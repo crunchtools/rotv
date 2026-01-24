@@ -2283,6 +2283,140 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
   );
 }
 
+// POI-specific Trail Status component
+function TrailStatus({ poiId, poiName, isAdmin, editMode }) {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [collecting, setCollecting] = useState(false);
+
+  const fetchStatus = async () => {
+    if (!poiId) {
+      console.log('[fetchStatus] No poiId, skipping fetch');
+      return;
+    }
+    console.log(`[fetchStatus] Fetching status for trail ${poiId}...`);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/pois/${poiId}/status`);
+      console.log(`[fetchStatus] Response status: ${response.status} ${response.statusText}`);
+      if (response.ok) {
+        const data = await response.json();
+        console.log(`[fetchStatus] Received status:`, data);
+        setStatus(data);
+      } else {
+        console.error(`[fetchStatus] Request failed: ${response.status} ${response.statusText}`);
+      }
+    } catch (err) {
+      console.error('[fetchStatus] Error fetching trail status:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatus();
+  }, [poiId]);
+
+  const handleCollect = async () => {
+    if (!poiId) return;
+    setCollecting(true);
+
+    try {
+      const response = await fetch(`/api/admin/pois/${poiId}/status/collect`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('[handleCollect] Collection successful:', result);
+
+        // Refresh status
+        await fetchStatus();
+      } else {
+        const error = await response.json();
+        alert('Collection failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('[handleCollect] Error:', err);
+      alert('Collection error: ' + err.message);
+    } finally {
+      setCollecting(false);
+    }
+  };
+
+  if (loading) {
+    return <div className="sidebar-tab-loading">Loading trail status...</div>;
+  }
+
+  const statusBadgeClass = status?.status ? `status-${status.status}` : 'status-unknown';
+
+  return (
+    <div className="trail-status-tab">
+      {isAdmin && editMode && (
+        <button
+          className="admin-button"
+          onClick={handleCollect}
+          disabled={collecting}
+          style={{ marginBottom: '1rem' }}
+        >
+          {collecting ? 'Collecting...' : 'Collect Status'}
+        </button>
+      )}
+
+      {status && status.status !== 'unknown' ? (
+        <div className={`trail-status ${statusBadgeClass}`}>
+          <div className="status-badge">{(status.status || 'unknown').toUpperCase()}</div>
+
+          {status.conditions && (
+            <div className="status-conditions">
+              <strong>Conditions:</strong> {status.conditions}
+            </div>
+          )}
+
+          {status.weather_impact && (
+            <div className="status-weather">
+              <strong>Weather:</strong> {status.weather_impact}
+            </div>
+          )}
+
+          {status.last_updated && (
+            <div className="status-updated">
+              Last updated: {new Date(status.last_updated).toLocaleString()}
+            </div>
+          )}
+
+          {status.source_url && (
+            <a
+              href={status.source_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="status-source-link"
+            >
+              View on {status.source_name || 'Source'} ↗
+            </a>
+          )}
+
+          {status.seasonal_closure && (
+            <div className="status-seasonal">
+              ⚠️ Seasonal Closure in Effect
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="sidebar-tab-empty">
+          No trail status information available.
+          {isAdmin && editMode && (
+            <p style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#666' }}>
+              Use the "Collect Status" button above to gather current trail conditions.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
@@ -2875,6 +3009,14 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           >
             Events
           </button>
+          {linearFeature?.is_mtb_trail && (
+            <button
+              className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
+              onClick={() => setSidebarTab('status')}
+            >
+              Status
+            </button>
+          )}
           <button
             className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
             onClick={() => setSidebarTab('history')}
@@ -2933,6 +3075,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
           {sidebarTab === 'events' && linearFeature && (
             <PoiEvents poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount} />
+          )}
+
+          {sidebarTab === 'status' && linearFeature && linearFeature.is_mtb_trail && (
+            <TrailStatus poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} />
           )}
 
           {sidebarTab === 'history' && linearFeature && (
@@ -3143,6 +3289,14 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         >
           Events
         </button>
+        {destination?.is_mtb_trail && (
+          <button
+            className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
+            onClick={() => setSidebarTab('status')}
+          >
+            Status
+          </button>
+        )}
         <button
           className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
           onClick={() => setSidebarTab('history')}
@@ -3201,6 +3355,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
         {sidebarTab === 'events' && destination && (
           <PoiEvents poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount} />
+        )}
+
+        {sidebarTab === 'status' && destination && destination.is_mtb_trail && (
+          <TrailStatus poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} />
         )}
 
         {sidebarTab === 'history' && destination && (
