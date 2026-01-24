@@ -19,6 +19,9 @@ import {
   registerNewsCollectionHandler,
   registerBatchNewsHandler,
   submitBatchNewsJob,
+  scheduleTrailStatusCollection,
+  registerTrailStatusHandler,
+  registerBatchTrailStatusHandler,
   stopJobScheduler
 } from './services/jobScheduler.js';
 import {
@@ -27,6 +30,10 @@ import {
   ensureNewsJobCheckpointColumns,
   findIncompleteJobs
 } from './services/newsService.js';
+import {
+  getLatestTrailStatus,
+  processTrailStatusCollectionJob
+} from './services/trailStatusService.js';
 import { createSheetsService } from './services/sheetsSync.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1200,6 +1207,78 @@ app.get('/api/pois/:id/events', async (req, res) => {
   }
 });
 
+// Get trail status for a specific trail (public)
+app.get('/api/pois/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const status = await getLatestTrailStatus(pool, id);
+
+    if (!status) {
+      return res.json({
+        status: 'unknown',
+        conditions: null,
+        last_updated: null,
+        source_name: null,
+        source_url: null,
+        weather_impact: null,
+        seasonal_closure: false
+      });
+    }
+
+    res.json({
+      status: status.status,
+      conditions: status.conditions,
+      last_updated: status.last_updated,
+      source_name: status.source_name,
+      source_url: status.source_url,
+      weather_impact: status.weather_impact,
+      seasonal_closure: status.seasonal_closure
+    });
+  } catch (error) {
+    console.error('Error fetching trail status:', error);
+    res.status(500).json({ error: 'Failed to fetch trail status' });
+  }
+});
+
+// Get all MTB trails with optional status (public)
+app.get('/api/trails/mtb', async (req, res) => {
+  try {
+    const includeStatus = req.query.includeStatus === 'true';
+
+    let query = `
+      SELECT id, name, description, location, poi_type, status_url,
+             ST_AsGeoJSON(geometry) as geometry
+      FROM pois
+      WHERE is_mtb_trail = true
+      AND (deleted IS NULL OR deleted = FALSE)
+      ORDER BY name
+    `;
+
+    const result = await pool.query(query);
+    const trails = result.rows.map(row => ({
+      ...row,
+      geometry: row.geometry ? JSON.parse(row.geometry) : null
+    }));
+
+    // Optionally fetch latest status for each trail
+    if (includeStatus) {
+      for (const trail of trails) {
+        const status = await getLatestTrailStatus(pool, trail.id);
+        trail.status = status ? {
+          status: status.status,
+          conditions: status.conditions,
+          last_updated: status.last_updated
+        } : null;
+      }
+    }
+
+    res.json(trails);
+  } catch (error) {
+    console.error('Error fetching MTB trails:', error);
+    res.status(500).json({ error: 'Failed to fetch MTB trails' });
+  }
+});
+
 // All recent news across the park (public)
 app.get('/api/news/recent', async (req, res) => {
   try {
@@ -1577,6 +1656,34 @@ async function start() {
 
     // Schedule daily news collection at 6 AM Eastern
     await scheduleNewsCollection('0 6 * * *');
+
+    // Register scheduled trail status collection handler
+    await registerTrailStatusHandler(async () => {
+      console.log('Running scheduled trail status collection for all MTB trails...');
+      const { runTrailStatusCollection } = await import('./services/trailStatusService.js');
+      const boss = app.get('boss');
+      const result = await runTrailStatusCollection(pool, boss, {
+        jobType: 'scheduled_collection'
+      });
+      if (result.totalTrails > 0) {
+        console.log(`Trail status collection started for ${result.totalTrails} trails`);
+      } else {
+        console.log('No MTB trails to collect');
+      }
+    });
+
+    // Register batch trail status collection handler
+    await registerBatchTrailStatusHandler(async (jobId, poiIds) => {
+      console.log(`[pg-boss] Processing batch trail status job: ${jobId}`);
+      await processTrailStatusCollectionJob(pool, jobId, poiIds);
+    });
+
+    // Schedule trail status collection (default every 2 hours, configurable via admin settings)
+    const trailStatusInterval = '0 */2 * * *';  // Every 2 hours
+    await scheduleTrailStatusCollection(trailStatusInterval);
+
+    // Make boss available to routes
+    app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));
 
     // Resume any incomplete jobs from before restart
     const incompleteJobs = await findIncompleteJobs(pool);

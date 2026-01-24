@@ -74,6 +74,15 @@ import {
 } from '../services/newsService.js';
 import { submitBatchNewsJob } from '../services/jobScheduler.js';
 import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
+import {
+  collectTrailStatus,
+  runTrailStatusCollection,
+  getJobStatus as getTrailJobStatus,
+  cancelJob as cancelTrailJob,
+  getLatestTrailStatus,
+  getCollectionProgress as getTrailProgress,
+  clearProgress as clearTrailProgress
+} from '../services/trailStatusService.js';
 
 const router = express.Router();
 
@@ -3619,6 +3628,144 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     } catch (error) {
       console.error('Error creating batch POI associations:', error);
       res.status(500).json({ error: 'Failed to create associations' });
+    }
+  });
+
+  // ===== TRAIL STATUS ENDPOINTS =====
+
+  // Collect status for a single MTB trail
+  router.post('/pois/:id/status/collect', isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      // Get trail details
+      const poiResult = await pool.query(
+        'SELECT id, name, poi_type, status_url, location, is_mtb_trail FROM pois WHERE id = $1',
+        [id]
+      );
+
+      if (poiResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Trail not found' });
+      }
+
+      const poi = poiResult.rows[0];
+
+      if (!poi.is_mtb_trail) {
+        return res.status(400).json({ error: 'POI is not an MTB trail' });
+      }
+
+      // Check if collection is already running for this trail
+      const existingProgress = getTrailProgress(parseInt(id));
+      if (existingProgress && !existingProgress.completed) {
+        console.log(`Admin ${req.user.email} attempted to collect trail status, but one is already running for: ${poi.name}`);
+        return res.status(200).json({
+          success: true,
+          alreadyRunning: true,
+          message: 'Collection already in progress',
+          progress: existingProgress
+        });
+      }
+
+      // Clear any old completed progress
+      clearTrailProgress(parseInt(id));
+
+      // Reset AI usage counter
+      resetJobUsage();
+
+      console.log(`Admin ${req.user.email} triggered trail status collection for: ${poi.name}`);
+
+      // Collect trail status
+      const result = await collectTrailStatus(pool, poi, null, 'America/New_York');
+
+      res.json({
+        success: true,
+        message: 'Trail status collected',
+        statusFound: result.statusFound,
+        statusSaved: result.statusSaved,
+        aiUsage: getJobStats()
+      });
+
+    } catch (error) {
+      console.error('Error collecting trail status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Batch collection for multiple trails
+  router.post('/trail-status/collect-batch', isAdmin, async (req, res) => {
+    try {
+      const { poiIds } = req.body;
+
+      console.log(`Admin ${req.user.email} triggered batch trail status collection for ${poiIds?.length || 'all'} trails`);
+
+      const result = await runTrailStatusCollection(pool, req.app.get('boss'), {
+        poiIds: poiIds || null,
+        jobType: 'batch_collection'
+      });
+
+      res.json({
+        success: true,
+        message: result.message,
+        jobId: result.jobId,
+        totalTrails: result.totalTrails
+      });
+
+    } catch (error) {
+      console.error('Error starting batch trail status collection:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get job status
+  router.get('/trail-status/job-status/:jobId', isAdmin, async (req, res) => {
+    try {
+      const { jobId } = req.params;
+      const status = await getTrailJobStatus(pool, jobId);
+
+      if (!status) {
+        return res.status(404).json({ error: 'Job not found' });
+      }
+
+      res.json(status);
+
+    } catch (error) {
+      console.error('Error getting trail status job status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Cancel batch job
+  router.put('/trail-status/batch-collect/:jobId/cancel', isAdmin, async (req, res) => {
+    try {
+      const { jobId } = req.params;
+
+      console.log(`Admin ${req.user.email} requested cancellation of trail status job ${jobId}`);
+
+      const cancelled = await cancelTrailJob(pool, jobId);
+
+      if (!cancelled) {
+        return res.status(400).json({ error: 'Job not found or not running' });
+      }
+
+      res.json({
+        success: true,
+        message: 'Job cancelled'
+      });
+
+    } catch (error) {
+      console.error('Error cancelling trail status job:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get AI statistics
+  router.get('/trail-status/ai-stats', isAdmin, async (req, res) => {
+    try {
+      const stats = getJobStats();
+      res.json(stats);
+    } catch (error) {
+      console.error('Error getting AI stats:', error);
+      res.status(500).json({ error: error.message });
     }
   });
 
