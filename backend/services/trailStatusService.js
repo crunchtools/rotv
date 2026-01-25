@@ -362,7 +362,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
     let trails;
     if (poiIds && poiIds.length > 0) {
       const result = await pool.query(`
-        SELECT id, name, poi_type, status_url, location
+        SELECT id, name, poi_type, status_url, brief_description
         FROM pois
         WHERE id = ANY($1) AND is_mtb_trail = true
         ORDER BY name
@@ -370,7 +370,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
       trails = result.rows;
     } else {
       const result = await pool.query(`
-        SELECT id, name, poi_type, status_url, location
+        SELECT id, name, poi_type, status_url, brief_description
         FROM pois
         WHERE is_mtb_trail = true
         ORDER BY name
