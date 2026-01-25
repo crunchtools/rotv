@@ -1246,7 +1246,8 @@ app.get('/api/trails/mtb', async (req, res) => {
     const includeStatus = req.query.includeStatus === 'true';
 
     let query = `
-      SELECT id, name, description, location, poi_type, status_url,
+      SELECT id, name, brief_description, poi_type, status_url,
+             length_miles, difficulty, surface, primary_activities,
              ST_AsGeoJSON(geometry) as geometry
       FROM pois
       WHERE is_mtb_trail = true
@@ -1267,7 +1268,11 @@ app.get('/api/trails/mtb', async (req, res) => {
         trail.status = status ? {
           status: status.status,
           conditions: status.conditions,
-          last_updated: status.last_updated
+          last_updated: status.last_updated,
+          weather_impact: status.weather_impact,
+          seasonal_closure: status.seasonal_closure,
+          source_name: status.source_name,
+          source_url: status.source_url
         } : null;
       }
     }

@@ -15,6 +15,7 @@ import ParkEvents from './components/ParkEvents';
 import NewsSettings from './components/NewsSettings';
 import ResultsTab from './components/ResultsTab';
 import OrganizationsTab from './components/OrganizationsTab';
+import StatusTab from './components/StatusTab';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse']);
@@ -802,6 +803,12 @@ function AppContent() {
           >
             Organizations
           </button>
+          <button
+            className={`tab-btn ${activeTab === 'status' ? 'active' : ''}`}
+            onClick={() => setActiveTab('status')}
+          >
+            Status
+          </button>
           {isAdmin && (
             <button
               className={`tab-btn ${activeTab === 'edit' ? 'active' : ''}`}
@@ -963,6 +970,18 @@ function AppContent() {
             allVirtualPois={virtualPois}
             selectedDestination={selectedDestination}
             onSelectDestination={handleResultsSelectDestination}
+          />
+        </main>
+      )}
+
+      {/* Status tab content */}
+      {activeTab === 'status' && (
+        <main className="main-content-full">
+          <StatusTab
+            mapState={mapState}
+            onMapClick={() => setActiveTab('view')}
+            onSelectLinearFeature={handleResultsSelectLinearFeature}
+            linearFeatures={linearFeatures}
           />
         </main>
       )}

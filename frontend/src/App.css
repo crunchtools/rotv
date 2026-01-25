@@ -11168,3 +11168,104 @@ svg.leaflet-zoom-animated {
   border-radius: 4px;
   margin-top: 1rem;
 }
+
+/* Status Tab - Main Tab View */
+.status-tab-content {
+  width: 100%;
+}
+
+.status-section {
+  margin-bottom: 2rem;
+}
+
+.status-section-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #2d5016;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid #4a7c23;
+}
+
+.status-group {
+  margin-bottom: 1.5rem;
+}
+
+.status-group-header {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Trail Status Tiles */
+.trail-status-tile {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.trail-status-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.trail-status-tile .results-tile-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.trail-status-tile .status-badge {
+  margin-bottom: 0;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+}
+
+.trail-conditions,
+.trail-weather {
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+  color: #555;
+}
+
+.trail-status-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.trail-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.trail-updated {
+  font-style: italic;
+  color: #888;
+}
+
+.trail-seasonal-notice {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #856404;
+}
+
+.results-tab-empty-inline {
+  text-align: center;
+  padding: 2rem;
+  color: #666;
+  font-size: 1rem;
+}
