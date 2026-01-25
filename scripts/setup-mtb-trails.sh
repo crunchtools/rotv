@@ -23,6 +23,25 @@ CREATE TABLE IF NOT EXISTS trail_status (
 
 CREATE INDEX IF NOT EXISTS idx_trail_status_poi_id ON trail_status(poi_id);
 
+-- Create trail_status_job_status table
+CREATE TABLE IF NOT EXISTS trail_status_job_status (
+  id SERIAL PRIMARY KEY,
+  job_type VARCHAR(50),
+  status VARCHAR(20),
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP,
+  total_trails INTEGER,
+  trails_processed INTEGER,
+  status_found INTEGER,
+  error_message TEXT,
+  poi_ids TEXT,
+  processed_poi_ids TEXT,
+  pg_boss_job_id VARCHAR(100),
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_trail_status_job_status_status ON trail_status_job_status(status);
+
 -- Flag Hampton Hills as MTB trail
 UPDATE pois SET
   is_mtb_trail = true,
