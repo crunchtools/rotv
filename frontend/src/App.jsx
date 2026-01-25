@@ -13,6 +13,7 @@ import IconsSettings from './components/IconsSettings';
 import ParkNews from './components/ParkNews';
 import ParkEvents from './components/ParkEvents';
 import NewsSettings from './components/NewsSettings';
+import TrailStatusSettings from './components/TrailStatusSettings';
 import ResultsTab from './components/ResultsTab';
 import OrganizationsTab from './components/OrganizationsTab';
 import StatusTab from './components/StatusTab';
@@ -1027,6 +1028,12 @@ function AppContent() {
                 News & Events
               </button>
               <button
+                className={`settings-tab-btn ${settingsTab === 'trailStatus' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('trailStatus')}
+              >
+                Trail Status
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('google')}
               >
@@ -1041,6 +1048,7 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'news' && <NewsSettings />}
+              {settingsTab === 'trailStatus' && <TrailStatusSettings />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
                   <SyncSettings onDataRefresh={refreshAllData} />

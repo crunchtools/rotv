@@ -3758,6 +3758,38 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     }
   });
 
+  // Get latest job status
+  router.get('/trail-status/job-status/latest', isAdmin, async (req, res) => {
+    try {
+      const pool = req.app.get('pool');
+      const result = await pool.query(`
+        SELECT *
+        FROM trail_status_job_status
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return res.json(null);
+      }
+
+      const job = result.rows[0];
+      res.json({
+        jobId: job.pg_boss_job_id,
+        status: job.status,
+        started_at: job.started_at,
+        completed_at: job.completed_at,
+        total_trails: job.total_trails,
+        trails_processed: job.trails_processed,
+        status_found: job.status_found,
+        error_message: job.error_message
+      });
+    } catch (error) {
+      console.error('Error getting latest job status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Get AI statistics
   router.get('/trail-status/ai-stats', isAdmin, async (req, res) => {
     try {
