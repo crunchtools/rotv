@@ -1248,7 +1248,7 @@ app.get('/api/trails/mtb', async (req, res) => {
     let query = `
       SELECT id, name, brief_description, poi_type, status_url,
              length_miles, difficulty, surface, primary_activities,
-             ST_AsGeoJSON(geometry) as geometry
+             geometry
       FROM pois
       WHERE is_mtb_trail = true
       AND (deleted IS NULL OR deleted = FALSE)
@@ -1256,10 +1256,7 @@ app.get('/api/trails/mtb', async (req, res) => {
     `;
 
     const result = await pool.query(query);
-    const trails = result.rows.map(row => ({
-      ...row,
-      geometry: row.geometry ? JSON.parse(row.geometry) : null
-    }));
+    const trails = result.rows;
 
     // Optionally fetch latest status for each trail
     if (includeStatus) {
