@@ -809,14 +809,15 @@ function DataCollectionSettings() {
             // Use fixed slots (jobs never move between slots)
             const slots = newsJobSlots;
 
-            // Show table if job is running OR if we have any jobs in slots
-            const hasJobs = slots.some(s => s !== null);
-            if (!isJobRunning && !hasJobs) return null;
-
             // Calculate total 429 errors and usage stats
             const total429 = (newsAiStats?.errors?.gemini429 || 0) + (newsAiStats?.errors?.perplexity429 || 0);
             const geminiUsage = newsAiStats?.usage?.gemini || 0;
             const perplexityUsage = newsAiStats?.usage?.perplexity || 0;
+
+            // Show table if job is running OR if we have any jobs in slots OR if there are AI stats to display
+            const hasJobs = slots.some(s => s !== null);
+            const hasAiStats = geminiUsage > 0 || perplexityUsage > 0 || total429 > 0;
+            if (!isJobRunning && !hasJobs && !hasAiStats) return null;
 
             return (
               <div className="ai-stats-table">
@@ -957,14 +958,15 @@ function DataCollectionSettings() {
             // Use fixed slots (jobs never move between slots)
             const slots = trailJobSlots;
 
-            // Show table if job is running OR if we have any jobs in slots
-            const hasJobs = slots.some(s => s !== null);
-            if (!isJobRunning && !hasJobs) return null;
-
             // Calculate total 429 errors and usage stats
             const total429 = (trailAiStats?.errors?.gemini429 || 0) + (trailAiStats?.errors?.perplexity429 || 0);
             const geminiUsage = trailAiStats?.usage?.gemini || 0;
             const perplexityUsage = trailAiStats?.usage?.perplexity || 0;
+
+            // Show table if job is running OR if we have any jobs in slots OR if there are AI stats to display
+            const hasJobs = slots.some(s => s !== null);
+            const hasAiStats = geminiUsage > 0 || perplexityUsage > 0 || total429 > 0;
+            if (!isJobRunning && !hasJobs && !hasAiStats) return null;
 
             return (
               <div className="ai-stats-table">
