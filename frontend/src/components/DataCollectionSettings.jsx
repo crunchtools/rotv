@@ -748,11 +748,6 @@ function DataCollectionSettings() {
                   Cancel
                 </button>
               )}
-              {newsProgress.status === 'cancelled' && newsProgress.displaySlots && newsProgress.displaySlots.some(s => s.poiId && s.status === 'active') && (
-                <span className="status-cancelling-text" title={`Waiting for ${newsProgress.displaySlots.filter(s => s.poiId && s.status === 'active').length} jobs to finish`}>
-                  ⏳ Cancelling... ({newsProgress.displaySlots.filter(s => s.poiId && s.status === 'active').length} finishing)
-                </span>
-              )}
               {(newsProgress.status === 'completed' ||
                 (newsProgress.status === 'cancelled' && (!newsProgress.displaySlots || !newsProgress.displaySlots.some(s => s.poiId && s.status === 'active')))) && (
                 <button className="status-close-btn" onClick={() => {
@@ -905,11 +900,6 @@ function DataCollectionSettings() {
                 <button className="status-cancel-btn" onClick={handleCancelTrailJob} title="Cancel job">
                   Cancel
                 </button>
-              )}
-              {trailProgress.status === 'cancelled' && trailProgress.displaySlots && trailProgress.displaySlots.some(s => s.poiId && s.status === 'active') && (
-                <span className="status-cancelling-text" title={`Waiting for ${trailProgress.displaySlots.filter(s => s.poiId && s.status === 'active').length} jobs to finish`}>
-                  ⏳ Cancelling... ({trailProgress.displaySlots.filter(s => s.poiId && s.status === 'active').length} finishing)
-                </span>
               )}
               {(trailProgress.status === 'completed' ||
                 (trailProgress.status === 'cancelled' && (!trailProgress.displaySlots || !trailProgress.displaySlots.some(s => s.poiId && s.status === 'active')))) && (
