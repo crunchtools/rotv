@@ -186,16 +186,18 @@ git push && git push --tags
 ```
 1. Create feature branch       # git checkout -b feature/description
 2. Make code changes
-3. ./run.sh build              # Build container (must succeed)
-4. ./run.sh test               # Run automated tests (must pass)
-5. git commit                  # Commit changes
-6. Ask user to verify          # User manually tests and approves
-7. Update version (SemVer)     # Bump version in package.json & Containerfile (if releasing)
-8. git commit                  # Commit version bump
-9. git push origin branch      # Push branch to GitHub
-10. Create Pull Request        # Create PR in GitHub (via gh CLI or web UI)
-11. Ask user to merge PR       # User reviews and merges via GitHub
-12. After merge:
+3. ./run.sh reload-app         # Hot reload for quick testing (OPTIONAL - during development)
+4. Iterate on changes          # Repeat steps 2-3 as needed
+5. ./run.sh build              # MANDATORY full rebuild before PR
+6. ./run.sh test               # Run automated tests (must pass)
+7. git commit                  # Commit changes
+8. Ask user to verify          # User manually tests and approves
+9. Update version (SemVer)     # Bump version in package.json & Containerfile (if releasing)
+10. git commit                 # Commit version bump
+11. git push origin branch     # Push branch to GitHub
+12. Create Pull Request        # Create PR in GitHub (via gh CLI or web UI)
+13. Ask user to merge PR       # User reviews and merges via GitHub
+14. After merge:
     - git checkout master      # Switch to master
     - git pull origin master   # Pull merged changes
     - git tag vX.Y.Z           # Tag the release (AFTER merge)
@@ -206,6 +208,8 @@ git push && git push --tags
 
 **Key Points:**
 - ✅ Always work in feature branches - NEVER commit directly to master
+- ✅ Use `reload-app` for fast iteration during development
+- ✅ ALWAYS do full rebuild (`./run.sh build`) before creating PR
 - ✅ Tests must pass before asking user to verify
 - ✅ User approval required before version bump and PR creation
 - ✅ User decides when to merge PR
@@ -213,6 +217,35 @@ git push && git push --tags
 - ✅ Clean up branches after merge
 
 **This prevents production issues and ensures quality.**
+
+---
+
+### Development Iteration Priority (Stack Ranked)
+
+**When making changes, ALWAYS follow this priority order:**
+
+1. **`./run.sh reload-app`** - Hot reload frontend/backend code without container restart
+   - **When:** Frontend or backend code changes only
+   - **Speed:** ~2-3 seconds
+   - **Use for:** Iterating on features during development
+   - **⚠️ Important:** ALWAYS do full rebuild before creating PR
+
+2. **`./run.sh restart-db`** - Restart PostgreSQL service only
+   - **When:** Database service issues, connection problems
+   - **Speed:** ~5 seconds
+   - **Use for:** Debugging database connectivity
+
+3. **`./run.sh build`** + `./run.sh start` - Full container rebuild
+   - **When:** Changes to Containerfile, package.json dependencies, systemd services
+   - **Speed:** ~30-60 seconds
+   - **Use for:** Testing changes that need to be baked into the image
+
+4. **`./run.sh build-base`** - Rebuild base infrastructure image (LAST RESORT)
+   - **When:** Changes to systemd, PostgreSQL, Node.js, Playwright, or base OS packages
+   - **Speed:** ~5-10 minutes
+   - **Use for:** Infrastructure changes in Containerfile.base
+
+**Golden Rule:** Start with #1, escalate only if needed. Never jump straight to rebuild.
 
 ---
 
@@ -274,16 +307,28 @@ cp .env.example backend/.env  # Fill in your API keys
 
 ### Development Workflow
 
-**Making Code Changes:**
+**During Development (Quick Iteration):**
 
-🚫 **NEVER use `./run.sh reload-backend` or `./run.sh reload-frontend`**
+✅ **Use hot reload for fast feedback during active development:**
 
-These hot-reload commands can leave the container in an inconsistent state where code changes appear to work but are lost on restart, or where the running code doesn't match what's in the source files.
+```bash
+./run.sh reload-app
+```
 
-✅ **ALWAYS rebuild the container after code changes:**
+This command:
+- Copies updated source code into the running container
+- Rebuilds frontend assets with Vite
+- Restarts the backend Node.js server
+- Keeps database and state intact
+- Much faster than full container rebuild (~10-15 seconds vs 2-3 minutes)
+
+**Before Creating a Pull Request:**
+
+🔴 **MANDATORY: Full rebuild before PR**
 
 ```bash
 ./run.sh build && ./run.sh start
+./run.sh test
 ```
 
 This ensures:
@@ -291,8 +336,11 @@ This ensures:
 - Frontend and backend are always in sync
 - No surprises when the container restarts
 - Consistent behavior between development and production
+- All tests pass with the final built artifacts
 
-**Utility commands (safe to use):**
+**Why this matters:** Hot reloads are great for development speed, but the final PR must be tested with a clean build to ensure nothing breaks in production.
+
+**Utility commands (always safe):**
 
 ```bash
 # View logs

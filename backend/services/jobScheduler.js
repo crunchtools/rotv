@@ -10,7 +10,9 @@ let boss = null;
 const JOB_NAMES = {
   NEWS_COLLECTION: 'news-collection',           // Scheduled daily collection
   NEWS_COLLECTION_POI: 'news-collection-poi',   // Individual POI processing
-  NEWS_BATCH: 'news-batch-collection'           // Admin-triggered batch collection
+  NEWS_BATCH: 'news-batch-collection',          // Admin-triggered batch collection
+  TRAIL_STATUS_COLLECTION: 'trail-status-collection',  // Scheduled trail status collection
+  TRAIL_STATUS_BATCH: 'trail-status-batch-collect'     // Admin-triggered trail status batch
 };
 
 /**
@@ -213,6 +215,84 @@ export async function submitBatchNewsJob(options = {}) {
 export async function getBatchJobStatus(jobId) {
   const scheduler = getJobScheduler();
   return scheduler.getJobById(jobId);
+}
+
+/**
+ * Schedule the trail status collection job
+ * @param {string} cronExpression - Cron expression (default: every 2 hours)
+ */
+export async function scheduleTrailStatusCollection(cronExpression = '0 */2 * * *') {
+  const scheduler = getJobScheduler();
+
+  // Create a schedule for the trail status collection job
+  await scheduler.schedule(JOB_NAMES.TRAIL_STATUS_COLLECTION, cronExpression, {}, {
+    tz: 'America/New_York'
+  });
+
+  console.log(`Trail status collection scheduled with cron: ${cronExpression}`);
+}
+
+/**
+ * Register the trail status collection job handler
+ * @param {Function} handler - Async function to handle the job
+ */
+export async function registerTrailStatusHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  // Create the queue if it doesn't exist
+  try {
+    await scheduler.createQueue(JOB_NAMES.TRAIL_STATUS_COLLECTION);
+    console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_COLLECTION}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_COLLECTION}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.TRAIL_STATUS_COLLECTION, async (job) => {
+    console.log('Starting trail status collection job:', job.id);
+    try {
+      await handler(job.data);
+      console.log('Trail status collection job completed:', job.id);
+    } catch (error) {
+      console.error('Trail status collection job failed:', error);
+      throw error; // Re-throw to mark job as failed
+    }
+  });
+}
+
+/**
+ * Register handler for batch trail status collection
+ * @param {Function} handler - Async function to handle batch collection
+ */
+export async function registerBatchTrailStatusHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  // Create the queue if it doesn't exist
+  try {
+    await scheduler.createQueue(JOB_NAMES.TRAIL_STATUS_BATCH);
+    console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_BATCH}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_BATCH}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.TRAIL_STATUS_BATCH, {
+    newJobCheckIntervalSeconds: 1  // Check for new jobs every second for responsive UI
+  }, async (jobs) => {
+    const jobList = Array.isArray(jobs) ? jobs : [jobs];
+    for (const job of jobList) {
+      console.log(`[pg-boss] Starting batch trail status collection job: ${job.id}`);
+      try {
+        await handler(job.data.jobId, job.data.poiIds);
+        console.log(`[pg-boss] Batch trail status collection job completed: ${job.id}`);
+      } catch (error) {
+        console.error(`[pg-boss] Batch trail status collection job failed:`, error);
+        throw error; // Re-throw to mark job as failed in pg-boss
+      }
+    }
+  });
 }
 
 /**

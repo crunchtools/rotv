@@ -8,8 +8,8 @@ LABEL maintainer="fatherlinux"
 LABEL description="ROTV Base - PostgreSQL 17, Node.js, Playwright infrastructure"
 LABEL version="1.0.0"
 
-# Install Node.js and Chromium dependencies for Playwright
-RUN dnf install -y nodejs npm \
+# Install systemd, Node.js and Chromium dependencies for Playwright
+RUN dnf install -y systemd nodejs npm procps-ng \
     # Playwright/Chromium system dependencies
     nspr nss alsa-lib atk cups-libs gtk3 \
     libXcomposite libXdamage libXrandr libxkbcommon \
@@ -17,8 +17,21 @@ RUN dnf install -y nodejs npm \
     libxshmfence libX11 libXext libXfixes \
     && dnf clean all
 
-# Install Playwright Chromium browser early (rarely changes)
-RUN npx playwright install chromium
+# Configure systemd for container use
+# Remove unnecessary systemd units to reduce overhead
+RUN (cd /lib/systemd/system/sysinit.target.wants/; for i in *; do [ $i == systemd-tmpfiles-setup.service ] || rm -f $i; done); \
+    rm -f /lib/systemd/system/multi-user.target.wants/*;\
+    rm -f /etc/systemd/system/*.wants/*;\
+    rm -f /lib/systemd/system/local-fs.target.wants/*; \
+    rm -f /lib/systemd/system/sockets.target.wants/*udev*; \
+    rm -f /lib/systemd/system/sockets.target.wants/*initctl*; \
+    rm -f /lib/systemd/system/basic.target.wants/*;\
+    rm -f /lib/systemd/system/anaconda.target.wants/*;
+
+# Install Playwright globally and record version for app layer to match
+# This ensures the npm package and browser binaries are always in sync
+RUN npm install -g playwright && npx playwright install chromium
+RUN npm list -g playwright --depth=0 | grep playwright | awk -F@ '{print $2}' > /etc/playwright-version
 
 # Add PostgreSQL official repository and install PostgreSQL 17
 RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
@@ -49,3 +62,49 @@ ENV PGPORT=5432
 ENV PGDATABASE=rotv
 ENV PGUSER=postgres
 ENV PGPASSWORD=rotv
+
+# Create systemd unit file for PostgreSQL
+RUN mkdir -p /etc/systemd/system && \
+    cat > /etc/systemd/system/postgresql.service <<'EOF'
+[Unit]
+Description=PostgreSQL 17 Database Server
+After=syslog.target network.target
+
+[Service]
+Type=forking
+User=postgres
+Group=postgres
+
+# Environment
+Environment=PGDATA=/data/pgdata
+Environment=PGPORT=5432
+
+# Fix permissions on data directory (runs as root due to ! prefix)
+ExecStartPre=+/bin/bash -c 'mkdir -p /data/pgdata && chown -R postgres:postgres /data/pgdata && chmod 700 /data/pgdata'
+
+# Initialization script - creates DB if needed (runs as postgres user)
+ExecStartPre=/bin/bash -c 'if [ ! -f /data/pgdata/PG_VERSION ]; then /usr/pgsql-17/bin/initdb -D /data/pgdata; fi'
+
+# Start PostgreSQL
+ExecStart=/usr/pgsql-17/bin/pg_ctl start -D /data/pgdata -l /tmp/postgresql.log -o "-p 5432"
+
+# Stop PostgreSQL
+ExecStop=/usr/pgsql-17/bin/pg_ctl stop -D /data/pgdata -m fast
+
+# Restart PostgreSQL
+ExecReload=/usr/pgsql-17/bin/pg_ctl reload -D /data/pgdata
+
+# Auto-restart on failure
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable PostgreSQL service
+RUN systemctl enable postgresql.service
+
+# Use systemd as init system
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

@@ -306,6 +306,9 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef }) 
         return; // Skip the fly animation
       }
 
+      // Ensure map size is correct before flying (critical when switching from Results tab)
+      map.invalidateSize();
+
       // Mark this as a programmatic move so MapBoundsTracker doesn't update News/Events filter
       map._isProgrammaticMove = true;
 
@@ -317,6 +320,7 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef }) 
       // On initial load (when map is at default zoom), zoom in more to show detailed view
       // Otherwise, zoom to at least 15 but don't zoom out if already closer
       const targetZoom = isInitialLoad ? 16 : Math.max(currentZoom, 15);
+
       map.flyTo([selectedDestination.latitude, selectedDestination.longitude], targetZoom, {
         animate: true,
         duration: isInitialLoad ? 0.8 : 0.5 // Slightly longer animation on initial load
@@ -359,10 +363,11 @@ function MapVisibilityHandler({ activeTab }) {
     // When switching back to view/edit tab, invalidate size to fix rendering
     if ((activeTab === 'view' || activeTab === 'edit') &&
         prevTab.current !== 'view' && prevTab.current !== 'edit') {
-      // Small delay to ensure DOM has updated
-      setTimeout(() => {
+      // Call invalidateSize immediately so MapUpdater can flyTo with correct dimensions
+      // Use requestAnimationFrame to ensure DOM has painted
+      requestAnimationFrame(() => {
         map.invalidateSize();
-      }, 100);
+      });
     }
     prevTab.current = activeTab;
   }, [activeTab, map]);

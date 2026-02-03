@@ -136,14 +136,31 @@ case "${1:-help}" in
             SEED_MOUNT="-v $SEED_DATA_FILE:/tmp/seed-data.sql:ro"
         fi
 
+        # Create environment file for systemd services
+        mkdir -p ~/.rotv
+        cat > ~/.rotv/environment <<ENVFILE
+GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
+SESSION_SECRET=$SESSION_SECRET
+GEMINI_API_KEY=$GEMINI_API_KEY
+PERPLEXITY_API_KEY=$PERPLEXITY_API_KEY
+GOOGLE_SHEETS_CREDENTIALS=$GOOGLE_SHEETS_CREDENTIALS
+FACEBOOK_APP_ID=$FACEBOOK_APP_ID
+FACEBOOK_APP_SECRET=$FACEBOOK_APP_SECRET
+ADMIN_EMAIL=$ADMIN_EMAIL
+TWITTER_USERNAME=$TWITTER_USERNAME
+TWITTER_PASSWORD=$TWITTER_PASSWORD
+ENVFILE
+
         podman run -d \
             --name "$CONTAINER_NAME" \
             --privileged \
             --network=pasta:--dns-forward,8.8.8.8 \
             -p 8080:8080 \
+            --tmpfs /run \
+            -v ~/.rotv/environment:/etc/rotv/environment:ro,Z \
             $STORAGE_MOUNT \
             $SEED_MOUNT \
-            $ENV_ARGS \
             "$IMAGE_NAME"
 
         echo "Application starting at http://localhost:8080"
@@ -172,35 +189,71 @@ case "${1:-help}" in
             exit 1
         fi
 
+        # Build test image with Playwright browsers (BUILD_ENV=test)
+        echo "Building test container image with Playwright..."
+        if ! podman image exists "$BASE_IMAGE_NAME"; then
+            echo "Base image not found locally, pulling from quay.io..."
+            if ! podman pull "$BASE_IMAGE_NAME"; then
+                echo ""
+                echo "⚠ Base image not found on quay.io"
+                echo "Building base image locally (this will take longer)..."
+                podman build --security-opt label=disable -f Containerfile.base -t "$BASE_IMAGE_NAME" .
+            fi
+        fi
+        podman build --security-opt label=disable \
+            --build-arg BASE_IMAGE="$BASE_IMAGE_NAME" \
+            --build-arg BUILD_ENV=test \
+            -t "${IMAGE_NAME}:test" .
+
         # Stop and remove existing container
         echo "Stopping main container..."
         podman stop "$CONTAINER_NAME" 2>/dev/null || true
         podman rm "$CONTAINER_NAME" 2>/dev/null || true
 
-        # Start container with test database using ephemeral storage and seed data
+        # Create environment file for systemd services (use main 'rotv' database like CI)
+        mkdir -p ~/.rotv
+        cat > ~/.rotv/environment <<ENVFILE
+GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
+SESSION_SECRET=$SESSION_SECRET
+GEMINI_API_KEY=$GEMINI_API_KEY
+PERPLEXITY_API_KEY=$PERPLEXITY_API_KEY
+GOOGLE_SHEETS_CREDENTIALS=$GOOGLE_SHEETS_CREDENTIALS
+FACEBOOK_APP_ID=$FACEBOOK_APP_ID
+FACEBOOK_APP_SECRET=$FACEBOOK_APP_SECRET
+ADMIN_EMAIL=$ADMIN_EMAIL
+ENVFILE
+
+        # Start container with ephemeral storage and seed data (use :test tag)
         echo "Starting test container with ephemeral storage..."
         podman run -d \
             --name "$CONTAINER_NAME" \
             --privileged \
             --network=pasta:--dns-forward,8.8.8.8 \
             -p 8080:8080 \
+            --tmpfs /run \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
+            -v ~/.rotv/environment:/etc/rotv/environment:ro,Z \
             -v "$SEED_DATA_FILE:/tmp/seed-data.sql:ro" \
-            -e PGDATABASE=rotv_test \
-            $ENV_ARGS \
-            "$IMAGE_NAME" >/dev/null
+            "${IMAGE_NAME}:test" >/dev/null
 
-        echo "Waiting for container to be ready..."
-        sleep 10
+        # Wait for server to start and initialize database (match CI approach)
+        echo "Waiting for server to start and initialize database..."
+        sleep 20
 
-        # Create test database if it doesn't exist
-        echo "Setting up test database..."
-        podman exec "$CONTAINER_NAME" psql -U postgres -d postgres -c "DROP DATABASE IF EXISTS rotv_test;" 2>/dev/null || true
-        podman exec "$CONTAINER_NAME" psql -U postgres -d postgres -c "CREATE DATABASE rotv_test;" 2>/dev/null || true
+        # Check if server is ready by polling the API
+        for i in {1..30}; do
+            if podman exec "$CONTAINER_NAME" curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
+                echo "✓ Server is ready"
+                break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+        done
 
-        # Import seed data into test database
-        echo "Importing seed data into test database..."
-        podman exec "$CONTAINER_NAME" psql -U postgres -d rotv_test -f /tmp/seed-data.sql 2>&1 | grep -c "^COPY" | xargs echo "Imported rows from tables:"
+        # Import seed data into the database the server is using
+        echo "Importing seed data..."
+        podman exec "$CONTAINER_NAME" psql -U postgres -d rotv -f /tmp/seed-data.sql 2>&1 | grep -c "^COPY" | xargs echo "Imported rows from tables:"
 
         echo "✓ Test database ready"
         echo ""
@@ -290,6 +343,86 @@ case "${1:-help}" in
         echo "✓ Both images pushed"
         ;;
 
+    reload-app)
+        echo "Hot reloading application code..."
+        echo ""
+
+        # Check if container is running
+        if ! podman ps | grep -q "$CONTAINER_NAME"; then
+            echo "❌ Container is not running"
+            echo "Start the container first with: ./run.sh start"
+            exit 1
+        fi
+
+        # Copy updated backend code
+        echo "→ Copying backend source code..."
+        podman cp backend/routes "$CONTAINER_NAME:/app/"
+        podman cp backend/services "$CONTAINER_NAME:/app/"
+        podman cp backend/server.js "$CONTAINER_NAME:/app/"
+
+        # Copy updated frontend code to a temp build directory in container
+        echo "→ Copying frontend source code..."
+        podman exec "$CONTAINER_NAME" rm -rf /tmp/frontend-build
+        podman exec "$CONTAINER_NAME" mkdir -p /tmp/frontend-build
+        podman cp frontend/src "$CONTAINER_NAME:/tmp/frontend-build/"
+        podman cp frontend/public "$CONTAINER_NAME:/tmp/frontend-build/"
+        podman cp frontend/index.html "$CONTAINER_NAME:/tmp/frontend-build/"
+        podman cp frontend/vite.config.js "$CONTAINER_NAME:/tmp/frontend-build/"
+        podman cp frontend/package.json "$CONTAINER_NAME:/tmp/frontend-build/"
+        podman cp frontend/package-lock.json "$CONTAINER_NAME:/tmp/frontend-build/" 2>/dev/null || true
+
+        # Install dependencies and build in temp directory
+        echo "→ Installing dependencies and rebuilding frontend..."
+        podman exec "$CONTAINER_NAME" sh -c "cd /tmp/frontend-build && npm install --silent && npm run build"
+
+        # Replace public directory with new build
+        echo "→ Updating public directory..."
+        podman exec "$CONTAINER_NAME" rm -rf /app/public
+        podman exec "$CONTAINER_NAME" mv /tmp/frontend-build/dist /app/public
+        podman exec "$CONTAINER_NAME" rm -rf /tmp/frontend-build
+
+        # Restart backend Node.js server using systemctl
+        echo "→ Restarting backend server..."
+        podman exec "$CONTAINER_NAME" systemctl restart rotv-backend.service
+
+        echo ""
+        echo "✓ Application reloaded successfully"
+        echo ""
+        echo "⚠ IMPORTANT: This is for development only!"
+        echo "Before creating a PR, you MUST:"
+        echo "  1. ./run.sh build      # Full rebuild"
+        echo "  2. ./run.sh test       # Run all tests"
+        echo ""
+        ;;
+
+    restart-backend)
+        echo "Restarting backend service..."
+        podman exec "$CONTAINER_NAME" systemctl restart rotv-backend.service
+        echo "✓ Backend restarted"
+        ;;
+
+    restart-db)
+        echo "Restarting PostgreSQL service..."
+        podman exec "$CONTAINER_NAME" systemctl restart postgresql.service
+        echo "✓ PostgreSQL restarted"
+        ;;
+
+    status)
+        echo "Service Status:"
+        echo ""
+        podman exec "$CONTAINER_NAME" systemctl status postgresql.service rotv-init.service rotv-backend.service --no-pager
+        ;;
+
+    logs-backend)
+        echo "Backend logs (Ctrl+C to exit):"
+        podman exec "$CONTAINER_NAME" journalctl -u rotv-backend.service -f --no-pager
+        ;;
+
+    logs-db)
+        echo "PostgreSQL logs (Ctrl+C to exit):"
+        podman exec "$CONTAINER_NAME" journalctl -u postgresql.service -f --no-pager
+        ;;
+
     help|*)
         echo "Roots of The Valley - Container Management"
         echo ""
@@ -301,17 +434,23 @@ case "${1:-help}" in
         echo "  build-all   Build both base and application images"
         echo ""
         echo "Main Commands:"
-        echo "  seed    Pull production data to seed local development"
-        echo "  start   Start the application container (ephemeral storage)"
-        echo "  test    Run integration tests (ephemeral storage)"
-        echo "  stop    Stop and remove the container"
+        echo "  seed        Pull production data to seed local development"
+        echo "  start       Start the application container (ephemeral storage)"
+        echo "  test        Run integration tests (ephemeral storage)"
+        echo "  stop        Stop and remove the container"
+        echo "  reload-app  Hot reload code changes (dev only, ALWAYS rebuild before PR)"
         echo ""
         echo "Utility Commands:"
-        echo "  logs       Follow container logs"
-        echo "  shell      Open bash shell in running container"
-        echo "  push       Push application image to quay.io/fatherlinux/rotv"
-        echo "  push-base  Push base image to quay.io/fatherlinux/rotv-base"
-        echo "  push-all   Push both images to quay.io"
+        echo "  logs            Follow container logs"
+        echo "  logs-backend    Follow backend service logs (systemd journal)"
+        echo "  logs-db         Follow PostgreSQL service logs (systemd journal)"
+        echo "  status          Show systemd service status"
+        echo "  restart-backend Restart backend service only"
+        echo "  restart-db      Restart PostgreSQL service only"
+        echo "  shell           Open bash shell in running container"
+        echo "  push            Push application image to quay.io/fatherlinux/rotv"
+        echo "  push-base       Push base image to quay.io/fatherlinux/rotv-base"
+        echo "  push-all        Push both images to quay.io"
         echo ""
         echo "Storage & Data Workflow:"
         echo "  Development (default): Ephemeral storage + Production seed data"

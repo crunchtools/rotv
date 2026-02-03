@@ -692,9 +692,6 @@ Admin clicks Cancel → PUT /api/admin/news/batch-collect/:id/cancel
 GEMINI_API_KEY=your_gemini_api_key_here
 PERPLEXITY_API_KEY=your_perplexity_api_key_here
 
-# Playwright
-PLAYWRIGHT_BROWSERS_PATH=/path/to/browsers  # Optional
-
 # Database
 POSTGRES_USER=rotv
 POSTGRES_PASSWORD=rotv
@@ -725,7 +722,6 @@ INSERT INTO ai_config (key, value) VALUES
 **Backend:**
 ```json
 {
-  "playwright": "^1.40.0",
   "@google/generative-ai": "^0.2.0",
   "pg-boss": "^10.0.0"
 }
@@ -733,12 +729,14 @@ INSERT INTO ai_config (key, value) VALUES
 
 **Note:** Perplexity API uses standard HTTP requests, no additional package required.
 
-**Installation:**
-```bash
-cd backend
-npm install playwright
-node node_modules/playwright/cli.js install chromium
-```
+**Playwright Infrastructure:**
+
+Playwright and Chromium browsers are installed in the **base container image** (`Containerfile.base`):
+- Base image installs Playwright globally and downloads Chromium browsers
+- Base image records the version in `/etc/playwright-version`
+- App image installs the matching Playwright npm package version
+
+This ensures browser binaries match the npm package and avoids large downloads on every build.
 
 ## Performance Considerations
 
@@ -851,9 +849,10 @@ node test-playwright.js
 - Increase `waitTime` if lazy-loaded content not appearing
 
 **2. Playwright browser fails to launch**
-- Ensure Chromium is installed: `node node_modules/playwright/cli.js install chromium`
-- Check system dependencies on Linux (libx11, libgbm, etc.)
-- Verify no file permission issues
+- Verify base image was built with Playwright: check `/etc/playwright-version` exists
+- Ensure app image installed matching Playwright npm version
+- Check Settings > Data Collection for Playwright status indicator
+- System dependencies (libx11, libgbm, etc.) are pre-installed in base image
 
 **3. Events duplicating on refresh**
 - Check deduplication query (title + start_date match)
@@ -875,6 +874,10 @@ console.log(`[JS Renderer] Rendered ${content.text.length} chars`);
 ```
 
 ## Changelog
+
+**Version 1.4.1 (2026-02-03)**
+- 📝 Updated docs to reflect Playwright/Chromium installation in base container image
+- 📝 Added Playwright status indicator reference in troubleshooting
 
 **Version 1.4.0 (2026-01-22)**
 - ✨ Added multi-provider AI support (Gemini + Perplexity with automatic fallback)

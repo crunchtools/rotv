@@ -19,6 +19,9 @@ import {
   registerNewsCollectionHandler,
   registerBatchNewsHandler,
   submitBatchNewsJob,
+  scheduleTrailStatusCollection,
+  registerTrailStatusHandler,
+  registerBatchTrailStatusHandler,
   stopJobScheduler
 } from './services/jobScheduler.js';
 import {
@@ -27,6 +30,10 @@ import {
   ensureNewsJobCheckpointColumns,
   findIncompleteJobs
 } from './services/newsService.js';
+import {
+  getLatestTrailStatus,
+  processTrailStatusCollectionJob
+} from './services/trailStatusService.js';
 import { createSheetsService } from './services/sheetsSync.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -45,6 +52,11 @@ const pool = new Pool({
   database: process.env.PGDATABASE || 'rotv',
   user: process.env.PGUSER || 'rotv',
   password: process.env.PGPASSWORD || 'rotv',
+  // Background jobs use up to 10 concurrent connections
+  // Reserve extra for API requests to prevent blocking
+  max: 20,
+  // Timeout after 10 seconds if no connection available (fail fast vs hang)
+  connectionTimeoutMillis: 10000,
 });
 
 // CORS configuration - allow credentials for session cookies
@@ -558,13 +570,17 @@ async function initDatabase() {
         news_found INTEGER DEFAULT 0,
         events_found INTEGER DEFAULT 0,
         error_message TEXT,
+        ai_usage TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
-    // Add total_pois column if it doesn't exist (migration for existing tables)
+    // Add columns if they don't exist (migration for existing tables)
     await client.query(`
       ALTER TABLE news_job_status ADD COLUMN IF NOT EXISTS total_pois INTEGER DEFAULT 0
+    `);
+    await client.query(`
+      ALTER TABLE news_job_status ADD COLUMN IF NOT EXISTS ai_usage TEXT
     `);
 
     // Thumbnail cache table - persists across server restarts
@@ -603,6 +619,59 @@ async function initDatabase() {
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS news_url TEXT
     `);
+
+    // Add status_url column for MTB Trail Status feature
+    await client.query(`
+      ALTER TABLE pois ADD COLUMN IF NOT EXISTS status_url VARCHAR(500)
+    `);
+
+    // Create trail_status table for storing trail condition updates
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trail_status (
+        id SERIAL PRIMARY KEY,
+        poi_id INTEGER NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
+        status VARCHAR(50) NOT NULL,
+        conditions TEXT,
+        last_updated TIMESTAMP,
+        source_name VARCHAR(200),
+        source_url VARCHAR(1000),
+        weather_impact TEXT,
+        seasonal_closure BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Create indexes for trail_status
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_poi_id ON trail_status(poi_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_updated ON trail_status(last_updated DESC)`);
+
+    // Create trail_status_job_status table for job tracking
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS trail_status_job_status (
+        id SERIAL PRIMARY KEY,
+        job_type VARCHAR(50),
+        status VARCHAR(20),
+        started_at TIMESTAMP,
+        completed_at TIMESTAMP,
+        total_trails INTEGER,
+        trails_processed INTEGER,
+        status_found INTEGER,
+        error_message TEXT,
+        poi_ids TEXT,
+        processed_poi_ids TEXT,
+        pg_boss_job_id VARCHAR(100),
+        ai_usage JSONB,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+
+    // Add ai_usage column if missing (for existing tables)
+    await client.query(`
+      ALTER TABLE trail_status_job_status ADD COLUMN IF NOT EXISTS ai_usage JSONB
+    `);
+
+    // Create indexes for job status queries
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_job_status_created ON trail_status_job_status(created_at DESC)`);
 
     // Note: linear_features table is deprecated - data migrated to pois table above
 
@@ -1011,7 +1080,7 @@ app.get('/api/destinations', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_mime_type, p.image_drive_file_id, p.news_url, p.events_url,
+             p.image_mime_type, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1035,7 +1104,7 @@ app.get('/api/destinations/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_mime_type, p.image_drive_file_id, p.news_url, p.events_url,
+             p.image_mime_type, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1086,7 +1155,7 @@ app.get('/api/linear-features', async (req, res) => {
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.image_mime_type, p.image_drive_file_id,
-             p.boundary_type, p.boundary_color, p.news_url, p.events_url,
+             p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1110,7 +1179,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.image_mime_type, p.image_drive_file_id,
-             p.boundary_type, p.boundary_color,
+             p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1197,6 +1266,82 @@ app.get('/api/pois/:id/events', async (req, res) => {
   } catch (error) {
     console.error('Error fetching POI events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
+  }
+});
+
+// Get trail status for a specific trail (public)
+app.get('/api/pois/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const status = await getLatestTrailStatus(pool, id);
+
+    if (!status) {
+      return res.json({
+        status: 'unknown',
+        conditions: null,
+        last_updated: null,
+        source_name: null,
+        source_url: null,
+        weather_impact: null,
+        seasonal_closure: false
+      });
+    }
+
+    res.json({
+      status: status.status,
+      conditions: status.conditions,
+      last_updated: status.last_updated,
+      source_name: status.source_name,
+      source_url: status.source_url,
+      weather_impact: status.weather_impact,
+      seasonal_closure: status.seasonal_closure
+    });
+  } catch (error) {
+    console.error('Error fetching trail status:', error);
+    res.status(500).json({ error: 'Failed to fetch trail status' });
+  }
+});
+
+// Get all MTB trails with optional status (public)
+app.get('/api/trails/mtb', async (req, res) => {
+  try {
+    const includeStatus = req.query.includeStatus === 'true';
+
+    let query = `
+      SELECT id, name, brief_description, poi_type, status_url,
+             latitude, longitude,
+             length_miles, difficulty, surface, primary_activities,
+             geometry
+      FROM pois
+      WHERE status_url IS NOT NULL
+      AND status_url != ''
+      AND (deleted IS NULL OR deleted = FALSE)
+      ORDER BY name
+    `;
+
+    const result = await pool.query(query);
+    const trails = result.rows;
+
+    // Optionally fetch latest status for each trail
+    if (includeStatus) {
+      for (const trail of trails) {
+        const status = await getLatestTrailStatus(pool, trail.id);
+        trail.status = status ? {
+          status: status.status,
+          conditions: status.conditions,
+          last_updated: status.last_updated,
+          weather_impact: status.weather_impact,
+          seasonal_closure: status.seasonal_closure,
+          source_name: status.source_name,
+          source_url: status.source_url
+        } : null;
+      }
+    }
+
+    res.json(trails);
+  } catch (error) {
+    console.error('Error fetching MTB trails:', error);
+    res.status(500).json({ error: 'Failed to fetch MTB trails' });
   }
 });
 
@@ -1577,6 +1722,34 @@ async function start() {
 
     // Schedule daily news collection at 6 AM Eastern
     await scheduleNewsCollection('0 6 * * *');
+
+    // Register scheduled trail status collection handler
+    await registerTrailStatusHandler(async () => {
+      console.log('Running scheduled trail status collection for all MTB trails...');
+      const { runTrailStatusCollection } = await import('./services/trailStatusService.js');
+      const boss = app.get('boss');
+      const result = await runTrailStatusCollection(pool, boss, {
+        jobType: 'scheduled_collection'
+      });
+      if (result.totalTrails > 0) {
+        console.log(`Trail status collection started for ${result.totalTrails} trails`);
+      } else {
+        console.log('No MTB trails to collect');
+      }
+    });
+
+    // Register batch trail status collection handler
+    await registerBatchTrailStatusHandler(async (jobId, poiIds) => {
+      console.log(`[pg-boss] Processing batch trail status job: ${jobId}`);
+      await processTrailStatusCollectionJob(pool, jobId, poiIds);
+    });
+
+    // Schedule trail status collection once daily at 6 AM Eastern (same as news collection)
+    const trailStatusInterval = '0 6 * * *';  // Daily at 6 AM
+    await scheduleTrailStatusCollection(trailStatusInterval);
+
+    // Make boss available to routes
+    app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));
 
     // Resume any incomplete jobs from before restart
     const incompleteJobs = await findIncompleteJobs(pool);
