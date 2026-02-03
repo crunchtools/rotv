@@ -3481,8 +3481,19 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         });
       }
 
-      // For completed jobs, use database values
-      const aiUsage = job.ai_usage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+      // For completed/cancelled jobs, use database values
+      // Parse ai_usage if it's a string
+      let aiUsage = job.ai_usage;
+      if (typeof aiUsage === 'string') {
+        try {
+          aiUsage = JSON.parse(aiUsage);
+        } catch (e) {
+          console.error('Error parsing ai_usage:', e);
+          aiUsage = { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+        }
+      }
+      aiUsage = aiUsage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+
       res.json({
         usage: {
           gemini: aiUsage.gemini || 0,
@@ -3925,8 +3936,19 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         });
       }
 
-      // For completed jobs, use database values
-      const aiUsage = job.ai_usage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+      // For completed/cancelled jobs, use database values
+      // Parse ai_usage if it's a string
+      let aiUsage = job.ai_usage;
+      if (typeof aiUsage === 'string') {
+        try {
+          aiUsage = JSON.parse(aiUsage);
+        } catch (e) {
+          console.error('Error parsing ai_usage:', e);
+          aiUsage = { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+        }
+      }
+      aiUsage = aiUsage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+
       res.json({
         usage: {
           gemini: aiUsage.gemini || 0,

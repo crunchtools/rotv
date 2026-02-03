@@ -59,7 +59,7 @@ export function updateProgress(poiId, updates) {
     updates.phaseHistory = phaseHistory;
   }
 
-  const updated = { ...current, ...updates, lastUpdate: Date.now() };
+  const updated = { ...current, ...updates, poiId, lastUpdate: Date.now() };
   collectionProgress.set(poiId, updated);
 
   // Update display slot if slotId and jobId are present
