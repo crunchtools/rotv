@@ -82,6 +82,9 @@ Environment=PGPORT=5432
 # Fix permissions on data directory (runs as root due to ! prefix)
 ExecStartPre=+/bin/bash -c 'mkdir -p /data/pgdata && chown -R postgres:postgres /data/pgdata && chmod 700 /data/pgdata'
 
+# Create socket directory (runs as root due to ! prefix)
+ExecStartPre=+/bin/bash -c 'mkdir -p /tmp/pgsocket && chmod 1777 /tmp/pgsocket'
+
 # Initialization script - creates DB if needed (runs as postgres user)
 ExecStartPre=/bin/bash -c 'if [ ! -f /data/pgdata/PG_VERSION ]; then /usr/pgsql-17/bin/initdb -D /data/pgdata; fi'
 
