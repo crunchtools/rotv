@@ -372,6 +372,19 @@ function DataCollectionSettings() {
         method: 'POST',
         credentials: 'include'
       });
+
+      // Immediately fetch AI stats after cancel to prevent badge flicker
+      try {
+        const statsResponse = await fetch('/api/admin/news/ai-stats', {
+          credentials: 'include'
+        });
+        if (statsResponse.ok) {
+          const stats = await statsResponse.json();
+          setNewsAiStats(stats);
+        }
+      } catch (statsErr) {
+        console.error('Error fetching news AI stats after cancel:', statsErr);
+      }
     } catch (err) {
       console.error('Error cancelling news job:', err);
     }
@@ -383,6 +396,19 @@ function DataCollectionSettings() {
         method: 'PUT',
         credentials: 'include'
       });
+
+      // Immediately fetch AI stats after cancel to prevent badge flicker
+      try {
+        const statsResponse = await fetch('/api/admin/trail-status/ai-stats', {
+          credentials: 'include'
+        });
+        if (statsResponse.ok) {
+          const stats = await statsResponse.json();
+          setTrailAiStats(stats);
+        }
+      } catch (statsErr) {
+        console.error('Error fetching trail AI stats after cancel:', statsErr);
+      }
     } catch (err) {
       console.error('Error cancelling trail job:', err);
     }
