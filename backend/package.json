@@ -27,10 +27,10 @@
     "passport-google-oauth20": "^2.0.0",
     "pg": "^8.11.3",
     "pg-boss": "^12.5.4",
+    "playwright": "1.58.1",
     "sharp": "^0.33.5"
   },
   "devDependencies": {
-    "playwright": "1.58.1",
     "supertest": "^7.2.2",
     "vitest": "^2.1.8"
   }
