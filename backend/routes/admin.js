@@ -3222,7 +3222,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       }
 
       // Get display slots (exactly 10 slots with stable assignments)
-      const displaySlots = getNewsDisplaySlots(status.jobId);
+      const displaySlots = getNewsDisplaySlots(status.id);
 
       // Determine current phase from display slots
       let currentPhase = null;
