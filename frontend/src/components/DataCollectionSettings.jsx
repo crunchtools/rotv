@@ -92,15 +92,8 @@ function DataCollectionSettings() {
       });
       if (response.ok) {
         const status = await response.json();
-        setNewsProgress(status);
 
-        // Backend-managed slots: Just use what the backend sends
-        if (status.displaySlots) {
-          console.log('[News] Received displaySlots:', JSON.stringify(status.displaySlots, null, 2));
-          setNewsJobSlots(status.displaySlots);
-        }
-
-        // Fetch AI stats while job is running or when it completes
+        // Fetch AI stats FIRST to prevent badge flicker
         if (status.status === 'running' || status.status === 'completed' || status.status === 'cancelled') {
           try {
             const statsResponse = await fetch('/api/admin/news/ai-stats', {
@@ -113,6 +106,15 @@ function DataCollectionSettings() {
           } catch (statsErr) {
             console.error('Error fetching news AI stats:', statsErr);
           }
+        }
+
+        // Update progress and slots AFTER stats are fetched
+        setNewsProgress(status);
+
+        // Backend-managed slots: Just use what the backend sends
+        if (status.displaySlots) {
+          console.log('[News] Received displaySlots:', JSON.stringify(status.displaySlots, null, 2));
+          setNewsJobSlots(status.displaySlots);
         }
 
         // Stop polling only when job is done AND all display slots have finished
@@ -141,15 +143,8 @@ function DataCollectionSettings() {
       });
       if (response.ok) {
         const status = await response.json();
-        setTrailProgress(status);
 
-        // Backend-managed slots: Just use what the backend sends
-        if (status.displaySlots) {
-          console.log('[Trail] Received displaySlots:', JSON.stringify(status.displaySlots, null, 2));
-          setTrailJobSlots(status.displaySlots);
-        }
-
-        // Fetch AI stats while job is running or when it completes
+        // Fetch AI stats FIRST to prevent badge flicker
         if (status.status === 'running' || status.status === 'completed' || status.status === 'cancelled') {
           try {
             const statsResponse = await fetch('/api/admin/trail-status/ai-stats', {
@@ -162,6 +157,15 @@ function DataCollectionSettings() {
           } catch (statsErr) {
             console.error('Error fetching trail AI stats:', statsErr);
           }
+        }
+
+        // Update progress and slots AFTER stats are fetched
+        setTrailProgress(status);
+
+        // Backend-managed slots: Just use what the backend sends
+        if (status.displaySlots) {
+          console.log('[Trail] Received displaySlots:', JSON.stringify(status.displaySlots, null, 2));
+          setTrailJobSlots(status.displaySlots);
         }
 
         // Stop polling only when job is done AND all display slots have finished
@@ -814,9 +818,12 @@ function DataCollectionSettings() {
             const geminiUsage = newsAiStats?.usage?.gemini || 0;
             const perplexityUsage = newsAiStats?.usage?.perplexity || 0;
 
-            // Show table if job is running OR if we have any jobs in slots OR if there are AI stats to display
+            // Determine if we should show the table
             const hasJobs = slots.some(s => s !== null);
             const hasAiStats = geminiUsage > 0 || perplexityUsage > 0 || total429 > 0;
+
+            // Show table if: job running, OR jobs in slots, OR AI stats exist
+            // This ensures badges don't flicker when transitioning between states
             if (!isJobRunning && !hasJobs && !hasAiStats) return null;
 
             return (

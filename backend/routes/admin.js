@@ -3175,6 +3175,20 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     try {
       console.log(`Admin ${req.user.email} triggered full news collection`);
 
+      // Check if a job is already running
+      const runningJobCheck = await pool.query(`
+        SELECT id FROM news_job_status
+        WHERE status = 'running'
+        LIMIT 1
+      `);
+
+      if (runningJobCheck.rows.length > 0) {
+        return res.status(409).json({
+          error: 'A news collection job is already running',
+          runningJobId: runningJobCheck.rows[0].id
+        });
+      }
+
       // Get all active POI IDs
       const poisResult = await pool.query(`
         SELECT id FROM pois
@@ -3779,6 +3793,20 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       const { poiIds } = req.body;
 
       console.log(`Admin ${req.user.email} triggered batch trail status collection for ${poiIds?.length || 'all'} trails`);
+
+      // Check if a job is already running
+      const runningJobCheck = await pool.query(`
+        SELECT id FROM trail_status_job_status
+        WHERE status = 'running'
+        LIMIT 1
+      `);
+
+      if (runningJobCheck.rows.length > 0) {
+        return res.status(409).json({
+          error: 'A trail status collection job is already running',
+          runningJobId: runningJobCheck.rows[0].id
+        });
+      }
 
       const result = await runTrailStatusCollection(pool, req.app.get('boss'), {
         poiIds: poiIds || null,
