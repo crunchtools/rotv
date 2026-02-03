@@ -79,3 +79,11 @@ COMMENT ON TABLE trail_status IS 'Stores MTB trail status and condition updates'
 COMMENT ON TABLE trail_status_job_status IS 'Tracks trail status collection job progress';
 COMMENT ON COLUMN pois.status_url IS 'URL to trail status page (for MTB trails)';
 COMMENT ON COLUMN pois.is_mtb_trail IS 'Flag indicating this is a mountain bike trail';
+
+-- 5. Configure known MTB trails with their status URLs
+-- East Rim Trail - status from CVNP MTB Twitter account
+UPDATE pois
+SET status_url = 'https://x.com/CVNPmtb',
+    is_mtb_trail = TRUE
+WHERE name LIKE '%East Rim%'
+  AND status_url IS DISTINCT FROM 'https://x.com/CVNPmtb';

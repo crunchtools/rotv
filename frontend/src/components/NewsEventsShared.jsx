@@ -5,7 +5,7 @@
 import React from 'react';
 
 /**
- * Format a date string for display
+ * Format a date string for display in US format (MM/DD/YYYY)
  * @param {string} dateString - ISO date string
  * @returns {string} - Formatted date string
  */
@@ -13,14 +13,14 @@ export function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     year: 'numeric'
   });
 }
 
 /**
- * Format a date with weekday included
+ * Format a date with weekday included in US format (Sat, MM/DD/YYYY)
  * @param {string} dateString - ISO date string
  * @returns {string} - Formatted date with weekday
  */
@@ -29,25 +29,26 @@ export function formatDateWithWeekday(dateString) {
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
     weekday: 'short',
-    month: 'short',
-    day: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     year: 'numeric'
   });
 }
 
 /**
- * Format a date with time for job status display
+ * Format a date with time in US format (MM/DD/YYYY h:mm AM/PM)
  * @param {string} dateString - ISO date string
  * @returns {string} - Formatted date with time
  */
 export function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
     year: 'numeric',
     hour: 'numeric',
-    minute: '2-digit'
+    minute: '2-digit',
+    hour12: true
   });
 }
 

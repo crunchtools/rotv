@@ -6,7 +6,9 @@ const StatusTab = memo(function StatusTab({
   mapState,
   onMapClick,
   onSelectLinearFeature,
-  linearFeatures
+  onSelectDestination,
+  linearFeatures,
+  destinations
 }) {
   const [trails, setTrails] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -74,12 +76,23 @@ const StatusTab = memo(function StatusTab({
   }, [filteredTrails]);
 
   const handleTrailClick = useCallback((trail) => {
-    // Find the full linear feature object from the linearFeatures prop
-    const fullTrail = linearFeatures?.find(f => f.id === trail.id);
-    if (fullTrail) {
-      onSelectLinearFeature(fullTrail);
+    // Handle both point POIs and linear features
+    if (trail.poi_type === 'point') {
+      // Find the full destination object
+      const fullDestination = destinations?.find(d => d.id === trail.id);
+      if (fullDestination) {
+        onSelectDestination(fullDestination);
+        onMapClick();
+      }
+    } else {
+      // Find the full linear feature object (trail, river, boundary, etc.)
+      const fullTrail = linearFeatures?.find(f => f.id === trail.id);
+      if (fullTrail) {
+        onSelectLinearFeature(fullTrail);
+        onMapClick();
+      }
     }
-  }, [linearFeatures, onSelectLinearFeature]);
+  }, [linearFeatures, destinations, onSelectLinearFeature, onSelectDestination, onMapClick]);
 
   const getStatusBadge = (status) => {
     const statusMap = {

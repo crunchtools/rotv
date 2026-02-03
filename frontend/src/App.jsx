@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import Map from './components/Map';
@@ -12,11 +13,9 @@ import SurfacesSettings from './components/SurfacesSettings';
 import IconsSettings from './components/IconsSettings';
 import ParkNews from './components/ParkNews';
 import ParkEvents from './components/ParkEvents';
-import NewsSettings from './components/NewsSettings';
-import TrailStatusSettings from './components/TrailStatusSettings';
+import DataCollectionSettings from './components/DataCollectionSettings';
 import ResultsTab from './components/ResultsTab';
 import OrganizationsTab from './components/OrganizationsTab';
-import StatusTab from './components/StatusTab';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse']);
@@ -140,6 +139,58 @@ function AppContent() {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [profileImageError, setProfileImageError] = useState(false);
 
+  // Router hooks
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Track programmatic navigation to avoid effect conflicts
+  const isProgrammaticNavigationRef = useRef(false);
+  const isLoadingFromUrlRef = useRef(false);
+
+  // Initial MTB filter state for Results tab (controlled by URL path)
+  const [initialShowMtbOnly, setInitialShowMtbOnly] = useState(false);
+  const [isInMtbMode, setIsInMtbMode] = useState(false);
+  const [selectedFromMtbList, setSelectedFromMtbList] = useState(false);
+
+  // Check URL path for MTB trail status route
+  useEffect(() => {
+    if (location.pathname.startsWith('/mtb-trail-status')) {
+      const pathParts = location.pathname.split('/');
+      const poiSlug = pathParts[2]; // /mtb-trail-status/east-rim-trail -> 'east-rim-trail'
+
+      // Only set to results tab if there's no POI slug in URL (otherwise POI loading will handle it)
+      if (!poiSlug) {
+        setActiveTab('results');
+      }
+      setInitialShowMtbOnly(true);
+      setIsInMtbMode(true);
+    } else {
+      setIsInMtbMode(false);
+    }
+  }, [location.pathname]);
+
+  // Helper to handle tab changes and clear MTB mode if needed
+  const handleTabChange = useCallback((newTab) => {
+    setActiveTab(newTab);
+    // If switching away from Results tab and currently on MTB trail status page, navigate back to home
+    if (newTab !== 'results' && location.pathname.startsWith('/mtb-trail-status')) {
+      navigate('/');
+      setSelectedFromMtbList(false);
+    }
+  }, [location.pathname, navigate]);
+
+  // Handle MTB filter toggle from ResultsTab - update URL accordingly
+  const handleShowMtbOnlyChange = useCallback((showMtbOnly) => {
+    isProgrammaticNavigationRef.current = true;
+    if (showMtbOnly) {
+      navigate('/mtb-trail-status');
+      setIsInMtbMode(true);
+    } else {
+      navigate('/');
+      setIsInMtbMode(false);
+    }
+  }, [navigate]);
+
   // Reset to View tab when user loses admin status (e.g., logout)
   useEffect(() => {
     if (!isAdmin && (activeTab === 'edit' || activeTab === 'settings')) {
@@ -193,8 +244,19 @@ function AppContent() {
       window.history.replaceState({}, '', newUrl);
     }
 
-    // Check for POI query parameter (for direct linking) - now uses slug
-    const poiSlug = params.get('poi');
+    // Check for POI - first check path-based route (/:slug)
+    // Then fall back to query parameter (?poi=slug) for backward compatibility
+    let poiSlug = null;
+    const pathParts = window.location.pathname.split('/').filter(Boolean);
+
+    if (pathParts.length === 1 && pathParts[0] !== 'mtb-trail-status') {
+      // POI path: /:slug (but not /mtb-trail-status which is the list page)
+      poiSlug = pathParts[0];
+    } else {
+      // Fall back to query parameter for backward compatibility
+      poiSlug = params.get('poi');
+    }
+
     if (poiSlug) {
       setInitialPoiSlug(poiSlug);
     }
@@ -203,11 +265,18 @@ function AppContent() {
   // Auto-select POI from URL after data loads (matches by slug)
   useEffect(() => {
     if (initialPoiSlug && !loading && destinations.length > 0) {
+      const isOnMtbPage = location.pathname.startsWith('/mtb-trail-status');
+
       // First check point destinations by slug match
       const destination = destinations.find(d => generateSlug(d.name) === initialPoiSlug);
       if (destination) {
         setSelectedDestination(destination);
         document.title = `${destination.name} | Roots of The Valley`;
+        // If on MTB page, mark as selected from MTB list and switch to view tab
+        if (isOnMtbPage) {
+          setSelectedFromMtbList(true);
+          setActiveTab('view');
+        }
         setInitialPoiSlug(null); // Clear so it doesn't re-trigger
         return;
       }
@@ -217,6 +286,11 @@ function AppContent() {
       if (virtualPoi) {
         setSelectedDestination(virtualPoi);
         document.title = `${virtualPoi.name} | Roots of The Valley`;
+        // If on MTB page, mark as selected from MTB list and switch to view tab
+        if (isOnMtbPage) {
+          setSelectedFromMtbList(true);
+          setActiveTab('view');
+        }
         setInitialPoiSlug(null);
         return;
       }
@@ -226,6 +300,11 @@ function AppContent() {
       if (linearFeature) {
         setSelectedLinearFeature(linearFeature);
         document.title = `${linearFeature.name} | Roots of The Valley`;
+        // If on MTB page, mark as selected from MTB list and switch to view tab
+        if (isOnMtbPage) {
+          setSelectedFromMtbList(true);
+          setActiveTab('view');
+        }
         setInitialPoiSlug(null);
         return;
       }
@@ -233,7 +312,137 @@ function AppContent() {
       // POI not found - clear the param
       setInitialPoiSlug(null);
     }
-  }, [initialPoiSlug, loading, destinations, linearFeatures, virtualPois]);
+  }, [initialPoiSlug, loading, destinations, linearFeatures, virtualPois, location.pathname]);
+
+  // Handle browser back/forward navigation for all POI paths
+  useEffect(() => {
+    console.log('[Browser Nav Effect] Running:', { pathname: location.pathname, isProgrammatic: isProgrammaticNavigationRef.current });
+
+    // Skip if this is a programmatic navigation (handled by click handler)
+    if (isProgrammaticNavigationRef.current) {
+      console.log('[Browser Nav Effect] Skipping programmatic navigation');
+      isProgrammaticNavigationRef.current = false;
+      return;
+    }
+
+    // Only run if data is loaded
+    if (loading || destinations.length === 0) {
+      console.log('[Browser Nav Effect] Skipping - data not loaded');
+      return;
+    }
+
+    // Check if we're on the MTB trail status list page (no POI slug)
+    if (location.pathname === '/mtb-trail-status') {
+      // User navigated to MTB trails list
+      // Clear any selected POI only if one is currently selected
+      // BUT don't clear if we're in the middle of loading from URL
+      if (!isLoadingFromUrlRef.current && (selectedDestination || selectedLinearFeature)) {
+        console.log('[Browser Nav Effect] Clearing POI - navigated to MTB list');
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        setActiveTab('results');
+        document.title = 'Roots of The Valley';
+      }
+      return; // MTB list handled, exit early
+    }
+
+    // Handle root path: "/" should clear any selected POI
+    if (location.pathname === '/') {
+      if (!isLoadingFromUrlRef.current && (selectedDestination || selectedLinearFeature)) {
+        console.log('[Browser Nav Effect] Root path - clearing POI');
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        document.title = 'Roots of The Valley';
+      }
+      return;
+    }
+
+    // Check if path is a POI slug: /:slug (single segment, not empty)
+    const pathParts = location.pathname.split('/').filter(Boolean); // Remove empty strings
+    if (pathParts.length === 1) {
+      const poiSlug = pathParts[0];
+
+      // Check if this slug matches currently selected POI
+      const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
+        : selectedLinearFeature ? generateSlug(selectedLinearFeature.name)
+        : null;
+
+      console.log('[Browser Nav Effect] POI path - slug:', poiSlug, 'current:', currentSlug);
+
+      // If already showing the correct POI, don't re-set state
+      if (currentSlug === poiSlug) {
+        console.log('[Browser Nav Effect] Already showing correct POI, skipping');
+        return;
+      }
+
+      // Allow map to fly to POI when using browser navigation
+      skipNextFlyRef.current = false;
+
+      // Set flag to prevent URL update effect from running
+      isLoadingFromUrlRef.current = true;
+
+      // Find and select the POI
+      const destination = destinations.find(d => generateSlug(d.name) === poiSlug);
+      if (destination) {
+        setSelectedDestination(destination);
+        setSelectedLinearFeature(null);
+        // Don't change selectedFromMtbList - preserve state for browser navigation
+        setActiveTab('view');
+        document.title = `${destination.name} | Roots of The Valley`;
+        // Clear flag after state is set
+        setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+        return;
+      }
+
+      const virtualPoi = virtualPois.find(v => generateSlug(v.name) === poiSlug);
+      if (virtualPoi) {
+        setSelectedDestination(virtualPoi);
+        setSelectedLinearFeature(null);
+        // Don't change selectedFromMtbList - preserve state for browser navigation
+        setActiveTab('view');
+        document.title = `${virtualPoi.name} | Roots of The Valley`;
+        // Clear flag after state is set
+        setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+        return;
+      }
+
+      const linearFeature = linearFeatures.find(f => generateSlug(f.name) === poiSlug);
+      if (linearFeature) {
+        setSelectedLinearFeature(linearFeature);
+        setSelectedDestination(null);
+        // Don't change selectedFromMtbList - preserve state for browser navigation
+        setActiveTab('view');
+        document.title = `${linearFeature.name} | Roots of The Valley`;
+
+        // Enable layer visibility so feature appears on map
+        if (linearFeature.feature_type === 'boundary') {
+          setVisibleBoundaries(prev => {
+            if (prev.has(linearFeature.id)) return prev;
+            const next = new Set(prev);
+            next.add(linearFeature.id);
+            return next;
+          });
+        } else if (linearFeature.feature_type === 'trail') {
+          setShowTrails(true);
+        } else if (linearFeature.feature_type === 'river') {
+          setShowRivers(true);
+        }
+        // Clear flag after state is set
+        setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+        return;
+      }
+
+      // POI not found - clear flag
+      console.warn('[Browser Nav Effect] POI not found for slug:', poiSlug);
+      isLoadingFromUrlRef.current = false;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname, loading, destinations, linearFeatures, virtualPois]);
+  // NOTE: selectedDestination and selectedLinearFeature are intentionally NOT in dependencies
+  // We only want this effect to run on URL changes (browser back/forward), not POI state changes
+
+  // URL updates are now handled directly in click handlers with setTimeout
+  // This avoids race conditions with state updates and navigation
 
   // Reusable function to fetch all data (used on mount and after sync operations)
   const refreshAllData = React.useCallback(async () => {
@@ -316,20 +525,23 @@ function AppContent() {
   const skipNextFlyRef = useRef(false);
 
   // Combined navigation list (destinations + linear features + virtual POIs, sorted alphabetically)
+  // In MTB mode, use all linear features (not just viewport filtered) so we can navigate to any trail
   const poiNavigationList = useMemo(() => {
     const dests = (viewportFilteredDestinations || []).map(d => ({
       ...d,
       _isLinear: false,
       _isVirtual: d.poi_type === 'virtual'
     }));
-    const linear = (viewportFilteredLinearFeatures || []).map(f => ({ ...f, _isLinear: true }));
+    // Use all linear features in MTB mode, viewport filtered otherwise
+    const linearSource = isInMtbMode ? linearFeatures : viewportFilteredLinearFeatures;
+    const linear = (linearSource || []).map(f => ({ ...f, _isLinear: true }));
     const virtual = (viewportFilteredVirtualPois || []).map(v => ({
       ...v,
       _isLinear: false,
       _isVirtual: true
     }));
     return [...dests, ...linear, ...virtual].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-  }, [viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois]);
+  }, [viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, isInMtbMode, linearFeatures]);
 
   // Sync currentPoiIndex when selectedDestination changes (for URL loading and direct selection)
   useEffect(() => {
@@ -354,7 +566,10 @@ function AppContent() {
       if (index !== -1) {
         setCurrentPoiIndex(index);
       } else {
+        const linearInList = poiNavigationList.filter(p => p._isLinear);
         console.warn('[Navigation] Could not find selected linear feature in navigation list:', selectedLinearFeature.name, 'ID:', selectedLinearFeature.id);
+        console.warn('[Navigation] Navigation list has', linearInList.length, 'linear features out of', poiNavigationList.length, 'total');
+        console.warn('[Navigation] Is trail in list?', linearInList.some(p => String(p.id) === String(selectedLinearFeature.id)));
       }
     } else if (!selectedDestination && !selectedLinearFeature) {
       setCurrentPoiIndex(-1);
@@ -428,17 +643,19 @@ function AppContent() {
   };
 
   // Helper to update URL with POI slug (for shareable links)
+  // Uses path-based routing: /:slug instead of ?poi=slug
   const updateUrlWithPoi = useCallback((poiName) => {
-    const params = new URLSearchParams(window.location.search);
     if (poiName) {
-      params.set('poi', generateSlug(poiName));
+      const slug = generateSlug(poiName);
+      // Set flag to prevent browser nav effect from clearing POI
+      isProgrammaticNavigationRef.current = true;
+      navigate(`/${slug}`);
     } else {
-      params.delete('poi');
+      // No POI - navigate to root
+      isProgrammaticNavigationRef.current = true;
+      navigate('/');
     }
-    const newSearch = params.toString();
-    const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
-    window.history.replaceState({}, '', newUrl);
-  }, []);
+  }, [navigate]);
 
   // Handle linear feature selection (clears destination selection) - wrapped in useCallback for stable reference
   const handleSelectLinearFeature = useCallback((feature) => {
@@ -446,6 +663,7 @@ function AppContent() {
     setNewPOI(null);
     setPreviewCoords(null);
     setSelectedLinearFeature(feature);
+    setSelectedFromMtbList(false); // Not from MTB list (map click or other)
     updateUrlWithPoi(feature?.name);
     // Update document title for sharing
     document.title = feature ? `${feature.name} | Roots of The Valley` : 'Roots of The Valley';
@@ -483,6 +701,7 @@ function AppContent() {
   const handleSelectDestination = useCallback((destination) => {
     setSelectedLinearFeature(null);
     setSelectedDestination(destination);
+    setSelectedFromMtbList(false); // Not from MTB list (map click or other)
     updateUrlWithPoi(destination?.name);
     // Update document title for sharing
     document.title = destination ? `${destination.name} | Roots of The Valley` : 'Roots of The Valley';
@@ -542,20 +761,112 @@ function AppContent() {
   }, [poiNavigationList, currentPoiIndex, updateUrlWithPoi]);
 
   // Stable callbacks for ResultsTab - always switch to view tab to show sidebar with navigation
-  // Skip fly animation when selecting from Results to preserve map view
+  // Skip fly animation when selecting from Results to preserve map view (except in MTB mode where we want to fly to the trail)
   const handleResultsSelectDestination = useCallback((poi) => {
-    skipNextFlyRef.current = true; // Don't fly to POI - preserve current map view
-    handleSelectDestination(poi);
-    // Always switch to view tab to show sidebar with thumbnail navigation
-    setActiveTab('view');
-  }, [handleSelectDestination]);
+    if (isInMtbMode && poi) {
+      const slug = generateSlug(poi.name);
+
+      // Set flag FIRST to prevent browser nav effect from clearing POI
+      isProgrammaticNavigationRef.current = true;
+
+      // Explicitly allow fly animation
+      skipNextFlyRef.current = false;
+
+      // Switch to view tab first, THEN set destination after a delay
+      // This ensures the map container is visible (zIndex=1) before flyTo is called
+      console.log('[MTB Click] Switching to view tab for:', poi.name);
+      setActiveTab('view');
+      setSelectedFromMtbList(true);
+      document.title = `${poi.name} | Roots of The Valley`;
+
+      // Wait for tab to render and map to be ready, then set destination to trigger zoom
+      // Use requestAnimationFrame to ensure DOM has updated
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          console.log('[MTB Click] Setting destination:', poi.name);
+          setSelectedDestination(poi);
+          setSelectedLinearFeature(null);
+          setNewPOI(null);
+          setPreviewCoords(null);
+
+          // Update navigation index
+          const index = poiNavigationList.findIndex(p => !p._isLinear && String(p.id) === String(poi.id));
+          setCurrentPoiIndex(index);
+
+          // Navigate after setting destination
+          setTimeout(() => {
+            navigate(`/${slug}`);
+          }, 100);
+        }, 100); // Delay to let map visibility handler complete
+      });
+    } else {
+      // Normal mode - skip fly to preserve map view
+      skipNextFlyRef.current = true;
+      handleSelectDestination(poi);
+      setSelectedFromMtbList(false);
+      setActiveTab('view');
+    }
+  }, [handleSelectDestination, isInMtbMode, navigate, poiNavigationList]);
 
   const handleResultsSelectLinearFeature = useCallback((poi) => {
-    skipNextFlyRef.current = true; // Don't fly to POI - preserve current map view
-    handleSelectLinearFeature(poi);
-    // Always switch to view tab to show sidebar with thumbnail navigation
-    setActiveTab('view');
-  }, [handleSelectLinearFeature]);
+    if (isInMtbMode && poi) {
+      const slug = generateSlug(poi.name);
+
+      // Set flag FIRST to prevent browser nav effect from clearing POI
+      isProgrammaticNavigationRef.current = true;
+
+      // CRITICAL: If this trail isn't in linearFeatures yet (MTB trails are fetched separately),
+      // add it so the map can work with it
+      if (!linearFeatures.find(f => String(f.id) === String(poi.id))) {
+        setLinearFeatures(prev => [...prev, poi]);
+      }
+
+      // Explicitly allow fly animation
+      skipNextFlyRef.current = false;
+
+      // Switch to view tab first, THEN set linear feature after a brief delay
+      // This ensures the map container is visible (zIndex=1) before any map operations
+      setActiveTab('view');
+      setSelectedFromMtbList(true);
+      document.title = `${poi.name} | Roots of The Valley`;
+
+      // CRITICAL: Enable layer visibility so feature appears on map
+      if (poi.feature_type === 'boundary') {
+        setVisibleBoundaries(prev => {
+          if (prev.has(poi.id)) return prev;
+          const next = new Set(prev);
+          next.add(poi.id);
+          return next;
+        });
+      } else if (poi.feature_type === 'trail') {
+        setShowTrails(true);
+      } else if (poi.feature_type === 'river') {
+        setShowRivers(true);
+      }
+
+      // Wait for tab to render, then set linear feature
+      setTimeout(() => {
+        setSelectedLinearFeature(poi);
+        setSelectedDestination(null);
+        setNewPOI(null);
+        setPreviewCoords(null);
+
+        // Update navigation index - will be set by the effect after linearFeatures updates
+        setCurrentPoiIndex(-1);
+
+        // Navigate after setting linear feature
+        setTimeout(() => {
+          navigate(`/${slug}`);
+        }, 100);
+      }, 50); // Small delay to let tab switch complete
+    } else {
+      // Normal mode - skip fly to preserve map view
+      skipNextFlyRef.current = true;
+      handleSelectLinearFeature(poi);
+      setSelectedFromMtbList(false);
+      setActiveTab('view');
+    }
+  }, [handleSelectLinearFeature, isInMtbMode, navigate, linearFeatures]);
 
   // Handle linear feature update - merge instead of replace to preserve geometry
   const handleLinearFeatureUpdate = (updatedFeature) => {
@@ -769,51 +1080,45 @@ function AppContent() {
   return (
     <div className="app">
       <header className="header">
-        <div className="header-left" onClick={() => setActiveTab('view')} style={{ cursor: 'pointer' }}>
+        <div className="header-left" onClick={() => handleTabChange('view')} style={{ cursor: 'pointer' }}>
           <h1>Roots of The Valley</h1>
           <span className="subtitle">Explore Cuyahoga Valley's History</span>
         </div>
         <nav className="header-tabs">
           <button
             className={`tab-btn ${activeTab === 'view' ? 'active' : ''}`}
-            onClick={() => setActiveTab('view')}
+            onClick={() => handleTabChange('view')}
           >
             View
           </button>
           <button
             className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
-            onClick={() => setActiveTab('results')}
+            onClick={() => handleTabChange('results')}
           >
             Results
           </button>
           <button
             className={`tab-btn ${activeTab === 'news' ? 'active' : ''}`}
-            onClick={() => setActiveTab('news')}
+            onClick={() => handleTabChange('news')}
           >
             News
           </button>
           <button
             className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
-            onClick={() => setActiveTab('events')}
+            onClick={() => handleTabChange('events')}
           >
             Events
           </button>
           <button
             className={`tab-btn ${activeTab === 'organizations' ? 'active' : ''}`}
-            onClick={() => setActiveTab('organizations')}
+            onClick={() => handleTabChange('organizations')}
           >
             Organizations
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'status' ? 'active' : ''}`}
-            onClick={() => setActiveTab('status')}
-          >
-            Status
           </button>
           {isAdmin && (
             <button
               className={`tab-btn ${activeTab === 'edit' ? 'active' : ''}`}
-              onClick={() => setActiveTab('edit')}
+              onClick={() => handleTabChange('edit')}
             >
               Edit
             </button>
@@ -821,7 +1126,7 @@ function AppContent() {
           {isAdmin && (
             <button
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setActiveTab('settings')}
+              onClick={() => handleTabChange('settings')}
             >
               Settings
             </button>
@@ -918,6 +1223,8 @@ function AppContent() {
             onSelectLinearFeature={handleResultsSelectLinearFeature}
             mapState={mapState}
             onMapClick={() => setActiveTab('view')}
+            initialShowMtbOnly={initialShowMtbOnly}
+            onShowMtbOnlyChange={handleShowMtbOnlyChange}
           />
         </main>
       )}
@@ -975,18 +1282,6 @@ function AppContent() {
         </main>
       )}
 
-      {/* Status tab content */}
-      {activeTab === 'status' && (
-        <main className="main-content-full">
-          <StatusTab
-            mapState={mapState}
-            onMapClick={() => setActiveTab('view')}
-            onSelectLinearFeature={handleResultsSelectLinearFeature}
-            linearFeatures={linearFeatures}
-          />
-        </main>
-      )}
-
       {activeTab === 'settings' && (
         <main className="settings-content">
           <div className="settings-panel">
@@ -1022,16 +1317,10 @@ function AppContent() {
                 Icons
               </button>
               <button
-                className={`settings-tab-btn ${settingsTab === 'news' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('news')}
+                className={`settings-tab-btn ${settingsTab === 'dataCollection' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('dataCollection')}
               >
-                News & Events
-              </button>
-              <button
-                className={`settings-tab-btn ${settingsTab === 'trailStatus' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('trailStatus')}
-              >
-                Trail Status
+                Data Collection
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
@@ -1047,8 +1336,7 @@ function AppContent() {
               {settingsTab === 'eras' && <ErasSettings />}
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
-              {settingsTab === 'news' && <NewsSettings />}
-              {settingsTab === 'trailStatus' && <TrailStatusSettings />}
+              {settingsTab === 'dataCollection' && <DataCollectionSettings />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
                   <SyncSettings onDataRefresh={refreshAllData} />
@@ -1061,8 +1349,20 @@ function AppContent() {
         </main>
       )}
 
-      {/* Map content - always mounted to preserve zoom/position state */}
-      <main className="main-content" style={{ display: (activeTab === 'view' || activeTab === 'edit') ? 'flex' : 'none' }}>
+      {/* Map content - always mounted and visible to Leaflet, layered below Results tab when not active */}
+      <main
+        className="main-content"
+        style={{
+          display: 'flex',
+          position: 'fixed',
+          top: '60px',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: (activeTab === 'view' || activeTab === 'edit') ? '1' : '-1',
+          pointerEvents: (activeTab === 'view' || activeTab === 'edit') ? 'auto' : 'none'
+        }}
+      >
         <Map
           destinations={filteredDestinations}
           selectedDestination={selectedDestination}
@@ -1137,6 +1437,17 @@ function AppContent() {
             updateUrlWithPoi(null); // Clear POI from URL
             document.title = 'Roots of The Valley'; // Reset title
             setCurrentPoiIndex(-1); // Reset navigation index
+          }}
+          isInMtbMode={isInMtbMode}
+          selectedFromMtbList={selectedFromMtbList}
+          onBackToMtbList={() => {
+            setSelectedDestination(null);
+            setSelectedLinearFeature(null);
+            setSelectedFromMtbList(false);
+            setActiveTab('results');
+            // Navigate back to MTB trails list
+            isProgrammaticNavigationRef.current = true;
+            navigate('/mtb-trail-status');
           }}
           isAdmin={isAdmin}
           editMode={editMode}

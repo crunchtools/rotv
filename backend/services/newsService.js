@@ -6,9 +6,21 @@
  * Progress is checkpointed after each batch so jobs can resume after container restarts.
  */
 
-import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage } from './aiSearchFactory.js';
+import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats } from './aiSearchFactory.js';
 import { pushNewsToSheets, pushEventsToSheets } from './sheetsSync.js';
 import { renderJavaScriptPage, isJavaScriptHeavySite, extractEventContent } from './jsRenderer.js';
+import fs from 'fs';
+
+function debugLog(message) {
+  const timestamp = new Date().toISOString();
+  const logMessage = `${timestamp} ${message}\n`;
+  try {
+    fs.appendFileSync('/tmp/logs/debug.log', logMessage);
+  } catch (err) {
+    // Ignore
+  }
+  console.error(message);
+}
 
 // Dispatch interval: start one new POI job every N milliseconds
 const DISPATCH_INTERVAL_MS = 1500;
@@ -17,6 +29,10 @@ const MAX_CONCURRENCY = 10;
 
 // In-memory progress tracking for active collections
 const collectionProgress = new Map();
+
+// Job display slots: jobId → [10 slots]
+// Each slot represents a display position for POI progress
+const jobDisplaySlots = new Map();
 
 /**
  * Update collection progress for a POI
@@ -29,7 +45,9 @@ export function updateProgress(poiId, updates) {
     eventsFound: 0,
     startTime: Date.now(),
     steps: [],
-    phaseHistory: []
+    phaseHistory: [],
+    slotId: null,
+    jobId: null
   };
 
   // Track phase transitions - add previous phase to history when phase changes
@@ -43,6 +61,12 @@ export function updateProgress(poiId, updates) {
 
   const updated = { ...current, ...updates, lastUpdate: Date.now() };
   collectionProgress.set(poiId, updated);
+
+  // Update display slot if slotId and jobId are present
+  if (updated.slotId !== null && updated.slotId !== undefined && updated.jobId) {
+    updateSlotFromProgress(updated.jobId, updated.slotId, updated);
+  }
+
   return updated;
 }
 
@@ -58,6 +82,140 @@ export function getCollectionProgress(poiId) {
  */
 export function clearProgress(poiId) {
   collectionProgress.delete(poiId);
+}
+
+/**
+ * Get all active progress entries (for job status display)
+ * Returns the current phase(s) being processed
+ */
+export function getAllActiveProgress() {
+  const active = [];
+  for (const [poiId, progress] of collectionProgress.entries()) {
+    if (!progress.completed) {
+      const job = {
+        poiId,
+        phase: progress.phase,
+        message: progress.message,
+        poiName: progress.poiName,
+        provider: progress.provider || null
+      };
+      console.log(`[getAllActiveProgress] POI ${poiId}: provider=${progress.provider}, phase=${progress.phase}`);
+      active.push(job);
+    }
+  }
+  return active;
+}
+
+/**
+ * Initialize display slots for a job
+ * Creates 10 empty slots that will be filled as POIs are dispatched
+ */
+function initializeSlots(jobId) {
+  const slots = Array(10).fill(null).map((_, i) => ({
+    slotId: i,
+    poiId: null,
+    poiName: null,
+    phase: null,
+    provider: null,
+    status: null
+  }));
+  jobDisplaySlots.set(jobId, slots);
+  console.log(`[Job ${jobId}] Initialized 10 display slots`);
+}
+
+/**
+ * Find the first available slot (null or completed)
+ * Returns slot index 0-9
+ */
+function findFirstAvailableSlot(jobId) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots) return 0;
+
+  const availableIndex = slots.findIndex(slot =>
+    !slot.poiId || slot.status === 'completed'
+  );
+
+  return availableIndex >= 0 ? availableIndex : 0;
+}
+
+/**
+ * Assign a POI to a display slot
+ */
+function assignPoiToSlot(jobId, slotId, poiId, poiName, provider) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots) return;
+
+  slots[slotId] = {
+    slotId,
+    poiId,
+    poiName,
+    phase: 'initializing',
+    provider,
+    status: 'active'
+  };
+
+  console.log(`[Job ${jobId}] Assigned POI ${poiId} (${poiName}) to Slot ${slotId}`);
+}
+
+/**
+ * Update slot with current progress data
+ */
+function updateSlotFromProgress(jobId, slotId, progress) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots || slotId === undefined || slotId === null) return;
+
+  slots[slotId] = {
+    slotId,
+    poiId: progress.poiId || slots[slotId].poiId,
+    poiName: progress.poiName || slots[slotId].poiName,
+    phase: progress.phase,
+    provider: progress.provider,
+    status: progress.completed ? 'completed' : 'active'
+  };
+}
+
+/**
+ * Get current display slots for a job
+ * Returns exactly 10 slots with latest progress data
+ */
+export function getDisplaySlots(jobId) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots) {
+    // Return 10 empty slots if job not found
+    return Array(10).fill(null).map((_, i) => ({
+      slotId: i,
+      poiId: null,
+      poiName: null,
+      phase: null,
+      provider: null,
+      status: null
+    }));
+  }
+
+  // Enrich each slot with latest progress data
+  return slots.map(slot => {
+    if (!slot.poiId) return slot;
+
+    const progress = collectionProgress.get(slot.poiId);
+    if (!progress) return slot;
+
+    return {
+      slotId: slot.slotId,
+      poiId: slot.poiId,
+      poiName: progress.poiName || slot.poiName,
+      phase: progress.phase,
+      provider: progress.provider,
+      status: progress.completed ? 'completed' : 'active'
+    };
+  });
+}
+
+/**
+ * Clear display slots when job completes
+ */
+function clearDisplaySlots(jobId) {
+  jobDisplaySlots.delete(jobId);
+  console.log(`[Job ${jobId}] Cleared display slots`);
 }
 
 /**
@@ -399,14 +557,71 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   const eventsUrl = poi.events_url || 'No dedicated events page';
   const newsUrl = poi.news_url || 'No dedicated news page';
 
+  // Determine which AI provider will be used (at the start, so it's available in all phases)
+  const configResult = await pool.query(`
+    SELECT key, value FROM admin_settings
+    WHERE key IN ('ai_search_primary', 'ai_search_fallback', 'ai_search_primary_limit')
+  `);
+  const aiConfig = {
+    primary: 'perplexity',
+    fallback: 'none',
+    primaryLimit: 0
+  };
+  for (const row of configResult.rows) {
+    if (row.key === 'ai_search_primary') aiConfig.primary = row.value;
+    if (row.key === 'ai_search_fallback') aiConfig.fallback = row.value;
+    if (row.key === 'ai_search_primary_limit') aiConfig.primaryLimit = parseInt(row.value) || 0;
+  }
+
+  // Check current usage and determine which provider will be used
+  const currentUsage = getJobUsage();
+  let providerToUse = aiConfig.primary;
+  const primaryUsage = currentUsage[aiConfig.primary] || 0;
+
+  // Check if we've exceeded the primary limit
+  if (aiConfig.primaryLimit > 0 && primaryUsage >= aiConfig.primaryLimit) {
+    if (aiConfig.fallback && aiConfig.fallback !== 'none') {
+      console.log(`[News Service] Primary limit reached (${primaryUsage}/${aiConfig.primaryLimit}), will use fallback: ${aiConfig.fallback}`);
+      providerToUse = aiConfig.fallback;
+    }
+  }
+
+  // Fetch Twitter credentials from database
+  let twitterCredentials = null;
+  try {
+    const credResult = await pool.query(
+      `SELECT key, value FROM admin_settings WHERE key IN ('twitter_username', 'twitter_password')`
+    );
+    const credentials = {};
+    credResult.rows.forEach(row => {
+      if (row.key === 'twitter_username') credentials.username = row.value;
+      if (row.key === 'twitter_password') credentials.password = row.value;
+    });
+    if (credentials.username && credentials.password) {
+      twitterCredentials = credentials;
+      console.log('[News/Events] ✓ Twitter credentials loaded from database');
+    } else {
+      console.log('[News/Events] ⚠️ Twitter credentials not configured in database');
+    }
+  } catch (credErr) {
+    console.error('[News/Events] Error fetching Twitter credentials:', credErr.message);
+  }
+
+  // Preserve slotId and jobId if they exist (set by job processing loop)
+  const existingProgress = collectionProgress.get(poi.id);
+  const slotId = existingProgress?.slotId;
+  const jobId = existingProgress?.jobId;
+
   // Clear any old progress data for this POI before starting
   collectionProgress.delete(poi.id);
 
-  // Initialize progress tracking with fresh data
+  // Initialize progress tracking with fresh data (preserving slotId/jobId)
   const typeLabel = collectionType === 'news' ? 'news' : collectionType === 'events' ? 'events' : 'news & events';
   updateProgress(poi.id, {
     phase: 'initializing',
     message: `Starting ${typeLabel} search for ${poi.name}...`,
+    poiName: poi.name,
+    provider: providerToUse,  // Set provider from the start
     newsFound: 0,
     eventsFound: 0,
     newsSaved: undefined,
@@ -417,7 +632,9 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     collectionType,
     startTime: Date.now(),
     phaseHistory: [],
-    completed: false
+    completed: false,
+    slotId,  // Preserve slot assignment
+    jobId    // Preserve job association
   });
 
   console.log(`[AI Research] Starting search for: ${poi.name}`);
@@ -461,20 +678,28 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     console.log(`[AI Research] 🌐 Detected JS-heavy events page, rendering with Playwright...`);
     const rendered = await renderJavaScriptPage(eventsPageToRender, {
       waitTime: 4000,
-      timeout: 20000
+      timeout: 20000,
+      twitterCredentials
     });
 
     if (rendered.success) {
-      // Use full rendered text, not just extracted keywords
-      // This ensures we don't filter out important event details
-      renderedEventsContent = rendered.text.substring(0, 15000); // Increased limit
-      eventsLinks = rendered.links || []; // Store extracted links
-      console.log(`[AI Research] ✓ Rendered events page: ${renderedEventsContent.length} chars (from ${rendered.text.length} total)`);
+      // Check if we got meaningful content (minimum 500 chars)
+      const MIN_CONTENT_LENGTH = 500;
+      if (rendered.text && rendered.text.length >= MIN_CONTENT_LENGTH) {
+        // Use full rendered text, not just extracted keywords
+        // This ensures we don't filter out important event details
+        renderedEventsContent = rendered.text.substring(0, 15000); // Increased limit
+        eventsLinks = rendered.links || []; // Store extracted links
+        console.log(`[AI Research] ✓ Rendered events page: ${renderedEventsContent.length} chars (from ${rendered.text.length} total)`);
 
-      updateProgress(poi.id, {
-        message: `Rendered events page (${eventsLinks.length} links found)`,
-        steps: ['Initialized', 'Rendered events page']
-      });
+        updateProgress(poi.id, {
+          message: `Rendered events page (${eventsLinks.length} links found)`,
+          steps: ['Initialized', 'Rendered events page']
+        });
+      } else {
+        console.log(`[AI Research] ⚠️ Rendered events page has insufficient content (${rendered.text?.length || 0} chars, need ${MIN_CONTENT_LENGTH}+)`);
+        console.log(`[AI Research] This may indicate login wall, empty page, or rendering failure - skipping rendered content`);
+      }
     } else {
       console.log(`[AI Research] ❌ Failed to render events page: ${rendered.error}`);
     }
@@ -495,20 +720,28 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     console.log(`[AI Research] 🌐 Detected JS-heavy news page, rendering with Playwright...`);
     const rendered = await renderJavaScriptPage(newsPageToRender, {
       waitTime: 4000,
-      timeout: 20000
+      timeout: 20000,
+      twitterCredentials
     });
 
     if (rendered.success) {
-      // Use full rendered text for news as well
-      renderedNewsContent = rendered.text.substring(0, 15000); // Increased limit
-      newsLinks = rendered.links || []; // Store extracted links
-      usedDedicatedNewsUrl = true; // Mark that we used dedicated news URL
-      console.log(`[AI Research] ✓ Rendered news page: ${renderedNewsContent.length} chars (from ${rendered.text.length} total)`);
+      // Check if we got meaningful content (minimum 500 chars)
+      const MIN_CONTENT_LENGTH = 500;
+      if (rendered.text && rendered.text.length >= MIN_CONTENT_LENGTH) {
+        // Use full rendered text for news as well
+        renderedNewsContent = rendered.text.substring(0, 15000); // Increased limit
+        newsLinks = rendered.links || []; // Store extracted links
+        usedDedicatedNewsUrl = true; // Mark that we used dedicated news URL
+        console.log(`[AI Research] ✓ Rendered news page: ${renderedNewsContent.length} chars (from ${rendered.text.length} total)`);
 
-      updateProgress(poi.id, {
-        message: `Rendered news page (${newsLinks.length} links found)`,
-        steps: ['Initialized', 'Rendered news page']
-      });
+        updateProgress(poi.id, {
+          message: `Rendered news page (${newsLinks.length} links found)`,
+          steps: ['Initialized', 'Rendered news page']
+        });
+      } else {
+        console.log(`[AI Research] ⚠️ Rendered news page has insufficient content (${rendered.text?.length || 0} chars, need ${MIN_CONTENT_LENGTH}+)`);
+        console.log(`[AI Research] This may indicate login wall, empty page, or rendering failure - skipping rendered content`);
+      }
     } else {
       console.log(`[AI Research] ❌ Failed to render news page: ${rendered.error}`);
     }
@@ -557,15 +790,34 @@ Extract ALL news from this rendered content using these relaxed criteria.`;
   checkCancellation(); // Check before AI search
 
   try {
+    // Get the current provider (already determined at start of function)
+    const currentProgress = getCollectionProgress(poi.id);
+    const initialProvider = currentProgress?.provider || 'perplexity';
+
     updateProgress(poi.id, {
       phase: 'ai_search',
       message: 'Searching with AI (Perplexity web search)...',
       steps: ['Initialized', 'Rendered pages', 'Searching with AI']
     });
 
-    console.log(`[AI Research] Sending prompt to Perplexity (${prompt.length} chars)...`);
-    const response = await generateTextWithCustomPrompt(pool, prompt, sheets);
-    console.log(`[AI Research] Received response (${response.length} chars)`);
+    debugLog(`[AI Research POI ${poi.id}] ====== BEFORE AI CALL (provider=${initialProvider}) ======`);
+    const aiResult = await generateTextWithCustomPrompt(pool, prompt, sheets);
+    debugLog(`[AI Research POI ${poi.id}] ====== AFTER AI CALL ======`);
+    debugLog(`[AI Research POI ${poi.id}] aiResult: ${JSON.stringify({
+      type: typeof aiResult,
+      keys: Object.keys(aiResult || {}),
+      provider: aiResult?.provider,
+      responseLength: aiResult?.response?.length
+    })}`);
+    const response = aiResult.response;
+    const usedProvider = aiResult.provider;
+    debugLog(`[AI Research POI ${poi.id}] usedProvider = '${usedProvider}'`);
+    // Update provider if it changed (e.g., fallback was used during the AI call)
+    if (usedProvider !== initialProvider) {
+      updateProgress(poi.id, { provider: usedProvider });
+      debugLog(`[AI Research POI ${poi.id}] Provider changed to: '${usedProvider}'`);
+    }
+    console.log(`[AI Research] Received response (${response.length} chars) from ${usedProvider}`);
 
     // Parse JSON response
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -754,8 +1006,9 @@ IMPORTANT:
 - Return {"news": []} if no relevant external news found
 - All dates must be in ISO 8601 format (YYYY-MM-DD)`;
 
-        const googleNewsResponse = await generateTextWithCustomPrompt(pool, googleNewsPrompt, sheets);
-        console.log(`[AI Research] Received Google News response (${googleNewsResponse.length} chars)`);
+        const googleNewsResult = await generateTextWithCustomPrompt(pool, googleNewsPrompt, sheets);
+        const googleNewsResponse = googleNewsResult.response;
+        console.log(`[AI Research] Received Google News response (${googleNewsResponse.length} chars) from ${googleNewsResult.provider}`);
 
         const googleJsonMatch = googleNewsResponse.match(/\{[\s\S]*\}/);
         if (googleJsonMatch) {
@@ -1252,6 +1505,9 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   // Reset AI provider usage tracking for this job
   resetJobUsage();
 
+  // Initialize display slots for this job
+  initializeSlots(jobId);
+
   console.log(`[Job ${jobId}] Starting/resuming news collection: ${remainingPoiIds.length} POIs remaining (${processedPoiIds.length} already done)`);
 
   // Get POI details for remaining POIs
@@ -1305,8 +1561,49 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       const poi = pois[index];
       inFlight++;
 
+      // Find available slot and assign POI to it
+      const slotId = findFirstAvailableSlot(jobId);
+
+      // Determine provider before calling collectNewsForPoi (same logic as in collectNewsForPoi)
+      const configResult = await pool.query(`
+        SELECT key, value FROM admin_settings
+        WHERE key IN ('ai_search_primary', 'ai_search_fallback', 'ai_search_primary_limit')
+      `);
+      const aiConfig = {
+        primary: 'perplexity',
+        fallback: 'none',
+        primaryLimit: 0
+      };
+      for (const row of configResult.rows) {
+        if (row.key === 'ai_search_primary') aiConfig.primary = row.value;
+        if (row.key === 'ai_search_fallback') aiConfig.fallback = row.value;
+        if (row.key === 'ai_search_primary_limit') aiConfig.primaryLimit = parseInt(row.value) || 0;
+      }
+      const currentUsage = getJobUsage();
+      let providerToUse = aiConfig.primary;
+      const primaryUsage = currentUsage[aiConfig.primary] || 0;
+      if (aiConfig.primaryLimit > 0 && primaryUsage >= aiConfig.primaryLimit) {
+        if (aiConfig.fallback && aiConfig.fallback !== 'none') {
+          providerToUse = aiConfig.fallback;
+        }
+      }
+
+      // Assign POI to slot with provider info
+      assignPoiToSlot(jobId, slotId, poi.id, poi.name, providerToUse);
+
+      // Initialize progress with slotId and jobId
+      updateProgress(poi.id, {
+        phase: 'initializing',
+        message: `Starting news & events search for ${poi.name}...`,
+        poiName: poi.name,
+        provider: providerToUse,
+        slotId,
+        jobId,
+        completed: false
+      });
+
       try {
-        console.log(`[Job ${jobId}] [${index + 1}/${pois.length}] Starting: ${poi.name} (${inFlight} in flight)`);
+        console.log(`[Job ${jobId}] [${index + 1}/${pois.length}] Starting: ${poi.name} (Slot ${slotId}, ${inFlight} in flight)`);
         const { news, events, metadata } = await collectNewsForPoi(pool, poi, sheets, 'America/New_York');
         const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
         const savedEvents = await saveEventItems(pool, poi.id, events);
@@ -1318,12 +1615,13 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         eventsFound += savedEvents;
         newlyProcessedIds.push(poi.id);
 
-        // Checkpoint progress to database
+        // Checkpoint progress to database (including AI usage)
+        const currentAiUsage = getJobUsage();
         await pool.query(`
           UPDATE news_job_status
-          SET pois_processed = $1, news_found = $2, events_found = $3, processed_poi_ids = $4
+          SET pois_processed = $1, news_found = $2, events_found = $3, processed_poi_ids = $4, ai_usage = $6
           WHERE id = $5
-        `, [processed, newsFound, eventsFound, JSON.stringify(newlyProcessedIds), jobId]);
+        `, [processed, newsFound, eventsFound, JSON.stringify(newlyProcessedIds), jobId, JSON.stringify(currentAiUsage)]);
 
         // Update last_news_collection timestamp
         await pool.query(`
@@ -1338,12 +1636,13 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         processed++;
         newlyProcessedIds.push(poi.id);
 
-        // Still checkpoint on error
+        // Still checkpoint on error (including AI usage)
+        const currentAiUsage = getJobUsage();
         await pool.query(`
           UPDATE news_job_status
-          SET pois_processed = $1, news_found = $2, events_found = $3, processed_poi_ids = $4
+          SET pois_processed = $1, news_found = $2, events_found = $3, processed_poi_ids = $4, ai_usage = $6
           WHERE id = $5
-        `, [processed, newsFound, eventsFound, JSON.stringify(newlyProcessedIds), jobId]);
+        `, [processed, newsFound, eventsFound, JSON.stringify(newlyProcessedIds), jobId, JSON.stringify(currentAiUsage)]);
 
         allResults.push({ poiId: poi.id, poiName: poi.name, newsFound: 0, eventsFound: 0, success: false });
       }
@@ -1369,26 +1668,29 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     // Wait for all to complete
     await allDone;
 
+    // Log AI provider usage for this job
+    const usage = getJobUsage();
+    console.log(`[Job ${jobId}] AI provider usage: Gemini=${usage.gemini}, Perplexity=${usage.perplexity}`);
+
     // Only mark complete if not cancelled (cancel endpoint already set status)
     if (!jobCancelled) {
       await pool.query(`
         UPDATE news_job_status
-        SET status = 'completed', completed_at = $1
+        SET status = 'completed', completed_at = $1, ai_usage = $3
         WHERE id = $2
-      `, [new Date(), jobId]);
+      `, [new Date(), jobId, JSON.stringify(usage)]);
     } else {
       console.log(`[Job ${jobId}] Job was cancelled, not marking as completed`);
     }
-
-    // Log AI provider usage for this job
-    const usage = getJobUsage();
-    console.log(`[Job ${jobId}] AI provider usage: Gemini=${usage.gemini}, Perplexity=${usage.perplexity}`);
 
     if (jobCancelled) {
       console.log(`[Job ${jobId}] Cancelled after processing ${processed} POIs, ${newsFound} news, ${eventsFound} events`);
     } else {
       console.log(`[Job ${jobId}] Completed: ${processed} POIs, ${newsFound} news, ${eventsFound} events`);
     }
+
+    // Clear display slots
+    clearDisplaySlots(jobId);
 
     // Log summary of results
     const poisWithResults = allResults.filter(r => r.newsFound > 0 || r.eventsFound > 0);

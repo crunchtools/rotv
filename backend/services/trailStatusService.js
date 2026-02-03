@@ -6,7 +6,7 @@
  * Progress is checkpointed after each trail so jobs can resume after container restarts.
  */
 
-import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage } from './aiSearchFactory.js';
+import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats } from './aiSearchFactory.js';
 import { renderJavaScriptPage, isJavaScriptHeavySite } from './jsRenderer.js';
 
 // Dispatch interval: start one new trail job every N milliseconds
@@ -17,6 +17,10 @@ const MAX_CONCURRENCY = 10;
 // In-memory progress tracking for active collections
 const collectionProgress = new Map();
 
+// Job display slots: jobId → [10 slots]
+// Each slot represents a display position for trail progress
+const jobDisplaySlots = new Map();
+
 /**
  * Update collection progress for a trail
  */
@@ -26,11 +30,19 @@ export function updateProgress(poiId, updates) {
     message: 'Initializing...',
     statusFound: 0,
     startTime: Date.now(),
-    steps: []
+    steps: [],
+    slotId: null,
+    jobId: null
   };
 
   const updated = { ...current, ...updates, lastUpdate: Date.now() };
   collectionProgress.set(poiId, updated);
+
+  // Update display slot if slotId and jobId are present
+  if (updated.slotId !== null && updated.slotId !== undefined && updated.jobId) {
+    updateSlotFromProgress(updated.jobId, updated.slotId, updated);
+  }
+
   return updated;
 }
 
@@ -46,6 +58,140 @@ export function getCollectionProgress(poiId) {
  */
 export function clearProgress(poiId) {
   collectionProgress.delete(poiId);
+}
+
+/**
+ * Get all active progress entries (for job status display)
+ * Returns the current phase(s) being processed
+ */
+export function getAllActiveProgress() {
+  const active = [];
+  for (const [poiId, progress] of collectionProgress.entries()) {
+    if (!progress.completed) {
+      const job = {
+        poiId,
+        phase: progress.phase,
+        message: progress.message,
+        poiName: progress.poiName,
+        provider: progress.provider || null
+      };
+      console.log(`[Trail getAllActiveProgress] POI ${poiId}: provider=${progress.provider}, phase=${progress.phase}`);
+      active.push(job);
+    }
+  }
+  return active;
+}
+
+/**
+ * Initialize display slots for a job
+ * Creates 10 empty slots that will be filled as trails are dispatched
+ */
+function initializeSlots(jobId) {
+  const slots = Array(10).fill(null).map((_, i) => ({
+    slotId: i,
+    poiId: null,
+    poiName: null,
+    phase: null,
+    provider: null,
+    status: null
+  }));
+  jobDisplaySlots.set(jobId, slots);
+  console.log(`[Trail Job ${jobId}] Initialized 10 display slots`);
+}
+
+/**
+ * Find the first available slot (null or completed)
+ * Returns slot index 0-9
+ */
+function findFirstAvailableSlot(jobId) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots) return 0;
+
+  const availableIndex = slots.findIndex(slot =>
+    !slot.poiId || slot.status === 'completed'
+  );
+
+  return availableIndex >= 0 ? availableIndex : 0;
+}
+
+/**
+ * Assign a trail to a display slot
+ */
+function assignPoiToSlot(jobId, slotId, poiId, poiName, provider) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots) return;
+
+  slots[slotId] = {
+    slotId,
+    poiId,
+    poiName,
+    phase: 'initializing',
+    provider,
+    status: 'active'
+  };
+
+  console.log(`[Trail Job ${jobId}] Assigned trail ${poiId} (${poiName}) to Slot ${slotId}`);
+}
+
+/**
+ * Update slot with current progress data
+ */
+function updateSlotFromProgress(jobId, slotId, progress) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots || slotId === undefined || slotId === null) return;
+
+  slots[slotId] = {
+    slotId,
+    poiId: progress.poiId || slots[slotId].poiId,
+    poiName: progress.poiName || slots[slotId].poiName,
+    phase: progress.phase,
+    provider: progress.provider,
+    status: progress.completed ? 'completed' : 'active'
+  };
+}
+
+/**
+ * Get current display slots for a job
+ * Returns exactly 10 slots with latest progress data
+ */
+export function getDisplaySlots(jobId) {
+  const slots = jobDisplaySlots.get(jobId);
+  if (!slots) {
+    // Return 10 empty slots if job not found
+    return Array(10).fill(null).map((_, i) => ({
+      slotId: i,
+      poiId: null,
+      poiName: null,
+      phase: null,
+      provider: null,
+      status: null
+    }));
+  }
+
+  // Enrich each slot with latest progress data
+  return slots.map(slot => {
+    if (!slot.poiId) return slot;
+
+    const progress = collectionProgress.get(slot.poiId);
+    if (!progress) return slot;
+
+    return {
+      slotId: slot.slotId,
+      poiId: slot.poiId,
+      poiName: progress.poiName || slot.poiName,
+      phase: progress.phase,
+      provider: progress.provider,
+      status: progress.completed ? 'completed' : 'active'
+    };
+  });
+}
+
+/**
+ * Clear display slots when job completes
+ */
+function clearDisplaySlots(jobId) {
+  jobDisplaySlots.delete(jobId);
+  console.log(`[Trail Job ${jobId}] Cleared display slots`);
 }
 
 /**
@@ -75,32 +221,47 @@ export function isCancellationRequested(poiId) {
 // Prompt template for trail status collection
 const TRAIL_STATUS_PROMPT = `You are a precise mountain bike trail status researcher for Northeast Ohio.
 
+CURRENT DATE AND TIME:
+- Today's date: {{currentDate}}
+- Current timezone: {{timezone}}
+
 TIMEZONE CONTEXT:
-- The current timezone is: {{timezone}}
 - Return ALL dates/times in ISO 8601 format: YYYY-MM-DD HH:MM:SS
 - If no time is specified, use 00:00:00
+- Use the current date above to calculate date ranges (e.g., "last 30 days")
 
 Search for CURRENT trail status for: "{{name}}"
 Trail System: {{trailSystem}}
-Location: {{location}}
+Description: {{description}}
 
 STATUS URL (if provided):
 {{statusUrl}}
 
 PRIORITY SOURCES TO SEARCH:
+- Status URL provided above (if available) - CHECK THIS FIRST
+- Bluesky/Twitter accounts (bsky.app, twitter.com) - check recent posts
 - IMBA Trail Forks - trailforks.com
 - MTB Project - mtbproject.com
 - Summit Metro Parks - summitmetroparks.org
 - Cleveland Metroparks - clevelandmetroparks.com
 - Stark Parks - starkparks.com
 - Local trail Facebook pages and groups
-- Trail-specific Twitter/Bluesky accounts
 - Park district status pages
 
-CRITICAL REQUIREMENTS:
+IMPORTANT FOR SOCIAL MEDIA:
+- For Bluesky URLs (bsky.app/profile/...), look for recent posts about trail conditions
+- For Twitter/X URLs, examine the timeline and find the MOST RECENT post about trail status
+- Trail closures often persist for weeks/months - include older closure posts if no newer info exists
+- Common status indicators: "closed", "open", "muddy", "dry", "groomed", "clear", "snow covered"
+
+CRITICAL REQUIREMENTS - READ CAREFULLY:
+- ALWAYS check post dates FIRST - ignore posts older than the date ranges below
 - Only include status that EXPLICITLY mentions "{{name}}" or the trail system it belongs to
 - Focus on CURRENT status (not historical)
-- Look for recent updates (last 7 days preferred, last 30 days maximum)
+- For OPEN/LIMITED status: ONLY use updates from last 30 days - REJECT older posts
+- For CLOSED/MAINTENANCE status: ONLY use updates from last 90 days - REJECT older posts
+- If multiple posts exist within date range, use the MOST RECENT one by date
+- NEVER use posts from previous years unless they are within the 90-day window
 - Include weather-related impacts if mentioned
 
 Search for:
@@ -133,7 +294,7 @@ IMPORTANT:
 /**
  * Collect trail status for a specific MTB trail
  * @param {Pool} pool - Database connection pool
- * @param {Object} poi - POI object with id, name, location, status_url
+ * @param {Object} poi - POI object with id, name, brief_description, status_url
  * @param {Object} sheets - Optional sheets client for API key restore
  * @param {string} timezone - IANA timezone string (e.g., 'America/New_York')
  * @returns {Object} - { statusFound: number, statusSaved: number }
@@ -141,15 +302,74 @@ IMPORTANT:
 export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'America/New_York') {
   console.log(`\n[Trail Status] ======== Collecting status for: ${poi.name} ========`);
 
+  // Determine which AI provider will be used (at the start, so it's available in all phases)
+  const configResult = await pool.query(`
+    SELECT key, value FROM admin_settings
+    WHERE key IN ('ai_search_primary', 'ai_search_fallback', 'ai_search_primary_limit')
+  `);
+  const aiConfig = {
+    primary: 'perplexity',
+    fallback: 'none',
+    primaryLimit: 0
+  };
+  for (const row of configResult.rows) {
+    if (row.key === 'ai_search_primary') aiConfig.primary = row.value;
+    if (row.key === 'ai_search_fallback') aiConfig.fallback = row.value;
+    if (row.key === 'ai_search_primary_limit') aiConfig.primaryLimit = parseInt(row.value) || 0;
+  }
+
+  // Check current usage and determine which provider will be used
+  const currentUsage = getJobUsage();
+  let providerToUse = aiConfig.primary;
+  const primaryUsage = currentUsage[aiConfig.primary] || 0;
+
+  // Check if we've exceeded the primary limit
+  if (aiConfig.primaryLimit > 0 && primaryUsage >= aiConfig.primaryLimit) {
+    if (aiConfig.fallback && aiConfig.fallback !== 'none') {
+      console.log(`[Trail Status] Primary limit reached (${primaryUsage}/${aiConfig.primaryLimit}), will use fallback: ${aiConfig.fallback}`);
+      providerToUse = aiConfig.fallback;
+    }
+  }
+
+  // Preserve slotId and jobId if they exist (set by job processing loop)
+  const existingProgress = collectionProgress.get(poi.id);
+  const slotId = existingProgress?.slotId;
+  const jobId = existingProgress?.jobId;
+
   updateProgress(poi.id, {
     phase: 'starting',
     message: 'Initializing trail status collection...',
-    steps: ['Initialized']
+    steps: ['Initialized'],
+    poiName: poi.name,
+    provider: providerToUse,  // Set provider from the start
+    slotId,  // Preserve slot assignment
+    jobId    // Preserve job association
   });
 
   const trailSystem = poi.trail_system || 'Unknown system';
-  const location = poi.location || 'Northeast Ohio';
+  const description = poi.brief_description || 'Northeast Ohio';
   const statusUrl = poi.status_url || 'No dedicated status page';
+
+  // Fetch Twitter credentials from database
+  let twitterCredentials = null;
+  try {
+    const credResult = await pool.query(
+      `SELECT key, value FROM admin_settings WHERE key IN ('twitter_username', 'twitter_password')`
+    );
+    const credentials = {};
+    credResult.rows.forEach(row => {
+      if (row.key === 'twitter_username') credentials.username = row.value;
+      if (row.key === 'twitter_password') credentials.password = row.value;
+    });
+    if (credentials.username && credentials.password) {
+      twitterCredentials = credentials;
+      console.log('[Trail Status] ✓ Twitter credentials loaded from database');
+    } else {
+      console.log('[Trail Status] ⚠️ Twitter credentials not configured in database');
+    }
+  } catch (credErr) {
+    console.error('[Trail Status] Error fetching Twitter credentials:', credErr.message);
+  }
 
   try {
     // Check for cancellation before starting
@@ -165,7 +385,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     }
 
     // Check if status URL needs JavaScript rendering
-    let renderedHtml = null;
+    let renderedContent = null;
     if (statusUrl && statusUrl !== 'No dedicated status page') {
       const isJsHeavy = await isJavaScriptHeavySite(statusUrl);
       if (isJsHeavy) {
@@ -177,31 +397,77 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
         });
 
         try {
-          renderedHtml = await renderJavaScriptPage(statusUrl);
-          console.log(`[Trail Status] ✓ Rendered page (${renderedHtml.length} chars)`);
+          const rendered = await renderJavaScriptPage(statusUrl, {
+            twitterCredentials
+          });
+          // Check if we got meaningful content (minimum 500 chars)
+          const MIN_CONTENT_LENGTH = 500;
+          if (rendered.success && rendered.text && rendered.text.length >= MIN_CONTENT_LENGTH) {
+            renderedContent = rendered.text;
+            console.log(`[Trail Status] ✓ Rendered page (${renderedContent.length} chars)`);
+          } else if (rendered.success && rendered.text) {
+            console.log(`[Trail Status] ⚠️ Rendered page has insufficient content (${rendered.text.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
+            console.log(`[Trail Status] This may indicate login wall, empty page, or rendering failure - skipping rendered content`);
+          } else {
+            console.error(`[Trail Status] ⚠️ Rendering failed or no content extracted`);
+          }
         } catch (renderError) {
           console.error(`[Trail Status] ⚠️ Rendering failed: ${renderError.message}, continuing with AI search`);
         }
       }
     }
 
+    // Get the current provider (already determined at start of function)
+    const currentProgress = getCollectionProgress(poi.id);
+    const initialProvider = currentProgress?.provider || 'perplexity';
+
     // Build AI search prompt
     updateProgress(poi.id, {
-      phase: 'searching',
+      phase: 'ai_search',
       message: 'Searching for trail status...',
       steps: ['Initialized', 'Searching']
     });
 
-    const prompt = TRAIL_STATUS_PROMPT
+    // Build base prompt with current date
+    const currentDate = new Date().toISOString().split('T')[0]; // YYYY-MM-DD format
+    let prompt = TRAIL_STATUS_PROMPT
+      .replace(/\{\{currentDate\}\}/g, currentDate)
       .replace(/\{\{name\}\}/g, poi.name)
       .replace(/\{\{trailSystem\}\}/g, trailSystem)
-      .replace(/\{\{location\}\}/g, location)
+      .replace(/\{\{description\}\}/g, description)
       .replace(/\{\{statusUrl\}\}/g, statusUrl)
       .replace(/\{\{timezone\}\}/g, timezone);
 
+    // If we have rendered content, include it in the prompt
+    if (renderedContent) {
+      console.log(`[Trail Status] DEBUG - Rendered content preview (first 1000 chars):`);
+      console.log(renderedContent.substring(0, 1000));
+      console.log(`[Trail Status] DEBUG - End of preview`);
+
+      prompt += `\n\nRENDERED PAGE CONTENT FROM ${statusUrl}:\n${renderedContent.substring(0, 15000)}\n\n` +
+                `CRITICAL INSTRUCTIONS FOR RENDERED CONTENT:\n` +
+                `1. Find ALL posts in the rendered content above that mention trail status, conditions, or closures\n` +
+                `2. This is the official trail status account - ANY post about trail conditions IS about "${poi.name}"\n` +
+                `3. Check the DATE of each post - look for timestamps, dates, or relative times (e.g., "2h ago", "Jan 14")\n` +
+                `4. IGNORE posts older than 30 days for open status, 90 days for closed status\n` +
+                `5. Select the MOST RECENT post within the allowed date range\n` +
+                `6. NEVER use old posts from previous years if recent posts exist\n` +
+                `7. Common trail status phrases: "trail is open", "trail is closed", "open for riding", "closed due to", "muddy", "dry"`;
+    }
+
     console.log(`[Trail Status] 🔍 Searching with AI for trail status...`);
-    const response = await generateTextWithCustomPrompt(pool, prompt, sheets);
-    console.log(`[Trail Status] Received response (${response.length} chars)`);
+    const aiResult = await generateTextWithCustomPrompt(pool, prompt, sheets);
+    const response = aiResult.response;
+    const usedProvider = aiResult.provider;
+
+    // Update provider if it changed (e.g., fallback was used)
+    if (usedProvider !== initialProvider) {
+      console.log(`[Trail Status] Provider changed from ${initialProvider} to ${usedProvider} (fallback used)`);
+      updateProgress(poi.id, { provider: usedProvider });
+    }
+
+    console.log(`[Trail Status] Received response (${response.length} chars) from ${usedProvider}`);
+    console.log(`[Trail Status] DEBUG - Full AI response:`, response);
 
     // Check for cancellation after AI search
     if (isCancellationRequested(poi.id)) {
@@ -248,6 +514,24 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     console.log(`[Trail Status]   Source: ${status.source_name || 'N/A'}`);
     console.log(`[Trail Status]   Last Updated: ${status.last_updated || 'N/A'}`);
 
+    // Override source_url with the POI's configured status_url if available
+    // This ensures we link to the user-configured source, not whatever the AI happened to find
+    if (poi.status_url && poi.status_url !== 'No dedicated status page') {
+      console.log(`[Trail Status]   Overriding source_url with configured status_url: ${poi.status_url}`);
+      status.source_url = poi.status_url;
+      // Extract source name from the URL if not already set or if it doesn't match
+      if (poi.status_url.includes('x.com') || poi.status_url.includes('twitter.com')) {
+        status.source_name = 'Twitter/X';
+      } else if (poi.status_url.includes('bsky.app')) {
+        status.source_name = 'Bluesky';
+      } else if (poi.status_url.includes('trailforks.com')) {
+        status.source_name = 'IMBA Trail Forks';
+      } else if (poi.status_url.includes('mtbproject.com')) {
+        status.source_name = 'MTB Project';
+      }
+      // Keep existing source_name if URL doesn't match known patterns
+    }
+
     // Save to database with deduplication
     updateProgress(poi.id, {
       phase: 'saving',
@@ -290,6 +574,18 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
  */
 async function saveTrailStatus(pool, poiId, status) {
   try {
+    // Validate that last_updated is not too old (reject status older than 30 days)
+    if (status.last_updated) {
+      const lastUpdated = new Date(status.last_updated);
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      if (lastUpdated < thirtyDaysAgo) {
+        console.log(`[Trail Status] ⏭️  Skipping outdated status (last updated: ${status.last_updated})`);
+        return false;
+      }
+    }
+
     // Check for recent status (last 24 hours)
     const recentResult = await pool.query(`
       SELECT * FROM trail_status
@@ -364,7 +660,9 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
       const result = await pool.query(`
         SELECT id, name, poi_type, status_url, brief_description
         FROM pois
-        WHERE id = ANY($1) AND is_mtb_trail = true
+        WHERE id = ANY($1)
+        AND status_url IS NOT NULL
+        AND status_url != ''
         ORDER BY name
       `, [poiIds]);
       trails = result.rows;
@@ -372,7 +670,8 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
       const result = await pool.query(`
         SELECT id, name, poi_type, status_url, brief_description
         FROM pois
-        WHERE is_mtb_trail = true
+        WHERE status_url IS NOT NULL
+        AND status_url != ''
         ORDER BY name
       `);
       trails = result.rows;
@@ -470,90 +769,170 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     // Reset AI usage tracking for this job
     resetJobUsage();
 
-    // Process trails with concurrency control
+    // Initialize display slots for this job
+    initializeSlots(jobId);
+
+    // Process trails with continuous flow (semaphore pattern)
     const trailsToProcess = poiIds.filter(id => !processedPois.has(id));
     let totalStatusFound = 0;
     let totalStatusSaved = 0;
 
-    for (let i = 0; i < trailsToProcess.length; i += MAX_CONCURRENCY) {
-      const batch = trailsToProcess.slice(i, i + MAX_CONCURRENCY);
+    // Continuous flow pattern (like newsService.js)
+    let inFlight = 0;
+    let nextIndex = 0;
+    let resolveAll;
+    const allDone = new Promise(resolve => { resolveAll = resolve; });
 
-      console.log(`\n[Trail Status Job ${jobId}] Processing batch ${Math.floor(i / MAX_CONCURRENCY) + 1} (${batch.length} trails)`);
+    const processNextTrail = async () => {
+      if (nextIndex >= trailsToProcess.length) {
+        if (inFlight === 0) resolveAll();
+        return;
+      }
 
-      const promises = batch.map(async (poiId, batchIndex) => {
-        // Stagger requests to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, batchIndex * DISPATCH_INTERVAL_MS));
+      const index = nextIndex++;
+      const poiId = trailsToProcess[index];
+      inFlight++;
 
-        try {
-          // Get trail data
-          const poiResult = await pool.query(`
-            SELECT id, name, poi_type, status_url, location
-            FROM pois
-            WHERE id = $1
-          `, [poiId]);
+      try {
+        // Get trail data
+        const poiResult = await pool.query(`
+          SELECT id, name, poi_type, status_url, brief_description
+          FROM pois
+          WHERE id = $1
+        `, [poiId]);
 
-          if (poiResult.rows.length === 0) {
-            console.error(`[Trail Status Job ${jobId}] Trail ${poiId} not found`);
-            return { statusFound: 0, statusSaved: 0 };
+        if (poiResult.rows.length === 0) {
+          console.error(`[Trail Status Job ${jobId}] Trail ${poiId} not found`);
+          processedPois.add(poiId);
+        } else {
+          const poi = poiResult.rows[0];
+
+          // Find available slot and assign trail to it
+          const slotId = findFirstAvailableSlot(jobId);
+
+          // Determine provider before calling collectTrailStatus (same logic as in collectTrailStatus)
+          const configResult = await pool.query(`
+            SELECT key, value FROM admin_settings
+            WHERE key IN ('ai_search_primary', 'ai_search_fallback', 'ai_search_primary_limit')
+          `);
+          const aiConfig = {
+            primary: 'perplexity',
+            fallback: 'none',
+            primaryLimit: 0
+          };
+          for (const row of configResult.rows) {
+            if (row.key === 'ai_search_primary') aiConfig.primary = row.value;
+            if (row.key === 'ai_search_fallback') aiConfig.fallback = row.value;
+            if (row.key === 'ai_search_primary_limit') aiConfig.primaryLimit = parseInt(row.value) || 0;
+          }
+          const currentUsage = getJobUsage();
+          let providerToUse = aiConfig.primary;
+          const primaryUsage = currentUsage[aiConfig.primary] || 0;
+          if (aiConfig.primaryLimit > 0 && primaryUsage >= aiConfig.primaryLimit) {
+            if (aiConfig.fallback && aiConfig.fallback !== 'none') {
+              providerToUse = aiConfig.fallback;
+            }
           }
 
-          const poi = poiResult.rows[0];
+          // Assign trail to slot with provider info
+          assignPoiToSlot(jobId, slotId, poi.id, poi.name, providerToUse);
+
+          // Initialize progress with slotId and jobId
+          updateProgress(poi.id, {
+            phase: 'initializing',
+            message: `Starting trail status search for ${poi.name}...`,
+            poiName: poi.name,
+            provider: providerToUse,
+            slotId,
+            jobId,
+            completed: false
+          });
+
+          console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] Starting trail ${poiId} (Slot ${slotId}, ${inFlight} in flight)`);
 
           // Collect status
           const result = await collectTrailStatus(pool, poi, sheets, 'America/New_York');
 
-          // Checkpoint progress
-          processedPois.add(poiId);
-          await pool.query(`
-            UPDATE trail_status_job_status
-            SET trails_processed = $1,
-                status_found = status_found + $2,
-                processed_poi_ids = $3
-            WHERE id = $4
-          `, [
-            processedPois.size,
-            result.statusFound,
-            JSON.stringify([...processedPois]),
-            jobId
-          ]);
+          console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] ✓ ${poi.name}: ${result.statusFound} status found`);
 
-          return result;
+          totalStatusFound += result.statusFound;
+          totalStatusSaved += result.statusSaved;
 
-        } catch (error) {
-          console.error(`[Trail Status Job ${jobId}] Error processing trail ${poiId}:`, error.message);
-          // Mark as processed even if failed
+          // Mark as processed
           processedPois.add(poiId);
-          await pool.query(`
-            UPDATE trail_status_job_status
-            SET trails_processed = $1,
-                processed_poi_ids = $2
-            WHERE id = $3
-          `, [
-            processedPois.size,
-            JSON.stringify([...processedPois]),
-            jobId
-          ]);
-          return { statusFound: 0, statusSaved: 0 };
         }
-      });
 
-      const results = await Promise.all(promises);
-      totalStatusFound += results.reduce((sum, r) => sum + r.statusFound, 0);
-      totalStatusSaved += results.reduce((sum, r) => sum + r.statusSaved, 0);
+        // Checkpoint progress (including AI usage)
+        const currentAiUsage = getJobUsage();
+        await pool.query(`
+          UPDATE trail_status_job_status
+          SET trails_processed = $1,
+              status_found = $2,
+              processed_poi_ids = $3,
+              ai_usage = $5
+          WHERE id = $4
+        `, [
+          processedPois.size,
+          totalStatusFound,
+          JSON.stringify([...processedPois]),
+          jobId,
+          JSON.stringify(currentAiUsage)
+        ]);
+
+      } catch (error) {
+        console.error(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] ✗ Trail ${poiId}: ${error.message}`);
+
+        // Mark as processed even if failed
+        processedPois.add(poiId);
+
+        // Checkpoint on error (including AI usage)
+        const currentAiUsage = getJobUsage();
+        await pool.query(`
+          UPDATE trail_status_job_status
+          SET trails_processed = $1,
+              processed_poi_ids = $2,
+              ai_usage = $4
+          WHERE id = $3
+        `, [
+          processedPois.size,
+          JSON.stringify([...processedPois]),
+          jobId,
+          JSON.stringify(currentAiUsage)
+        ]);
+      }
+
+      inFlight--;
+
+      // Start next trail with delay when a slot opens
+      if (nextIndex < trailsToProcess.length && inFlight < MAX_CONCURRENCY) {
+        setTimeout(() => processNextTrail(), DISPATCH_INTERVAL_MS);
+      } else if (nextIndex >= trailsToProcess.length && inFlight === 0) {
+        resolveAll();
+      }
+    };
+
+    // Start initial batch with staggered dispatch
+    const initialBatch = Math.min(MAX_CONCURRENCY, trailsToProcess.length);
+    for (let i = 0; i < initialBatch; i++) {
+      setTimeout(() => processNextTrail(), i * DISPATCH_INTERVAL_MS);
     }
+
+    // Wait for all to complete
+    await allDone;
 
     // Get AI usage stats
     const aiUsage = getJobUsage();
 
-    // Mark job completed
+    // Mark job completed (including AI usage)
     await pool.query(`
       UPDATE trail_status_job_status
       SET status = 'completed',
           completed_at = NOW(),
           trails_processed = $1,
-          status_found = $2
+          status_found = $2,
+          ai_usage = $4
       WHERE id = $3
-    `, [processedPois.size, totalStatusFound, jobId]);
+    `, [processedPois.size, totalStatusFound, jobId, JSON.stringify(aiUsage)]);
 
     console.log(`\n[Trail Status Job ${jobId}] ✅ Completed`);
     console.log(`[Trail Status Job ${jobId}] Trails processed: ${processedPois.size}/${poiIds.length}`);
@@ -561,17 +940,22 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     console.log(`[Trail Status Job ${jobId}] Status saved: ${totalStatusSaved}`);
     console.log(`[Trail Status Job ${jobId}] AI usage: ${JSON.stringify(aiUsage)}`);
 
+    // Clear display slots
+    clearDisplaySlots(jobId);
+
   } catch (error) {
     console.error(`[Trail Status Job ${jobId}] ❌ Failed:`, error.message);
 
-    // Mark job failed
+    // Mark job failed (including AI usage)
+    const failureAiUsage = getJobUsage();
     await pool.query(`
       UPDATE trail_status_job_status
       SET status = 'failed',
           completed_at = NOW(),
-          error_message = $1
+          error_message = $1,
+          ai_usage = $3
       WHERE id = $2
-    `, [error.message, jobId]);
+    `, [error.message, jobId, JSON.stringify(failureAiUsage)]);
 
     throw error;
   }
@@ -580,13 +964,19 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
 /**
  * Get job status
  * @param {Pool} pool - Database connection pool
- * @param {number} jobId - Job ID
+ * @param {string|number} jobId - Job ID (integer) or pg_boss_job_id (UUID)
  * @returns {Object} - Job status object
  */
 export async function getJobStatus(pool, jobId) {
-  const result = await pool.query(`
-    SELECT * FROM trail_status_job_status WHERE id = $1
-  `, [jobId]);
+  // Check if jobId is a UUID (pg_boss_job_id) or integer (table id)
+  const isUuid = typeof jobId === 'string' && jobId.includes('-');
+
+  const result = await pool.query(
+    isUuid
+      ? `SELECT * FROM trail_status_job_status WHERE pg_boss_job_id = $1`
+      : `SELECT * FROM trail_status_job_status WHERE id = $1`,
+    [jobId]
+  );
 
   if (result.rows.length === 0) {
     return null;
@@ -614,13 +1004,17 @@ export async function getJobStatus(pool, jobId) {
  * @returns {boolean} - true if cancelled, false if not running
  */
 export async function cancelJob(pool, jobId) {
+  // Get current AI usage before cancelling
+  const currentUsage = getJobUsage();
+
   const result = await pool.query(`
     UPDATE trail_status_job_status
     SET status = 'cancelled',
-        completed_at = NOW()
+        completed_at = NOW(),
+        ai_usage = $2
     WHERE id = $1 AND status IN ('queued', 'running')
     RETURNING id
-  `, [jobId]);
+  `, [jobId, JSON.stringify(currentUsage)]);
 
   return result.rowCount > 0;
 }

@@ -70,7 +70,8 @@ import {
   getCollectionProgress,
   clearProgress,
   updateProgress,
-  requestCancellation
+  requestCancellation,
+  getDisplaySlots as getNewsDisplaySlots
 } from '../services/newsService.js';
 import { submitBatchNewsJob } from '../services/jobScheduler.js';
 import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
@@ -81,7 +82,8 @@ import {
   cancelJob as cancelTrailJob,
   getLatestTrailStatus,
   getCollectionProgress as getTrailProgress,
-  clearProgress as clearTrailProgress
+  clearProgress as clearTrailProgress,
+  getDisplaySlots as getTrailDisplaySlots
 } from '../services/trailStatusService.js';
 
 const router = express.Router();
@@ -290,7 +292,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     const allowedFields = [
       'name', 'latitude', 'longitude', 'property_owner', 'owner_id', 'brief_description',
       'era', 'era_id', 'historical_description', 'primary_activities', 'surface',
-      'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url'
+      'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url', 'status_url'
     ];
     const updates = {};
     const values = [];
@@ -363,7 +365,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     const allowedFields = [
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
-      'events_url', 'news_url'
+      'events_url', 'news_url', 'status_url'
     ];
 
     const fields = ['name', 'latitude', 'longitude'];
@@ -542,7 +544,9 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       'gemini_prompt_historical',
       'ai_search_primary',
       'ai_search_fallback',
-      'ai_search_primary_limit'
+      'ai_search_primary_limit',
+      'twitter_username',
+      'twitter_password'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
@@ -2547,7 +2551,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         'name', 'poi_type', 'geometry', 'property_owner', 'owner_id', 'brief_description',
         'era', 'era_id', 'historical_description', 'primary_activities', 'surface', 'pets',
         'cell_signal', 'more_info_link', 'length_miles', 'difficulty',
-        'boundary_type', 'boundary_color'
+        'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url'
       ];
 
       // Map feature_type to poi_type for backward compatibility
@@ -2584,7 +2588,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
                   brief_description, era, historical_description, primary_activities,
                   surface, pets, cell_signal, more_info_link, length_miles, difficulty,
                   image_mime_type, image_drive_file_id, geometry_drive_file_id,
-                  boundary_type, boundary_color,
+                  boundary_type, boundary_color, status_url, news_url, events_url,
                   locally_modified, deleted, synced, created_at, updated_at
       `, values);
 
@@ -3217,7 +3221,36 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         return res.status(404).json({ error: 'Job not found' });
       }
 
-      res.json(status);
+      // Get display slots (exactly 10 slots with stable assignments)
+      const displaySlots = getNewsDisplaySlots(status.jobId);
+
+      // Determine current phase from display slots
+      let currentPhase = null;
+      let currentMessage = null;
+      if (displaySlots.some(s => s.poiId)) {
+        const activeSlots = displaySlots.filter(s => s.poiId && s.status === 'active');
+        if (activeSlots.length > 0) {
+          const renderingSlot = activeSlots.find(s => s.phase === 'rendering_events' || s.phase === 'rendering_news');
+          const searchingSlot = activeSlots.find(s => s.phase === 'ai_search');
+          if (renderingSlot) {
+            currentPhase = 'rendering';
+            currentMessage = `Processing ${renderingSlot.poiName}`;
+          } else if (searchingSlot) {
+            currentPhase = 'ai_search';
+            currentMessage = `Searching for ${searchingSlot.poiName}`;
+          } else if (activeSlots[0]) {
+            currentPhase = activeSlots[0].phase;
+            currentMessage = `Processing ${activeSlots[0].poiName}`;
+          }
+        }
+      }
+
+      res.json({
+        ...status,
+        phase: currentPhase,
+        phase_message: currentMessage,
+        displaySlots  // Send exactly 10 slots instead of unbounded activeJobs
+      });
     } catch (error) {
       console.error('Error getting job status:', error);
       res.status(500).json({ error: 'Failed to get job status' });
@@ -3421,11 +3454,46 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     }
   });
 
-  // Get AI stats for current job
+  // Get AI stats for current/most recent job (per-job tracking)
   router.get('/news/ai-stats', isAdmin, async (req, res) => {
     try {
-      const stats = getJobStats();
-      res.json(stats);
+      // Get the most recent job status
+      const result = await pool.query(`
+        SELECT ai_usage, status
+        FROM news_job_status
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return res.json({ usage: { gemini: 0, perplexity: 0 }, errors: { gemini429: 0, perplexity429: 0 }, activeProvider: null });
+      }
+
+      const job = result.rows[0];
+
+      // If job is running, use real-time in-memory stats
+      if (job.status === 'running') {
+        const liveStats = getJobStats();
+        return res.json({
+          usage: liveStats.usage,
+          errors: liveStats.errors,
+          activeProvider: liveStats.activeProvider
+        });
+      }
+
+      // For completed jobs, use database values
+      const aiUsage = job.ai_usage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+      res.json({
+        usage: {
+          gemini: aiUsage.gemini || 0,
+          perplexity: aiUsage.perplexity || 0
+        },
+        errors: {
+          gemini429: aiUsage.gemini429 || 0,
+          perplexity429: aiUsage.perplexity429 || 0
+        },
+        activeProvider: null
+      });
     } catch (error) {
       console.error('Error getting AI stats:', error);
       res.status(500).json({ error: 'Failed to get AI stats' });
@@ -3438,13 +3506,16 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       const { id } = req.params;
       const jobId = parseInt(id);
 
-      // Update job status in database to 'cancelled'
+      // Get current AI usage before cancelling
+      const currentUsage = getJobStats();
+
+      // Update job status in database to 'cancelled' (preserve AI usage)
       const result = await pool.query(`
         UPDATE news_job_status
-        SET status = 'cancelled', completed_at = NOW()
+        SET status = 'cancelled', completed_at = NOW(), ai_usage = $2
         WHERE id = $1 AND status = 'running'
         RETURNING *
-      `, [jobId]);
+      `, [jobId, JSON.stringify(currentUsage)]);
 
       if (result.rows.length > 0) {
         console.log(`Admin ${req.user.email} cancelled batch job ${jobId}`);
@@ -3707,7 +3778,8 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         success: true,
         message: result.message,
         jobId: result.jobId,
-        totalTrails: result.totalTrails
+        totalTrails: result.totalTrails,  // Keep camelCase for backward compatibility
+        total_trails: result.totalTrails  // Add snake_case for frontend
       });
 
     } catch (error) {
@@ -3716,7 +3788,38 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     }
   });
 
-  // Get job status
+  // Get latest job status (MUST come before /:jobId route)
+  router.get('/trail-status/job-status/latest', isAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT *
+        FROM trail_status_job_status
+        ORDER BY created_at DESC
+        LIMIT 1
+      `);
+
+      if (result.rows.length === 0) {
+        return res.json(null);
+      }
+
+      const job = result.rows[0];
+      res.json({
+        jobId: job.pg_boss_job_id,
+        status: job.status,
+        started_at: job.started_at,
+        completed_at: job.completed_at,
+        total_trails: job.total_trails,
+        trails_processed: job.trails_processed,
+        status_found: job.status_found,
+        error_message: job.error_message
+      });
+    } catch (error) {
+      console.error('Error getting latest job status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Get job status by ID
   router.get('/trail-status/job-status/:jobId', isAdmin, async (req, res) => {
     try {
       const { jobId } = req.params;
@@ -3726,7 +3829,44 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         return res.status(404).json({ error: 'Job not found' });
       }
 
-      res.json(status);
+      // Get display slots (exactly 10 slots with stable assignments)
+      const displaySlots = getTrailDisplaySlots(status.jobId);
+
+      // Determine current phase from display slots
+      let currentPhase = null;
+      let currentMessage = null;
+      if (displaySlots.some(s => s.poiId)) {
+        const activeSlots = displaySlots.filter(s => s.poiId && s.status === 'active');
+        if (activeSlots.length > 0) {
+          const renderingSlot = activeSlots.find(s => s.phase === 'rendering');
+          const searchingSlot = activeSlots.find(s => s.phase === 'ai_search');
+          if (renderingSlot) {
+            currentPhase = 'rendering';
+            currentMessage = `Processing ${renderingSlot.poiName}`;
+          } else if (searchingSlot) {
+            currentPhase = 'ai_search';
+            currentMessage = `Searching for ${searchingSlot.poiName}`;
+          } else if (activeSlots[0]) {
+            currentPhase = activeSlots[0].phase;
+            currentMessage = `Processing ${activeSlots[0].poiName}`;
+          }
+        }
+      }
+
+      // Convert camelCase to snake_case for frontend consistency
+      res.json({
+        jobId: status.jobId,
+        status: status.status,
+        started_at: status.startedAt,
+        completed_at: status.completedAt,
+        total_trails: status.totalTrails,
+        trails_processed: status.trailsProcessed,
+        status_found: status.statusFound,
+        error_message: status.errorMessage,
+        phase: currentPhase,
+        phase_message: currentMessage,
+        displaySlots  // Send exactly 10 slots instead of unbounded activeJobs
+      });
 
     } catch (error) {
       console.error('Error getting trail status job status:', error);
@@ -3758,46 +3898,456 @@ export function createAdminRouter(pool, clearThumbnailCache) {
     }
   });
 
-  // Get latest job status
-  router.get('/trail-status/job-status/latest', isAdmin, async (req, res) => {
+  // Get AI statistics for current/most recent job (per-job tracking)
+  router.get('/trail-status/ai-stats', isAdmin, async (req, res) => {
     try {
-      const pool = req.app.get('pool');
+      // Get the most recent job status
       const result = await pool.query(`
-        SELECT *
+        SELECT ai_usage, status
         FROM trail_status_job_status
         ORDER BY created_at DESC
         LIMIT 1
       `);
 
       if (result.rows.length === 0) {
-        return res.json(null);
+        return res.json({ usage: { gemini: 0, perplexity: 0 }, errors: { gemini429: 0, perplexity429: 0 }, activeProvider: null });
       }
 
       const job = result.rows[0];
+
+      // If job is running, use real-time in-memory stats
+      if (job.status === 'running') {
+        const liveStats = getJobStats();
+        return res.json({
+          usage: liveStats.usage,
+          errors: liveStats.errors,
+          activeProvider: liveStats.activeProvider
+        });
+      }
+
+      // For completed jobs, use database values
+      const aiUsage = job.ai_usage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
       res.json({
-        jobId: job.pg_boss_job_id,
-        status: job.status,
-        started_at: job.started_at,
-        completed_at: job.completed_at,
-        total_trails: job.total_trails,
-        trails_processed: job.trails_processed,
-        status_found: job.status_found,
-        error_message: job.error_message
+        usage: {
+          gemini: aiUsage.gemini || 0,
+          perplexity: aiUsage.perplexity || 0
+        },
+        errors: {
+          gemini429: aiUsage.gemini429 || 0,
+          perplexity429: aiUsage.perplexity429 || 0
+        },
+        activeProvider: null
       });
     } catch (error) {
-      console.error('Error getting latest job status:', error);
+      console.error('Error getting AI stats:', error);
       res.status(500).json({ error: error.message });
     }
   });
 
-  // Get AI statistics
-  router.get('/trail-status/ai-stats', isAdmin, async (req, res) => {
+  // ============================================================================
+  // Twitter Cookie Authentication
+  // ============================================================================
+
+  /**
+   * Launch browser for manual Twitter login (opens on host machine)
+   */
+  router.post('/twitter/login', isAdmin, async (req, res) => {
     try {
-      const stats = getJobStats();
-      res.json(stats);
+      // Just return instructions - user will log in via their regular browser
+      res.json({
+        success: true,
+        message: 'Please log in to Twitter in your browser and export cookies using the browser extension or DevTools.',
+        instructions_url: 'https://x.com/login'
+      });
     } catch (error) {
-      console.error('Error getting AI stats:', error);
+      console.error('[Twitter Auth] Error:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Save manually exported cookies
+   */
+  router.post('/twitter/save-cookies', isAdmin, async (req, res) => {
+    try {
+      const { cookies } = req.body;
+
+      if (!cookies) {
+        return res.status(400).json({
+          success: false,
+          error: 'No cookies provided'
+        });
+      }
+
+      // Parse cookies (could be JSON array or string)
+      let cookiesArray;
+      if (typeof cookies === 'string') {
+        try {
+          cookiesArray = JSON.parse(cookies);
+        } catch (e) {
+          return res.status(400).json({
+            success: false,
+            error: 'Invalid JSON format for cookies'
+          });
+        }
+      } else {
+        cookiesArray = cookies;
+      }
+
+      // Validate it's an array
+      if (!Array.isArray(cookiesArray)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Cookies must be an array'
+        });
+      }
+
+      // Find the auth_token cookie
+      const authToken = cookiesArray.find(c => c.name === 'auth_token');
+
+      if (!authToken) {
+        return res.status(400).json({
+          success: false,
+          error: 'No auth_token cookie found in provided cookies. Make sure you exported all cookies from x.com'
+        });
+      }
+
+      // Parse expiration date (could be Unix timestamp, ISO string, or missing)
+      let expiresDate = null;
+      if (authToken.expirationDate) {
+        // Chrome extension format uses expirationDate (Unix timestamp)
+        expiresDate = new Date(authToken.expirationDate * 1000);
+      } else if (authToken.expires) {
+        // Could be Unix timestamp or ISO string
+        if (typeof authToken.expires === 'number') {
+          expiresDate = new Date(authToken.expires * 1000);
+        } else if (typeof authToken.expires === 'string') {
+          expiresDate = new Date(authToken.expires);
+        }
+      }
+
+      // If still no valid date, estimate 60 days from now
+      if (!expiresDate || isNaN(expiresDate.getTime())) {
+        expiresDate = new Date();
+        expiresDate.setDate(expiresDate.getDate() + 60);
+        console.log('[Twitter Auth] ⚠️ No expiration date found, estimating 60 days');
+      }
+
+      // Save cookies to database
+      const cookieData = JSON.stringify(cookiesArray);
+
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, updated_at, updated_by)
+         VALUES ('twitter_cookies', $1, NOW(), $2)
+         ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = NOW(), updated_by = $2`,
+        [cookieData, req.user.id]
+      );
+
+      console.log('[Twitter Auth] ✓ Cookies saved to database');
+      console.log('[Twitter Auth] Auth token expires:', expiresDate.toISOString());
+
+      res.json({
+        success: true,
+        message: 'Twitter cookies saved successfully!',
+        auth_token_preview: authToken.value.substring(0, 20) + '...',
+        expires: expiresDate.toISOString(),
+        cookies_count: cookiesArray.length
+      });
+
+    } catch (error) {
+      console.error('[Twitter Auth] Error saving cookies:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Test if saved Twitter cookies still work
+   */
+  router.post('/twitter/test-cookies', isAdmin, async (req, res) => {
+    try {
+      const { chromium } = await import('playwright');
+
+      // Get saved cookies from database
+      const result = await pool.query(
+        "SELECT value FROM admin_settings WHERE key = 'twitter_cookies'"
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'No saved Twitter cookies found. Please log in first.'
+        });
+      }
+
+      const cookies = JSON.parse(result.rows[0].value);
+      console.log('[Twitter Auth] Testing', cookies.length, 'saved cookies...');
+
+      // Launch browser and load cookies
+      const browser = await chromium.launch({
+        headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage'
+        ]
+      });
+
+      const context = await browser.newContext({
+        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      });
+
+      // Sanitize cookies for Playwright compatibility
+      const sanitizedCookies = cookies.map(cookie => {
+        const sanitized = { ...cookie };
+
+        // Fix sameSite - Playwright only accepts Strict, Lax, or None
+        if (sanitized.sameSite && !['Strict', 'Lax', 'None'].includes(sanitized.sameSite)) {
+          sanitized.sameSite = 'Lax';
+        }
+
+        // Ensure required fields exist
+        if (!sanitized.name || !sanitized.value) {
+          return null;
+        }
+
+        // Convert expirationDate to expires if needed
+        if (sanitized.expirationDate && !sanitized.expires) {
+          sanitized.expires = sanitized.expirationDate;
+        }
+
+        return sanitized;
+      }).filter(c => c !== null);
+
+      // Add cookies to context
+      await context.addCookies(sanitizedCookies);
+
+      const page = await context.newPage();
+
+      // Try to access Twitter home (should redirect if not logged in)
+      await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 15000 });
+      await page.waitForTimeout(3000);
+
+      const currentUrl = page.url();
+      const pageTitle = await page.title();
+
+      console.log('[Twitter Auth] Test result - URL:', currentUrl);
+      console.log('[Twitter Auth] Test result - Title:', pageTitle);
+
+      // Check if still logged in
+      const isLoggedIn = currentUrl.includes('/home') && !currentUrl.includes('/login');
+
+      await browser.close();
+
+      if (isLoggedIn) {
+        res.json({
+          success: true,
+          message: 'Twitter cookies are valid! Authentication is working.',
+          logged_in: true
+        });
+      } else {
+        res.json({
+          success: false,
+          message: 'Twitter cookies have expired. Please log in again.',
+          logged_in: false
+        });
+      }
+
+    } catch (error) {
+      console.error('[Twitter Auth] Error testing cookies:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+
+  /**
+   * Get Twitter authentication status
+   */
+  router.get('/twitter/auth-status', isAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(
+        "SELECT value, updated_at FROM admin_settings WHERE key = 'twitter_cookies'"
+      );
+
+      if (result.rows.length === 0) {
+        return res.json({
+          authenticated: false,
+          message: 'No Twitter cookies saved'
+        });
+      }
+
+      const cookies = JSON.parse(result.rows[0].value);
+      const authToken = cookies.find(c => c.name === 'auth_token');
+
+      if (!authToken) {
+        return res.json({
+          authenticated: false,
+          message: 'No auth_token found in saved cookies'
+        });
+      }
+
+      // Parse expiration date (could be Unix timestamp, ISO string, or missing)
+      let expiresDate = null;
+      if (authToken.expirationDate) {
+        // Chrome extension format uses expirationDate (Unix timestamp)
+        expiresDate = new Date(authToken.expirationDate * 1000);
+      } else if (authToken.expires) {
+        // Could be Unix timestamp or ISO string
+        if (typeof authToken.expires === 'number') {
+          expiresDate = new Date(authToken.expires * 1000);
+        } else if (typeof authToken.expires === 'string') {
+          expiresDate = new Date(authToken.expires);
+        }
+      }
+
+      // If no valid date, assume it's valid (session cookie or long-lived)
+      const isExpired = expiresDate && !isNaN(expiresDate.getTime()) ? expiresDate < new Date() : false;
+
+      res.json({
+        authenticated: !isExpired,
+        auth_token_preview: authToken.value.substring(0, 20) + '...',
+        expires: expiresDate && !isNaN(expiresDate.getTime()) ? expiresDate.toISOString() : 'Session',
+        saved_at: result.rows[0].updated_at,
+        is_expired: isExpired,
+        cookies_count: cookies.length
+      });
+
+    } catch (error) {
+      console.error('[Twitter Auth] Error getting auth status:', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  // Playwright status endpoint - check if browser can be launched
+  router.get('/playwright/status', isAdmin, async (req, res) => {
+    const startTime = Date.now();
+    let browser = null;
+
+    try {
+      const { chromium } = await import('playwright');
+
+      // Try to launch browser
+      browser = await chromium.launch({
+        headless: true,
+        timeout: 15000
+      });
+
+      const context = await browser.newContext();
+      const page = await context.newPage();
+
+      // Navigate to a simple test page
+      await page.goto('about:blank', { timeout: 5000 });
+
+      // Get browser version
+      const version = browser.version();
+
+      await browser.close();
+      browser = null;
+
+      const elapsed = Date.now() - startTime;
+
+      res.json({
+        status: 'working',
+        message: 'Playwright is operational',
+        browser_version: version,
+        launch_time_ms: elapsed,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      const elapsed = Date.now() - startTime;
+
+      // Clean up browser if it was partially launched
+      if (browser) {
+        try {
+          await browser.close();
+        } catch (closeErr) {
+          // Ignore close errors
+        }
+      }
+
+      console.error('[Playwright Status] Error:', error.message);
+
+      // Determine the type of error
+      let errorType = 'unknown';
+      let suggestion = 'Check server logs for details';
+
+      if (error.message.includes('Executable doesn\'t exist')) {
+        errorType = 'not_installed';
+        suggestion = 'Run: npx playwright install chromium';
+      } else if (error.message.includes('timeout')) {
+        errorType = 'timeout';
+        suggestion = 'Browser launch timed out - server may be under heavy load';
+      } else if (error.message.includes('permission')) {
+        errorType = 'permission';
+        suggestion = 'Check file permissions on Playwright browser directory';
+      }
+
+      res.json({
+        status: 'error',
+        message: error.message,
+        error_type: errorType,
+        suggestion: suggestion,
+        elapsed_ms: elapsed,
+        timestamp: new Date().toISOString()
+      });
+    }
+  });
+
+  // Playwright test endpoint - actually render a page and verify content extraction
+  router.post('/playwright/test', isAdmin, async (req, res) => {
+    const { url = 'https://example.com' } = req.body;
+    const startTime = Date.now();
+
+    try {
+      const { renderJavaScriptPage } = await import('../services/jsRenderer.js');
+
+      const result = await renderJavaScriptPage(url, {
+        timeout: 15000,
+        waitTime: 2000
+      });
+
+      const elapsed = Date.now() - startTime;
+
+      if (result.success) {
+        res.json({
+          status: 'success',
+          message: 'Page rendered successfully',
+          url: url,
+          title: result.title,
+          text_length: result.text?.length || 0,
+          links_found: result.links?.length || 0,
+          elapsed_ms: elapsed,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        res.json({
+          status: 'failed',
+          message: result.error || 'Failed to render page',
+          url: url,
+          elapsed_ms: elapsed,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+    } catch (error) {
+      const elapsed = Date.now() - startTime;
+      console.error('[Playwright Test] Error:', error.message);
+
+      res.json({
+        status: 'error',
+        message: error.message,
+        url: url,
+        elapsed_ms: elapsed,
+        timestamp: new Date().toISOString()
+      });
     }
   });
 

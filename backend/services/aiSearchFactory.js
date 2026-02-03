@@ -15,6 +15,19 @@
 
 import { generateTextWithCustomPrompt as geminiSearch } from './geminiService.js';
 import { generateTextWithCustomPrompt as perplexitySearch } from './perplexityService.js';
+import fs from 'fs';
+
+// Debug logging helper
+function debugLog(message) {
+  const timestamp = new Date().toISOString();
+  const logMessage = `${timestamp} ${message}\n`;
+  try {
+    fs.appendFileSync('/tmp/logs/debug.log', logMessage);
+  } catch (err) {
+    // Ignore file write errors
+  }
+  console.log(message);
+}
 
 // Track usage per job session
 let currentJobUsage = { gemini: 0, perplexity: 0 };
@@ -95,14 +108,16 @@ async function getConfig(pool) {
  * @param {Pool} pool - Database connection pool
  * @param {string} customPrompt - The prompt to send to the AI
  * @param {Object} sheets - Optional Google Sheets API client (for Gemini API key restore)
- * @returns {Promise<string>} - Generated text response
+ * @returns {Promise<{response: string, provider: string}>} - Generated text response and provider used
  */
 export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = null) {
   const config = await getConfig(pool);
+  debugLog(`[AI Search Factory] Config: primary=${config.primary}, fallback=${config.fallback}, limit=${config.primaryLimit}`);
 
   // Determine which provider to use
   let provider = config.primary;
   const primaryUsage = currentJobUsage[config.primary] || 0;
+  debugLog(`[AI Search Factory] Initial provider: ${provider}, usage: ${primaryUsage}`);
 
   // Check if we've exceeded the primary limit
   if (config.primaryLimit > 0 && primaryUsage >= config.primaryLimit) {
@@ -124,6 +139,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
 
   // Track active provider
   currentActiveProvider = provider;
+  let usedProvider = provider; // Track which provider actually succeeded
 
   // Call the appropriate provider
   let result;
@@ -150,6 +166,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
 
       const fallbackProvider = config.fallback;
       currentActiveProvider = fallbackProvider;
+      usedProvider = fallbackProvider; // Update the provider that succeeded
 
       try {
         if (fallbackProvider === 'gemini') {
@@ -171,5 +188,6 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
     }
   }
 
-  return result;
+  debugLog(`[AI Search Factory] Returning provider: ${usedProvider}`);
+  return { response: result, provider: usedProvider };
 }

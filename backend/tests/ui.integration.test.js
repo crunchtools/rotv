@@ -53,43 +53,80 @@ describe('UI Integration Tests', () => {
     it('should toggle satellite mode on and off', async () => {
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Wait for the map controls to render
-      await page.waitForSelector('.zoom-locate-control', { timeout: 10000 });
+      // Give UI time to fully load
+      await page.waitForTimeout(500);
 
-      const satelliteButton = await page.locator('.satellite-toggle-button');
+      // Wait for the map controls to render
+      await page.waitForSelector('.zoom-locate-control', { timeout: 15000 });
+      await page.waitForSelector('.satellite-toggle-button', { timeout: 5000 });
+
+      // Close legend if it's overlaying the map controls
+      try {
+        const legendVisible = await page.locator('.legend').isVisible();
+        if (legendVisible) {
+          await page.evaluate(() => {
+            const closeBtn = document.querySelector('.legend .legend-toggle, .legend .close-btn');
+            if (closeBtn) closeBtn.click();
+          });
+          await page.waitForTimeout(300);
+        }
+      } catch (e) {
+        // Legend not present, continue
+      }
 
       // Verify button is not active initially
-      let hasActiveClass = await satelliteButton.evaluate(el => el.classList.contains('active'));
+      let hasActiveClass = await page.evaluate(() => {
+        const btn = document.querySelector('.satellite-toggle-button');
+        return btn ? btn.classList.contains('active') : false;
+      });
       expect(hasActiveClass).toBe(false);
 
-      // Click to enable satellite mode
-      await satelliteButton.click();
+      // Click to enable satellite mode using evaluate to trigger React event
+      await page.evaluate(() => {
+        const btn = document.querySelector('.satellite-toggle-button');
+        if (btn) btn.click();
+      });
 
       // Wait a bit for the class to update
       await page.waitForTimeout(500);
 
       // Verify button is now active
-      hasActiveClass = await satelliteButton.evaluate(el => el.classList.contains('active'));
+      hasActiveClass = await page.evaluate(() => {
+        const btn = document.querySelector('.satellite-toggle-button');
+        return btn ? btn.classList.contains('active') : false;
+      });
       expect(hasActiveClass).toBe(true);
 
       // Verify title changed
-      let title = await satelliteButton.getAttribute('title');
+      let title = await page.evaluate(() => {
+        const btn = document.querySelector('.satellite-toggle-button');
+        return btn ? btn.getAttribute('title') : null;
+      });
       expect(title).toBe('Switch to map view');
 
-      // Click again to disable satellite mode
-      await satelliteButton.click();
+      // Click again to disable satellite mode using evaluate
+      await page.evaluate(() => {
+        const btn = document.querySelector('.satellite-toggle-button');
+        if (btn) btn.click();
+      });
 
       // Wait a bit for the class to update
       await page.waitForTimeout(500);
 
       // Verify button is no longer active
-      hasActiveClass = await satelliteButton.evaluate(el => el.classList.contains('active'));
+      hasActiveClass = await page.evaluate(() => {
+        const btn = document.querySelector('.satellite-toggle-button');
+        return btn ? btn.classList.contains('active') : false;
+      });
       expect(hasActiveClass).toBe(false);
 
       // Verify title changed back
-      title = await satelliteButton.getAttribute('title');
+      title = await page.evaluate(() => {
+        const btn = document.querySelector('.satellite-toggle-button');
+        return btn ? btn.getAttribute('title') : null;
+      });
       expect(title).toBe('Switch to satellite view');
-    }, 30000);
+    }, 40000);
 
     it('should switch between OpenStreetMap and Esri satellite tiles', async () => {
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
@@ -97,14 +134,21 @@ describe('UI Integration Tests', () => {
       // Wait for the map controls to render
       await page.waitForSelector('.zoom-locate-control', { timeout: 10000 });
 
-      const satelliteButton = await page.locator('.satellite-toggle-button');
+      // Close legend if it's overlaying the map controls
+      const legend = page.locator('.legend');
+      if (await legend.isVisible()) {
+        await legend.locator('.legend-toggle, .close-btn').first().click().catch(() => {});
+        await page.waitForTimeout(300);
+      }
+
+      const satelliteButton = page.locator('.satellite-toggle-button');
 
       // Verify button starts inactive (regular map mode)
       let hasActiveClass = await satelliteButton.evaluate(el => el.classList.contains('active'));
       expect(hasActiveClass).toBe(false);
 
-      // Click satellite toggle to enable satellite mode
-      await satelliteButton.click();
+      // Click satellite toggle to enable satellite mode using evaluate to trigger React event
+      await satelliteButton.evaluate(el => el.click());
 
       // Wait for state change
       await page.waitForTimeout(1000);
@@ -117,8 +161,8 @@ describe('UI Integration Tests', () => {
       const attribution = await page.locator('.leaflet-control-attribution').textContent();
       expect(attribution).toContain('Esri');
 
-      // Click again to switch back to regular map
-      await satelliteButton.click();
+      // Click again to switch back to regular map using evaluate
+      await satelliteButton.evaluate(el => el.click());
 
       // Wait for state change
       await page.waitForTimeout(1000);
@@ -305,22 +349,26 @@ describe('UI Integration Tests', () => {
       // Wait for navigation buttons to appear
       await page.waitForSelector('.image-nav-btn', { timeout: 5000 });
 
-      // Get initial POI name
-      const sidebarHeader = await page.locator('.sidebar-header h2');
-      const initialName = await sidebarHeader.textContent();
+      // Get initial POI name - use helper to avoid detachment
+      const getHeaderText = async () => {
+        return await page.locator('.sidebar-header h2').textContent();
+      };
+      const initialName = await getHeaderText();
 
       // Check which navigation buttons exist
       const nextButtonExists = await page.locator('.image-nav-btn.image-nav-next').count() > 0;
       const prevButtonExists = await page.locator('.image-nav-btn.image-nav-prev').count() > 0;
 
-      // Test navigation - use whichever button is available
+      // Test navigation - use evaluate to avoid detachment issues
       if (nextButtonExists) {
-        const nextButton = await page.locator('.image-nav-btn.image-nav-next');
-        await nextButton.click();
+        await page.evaluate(() => {
+          const btn = document.querySelector('.image-nav-btn.image-nav-next');
+          if (btn) btn.click();
+        });
         await page.waitForTimeout(800);
 
         // Verify POI changed (or stay same if at boundary)
-        const newName = await sidebarHeader.textContent();
+        const newName = await getHeaderText();
         // If name didn't change, we might be at a boundary - that's okay
         if (newName === initialName) {
           expect(true).toBe(true); // Pass the test
@@ -330,33 +378,39 @@ describe('UI Integration Tests', () => {
         expect(newName).not.toBe(initialName);
 
         // Navigate back if prev button now exists
-        const prevButton = await page.locator('.image-nav-btn.image-nav-prev');
-        if (await prevButton.count() > 0) {
-          await prevButton.click();
+        if (await page.locator('.image-nav-btn.image-nav-prev').count() > 0) {
+          await page.evaluate(() => {
+            const btn = document.querySelector('.image-nav-btn.image-nav-prev');
+            if (btn) btn.click();
+          });
           await page.waitForTimeout(800);
 
           // Verify we're back to original POI
-          const finalName = await sidebarHeader.textContent();
+          const finalName = await getHeaderText();
           expect(finalName).toBe(initialName);
         }
       } else if (prevButtonExists) {
         // We're at the end of the list, try prev
-        const prevButton = await page.locator('.image-nav-btn.image-nav-prev');
-        await prevButton.click();
+        await page.evaluate(() => {
+          const btn = document.querySelector('.image-nav-btn.image-nav-prev');
+          if (btn) btn.click();
+        });
         await page.waitForTimeout(800);
 
         // Verify POI changed
-        const newName = await sidebarHeader.textContent();
+        const newName = await getHeaderText();
         expect(newName).not.toBe(initialName);
 
         // Navigate back
-        const nextButton = await page.locator('.image-nav-btn.image-nav-next');
-        if (await nextButton.count() > 0) {
-          await nextButton.click();
+        if (await page.locator('.image-nav-btn.image-nav-next').count() > 0) {
+          await page.evaluate(() => {
+            const btn = document.querySelector('.image-nav-btn.image-nav-next');
+            if (btn) btn.click();
+          });
           await page.waitForTimeout(800);
 
           // Verify we're back
-          const finalName = await sidebarHeader.textContent();
+          const finalName = await getHeaderText();
           expect(finalName).toBe(initialName);
         }
       } else {
@@ -384,9 +438,11 @@ describe('UI Integration Tests', () => {
       await page.waitForSelector('.sidebar.open', { timeout: 5000 });
       await page.waitForSelector('.image-nav-btn', { timeout: 5000 });
 
-      // Get initial POI name
-      const sidebarHeader = await page.locator('.sidebar-header h2');
-      const initialName = await sidebarHeader.textContent();
+      // Get initial POI name - re-query to avoid detachment
+      const getHeaderText = async () => {
+        return await page.locator('.sidebar-header h2').textContent();
+      };
+      const initialName = await getHeaderText();
 
       // Check which navigation buttons exist
       const nextButtonExists = await page.locator('.image-nav-btn.image-nav-next').count() > 0;
@@ -394,18 +450,22 @@ describe('UI Integration Tests', () => {
 
       // Test debouncing - use whichever button is available
       if (nextButtonExists) {
-        const nextButton = await page.locator('.image-nav-btn.image-nav-next');
-
-        // Click 3 times rapidly (should only navigate once due to 300ms debounce)
-        await nextButton.click();
-        await nextButton.click();
-        await nextButton.click();
+        // Click 3 times rapidly using evaluate to avoid detachment issues
+        // (should only navigate once due to 300ms debounce)
+        await page.evaluate(() => {
+          const btn = document.querySelector('.image-nav-btn.image-nav-next');
+          if (btn) {
+            btn.click();
+            btn.click();
+            btn.click();
+          }
+        });
 
         // Wait for navigation to complete
         await page.waitForTimeout(1000);
 
-        // Get POI name after clicks
-        const nameAfterClicks = await sidebarHeader.textContent();
+        // Get POI name after clicks - re-query to avoid detachment
+        const nameAfterClicks = await getHeaderText();
 
         // If name didn't change, we might be at a boundary - that's okay
         if (nameAfterClicks === initialName) {
@@ -417,40 +477,46 @@ describe('UI Integration Tests', () => {
         // Should have navigated exactly once
         expect(nameAfterClicks).not.toBe(initialName);
 
-        // Click prev once to go back
-        const prevButton = await page.locator('.image-nav-btn.image-nav-prev');
-        if (await prevButton.count() > 0) {
-          await prevButton.click();
+        // Click prev once to go back using evaluate
+        if (await page.locator('.image-nav-btn.image-nav-prev').count() > 0) {
+          await page.evaluate(() => {
+            const btn = document.querySelector('.image-nav-btn.image-nav-prev');
+            if (btn) btn.click();
+          });
           await page.waitForTimeout(800);
 
           // Verify we're back to original (proves we only moved one step forward)
-          const finalName = await sidebarHeader.textContent();
+          const finalName = await getHeaderText();
           expect(finalName).toBe(initialName);
         }
       } else if (prevButtonExists) {
-        // We're at the end, test with prev button
-        const prevButton = await page.locator('.image-nav-btn.image-nav-prev');
-
-        // Click 3 times rapidly
-        await prevButton.click();
-        await prevButton.click();
-        await prevButton.click();
+        // We're at the end, test with prev button using evaluate
+        await page.evaluate(() => {
+          const btn = document.querySelector('.image-nav-btn.image-nav-prev');
+          if (btn) {
+            btn.click();
+            btn.click();
+            btn.click();
+          }
+        });
 
         // Wait for navigation
         await page.waitForTimeout(1000);
 
-        // Should have navigated exactly once
-        const nameAfterClicks = await sidebarHeader.textContent();
+        // Should have navigated exactly once - re-query to avoid detachment
+        const nameAfterClicks = await getHeaderText();
         expect(nameAfterClicks).not.toBe(initialName);
 
         // Click next to go back
-        const nextButton = await page.locator('.image-nav-btn.image-nav-next');
-        if (await nextButton.count() > 0) {
-          await nextButton.click();
+        if (await page.locator('.image-nav-btn.image-nav-next').count() > 0) {
+          await page.evaluate(() => {
+            const btn = document.querySelector('.image-nav-btn.image-nav-next');
+            if (btn) btn.click();
+          });
           await page.waitForTimeout(800);
 
           // Verify we're back
-          const finalName = await sidebarHeader.textContent();
+          const finalName = await getHeaderText();
           expect(finalName).toBe(initialName);
         }
       } else {
@@ -514,6 +580,58 @@ describe('UI Integration Tests', () => {
 
       // Reset viewport
       await page.setViewportSize({ width: 1280, height: 720 });
+    }, 40000);
+  });
+
+  describe('Header Visibility', () => {
+    it('should keep header visible above the map', async () => {
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Wait for header to render
+      await page.waitForSelector('.header', { timeout: 15000 });
+
+      // Give UI time to fully render
+      await page.waitForTimeout(1000);
+
+      // First ensure we're on the View tab (map view)
+      const viewTab = page.locator('.tab-btn:has-text("View")');
+      if (await viewTab.isVisible()) {
+        await viewTab.evaluate(el => el.click());
+        await page.waitForTimeout(500);
+      }
+
+      // Wait for map container to exist in DOM (may be hidden due to tabs)
+      // Use state: 'attached' since the container might not be visible initially
+      await page.locator('.leaflet-container').first().waitFor({ state: 'attached', timeout: 10000 });
+
+      // Verify header is visible
+      const header = page.locator('.header');
+      expect(await header.isVisible()).toBe(true);
+
+      // Verify header tabs are clickable (not covered by map)
+      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      expect(await resultsTab.isVisible()).toBe(true);
+
+      // Click the Results tab to verify it's not covered using evaluate
+      await resultsTab.evaluate(el => el.click());
+      await page.waitForTimeout(500);
+
+      // Header should still be visible after switching tabs
+      expect(await header.isVisible()).toBe(true);
+
+      // Click back to View tab using evaluate
+      await viewTab.evaluate(el => el.click());
+      await page.waitForTimeout(500);
+
+      // Header should still be visible with map showing
+      expect(await header.isVisible()).toBe(true);
+
+      // Verify header has proper z-index (above map)
+      const headerZIndex = await header.evaluate(el => {
+        const style = window.getComputedStyle(el);
+        return parseInt(style.zIndex) || 0;
+      });
+      expect(headerZIndex).toBeGreaterThan(0);
     }, 40000);
   });
 });

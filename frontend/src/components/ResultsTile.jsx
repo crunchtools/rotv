@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 
 // Individual POI tile for the Results tab
-const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected }) {
+const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status }) {
   // Use thumbnail endpoint for fast, cached small images
   // Include updated_at for cache busting when image changes
   const imageUrl = poi.image_mime_type
@@ -65,6 +65,11 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
           <span className={`poi-type-icon ${poiType}`}>
             {poiType === 'virtual' ? 'O' : poiType === 'destination' ? 'D' : poiType === 'trail' ? 'T' : poiType === 'river' ? 'R' : 'B'}
           </span>
+          {showStatusBadge && status && (
+            <span className={`status-badge status-${status.status}`}>
+              {status.status.toUpperCase()}
+            </span>
+          )}
           {poi.era_name && (
             <span className="results-tile-era">{poi.era_name}</span>
           )}
