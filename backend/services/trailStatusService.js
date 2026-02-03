@@ -116,18 +116,21 @@ function findFirstAvailableSlot(jobId) {
 
 /**
  * Assign a trail to a display slot
+ * IMPORTANT: This immediately replaces any old job data with new job data
+ * to prevent the frontend from briefly displaying old "completed" status
  */
 function assignPoiToSlot(jobId, slotId, poiId, poiName, provider) {
   const slots = jobDisplaySlots.get(jobId);
   if (!slots) return;
 
+  // Immediately replace slot data (don't let old completed status linger)
   slots[slotId] = {
     slotId,
     poiId,
     poiName,
     phase: 'initializing',
     provider,
-    status: 'active'
+    status: 'active'  // Force active status immediately
   };
 
   console.log(`[Trail Job ${jobId}] Assigned trail ${poiId} (${poiName}) to Slot ${slotId}`);
@@ -173,7 +176,11 @@ export function getDisplaySlots(jobId) {
     if (!slot.poiId) return slot;
 
     const progress = collectionProgress.get(slot.poiId);
-    if (!progress) return slot;
+    if (!progress) {
+      // Progress not found - use slot data as-is
+      // This can happen briefly when a new trail is assigned but progress hasn't been created yet
+      return slot;
+    }
 
     return {
       slotId: slot.slotId,
@@ -940,8 +947,8 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     console.log(`[Trail Status Job ${jobId}] Status saved: ${totalStatusSaved}`);
     console.log(`[Trail Status Job ${jobId}] AI usage: ${JSON.stringify(aiUsage)}`);
 
-    // Clear display slots
-    clearDisplaySlots(jobId);
+    // Don't clear display slots - keep them frozen for frontend to display
+    // Frontend will clear them when user clicks X or starts a new job
 
   } catch (error) {
     console.error(`[Trail Status Job ${jobId}] ❌ Failed:`, error.message);

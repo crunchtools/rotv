@@ -140,18 +140,21 @@ function findFirstAvailableSlot(jobId) {
 
 /**
  * Assign a POI to a display slot
+ * IMPORTANT: This immediately replaces any old job data with new job data
+ * to prevent the frontend from briefly displaying old "completed" status
  */
 function assignPoiToSlot(jobId, slotId, poiId, poiName, provider) {
   const slots = jobDisplaySlots.get(jobId);
   if (!slots) return;
 
+  // Immediately replace slot data (don't let old completed status linger)
   slots[slotId] = {
     slotId,
     poiId,
     poiName,
     phase: 'initializing',
     provider,
-    status: 'active'
+    status: 'active'  // Force active status immediately
   };
 
   console.log(`[Job ${jobId}] Assigned POI ${poiId} (${poiName}) to Slot ${slotId}`);
@@ -197,7 +200,11 @@ export function getDisplaySlots(jobId) {
     if (!slot.poiId) return slot;
 
     const progress = collectionProgress.get(slot.poiId);
-    if (!progress) return slot;
+    if (!progress) {
+      // Progress not found - use slot data as-is
+      // This can happen briefly when a new POI is assigned but progress hasn't been created yet
+      return slot;
+    }
 
     return {
       slotId: slot.slotId,
@@ -1689,8 +1696,8 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       console.log(`[Job ${jobId}] Completed: ${processed} POIs, ${newsFound} news, ${eventsFound} events`);
     }
 
-    // Clear display slots
-    clearDisplaySlots(jobId);
+    // Don't clear display slots - keep them frozen for frontend to display
+    // Frontend will clear them when user clicks X or starts a new job
 
     // Log summary of results
     const poisWithResults = allResults.filter(r => r.newsFound > 0 || r.eventsFound > 0);
