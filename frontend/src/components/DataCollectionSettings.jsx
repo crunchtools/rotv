@@ -839,13 +839,15 @@ function DataCollectionSettings() {
                   const isThisJobActive = job && job.status === 'active';
 
                   return (
-                    <div key={idx} className={`ai-stats-row ${isThisJobActive ? 'active' : ''} ${!job ? 'empty-slot' : ''}`}>
-                      <div className="ai-col-poi">{job ? (job.poiName || `POI ${job.poiId}`) : '—'}</div>
+                    <div key={idx} className={`ai-stats-row ${isThisJobActive ? 'active' : ''} ${!job || !job.poiName ? 'empty-slot' : ''}`}>
+                      <div className="ai-col-poi">{job && job.poiName ? job.poiName : (isJobRunning ? 'Waiting' : '—')}</div>
                       <div className="ai-col-status">
-                        {!job
+                        {!job || !job.poiName
                           ? (isJobRunning ? 'Waiting' : '—')
                           : job.status === 'completed'
                           ? '✓ Done'
+                          : job.phase === 'error'
+                          ? '❌ Error'
                           : job.phase === 'rendering_events' || job.phase === 'rendering_news' || job.phase === 'rendering'
                           ? '📄 Rendering'
                           : job.phase === 'ai_search'
@@ -859,7 +861,7 @@ function DataCollectionSettings() {
                           : job.phase || '—'}
                       </div>
                       <div className="ai-col-provider">
-                        {!job
+                        {!job || !job.poiName
                           ? '—'
                           : job.provider === 'gemini' ? '🔷 Gemini'
                           : job.provider === 'perplexity' ? '🔮 Perplexity'
@@ -985,13 +987,15 @@ function DataCollectionSettings() {
                   const isThisJobActive = job && job.status === 'active';
 
                   return (
-                    <div key={idx} className={`ai-stats-row ${isThisJobActive ? 'active' : ''} ${!job ? 'empty-slot' : ''}`}>
-                      <div className="ai-col-poi">{job ? (job.poiName || `Trail ${job.poiId}`) : '—'}</div>
+                    <div key={idx} className={`ai-stats-row ${isThisJobActive ? 'active' : ''} ${!job || !job.poiName ? 'empty-slot' : ''}`}>
+                      <div className="ai-col-poi">{job && job.poiName ? job.poiName : (isJobRunning ? 'Waiting' : '—')}</div>
                       <div className="ai-col-status">
-                        {!job
+                        {!job || !job.poiName
                           ? (isJobRunning ? 'Waiting' : '—')
                           : job.status === 'completed'
                           ? '✓ Done'
+                          : job.phase === 'error'
+                          ? '❌ Error'
                           : job.phase === 'rendering'
                           ? '📄 Rendering'
                           : job.phase === 'ai_search'
@@ -1001,7 +1005,7 @@ function DataCollectionSettings() {
                           : job.phase || '—'}
                       </div>
                       <div className="ai-col-provider">
-                        {!job
+                        {!job || !job.poiName
                           ? '—'
                           : job.provider === 'gemini' ? '🔷 Gemini'
                           : job.provider === 'perplexity' ? '🔮 Perplexity'
