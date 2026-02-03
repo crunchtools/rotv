@@ -30,11 +30,6 @@ RUN if [ "$BUILD_ENV" = "test" ]; then \
       npm install --only=production; \
     fi
 
-# Install Playwright npm package matching the base image version
-# Browsers are pre-installed in base image, this just adds the npm package
-RUN PLAYWRIGHT_VERSION=$(cat /etc/playwright-version) && \
-    npm install playwright@$PLAYWRIGHT_VERSION
-
 # Copy backend code
 COPY backend/ ./
 
