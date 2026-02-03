@@ -71,7 +71,11 @@ describe('Slot Management Unit Tests - News Service', () => {
       const jobId1 = 'job-1';
       const jobId2 = 'job-2';
 
-      // Get slots for both jobs (this should create empty slots for each)
+      // Initialize slots for both jobs
+      newsService.initializeSlots(jobId1);
+      newsService.initializeSlots(jobId2);
+
+      // Get slots for both jobs
       const slots1 = newsService.getDisplaySlots(jobId1);
       const slots2 = newsService.getDisplaySlots(jobId2);
 
@@ -105,6 +109,9 @@ describe('Slot Management Unit Tests - News Service', () => {
       const slotId = 5;
       const jobId = 'update-test-job';
 
+      // Initialize slots first
+      newsService.initializeSlots(jobId);
+
       // Update progress with slotId and jobId
       newsService.updateProgress(poiId, {
         jobId,
@@ -131,6 +138,9 @@ describe('Slot Management Unit Tests - News Service', () => {
       const poiId = 101;
       const slotId = 3;
       const jobId = 'preserve-slot-job';
+
+      // Initialize slots first
+      newsService.initializeSlots(jobId);
 
       // Initial update
       newsService.updateProgress(poiId, {
@@ -162,6 +172,9 @@ describe('Slot Management Unit Tests - News Service', () => {
 
       const phases = ['initializing', 'rendering_events', 'ai_search', 'processing_results', 'complete'];
 
+      // Initialize slots first
+      newsService.initializeSlots(jobId);
+
       // Initialize
       newsService.updateProgress(poiId, {
         jobId,
@@ -186,6 +199,9 @@ describe('Slot Management Unit Tests - News Service', () => {
       const poiId = 103;
       const slotId = 4;
       const jobId = 'completion-test-job';
+
+      // Initialize slots first
+      newsService.initializeSlots(jobId);
 
       // Start progress
       newsService.updateProgress(poiId, {
@@ -215,6 +231,9 @@ describe('Slot Management Unit Tests - News Service', () => {
       const poiId = 104;
       const slotId = 6;
       const jobId = 'error-test-job';
+
+      // Initialize slots first
+      newsService.initializeSlots(jobId);
 
       // Start progress
       newsService.updateProgress(poiId, {
@@ -289,6 +308,9 @@ describe('Slot Management Unit Tests - News Service', () => {
       const slotId = 7;
       const jobId = 'enrich-test-job';
 
+      // Initialize slots first
+      newsService.initializeSlots(jobId);
+
       // Create initial progress
       newsService.updateProgress(poiId, {
         jobId,
@@ -359,6 +381,9 @@ describe('Slot Management Unit Tests - News Service', () => {
       const activePoiId = 600;
       const completedPoiId = 601;
       const jobId = 'status-compute-job';
+
+      // Initialize slots first
+      newsService.initializeSlots(jobId);
 
       // Active POI
       newsService.updateProgress(activePoiId, {
@@ -514,6 +539,9 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
       const slotId = 5;
       const jobId = 'trail-update-test-job';
 
+      // Initialize slots first
+      trailStatusService.initializeSlots(jobId);
+
       trailStatusService.updateProgress(poiId, {
         jobId,
         slotId,
@@ -541,6 +569,9 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
 
       const phases = ['starting', 'rendering', 'ai_search', 'saving', 'complete'];
 
+      // Initialize slots first
+      trailStatusService.initializeSlots(jobId);
+
       trailStatusService.updateProgress(poiId, {
         jobId,
         slotId,
@@ -563,6 +594,9 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
       const poiId = 1002;
       const slotId = 7;
       const jobId = 'trail-complete-job';
+
+      // Initialize slots first
+      trailStatusService.initializeSlots(jobId);
 
       trailStatusService.updateProgress(poiId, {
         jobId,
@@ -618,6 +652,9 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
       const poiId = 2100;
       const slotId = 4;
       const jobId = 'trail-enrich-job';
+
+      // Initialize slots first
+      trailStatusService.initializeSlots(jobId);
 
       trailStatusService.updateProgress(poiId, {
         jobId,

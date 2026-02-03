@@ -109,8 +109,9 @@ export function getAllActiveProgress() {
 /**
  * Initialize display slots for a job
  * Creates 10 empty slots that will be filled as POIs are dispatched
+ * Exported for testing purposes
  */
-function initializeSlots(jobId) {
+export function initializeSlots(jobId) {
   const slots = Array(10).fill(null).map((_, i) => ({
     slotId: i,
     poiId: null,
