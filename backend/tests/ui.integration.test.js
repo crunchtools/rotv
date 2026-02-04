@@ -211,6 +211,97 @@ describe('UI Integration Tests', () => {
       expect(classNames[2]).toContain('locate-button');
       expect(classNames[3]).toContain('satellite-toggle-button');
     }, 30000);
+
+    it('should position map controls below header (not off-screen)', async () => {
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Wait for controls to render
+      await page.waitForSelector('.zoom-locate-control', { timeout: 10000 });
+      await page.waitForSelector('.map-poi-count', { timeout: 10000 });
+
+      // Get header height
+      const headerHeight = await page.evaluate(() => {
+        const header = document.querySelector('.header');
+        return header ? header.offsetHeight : 0;
+      });
+
+      // Verify Leaflet controls (zoom, GPS) are positioned below header
+      const leafletTop = await page.evaluate(() => {
+        const leafletControl = document.querySelector('.leaflet-top');
+        if (!leafletControl) return null;
+
+        const rect = leafletControl.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(leafletControl);
+        return {
+          top: parseInt(computedStyle.top, 10),
+          boundingTop: rect.top,
+          isVisible: rect.top >= 0 && rect.bottom <= window.innerHeight
+        };
+      });
+
+      expect(leafletTop).not.toBeNull();
+      expect(leafletTop.top).toBeGreaterThanOrEqual(headerHeight);
+      expect(leafletTop.boundingTop).toBeGreaterThanOrEqual(0);
+      expect(leafletTop.isVisible).toBe(true);
+
+      // Verify POI count badge is positioned below header
+      const poiCountPosition = await page.evaluate(() => {
+        const poiCount = document.querySelector('.map-poi-count');
+        if (!poiCount) return null;
+
+        const rect = poiCount.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(poiCount);
+        return {
+          top: parseInt(computedStyle.top, 10),
+          boundingTop: rect.top,
+          isVisible: rect.top >= 0 && rect.bottom <= window.innerHeight
+        };
+      });
+
+      expect(poiCountPosition).not.toBeNull();
+      expect(poiCountPosition.top).toBeGreaterThanOrEqual(headerHeight);
+      expect(poiCountPosition.boundingTop).toBeGreaterThanOrEqual(0);
+      expect(poiCountPosition.isVisible).toBe(true);
+    }, 30000);
+
+    it('should position map controls below header on mobile', async () => {
+      // Set viewport to mobile size
+      await page.setViewportSize({ width: 375, height: 667 });
+
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Wait for controls to render
+      await page.waitForSelector('.zoom-locate-control', { timeout: 10000 });
+      await page.waitForSelector('.map-poi-count', { timeout: 10000 });
+
+      // Get header height
+      const headerHeight = await page.evaluate(() => {
+        const header = document.querySelector('.header');
+        return header ? header.offsetHeight : 0;
+      });
+
+      // Verify POI count badge is positioned below header on mobile
+      const poiCountPosition = await page.evaluate(() => {
+        const poiCount = document.querySelector('.map-poi-count');
+        if (!poiCount) return null;
+
+        const rect = poiCount.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(poiCount);
+        return {
+          top: parseInt(computedStyle.top, 10),
+          boundingTop: rect.top,
+          isVisible: rect.top >= 0 && rect.bottom <= window.innerHeight
+        };
+      });
+
+      expect(poiCountPosition).not.toBeNull();
+      expect(poiCountPosition.top).toBeGreaterThanOrEqual(headerHeight);
+      expect(poiCountPosition.boundingTop).toBeGreaterThanOrEqual(0);
+      expect(poiCountPosition.isVisible).toBe(true);
+
+      // Reset viewport
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }, 30000);
   });
 
   describe('Mobile Navigation Features', () => {
@@ -633,5 +724,77 @@ describe('UI Integration Tests', () => {
       });
       expect(headerZIndex).toBeGreaterThan(0);
     }, 40000);
+  });
+
+  describe('Results Tab Filter Badges', () => {
+    it('should keep filter badges visible when all are deselected', async () => {
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Switch to Results tab
+      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      await resultsTab.evaluate(el => el.click());
+      await page.waitForTimeout(1000);
+
+      // Wait for filter badges to render
+      await page.waitForSelector('.results-type-filters', { timeout: 10000 });
+
+      // Verify all 5 filter badges are initially visible
+      const filterChips = page.locator('.type-filter-chip');
+      expect(await filterChips.count()).toBe(5);
+
+      // Click all badges to deselect them
+      await page.evaluate(() => {
+        const chips = document.querySelectorAll('.type-filter-chip');
+        chips.forEach(chip => chip.click());
+      });
+
+      await page.waitForTimeout(500);
+
+      // Verify all badges are still visible even when deselected
+      expect(await filterChips.count()).toBe(5);
+      expect(await page.locator('.results-type-filters').isVisible()).toBe(true);
+
+      // Verify badges are clickable to re-enable filters
+      const destinationChip = page.locator('.type-filter-chip.destination');
+      await destinationChip.evaluate(el => el.click());
+      await page.waitForTimeout(300);
+
+      // Verify the badge is now active
+      const isActive = await destinationChip.evaluate(el => el.classList.contains('active'));
+      expect(isActive).toBe(true);
+    }, 30000);
+
+    it('should keep filter badges visible when no POIs match filters', async () => {
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Switch to Results tab
+      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      await resultsTab.evaluate(el => el.click());
+      await page.waitForTimeout(1000);
+
+      // Wait for filter badges to render
+      await page.waitForSelector('.results-type-filters', { timeout: 10000 });
+
+      // Type search text that won't match anything
+      const searchInput = page.locator('.results-search-input');
+      await searchInput.fill('xyznonexistentpoi123');
+      await page.waitForTimeout(500);
+
+      // Verify filter badges are still visible even with 0 results
+      const filterChips = page.locator('.type-filter-chip');
+      expect(await filterChips.count()).toBe(5);
+      expect(await page.locator('.results-type-filters').isVisible()).toBe(true);
+
+      // Verify results count shows 0
+      const resultsCount = await page.locator('.results-count').textContent();
+      expect(resultsCount).toContain('0');
+
+      // Clear search to restore results
+      await searchInput.fill('');
+      await page.waitForTimeout(500);
+
+      // Badges should still be visible
+      expect(await filterChips.count()).toBe(5);
+    }, 30000);
   });
 });
