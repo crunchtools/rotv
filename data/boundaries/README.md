@@ -52,3 +52,37 @@ After adding Akron and Cuyahoga Falls, there are 11 municipal boundaries:
 9. Newburgh Heights
 10. Valley View
 11. Walton Hills
+
+## Boundary Colors
+
+Each municipality has a unique color for visual distinction on the map:
+
+| Municipality | Color Code | Color Name |
+|--------------|------------|------------|
+| **Akron** | `#9370DB` | Medium Purple |
+| Bedford | `#8B008B` | Dark Magenta |
+| Brecksville | `#FF8C00` | Dark Orange |
+| Cleveland | `#000080` | Navy |
+| **Cuyahoga Falls** | `#20B2AA` | Light Sea Green |
+| Cuyahoga Heights | `#8B4513` | Saddle Brown |
+| Cuyahoga Valley National Park | `#228B22` | Forest Green |
+| Independence | `#DC143C` | Crimson |
+| Newburgh Heights | `#2F4F4F` | Dark Slate Gray |
+| Valley View | `#4682B4` | Steel Blue |
+| Walton Hills | `#8B4513` | Saddle Brown |
+
+### Update Boundary Colors
+
+To update the colors for Akron and Cuyahoga Falls:
+
+```bash
+podman exec rotv psql -U postgres -d rotv -f /tmp/update_colors.sql
+```
+
+Or on production:
+
+```bash
+ssh -p 22422 root@sven.dc3.crunchtools.com \
+  "podman cp update_colors.sql rootsofthevalley.org:/tmp/ && \
+   podman exec rootsofthevalley.org psql -U rotv rotv -f /tmp/update_colors.sql"
+```
