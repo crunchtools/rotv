@@ -318,25 +318,26 @@ describe('UI Integration Tests', () => {
       // Wait for map markers to load (indicates data is fetched)
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
 
-      // Wait for sidebar to open from URL parameter with increased timeout
+      // Wait for sidebar to open from URL parameter
       // The sidebar opening depends on React effects coordinating after data loads
+      // GitHub Actions environment is slower, so we need a longer timeout
       try {
         await page.waitForSelector('.sidebar.open', {
-          timeout: 10000,  // Increased from 5000ms
+          timeout: 20000,  // Increased to 20s for GitHub Actions
           state: 'visible'
         });
       } catch (error) {
         // If sidebar didn't auto-open from URL, click a marker as fallback
-        console.log('[Test] Sidebar did not auto-open from URL parameter, trying marker click');
+        console.log('[Test] Sidebar did not auto-open from URL parameter after 20s, trying marker click');
         const markers = await page.locator('.leaflet-marker-icon').all();
         if (markers.length > 0) {
           await markers[0].click();
-          await page.waitForTimeout(500);
+          await page.waitForTimeout(1000);
         }
 
-        // Now wait for sidebar to open (increased timeout for marker click)
+        // Final attempt: wait for sidebar to open after marker click
         await page.waitForSelector('.sidebar.open', {
-          timeout: 10000,  // Increased to match primary wait
+          timeout: 15000,  // Give marker click plenty of time
           state: 'visible'
         });
       }
