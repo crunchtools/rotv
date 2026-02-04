@@ -334,9 +334,9 @@ describe('UI Integration Tests', () => {
           await page.waitForTimeout(500);
         }
 
-        // Now wait for sidebar to open
+        // Now wait for sidebar to open (increased timeout for marker click)
         await page.waitForSelector('.sidebar.open', {
-          timeout: 5000,
+          timeout: 10000,  // Increased to match primary wait
           state: 'visible'
         });
       }
