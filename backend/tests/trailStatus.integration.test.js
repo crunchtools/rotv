@@ -63,28 +63,16 @@ describe('Trail Status Integration Tests', () => {
     `, [JSON.stringify(TWITTER_COOKIES)]);
     console.log(`[Test Setup] Inserted Twitter cookies for authenticated access`);
 
-    // Check if East Rim Trail exists
-    const existingResult = await pool.query(`
-      SELECT id FROM pois WHERE name = $1
-    `, [EAST_RIM_NAME]);
+    // Remove any existing East Rim trails to ensure clean state (including similar names)
+    await pool.query(`DELETE FROM pois WHERE name LIKE '%East Rim%'`);
+    console.log(`[Test Setup] Removed any existing East Rim trail entries`);
 
-    if (existingResult.rows.length > 0) {
-      // Update existing trail with status_url
-      await pool.query(`
-        UPDATE pois
-        SET status_url = $1
-        WHERE name = $2
-      `, [EAST_RIM_STATUS_URL, EAST_RIM_NAME]);
-      console.log(`[Test Setup] Updated ${EAST_RIM_NAME} with status_url: ${EAST_RIM_STATUS_URL}`);
-    } else {
-      // Create East Rim Trail if it doesn't exist
-      await pool.query(`
-        INSERT INTO pois (name, poi_type, status_url, brief_description, geometry)
-        VALUES ($1, 'trail', $2, 'MTB trail system in Cuyahoga Valley National Park',
-                ST_SetSRID(ST_Point(-81.5558, 41.2275), 4326))
-      `, [EAST_RIM_NAME, EAST_RIM_STATUS_URL]);
-      console.log(`[Test Setup] Created ${EAST_RIM_NAME} with status_url: ${EAST_RIM_STATUS_URL}`);
-    }
+    // Create East Rim Trail (without geometry - PostGIS not required for status testing)
+    await pool.query(`
+      INSERT INTO pois (name, poi_type, status_url, brief_description, latitude, longitude)
+      VALUES ($1, 'trail', $2, 'MTB trail system in Cuyahoga Valley National Park', 41.2275, -81.5558)
+    `, [EAST_RIM_NAME, EAST_RIM_STATUS_URL]);
+    console.log(`[Test Setup] Created ${EAST_RIM_NAME} with status_url: ${EAST_RIM_STATUS_URL}`);
 
     // Clear any existing trail status for East Rim to ensure fresh collection
     const poiResult = await pool.query(`SELECT id FROM pois WHERE name = $1`, [EAST_RIM_NAME]);
