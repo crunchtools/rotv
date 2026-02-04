@@ -177,7 +177,7 @@ The system uses pg-boss for reliable background job processing:
 │                                                                 │
 │  pois table extensions:                                         │
 │    - status_url: Configured status page URL                     │
-│    - is_mtb_trail: Flag for MTB trails                          │
+│      (MTB trails identified by having a non-empty status_url)   │
 │                                                                 │
 │  trail_status table:                                            │
 │    - poi_id, status, conditions, last_updated                   │
@@ -197,9 +197,9 @@ The system uses pg-boss for reliable background job processing:
 
 ```sql
 ALTER TABLE pois ADD COLUMN status_url VARCHAR(500);  -- Dedicated status page URL
-ALTER TABLE pois ADD COLUMN is_mtb_trail BOOLEAN DEFAULT FALSE;  -- Flag MTB trails
 
-CREATE INDEX idx_pois_is_mtb_trail ON pois(is_mtb_trail) WHERE is_mtb_trail = TRUE;
+-- MTB trails are identified by having a non-empty status_url
+-- No additional flag column needed
 ```
 
 ### Trail Status Table
@@ -400,7 +400,7 @@ Cancels a running batch job gracefully.
 
 ### Status Tab in Sidebar
 
-The Status tab only appears for POIs marked as MTB trails (`is_mtb_trail = true`).
+The Status tab only appears for POIs with a configured `status_url` (MTB trails).
 
 **File:** `frontend/src/components/Sidebar.jsx`
 
@@ -565,15 +565,13 @@ The migration file (`001_add_trail_status_support.sql`) automatically configures
 ```sql
 -- East Rim Trail - status from CVNP MTB Twitter account
 UPDATE pois
-SET status_url = 'https://x.com/CVNPmtb',
-    is_mtb_trail = TRUE
+SET status_url = 'https://x.com/CVNPmtb'
 WHERE name LIKE '%East Rim%'
   AND status_url IS DISTINCT FROM 'https://x.com/CVNPmtb';
 ```
 
 Additional trails can be added by:
-1. Setting `is_mtb_trail = TRUE` on the POI
-2. Configuring the `status_url` to the official source
+1. Configuring the `status_url` to the official source (any POI with a non-empty `status_url` is treated as an MTB trail)
 
 ---
 
@@ -582,8 +580,8 @@ Additional trails can be added by:
 ### Status Not Showing
 
 1. **Verify `status_url` is configured**: Query: `SELECT id, name, status_url FROM pois WHERE name LIKE '%Trail Name%';`
-2. **Check `is_mtb_trail` flag**: POI should have `is_mtb_trail = TRUE` for the Status tab to appear
-3. **Check recent collection**: Status may need to be collected first via admin panel or API
+   - The POI must have a non-empty `status_url` to be identified as an MTB trail
+2. **Check recent collection**: Status may need to be collected first via admin panel or API
 
 ### Wrong Source URL Showing
 

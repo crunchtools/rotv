@@ -693,7 +693,8 @@ async function initDatabase() {
         ('camping', 'Camping', 'camping.svg', 'camp,campground', 'Camping', 11),
         ('music', 'Music Venue', 'music.svg', 'music,blossom,concert', 'Music', 12),
         ('river', 'River/Waterway', 'river.svg', 'river,creek,stream,cuyahoga', 'Kayaking,Fishing', 13),
-        ('default', 'Other', 'default.svg', NULL, NULL, 14)
+        ('mtb-trailheads', 'MTB Trailheads', 'mtb.svg', NULL, 'Mountain Biking', 14),
+        ('default', 'Other', 'default.svg', NULL, NULL, 15)
         ON CONFLICT (name) DO NOTHING
       `);
     }
@@ -1342,6 +1343,43 @@ app.get('/api/trails/mtb', async (req, res) => {
   } catch (error) {
     console.error('Error fetching MTB trails:', error);
     res.status(500).json({ error: 'Failed to fetch MTB trails' });
+  }
+});
+
+// Get all MTB trails with status data for Status Tab (public)
+app.get('/api/trail-status/mtb-trails', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        p.id,
+        p.name,
+        p.poi_type,
+        p.latitude,
+        p.longitude,
+        p.geometry,
+        p.status_url,
+        ts.status,
+        ts.conditions,
+        ts.last_updated,
+        ts.source_name
+      FROM pois p
+      LEFT JOIN LATERAL (
+        SELECT status, conditions, last_updated, source_name
+        FROM trail_status
+        WHERE poi_id = p.id
+        ORDER BY last_updated DESC NULLS LAST
+        LIMIT 1
+      ) ts ON true
+      WHERE p.status_url IS NOT NULL
+        AND p.status_url != ''
+        AND (p.deleted IS NULL OR p.deleted = FALSE)
+      ORDER BY p.name
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching MTB trail status:', error);
+    res.status(500).json({ error: 'Failed to fetch MTB trail status' });
   }
 });
 

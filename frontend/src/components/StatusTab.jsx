@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, memo } from 'react';
 import MapThumbnail from './MapThumbnail';
+import { StatusBadge } from './StatusBadge';
+import { formatRelativeTime } from '../utils/dateUtils';
 
 // StatusTab component showing all MTB trails with status badges
 const StatusTab = memo(function StatusTab({
@@ -8,7 +10,8 @@ const StatusTab = memo(function StatusTab({
   onSelectLinearFeature,
   onSelectDestination,
   linearFeatures,
-  destinations
+  destinations,
+  onMTBTrailsBoundsChange
 }) {
   const [trails, setTrails] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -23,10 +26,18 @@ const StatusTab = memo(function StatusTab({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/trails/mtb?includeStatus=true');
+      const response = await fetch('/api/trail-status/mtb-trails');
       if (response.ok) {
         const data = await response.json();
         setTrails(data);
+
+        // Calculate bounds for all MTB trails
+        if (data.length > 0 && onMTBTrailsBoundsChange) {
+          const bounds = calculateTrailsBounds(data);
+          if (bounds) {
+            onMTBTrailsBoundsChange(bounds);
+          }
+        }
       } else {
         setError('Failed to load MTB trails');
       }
@@ -36,6 +47,63 @@ const StatusTab = memo(function StatusTab({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Calculate bounds that encompass all MTB trails
+  const calculateTrailsBounds = (trails) => {
+    let minLat = Infinity, maxLat = -Infinity;
+    let minLng = Infinity, maxLng = -Infinity;
+
+    trails.forEach(trail => {
+      if (trail.latitude && trail.longitude) {
+        // Point POI
+        minLat = Math.min(minLat, trail.latitude);
+        maxLat = Math.max(maxLat, trail.latitude);
+        minLng = Math.min(minLng, trail.longitude);
+        maxLng = Math.max(maxLng, trail.longitude);
+      } else if (trail.geometry) {
+        // Linear feature - extract coordinates from geometry
+        const coords = extractCoordinatesFromGeometry(trail.geometry);
+        coords.forEach(([lng, lat]) => {
+          minLat = Math.min(minLat, lat);
+          maxLat = Math.max(maxLat, lat);
+          minLng = Math.min(minLng, lng);
+          maxLng = Math.max(maxLng, lng);
+        });
+      }
+    });
+
+    if (minLat === Infinity) return null;
+
+    return [[minLng, minLat], [maxLng, maxLat]];
+  };
+
+  // Extract coordinates from GeoJSON geometry
+  const extractCoordinatesFromGeometry = (geometry) => {
+    if (typeof geometry === 'string') {
+      geometry = JSON.parse(geometry);
+    }
+
+    const coords = [];
+    if (geometry.type === 'LineString') {
+      coords.push(...geometry.coordinates);
+    } else if (geometry.type === 'MultiLineString') {
+      geometry.coordinates.forEach(lineString => {
+        coords.push(...lineString);
+      });
+    } else if (geometry.type === 'Polygon') {
+      geometry.coordinates[0].forEach(coord => {
+        coords.push(coord);
+      });
+    } else if (geometry.type === 'MultiPolygon') {
+      geometry.coordinates.forEach(polygon => {
+        polygon[0].forEach(coord => {
+          coords.push(coord);
+        });
+      });
+    }
+
+    return coords;
   };
 
   // Filter trails by search text
@@ -64,7 +132,7 @@ const StatusTab = memo(function StatusTab({
     };
 
     filteredTrails.forEach(trail => {
-      const status = trail.status?.status || 'unknown';
+      const status = trail.status || 'unknown';
       if (groups[status]) {
         groups[status].push(trail);
       } else {
@@ -94,27 +162,10 @@ const StatusTab = memo(function StatusTab({
     }
   }, [linearFeatures, destinations, onSelectLinearFeature, onSelectDestination, onMapClick]);
 
-  const getStatusBadge = (status) => {
-    const statusMap = {
-      open: { label: 'OPEN', className: 'status-open' },
-      closed: { label: 'CLOSED', className: 'status-closed' },
-      limited: { label: 'LIMITED', className: 'status-limited' },
-      maintenance: { label: 'MAINTENANCE', className: 'status-maintenance' },
-      unknown: { label: 'UNKNOWN', className: 'status-unknown' }
-    };
-
-    const statusInfo = statusMap[status] || statusMap.unknown;
-    return (
-      <span className={`status-badge ${statusInfo.className}`}>
-        {statusInfo.label}
-      </span>
-    );
-  };
-
   const renderTrailTile = (trail) => {
-    const status = trail.status?.status || 'unknown';
-    const lastUpdated = trail.status?.last_updated
-      ? new Date(trail.status.last_updated).toLocaleDateString()
+    const status = trail.status || 'unknown';
+    const lastUpdated = trail.last_updated
+      ? formatRelativeTime(trail.last_updated)
       : null;
 
     return (
@@ -126,34 +177,19 @@ const StatusTab = memo(function StatusTab({
       >
         <div className="results-tile-header">
           <h3 className="results-tile-title">{trail.name}</h3>
-          {getStatusBadge(status)}
+          <StatusBadge status={status} />
         </div>
 
-        {trail.brief_description && (
-          <p className="results-tile-description">{trail.brief_description}</p>
-        )}
-
-        {trail.status?.conditions && (
+        {trail.conditions && (
           <div className="trail-conditions">
-            <strong>Conditions:</strong> {trail.status.conditions}
-          </div>
-        )}
-
-        {trail.status?.weather_impact && (
-          <div className="trail-weather">
-            <strong>Weather:</strong> {trail.status.weather_impact}
+            {trail.conditions}
           </div>
         )}
 
         <div className="trail-status-meta">
-          {trail.length_miles && (
+          {trail.source_name && (
             <span className="trail-meta-item">
-              📏 {trail.length_miles} miles
-            </span>
-          )}
-          {trail.difficulty && (
-            <span className="trail-meta-item">
-              ⚡ {trail.difficulty}
+              Source: {trail.source_name}
             </span>
           )}
           {lastUpdated && (
@@ -162,12 +198,6 @@ const StatusTab = memo(function StatusTab({
             </span>
           )}
         </div>
-
-        {trail.status?.seasonal_closure && (
-          <div className="trail-seasonal-notice">
-            ⚠️ Seasonal Closure in Effect
-          </div>
-        )}
       </div>
     );
   };
@@ -179,7 +209,7 @@ const StatusTab = memo(function StatusTab({
     return (
       <div key={status} className="status-group">
         <h3 className="status-group-header">
-          {getStatusBadge(status)} {label} ({groupTrails.length})
+          <StatusBadge status={status} /> {label} ({groupTrails.length})
         </h3>
         <div className="results-list">
           {groupTrails.map(trail => renderTrailTile(trail))}

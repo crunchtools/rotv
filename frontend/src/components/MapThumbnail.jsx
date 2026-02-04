@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, memo } from 'react';
 import { MapContainer, TileLayer, CircleMarker, useMap } from 'react-leaflet';
 
 // Park center for default view
@@ -8,28 +8,64 @@ const DEFAULT_BOUNDS = [[41.1, -81.7], [41.4, -81.4]];
 // Component to fix map size and sync bounds
 function MapBoundsSync({ bounds }) {
   const map = useMap();
+  const prevBoundsRef = useRef(null);
 
   useEffect(() => {
-    // Force size recalculation
-    map.invalidateSize();
+    // Check if bounds coordinates actually changed
+    const boundsChanged = !prevBoundsRef.current || !bounds ||
+      bounds[0][0] !== prevBoundsRef.current[0][0] ||
+      bounds[0][1] !== prevBoundsRef.current[0][1] ||
+      bounds[1][0] !== prevBoundsRef.current[1][0] ||
+      bounds[1][1] !== prevBoundsRef.current[1][1];
 
-    // Fit to bounds if provided
-    if (bounds && bounds.length === 2) {
-      map.fitBounds(bounds, { animate: false, padding: [0, 0] });
+    if (!boundsChanged) {
+      console.log('[MapThumbnail MapBoundsSync] Bounds unchanged - skipping fitBounds');
+      return;
+    }
+
+    console.log('[MapThumbnail MapBoundsSync] Bounds changed! Fitting to bounds SW:', bounds?.[0], 'NE:', bounds?.[1]);
+    prevBoundsRef.current = bounds;
+
+    try {
+      // Force size recalculation
+      if (map && map.getContainer()) {
+        map.invalidateSize();
+
+        // Fit to bounds if provided
+        if (bounds && bounds.length === 2) {
+          map.fitBounds(bounds, { animate: false, padding: [0, 0] });
+        }
+      }
+    } catch (e) {
+      // Map not ready, will retry on next update
+      console.log('[MapThumbnail MapBoundsSync] Error:', e);
     }
   }, [map, bounds]);
 
   // Use IntersectionObserver to detect when map becomes visible
   useEffect(() => {
+    console.log('[MapThumbnail IntersectionObserver] Setting up observer');
+    if (!map) return;
+
     const container = map.getContainer();
+    if (!container) return;
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
+          console.log('[MapThumbnail IntersectionObserver] Entry:', entry.isIntersecting);
           if (entry.isIntersecting) {
             setTimeout(() => {
-              map.invalidateSize();
-              if (bounds && bounds.length === 2) {
-                map.fitBounds(bounds, { animate: false, padding: [0, 0] });
+              try {
+                if (map && map.getContainer()) {
+                  console.log('[MapThumbnail IntersectionObserver] Invalidating size only (MapBoundsSync handles fitBounds)');
+                  map.invalidateSize();
+                  // Don't call fitBounds here - MapBoundsSync effect already handles it
+                  // This was causing double-drawing (MapBoundsSync + IntersectionObserver 50ms later)
+                }
+              } catch (e) {
+                // Map not ready, ignore
+                console.log('[MapThumbnail IntersectionObserver] Error:', e);
               }
             }, 50);
           }
@@ -130,4 +166,35 @@ function MapThumbnail({
   );
 }
 
-export default MapThumbnail;
+// Custom comparison function - only re-render if bounds coordinates actually changed
+function arePropsEqual(prevProps, nextProps) {
+  // Check if bounds coordinates are the same
+  const prevBounds = prevProps.bounds;
+  const nextBounds = nextProps.bounds;
+
+  const boundsEqual = prevBounds && nextBounds &&
+    prevBounds[0][0] === nextBounds[0][0] &&
+    prevBounds[0][1] === nextBounds[0][1] &&
+    prevBounds[1][0] === nextBounds[1][0] &&
+    prevBounds[1][1] === nextBounds[1][1];
+
+  // Check other props
+  const aspectRatioEqual = prevProps.aspectRatio === nextProps.aspectRatio;
+  const poiCountEqual = prevProps.poiCount === nextProps.poiCount;
+  const onClickEqual = prevProps.onClick === nextProps.onClick;
+
+  // Check visibleDestinations length (good enough for most cases)
+  const destinationsEqual = prevProps.visibleDestinations?.length === nextProps.visibleDestinations?.length;
+
+  const shouldSkipRender = boundsEqual && aspectRatioEqual && poiCountEqual && onClickEqual && destinationsEqual;
+
+  if (!shouldSkipRender) {
+    console.log('[MapThumbnail memo] Re-rendering - boundsEqual:', boundsEqual, 'aspectRatioEqual:', aspectRatioEqual, 'poiCountEqual:', poiCountEqual, 'destinationsEqual:', destinationsEqual);
+  } else {
+    console.log('[MapThumbnail memo] Skipping re-render - all props equal');
+  }
+
+  return shouldSkipRender;
+}
+
+export default memo(MapThumbnail, arePropsEqual);

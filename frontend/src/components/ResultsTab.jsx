@@ -1,21 +1,36 @@
-import React, { useMemo, useCallback, memo, useState, useEffect } from 'react';
+import React, { useMemo, useCallback, memo, useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ResultsTile from './ResultsTile';
 import MapThumbnail from './MapThumbnail';
+
+// Default park bounds - same as used in App.jsx
+const DEFAULT_PARK_BOUNDS = [
+  [41.1390, -81.6654],  // Southwest corner
+  [41.4226, -81.4706]   // Northeast corner
+];
 
 // Results tab component showing all visible POIs as tiles
 const ResultsTab = memo(function ResultsTab({
   viewportFilteredDestinations,
   viewportFilteredLinearFeatures,
   viewportFilteredVirtualPois,
+  allDestinations,
+  allLinearFeatures,
   selectedDestination,
   selectedLinearFeature,
   onSelectDestination,
   onSelectLinearFeature,
   mapState,
+  boundsToFit,
+  cachedMtbBoundsRef,  // Pre-calculated MTB bounds for instant access
   onMapClick,
   initialShowMtbOnly = false,
-  onShowMtbOnlyChange
+  onFilterByTypes,  // Callback to filter by POI types: array of types or null for all
+  bypassViewportFilter = false  // Temporarily show all POIs (bypass viewport filtering)
 }) {
+  const navigate = useNavigate();
+  const isNavigatingRef = useRef(false);
+
   // Sub-tab state: 'all' or 'mtb'
   const [activeSubTab, setActiveSubTab] = useState(initialShowMtbOnly ? 'mtb' : 'all');
   const [searchText, setSearchText] = useState('');
@@ -26,120 +41,99 @@ const ResultsTab = memo(function ResultsTab({
     boundary: true,
     organization: true
   });
-  // Derive showMtbOnly from activeSubTab
-  const showMtbOnly = activeSubTab === 'mtb';
   const [mtbTrailStatuses, setMtbTrailStatuses] = useState({});
-  const [allMtbTrails, setAllMtbTrails] = useState(null); // Store fetched MTB trails when using direct link
 
-  // Fetch MTB trail statuses when MTB tab is active
+  // Transition state - tracks when we're leaving MTB mode but bypassViewportFilter hasn't caught up yet
+  const [isInTransition, setIsInTransition] = useState(false);
+  const prevActiveSubTabRef = useRef(activeSubTab);
+
+  // Update sub-tab when initialShowMtbOnly changes (e.g., from route navigation)
+  // But skip if we initiated the navigation ourselves
+  useEffect(() => {
+    if (isNavigatingRef.current) {
+      isNavigatingRef.current = false;
+      return;
+    }
+
+    if (initialShowMtbOnly && activeSubTab !== 'mtb') {
+      setActiveSubTab('mtb');
+    } else if (!initialShowMtbOnly && activeSubTab === 'mtb') {
+      setActiveSubTab('all');
+    }
+  }, [initialShowMtbOnly, activeSubTab]);
+
+  // Fetch MTB trail statuses when in MTB mode
   useEffect(() => {
     if (activeSubTab === 'mtb') {
-      fetchMtbStatuses();
+      fetch('/api/trail-status/mtb-trails')
+        .then(res => res.json())
+        .then(trails => {
+          const statusMap = {};
+          trails.forEach(trail => {
+            statusMap[trail.id] = {
+              status: trail.status || 'unknown',
+              conditions: trail.conditions,
+              last_updated: trail.last_updated,
+              source_name: trail.source_name
+            };
+          });
+          setMtbTrailStatuses(statusMap);
+        })
+        .catch(err => console.error('Failed to fetch MTB trail statuses:', err));
     }
   }, [activeSubTab]);
 
-  // Fetch all MTB trails when initialized via URL parameter
+
+  // Apply POI type filter when sub-tab changes
   useEffect(() => {
-    if (initialShowMtbOnly) {
-      fetchAllMtbTrails();
-    }
-  }, [initialShowMtbOnly]);
+    if (onFilterByTypes) {
+      // Determine which POI types to show based on active sub-tab
+      let typesToShow = null; // null means "show all"
 
-  const fetchAllMtbTrails = async () => {
-    try {
-      const response = await fetch('/api/trails/mtb?includeStatus=true');
-      if (response.ok) {
-        const trails = await response.json();
-        // Format trails to match the expected structure
-        // Check actual poi_type - could be 'trail' (linear) or 'point' (destination)
-        const formattedTrails = trails.map(trail => ({
-          ...trail,
-          _isLinear: trail.poi_type === 'trail',
-          _isVirtual: false,
-          _poiType: trail.poi_type === 'trail' ? 'trail' : 'destination'
-        }));
-        setAllMtbTrails(formattedTrails);
-
-        // Also populate status map
-        const statusMap = {};
-        trails.forEach(trail => {
-          if (trail.status) {
-            statusMap[trail.id] = trail.status;
-          }
-        });
-        setMtbTrailStatuses(statusMap);
+      if (activeSubTab === 'mtb') {
+        typesToShow = ['mtb-trailheads'];
+      } else if (activeSubTab === 'organizations') {
+        typesToShow = ['organization']; // virtual POIs
       }
-    } catch (err) {
-      console.error('Error fetching all MTB trails:', err);
-    }
-  };
+      // 'all' sub-tab passes null to show all types
 
-  const fetchMtbStatuses = async () => {
-    try {
-      const response = await fetch('/api/trails/mtb?includeStatus=true');
-      if (response.ok) {
-        const trails = await response.json();
-        const statusMap = {};
-        trails.forEach(trail => {
-          if (trail.status) {
-            statusMap[trail.id] = trail.status;
-          }
-        });
-        setMtbTrailStatuses(statusMap);
-      }
-    } catch (err) {
-      console.error('Error fetching MTB trail statuses:', err);
+      onFilterByTypes(typesToShow);
     }
-  };
+  }, [activeSubTab, onFilterByTypes]);
 
   // Combine and sort POIs alphabetically - also create a lookup map
-  const { sortedPois, poiMap, totalCount } = useMemo(() => {
-    // If we have fetched all MTB trails (from URL parameter), use only those
-    if (allMtbTrails) {
-      const filtered = allMtbTrails;
+  const { sortedPois, poiMap, totalCount, thumbnailDestinations } = useMemo(() => {
+    // When in MTB mode OR bypassing viewport filter OR in transition,
+    // use ALL destinations/features (not viewport-filtered)
+    // This prevents the list from becoming empty during map zoom animations
+    const useAllPois = activeSubTab === 'mtb' || bypassViewportFilter || isInTransition;
 
-      // Apply text search if present
-      let searchFiltered = filtered;
-      if (searchText.trim()) {
-        const search = searchText.toLowerCase();
-        searchFiltered = filtered.filter(poi =>
-          (poi.name || '').toLowerCase().includes(search) ||
-          (poi.brief_description || '').toLowerCase().includes(search)
-        );
-      }
+    console.log('[ResultsTab] activeSubTab:', activeSubTab, 'bypassViewportFilter:', bypassViewportFilter, 'isInTransition:', isInTransition, 'useAllPois:', useAllPois);
 
-      const sorted = searchFiltered.sort((a, b) =>
-        (a.name || '').localeCompare(b.name || '')
-      );
+    let sourceDestinations = useAllPois ? (allDestinations || []) : (viewportFilteredDestinations || []);
+    let sourceLinear = useAllPois ? (allLinearFeatures || []) : (viewportFilteredLinearFeatures || []);
 
-      const map = new Map();
-      sorted.forEach(poi => {
-        const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
-        const key = `${type}-${poi.id}`;
-        map.set(key, poi);
-      });
+    console.log('[ResultsTab] sourceDestinations:', sourceDestinations?.length, 'sourceLinear:', sourceLinear?.length);
 
-      return {
-        sortedPois: sorted,
-        poiMap: map,
-        totalCount: sorted.length
-      };
+    // When in MTB mode, filter to only MTB trailheads (POIs with status_url)
+    if (activeSubTab === 'mtb') {
+      sourceDestinations = sourceDestinations.filter(d => d.status_url && d.status_url.trim() !== '');
+      sourceLinear = []; // No linear features in MTB mode
     }
 
-    // Normal viewport-based filtering
-    const dests = (viewportFilteredDestinations || []).map(d => ({
+    const dests = sourceDestinations.map(d => ({
       ...d,
       _isLinear: false,
       _isVirtual: false,
       _poiType: 'destination'
     }));
-    const linear = (viewportFilteredLinearFeatures || []).map(f => ({
+    const linear = sourceLinear.map(f => ({
       ...f,
       _isLinear: true,
       _isVirtual: false,
       _poiType: f.feature_type || 'trail'
     }));
-    const virtual = (viewportFilteredVirtualPois || []).map(v => ({
+    const virtual = (useAllPois ? [] : viewportFilteredVirtualPois || []).map(v => ({
       ...v,
       _isLinear: false,
       _isVirtual: true,
@@ -164,11 +158,6 @@ const ResultsTab = memo(function ResultsTab({
     // Type filter
     filtered = filtered.filter(poi => typeFilters[poi._poiType]);
 
-    // MTB filter - show only trails with status collection configured
-    if (showMtbOnly) {
-      filtered = filtered.filter(poi => poi.status_url && poi.status_url.trim() !== '');
-    }
-
     // Sort alphabetically
     const sorted = filtered.sort((a, b) =>
       (a.name || '').localeCompare(b.name || '')
@@ -182,8 +171,13 @@ const ResultsTab = memo(function ResultsTab({
       map.set(key, poi);
     });
 
-    return { sortedPois: sorted, poiMap: map, totalCount: total };
-  }, [viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, searchText, typeFilters, showMtbOnly, allMtbTrails]);
+    return {
+      sortedPois: sorted,
+      poiMap: map,
+      totalCount: total,
+      thumbnailDestinations: sourceDestinations // For MapThumbnail - use source destinations (MTB trailheads or all destinations during transition)
+    };
+  }, [activeSubTab, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, allDestinations, allLinearFeatures, searchText, typeFilters, bypassViewportFilter, isInTransition]);
 
   // Event delegation handler - single handler for all tiles
   const handleListClick = useCallback((e) => {
@@ -207,12 +201,70 @@ const ResultsTab = memo(function ResultsTab({
 
   const poiCount = sortedPois.length;
 
+  // Clear transition state when App.jsx bypassViewportFilter catches up
+  useEffect(() => {
+    if (bypassViewportFilter && isInTransition) {
+      console.log('[ResultsTab transition] Bypass filter active - clearing transition');
+      setIsInTransition(false);
+    }
+  }, [bypassViewportFilter, isInTransition]);
+
+  // Simple, direct bounds computation - no async effects, no delays
+  const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
+
+  let currentBounds;
+  if (activeSubTab === 'mtb') {
+    // MTB mode: use pre-calculated cached bounds
+    currentBounds = cachedMtbBoundsRef?.current || DEFAULT_PARK_BOUNDS;
+  } else if (bypassViewportFilter || isInTransition) {
+    // Bypass mode OR in transition: use default park bounds constant
+    // Stay in transition until bypassViewportFilter catches up to prevent using stale mapState.bounds
+    currentBounds = DEFAULT_PARK_BOUNDS;
+  } else {
+    // Normal mode: use current viewport bounds
+    currentBounds = mapState?.bounds || DEFAULT_PARK_BOUNDS;
+  }
+
+  // Only update stable ref if coordinates actually changed
+  // This prevents MapThumbnail from re-rendering when bounds array reference changes but values don't
+  const boundsChanged = currentBounds &&
+    (!stableBoundsRef.current ||
+    currentBounds[0][0] !== stableBoundsRef.current[0][0] ||
+    currentBounds[0][1] !== stableBoundsRef.current[0][1] ||
+    currentBounds[1][0] !== stableBoundsRef.current[1][0] ||
+    currentBounds[1][1] !== stableBoundsRef.current[1][1]);
+
+  if (boundsChanged) {
+    console.log('[ResultsTab] Thumbnail bounds UPDATE - Mode:', activeSubTab, 'Bypass:', bypassViewportFilter, 'SW:', currentBounds[0], 'NE:', currentBounds[1]);
+    stableBoundsRef.current = currentBounds;
+  }
+
+  const thumbnailBounds = stableBoundsRef.current;
+
   // Handle sub-tab change
   const handleSubTabChange = (tab) => {
-    setActiveSubTab(tab);
-    if (onShowMtbOnlyChange) {
-      onShowMtbOnlyChange(tab === 'mtb');
+    // Set flag to prevent redundant sync when URL changes
+    isNavigatingRef.current = true;
+
+    // If leaving MTB mode, immediately set transition state
+    // This ensures the next render has the correct POI list and bounds
+    if (activeSubTab === 'mtb' && tab === 'all') {
+      console.log('[ResultsTab handleSubTabChange] Leaving MTB mode - setting transition = true');
+      setIsInTransition(true);
     }
+
+    setActiveSubTab(tab);
+
+    // Don't clear bypass filter here - let App.jsx MTB Route Effect handle it
+    // This prevents flickering when switching from MTB to All Results
+
+    // Navigate to appropriate URL
+    if (tab === 'mtb') {
+      navigate('/mtb-trail-status');
+    } else {
+      navigate('/');
+    }
+    // Filter will be applied by useEffect that watches activeSubTab
   };
 
   if (sortedPois.length === 0) {
@@ -258,9 +310,9 @@ const ResultsTab = memo(function ResultsTab({
           {mapState && (
             <div className="map-thumbnail-sidebar">
               <MapThumbnail
-                bounds={mapState.bounds}
+                bounds={thumbnailBounds}
                 aspectRatio={mapState.aspectRatio || 1.5}
-                visibleDestinations={viewportFilteredDestinations}
+                visibleDestinations={thumbnailDestinations}
                 onClick={onMapClick}
                 poiCount={poiCount}
               />
@@ -363,8 +415,8 @@ const ResultsTab = memo(function ResultsTab({
                   isLinear={poi._isLinear}
                   isVirtual={poi._isVirtual}
                   isSelected={isSelected}
-                  showStatusBadge={showMtbOnly}
-                  status={mtbTrailStatuses[poi.id]}
+                  showStatusInfo={activeSubTab === 'mtb'}
+                  statusData={mtbTrailStatuses[poi.id]}
                 />
               );
             })}
@@ -373,9 +425,9 @@ const ResultsTab = memo(function ResultsTab({
         {mapState && (
           <div className="map-thumbnail-sidebar">
             <MapThumbnail
-              bounds={mapState.bounds}
+              bounds={thumbnailBounds}
               aspectRatio={mapState.aspectRatio || 1.5}
-              visibleDestinations={viewportFilteredDestinations}
+              visibleDestinations={thumbnailDestinations}
               onClick={onMapClick}
               poiCount={poiCount}
             />
