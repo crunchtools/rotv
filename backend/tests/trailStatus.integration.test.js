@@ -63,16 +63,18 @@ describe('Trail Status Integration Tests', () => {
     `, [JSON.stringify(TWITTER_COOKIES)]);
     console.log(`[Test Setup] Inserted Twitter cookies for authenticated access`);
 
-    // Remove any existing East Rim trails to ensure clean state (including similar names)
-    await pool.query(`DELETE FROM pois WHERE name LIKE '%East Rim%'`);
+    // Remove any existing East Rim trails (including variations) to ensure clean state
+    await pool.query(`DELETE FROM pois WHERE name LIKE '%East Rim%' AND poi_type = 'trail'`);
     console.log(`[Test Setup] Removed any existing East Rim trail entries`);
 
-    // Create East Rim Trail (without geometry - PostGIS not required for status testing)
+    // Insert East Rim Trail with explicit ID (avoids sequence conflicts from seed data)
+    const maxId = await pool.query(`SELECT COALESCE(MAX(id), 0) as max_id FROM pois`);
+    const nextId = maxId.rows[0].max_id + 1;
     await pool.query(`
-      INSERT INTO pois (name, poi_type, status_url, brief_description, latitude, longitude)
-      VALUES ($1, 'trail', $2, 'MTB trail system in Cuyahoga Valley National Park', 41.2275, -81.5558)
-    `, [EAST_RIM_NAME, EAST_RIM_STATUS_URL]);
-    console.log(`[Test Setup] Created ${EAST_RIM_NAME} with status_url: ${EAST_RIM_STATUS_URL}`);
+      INSERT INTO pois (id, name, poi_type, status_url, brief_description, latitude, longitude)
+      VALUES ($1, $2, 'trail', $3, 'MTB trail system in Cuyahoga Valley National Park', 41.2275, -81.5558)
+    `, [nextId, EAST_RIM_NAME, EAST_RIM_STATUS_URL]);
+    console.log(`[Test Setup] Created ${EAST_RIM_NAME} (id=${nextId}) with status_url: ${EAST_RIM_STATUS_URL}`);
 
     // Clear any existing trail status for East Rim to ensure fresh collection
     const poiResult = await pool.query(`SELECT id FROM pois WHERE name = $1`, [EAST_RIM_NAME]);
@@ -127,8 +129,8 @@ describe('Trail Status Integration Tests', () => {
       const result = await pool.query(`
         SELECT id, name, status_url, poi_type
         FROM pois
-        WHERE name LIKE '%East Rim%'
-      `);
+        WHERE name = $1 AND poi_type = 'trail'
+      `, [EAST_RIM_NAME]);
 
       expect(result.rows.length).toBe(1);
       expect(result.rows[0].name).toBe('East Rim Trail');
@@ -138,8 +140,8 @@ describe('Trail Status Integration Tests', () => {
       const result = await pool.query(`
         SELECT id, name, status_url
         FROM pois
-        WHERE name LIKE '%East Rim%'
-      `);
+        WHERE name = $1 AND poi_type = 'trail'
+      `, [EAST_RIM_NAME]);
 
       expect(result.rows.length).toBe(1);
       expect(result.rows[0].status_url).toBe(EAST_RIM_STATUS_URL);
