@@ -87,12 +87,19 @@ export function getDefaultPrompt(promptKey) {
 }
 
 /**
- * Initialize Gemini client with API key from database
- * If not found in database, attempts to pull from Google Sheet (Integration tab)
+ * Initialize Gemini client with API key from database or environment
+ * Priority: 1) Environment variable (for CI/testing), 2) Database, 3) Google Sheet restore
  * @param {Pool} pool - Database connection pool
  * @param {Object} sheets - Optional Google Sheets API client for auto-restore
  */
 export async function createGeminiClient(pool, sheets = null) {
+  // Check environment variable first (for CI/testing)
+  if (process.env.GEMINI_API_KEY) {
+    console.log('[Gemini] Using API key from environment variable');
+    return new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+
+  // Otherwise check database (production path)
   let result = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
   );

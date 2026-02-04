@@ -315,24 +315,33 @@ describe('UI Integration Tests', () => {
       // Load page with POI in URL
       await page.goto(`${baseUrl}/?poi=trail-mix`, { waitUntil: 'networkidle' });
 
-      // Wait for page to load
-      await page.waitForTimeout(2000);
-
-      // Wait for map markers to load
+      // Wait for map markers to load (indicates data is fetched)
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(1000);
 
-      // Check if sidebar opened from URL parameter
-      const sidebarAlreadyOpen = await page.locator('.sidebar.open').count() > 0;
+      // Wait for sidebar to open from URL parameter with increased timeout
+      // The sidebar opening depends on React effects coordinating after data loads
+      try {
+        await page.waitForSelector('.sidebar.open', {
+          timeout: 10000,  // Increased from 5000ms
+          state: 'visible'
+        });
+      } catch (error) {
+        // If sidebar didn't auto-open from URL, click a marker as fallback
+        console.log('[Test] Sidebar did not auto-open from URL parameter, trying marker click');
+        const markers = await page.locator('.leaflet-marker-icon').all();
+        if (markers.length > 0) {
+          await markers[0].click();
+          await page.waitForTimeout(500);
+        }
 
-      if (!sidebarAlreadyOpen) {
-        // If sidebar didn't open from URL, click a marker to open it
-        const firstMarker = await page.locator('.leaflet-marker-icon').first();
-        await firstMarker.click();
+        // Now wait for sidebar to open
+        await page.waitForSelector('.sidebar.open', {
+          timeout: 5000,
+          state: 'visible'
+        });
       }
 
-      // Wait for sidebar to be open (either from URL or marker click)
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Wait a bit for carousel to fully initialize
