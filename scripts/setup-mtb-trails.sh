@@ -5,7 +5,6 @@
 podman exec rotv psql -U postgres -d rotv -c "
 -- Add MTB trail columns to pois table
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS status_url VARCHAR(500);
-ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_mtb_trail BOOLEAN DEFAULT FALSE;
 
 -- Create trail_status table
 CREATE TABLE IF NOT EXISTS trail_status (
@@ -44,7 +43,6 @@ CREATE INDEX IF NOT EXISTS idx_trail_status_job_status_status ON trail_status_jo
 
 -- Flag Hampton Hills as MTB trail
 UPDATE pois SET
-  is_mtb_trail = true,
   status_url = 'https://www.summitmetroparks.org/activities/mountain-biking/',
   length_miles = 7.0,
   difficulty = 'Intermediate',
@@ -54,14 +52,13 @@ WHERE id = 5544;
 
 -- Flag Ohio & Erie Canal Towpath Trail as MTB trail
 UPDATE pois SET
-  is_mtb_trail = true,
   status_url = 'https://www.summitmetroparks.org/activities/mountain-biking/'
 WHERE id = 1062;
 
--- Show results
-SELECT id, name, is_mtb_trail, length_miles, difficulty
+-- Show results (MTB trails are identified by having a status_url)
+SELECT id, name, status_url, length_miles, difficulty
 FROM pois
-WHERE is_mtb_trail = true
+WHERE status_url IS NOT NULL AND status_url != ''
 ORDER BY name;
 "
 

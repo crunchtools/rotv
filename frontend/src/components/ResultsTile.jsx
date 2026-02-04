@@ -1,7 +1,7 @@
 import React, { memo } from 'react';
 
 // Individual POI tile for the Results tab
-const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status }) {
+const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status, showStatusInfo, statusData }) {
   // Use thumbnail endpoint for fast, cached small images
   // Include updated_at for cache busting when image changes
   const imageUrl = poi.image_mime_type
@@ -80,8 +80,24 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
           )}
         </div>
 
-        {/* Brief description - show full text */}
-        {poi.brief_description && (
+        {/* Trail status info (MTB mode) or brief description */}
+        {showStatusInfo && statusData ? (
+          <div className="results-tile-status-info">
+            <div className="status-row">
+              <span className={`status-badge status-${statusData.status || 'unknown'}`}>
+                {statusData.status ? statusData.status.toUpperCase() : 'UNKNOWN'}
+              </span>
+            </div>
+            {statusData.conditions && (
+              <div className="status-conditions">{statusData.conditions}</div>
+            )}
+            {statusData.last_updated && (
+              <div className="status-updated">
+                Updated: {new Date(statusData.last_updated).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+        ) : poi.brief_description && (
           <div className="results-tile-description">
             {poi.brief_description}
           </div>

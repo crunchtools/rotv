@@ -2670,25 +2670,20 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
   // Fetch trail status if POI has status_url
   useEffect(() => {
-    console.log('[Trail Status] POI changed, id:', displayItem?.id, 'status_url:', displayItem?.status_url);
-
     // Clear any existing status first
     setTrailStatus(null);
 
     // Don't fetch if no displayItem or no ID
     if (!displayItem || !displayItem.id) {
-      console.log('[Trail Status] No displayItem or ID, skipping');
       return;
     }
 
     // Don't fetch if no status_url
     if (!displayItem.status_url) {
-      console.log('[Trail Status] No status_url, skipping');
       return;
     }
 
     // Fetch the trail status
-    console.log('[Trail Status] Fetching for POI', displayItem.id);
     fetch(`/api/pois/${displayItem.id}/status`)
       .then(response => {
         if (response.ok) {
@@ -2697,12 +2692,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         throw new Error('Failed to fetch status');
       })
       .then(data => {
-        console.log('[Trail Status] Received:', data);
         setTrailStatus(data);
-        console.log('[Trail Status] State updated');
       })
       .catch(err => {
-        console.error('[Trail Status] Error:', err);
+        console.error('Failed to fetch trail status:', err);
       });
   }, [displayItem?.id, displayItem?.status_url]);
 

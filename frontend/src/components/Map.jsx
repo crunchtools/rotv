@@ -52,10 +52,15 @@ function matchesWholeWord(text, keyword) {
 
 // Get icon type for a destination using database configuration
 function getDestinationIconTypeFromConfig(dest, iconConfig) {
+  // Check for MTB trailhead first (has status_url)
+  if (dest.status_url && dest.status_url.trim() !== '') {
+    return 'mtb-trailheads';
+  }
+
   const name = (dest.name || '').toLowerCase();
   const activities = (dest.primary_activities || '').toLowerCase();
 
-  // Check title keywords first (in sort order - first match wins)
+  // Check title keywords (in sort order - first match wins)
   for (const icon of iconConfig) {
     if (icon.enabled === false) continue;
     if (!icon.title_keywords) continue;
@@ -375,6 +380,42 @@ function MapVisibilityHandler({ activeTab }) {
   return null;
 }
 
+// Component to fit map to specific bounds when provided
+function BoundsFitter({ boundsToFit }) {
+  const map = useMap();
+  const prevBounds = useRef(null);
+
+  useEffect(() => {
+    console.log('[BoundsFitter] boundsToFit:', boundsToFit, 'prevBounds:', prevBounds.current);
+    if (boundsToFit && JSON.stringify(boundsToFit) !== JSON.stringify(prevBounds.current)) {
+      console.log('[BoundsFitter] Fitting map to bounds:', boundsToFit);
+      console.log('[BoundsFitter] Bounds SW:', boundsToFit[0], 'NE:', boundsToFit[1]);
+
+      // Calculate geographic size to determine if we need extra zoom out
+      const latRange = boundsToFit[1][0] - boundsToFit[0][0];
+      const lngRange = boundsToFit[1][1] - boundsToFit[0][1];
+      const geoSize = Math.max(latRange, lngRange);
+
+      // If bounds cover a large area (all POIs), zoom out more to show more in viewport
+      // Small bounds (< 0.3 degrees) = zooming to small set of POIs, use normal padding
+      // Large bounds (>= 0.3 degrees) = zooming to all POIs, use extra zoom out
+      const padding = geoSize >= 0.3 ? [20, 20] : [50, 50];
+      const maxZoom = geoSize >= 0.3 ? 12 : undefined; // Limit zoom for large areas
+
+      console.log('[BoundsFitter] Geographic size:', geoSize, 'using padding:', padding);
+
+      // boundsToFit is already in Leaflet format: [[lat, lng], [lat, lng]]
+      map.fitBounds(boundsToFit, { padding, maxZoom });
+      prevBounds.current = boundsToFit;
+      console.log('[BoundsFitter] Map fitted');
+    } else {
+      console.log('[BoundsFitter] Skipping - bounds unchanged or null');
+    }
+  }, [boundsToFit, map]);
+
+  return null;
+}
+
 // Helper to get bounding box from GeoJSON geometry
 function getGeometryBounds(geometry) {
   if (!geometry) return null;
@@ -500,16 +541,18 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
             destIncluded++;
           }
         });
-        if (visibleTypes.size < 5 || visibleTypes.size === 0) { // Only log when filters are selective
-          console.log('[MapBoundsTracker] visibleTypes:', Array.from(visibleTypes));
-          console.log('[MapBoundsTracker] Destinations: filtered out =', destFilteredOut, ', included in viewport =', destIncluded);
-        }
       }
 
       // Add linear features in viewport to Results
-      // Linear features respect their layer toggles (showTrails, showRivers, visibleBoundaries)
-      // NOT the icon type filter (visibleTypes) which only applies to point destinations
-      if (linearFeatures && linearFeatures.length > 0) {
+      // When filtering by specific POI types (e.g., mtb-trailheads), skip linear features
+      // Linear features are only included when showing all types or no filter is active
+      const isFilteredMode = visibleTypes.size < 10; // Small specific set means filtered mode
+      const includeLinearFeatures = !isFilteredMode ||
+                                    visibleTypes.has('trail') ||
+                                    visibleTypes.has('river') ||
+                                    visibleTypes.has('boundary');
+
+      if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
         let linearIncluded = 0;
         linearFeatures.forEach(feature => {
           // Check if the feature's layer is visible
@@ -534,18 +577,11 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
             }
           }
         });
-        if (visibleTypes.size < 5 || visibleTypes.size === 0 || showTrails || showRivers) {
-          console.log('[MapBoundsTracker] Linear features included in viewport:', linearIncluded,
-                      '(showTrails:', showTrails, 'showRivers:', showRivers, ')');
-        }
       }
 
       // Emit visible IDs (destinations + linear features)
       // Skip if this is a programmatic move (e.g., selection zoom) to preserve current selection
       if (onVisiblePoisChange && !map._isProgrammaticMove) {
-        if (visibleTypes.size < 5 || visibleTypes.size === 0) {
-          console.log('[MapBoundsTracker] Total visible POI IDs:', visibleIds.length);
-        }
         onVisiblePoisChange(visibleIds);
       }
 
@@ -991,7 +1027,7 @@ const DEFAULT_NPS_MAP_BOUNDS = [
 // Default icon type IDs for initializing the filter (before config loads)
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations }) {
+function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit }) {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [mapBounds, setMapBounds] = useState(DEFAULT_NPS_MAP_BOUNDS);
@@ -1575,6 +1611,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
         <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />
         <MapVisibilityHandler activeTab={activeTab} />
+        <BoundsFitter boundsToFit={boundsToFit} />
         <MapBoundsTracker
           destinations={destinations}
           visibleTypes={visibleTypes}

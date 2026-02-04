@@ -10420,6 +10420,27 @@ body {
   line-height: 1.4;
 }
 
+/* Trail status info (MTB mode) */
+.results-tile-status-info {
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+
+.results-tile-status-info .status-row {
+  margin-bottom: 6px;
+}
+
+.results-tile-status-info .status-conditions {
+  color: #555;
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.results-tile-status-info .status-updated {
+  font-size: 0.75rem;
+  color: #999;
+}
+
 /* Empty state */
 .results-tab-empty {
   flex: 1;
@@ -11326,13 +11347,39 @@ svg.leaflet-zoom-animated {
 
 .status-badge {
   display: inline-block;
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-weight: bold;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-right: 8px;
 }
 
+.status-badge.status-open {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-badge.status-closed {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.status-badge.status-limited {
+  background-color: #fff3cd;
+  color: #856404;
+}
+
+.status-badge.status-maintenance {
+  background-color: #d1ecf1;
+  color: #0c5460;
+}
+
+.status-badge.status-unknown {
+  background-color: #e2e3e5;
+  color: #383d41;
+}
+
+/* Legacy support for old-style parent-child selectors */
 .status-open .status-badge {
   background: #4caf50;
   color: white;

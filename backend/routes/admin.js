@@ -3736,7 +3736,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
 
       // Get trail details
       const poiResult = await pool.query(
-        'SELECT id, name, poi_type, status_url, location, is_mtb_trail FROM pois WHERE id = $1',
+        'SELECT id, name, poi_type, status_url, location FROM pois WHERE id = $1',
         [id]
       );
 
@@ -3746,8 +3746,8 @@ export function createAdminRouter(pool, clearThumbnailCache) {
 
       const poi = poiResult.rows[0];
 
-      if (!poi.is_mtb_trail) {
-        return res.status(400).json({ error: 'POI is not an MTB trail' });
+      if (!poi.status_url || poi.status_url === '') {
+        return res.status(400).json({ error: 'POI does not have a status URL' });
       }
 
       // Check if collection is already running for this trail
