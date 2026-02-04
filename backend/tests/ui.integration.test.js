@@ -211,6 +211,100 @@ describe('UI Integration Tests', () => {
       expect(classNames[2]).toContain('locate-button');
       expect(classNames[3]).toContain('satellite-toggle-button');
     }, 30000);
+
+    it('should position map controls below header (not off-screen)', async () => {
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Wait for controls to render
+      await page.waitForSelector('.zoom-locate-control', { timeout: 10000 });
+      await page.waitForSelector('.map-poi-count', { timeout: 10000 });
+
+      // Verify Leaflet controls (zoom, GPS) are visible and not overlapping header
+      const leafletTop = await page.evaluate(() => {
+        const leafletControl = document.querySelector('.leaflet-top');
+        const header = document.querySelector('.header');
+        if (!leafletControl || !header) return null;
+
+        const controlRect = leafletControl.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(leafletControl);
+
+        return {
+          top: parseInt(computedStyle.top, 10),
+          boundingTop: controlRect.top,
+          headerBottom: headerRect.bottom,
+          isVisible: controlRect.top >= 0 && controlRect.bottom <= window.innerHeight,
+          isNotOverlapping: controlRect.top >= headerRect.bottom - 10 // Allow 10px tolerance
+        };
+      });
+
+      expect(leafletTop).not.toBeNull();
+      expect(leafletTop.top).toBeGreaterThan(0); // Has positive top value (not at 0)
+      expect(leafletTop.boundingTop).toBeGreaterThanOrEqual(0); // Not cut off at top
+      expect(leafletTop.isVisible).toBe(true); // Fully visible in viewport
+
+      // Verify POI count badge is visible and not overlapping header
+      const poiCountPosition = await page.evaluate(() => {
+        const poiCount = document.querySelector('.map-poi-count');
+        const header = document.querySelector('.header');
+        if (!poiCount || !header) return null;
+
+        const badgeRect = poiCount.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(poiCount);
+
+        return {
+          top: parseInt(computedStyle.top, 10),
+          boundingTop: badgeRect.top,
+          headerBottom: headerRect.bottom,
+          isVisible: badgeRect.top >= 0 && badgeRect.bottom <= window.innerHeight,
+          isNotOverlapping: badgeRect.top >= headerRect.bottom - 10 // Allow 10px tolerance
+        };
+      });
+
+      expect(poiCountPosition).not.toBeNull();
+      expect(poiCountPosition.top).toBeGreaterThan(0); // Has positive top value
+      expect(poiCountPosition.boundingTop).toBeGreaterThanOrEqual(0); // Not cut off
+      expect(poiCountPosition.isVisible).toBe(true); // Fully visible
+    }, 30000);
+
+    it('should position map controls below header on mobile', async () => {
+      // Set viewport to mobile size
+      await page.setViewportSize({ width: 375, height: 667 });
+
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Wait for controls to render
+      await page.waitForSelector('.zoom-locate-control', { timeout: 10000 });
+      await page.waitForSelector('.map-poi-count', { timeout: 10000 });
+
+      // Verify POI count badge is visible and not overlapping header on mobile
+      const poiCountPosition = await page.evaluate(() => {
+        const poiCount = document.querySelector('.map-poi-count');
+        const header = document.querySelector('.header');
+        if (!poiCount || !header) return null;
+
+        const badgeRect = poiCount.getBoundingClientRect();
+        const headerRect = header.getBoundingClientRect();
+        const computedStyle = window.getComputedStyle(poiCount);
+
+        return {
+          top: parseInt(computedStyle.top, 10),
+          boundingTop: badgeRect.top,
+          headerBottom: headerRect.bottom,
+          isVisible: badgeRect.top >= 0 && badgeRect.bottom <= window.innerHeight,
+          isNotOverlapping: badgeRect.top >= headerRect.bottom - 10 // Allow 10px tolerance
+        };
+      });
+
+      expect(poiCountPosition).not.toBeNull();
+      expect(poiCountPosition.top).toBeGreaterThan(0); // Has positive top value (not 0.5rem like the bug)
+      expect(poiCountPosition.boundingTop).toBeGreaterThanOrEqual(0); // Not cut off at top
+      expect(poiCountPosition.isVisible).toBe(true); // Fully visible in mobile viewport
+
+      // Reset viewport
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }, 30000);
   });
 
   describe('Mobile Navigation Features', () => {
@@ -633,5 +727,80 @@ describe('UI Integration Tests', () => {
       });
       expect(headerZIndex).toBeGreaterThan(0);
     }, 40000);
+  });
+
+  describe('Results Tab Filter Badges', () => {
+    it('should keep filter badges visible when all are deselected', async () => {
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Switch to Results tab
+      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      await resultsTab.evaluate(el => el.click());
+      await page.waitForTimeout(1000);
+
+      // Wait for Results tab content to render
+      await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
+      await page.waitForSelector('.results-type-filters', { timeout: 10000 });
+
+      // Verify all 5 filter badges are initially visible (only in Results tab)
+      const filterChips = page.locator('.results-tab-wrapper .type-filter-chip');
+      expect(await filterChips.count()).toBe(5);
+
+      // Click all badges to deselect them
+      await page.evaluate(() => {
+        const resultsWrapper = document.querySelector('.results-tab-wrapper');
+        const chips = resultsWrapper.querySelectorAll('.type-filter-chip');
+        chips.forEach(chip => chip.click());
+      });
+
+      await page.waitForTimeout(500);
+
+      // Verify all badges are still visible even when deselected
+      expect(await filterChips.count()).toBe(5);
+      expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
+
+      // Verify badges are clickable to re-enable filters
+      const destinationChip = page.locator('.results-tab-wrapper .type-filter-chip.destination');
+      await destinationChip.evaluate(el => el.click());
+      await page.waitForTimeout(300);
+
+      // Verify the badge is now active
+      const isActive = await destinationChip.evaluate(el => el.classList.contains('active'));
+      expect(isActive).toBe(true);
+    }, 30000);
+
+    it('should keep filter badges visible when no POIs match filters', async () => {
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Switch to Results tab
+      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      await resultsTab.evaluate(el => el.click());
+      await page.waitForTimeout(1000);
+
+      // Wait for Results tab content to render
+      await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
+      await page.waitForSelector('.results-type-filters', { timeout: 10000 });
+
+      // Type search text that won't match anything - scope to Results tab only
+      const searchInput = page.locator('.results-tab-wrapper .results-search-input');
+      await searchInput.fill('xyznonexistentpoi123');
+      await page.waitForTimeout(500);
+
+      // Verify filter badges are still visible even with 0 results (only in Results tab)
+      const filterChips = page.locator('.results-tab-wrapper .type-filter-chip');
+      expect(await filterChips.count()).toBe(5);
+      expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
+
+      // Verify results count shows 0
+      const resultsCount = await page.locator('.results-tab-wrapper .results-count').textContent();
+      expect(resultsCount).toContain('0');
+
+      // Clear search to restore results
+      await searchInput.fill('');
+      await page.waitForTimeout(500);
+
+      // Badges should still be visible
+      expect(await filterChips.count()).toBe(5);
+    }, 30000);
   });
 });

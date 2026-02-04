@@ -291,6 +291,59 @@ const ResultsTab = memo(function ResultsTab({
           </button>
         </div>
 
+        {/* Filter badges - always visible even when no results */}
+        <div className="results-filters">
+          <input
+            type="text"
+            className="results-search-input"
+            placeholder="Search by name or description..."
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+          />
+          {activeSubTab === 'all' && (
+            <div className="results-type-filters">
+              <div
+                className={`type-filter-chip destination ${typeFilters.destination ? 'active' : 'inactive'}`}
+                onClick={() => setTypeFilters(prev => ({ ...prev, destination: !prev.destination }))}
+              >
+                <span className="type-filter-icon">D</span>
+                Destination
+              </div>
+              <div
+                className={`type-filter-chip trail ${typeFilters.trail ? 'active' : 'inactive'}`}
+                onClick={() => setTypeFilters(prev => ({ ...prev, trail: !prev.trail }))}
+              >
+                <span className="type-filter-icon">T</span>
+                Trail
+              </div>
+              <div
+                className={`type-filter-chip river ${typeFilters.river ? 'active' : 'inactive'}`}
+                onClick={() => setTypeFilters(prev => ({ ...prev, river: !prev.river }))}
+              >
+                <span className="type-filter-icon">R</span>
+                River
+              </div>
+              <div
+                className={`type-filter-chip boundary ${typeFilters.boundary ? 'active' : 'inactive'}`}
+                onClick={() => setTypeFilters(prev => ({ ...prev, boundary: !prev.boundary }))}
+              >
+                <span className="type-filter-icon">B</span>
+                Boundary
+              </div>
+              <div
+                className={`type-filter-chip organization ${typeFilters.organization ? 'active' : 'inactive'}`}
+                onClick={() => setTypeFilters(prev => ({ ...prev, organization: !prev.organization }))}
+              >
+                <span className="type-filter-icon">O</span>
+                Organization
+              </div>
+            </div>
+          )}
+          <div className="results-count">
+            Showing {poiCount} of {totalCount} POIs
+          </div>
+        </div>
+
         <div className="news-events-layout">
           <div className="news-events-content">
             <div className="results-tab-empty">

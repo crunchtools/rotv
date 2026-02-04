@@ -2060,7 +2060,7 @@ body {
 /* POI Count Overlay on Map - clickable button */
 .map-poi-count {
   position: absolute;
-  top: 1rem;
+  top: 5rem;
   right: 1rem;
   background: white;
   padding: 0.5rem 0.75rem;
@@ -2628,7 +2628,7 @@ body {
 
   /* POI count chip - slightly smaller on mobile */
   .map-poi-count {
-    top: 0.5rem;
+    top: 5rem;
     right: 0.5rem;
     padding: 0.4rem 0.6rem;
     font-size: 0.8rem;
@@ -3417,8 +3417,13 @@ body {
   top: 3rem;
 }
 
+/* Position Leaflet controls below header */
+.leaflet-top {
+  top: 5rem !important;
+}
+
 .map-container.edit-mode-active .leaflet-top {
-  top: 2.5rem;
+  top: 5rem;
 }
 
 .edit-mode-toggle input:checked + span {
