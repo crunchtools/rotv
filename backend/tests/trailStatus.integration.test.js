@@ -129,8 +129,8 @@ describe('Trail Status Integration Tests', () => {
       const result = await pool.query(`
         SELECT id, name, status_url, poi_type
         FROM pois
-        WHERE name LIKE '%East Rim%'
-      `);
+        WHERE name = $1 AND poi_type = 'trail'
+      `, [EAST_RIM_NAME]);
 
       expect(result.rows.length).toBe(1);
       expect(result.rows[0].name).toBe('East Rim Trail');
@@ -140,8 +140,8 @@ describe('Trail Status Integration Tests', () => {
       const result = await pool.query(`
         SELECT id, name, status_url
         FROM pois
-        WHERE name LIKE '%East Rim%'
-      `);
+        WHERE name = $1 AND poi_type = 'trail'
+      `, [EAST_RIM_NAME]);
 
       expect(result.rows.length).toBe(1);
       expect(result.rows[0].status_url).toBe(EAST_RIM_STATUS_URL);
