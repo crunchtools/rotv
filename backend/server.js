@@ -1364,10 +1364,12 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
         ts.source_name
       FROM pois p
       LEFT JOIN LATERAL (
-        SELECT status, conditions, last_updated, source_name
+        SELECT status, conditions,
+               COALESCE(last_updated, created_at) as last_updated,
+               source_name
         FROM trail_status
         WHERE poi_id = p.id
-        ORDER BY last_updated DESC NULLS LAST
+        ORDER BY last_updated DESC NULLS LAST, created_at DESC NULLS LAST
         LIMIT 1
       ) ts ON true
       WHERE p.status_url IS NOT NULL

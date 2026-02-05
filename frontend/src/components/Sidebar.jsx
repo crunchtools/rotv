@@ -2616,9 +2616,11 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     if (displayItem) {
       setEditedData({ ...displayItem });
       // Auto-enter edit mode if admin and editMode is on, or if creating new POI
-      setIsEditing((isAdmin && editMode) || isNewPOI);
-      // Reset to Status tab if selected from MTB list, otherwise Info tab when switching to a different POI
-      setSidebarTab(selectedFromMtbList ? 'status' : 'view');
+      const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
+      setIsEditing(shouldEnterEditMode);
+      // Stay on view tab if entering edit mode (EditView only renders on view tab)
+      // Otherwise: Status tab if selected from MTB list, Info tab otherwise
+      setSidebarTab(shouldEnterEditMode ? 'view' : (selectedFromMtbList ? 'status' : 'view'));
     } else {
       setIsEditing(false);
     }

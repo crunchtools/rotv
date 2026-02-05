@@ -15,7 +15,6 @@ import ParkNews from './components/ParkNews';
 import ParkEvents from './components/ParkEvents';
 import DataCollectionSettings from './components/DataCollectionSettings';
 import ResultsTab from './components/ResultsTab';
-import OrganizationsTab from './components/OrganizationsTab';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse']);
@@ -74,10 +73,12 @@ function getDestinationIconType(dest, iconConfig) {
   return 'default';
 }
 
-// Default park bounds - same as used in Map component on initial load
+// Default park bounds - expanded to include all MTB trailheads
+// Includes: Reagan-Huffman (westernmost), Ohio & Erie Canal (northernmost),
+// East Rim (easternmost), Hampton Hills (southernmost)
 const DEFAULT_PARK_BOUNDS = [
-  [41.1390, -81.6654],  // Southwest corner
-  [41.4226, -81.4706]   // Northeast corner
+  [41.13, -81.85],  // Southwest corner (expanded west to include Reagan-Huffman at -81.832)
+  [41.45, -81.50]   // Northeast corner (expanded to fit all trailheads)
 ];
 
 function AppContent() {
@@ -1285,12 +1286,6 @@ function AppContent() {
           >
             Events
           </button>
-          <button
-            className={`tab-btn ${activeTab === 'organizations' ? 'active' : ''}`}
-            onClick={() => handleTabChange('organizations')}
-          >
-            Organizations
-          </button>
           {isAdmin && (
             <button
               className={`tab-btn ${activeTab === 'edit' ? 'active' : ''}`}
@@ -1395,6 +1390,7 @@ function AppContent() {
             viewportFilteredVirtualPois={viewportFilteredVirtualPois}
             allDestinations={destinations}
             allLinearFeatures={linearFeatures}
+            allVirtualPois={virtualPois}
             selectedDestination={selectedDestination}
             selectedLinearFeature={selectedLinearFeature}
             onSelectDestination={handleResultsSelectDestination}
@@ -1452,16 +1448,6 @@ function AppContent() {
         />
       </main>
 
-      {/* Organizations tab content */}
-      {activeTab === 'organizations' && (
-        <main className="main-content-full">
-          <OrganizationsTab
-            allVirtualPois={virtualPois}
-            selectedDestination={selectedDestination}
-            onSelectDestination={handleResultsSelectDestination}
-          />
-        </main>
-      )}
 
       {activeTab === 'settings' && (
         <main className="settings-content">

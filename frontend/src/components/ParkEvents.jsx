@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { formatDateWithWeekday, EventTypeIcon } from './NewsEventsShared';
 
+// Default park bounds - show full park view in mini map
+const DEFAULT_PARK_BOUNDS = [
+  [41.13, -81.85],  // Southwest corner
+  [41.45, -81.50]   // Northeast corner
+];
+
 // Calendar-specific date formatting (local to this component)
 function formatDateForCalendar(dateString) {
   if (!dateString) return '';
@@ -322,7 +328,7 @@ END:VCALENDAR`;
         {mapState && (
           <div className="map-thumbnail-sidebar">
             <MapThumbnail
-              bounds={mapState.bounds}
+              bounds={DEFAULT_PARK_BOUNDS}
               aspectRatio={mapState.aspectRatio || 1.5}
               visibleDestinations={filteredDestinations}
               onClick={onMapClick}

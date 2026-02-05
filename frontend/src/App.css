@@ -501,7 +501,7 @@ body {
 /* Tooltip thumbnail image */
 .tooltip-thumbnail {
   width: 100%;
-  height: 120px;
+  height: 180px;
   margin: -0.75rem -1rem 0.75rem -1rem;
   width: calc(100% + 2rem);
   overflow: hidden;
@@ -3139,6 +3139,10 @@ body {
 }
 
 /* Auth Components */
+.login-backdrop {
+  display: none;
+}
+
 .login-container {
   position: relative;
 }
@@ -3207,6 +3211,43 @@ body {
   font-size: 0.8rem;
   margin-top: 0.5rem;
   text-align: center;
+}
+
+/* Mobile-responsive login dropdown */
+@media (max-width: 768px) {
+  .login-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
+
+  .login-dropdown {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    right: auto;
+    transform: translate(-50%, -50%);
+    margin-top: 0;
+    min-width: 280px;
+    max-width: 90vw;
+    padding: 1.25rem;
+    z-index: 1001;
+  }
+
+  .oauth-btn {
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .oauth-btn:last-of-type {
+    margin-bottom: 0;
+  }
 }
 
 /* User Menu */

@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { formatDate, NewsTypeIcon } from './NewsEventsShared';
 
+// Default park bounds - show full park view in mini map
+const DEFAULT_PARK_BOUNDS = [
+  [41.13, -81.85],  // Southwest corner
+  [41.45, -81.50]   // Northeast corner
+];
+
 function ParkNews({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -226,7 +232,7 @@ function ParkNews({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFe
         {mapState && (
           <div className="map-thumbnail-sidebar">
             <MapThumbnail
-              bounds={mapState.bounds}
+              bounds={DEFAULT_PARK_BOUNDS}
               aspectRatio={mapState.aspectRatio || 1.5}
               visibleDestinations={filteredDestinations}
               onClick={onMapClick}
