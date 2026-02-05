@@ -222,7 +222,9 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
       if (destination.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
       return '/icons/thumbnails/trail.svg';
     }
-    if (destination.poi_type === 'virtual') return '/icons/thumbnails/organization.svg';
+    if (destination.poi_type === 'virtual') return '/icons/thumbnails/virtual.svg';
+    // MTB trailheads are point POIs with status_url
+    if (destination.poi_type === 'point' && destination.status_url) return '/icons/thumbnails/trail.svg';
     return '/icons/thumbnails/destination.svg';
   };
 
@@ -256,6 +258,10 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
           ) : destination.poi_type === 'virtual' ? (
             <span className="poi-type-badge virtual">
               Organization
+            </span>
+          ) : destination.poi_type === 'point' && destination.status_url ? (
+            <span className="poi-type-badge trail">
+              MTB Trailhead
             </span>
           ) : (
             <span className="poi-type-badge destination">
@@ -291,6 +297,19 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
                 <path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>
               </svg>
               Share
+            </button>
+          )}
+          {/* NPS Map toggle button */}
+          {onToggleNpsMap && (
+            <button
+              className={`nps-map-toggle-btn ${showNpsMap ? 'active' : ''}`}
+              onClick={() => onToggleNpsMap(!showNpsMap)}
+              title={showNpsMap ? 'Hide NPS Park Map' : 'Show NPS Park Map'}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+              </svg>
+              NPS Map
             </button>
           )}
         </div>
@@ -2454,7 +2473,7 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
   );
 }
 
-function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, onBackToMtbList }) {
+function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, showNpsMap, onToggleNpsMap }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
   const [saving, setSaving] = useState(false);
@@ -2994,6 +3013,48 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         <div className="sidebar-header">
           <h2 title={linearFeature.name}>{isEditing ? 'Edit: ' : ''}{linearFeature.name}</h2>
           <div className="header-buttons">
+            {selectedFromMtbList && mtbTrailsList && mtbTrailsList.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  className="mtb-nav-btn prev-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onNavigateMtbTrail('prev');
+                  }}
+                  title="Previous MTB Trail"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="mtb-nav-btn next-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onNavigateMtbTrail('next');
+                  }}
+                  title="Next MTB Trail"
+                >
+                  ›
+                </button>
+              </>
+            )}
+            {isInMtbMode && linearFeature && (
+              <button
+                type="button"
+                className="back-to-mtb-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onBackToMtbList();
+                }}
+                title="Back to MTB Trails"
+              >
+                ←
+              </button>
+            )}
             <button className="close-btn" onClick={onClose}>&times;</button>
           </div>
         </div>
@@ -3275,6 +3336,34 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           {isNewOrganization ? 'Create Organization' : (isEditing ? 'Edit: ' : '')}{!isNewOrganization && (destination?.name || 'Location Details')}
         </h2>
         <div className="header-buttons">
+          {selectedFromMtbList && mtbTrailsList && mtbTrailsList.length > 1 && (
+            <>
+              <button
+                type="button"
+                className="mtb-nav-btn prev-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNavigateMtbTrail('prev');
+                }}
+                title="Previous MTB Trail"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="mtb-nav-btn next-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNavigateMtbTrail('next');
+                }}
+                title="Next MTB Trail"
+              >
+                ›
+              </button>
+            </>
+          )}
           {isInMtbMode && !isNewPOI && !isNewOrganization && destination && (
             <button
               type="button"

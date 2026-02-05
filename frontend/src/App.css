@@ -659,6 +659,35 @@ body {
   flex-shrink: 0;
 }
 
+/* NPS Map toggle button in badges row */
+.nps-map-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  background: #5a7a9e;
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.nps-map-toggle-btn:hover {
+  background: #6a8aae;
+}
+
+.nps-map-toggle-btn.active {
+  background: #3a5a7e;
+  box-shadow: inset 0 1px 3px rgba(0,0,0,0.3);
+}
+
+.nps-map-toggle-btn svg {
+  flex-shrink: 0;
+}
+
 /* Associations badge button in badges row */
 .associations-badge-btn {
   display: inline-flex;
@@ -3842,6 +3871,26 @@ body {
 }
 
 .sidebar-header .edit-btn:hover {
+  background: rgba(255,255,255,0.35);
+}
+
+/* MTB navigation buttons */
+.sidebar-header .mtb-nav-btn {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 4px;
+  padding: 0.35rem 0.6rem;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: white;
+  transition: background 0.2s;
+  min-width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar-header .mtb-nav-btn:hover {
   background: rgba(255,255,255,0.35);
 }
 

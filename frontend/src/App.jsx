@@ -167,6 +167,8 @@ function AppContent() {
   const [initialShowMtbOnly, setInitialShowMtbOnly] = useState(false);
   const [isInMtbMode, setIsInMtbMode] = useState(false);
   const [selectedFromMtbList, setSelectedFromMtbList] = useState(false);
+  const [mtbTrailsList, setMtbTrailsList] = useState([]);
+  const [currentMtbIndex, setCurrentMtbIndex] = useState(-1);
 
   // Flag to temporarily show all POIs when transitioning from MTB mode to All Results
   // This prevents showing only viewport-filtered POIs before the map finishes zooming
@@ -941,9 +943,16 @@ function AppContent() {
 
   // Stable callbacks for ResultsTab - always switch to view tab to show sidebar with navigation
   // Skip fly animation when selecting from Results to preserve map view (except in MTB mode where we want to fly to the trail)
-  const handleResultsSelectDestination = useCallback((poi) => {
+  const handleResultsSelectDestination = useCallback((poi, mtbContext) => {
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
+
+      // If MTB context is provided, set up navigation
+      if (mtbContext) {
+        setMtbTrailsList(mtbContext.trailsList);
+        setCurrentMtbIndex(mtbContext.currentIndex);
+        setSelectedFromMtbList(true);
+      }
 
       // Set flag FIRST to prevent browser nav effect from clearing POI
       isProgrammaticNavigationRef.current = true;
@@ -985,9 +994,16 @@ function AppContent() {
     }
   }, [handleSelectDestination, isInMtbMode, navigate, poiNavigationList]);
 
-  const handleResultsSelectLinearFeature = useCallback((poi) => {
+  const handleResultsSelectLinearFeature = useCallback((poi, mtbContext) => {
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
+
+      // If MTB context is provided, set up navigation
+      if (mtbContext) {
+        setMtbTrailsList(mtbContext.trailsList);
+        setCurrentMtbIndex(mtbContext.currentIndex);
+        setSelectedFromMtbList(true);
+      }
 
       // Set flag FIRST to prevent browser nav effect from clearing POI
       isProgrammaticNavigationRef.current = true;
@@ -1004,7 +1020,9 @@ function AppContent() {
       // Switch to view tab first, THEN set linear feature after a brief delay
       // This ensures the map container is visible (zIndex=1) before any map operations
       setActiveTab('view');
-      setSelectedFromMtbList(true);
+      if (!mtbContext) {
+        setSelectedFromMtbList(true);
+      }
       document.title = `${poi.name} | Roots of The Valley`;
 
       // CRITICAL: Enable layer visibility so feature appears on map
@@ -1608,10 +1626,40 @@ function AppContent() {
           }}
           isInMtbMode={isInMtbMode}
           selectedFromMtbList={selectedFromMtbList}
+          mtbTrailsList={mtbTrailsList}
+          currentMtbIndex={currentMtbIndex}
+          onNavigateMtbTrail={(direction) => {
+            if (mtbTrailsList.length === 0) return;
+
+            const newIndex = direction === 'next'
+              ? (currentMtbIndex + 1) % mtbTrailsList.length
+              : (currentMtbIndex - 1 + mtbTrailsList.length) % mtbTrailsList.length;
+
+            const nextTrail = mtbTrailsList[newIndex];
+            setCurrentMtbIndex(newIndex);
+
+            // Select the next/previous trail
+            if (nextTrail.poi_type === 'point') {
+              const fullDestination = destinations?.find(d => d.id === nextTrail.id);
+              if (fullDestination) {
+                setSelectedDestination(fullDestination);
+                setSelectedLinearFeature(null);
+                updateUrlWithPoi(fullDestination);
+              }
+            } else {
+              const fullTrail = linearFeatures?.find(f => f.id === nextTrail.id);
+              if (fullTrail) {
+                setSelectedLinearFeature(fullTrail);
+                setSelectedDestination(null);
+                updateUrlWithPoi(fullTrail);
+              }
+            }
+          }}
           onBackToMtbList={() => {
             setSelectedDestination(null);
             setSelectedLinearFeature(null);
             setSelectedFromMtbList(false);
+            setCurrentMtbIndex(-1);
             setActiveTab('results');
             // Navigate back to MTB trails list
             isProgrammaticNavigationRef.current = true;
@@ -1642,6 +1690,8 @@ function AppContent() {
           onSelectLinearFeature={handleSelectLinearFeature}
           onAssociationsChanged={refreshAllData}
           onStartDrawingAssociations={handleStartDrawingAssociations}
+          showNpsMap={showNpsMap}
+          onToggleNpsMap={setShowNpsMap}
         />
       </main>
     </div>
