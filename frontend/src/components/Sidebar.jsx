@@ -208,7 +208,7 @@ function EditableCellSignal({ level, onChange }) {
 }
 
 // Read-only view component - works for both destinations and linear features
-function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null }) {
+function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null, showNpsMap, onToggleNpsMap }) {
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
   const imageUrl = destination.image_mime_type
@@ -3198,6 +3198,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 onShare={() => setShowShareModal(true)}
                 moreInfoLink={linearFeature.more_info_link}
                 trailStatus={trailStatus}
+                showNpsMap={showNpsMap}
+                onToggleNpsMap={onToggleNpsMap}
               />
             )
           )}
@@ -3521,6 +3523,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               onShare={() => setShowShareModal(true)}
               moreInfoLink={destination.more_info_link}
               trailStatus={trailStatus}
+              showNpsMap={showNpsMap}
+              onToggleNpsMap={onToggleNpsMap}
             />
           )
         )}
