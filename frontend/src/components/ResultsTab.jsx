@@ -93,7 +93,7 @@ const ResultsTab = memo(function ResultsTab({
       let typesToShow = null; // null means "show all"
 
       if (activeSubTab === 'mtb') {
-        typesToShow = ['mtb-trailheads'];
+        typesToShow = ['mtb-trailhead'];
       } else if (activeSubTab === 'organizations') {
         typesToShow = ['organization']; // virtual POIs
       }

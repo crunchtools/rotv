@@ -167,16 +167,6 @@ function Legend({
           iconUrl: getIconUrl(icon),
           type: 'poi'
         }));
-
-      // Add MTB Trailheads if not already in config
-      if (!poiTypes.find(t => t.id === 'mtb-trailhead')) {
-        poiTypes.push({
-          id: 'mtb-trailhead',
-          label: 'MTB Trailheads',
-          svg_filename: 'mtb-trailhead.svg',
-          type: 'poi'
-        });
-      }
     }
 
     // Add layer icons (Trails, Rivers)
