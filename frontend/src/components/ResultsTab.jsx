@@ -28,7 +28,8 @@ const ResultsTab = memo(function ResultsTab({
   onMapClick,
   initialShowMtbOnly = false,
   onFilterByTypes,  // Callback to filter by POI types: array of types or null for all
-  bypassViewportFilter = false  // Temporarily show all POIs (bypass viewport filtering)
+  bypassViewportFilter = false,  // Temporarily show all POIs (bypass viewport filtering)
+  visiblePoiCount  // Global POI count from App.jsx
 }) {
   const navigate = useNavigate();
   const isNavigatingRef = useRef(false);
@@ -207,7 +208,8 @@ const ResultsTab = memo(function ResultsTab({
   const selectedId = selectedDestination?.id;
   const selectedLinearId = selectedLinearFeature?.id;
 
-  const poiCount = sortedPois.length;
+  // Use global POI count instead of filtered list count
+  const poiCount = visiblePoiCount;
 
   // Clear transition state when App.jsx bypassViewportFilter catches up
   useEffect(() => {
@@ -382,6 +384,7 @@ const ResultsTab = memo(function ResultsTab({
           </div>
           {mapState && (
             <div className="map-thumbnail-sidebar">
+              {console.log('[ResultsTab] Passing to MapThumbnail - thumbnailBounds SW:', thumbnailBounds[0], 'NE:', thumbnailBounds[1])}
               <MapThumbnail
                 bounds={thumbnailBounds}
                 aspectRatio={mapState.aspectRatio || 1.5}

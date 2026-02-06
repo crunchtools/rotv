@@ -1027,7 +1027,7 @@ const DEFAULT_NPS_MAP_BOUNDS = [
 // Default icon type IDs for initializing the filter (before config loads)
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit }) {
+function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [mapBounds, setMapBounds] = useState(DEFAULT_NPS_MAP_BOUNDS);
@@ -1039,7 +1039,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   const [importMessage, setImportMessage] = useState(null);
   const [isCreatingVirtualPoi, setIsCreatingVirtualPoi] = useState(false);
   const fileRef = useRef(null); // Store File object in ref to avoid React re-renders
-  const [visiblePoiCount, setVisiblePoiCount] = useState(0);
   const [visiblePoiIds, setVisiblePoiIds] = useState([]);
 
   // Admin news refresh state
@@ -1049,13 +1048,10 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   // Track map moves to trigger tooltip direction recalculation
   const [mapMoveCount, setMapMoveCount] = useState(0);
 
-  // Icon configuration from database
-  const [iconConfig, setIconConfig] = useState([]);
+  // Icon configuration is passed as prop from App.jsx (fetched on mount)
 
-  // Wrapper to track visible result count and IDs locally and pass to parent
-  // visibleIds now includes both destinations AND linear features
+  // Store visible IDs locally for admin news refresh
   const handleVisiblePoisChange = useCallback((visibleIds) => {
-    setVisiblePoiCount(visibleIds.length);
     setVisiblePoiIds(visibleIds);
     if (onVisiblePoisChange) {
       onVisiblePoisChange(visibleIds);
@@ -1142,34 +1138,8 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
     }
   }, [refreshingNews, visiblePoiIds]);
 
-  // Fetch icon configuration on mount and when switching tabs
-  // This ensures icons show correctly on initial load and when new icons are created
-  useEffect(() => {
-    if (activeTab === 'view' || activeTab === 'explore' || activeTab === 'edit') {
-      fetch('/api/admin/icons')
-        .then(res => res.json())
-        .then(data => {
-          setIconConfig(data);
-          // Update visible types to include all enabled icons
-          const allTypes = new Set(data.filter(i => i.enabled !== false).map(i => i.name));
-          if (!allTypes.has('default')) allTypes.add('default');
-          if (onVisibleTypesChange) {
-            onVisibleTypesChange(prev => {
-              // Merge new icons into visible set (keep user's filter choices)
-              const merged = new Set(prev);
-              allTypes.forEach(t => {
-                if (!iconConfig.find(i => i.name === t)) {
-                  // New icon - add to visible set
-                  merged.add(t);
-                }
-              });
-              return merged;
-            });
-          }
-        })
-        .catch(err => console.error('Failed to load icon config:', err));
-    }
-  }, [activeTab]);
+  // Icon config is fetched in App.jsx on mount and passed as prop
+  // We receive iconConfig but don't fetch or modify visibleTypes here
 
   // Memoize Leaflet icons created from config
   const icons = useMemo(() => createIconsFromConfig(iconConfig), [iconConfig]);

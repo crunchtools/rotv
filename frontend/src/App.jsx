@@ -17,7 +17,7 @@ import DataCollectionSettings from './components/DataCollectionSettings';
 import ResultsTab from './components/ResultsTab';
 
 // Default icon type IDs for initializing the filter
-const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse']);
+const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
 
 // Generate URL-friendly slug from POI name
 function generateSlug(name) {
@@ -89,13 +89,17 @@ function AppContent() {
   const [filters, setFilters] = useState({ owners: [], eras: [], surfaces: [] });
 
   // POI type visibility filter (shared with Map and News/Events tabs)
-  const [visibleTypes, setVisibleTypes] = useState(new Set(DEFAULT_ICON_TYPES));
-
   // Icon configuration for determining POI types
   const [iconConfig, setIconConfig] = useState([]);
 
+  // Initialize visibleTypes from database after iconConfig loads
+  const [visibleTypes, setVisibleTypes] = useState(new Set(DEFAULT_ICON_TYPES));
+
   // POI IDs currently visible in the map viewport (for News/Events filtering)
   const [visiblePoiIds, setVisiblePoiIds] = useState([]);
+
+  // Global visible POI count (single source of truth for all tabs)
+  const visiblePoiCount = visiblePoiIds.length;
 
   // Layer visibility states (lifted from Map component for unified control)
   const [showNpsMap, setShowNpsMap] = useState(false);
@@ -301,10 +305,26 @@ function AppContent() {
       // Filtering to specific types
       setVisibleTypes(new Set(typesToShow));
     } else {
-      // Restore to "show all" mode
-      setVisibleTypes(new Set(DEFAULT_ICON_TYPES));
+      // Restore to "show all" mode - use database-loaded icon types
+      if (iconConfig && iconConfig.length > 0) {
+        const allTypes = new Set(
+          iconConfig
+            .filter(icon => icon.enabled !== false)
+            .map(icon => icon.name)
+        );
+        if (!allTypes.has('default')) allTypes.add('default');
+        // Include layer types
+        allTypes.add('trail');
+        allTypes.add('river');
+        allTypes.add('boundary');
+        allTypes.add('organization');
+        setVisibleTypes(allTypes);
+      } else {
+        // Fallback to hardcoded defaults if iconConfig not loaded yet
+        setVisibleTypes(new Set(DEFAULT_ICON_TYPES));
+      }
     }
-  }, []);
+  }, [iconConfig]);
 
   // Reset to View tab when user loses admin status (e.g., logout)
   useEffect(() => {
@@ -658,6 +678,30 @@ function AppContent() {
     refreshAllData();
   }, [refreshAllData]);
 
+  // Initialize visibleTypes from iconConfig ONCE after it loads from database
+  // Use a ref to ensure this only runs once, not every time iconConfig changes
+  const hasInitializedVisibleTypes = useRef(false);
+  useEffect(() => {
+    if (iconConfig && iconConfig.length > 0 && !hasInitializedVisibleTypes.current) {
+      const enabledTypes = new Set(
+        iconConfig
+          .filter(icon => icon.enabled !== false)
+          .map(icon => icon.name)
+      );
+      // Add 'default' if not present
+      if (!enabledTypes.has('default')) {
+        enabledTypes.add('default');
+      }
+      // Also include layer types that aren't in icon config
+      enabledTypes.add('trail');
+      enabledTypes.add('river');
+      enabledTypes.add('boundary');
+      enabledTypes.add('organization');
+
+      setVisibleTypes(enabledTypes);
+      hasInitializedVisibleTypes.current = true;
+    }
+  }, [iconConfig]);
 
   // Compute destinations filtered by map viewport visibility (for News/Events tabs)
   // This uses the actual POI IDs visible on the map (respects zoom, pan, and legend filters)
@@ -1421,13 +1465,15 @@ function AppContent() {
             initialShowMtbOnly={initialShowMtbOnly}
             onFilterByTypes={handleFilterByTypes}
             bypassViewportFilter={bypassViewportFilter}
+            visiblePoiCount={visiblePoiCount}
           />
         </main>
       )}
 
       {/* News tab content */}
-      <main className="main-content-full" style={{ display: activeTab === 'news' ? 'flex' : 'none', flexDirection: 'column' }}>
-        <ParkNews
+      {activeTab === 'news' && (
+        <main className="main-content-full" style={{ display: 'flex', flexDirection: 'column' }}>
+          <ParkNews
           isAdmin={isAdmin}
           filteredDestinations={viewportFilteredDestinations}
           filteredLinearFeatures={viewportFilteredLinearFeatures}
@@ -1435,6 +1481,8 @@ function AppContent() {
           mapState={mapState}
           linearFeatures={linearFeatures}
           refreshTrigger={newsRefreshTrigger}
+          bypassViewportFilter={bypassViewportFilter}
+          visiblePoiCount={visiblePoiCount}
           onMapClick={() => setActiveTab('view')}
           onSelectPoi={(poiId) => {
             const poi = destinations.find(d => d.id === poiId);
@@ -1444,11 +1492,13 @@ function AppContent() {
             }
           }}
         />
-      </main>
+        </main>
+      )}
 
       {/* Events tab content */}
-      <main className="main-content-full" style={{ display: activeTab === 'events' ? 'flex' : 'none', flexDirection: 'column' }}>
-        <ParkEvents
+      {activeTab === 'events' && (
+        <main className="main-content-full" style={{ display: 'flex', flexDirection: 'column' }}>
+          <ParkEvents
           isAdmin={isAdmin}
           filteredDestinations={viewportFilteredDestinations}
           filteredLinearFeatures={viewportFilteredLinearFeatures}
@@ -1456,6 +1506,8 @@ function AppContent() {
           mapState={mapState}
           linearFeatures={linearFeatures}
           refreshTrigger={newsRefreshTrigger}
+          bypassViewportFilter={bypassViewportFilter}
+          visiblePoiCount={visiblePoiCount}
           onMapClick={() => setActiveTab('view')}
           onSelectPoi={(poiId) => {
             const poi = destinations.find(d => d.id === poiId);
@@ -1465,7 +1517,8 @@ function AppContent() {
             }
           }}
         />
-      </main>
+        </main>
+      )}
 
 
       {activeTab === 'settings' && (
@@ -1597,6 +1650,8 @@ function AppContent() {
           onNewsRefresh={() => setNewsRefreshTrigger(prev => prev + 1)}
           skipFlyRef={skipNextFlyRef}
           boundsToFit={boundsToFit}
+          visiblePoiCount={visiblePoiCount}
+          iconConfig={iconConfig}
           isDrawingAssociations={isDrawingAssociations}
           addingAssociationsToOrgId={addingAssociationsToOrgId}
           onAddAssociationsFromDrawing={handleAddAssociationsFromDrawing}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { formatDateWithWeekday, EventTypeIcon } from './NewsEventsShared';
 
@@ -15,11 +15,12 @@ function formatDateForCalendar(dateString) {
   return date.toISOString().replace(/-|:|\.\d{3}/g, '').slice(0, 15) + 'Z';
 }
 
-function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger }) {
+function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [deleting, setDeleting] = useState(null);
+  const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [typeFilters, setTypeFilters] = useState({
     'guided-tour': true,
@@ -52,6 +53,31 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
       setLoading(false);
     }
   };
+
+  // Simple, direct bounds computation - matches ResultsTab pattern
+  let currentBounds;
+  if (bypassViewportFilter) {
+    // Bypass mode: use default park bounds constant (e.g., after returning from single POI view)
+    currentBounds = DEFAULT_PARK_BOUNDS;
+  } else {
+    // Normal mode: use current viewport bounds
+    currentBounds = mapState?.bounds || DEFAULT_PARK_BOUNDS;
+  }
+
+  // Only update stable ref if coordinates actually changed
+  const boundsChanged = currentBounds &&
+    (!stableBoundsRef.current ||
+    currentBounds[0][0] !== stableBoundsRef.current[0][0] ||
+    currentBounds[0][1] !== stableBoundsRef.current[0][1] ||
+    currentBounds[1][0] !== stableBoundsRef.current[1][0] ||
+    currentBounds[1][1] !== stableBoundsRef.current[1][1]);
+
+  if (boundsChanged) {
+    console.log('[ParkEvents] Thumbnail bounds UPDATE - Bypass:', bypassViewportFilter, 'SW:', currentBounds[0], 'NE:', currentBounds[1]);
+    stableBoundsRef.current = currentBounds;
+  }
+
+  const thumbnailBounds = stableBoundsRef.current;
 
   // Filter events based on visible POIs (destinations, linear features, and organizations)
   const filteredEvents = React.useMemo(() => {
@@ -327,12 +353,13 @@ END:VCALENDAR`;
         {/* Map thumbnail sidebar */}
         {mapState && (
           <div className="map-thumbnail-sidebar">
+            {console.log('[ParkEvents] Passing to MapThumbnail - thumbnailBounds SW:', thumbnailBounds[0], 'NE:', thumbnailBounds[1])}
             <MapThumbnail
-              bounds={DEFAULT_PARK_BOUNDS}
+              bounds={thumbnailBounds}
               aspectRatio={mapState.aspectRatio || 1.5}
               visibleDestinations={filteredDestinations}
               onClick={onMapClick}
-              poiCount={(filteredDestinations?.length || 0) + (filteredLinearFeatures?.length || 0)}
+              poiCount={visiblePoiCount}
             />
           </div>
         )}
