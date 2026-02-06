@@ -93,7 +93,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
             )}
             {statusData.last_updated && (
               <div className="status-updated">
-                Updated: {new Date(statusData.last_updated).toLocaleDateString()}
+                Updated: {new Date(statusData.last_updated).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
               </div>
             )}
           </div>

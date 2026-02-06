@@ -268,6 +268,97 @@ INSERT INTO admin_settings (setting_key, setting_value, description) VALUES
 
 ---
 
+## MTB Trail Status Date Logic
+
+Every MTB trail in the Results → MTB Trail Status list displays a "Last Updated" date to show data freshness. The date system uses a cascading fallback priority to ensure every trail shows a meaningful date, even if it doesn't have status records yet.
+
+### Date Priority Cascade
+
+The system selects the most recent date from the following sources (in priority order):
+
+1. **`trail_status.last_updated`** - Most recent status update timestamp
+2. **`trail_status.created_at`** - When the status record was created (if `last_updated` is NULL)
+3. **`pois.updated_at`** - When the POI itself was last modified
+4. **`pois.created_at`** - When the POI was created
+
+### Implementation
+
+**Backend API Query** (`/api/trail-status/mtb-trails`):
+
+```sql
+SELECT
+  p.id,
+  p.name,
+  p.poi_type,
+  p.latitude,
+  p.longitude,
+  p.geometry,
+  p.status_url,
+  ts.status,
+  ts.conditions,
+  COALESCE(ts.last_updated, p.updated_at, p.created_at) as last_updated,
+  ts.source_name
+FROM pois p
+LEFT JOIN LATERAL (
+  SELECT status, conditions,
+         COALESCE(last_updated, created_at) as last_updated,
+         source_name
+  FROM trail_status
+  WHERE poi_id = p.id
+  ORDER BY last_updated DESC NULLS LAST, created_at DESC NULLS LAST
+  LIMIT 1
+) ts ON true
+WHERE p.status_url IS NOT NULL
+  AND p.status_url != ''
+  AND (p.deleted IS NULL OR p.deleted = FALSE)
+ORDER BY p.name
+```
+
+**Frontend Display** (`ResultsTile.jsx`):
+
+```javascript
+{statusData.last_updated && (
+  <div className="status-updated">
+    Updated: {new Date(statusData.last_updated).toLocaleDateString('en-US', {
+      month: '2-digit',
+      day: '2-digit',
+      year: 'numeric'
+    })}
+  </div>
+)}
+```
+
+### Date Format
+
+Dates are displayed in **US format**: `MM/DD/YYYY` (e.g., `02/05/2026`)
+
+The `toLocaleDateString('en-US', ...)` method ensures consistent formatting regardless of user's browser locale.
+
+### What This Means for Users
+
+- **Trails with active status monitoring**: Show when their status was last checked
+- **Trails without status records**: Show when the trail POI was last modified
+- **New trails**: Show their creation date until first status is collected
+- **All trails**: Always display a date to indicate data freshness
+
+### Example Scenarios
+
+| Trail Scenario | Status Record | POI Metadata | Date Shown | Meaning |
+|---------------|---------------|--------------|------------|---------|
+| East Rim Trail | ✅ last_updated: 02/05/2026 | updated_at: 01/15/2026 | **02/05/2026** | Status checked today |
+| Bolton Field | ✅ created_at: 01/20/2026 | updated_at: 01/10/2026 | **01/20/2026** | Status first collected on 1/20 |
+| New Trail | ❌ No status record | created_at: 02/01/2026 | **02/01/2026** | Trail created 2/1, no status yet |
+| Updated POI | ❌ No status record | updated_at: 02/03/2026 | **02/03/2026** | Trail info updated 2/3, no status yet |
+
+### Why This Design
+
+1. **Always shows a date**: Users never see blank/unknown dates
+2. **Meaningful fallbacks**: POI update dates indicate when trail info was last verified
+3. **Data freshness**: Users can judge whether to trust the status or check source directly
+4. **Consistent ordering**: SQL handles NULL values properly with `NULLS LAST`
+
+---
+
 ## Source Attribution Pattern
 
 The system ensures that saved status records always reference the configured `status_url` as the source. Here's how it works:
@@ -629,6 +720,12 @@ psql -U postgres -d rotv -f backend/migrations/001_add_trail_status_support.sql
 ---
 
 ## Changelog
+
+**Version 1.3.0 (2026-02-06)**
+- Added "MTB Trail Status Date Logic" section documenting date priority cascade
+- Fixed date format to US format (MM/DD/YYYY) instead of browser locale
+- Fixed missing dates for trails without status records (now use POI metadata as fallback)
+- Backend query now uses `COALESCE(ts.last_updated, p.updated_at, p.created_at)` for complete date coverage
 
 **Version 1.2.0 (2026-02-03)**
 - Clarified documentation: AI only analyzes configured status_url, does NOT search the web

@@ -1360,7 +1360,7 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
         p.status_url,
         ts.status,
         ts.conditions,
-        ts.last_updated,
+        COALESCE(ts.last_updated, p.updated_at, p.created_at) as last_updated,
         ts.source_name
       FROM pois p
       LEFT JOIN LATERAL (
