@@ -3125,39 +3125,45 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         <div className="sidebar-tabs">
           <button
             className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('view')}
+            onClick={() => !isEditing && setSidebarTab('view')}
+            disabled={isEditing && sidebarTab !== 'view'}
           >
             Info
           </button>
           {linearFeature?.status_url && (
             <button
               className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
-              onClick={() => setSidebarTab('status')}
+              onClick={() => !isEditing && setSidebarTab('status')}
+              disabled={isEditing}
             >
               Status
             </button>
           )}
           <button
             className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('news')}
+            onClick={() => !isEditing && setSidebarTab('news')}
+            disabled={isEditing}
           >
             News
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('events')}
+            onClick={() => !isEditing && setSidebarTab('events')}
+            disabled={isEditing}
           >
             Events
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('history')}
+            onClick={() => !isEditing && setSidebarTab('history')}
+            disabled={isEditing}
           >
             History
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('associations')}
+            onClick={() => !isEditing && setSidebarTab('associations')}
+            disabled={isEditing}
           >
             Associations
           </button>
@@ -3450,39 +3456,45 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       <div className="sidebar-tabs">
         <button
           className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('view')}
+          onClick={() => !isEditing && setSidebarTab('view')}
+          disabled={isEditing && sidebarTab !== 'view'}
         >
           Info
         </button>
         {destination?.status_url && (
           <button
             className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('status')}
+            onClick={() => !isEditing && setSidebarTab('status')}
+            disabled={isEditing}
           >
             Status
           </button>
         )}
         <button
           className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('news')}
+          onClick={() => !isEditing && setSidebarTab('news')}
+          disabled={isEditing}
         >
           News
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('events')}
+          onClick={() => !isEditing && setSidebarTab('events')}
+          disabled={isEditing}
         >
           Events
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('history')}
+          onClick={() => !isEditing && setSidebarTab('history')}
+          disabled={isEditing}
         >
           History
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('associations')}
+          onClick={() => !isEditing && setSidebarTab('associations')}
+          disabled={isEditing}
         >
           Associations
         </button>

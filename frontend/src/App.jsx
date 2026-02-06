@@ -275,7 +275,8 @@ function AppContent() {
     }
 
     // If switching away from Results tab and currently on MTB trail status page, navigate back to home
-    if (newTab !== 'results' && location.pathname.startsWith('/mtb-trail-status')) {
+    // BUT: Don't navigate away if switching to Edit or View - preserve the selected trail
+    if (newTab !== 'results' && newTab !== 'edit' && newTab !== 'view' && location.pathname.startsWith('/mtb-trail-status')) {
       navigate('/');
       setSelectedFromMtbList(false);
     }
