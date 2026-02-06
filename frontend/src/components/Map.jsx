@@ -969,7 +969,7 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
           <div className="tooltip-content">
             {dest.image_mime_type && (
               <div className="tooltip-thumbnail">
-                <img src={`/api/pois/${dest.id}/thumbnail?size=small`} alt="" />
+                <img src={`/api/pois/${dest.id}/thumbnail?size=medium`} alt="" />
               </div>
             )}
             <strong>{dest.name}</strong>
@@ -1474,7 +1474,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                     const hasAnySelection = (selectedDestination && selectedDestination.poi_type !== 'virtual') || selectedLinearFeature;
                     if (isSelected || !hasAnySelection) {
                       const hasImage = feature.image_mime_type;
-                      const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=small` : null;
+                      const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
                       let tooltipHtml = '<div class="tooltip-content">';
                       if (hasImage) {
@@ -1538,7 +1538,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                   if (isSelected || !hasAnySelection) {
                     // Build rich tooltip content (similar to destination tooltips)
                     const hasImage = feature.image_mime_type;
-                    const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=small` : null;
+                    const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
                     let tooltipHtml = '<div class="tooltip-content">';
                     if (hasImage) {
