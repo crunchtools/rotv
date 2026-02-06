@@ -703,6 +703,18 @@ function AppContent() {
     }
   }, [iconConfig]);
 
+  // Auto-scroll header tabs to show Login button on mobile
+  useEffect(() => {
+    const isMobile = window.innerWidth <= 768;
+    if (isMobile) {
+      const headerTabs = document.querySelector('.header-tabs');
+      if (headerTabs) {
+        // Scroll to the right to show Login button
+        headerTabs.scrollLeft = headerTabs.scrollWidth;
+      }
+    }
+  }, [isAuthenticated]); // Re-run when auth state changes
+
   // Compute destinations filtered by map viewport visibility (for News/Events tabs)
   // This uses the actual POI IDs visible on the map (respects zoom, pan, and legend filters)
   const viewportFilteredDestinations = React.useMemo(() => {
@@ -1590,14 +1602,9 @@ function AppContent() {
 
       {/* Map content - always mounted and visible to Leaflet, layered below Results tab when not active */}
       <main
-        className="main-content"
+        className={`main-content ${editMode ? 'edit-mode' : ''}`}
         style={{
           display: 'flex',
-          position: 'fixed',
-          top: '60px',
-          left: 0,
-          right: 0,
-          bottom: 0,
           zIndex: (activeTab === 'view' || activeTab === 'edit') ? '1' : '-1',
           pointerEvents: (activeTab === 'view' || activeTab === 'edit') ? 'auto' : 'none'
         }}

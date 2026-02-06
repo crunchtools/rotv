@@ -1,3 +1,14 @@
+:root {
+  --header-height: 108px; /* Desktop header height */
+  --banner-height: 40px; /* Edit mode banner height */
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-height: 88px; /* Mobile header height (shorter) */
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -26,8 +37,12 @@ body {
   align-items: center;
   gap: 0.5rem;
   box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-  position: relative;
-  z-index: 100;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10000;
+  height: var(--header-height); /* Fixed height - responsive via CSS variable */
 }
 
 .header-left {
@@ -314,6 +329,7 @@ body {
   display: flex;
   position: relative;
   overflow: hidden;
+  /* Position set inline with fixed positioning at top: 108px */
 }
 
 /* Map */
@@ -2089,8 +2105,8 @@ body {
 /* POI Count Overlay on Map - clickable button */
 .map-poi-count {
   position: absolute;
-  top: 5rem;
-  right: 1rem;
+  top: 1rem; /* 16px from top of map (map starts below header) */
+  right: 1rem; /* 16px from right */
   background: white;
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
@@ -2502,6 +2518,15 @@ body {
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.5rem 0.75rem;
+    height: 88px; /* Fixed height for mobile - shorter than desktop */
+  }
+
+  .header-left h1 {
+    font-size: 1.2rem;
+  }
+
+  .header-left .subtitle {
+    font-size: 0.75rem;
   }
 
   /* Header tabs - horizontally scrollable on mobile */
@@ -2514,6 +2539,7 @@ body {
     -ms-overflow-style: none; /* IE/Edge */
     justify-content: flex-start;
     padding: 0.25rem 0.5rem;
+    position: relative;
   }
 
   .header-tabs::-webkit-scrollbar {
@@ -2525,6 +2551,23 @@ body {
     padding: 0.4rem 0.9rem;
     font-size: 0.85rem;
   }
+
+  /* Login/Account button - flows with other tabs on mobile */
+  .tab-account-container {
+    flex-shrink: 0;
+  }
+
+  /* Make dropdown use fixed positioning on mobile to avoid clipping */
+  .tab-dropdown {
+    position: fixed;
+    top: 5.5rem; /* Below taller mobile header */
+    right: 0.75rem;
+    left: auto;
+    margin-top: 0;
+    z-index: 10001;
+  }
+
+  /* Edit mode banner stays at top: 0 (relative to map container) on mobile too */
 
   /* Mobile filter bar - collapsed by default */
   .filter-bar {
@@ -2581,11 +2624,11 @@ body {
 
   .sidebar {
     position: absolute;
-    top: 0;
+    top: 1rem; /* 16px from top of map container */
     left: 0;
     right: auto;
     width: 100%;
-    height: 100%;
+    height: calc(100% - 1rem); /* Adjust height to account for top spacing */
     transform: translateX(100%);
   }
 
@@ -2630,37 +2673,71 @@ body {
     object-fit: cover;
   }
 
-  /* Mobile legend - hidden by default, shown as popup when expanded */
+  /* Mobile legend - hidden by default, shown nearly full width when expanded */
   .legend {
     display: none;
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    bottom: auto;
-    right: auto;
-    width: 90vw;
-    max-width: 400px;
-    max-height: 80vh;
-    overflow-y: auto;
-    padding: 0.75rem 1rem;
-    z-index: 2000;
+    position: fixed !important;
+    top: calc(var(--header-height) + 1rem) !important; /* 16px below green header (View mode) */
+    left: 1rem !important; /* 16px from left */
+    right: 1rem !important; /* 16px from right */
+    bottom: 1rem !important; /* 16px from bottom */
+    width: auto !important;
+    max-width: none !important; /* Remove width constraint on mobile */
+    max-height: calc(100vh - var(--header-height) - 2rem) !important; /* Account for top + bottom margins */
+    overflow-y: auto !important;
+    padding: 0.75rem 1rem !important;
+    z-index: 2000 !important;
+    background: white !important;
+    transform: none !important;
+    border-radius: 6px !important; /* Add rounded corners */
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15) !important;
+  }
+
+  /* In edit mode, position legend 16px below orange banner */
+  .legend.legend-edit-mode {
+    top: calc(var(--header-height) + var(--banner-height) + 1rem); /* 16px below banner */
+    max-height: calc(100vh - var(--header-height) - var(--banner-height) - 2rem); /* Account for top + bottom margins */
   }
 
   .legend.legend-expanded {
     display: block;
+    top: calc(var(--header-height) + 1rem) !important;
+    left: 1rem !important;
+    right: 1rem !important;
+    bottom: 1rem !important;
+    max-width: none !important;
+    width: auto !important;
+    transform: none !important;
+  }
+
+  .legend.legend-expanded.legend-edit-mode {
+    top: calc(var(--header-height) + var(--banner-height) + 1rem) !important;
   }
 
   .legend-content {
     display: block;
   }
 
-  /* POI count chip - slightly smaller on mobile */
+  /* POI count chip - tighter spacing on mobile */
   .map-poi-count {
-    top: 5rem;
-    right: 0.5rem;
+    top: 0.5rem; /* 8px from map container */
+    right: 0.5rem; /* 8px from right */
     padding: 0.4rem 0.6rem;
     font-size: 0.8rem;
+  }
+
+  /* GPS controls on mobile - tighter spacing */
+  .leaflet-top {
+    top: 0.5rem !important; /* 8px from map container */
+  }
+
+  .leaflet-left {
+    left: 0.5rem !important; /* 8px from left */
+  }
+
+  /* Position orange banner below mobile header */
+  .edit-mode-banner {
+    top: 5.5rem;
   }
 }
 
@@ -3468,32 +3545,46 @@ body {
 
 /* Admin Edit Mode */
 .edit-mode-banner {
-  position: absolute;
-  top: 0;
+  position: fixed;
+  top: var(--header-height); /* Below fixed header (responsive) */
   left: 0;
   right: 0;
   background: linear-gradient(90deg, #f57c00, #ff9800);
   color: white;
   text-align: center;
-  padding: 0.5rem;
+  padding: 0.75rem 1rem;
   font-weight: 600;
   font-size: 0.9rem;
-  z-index: 1000;
+  z-index: 9000;
   box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  line-height: 1.4;
+  height: var(--banner-height); /* Fixed height for banner */
 }
 
-/* Push down map controls when edit mode banner is visible */
-.map-container.edit-mode-active .map-poi-count {
-  top: 3rem;
+/* Main content positioning - below header in view mode, below banner in edit mode */
+.main-content {
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
 }
 
-/* Position Leaflet controls below header */
-.leaflet-top {
-  top: 5rem !important;
+.main-content.edit-mode {
+  top: calc(var(--header-height) + var(--banner-height));
 }
 
-.map-container.edit-mode-active .leaflet-top {
-  top: 5rem;
+/* Results badge stays at top: 1rem in all modes (map position adjusts) */
+
+/* Position Leaflet controls - 16px from edges of map on desktop */
+@media (min-width: 769px) {
+  .leaflet-top {
+    top: 1rem !important; /* 16px from top of map */
+  }
+
+  .leaflet-left {
+    left: 1rem !important; /* 16px from left of map */
+  }
 }
 
 .edit-mode-toggle input:checked + span {

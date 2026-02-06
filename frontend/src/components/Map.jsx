@@ -126,6 +126,8 @@ function Legend({
   searchQuery, onSearchChange,
   // Popup control
   isExpanded, onClose,
+  // Edit mode flag for mobile spacing
+  editMode,
   // Admin/Edit features
   activeTab, iconConfig, onOpenAdmin,
   onFileSelect, selectedFileName, importType, onImportTypeChange,
@@ -177,7 +179,7 @@ function Legend({
   }, [iconConfig, showTrails, showRivers, onToggleTrails, onToggleRivers]);
 
   return (
-    <div className={`legend ${isExpanded ? 'legend-expanded' : ''}`}>
+    <div className={`legend ${isExpanded ? 'legend-expanded' : ''} ${editMode ? 'legend-edit-mode' : ''}`}>
       <div className="legend-content">
         {/* Search input */}
         <div className="legend-search">
@@ -1750,6 +1752,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
         onSearchChange={onSearchChange}
         isExpanded={isLegendExpanded}
         onClose={() => setIsLegendExpanded(false)}
+        editMode={editMode}
         activeTab={activeTab}
         iconConfig={iconConfig}
         onOpenAdmin={() => setShowAdmin(true)}
