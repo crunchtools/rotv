@@ -266,8 +266,7 @@ CRITICAL REQUIREMENTS - READ CAREFULLY:
 - ALWAYS check post dates FIRST - ignore posts older than the date ranges below
 - Only include status that EXPLICITLY mentions "{{name}}" or the trail system it belongs to
 - Focus on CURRENT status (not historical)
-- For OPEN/LIMITED status: ONLY use updates from last 30 days - REJECT older posts
-- For CLOSED/MAINTENANCE status: ONLY use updates from last 180 days - REJECT older posts
+- For ALL statuses: ONLY use updates from last 180 days - REJECT older posts
 - If multiple posts exist within date range, use the MOST RECENT one by date
 - NEVER use posts from previous years unless they are within the 180-day window
 - Include weather-related impacts if mentioned
@@ -457,7 +456,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
                 `1. Find ALL posts in the rendered content above that mention trail status, conditions, or closures\n` +
                 `2. This is the official trail status account - ANY post about trail conditions IS about "${poi.name}"\n` +
                 `3. Check the DATE of each post - look for timestamps, dates, or relative times (e.g., "2h ago", "Jan 14")\n` +
-                `4. IGNORE posts older than 30 days for open status, 180 days for closed status\n` +
+                `4. IGNORE posts older than 180 days for all statuses\n` +
                 `5. Select the MOST RECENT post within the allowed date range\n` +
                 `6. NEVER use old posts from previous years if recent posts exist\n` +
                 `7. Common trail status phrases: "trail is open", "trail is closed", "open for riding", "closed due to", "muddy", "dry"`;

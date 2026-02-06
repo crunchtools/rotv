@@ -34,6 +34,25 @@ Google Gemini AI extracts status from the rendered page content:
 - Extracts conditions, weather impacts, dates
 - Returns results in a standardized format
 
+**180-Day Collection Window:**
+
+The AI system only considers status updates from the **last 180 days** (approximately 6 months). This design ensures:
+- **Recent information**: Outdated status from previous seasons is rejected
+- **All statuses treated equally**: Open, closed, limited, and maintenance all use the same 180-day window
+- **Seasonal relevance**: Captures full seasonal cycles (winter closures, spring maintenance, summer/fall riding)
+- **Protection against stale data**: Prevents AI from using year-old posts that may no longer be relevant
+
+The AI prompts explicitly instruct the model to:
+- **Reject posts older than 180 days**: Ignores updates from previous years or old seasons
+- **Use most recent within window**: If multiple posts exist, select the newest one
+- **Check post dates carefully**: Parse timestamps, relative times ("2h ago"), and absolute dates
+
+This window was chosen because:
+- **Winter closures** can last 3-4 months but should still be captured
+- **Maintenance projects** may span multiple months
+- **Six months** provides enough history without including truly outdated information
+- **Prevents confusion** from mixing current season with previous season status
+
 **3. JavaScript Rendering for Dynamic Pages**
 
 Many trail status pages use JavaScript frameworks or are Twitter/X pages that require browser rendering. The system automatically detects and renders these pages using Playwright:
@@ -726,6 +745,8 @@ psql -U postgres -d rotv -f backend/migrations/001_add_trail_status_support.sql
 - Fixed date format to US format (MM/DD/YYYY) instead of browser locale
 - Fixed missing dates for trails without status records (now use POI metadata as fallback)
 - Backend query now uses `COALESCE(ts.last_updated, p.updated_at, p.created_at)` for complete date coverage
+- **Unified collection window**: All trail statuses now use 180-day window (previously: open=30d, closed=180d)
+- Added "180-Day Collection Window" section explaining design rationale and seasonal relevance
 
 **Version 1.2.0 (2026-02-03)**
 - Clarified documentation: AI only analyzes configured status_url, does NOT search the web
