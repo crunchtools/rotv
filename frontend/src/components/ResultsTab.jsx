@@ -41,8 +41,7 @@ const ResultsTab = memo(function ResultsTab({
     destination: true,
     trail: true,
     river: true,
-    boundary: true,
-    organization: true
+    boundary: true
   });
   const [mtbTrailStatuses, setMtbTrailStatuses] = useState({});
 
@@ -134,7 +133,7 @@ const ResultsTab = memo(function ResultsTab({
       ...d,
       _isLinear: false,
       _isVirtual: false,
-      _poiType: 'destination'
+      _poiType: (d.status_url && d.status_url.trim() !== '') ? 'mtb' : 'destination'
     }));
     const linear = sourceLinear.map(f => ({
       ...f,
@@ -164,8 +163,10 @@ const ResultsTab = memo(function ResultsTab({
       );
     }
 
-    // Type filter
-    filtered = filtered.filter(poi => typeFilters[poi._poiType]);
+    // Type filter (only applies to Points of Interest subtab)
+    if (activeSubTab === 'all') {
+      filtered = filtered.filter(poi => typeFilters[poi._poiType]);
+    }
 
     // Sort alphabetically
     const sorted = filtered.sort((a, b) =>
@@ -291,7 +292,7 @@ const ResultsTab = memo(function ResultsTab({
             className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
             onClick={() => handleSubTabChange('all')}
           >
-            All Results
+            Points of Interest
           </button>
           <button
             className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
@@ -345,13 +346,6 @@ const ResultsTab = memo(function ResultsTab({
               >
                 <span className="type-filter-icon">B</span>
                 Boundary
-              </div>
-              <div
-                className={`type-filter-chip organization ${typeFilters.organization ? 'active' : 'inactive'}`}
-                onClick={() => setTypeFilters(prev => ({ ...prev, organization: !prev.organization }))}
-              >
-                <span className="type-filter-icon">O</span>
-                Organization
               </div>
             </div>
           )}
@@ -412,7 +406,7 @@ const ResultsTab = memo(function ResultsTab({
           className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('all')}
         >
-          All Results
+          Points of Interest
         </button>
         <button
           className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
@@ -465,13 +459,6 @@ const ResultsTab = memo(function ResultsTab({
             >
               <span className="type-filter-icon">B</span>
               Boundary
-            </div>
-            <div
-              className={`type-filter-chip organization ${typeFilters.organization ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, organization: !prev.organization }))}
-            >
-              <span className="type-filter-icon">O</span>
-              Organization
             </div>
           </div>
         )}

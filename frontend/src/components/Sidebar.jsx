@@ -260,7 +260,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
               Organization
             </span>
           ) : destination.poi_type === 'point' && destination.status_url ? (
-            <span className="poi-type-badge trail">
+            <span className="poi-type-badge mtb">
               MTB Trailhead
             </span>
           ) : (
@@ -1845,8 +1845,10 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                   return '/icons/thumbnails/destination.svg';
                 };
 
+                const isMtbTrailhead = !associatedPoi._isLinear && !associatedPoi._isVirtual &&
+                                      associatedPoi.status_url && associatedPoi.status_url.trim() !== '';
                 const poiType = associatedPoi._isVirtual ? 'virtual' :
-                                !associatedPoi._isLinear ? 'destination' :
+                                !associatedPoi._isLinear ? (isMtbTrailhead ? 'mtb' : 'destination') :
                                 associatedPoi.feature_type || 'trail';
 
                 return (
@@ -1881,6 +1883,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                         <div className="association-item-badges">
                           <span className={`poi-type-icon ${poiType}`}>
                             {associatedPoi._isVirtual ? 'O' :
+                             isMtbTrailhead ? 'M' :
                              !associatedPoi._isLinear ? 'D' :
                              associatedPoi.feature_type === 'river' ? 'R' :
                              associatedPoi.feature_type === 'boundary' ? 'B' : 'T'}
@@ -2168,8 +2171,10 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                 return '/icons/thumbnails/destination.svg';
               };
 
+              const isMtbTrailhead = !associatedPoi._isLinear && !associatedPoi._isVirtual &&
+                                    associatedPoi.status_url && associatedPoi.status_url.trim() !== '';
               const poiType = associatedPoi._isVirtual ? 'virtual' :
-                              !associatedPoi._isLinear ? 'destination' :
+                              !associatedPoi._isLinear ? (isMtbTrailhead ? 'mtb' : 'destination') :
                               associatedPoi.feature_type || 'trail';
 
               return (
@@ -2202,6 +2207,7 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                       <div className="association-item-badges">
                         <span className={`poi-type-icon ${poiType}`}>
                           {associatedPoi._isVirtual ? 'O' :
+                           isMtbTrailhead ? 'M' :
                            !associatedPoi._isLinear ? 'D' :
                            associatedPoi.feature_type === 'river' ? 'R' :
                            associatedPoi.feature_type === 'boundary' ? 'B' : 'T'}

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="mtbBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#e8f5e9"/>
+      <stop offset="100%" style="stop-color:#c8e6c9"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="120" height="120" fill="url(#mtbBg)" rx="8"/>
+  <!-- Hills/Mountains -->
+  <path d="M0 100 L30 60 L50 80 L80 45 L120 85 L120 120 L0 120 Z" fill="#81c784"/>
+  <path d="M0 110 L40 75 L60 90 L90 65 L120 95 L120 120 L0 120 Z" fill="#a5d6a7"/>
+  <!-- Trail path -->
+  <path d="M5 115 Q20 100 35 95 Q55 85 70 80 Q90 72 115 60"
+        stroke="#8d6e63" stroke-width="6" fill="none" stroke-linecap="round"/>
+  <!-- Mountain Bike -->
+  <g transform="translate(35, 50)">
+    <!-- Back wheel -->
+    <circle cx="0" cy="30" r="14" fill="none" stroke="#424242" stroke-width="3"/>
+    <circle cx="0" cy="30" r="3" fill="#424242"/>
+    <!-- Front wheel -->
+    <circle cx="40" cy="30" r="14" fill="none" stroke="#424242" stroke-width="3"/>
+    <circle cx="40" cy="30" r="3" fill="#424242"/>
+    <!-- Frame -->
+    <path d="M0 30 L15 10 L40 30 M15 10 L25 10 L40 30 M15 10 L15 25"
+          stroke="#43a047" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Handlebars -->
+    <path d="M25 10 L30 5 L35 8" stroke="#424242" stroke-width="2" fill="none" stroke-linecap="round"/>
+    <!-- Seat -->
+    <ellipse cx="12" cy="8" rx="5" ry="2" fill="#5d4037"/>
+  </g>
+</svg>

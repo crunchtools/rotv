@@ -17,7 +17,7 @@ import DataCollectionSettings from './components/DataCollectionSettings';
 import ResultsTab from './components/ResultsTab';
 
 // Default icon type IDs for initializing the filter
-const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
+const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
 
 // Generate URL-friendly slug from POI name
 function generateSlug(name) {

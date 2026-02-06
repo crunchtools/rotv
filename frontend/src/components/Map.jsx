@@ -54,7 +54,7 @@ function matchesWholeWord(text, keyword) {
 function getDestinationIconTypeFromConfig(dest, iconConfig) {
   // Check for MTB trailhead first (has status_url)
   if (dest.status_url && dest.status_url.trim() !== '') {
-    return 'mtb-trailheads';
+    return 'mtb-trailhead';
   }
 
   const name = (dest.name || '').toLowerCase();
@@ -144,6 +144,7 @@ function Legend({
         { id: 'visitor-center', label: 'Visitor Center', svg_filename: 'visitor-center.svg', type: 'poi' },
         { id: 'waterfall', label: 'Waterfall', svg_filename: 'waterfall.svg', type: 'poi' },
         { id: 'trail', label: 'Trailheads', svg_filename: 'trail.svg', type: 'poi' },
+        { id: 'mtb-trailhead', label: 'MTB Trailheads', svg_filename: 'mtb-trailhead.svg', type: 'poi' },
         { id: 'historic', label: 'Historic Site', svg_filename: 'historic.svg', type: 'poi' },
         { id: 'bridge', label: 'Bridge', svg_filename: 'bridge.svg', type: 'poi' },
         { id: 'train', label: 'Train Station', svg_filename: 'train.svg', type: 'poi' },
@@ -166,6 +167,16 @@ function Legend({
           iconUrl: getIconUrl(icon),
           type: 'poi'
         }));
+
+      // Add MTB Trailheads if not already in config
+      if (!poiTypes.find(t => t.id === 'mtb-trailhead')) {
+        poiTypes.push({
+          id: 'mtb-trailhead',
+          label: 'MTB Trailheads',
+          svg_filename: 'mtb-trailhead.svg',
+          type: 'poi'
+        });
+      }
     }
 
     // Add layer icons (Trails, Rivers)

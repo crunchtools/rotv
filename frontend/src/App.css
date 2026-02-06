@@ -9864,6 +9864,7 @@ body {
 }
 
 .poi-type-icon.destination { background: #2e7d32; } /* Green */
+.poi-type-icon.mtb { background: #e65100; } /* Orange - MTB Trailhead */
 .poi-type-icon.trail { background: #795548; } /* Brown */
 .poi-type-icon.river { background: #1565c0; } /* Blue */
 .poi-type-icon.boundary { background: #7b2d8e; } /* Purple */
@@ -9882,6 +9883,11 @@ body {
 .poi-type-badge.trail {
   background: #efebe9;
   color: #795548;
+}
+
+.poi-type-badge.mtb {
+  background: #fff3e0;
+  color: #e65100;
 }
 
 .poi-type-badge.river {
