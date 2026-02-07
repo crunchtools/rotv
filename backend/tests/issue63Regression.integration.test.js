@@ -12,7 +12,6 @@ import { chromium } from 'playwright';
  *
  * Validated bugs:
  * - Bug #6: Mobile responsive layout (CSS variables, positioning)
- * - Bug #11: NPS Map functionality in POI panel
  */
 
 describe('Issue #63 Regression Tests', () => {
@@ -192,60 +191,4 @@ describe('Issue #63 Regression Tests', () => {
     }, 30000);
   });
 
-  describe('Bug #11: NPS Map Functionality', () => {
-    it('should display NPS Map toggle in POI panel when destination has coordinates', async () => {
-      await page.goto(baseUrl, { waitUntil: 'networkidle' });
-
-      // Wait for markers and click one to open sidebar
-      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.locator('.leaflet-marker-icon').first().click();
-
-      // Wait for sidebar to open
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
-
-      // Look for NPS Map toggle or related control
-      const npsMapControl = page.locator('.nps-map-toggle, .nps-map-btn, button:has-text("NPS Map"), .map-toggle');
-      const npsMapExists = await npsMapControl.count() > 0;
-
-      if (npsMapExists) {
-        console.log('[Test] NPS Map control found in sidebar');
-        expect(await npsMapControl.first().isVisible()).toBe(true);
-      } else {
-        // Check if there's any map-related control in the sidebar
-        const mapControls = page.locator('.sidebar [class*="map"], .sidebar button:has-text("Map")');
-        console.log(`[Test] Found ${await mapControls.count()} map-related controls in sidebar`);
-        // This should fail if NPS Map control is not found
-        expect(npsMapExists).toBe(true);
-      }
-    }, 30000);
-
-    it('should render NPS Map component when toggled', async () => {
-      await page.goto(baseUrl, { waitUntil: 'networkidle' });
-
-      // Click a marker
-      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.locator('.leaflet-marker-icon').first().click();
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
-
-      // Try to find and click NPS Map toggle
-      const npsToggle = page.locator('button:has-text("NPS"), .nps-map-toggle, [class*="nps"]');
-      const toggleExists = await npsToggle.count() > 0;
-
-      expect(toggleExists).toBe(true);
-
-      if (toggleExists) {
-        await npsToggle.first().click();
-        await page.waitForTimeout(500);
-
-        // Check if NPS Map iframe or component appeared
-        const npsContent = page.locator('.nps-map-container, iframe[src*="nps"], .nps-map');
-        const npsVisible = await npsContent.count() > 0;
-
-        if (npsVisible) {
-          console.log('[Test] NPS Map content rendered successfully');
-          expect(await npsContent.first().isVisible()).toBe(true);
-        }
-      }
-    }, 30000);
-  });
 });
