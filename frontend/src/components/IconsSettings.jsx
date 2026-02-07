@@ -33,23 +33,9 @@ function IconsSettings() {
     }
   }, []);
 
-  const fetchActivities = useCallback(async () => {
-    try {
-      const response = await fetch('/api/admin/activities', {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        await response.json(); // Data not used, just fetch for potential future use
-      }
-    } catch (err) {
-      console.error('Failed to fetch activities:', err);
-    }
-  }, []);
-
   useEffect(() => {
     fetchIcons();
-    fetchActivities();
-  }, [fetchIcons, fetchActivities]);
+  }, [fetchIcons]);
 
   const handleStartEdit = (icon) => {
     setEditingId(icon.id);

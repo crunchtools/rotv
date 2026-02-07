@@ -2441,12 +2441,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const [showAssociationsModal, setShowAssociationsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [pendingImage, setPendingImage] = useState(null);
-  // News count state removed - was unused
-  // Events count state removed - was unused
   const [trailStatus, setTrailStatus] = useState(null);
 
-  // State for new organization creation
-  // Organization data state removed - was unused
   /* const [organizationData, setOrganizationData] = useState({
     name: '',
     brief_description: '',

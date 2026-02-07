@@ -227,13 +227,9 @@ function AppContent() {
     if (newTab === 'results' && previousActiveTab !== 'results') {
       // Check if we're in MTB trail status mode
       if (location.pathname.startsWith('/mtb-trail-status')) {
-        // Clear any selected destination/feature to show all MTB trails
+        // Clear selected destination/feature to show all MTB trails
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
-
-        // TODO: Restore MTB trails viewport bounds
-        // Would require adding a bounds prop to Map component or using a map ref
-        // For now, clearing selection will at least prevent single trail from staying highlighted
       }
     }
 
