@@ -12,5 +12,6 @@ dist/
 *.jpeg
 Screenshot*
 
-# Gourmand reports
+# Gourmand reports and cache
 gourmand-report.txt
+.gourmand-cache/

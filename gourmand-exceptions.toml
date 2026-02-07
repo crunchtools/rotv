@@ -1,44 +1,81 @@
 # Gourmand Exceptions
 # Documented exceptions for files that legitimately trigger checks
-# Each exception should include a rationale
+# See https://codeberg.org/mattdm/gourmand for documentation
 
-# Files that legitimately contain summaries/overviews
+# Summary litter exceptions - files that legitimately contain summaries/overviews
+
 [[exceptions]]
 check = "summary_litter"
-paths = [
-    "CLAUDE.md",           # AI development guidelines require summaries
-    ".specify/**/*.md",    # Spec files require overviews
-    "README.md",           # Project readme requires summary
-    "CONTRIBUTING.md",     # Contribution guide needs overview
-    "package.json",        # Package description field
-]
-rationale = "Documentation files require summaries for reader orientation"
+path = "CLAUDE.md"
+justification = "Claude Code project instructions require structured summaries for AI assistant orientation"
 
-# Legitimate shell scripts
+[[exceptions]]
+check = "summary_litter"
+path = ".specify/memory/constitution.md"
+justification = "Project constitution requires overview sections for governance documentation"
+
+[[exceptions]]
+check = "summary_litter"
+path = ".specify/specs/000-baseline/spec.md"
+justification = "Baseline specification requires summary of current features"
+
+[[exceptions]]
+check = "summary_litter"
+path = ".specify/specs/000-baseline/plan.md"
+justification = "Technical architecture plan requires overview sections"
+
+[[exceptions]]
+check = "summary_litter"
+path = "README.md"
+justification = "Project readme requires summary for repository visitors"
+
+[[exceptions]]
+check = "summary_litter"
+path = "CONTRIBUTING.md"
+justification = "Contribution guide needs overview for new contributors"
+
+[[exceptions]]
+check = "summary_litter"
+path = "frontend/package.json"
+justification = "Package description field is standard npm metadata"
+
+[[exceptions]]
+check = "summary_litter"
+path = "backend/package.json"
+justification = "Package description field is standard npm metadata"
+
+# Random scripts exceptions - legitimate shell scripts
+
 [[exceptions]]
 check = "random_scripts"
-paths = [
-    "run.sh",              # Main container management script
-    "entrypoint.sh",       # Container entrypoint
-]
-rationale = "Infrastructure scripts are essential for project operations"
+path = "run.sh"
+justification = "Main container management script - essential for development workflow"
 
-# Files with necessary verbose comments
+# Verbose comments exceptions - files with necessary inline documentation
+
 [[exceptions]]
 check = "verbose_comments"
-paths = [
-    "backend/server.js",   # API documentation in comments
-    "backend/services/*.js", # Service documentation
-]
-rationale = "API and service files benefit from inline documentation"
+path = "backend/server.js"
+justification = "Main server file benefits from API endpoint documentation"
 
-# Configuration files that may look like boilerplate
+# Boilerplate exceptions - configuration files that follow standard patterns
+
 [[exceptions]]
 check = "boilerplate"
-paths = [
-    "vite.config.js",
-    ".pre-commit-config.yaml",
-    "Containerfile",
-    "Containerfile.base",
-]
-rationale = "Configuration files follow standard patterns by design"
+path = "vite.config.js"
+justification = "Vite configuration follows standard patterns by design"
+
+[[exceptions]]
+check = "boilerplate"
+path = ".pre-commit-config.yaml"
+justification = "Pre-commit configuration follows standard hook patterns"
+
+[[exceptions]]
+check = "boilerplate"
+path = "Containerfile"
+justification = "Container build file follows Dockerfile best practices"
+
+[[exceptions]]
+check = "boilerplate"
+path = "Containerfile.base"
+justification = "Base container build file follows Dockerfile best practices"

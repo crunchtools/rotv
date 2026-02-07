@@ -269,12 +269,30 @@ ENVFILE
         podman stop "$CONTAINER_NAME" >/dev/null 2>&1
         podman rm "$CONTAINER_NAME" >/dev/null 2>&1
 
+        # Run Gourmand AI slop detection on the host (needs full git repo)
+        GOURMAND_EXIT_CODE=0
         echo ""
-        if [ $TEST_EXIT_CODE -eq 0 ]; then
-            echo "✓ Tests completed successfully"
+        echo "Running Gourmand AI slop detection..."
+        if command -v gourmand &> /dev/null; then
+            gourmand --full .
+            GOURMAND_EXIT_CODE=$?
         else
-            echo "❌ Tests failed"
-            exit $TEST_EXIT_CODE
+            echo "⚠ Gourmand not installed locally (skipping)"
+            echo "  Install with: cargo install --git https://codeberg.org/mattdm/gourmand.git"
+            echo "  CI will still run Gourmand checks on pull requests"
+        fi
+
+        echo ""
+        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ]; then
+            echo "✓ Tests and Gourmand checks completed successfully"
+        else
+            if [ $TEST_EXIT_CODE -ne 0 ]; then
+                echo "❌ Tests failed"
+            fi
+            if [ $GOURMAND_EXIT_CODE -ne 0 ]; then
+                echo "❌ Gourmand detected issues"
+            fi
+            exit 1
         fi
         ;;
 

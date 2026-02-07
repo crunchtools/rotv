@@ -1,6 +1,6 @@
 # Gourmand Configuration
 # AI slop detection for maintaining code quality
-# https://github.com/marketplace/gourmand
+# See https://codeberg.org/mattdm/gourmand for documentation
 
 [global]
 # Paths to exclude from all checks

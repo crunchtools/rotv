@@ -33,6 +33,9 @@ RUN if [ "$BUILD_ENV" = "test" ]; then \
 # Copy backend code
 COPY backend/ ./
 
+# Copy Gourmand config files for AI slop detection
+COPY gourmand.toml gourmand-exceptions.toml ./
+
 # Move built frontend to public directory
 RUN mv frontend/dist public && rm -rf frontend
 
