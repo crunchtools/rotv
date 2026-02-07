@@ -691,9 +691,8 @@ async function initDatabase() {
       ('picnic', 'Picnic Area', 'picnic.svg', 'picnic,shelter', 'Picnicking', 10),
       ('camping', 'Camping', 'camping.svg', 'camp,campground', 'Camping', 11),
       ('music', 'Music Venue', 'music.svg', 'music,blossom,concert', 'Music', 12),
-      ('river', 'River/Waterway', 'river.svg', 'river,creek,stream,cuyahoga', 'Kayaking,Fishing', 13),
-      ('mtb-trailhead', 'MTB Trailheads', 'mtb-trailhead.svg', NULL, 'Mountain Biking', 14),
-      ('default', 'Other', 'default.svg', NULL, NULL, 15)
+      ('mtb-trailhead', 'MTB Trailheads', 'mtb-trailhead.svg', NULL, 'Mountain Biking', 13),
+      ('default', 'Other', 'default.svg', NULL, NULL, 14)
       ON CONFLICT (name) DO NOTHING
     `);
 

@@ -922,7 +922,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
                 onChange={(e) => handleChange('feature_type', e.target.value)}
               >
                 <option value="trail">Trail</option>
-                <option value="river">River/Waterway</option>
               </select>
             </div>
             <div className="edit-section half">
