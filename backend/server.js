@@ -675,29 +675,26 @@ async function initDatabase() {
 
     // Note: linear_features table is deprecated - data migrated to pois table above
 
-    // Seed default icons if table is empty
-    const iconCount = await client.query('SELECT COUNT(*) FROM icons');
-    if (parseInt(iconCount.rows[0].count) === 0) {
-      await client.query(`
-        INSERT INTO icons (name, label, svg_filename, title_keywords, activity_fallbacks, sort_order) VALUES
-        ('visitor-center', 'Visitor Center', 'visitor-center.svg', 'visitor center,info,information', 'Info', 1),
-        ('waterfall', 'Waterfall', 'waterfall.svg', 'falls,waterfall,cascade', NULL, 2),
-        ('trail', 'Trail', 'trail.svg', 'trail,path,towpath', 'Hiking', 3),
-        ('historic', 'Historic Site', 'historic.svg', 'historic,history,museum,house,mill,lock', 'Historical Tours', 4),
-        ('bridge', 'Bridge', 'bridge.svg', 'bridge,covered bridge', NULL, 5),
-        ('train', 'Train Station', 'train.svg', 'train,station,depot,railroad', 'Train Rides', 6),
-        ('nature', 'Nature Area', 'nature.svg', 'nature,preserve,wetland,marsh,ledges', 'Nature Study,Wildlife Viewing', 7),
-        ('skiing', 'Skiing', 'skiing.svg', 'ski,winter', 'Cross-Country Skiing,Snowshoeing', 8),
-        ('biking', 'Biking', 'biking.svg', 'bike,cycling', 'Biking', 9),
-        ('picnic', 'Picnic Area', 'picnic.svg', 'picnic,shelter', 'Picnicking', 10),
-        ('camping', 'Camping', 'camping.svg', 'camp,campground', 'Camping', 11),
-        ('music', 'Music Venue', 'music.svg', 'music,blossom,concert', 'Music', 12),
-        ('river', 'River/Waterway', 'river.svg', 'river,creek,stream,cuyahoga', 'Kayaking,Fishing', 13),
-        ('mtb-trailheads', 'MTB Trailheads', 'mtb.svg', NULL, 'Mountain Biking', 14),
-        ('default', 'Other', 'default.svg', NULL, NULL, 15)
-        ON CONFLICT (name) DO NOTHING
-      `);
-    }
+    // Ensure default icons exist (adds any missing defaults to existing databases)
+    // ON CONFLICT DO NOTHING means existing icons won't be overwritten
+    await client.query(`
+      INSERT INTO icons (name, label, svg_filename, title_keywords, activity_fallbacks, sort_order) VALUES
+      ('visitor-center', 'Visitor Center', 'visitor-center.svg', 'visitor center,info,information', 'Info', 1),
+      ('waterfall', 'Waterfall', 'waterfall.svg', 'falls,waterfall,cascade', NULL, 2),
+      ('trail', 'Trail', 'trail.svg', 'trail,path,towpath', 'Hiking', 3),
+      ('historic', 'Historic Site', 'historic.svg', 'historic,history,museum,house,mill,lock', 'Historical Tours', 4),
+      ('bridge', 'Bridge', 'bridge.svg', 'bridge,covered bridge', NULL, 5),
+      ('train', 'Train Station', 'train.svg', 'train,station,depot,railroad', 'Train Rides', 6),
+      ('nature', 'Nature Area', 'nature.svg', 'nature,preserve,wetland,marsh,ledges', 'Nature Study,Wildlife Viewing', 7),
+      ('skiing', 'Skiing', 'skiing.svg', 'ski,winter', 'Cross-Country Skiing,Snowshoeing', 8),
+      ('biking', 'Biking', 'biking.svg', 'bike,cycling', 'Biking', 9),
+      ('picnic', 'Picnic Area', 'picnic.svg', 'picnic,shelter', 'Picnicking', 10),
+      ('camping', 'Camping', 'camping.svg', 'camp,campground', 'Camping', 11),
+      ('music', 'Music Venue', 'music.svg', 'music,blossom,concert', 'Music', 12),
+      ('mtb-trailhead', 'MTB Trailheads', 'mtb-trailhead.svg', NULL, 'Mountain Biking', 13),
+      ('default', 'Other', 'default.svg', NULL, NULL, 14)
+      ON CONFLICT (name) DO NOTHING
+    `);
 
     // Remove icon column from activities if it exists (moved to icons table)
     await client.query(`
@@ -1360,14 +1357,16 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
         p.status_url,
         ts.status,
         ts.conditions,
-        ts.last_updated,
+        COALESCE(ts.last_updated, p.updated_at, p.created_at) as last_updated,
         ts.source_name
       FROM pois p
       LEFT JOIN LATERAL (
-        SELECT status, conditions, last_updated, source_name
+        SELECT status, conditions,
+               COALESCE(last_updated, created_at) as last_updated,
+               source_name
         FROM trail_status
         WHERE poi_id = p.id
-        ORDER BY last_updated DESC NULLS LAST
+        ORDER BY last_updated DESC NULLS LAST, created_at DESC NULLS LAST
         LIMIT 1
       ) ts ON true
       WHERE p.status_url IS NOT NULL

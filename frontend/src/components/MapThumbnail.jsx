@@ -92,6 +92,7 @@ function MapThumbnail({
   onClick,
   poiCount = 0
 }) {
+  console.log('[MapThumbnail] Received bounds SW:', bounds?.[0], 'NE:', bounds?.[1]);
   const [isReady, setIsReady] = useState(false);
   const containerRef = useRef(null);
 

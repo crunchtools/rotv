@@ -144,23 +144,30 @@ const StatusTab = memo(function StatusTab({
   }, [filteredTrails]);
 
   const handleTrailClick = useCallback((trail) => {
+    // Find the index of this trail in the trails list for navigation
+    const currentIndex = trails.findIndex(t => t.id === trail.id);
+    const mtbContext = {
+      trailsList: trails,
+      currentIndex: currentIndex
+    };
+
     // Handle both point POIs and linear features
     if (trail.poi_type === 'point') {
       // Find the full destination object
       const fullDestination = destinations?.find(d => d.id === trail.id);
       if (fullDestination) {
-        onSelectDestination(fullDestination);
+        onSelectDestination(fullDestination, mtbContext);
         onMapClick();
       }
     } else {
       // Find the full linear feature object (trail, river, boundary, etc.)
       const fullTrail = linearFeatures?.find(f => f.id === trail.id);
       if (fullTrail) {
-        onSelectLinearFeature(fullTrail);
+        onSelectLinearFeature(fullTrail, mtbContext);
         onMapClick();
       }
     }
-  }, [linearFeatures, destinations, onSelectLinearFeature, onSelectDestination, onMapClick]);
+  }, [trails, linearFeatures, destinations, onSelectLinearFeature, onSelectDestination, onMapClick]);
 
   const renderTrailTile = (trail) => {
     const status = trail.status || 'unknown';

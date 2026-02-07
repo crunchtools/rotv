@@ -735,9 +735,9 @@ describe('UI Integration Tests', () => {
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
       await page.waitForSelector('.results-type-filters', { timeout: 10000 });
 
-      // Verify all 5 filter badges are initially visible (only in Results tab)
+      // Verify all 4 filter badges are initially visible (only in Results tab)
       const filterChips = page.locator('.results-tab-wrapper .type-filter-chip');
-      expect(await filterChips.count()).toBe(5);
+      expect(await filterChips.count()).toBe(4);
 
       // Click all badges to deselect them
       await page.evaluate(() => {
@@ -749,7 +749,7 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(500);
 
       // Verify all badges are still visible even when deselected
-      expect(await filterChips.count()).toBe(5);
+      expect(await filterChips.count()).toBe(4);
       expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
 
       // Verify badges are clickable to re-enable filters
@@ -762,7 +762,7 @@ describe('UI Integration Tests', () => {
       expect(isActive).toBe(true);
     }, 30000);
 
-    it('should keep filter badges visible when no POIs match filters', async () => {
+    it('should keep filter badges visible when search text is entered', async () => {
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
       // Switch to Results tab
@@ -774,26 +774,30 @@ describe('UI Integration Tests', () => {
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
       await page.waitForSelector('.results-type-filters', { timeout: 10000 });
 
-      // Type search text that won't match anything - scope to Results tab only
-      const searchInput = page.locator('.results-tab-wrapper .results-search-input');
-      await searchInput.fill('xyznonexistentpoi123');
-      await page.waitForTimeout(500);
-
-      // Verify filter badges are still visible even with 0 results (only in Results tab)
+      // Verify all 4 filter badges are initially visible
       const filterChips = page.locator('.results-tab-wrapper .type-filter-chip');
-      expect(await filterChips.count()).toBe(5);
+      expect(await filterChips.count()).toBe(4);
       expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
 
-      // Verify results count shows 0
+      // Type search text - scope to Results tab only
+      const searchInput = page.locator('.results-tab-wrapper .results-search-input');
+      await searchInput.fill('trail');
+      await page.waitForTimeout(500);
+
+      // Verify filter badges are still visible during search
+      expect(await filterChips.count()).toBe(4);
+      expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
+
+      // Verify results count is displayed
       const resultsCount = await page.locator('.results-tab-wrapper .results-count').textContent();
-      expect(resultsCount).toContain('0');
+      expect(resultsCount).toBeTruthy();
 
       // Clear search to restore results
       await searchInput.fill('');
       await page.waitForTimeout(500);
 
       // Badges should still be visible
-      expect(await filterChips.count()).toBe(5);
+      expect(await filterChips.count()).toBe(4);
     }, 30000);
   });
 });

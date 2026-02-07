@@ -54,7 +54,7 @@ function matchesWholeWord(text, keyword) {
 function getDestinationIconTypeFromConfig(dest, iconConfig) {
   // Check for MTB trailhead first (has status_url)
   if (dest.status_url && dest.status_url.trim() !== '') {
-    return 'mtb-trailheads';
+    return 'mtb-trailhead';
   }
 
   const name = (dest.name || '').toLowerCase();
@@ -126,6 +126,8 @@ function Legend({
   searchQuery, onSearchChange,
   // Popup control
   isExpanded, onClose,
+  // Edit mode flag for mobile spacing
+  editMode,
   // Admin/Edit features
   activeTab, iconConfig, onOpenAdmin,
   onFileSelect, selectedFileName, importType, onImportTypeChange,
@@ -142,6 +144,7 @@ function Legend({
         { id: 'visitor-center', label: 'Visitor Center', svg_filename: 'visitor-center.svg', type: 'poi' },
         { id: 'waterfall', label: 'Waterfall', svg_filename: 'waterfall.svg', type: 'poi' },
         { id: 'trail', label: 'Trailheads', svg_filename: 'trail.svg', type: 'poi' },
+        { id: 'mtb-trailhead', label: 'MTB Trailheads', svg_filename: 'mtb-trailhead.svg', type: 'poi' },
         { id: 'historic', label: 'Historic Site', svg_filename: 'historic.svg', type: 'poi' },
         { id: 'bridge', label: 'Bridge', svg_filename: 'bridge.svg', type: 'poi' },
         { id: 'train', label: 'Train Station', svg_filename: 'train.svg', type: 'poi' },
@@ -177,7 +180,7 @@ function Legend({
   }, [iconConfig, showTrails, showRivers, onToggleTrails, onToggleRivers]);
 
   return (
-    <div className={`legend ${isExpanded ? 'legend-expanded' : ''}`}>
+    <div className={`legend ${isExpanded ? 'legend-expanded' : ''} ${editMode ? 'legend-edit-mode' : ''}`}>
       <div className="legend-content">
         {/* Search input */}
         <div className="legend-search">
@@ -967,7 +970,7 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
           <div className="tooltip-content">
             {dest.image_mime_type && (
               <div className="tooltip-thumbnail">
-                <img src={`/api/pois/${dest.id}/thumbnail?size=small`} alt="" />
+                <img src={`/api/pois/${dest.id}/thumbnail?size=medium`} alt="" />
               </div>
             )}
             <strong>{dest.name}</strong>
@@ -1027,7 +1030,7 @@ const DEFAULT_NPS_MAP_BOUNDS = [
 // Default icon type IDs for initializing the filter (before config loads)
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit }) {
+function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [mapBounds, setMapBounds] = useState(DEFAULT_NPS_MAP_BOUNDS);
@@ -1039,7 +1042,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   const [importMessage, setImportMessage] = useState(null);
   const [isCreatingVirtualPoi, setIsCreatingVirtualPoi] = useState(false);
   const fileRef = useRef(null); // Store File object in ref to avoid React re-renders
-  const [visiblePoiCount, setVisiblePoiCount] = useState(0);
   const [visiblePoiIds, setVisiblePoiIds] = useState([]);
 
   // Admin news refresh state
@@ -1049,13 +1051,10 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   // Track map moves to trigger tooltip direction recalculation
   const [mapMoveCount, setMapMoveCount] = useState(0);
 
-  // Icon configuration from database
-  const [iconConfig, setIconConfig] = useState([]);
+  // Icon configuration is passed as prop from App.jsx (fetched on mount)
 
-  // Wrapper to track visible result count and IDs locally and pass to parent
-  // visibleIds now includes both destinations AND linear features
+  // Store visible IDs locally for admin news refresh
   const handleVisiblePoisChange = useCallback((visibleIds) => {
-    setVisiblePoiCount(visibleIds.length);
     setVisiblePoiIds(visibleIds);
     if (onVisiblePoisChange) {
       onVisiblePoisChange(visibleIds);
@@ -1142,34 +1141,8 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
     }
   }, [refreshingNews, visiblePoiIds]);
 
-  // Fetch icon configuration on mount and when switching tabs
-  // This ensures icons show correctly on initial load and when new icons are created
-  useEffect(() => {
-    if (activeTab === 'view' || activeTab === 'explore' || activeTab === 'edit') {
-      fetch('/api/admin/icons')
-        .then(res => res.json())
-        .then(data => {
-          setIconConfig(data);
-          // Update visible types to include all enabled icons
-          const allTypes = new Set(data.filter(i => i.enabled !== false).map(i => i.name));
-          if (!allTypes.has('default')) allTypes.add('default');
-          if (onVisibleTypesChange) {
-            onVisibleTypesChange(prev => {
-              // Merge new icons into visible set (keep user's filter choices)
-              const merged = new Set(prev);
-              allTypes.forEach(t => {
-                if (!iconConfig.find(i => i.name === t)) {
-                  // New icon - add to visible set
-                  merged.add(t);
-                }
-              });
-              return merged;
-            });
-          }
-        })
-        .catch(err => console.error('Failed to load icon config:', err));
-    }
-  }, [activeTab]);
+  // Icon config is fetched in App.jsx on mount and passed as prop
+  // We receive iconConfig but don't fetch or modify visibleTypes here
 
   // Memoize Leaflet icons created from config
   const icons = useMemo(() => createIconsFromConfig(iconConfig), [iconConfig]);
@@ -1502,7 +1475,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                     const hasAnySelection = (selectedDestination && selectedDestination.poi_type !== 'virtual') || selectedLinearFeature;
                     if (isSelected || !hasAnySelection) {
                       const hasImage = feature.image_mime_type;
-                      const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=small` : null;
+                      const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
                       let tooltipHtml = '<div class="tooltip-content">';
                       if (hasImage) {
@@ -1566,7 +1539,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                   if (isSelected || !hasAnySelection) {
                     // Build rich tooltip content (similar to destination tooltips)
                     const hasImage = feature.image_mime_type;
-                    const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=small` : null;
+                    const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
                     let tooltipHtml = '<div class="tooltip-content">';
                     if (hasImage) {
@@ -1780,6 +1753,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
         onSearchChange={onSearchChange}
         isExpanded={isLegendExpanded}
         onClose={() => setIsLegendExpanded(false)}
+        editMode={editMode}
         activeTab={activeTab}
         iconConfig={iconConfig}
         onOpenAdmin={() => setShowAdmin(true)}

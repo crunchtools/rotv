@@ -4,9 +4,10 @@ import ResultsTile from './ResultsTile';
 import MapThumbnail from './MapThumbnail';
 
 // Default park bounds - same as used in App.jsx
+// Expanded to include all MTB trailheads (especially western ones like Reagan-Huffman)
 const DEFAULT_PARK_BOUNDS = [
-  [41.1390, -81.6654],  // Southwest corner
-  [41.4226, -81.4706]   // Northeast corner
+  [41.13, -81.85],  // Southwest corner
+  [41.45, -81.50]   // Northeast corner
 ];
 
 // Results tab component showing all visible POIs as tiles
@@ -16,6 +17,7 @@ const ResultsTab = memo(function ResultsTab({
   viewportFilteredVirtualPois,
   allDestinations,
   allLinearFeatures,
+  allVirtualPois,  // All virtual POIs (for organizations mode)
   selectedDestination,
   selectedLinearFeature,
   onSelectDestination,
@@ -25,21 +27,24 @@ const ResultsTab = memo(function ResultsTab({
   cachedMtbBoundsRef,  // Pre-calculated MTB bounds for instant access
   onMapClick,
   initialShowMtbOnly = false,
+  initialShowOrganizationsOnly = false,  // Whether to show organizations sub-tab (controlled by URL)
   onFilterByTypes,  // Callback to filter by POI types: array of types or null for all
-  bypassViewportFilter = false  // Temporarily show all POIs (bypass viewport filtering)
+  bypassViewportFilter = false,  // Temporarily show all POIs (bypass viewport filtering)
+  visiblePoiCount  // Global POI count from App.jsx
 }) {
   const navigate = useNavigate();
   const isNavigatingRef = useRef(false);
 
-  // Sub-tab state: 'all' or 'mtb'
-  const [activeSubTab, setActiveSubTab] = useState(initialShowMtbOnly ? 'mtb' : 'all');
+  // Sub-tab state: 'all', 'mtb', or 'organizations'
+  const [activeSubTab, setActiveSubTab] = useState(
+    initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all'
+  );
   const [searchText, setSearchText] = useState('');
   const [typeFilters, setTypeFilters] = useState({
     destination: true,
     trail: true,
     river: true,
-    boundary: true,
-    organization: true
+    boundary: true
   });
   const [mtbTrailStatuses, setMtbTrailStatuses] = useState({});
 
@@ -47,7 +52,7 @@ const ResultsTab = memo(function ResultsTab({
   const [isInTransition, setIsInTransition] = useState(false);
   const prevActiveSubTabRef = useRef(activeSubTab);
 
-  // Update sub-tab when initialShowMtbOnly changes (e.g., from route navigation)
+  // Update sub-tab when initialShowMtbOnly or initialShowOrganizationsOnly changes (e.g., from route navigation)
   // But skip if we initiated the navigation ourselves
   useEffect(() => {
     if (isNavigatingRef.current) {
@@ -57,10 +62,12 @@ const ResultsTab = memo(function ResultsTab({
 
     if (initialShowMtbOnly && activeSubTab !== 'mtb') {
       setActiveSubTab('mtb');
-    } else if (!initialShowMtbOnly && activeSubTab === 'mtb') {
+    } else if (initialShowOrganizationsOnly && activeSubTab !== 'organizations') {
+      setActiveSubTab('organizations');
+    } else if (!initialShowMtbOnly && !initialShowOrganizationsOnly && (activeSubTab === 'mtb' || activeSubTab === 'organizations')) {
       setActiveSubTab('all');
     }
-  }, [initialShowMtbOnly, activeSubTab]);
+  }, [initialShowMtbOnly, initialShowOrganizationsOnly, activeSubTab]);
 
   // Fetch MTB trail statuses when in MTB mode
   useEffect(() => {
@@ -91,7 +98,7 @@ const ResultsTab = memo(function ResultsTab({
       let typesToShow = null; // null means "show all"
 
       if (activeSubTab === 'mtb') {
-        typesToShow = ['mtb-trailheads'];
+        typesToShow = ['mtb-trailhead'];
       } else if (activeSubTab === 'organizations') {
         typesToShow = ['organization']; // virtual POIs
       }
@@ -103,15 +110,16 @@ const ResultsTab = memo(function ResultsTab({
 
   // Combine and sort POIs alphabetically - also create a lookup map
   const { sortedPois, poiMap, totalCount, thumbnailDestinations } = useMemo(() => {
-    // When in MTB mode OR bypassing viewport filter OR in transition,
+    // When in MTB mode OR organizations mode OR bypassing viewport filter OR in transition,
     // use ALL destinations/features (not viewport-filtered)
     // This prevents the list from becoming empty during map zoom animations
-    const useAllPois = activeSubTab === 'mtb' || bypassViewportFilter || isInTransition;
+    const useAllPois = activeSubTab === 'mtb' || activeSubTab === 'organizations' || bypassViewportFilter || isInTransition;
 
     console.log('[ResultsTab] activeSubTab:', activeSubTab, 'bypassViewportFilter:', bypassViewportFilter, 'isInTransition:', isInTransition, 'useAllPois:', useAllPois);
 
     let sourceDestinations = useAllPois ? (allDestinations || []) : (viewportFilteredDestinations || []);
     let sourceLinear = useAllPois ? (allLinearFeatures || []) : (viewportFilteredLinearFeatures || []);
+    let sourceVirtual = useAllPois ? (allVirtualPois || []) : (viewportFilteredVirtualPois || []);
 
     console.log('[ResultsTab] sourceDestinations:', sourceDestinations?.length, 'sourceLinear:', sourceLinear?.length);
 
@@ -119,13 +127,18 @@ const ResultsTab = memo(function ResultsTab({
     if (activeSubTab === 'mtb') {
       sourceDestinations = sourceDestinations.filter(d => d.status_url && d.status_url.trim() !== '');
       sourceLinear = []; // No linear features in MTB mode
+      sourceVirtual = []; // No virtual POIs in MTB mode
+    } else if (activeSubTab === 'organizations') {
+      sourceDestinations = []; // No regular POIs in organizations mode
+      sourceLinear = []; // No linear features in organizations mode
+      // sourceVirtual stays as-is to show all organizations
     }
 
     const dests = sourceDestinations.map(d => ({
       ...d,
       _isLinear: false,
       _isVirtual: false,
-      _poiType: 'destination'
+      _poiType: (d.status_url && d.status_url.trim() !== '') ? 'mtb' : 'destination'
     }));
     const linear = sourceLinear.map(f => ({
       ...f,
@@ -133,7 +146,7 @@ const ResultsTab = memo(function ResultsTab({
       _isVirtual: false,
       _poiType: f.feature_type || 'trail'
     }));
-    const virtual = (useAllPois ? [] : viewportFilteredVirtualPois || []).map(v => ({
+    const virtual = sourceVirtual.map(v => ({
       ...v,
       _isLinear: false,
       _isVirtual: true,
@@ -155,8 +168,10 @@ const ResultsTab = memo(function ResultsTab({
       );
     }
 
-    // Type filter
-    filtered = filtered.filter(poi => typeFilters[poi._poiType]);
+    // Type filter (only applies to Points of Interest subtab)
+    if (activeSubTab === 'all') {
+      filtered = filtered.filter(poi => typeFilters[poi._poiType]);
+    }
 
     // Sort alphabetically
     const sorted = filtered.sort((a, b) =>
@@ -199,7 +214,10 @@ const ResultsTab = memo(function ResultsTab({
   const selectedId = selectedDestination?.id;
   const selectedLinearId = selectedLinearFeature?.id;
 
-  const poiCount = sortedPois.length;
+  // Use appropriate POI count based on mode
+  // Organizations mode: use count of organizations (sortedPois.length since it's filtered to only organizations)
+  // Other modes: use global POI count from App.jsx
+  const poiCount = activeSubTab === 'organizations' ? sortedPois.length : visiblePoiCount;
 
   // Clear transition state when App.jsx bypassViewportFilter catches up
   useEffect(() => {
@@ -261,6 +279,8 @@ const ResultsTab = memo(function ResultsTab({
     // Navigate to appropriate URL
     if (tab === 'mtb') {
       navigate('/mtb-trail-status');
+    } else if (tab === 'organizations') {
+      navigate('/organizations');
     } else {
       navigate('/');
     }
@@ -281,13 +301,19 @@ const ResultsTab = memo(function ResultsTab({
             className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
             onClick={() => handleSubTabChange('all')}
           >
-            All Results
+            Points of Interest
           </button>
           <button
             className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
             onClick={() => handleSubTabChange('mtb')}
           >
             MTB Trail Status
+          </button>
+          <button
+            className={`results-subtab ${activeSubTab === 'organizations' ? 'active' : ''}`}
+            onClick={() => handleSubTabChange('organizations')}
+          >
+            Organizations
           </button>
         </div>
 
@@ -330,13 +356,6 @@ const ResultsTab = memo(function ResultsTab({
                 <span className="type-filter-icon">B</span>
                 Boundary
               </div>
-              <div
-                className={`type-filter-chip organization ${typeFilters.organization ? 'active' : 'inactive'}`}
-                onClick={() => setTypeFilters(prev => ({ ...prev, organization: !prev.organization }))}
-              >
-                <span className="type-filter-icon">O</span>
-                Organization
-              </div>
             </div>
           )}
           <div className="results-count">
@@ -347,21 +366,28 @@ const ResultsTab = memo(function ResultsTab({
         <div className="news-events-layout">
           <div className="news-events-content">
             <div className="results-tab-empty">
-              <div className="results-tab-empty-icon">{activeSubTab === 'mtb' ? '🚵' : '🗺️'}</div>
+              <div className="results-tab-empty-icon">
+                {activeSubTab === 'mtb' ? '🚵' : activeSubTab === 'organizations' ? '🏢' : '🗺️'}
+              </div>
               <div className="results-tab-empty-text">
                 {activeSubTab === 'mtb'
                   ? 'No MTB trails with status tracking configured.'
+                  : activeSubTab === 'organizations'
+                  ? 'No organizations found.'
                   : 'No points of interest visible in the current map area.'}
               </div>
               <div className="results-tab-empty-hint">
                 {activeSubTab === 'mtb'
                   ? 'Configure status_url on trails to enable status tracking.'
+                  : activeSubTab === 'organizations'
+                  ? 'Create virtual POIs with poi_type="organization" to add organizations.'
                   : 'Try zooming out or panning to see more locations.'}
               </div>
             </div>
           </div>
           {mapState && (
             <div className="map-thumbnail-sidebar">
+              {console.log('[ResultsTab] Passing to MapThumbnail - thumbnailBounds SW:', thumbnailBounds[0], 'NE:', thumbnailBounds[1])}
               <MapThumbnail
                 bounds={thumbnailBounds}
                 aspectRatio={mapState.aspectRatio || 1.5}
@@ -389,13 +415,19 @@ const ResultsTab = memo(function ResultsTab({
           className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('all')}
         >
-          All Results
+          Points of Interest
         </button>
         <button
           className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('mtb')}
         >
           MTB Trail Status
+        </button>
+        <button
+          className={`results-subtab ${activeSubTab === 'organizations' ? 'active' : ''}`}
+          onClick={() => handleSubTabChange('organizations')}
+        >
+          Organizations
         </button>
       </div>
 
@@ -436,13 +468,6 @@ const ResultsTab = memo(function ResultsTab({
             >
               <span className="type-filter-icon">B</span>
               Boundary
-            </div>
-            <div
-              className={`type-filter-chip organization ${typeFilters.organization ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, organization: !prev.organization }))}
-            >
-              <span className="type-filter-icon">O</span>
-              Organization
             </div>
           </div>
         )}

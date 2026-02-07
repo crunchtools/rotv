@@ -8,6 +8,9 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
 
+  // Check if this is an MTB trailhead (destination with status_url)
+  const isMtbTrailhead = !isLinear && !isVirtual && poi.status_url && poi.status_url.trim() !== '';
+
   // Get default thumbnail SVG path based on type
   const getDefaultThumbnail = () => {
     if (isVirtual) return '/icons/thumbnails/virtual.svg';
@@ -16,13 +19,17 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       if (poi.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
       return '/icons/thumbnails/trail.svg';
     }
+    if (isMtbTrailhead) return '/icons/thumbnails/mtb.svg';
     return '/icons/thumbnails/destination.svg';
   };
 
   // Get POI type for styling and labels
   const getPoiType = () => {
     if (isVirtual) return 'virtual';
-    if (!isLinear) return 'destination';
+    if (!isLinear) {
+      if (isMtbTrailhead) return 'mtb';
+      return 'destination';
+    }
     if (poi.feature_type === 'river') return 'river';
     if (poi.feature_type === 'boundary') return 'boundary';
     return 'trail';
@@ -32,6 +39,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
   const getTypeLabel = () => {
     const type = getPoiType();
     if (type === 'virtual') return 'Organization';
+    if (type === 'mtb') return 'MTB Trailhead';
     if (type === 'destination') return 'Destination';
     if (type === 'river') return 'River';
     if (type === 'boundary') return 'Boundary';
@@ -63,7 +71,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
         {/* Badges row */}
         <div className="results-tile-badges">
           <span className={`poi-type-icon ${poiType}`}>
-            {poiType === 'virtual' ? 'O' : poiType === 'destination' ? 'D' : poiType === 'trail' ? 'T' : poiType === 'river' ? 'R' : 'B'}
+            {poiType === 'virtual' ? 'O' : poiType === 'mtb' ? 'M' : poiType === 'destination' ? 'D' : poiType === 'trail' ? 'T' : poiType === 'river' ? 'R' : 'B'}
           </span>
           {showStatusBadge && status && (
             <span className={`status-badge status-${status.status}`}>
@@ -93,7 +101,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
             )}
             {statusData.last_updated && (
               <div className="status-updated">
-                Updated: {new Date(statusData.last_updated).toLocaleDateString()}
+                Updated: {new Date(statusData.last_updated).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
               </div>
             )}
           </div>

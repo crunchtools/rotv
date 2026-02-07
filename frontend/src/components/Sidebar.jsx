@@ -208,7 +208,7 @@ function EditableCellSignal({ level, onChange }) {
 }
 
 // Read-only view component - works for both destinations and linear features
-function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null }) {
+function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null, showNpsMap, onToggleNpsMap }) {
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
   const imageUrl = destination.image_mime_type
@@ -222,7 +222,9 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
       if (destination.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
       return '/icons/thumbnails/trail.svg';
     }
-    if (destination.poi_type === 'virtual') return '/icons/thumbnails/organization.svg';
+    if (destination.poi_type === 'virtual') return '/icons/thumbnails/virtual.svg';
+    // MTB trailheads are point POIs with status_url
+    if (destination.poi_type === 'point' && destination.status_url) return '/icons/thumbnails/trail.svg';
     return '/icons/thumbnails/destination.svg';
   };
 
@@ -256,6 +258,10 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
           ) : destination.poi_type === 'virtual' ? (
             <span className="poi-type-badge virtual">
               Organization
+            </span>
+          ) : destination.poi_type === 'point' && destination.status_url ? (
+            <span className="poi-type-badge mtb">
+              MTB Trailhead
             </span>
           ) : (
             <span className="poi-type-badge destination">
@@ -291,6 +297,19 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
                 <path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>
               </svg>
               Share
+            </button>
+          )}
+          {/* NPS Map toggle button */}
+          {onToggleNpsMap && (
+            <button
+              className={`nps-map-toggle-btn ${showNpsMap ? 'active' : ''}`}
+              onClick={() => onToggleNpsMap(!showNpsMap)}
+              title={showNpsMap ? 'Hide NPS Park Map' : 'Show NPS Park Map'}
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path fill="currentColor" d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
+              </svg>
+              NPS Map
             </button>
           )}
         </div>
@@ -903,7 +922,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
                 onChange={(e) => handleChange('feature_type', e.target.value)}
               >
                 <option value="trail">Trail</option>
-                <option value="river">River/Waterway</option>
               </select>
             </div>
             <div className="edit-section half">
@@ -1826,8 +1844,10 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                   return '/icons/thumbnails/destination.svg';
                 };
 
+                const isMtbTrailhead = !associatedPoi._isLinear && !associatedPoi._isVirtual &&
+                                      associatedPoi.status_url && associatedPoi.status_url.trim() !== '';
                 const poiType = associatedPoi._isVirtual ? 'virtual' :
-                                !associatedPoi._isLinear ? 'destination' :
+                                !associatedPoi._isLinear ? (isMtbTrailhead ? 'mtb' : 'destination') :
                                 associatedPoi.feature_type || 'trail';
 
                 return (
@@ -1862,6 +1882,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                         <div className="association-item-badges">
                           <span className={`poi-type-icon ${poiType}`}>
                             {associatedPoi._isVirtual ? 'O' :
+                             isMtbTrailhead ? 'M' :
                              !associatedPoi._isLinear ? 'D' :
                              associatedPoi.feature_type === 'river' ? 'R' :
                              associatedPoi.feature_type === 'boundary' ? 'B' : 'T'}
@@ -2149,8 +2170,10 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                 return '/icons/thumbnails/destination.svg';
               };
 
+              const isMtbTrailhead = !associatedPoi._isLinear && !associatedPoi._isVirtual &&
+                                    associatedPoi.status_url && associatedPoi.status_url.trim() !== '';
               const poiType = associatedPoi._isVirtual ? 'virtual' :
-                              !associatedPoi._isLinear ? 'destination' :
+                              !associatedPoi._isLinear ? (isMtbTrailhead ? 'mtb' : 'destination') :
                               associatedPoi.feature_type || 'trail';
 
               return (
@@ -2183,6 +2206,7 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                       <div className="association-item-badges">
                         <span className={`poi-type-icon ${poiType}`}>
                           {associatedPoi._isVirtual ? 'O' :
+                           isMtbTrailhead ? 'M' :
                            !associatedPoi._isLinear ? 'D' :
                            associatedPoi.feature_type === 'river' ? 'R' :
                            associatedPoi.feature_type === 'boundary' ? 'B' : 'T'}
@@ -2388,7 +2412,19 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
 
       {status && status.status !== 'unknown' ? (
         <div className={`trail-status ${statusBadgeClass}`}>
-          <div className="status-badge">{(status.status || 'unknown').toUpperCase()}</div>
+          <div className="status-badges-row">
+            <div className="status-badge">{(status.status || 'unknown').toUpperCase()}</div>
+            {status.source_url && (
+              <a
+                href={status.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="source-badge"
+              >
+                SOURCE
+              </a>
+            )}
+          </div>
 
           {status.conditions && (
             <div className="status-conditions">
@@ -2408,17 +2444,6 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
             </div>
           )}
 
-          {status.source_url && (
-            <a
-              href={status.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="status-source-link"
-            >
-              View on {status.source_name || 'Source'} ↗
-            </a>
-          )}
-
           {status.seasonal_closure && (
             <div className="status-seasonal">
               ⚠️ Seasonal Closure in Effect
@@ -2435,26 +2460,11 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
           )}
         </div>
       )}
-
-      {selectedFromMtbList && onBackToMtbList && (
-        <button
-          type="button"
-          className="back-to-mtb-list-btn"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onBackToMtbList();
-          }}
-          style={{ marginTop: '1.5rem' }}
-        >
-          ← Back to MTB Trails List
-        </button>
-      )}
     </div>
   );
 }
 
-function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, onBackToMtbList }) {
+function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, showNpsMap, onToggleNpsMap }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
   const [saving, setSaving] = useState(false);
@@ -2616,9 +2626,11 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     if (displayItem) {
       setEditedData({ ...displayItem });
       // Auto-enter edit mode if admin and editMode is on, or if creating new POI
-      setIsEditing((isAdmin && editMode) || isNewPOI);
-      // Reset to Status tab if selected from MTB list, otherwise Info tab when switching to a different POI
-      setSidebarTab(selectedFromMtbList ? 'status' : 'view');
+      const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
+      setIsEditing(shouldEnterEditMode);
+      // Stay on view tab if entering edit mode (EditView only renders on view tab)
+      // Otherwise: Status tab if selected from MTB list, Info tab otherwise
+      setSidebarTab(shouldEnterEditMode ? 'view' : (selectedFromMtbList ? 'status' : 'view'));
     } else {
       setIsEditing(false);
     }
@@ -2992,6 +3004,48 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         <div className="sidebar-header">
           <h2 title={linearFeature.name}>{isEditing ? 'Edit: ' : ''}{linearFeature.name}</h2>
           <div className="header-buttons">
+            {selectedFromMtbList && mtbTrailsList && mtbTrailsList.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  className="mtb-nav-btn prev-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onNavigateMtbTrail('prev');
+                  }}
+                  title="Previous MTB Trail"
+                >
+                  ‹
+                </button>
+                <button
+                  type="button"
+                  className="mtb-nav-btn next-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onNavigateMtbTrail('next');
+                  }}
+                  title="Next MTB Trail"
+                >
+                  ›
+                </button>
+              </>
+            )}
+            {isInMtbMode && linearFeature && (
+              <button
+                type="button"
+                className="back-to-mtb-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onBackToMtbList();
+                }}
+                title="Back to MTB Trails"
+              >
+                ←
+              </button>
+            )}
             <button className="close-btn" onClick={onClose}>&times;</button>
           </div>
         </div>
@@ -3062,39 +3116,45 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         <div className="sidebar-tabs">
           <button
             className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('view')}
+            onClick={() => !isEditing && setSidebarTab('view')}
+            disabled={isEditing && sidebarTab !== 'view'}
           >
             Info
           </button>
           {linearFeature?.status_url && (
             <button
               className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
-              onClick={() => setSidebarTab('status')}
+              onClick={() => !isEditing && setSidebarTab('status')}
+              disabled={isEditing}
             >
               Status
             </button>
           )}
           <button
             className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('news')}
+            onClick={() => !isEditing && setSidebarTab('news')}
+            disabled={isEditing}
           >
             News
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('events')}
+            onClick={() => !isEditing && setSidebarTab('events')}
+            disabled={isEditing}
           >
             Events
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('history')}
+            onClick={() => !isEditing && setSidebarTab('history')}
+            disabled={isEditing}
           >
             History
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('associations')}
+            onClick={() => !isEditing && setSidebarTab('associations')}
+            disabled={isEditing}
           >
             Associations
           </button>
@@ -3135,6 +3195,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 onShare={() => setShowShareModal(true)}
                 moreInfoLink={linearFeature.more_info_link}
                 trailStatus={trailStatus}
+                showNpsMap={showNpsMap}
+                onToggleNpsMap={onToggleNpsMap}
               />
             )
           )}
@@ -3273,19 +3335,33 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           {isNewOrganization ? 'Create Organization' : (isEditing ? 'Edit: ' : '')}{!isNewOrganization && (destination?.name || 'Location Details')}
         </h2>
         <div className="header-buttons">
-          {isInMtbMode && !isNewPOI && !isNewOrganization && destination && (
-            <button
-              type="button"
-              className="back-to-mtb-btn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onBackToMtbList();
-              }}
-              title="Back to MTB Trails"
-            >
-              ← MTB Trails
-            </button>
+          {selectedFromMtbList && mtbTrailsList && mtbTrailsList.length > 1 && (
+            <>
+              <button
+                type="button"
+                className="mtb-nav-btn prev-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNavigateMtbTrail('prev');
+                }}
+                title="Previous MTB Trail"
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="mtb-nav-btn next-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNavigateMtbTrail('next');
+                }}
+                title="Next MTB Trail"
+              >
+                ›
+              </button>
+            </>
           )}
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
@@ -3357,39 +3433,45 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       <div className="sidebar-tabs">
         <button
           className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('view')}
+          onClick={() => !isEditing && setSidebarTab('view')}
+          disabled={isEditing && sidebarTab !== 'view'}
         >
           Info
         </button>
         {destination?.status_url && (
           <button
             className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('status')}
+            onClick={() => !isEditing && setSidebarTab('status')}
+            disabled={isEditing}
           >
             Status
           </button>
         )}
         <button
           className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('news')}
+          onClick={() => !isEditing && setSidebarTab('news')}
+          disabled={isEditing}
         >
           News
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('events')}
+          onClick={() => !isEditing && setSidebarTab('events')}
+          disabled={isEditing}
         >
           Events
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('history')}
+          onClick={() => !isEditing && setSidebarTab('history')}
+          disabled={isEditing}
         >
           History
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('associations')}
+          onClick={() => !isEditing && setSidebarTab('associations')}
+          disabled={isEditing}
         >
           Associations
         </button>
@@ -3430,6 +3512,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               onShare={() => setShowShareModal(true)}
               moreInfoLink={destination.more_info_link}
               trailStatus={trailStatus}
+              showNpsMap={showNpsMap}
+              onToggleNpsMap={onToggleNpsMap}
             />
           )
         )}
