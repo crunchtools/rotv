@@ -187,7 +187,7 @@ function SurfacesSettings() {
         credentials: 'include',
         body: JSON.stringify({ orderedIds: newOrder.map(s => s.id) })
       });
-    } catch {
+    } catch (err) {
       console.error('Failed to save order:', err);
     }
   };
@@ -205,7 +205,7 @@ function SurfacesSettings() {
         credentials: 'include',
         body: JSON.stringify({ orderedIds: sorted.map(s => s.id) })
       });
-    } catch {
+    } catch (err) {
       console.error('Failed to save order:', err);
     }
   };

@@ -193,7 +193,7 @@ function ErasSettings() {
         credentials: 'include',
         body: JSON.stringify({ orderedIds: newOrder.map(e => e.id) })
       });
-    } catch {
+    } catch (err) {
       console.error('Failed to save order:', err);
     }
   };
@@ -217,7 +217,7 @@ function ErasSettings() {
         credentials: 'include',
         body: JSON.stringify({ orderedIds: sorted.map(e => e.id) })
       });
-    } catch {
+    } catch (err) {
       console.error('Failed to save order:', err);
     }
   };

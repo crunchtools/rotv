@@ -599,7 +599,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         throw new Error(error.error || 'Generation failed');
       }
 
-      await response.json(); // Result not used
+      const result = await response.json();
 
       // Update the appropriate field based on prompt type
       if (promptType === 'brief') {
@@ -1123,6 +1123,7 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
   });
   const [collectionSession, setCollectionSession] = useState(0);
   const [showCompletedStatus, setShowCompletedStatus] = useState(false);
+  const [, setCollectResult] = useState(null);
 
   const fetchNews = async () => {
     if (!poiId) {
@@ -1189,7 +1190,7 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
         body: JSON.stringify({ timezone })
       });
       if (response.ok) {
-        await response.json(); // Result not used
+        const result = await response.json();
 
         // If collection is already running, just attach to it
         if (result.alreadyRunning) {
@@ -1355,6 +1356,7 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
   });
   const [collectionSession, setCollectionSession] = useState(0);
   const [showCompletedStatus, setShowCompletedStatus] = useState(false);
+  const [, setCollectResult] = useState(null);
 
   const fetchEvents = async () => {
     if (!poiId) return;
@@ -1417,7 +1419,7 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
         body: JSON.stringify({ timezone })
       });
       if (response.ok) {
-        await response.json(); // Result not used
+        const result = await response.json();
 
         // If collection is already running, just attach to it
         if (result.alreadyRunning) {
@@ -2441,6 +2443,9 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const [showAssociationsModal, setShowAssociationsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [pendingImage, setPendingImage] = useState(null);
+  const [, setNewsCount] = useState(0);
+  const [, setEventsCount] = useState(0);
+  const [, setCollectResult] = useState(null);
   const [trailStatus, setTrailStatus] = useState(null);
 
   /* const [organizationData, setOrganizationData] = useState({
