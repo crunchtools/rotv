@@ -92,7 +92,11 @@ export function createAdminRouter(pool, clearThumbnailCache) {
   // Helper to queue sync operation after a change
   async function queuePOISync(operation, recordId, data) {
     try {
-      await queueSyncOperation(pool, operation, 'pois', recordId, data);
+      // Exclude large binary fields from sync queue data
+      // These are not needed for Google Sheets sync (only Drive file IDs are synced)
+      // GeoJSON/image uploads fetch fresh data from database using record_id
+      const { image_data, geometry, ...syncData } = data;
+      await queueSyncOperation(pool, operation, 'pois', recordId, syncData);
     } catch (error) {
       console.error('Failed to queue POI sync operation:', error.message);
     }
