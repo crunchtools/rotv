@@ -12,11 +12,13 @@ excluded_paths = [
     ".git/**",
     "*.min.js",
     "*.min.css",
+    # Backend test scripts are manual debugging utilities
+    "backend/test-*.js",
 ]
 
 [checks]
-# Disable checks that conflict with project patterns
-# implicit_state_machine = false  # Uncomment if needed
+# Disable checks that don't apply to JavaScript/Node.js projects
+linter_configuration = false  # Expects clippy.toml (Rust) or pyproject.toml (Python)
 
 [severity]
 # Override severity levels for specific checks

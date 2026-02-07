@@ -673,8 +673,6 @@ async function initDatabase() {
     // Create indexes for job status queries
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_job_status_created ON trail_status_job_status(created_at DESC)`);
 
-    // Note: linear_features table is deprecated - data migrated to pois table above
-
     // Ensure default icons exist (adds any missing defaults to existing databases)
     // ON CONFLICT DO NOTHING means existing icons won't be overwritten
     await client.query(`
