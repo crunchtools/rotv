@@ -299,19 +299,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
               Share
             </button>
           )}
-          {/* NPS Map toggle button */}
-          {onToggleNpsMap && (
-            <button
-              className={`nps-map-toggle-btn ${showNpsMap ? 'active' : ''}`}
-              onClick={() => onToggleNpsMap(!showNpsMap)}
-              title={showNpsMap ? 'Hide NPS Park Map' : 'Show NPS Park Map'}
-            >
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path fill="currentColor" d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/>
-              </svg>
-              NPS Map
-            </button>
-          )}
         </div>
 
         {destination.brief_description && (
