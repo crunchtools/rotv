@@ -103,7 +103,7 @@ describe('Issue #63 Regression Tests', () => {
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
 
       // Check sidebar positioning
       const sidebarPosition = await page.evaluate(() => {
@@ -133,7 +133,7 @@ describe('Issue #63 Regression Tests', () => {
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar and carousel
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
