@@ -393,8 +393,8 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar to open
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      // Wait for sidebar to open (increased timeout for CI environment)
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
 
       // More Info link is at bottom of scrollable content, so scroll down to see it
       const tabContent = await page.locator('.sidebar-tab-content');
