@@ -1,454 +1,120 @@
 # Claude Code Development Guidelines
 
-## Development Governance
+## Required Reading
 
-### MANDATORY Rules - Read This First
+Before making any changes, read these documents in order:
 
-**These rules are non-negotiable and must be followed for every code change:**
-
-#### 1. Branch-Based Development & PR Workflow
-
-🚫 **NEVER work directly on master branch**
-🚫 **NEVER create a Pull Request without testing locally first**
-
-**Branch Naming Conventions:**
-
-```
-feature/short-description   # New features
-fix/short-description       # Bug fixes
-refactor/short-description  # Code refactoring
-docs/short-description      # Documentation updates
-test/short-description      # Test additions
-```
-
-**Examples:**
-- `feature/add-supertest-integration-tests`
-- `fix/playwright-timeout-handling`
-- `refactor/simplify-run-script`
-- `docs/update-governance-rules`
-
-**Complete Branch & PR Workflow:**
-
-```bash
-# 1. Create a new branch for your work
-git checkout -b feature/my-new-feature
-
-# 2. Make your code changes
-
-# 3. Build the container locally
-./run.sh build
-
-# 4. Run all tests and verify they pass
-./run.sh test
-# IMPORTANT: All 39 tests must pass before creating PR
-# GitHub Actions will run tests again automatically on PR
-
-# 5. Commit your changes (can be multiple commits)
-git add .
-git commit -m "feat: add my new feature"
-
-# 6. Ask user to manually verify
-# User will test in browser at http://localhost:8080
-
-# 7. After user approves:
-# - Update version numbers (SemVer) if releasing
-# - Commit version bump
-git commit -m "chore: bump version to X.Y.Z"
-
-# 8. Push branch to GitHub
-git push -u origin feature/my-new-feature
-
-# 9. Create Pull Request in GitHub
-# Use GitHub CLI or web interface:
-gh pr create --title "Add my new feature" --body "Description..."
-# GitHub Actions will automatically run all 39 tests on the PR
-# Check the "Checks" tab to see test results
-
-# 10. Create git tag for releases (AFTER PR is merged)
-git tag -a vX.Y.Z -m "Release vX.Y.Z - Description"
-git push --tags
-
-# 11. Ask user if they want to merge PR
-# User reviews and merges via GitHub UI
-
-# 12. After PR is merged, clean up
-git checkout master
-git pull origin master
-git branch -d feature/my-new-feature  # Delete local branch
-git push origin --delete feature/my-new-feature  # Delete remote branch
-```
-
-**Best Practices:**
-
-✅ **One branch per feature/fix** - Keep branches focused and small
-✅ **Keep branches up to date** - Regularly `git pull origin master` and rebase if needed
-✅ **Delete branches after merge** - Keeps repository clean
-✅ **Use descriptive commit messages** - Follow conventional commits (feat:, fix:, docs:, etc.)
-✅ **PR titles match branch purpose** - Makes review easier
-✅ **Link PRs to issues** - If tracking work in GitHub Issues
-
-**Why:** Branch-based development allows for:
-- Code review before merging
-- Parallel development on multiple features
-- Easy rollback if something breaks
-- Clear history of what changed and why
-
-**Note:** Tags are only created AFTER PR is merged to master, not on feature branches.
-
-#### 2. Semantic Versioning (SemVer)
-
-**Follow [Semantic Versioning 2.0.0](https://semver.org/) strictly:**
-
-Given a version number `MAJOR.MINOR.PATCH`, increment:
-- **MAJOR** (1.0.0 → 2.0.0): Breaking changes, incompatible API changes
-- **MINOR** (1.0.0 → 1.1.0): New features, backward-compatible
-- **PATCH** (1.0.0 → 1.0.1): Bug fixes, backward-compatible
-
-**Current version is tracked in:**
-- `frontend/package.json` - Source of truth
-- `Containerfile` LABEL - Should match frontend version
-
-**Version bump workflow:**
-
-```bash
-# 1. Determine version bump type based on changes
-# Breaking change → MAJOR
-# New feature → MINOR
-# Bug fix → PATCH
-
-# 2. Update frontend/package.json and backend/package.json
-# Frontend: "version": "1.10.0" → "1.11.0"
-# Backend:  "version": "1.5.0" → "1.6.0" (versions independently)
-
-# 3. Update Containerfile LABEL (should match frontend version)
-# Edit: LABEL version="1.10.0" → LABEL version="1.11.0"
-
-# 4. Commit version bump
-git add frontend/package.json backend/package.json Containerfile
-git commit -m "chore: bump version to 1.11.0 (frontend) and 1.6.0 (backend)"
-
-# 5. Create and push git tag
-git tag -a v1.11.0 -m "Release v1.11.0 - Description"
-git push && git push --tags
-
-# 6. GitHub Actions automatically handles production builds
-# DO NOT run ./run.sh build or ./run.sh push manually
-# The CI/CD pipeline rebuilds and pushes to quay.io/fatherlinux/rotv
-```
-
-**Important Notes:**
-- **Frontend and backend version independently** - frontend is source of truth for release version
-- **GitHub Actions handles production builds** - pushing tags triggers automated container build and push to quay.io
-- **Never manually build production containers** - use CI/CD pipeline for consistency
-
-**Pre-release versions:**
-- Use for testing: `1.11.0-alpha.1`, `1.11.0-beta.1`, `1.11.0-rc.1`
-
-#### 3. Testing Requirements for PRs
-
-**📖 Full Testing Documentation:** See `docs/CI_CD_TESTING.md` for comprehensive testing guide, troubleshooting, and best practices.
-
-**Before creating a Pull Request:**
-
-✅ **All tests must pass locally:**
-```bash
-./run.sh test
-```
-
-✅ **Container must build successfully:**
-```bash
-./run.sh build
-```
-
-✅ **Manual verification in running container:**
-```bash
-./run.sh start
-# Test the feature in browser
-```
-
-✅ **No breaking changes without MAJOR version bump**
-
-✅ **New features must include tests** (when applicable)
-
-**PR Checklist:**
-- [ ] Tests pass locally (`./run.sh test` - all 39 tests)
-- [ ] Container builds (`./run.sh build`)
-- [ ] Manual testing completed
-- [ ] GitHub Actions tests pass (check "Checks" tab on PR)
-- [ ] Version bumped correctly (SemVer)
-- [ ] CLAUDE.md updated (if workflow changed)
-- [ ] Architecture doc created (if major feature)
-
-### Workflow Summary
-
-**Every code change should follow this flow:**
-
-```
-1. Create feature branch       # git checkout -b feature/description
-2. Make code changes
-3. ./run.sh reload-app         # Hot reload for quick testing (OPTIONAL - during development)
-4. Iterate on changes          # Repeat steps 2-3 as needed
-5. ./run.sh build              # MANDATORY full rebuild before PR
-6. ./run.sh test               # Run automated tests (must pass)
-7. git commit                  # Commit changes
-8. Ask user to verify          # User manually tests and approves
-9. Update version (SemVer)     # Bump version in package.json & Containerfile (if releasing)
-10. git commit                 # Commit version bump
-11. git push origin branch     # Push branch to GitHub
-12. Create Pull Request        # Create PR in GitHub (via gh CLI or web UI)
-13. Ask user to merge PR       # User reviews and merges via GitHub
-14. After merge:
-    - git checkout master      # Switch to master
-    - git pull origin master   # Pull merged changes
-    - git tag vX.Y.Z           # Tag the release (AFTER merge)
-    - git push --tags          # Push tags (triggers GitHub Actions CI/CD)
-    - GitHub Actions builds    # Automated container build & push to quay.io
-    - Delete feature branch    # Clean up
-```
-
-**Key Points:**
-- ✅ Always work in feature branches - NEVER commit directly to master
-- ✅ Use `reload-app` for fast iteration during development
-- ✅ ALWAYS do full rebuild (`./run.sh build`) before creating PR
-- ✅ Tests must pass before asking user to verify
-- ✅ User approval required before version bump and PR creation
-- ✅ User decides when to merge PR
-- ✅ Tags are created AFTER PR is merged to master
-- ✅ Clean up branches after merge
-
-**This prevents production issues and ensures quality.**
+1. **Constitution** - `.specify/memory/constitution.md` - Core principles and workflow rules
+2. **Baseline Spec** - `.specify/specs/000-baseline/spec.md` - Current features as user stories
+3. **Baseline Plan** - `.specify/specs/000-baseline/plan.md` - Technical architecture
 
 ---
 
-### Development Iteration Priority (Stack Ranked)
+## Core Principles (Summary)
 
-**When making changes, ALWAYS follow this priority order:**
-
-1. **`./run.sh reload-app`** - Hot reload frontend/backend code without container restart
-   - **When:** Frontend or backend code changes only
-   - **Speed:** ~2-3 seconds
-   - **Use for:** Iterating on features during development
-   - **⚠️ Important:** ALWAYS do full rebuild before creating PR
-
-2. **`./run.sh restart-db`** - Restart PostgreSQL service only
-   - **When:** Database service issues, connection problems
-   - **Speed:** ~5 seconds
-   - **Use for:** Debugging database connectivity
-
-3. **`./run.sh build`** + `./run.sh start` - Full container rebuild
-   - **When:** Changes to Containerfile, package.json dependencies, systemd services
-   - **Speed:** ~30-60 seconds
-   - **Use for:** Testing changes that need to be baked into the image
-
-4. **`./run.sh build-base`** - Rebuild base infrastructure image (LAST RESORT)
-   - **When:** Changes to systemd, PostgreSQL, Node.js, Playwright, or base OS packages
-   - **Speed:** ~5-10 minutes
-   - **Use for:** Infrastructure changes in Containerfile.base
-
-**Golden Rule:** Start with #1, escalate only if needed. Never jump straight to rebuild.
+| Principle | Rule |
+|-----------|------|
+| Container-First | All development in containers, never on host |
+| Branch-Based | Never commit directly to master |
+| Test-First | All tests must pass before PR |
+| SemVer | MAJOR.MINOR.PATCH versioning strictly followed |
+| Documentation | Architecture docs for major features |
+| AI Quality | Gourmand checks for AI slop detection |
 
 ---
 
-## Container-Based Development (Recommended)
+## Technology Stack
 
-**IMPORTANT:** Always develop using containers to ensure consistency with production. This prevents issues like missing dependencies (e.g., Playwright not installed).
+| Layer | Technology |
+|-------|------------|
+| Container | Podman, Fedora |
+| Database | PostgreSQL 17 |
+| Backend | Node.js 20 + Express |
+| Frontend | React 18 + Vite 5 |
+| Maps | Leaflet + React-Leaflet |
+| Testing | Vitest + Playwright + Supertest |
+| AI | Google Gemini, Perplexity |
 
-**📖 Full Development Architecture:** See `docs/DEVELOPMENT_ARCHITECTURE.md` for comprehensive details on:
-- Ephemeral storage with tmpfs vs persistent storage
-- Automatic production data seeding workflow
-- Container build optimization strategies
-- PostgreSQL startup and seed data import
-- Testing and validation procedures
+---
 
-### Architecture
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Browser                                 │
-│                    http://localhost:8080                        │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Container: quay.io/fatherlinux/rotv                │
-│                        Port 8080                                │
-│                                                                 │
-│   ┌─────────────────────────────────────────────────────────┐  │
-│   │ Frontend (Built Static Assets in /app/public)          │  │
-│   │ Backend (Node.js Express on :8080)                      │  │
-│   │ PostgreSQL 17 (localhost:5432)                          │  │
-│   └─────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│   Development: tmpfs /data/pgdata (ephemeral, 2GB in-memory)   │
-│   Production:  ~/.rotv/pgdata → /data/pgdata (persistent)      │
-│   Seed Data:   ~/.rotv/seed-data.sql → /tmp/seed-data.sql      │
-│   Databases:   rotv (main), rotv_test (testing)                │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### Quick Start
+## Quick Reference Commands
 
 ```bash
-# 1. Setup environment
-cp .env.example backend/.env  # Fill in your API keys
+# Development (start here)
+./run.sh reload-app    # Hot reload code (~3s)
+./run.sh restart-db    # Restart PostgreSQL (~5s)
 
-# 2. Build container
-./run.sh build
+# Full builds
+./run.sh build         # Build container (~60s)
+./run.sh start         # Start container
+./run.sh stop          # Stop container
 
-# 3. Start application (auto-pulls production data on first start)
-./run.sh start
-# First start: Downloads 384MB production data from server
-# Subsequent starts: Uses cached data (~10 seconds)
+# Testing
+./run.sh test          # Run all tests
 
-# 4. Run tests
-./run.sh test
+# Utilities
+./run.sh logs          # View logs
+./run.sh shell         # Container shell
 ```
 
-**Note:** Development mode uses ephemeral tmpfs storage - data is discarded on restart and reimported from cached seed data. This ensures a clean slate every time with real production data.
+---
 
-### Development Workflow
+## Development Workflow
 
-**During Development (Quick Iteration):**
+```
+1. git checkout -b feature/description
+2. Make changes + ./run.sh reload-app (iterate)
+3. ./run.sh build (MANDATORY before PR)
+4. ./run.sh test (must pass)
+5. git commit
+6. User verification in browser
+7. Version bump (if releasing)
+8. git push + gh pr create
+9. After merge: tag, clean up branch
+```
 
-✅ **Use hot reload for fast feedback during active development:**
+**Full workflow details:** See `.specify/memory/constitution.md` Section III.
+
+---
+
+## Version Tracking
+
+| File | Purpose |
+|------|---------|
+| `frontend/package.json` | Source of truth for release version |
+| `backend/package.json` | Backend version (independent) |
+| `Containerfile` LABEL | Must match frontend version |
+
+---
+
+## Spec-Kit Commands
+
+When creating new features, use these templates:
 
 ```bash
-./run.sh reload-app
+# Create new spec
+cp .specify/templates/spec-template.md .specify/specs/XXX-feature/spec.md
+
+# Create implementation plan
+cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 ```
 
-This command:
-- Copies updated source code into the running container
-- Rebuilds frontend assets with Vite
-- Restarts the backend Node.js server
-- Keeps database and state intact
-- Much faster than full container rebuild (~10-15 seconds vs 2-3 minutes)
+---
 
-**Before Creating a Pull Request:**
+## Architecture Documentation
 
-🔴 **MANDATORY: Full rebuild before PR**
+| Document | Contents |
+|----------|----------|
+| `docs/DEVELOPMENT_ARCHITECTURE.md` | Container workflow, ephemeral storage |
+| `docs/NEWS_EVENTS_ARCHITECTURE.md` | AI-powered content collection |
+| `docs/TRAIL_STATUS_ARCHITECTURE.md` | Trail condition monitoring |
+| `docs/CI_CD_TESTING.md` | GitHub Actions, test suite |
+| `docs/TEST_COVERAGE.md` | Test coverage details |
 
-```bash
-./run.sh build && ./run.sh start
-./run.sh test
-```
+---
 
-This ensures:
-- All code changes are properly compiled into the container image
-- Frontend and backend are always in sync
-- No surprises when the container restarts
-- Consistent behavior between development and production
-- All tests pass with the final built artifacts
+## Recent Changes
 
-**Why this matters:** Hot reloads are great for development speed, but the final PR must be tested with a clean build to ensure nothing breaks in production.
-
-**Utility commands (always safe):**
-
-```bash
-# View logs
-./run.sh logs
-
-# Access container shell
-./run.sh shell
-
-# Run tests
-./run.sh test
-```
-
-### Start Local Development (Alternative - Direct Node.js)
-
-1. **Start PostgreSQL container**:
-   ```bash
-   podman run -d --name postgres -p 5432:5432 \
-     -v ~/.rotv/pgdata:/var/lib/postgresql/data:Z \
-     --tmpfs /tmp/pgsocket:rw,mode=1777 \
-     -e POSTGRES_USER=rotv \
-     -e POSTGRES_PASSWORD=rotv \
-     -e POSTGRES_DB=rotv \
-     postgres:17-alpine
-   ```
-   Note: The `--tmpfs` mount is required because the pgdata was created with a custom socket path.
-
-2. **Start Backend** (from backend/ directory):
-   ```bash
-   cd backend && npm run dev
-   ```
-   Runs on port 3001 with hot reload.
-
-3. **Start Frontend** (from frontend/ directory):
-   ```bash
-   cd frontend && npm run dev
-   ```
-   Runs on port 8080 with Vite HMR. Proxies `/api` and `/auth` to backend on 3001.
-
-4. **Access the app**: http://localhost:8080
-
-### Stop Local Development
-
-```bash
-# Stop frontend and backend
-pkill -f vite
-pkill -f "node.*server.js"
-
-# Stop postgres container
-podman stop postgres && podman rm postgres
-```
-
-### Google OAuth Note
-
-Google OAuth callbacks are registered for `localhost:8080`. The frontend runs on 8080 so OAuth works correctly.
-
-### Troubleshooting pgdata Permissions
-
-The pgdata directory has special permissions for rootless containers. To inspect:
-```bash
-podman unshare ls -la ~/.rotv/pgdata/
-```
-
-### Build Commands
-
-- **Frontend build**: `cd frontend && npm run build` (outputs to frontend/dist/)
-- **Rebuild container**: `./run.sh build`
-
-## Project Structure
-
-- `backend/` - Express.js API server
-- `frontend/` - React + Vite frontend
-- `frontend/dist/` - Built frontend assets (served by backend in production)
-- `run.sh` - Container management script
-- `~/.rotv/pgdata` - PostgreSQL data directory
-
-## Database Schema
-
-The app uses a unified `pois` table with `poi_type` to distinguish:
-- `point` - Traditional POI markers (188 entries)
-- `trail` - Trail geometries (180 entries)
-- `river` - River geometries (1 entry)
-- `boundary` - Municipal boundaries (9 entries)
-
-The `/api/destinations` endpoint returns `pois WHERE poi_type = 'point'`.
-
-## Documentation Standards
-
-### Architecture Documents
-
-For all major features or significant refactors, create an architecture document in the `docs/` directory following the pattern of existing architecture documents.
-
-**When to create an architecture document:**
-- New feature that introduces a multi-step workflow or complex system
-- Significant refactor that changes how a major part of the application works
-- Integration of new third-party services or APIs
-- Implementation of new data collection or processing pipelines
-- Changes to development workflow or infrastructure
-- Any feature that future developers would benefit from understanding holistically
-
-**What to include:**
-1. **Plain English Introduction**: Explain what problem the feature solves, how it works, and the benefits for users, admins, and developers
-2. **Architecture Overview**: High-level diagram or description of components and data flow
-3. **Key Technologies**: List technologies, libraries, and APIs used
-4. **Implementation Details**: Code structure, key functions, error handling
-5. **Testing & Validation**: How to verify the feature works correctly
-6. **Future Improvements**: Known limitations or planned enhancements
-
-**Examples:**
-- `docs/DEVELOPMENT_ARCHITECTURE.md` - Development workflow, ephemeral storage, production seeding, container optimization
-- `docs/NEWS_EVENTS_ARCHITECTURE.md` - News & events collection system with AI-powered content discovery
-- `docs/CI_CD_TESTING.md` - Automated testing with GitHub Actions, test suite architecture, troubleshooting guide
+- **v1.16.0** - Current version
+- See git log for recent commits
+- See `.specify/specs/` for feature specifications

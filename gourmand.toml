@@ -1,0 +1,28 @@
+# Gourmand Configuration
+# AI slop detection for maintaining code quality
+# https://github.com/marketplace/gourmand
+
+[global]
+# Paths to exclude from all checks
+excluded_paths = [
+    ".specify/**",
+    "docs/**",
+    "frontend/dist/**",
+    "node_modules/**",
+    ".git/**",
+    "*.min.js",
+    "*.min.css",
+]
+
+[checks]
+# Disable checks that conflict with project patterns
+# implicit_state_machine = false  # Uncomment if needed
+
+[severity]
+# Override severity levels for specific checks
+# check_name = "warning"  # Options: error, warning, info
+
+[output]
+# Output format options
+format = "text"  # Options: text, json, github
+color = true

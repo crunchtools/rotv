@@ -1,0 +1,44 @@
+# Gourmand Exceptions
+# Documented exceptions for files that legitimately trigger checks
+# Each exception should include a rationale
+
+# Files that legitimately contain summaries/overviews
+[[exceptions]]
+check = "summary_litter"
+paths = [
+    "CLAUDE.md",           # AI development guidelines require summaries
+    ".specify/**/*.md",    # Spec files require overviews
+    "README.md",           # Project readme requires summary
+    "CONTRIBUTING.md",     # Contribution guide needs overview
+    "package.json",        # Package description field
+]
+rationale = "Documentation files require summaries for reader orientation"
+
+# Legitimate shell scripts
+[[exceptions]]
+check = "random_scripts"
+paths = [
+    "run.sh",              # Main container management script
+    "entrypoint.sh",       # Container entrypoint
+]
+rationale = "Infrastructure scripts are essential for project operations"
+
+# Files with necessary verbose comments
+[[exceptions]]
+check = "verbose_comments"
+paths = [
+    "backend/server.js",   # API documentation in comments
+    "backend/services/*.js", # Service documentation
+]
+rationale = "API and service files benefit from inline documentation"
+
+# Configuration files that may look like boilerplate
+[[exceptions]]
+check = "boilerplate"
+paths = [
+    "vite.config.js",
+    ".pre-commit-config.yaml",
+    "Containerfile",
+    "Containerfile.base",
+]
+rationale = "Configuration files follow standard patterns by design"

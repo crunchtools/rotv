@@ -11,3 +11,6 @@ dist/
 *.jpg
 *.jpeg
 Screenshot*
+
+# Gourmand reports
+gourmand-report.txt

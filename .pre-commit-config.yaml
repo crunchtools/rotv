@@ -1,0 +1,41 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+
+repos:
+  # Standard pre-commit hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(frontend/dist/|\.specify/)
+      - id: end-of-file-fixer
+        exclude: ^(frontend/dist/)
+      - id: check-yaml
+      - id: check-json
+        exclude: ^(package-lock\.json)
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Local hooks
+  - repo: local
+    hooks:
+      # Gourmand AI slop detection
+      - id: gourmand
+        name: Gourmand AI Slop Detection
+        entry: gourmand
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
+        # Note: Install gourmand with: cargo install gourmand
+        # This hook will fail gracefully if gourmand is not installed
+
+      # Ensure package.json versions are consistent
+      - id: check-versions
+        name: Check Version Consistency
+        entry: bash -c 'frontend_ver=$(grep -o "\"version\": \"[^\"]*\"" frontend/package.json | head -1 | cut -d\" -f4) && container_ver=$(grep -o "version=\"[^\"]*\"" Containerfile | cut -d\" -f2) && if [ "$frontend_ver" != "$container_ver" ]; then echo "Version mismatch: frontend=$frontend_ver, Containerfile=$container_ver"; exit 1; fi'
+        language: system
+        files: ^(frontend/package\.json|Containerfile)$
+        pass_filenames: false
