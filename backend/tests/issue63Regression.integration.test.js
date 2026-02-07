@@ -95,7 +95,7 @@ describe('Issue #63 Regression Tests', () => {
       expect(desktopCssVar).toBeTruthy();
     }, 30000);
 
-    it('should position sidebar correctly on mobile with 16px top spacing', async () => {
+    it('should position sidebar flush with top on mobile', async () => {
       await page.setViewportSize({ width: 375, height: 667 });
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
@@ -119,8 +119,40 @@ describe('Issue #63 Regression Tests', () => {
       });
 
       expect(sidebarPosition).not.toBeNull();
-      // Should be 1rem (16px) from top of map container
-      expect(sidebarPosition.topPx).toBe(16);
+      // Should be flush with top (0px) - carousel fills the green header area
+      expect(sidebarPosition.topPx).toBe(0);
+
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }, 30000);
+
+    it('should have 16px bottom padding on thumbnail carousel for spacing', async () => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Wait for markers and click one
+      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
+      await page.locator('.leaflet-marker-icon').first().click();
+
+      // Wait for sidebar and carousel
+      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
+
+      // Check carousel bottom padding - this provides the 16px spacing between carousel and content
+      const carouselPadding = await page.evaluate(() => {
+        const carousel = document.querySelector('.thumbnail-carousel');
+        if (!carousel) return null;
+
+        const style = getComputedStyle(carousel);
+        return {
+          paddingBottom: style.paddingBottom,
+          paddingBottomPx: parseInt(style.paddingBottom, 10)
+        };
+      });
+
+      expect(carouselPadding).not.toBeNull();
+      // Should have 1rem (16px) bottom padding for spacing between carousel and sidebar content
+      expect(carouselPadding.paddingBottomPx).toBe(16);
+      console.log(`[Test] Carousel bottom padding: ${carouselPadding.paddingBottom}`);
 
       await page.setViewportSize({ width: 1280, height: 720 });
     }, 30000);

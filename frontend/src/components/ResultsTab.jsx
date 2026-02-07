@@ -27,6 +27,7 @@ const ResultsTab = memo(function ResultsTab({
   cachedMtbBoundsRef,  // Pre-calculated MTB bounds for instant access
   onMapClick,
   initialShowMtbOnly = false,
+  initialShowOrganizationsOnly = false,  // Whether to show organizations sub-tab (controlled by URL)
   onFilterByTypes,  // Callback to filter by POI types: array of types or null for all
   bypassViewportFilter = false,  // Temporarily show all POIs (bypass viewport filtering)
   visiblePoiCount  // Global POI count from App.jsx
@@ -34,8 +35,10 @@ const ResultsTab = memo(function ResultsTab({
   const navigate = useNavigate();
   const isNavigatingRef = useRef(false);
 
-  // Sub-tab state: 'all' or 'mtb'
-  const [activeSubTab, setActiveSubTab] = useState(initialShowMtbOnly ? 'mtb' : 'all');
+  // Sub-tab state: 'all', 'mtb', or 'organizations'
+  const [activeSubTab, setActiveSubTab] = useState(
+    initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all'
+  );
   const [searchText, setSearchText] = useState('');
   const [typeFilters, setTypeFilters] = useState({
     destination: true,
@@ -49,7 +52,7 @@ const ResultsTab = memo(function ResultsTab({
   const [isInTransition, setIsInTransition] = useState(false);
   const prevActiveSubTabRef = useRef(activeSubTab);
 
-  // Update sub-tab when initialShowMtbOnly changes (e.g., from route navigation)
+  // Update sub-tab when initialShowMtbOnly or initialShowOrganizationsOnly changes (e.g., from route navigation)
   // But skip if we initiated the navigation ourselves
   useEffect(() => {
     if (isNavigatingRef.current) {
@@ -59,10 +62,12 @@ const ResultsTab = memo(function ResultsTab({
 
     if (initialShowMtbOnly && activeSubTab !== 'mtb') {
       setActiveSubTab('mtb');
-    } else if (!initialShowMtbOnly && activeSubTab === 'mtb') {
+    } else if (initialShowOrganizationsOnly && activeSubTab !== 'organizations') {
+      setActiveSubTab('organizations');
+    } else if (!initialShowMtbOnly && !initialShowOrganizationsOnly && (activeSubTab === 'mtb' || activeSubTab === 'organizations')) {
       setActiveSubTab('all');
     }
-  }, [initialShowMtbOnly, activeSubTab]);
+  }, [initialShowMtbOnly, initialShowOrganizationsOnly, activeSubTab]);
 
   // Fetch MTB trail statuses when in MTB mode
   useEffect(() => {
@@ -209,8 +214,10 @@ const ResultsTab = memo(function ResultsTab({
   const selectedId = selectedDestination?.id;
   const selectedLinearId = selectedLinearFeature?.id;
 
-  // Use global POI count instead of filtered list count
-  const poiCount = visiblePoiCount;
+  // Use appropriate POI count based on mode
+  // Organizations mode: use count of organizations (sortedPois.length since it's filtered to only organizations)
+  // Other modes: use global POI count from App.jsx
+  const poiCount = activeSubTab === 'organizations' ? sortedPois.length : visiblePoiCount;
 
   // Clear transition state when App.jsx bypassViewportFilter catches up
   useEffect(() => {
@@ -272,6 +279,8 @@ const ResultsTab = memo(function ResultsTab({
     // Navigate to appropriate URL
     if (tab === 'mtb') {
       navigate('/mtb-trail-status');
+    } else if (tab === 'organizations') {
+      navigate('/organizations');
     } else {
       navigate('/');
     }

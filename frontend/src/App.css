@@ -1058,7 +1058,7 @@ body {
 /* Thumbnail Carousel for mobile navigation */
 .thumbnail-carousel-wrapper {
   background: #4a7c23;
-  padding: 0.75rem 0;
+  padding: 0.5rem 0;
   position: sticky;
   top: 0;
   z-index: 10;
@@ -1116,7 +1116,9 @@ body {
   gap: 0.5rem;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 0 1rem 1rem 1rem; /* Increased bottom padding to prevent scrollbar collision */
+  outline: none;
+  border: none;
+  padding: 0.5rem 1rem 1rem 1rem; /* Top padding to prevent selected thumbnail clipping, bottom for scrollbar */
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
@@ -2624,12 +2626,15 @@ body {
 
   .sidebar {
     position: absolute;
-    top: 1rem; /* 16px from top of map container */
+    top: 0; /* Flush with header - carousel fills the green area */
     left: 0;
     right: auto;
     width: 100%;
-    height: calc(100% - 1rem); /* Adjust height to account for top spacing */
+    height: 100%;
     transform: translateX(100%);
+    box-shadow: none; /* Remove desktop shadow on mobile */
+    outline: none;
+    border: none;
   }
 
   .sidebar.open {
@@ -11573,6 +11578,32 @@ svg.leaflet-zoom-animated {
 .status-badge.status-unknown {
   background-color: #e2e3e5;
   color: #383d41;
+}
+
+/* Status badges row - container for status and source badges */
+.status-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+/* Source badge - links to external status source */
+.source-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.85em;
+  font-weight: 600;
+  background-color: #6c757d;
+  color: white;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
+}
+
+.source-badge:hover {
+  background-color: #5a6268;
+  text-decoration: none;
 }
 
 /* Legacy support for old-style parent-child selectors */

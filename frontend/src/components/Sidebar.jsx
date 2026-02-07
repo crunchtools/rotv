@@ -2412,7 +2412,19 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
 
       {status && status.status !== 'unknown' ? (
         <div className={`trail-status ${statusBadgeClass}`}>
-          <div className="status-badge">{(status.status || 'unknown').toUpperCase()}</div>
+          <div className="status-badges-row">
+            <div className="status-badge">{(status.status || 'unknown').toUpperCase()}</div>
+            {status.source_url && (
+              <a
+                href={status.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="source-badge"
+              >
+                SOURCE
+              </a>
+            )}
+          </div>
 
           {status.conditions && (
             <div className="status-conditions">
@@ -2432,17 +2444,6 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
             </div>
           )}
 
-          {status.source_url && (
-            <a
-              href={status.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="status-source-link"
-            >
-              View on {status.source_name || 'Source'} ↗
-            </a>
-          )}
-
           {status.seasonal_closure && (
             <div className="status-seasonal">
               ⚠️ Seasonal Closure in Effect
@@ -2458,21 +2459,6 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
             </p>
           )}
         </div>
-      )}
-
-      {selectedFromMtbList && onBackToMtbList && (
-        <button
-          type="button"
-          className="back-to-mtb-list-btn"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onBackToMtbList();
-          }}
-          style={{ marginTop: '1.5rem' }}
-        >
-          ← Back to MTB Trails List
-        </button>
       )}
     </div>
   );
@@ -3376,20 +3362,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 ›
               </button>
             </>
-          )}
-          {isInMtbMode && !isNewPOI && !isNewOrganization && destination && (
-            <button
-              type="button"
-              className="back-to-mtb-btn"
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onBackToMtbList();
-              }}
-              title="Back to MTB Trails"
-            >
-              ← MTB Trails
-            </button>
           )}
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
