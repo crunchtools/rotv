@@ -303,6 +303,19 @@ ENVFILE
         echo "✓ Container stopped"
         ;;
 
+    gourmand)
+        echo "Running Gourmand AI slop detection..."
+        if command -v gourmand &> /dev/null; then
+            gourmand --full .
+        else
+            echo "❌ Gourmand not installed"
+            echo ""
+            echo "Install with:"
+            echo "  cargo install --git https://codeberg.org/mattdm/gourmand.git"
+            exit 1
+        fi
+        ;;
+
     logs)
         podman logs -f "$CONTAINER_NAME"
         ;;
@@ -455,6 +468,7 @@ ENVFILE
         echo "  seed        Pull production data to seed local development"
         echo "  start       Start the application container (ephemeral storage)"
         echo "  test        Run integration tests (ephemeral storage)"
+        echo "  gourmand    Run Gourmand AI slop detection"
         echo "  stop        Stop and remove the container"
         echo "  reload-app  Hot reload code changes (dev only, ALWAYS rebuild before PR)"
         echo ""
