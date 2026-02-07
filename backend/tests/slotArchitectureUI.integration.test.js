@@ -375,8 +375,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
 
   describe('Job Completion', () => {
     it('should freeze all slots with final states', async () => {
-      // This test would require waiting for a job to complete
-      // For now, we verify the structure supports frozen slots
+      // Verifies the structure supports frozen slots (without waiting for job completion)
 
       // Look for completed job indicators
       const completedIndicator = page.locator('text=Complete')

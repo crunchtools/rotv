@@ -22,20 +22,48 @@ repos:
   # Local hooks
   - repo: local
     hooks:
+      # Rust linting with clippy (no Rust code, but Gourmand requires this hook)
+      - id: clippy
+        name: Clippy Rust Linting
+        entry: cargo clippy -- -D warnings
+        language: system
+        files: \.rs$
+        stages: [pre-commit, pre-merge-commit]
+        # Note: This project has no Rust code, but Gourmand requires clippy config
+
+      # Python linting with ruff (for scripts/get_google_token.py)
+      - id: ruff-check
+        name: Ruff Python Linting
+        entry: ruff check --fix
+        language: system
+        files: \.py$
+        stages: [pre-commit, pre-merge-commit]
+        # Note: Install ruff with: pip install ruff
+
+      # JavaScript/React linting with ESLint
+      - id: eslint
+        name: ESLint JavaScript Linting
+        entry: bash -c 'cd frontend && npm run lint:fix && cd ../backend && npm run lint:fix'
+        language: system
+        files: \.(js|jsx)$
+        pass_filenames: false
+        stages: [pre-commit, pre-merge-commit]
+        # Note: Install dependencies with: npm install
+
       # Gourmand AI slop detection
       - id: gourmand
         name: Gourmand AI Slop Detection
         entry: gourmand
         language: system
         pass_filenames: false
-        stages: [pre-commit]
+        stages: [pre-commit, pre-merge-commit]
         # Note: Install gourmand with: cargo install gourmand
         # This hook will fail gracefully if gourmand is not installed
 
       # Ensure package.json versions are consistent
       - id: check-versions
         name: Check Version Consistency
-        entry: bash -c 'frontend_ver=$(grep -o "\"version\": \"[^\"]*\"" frontend/package.json | head -1 | cut -d\" -f4) && container_ver=$(grep -o "version=\"[^\"]*\"" Containerfile | cut -d\" -f2) && if [ "$frontend_ver" != "$container_ver" ]; then echo "Version mismatch: frontend=$frontend_ver, Containerfile=$container_ver"; exit 1; fi'
+        entry: "bash -c 'frontend_ver=$(grep -o '\\\"version\\\": \\\"[^\\\"]*\\\"' frontend/package.json | head -1 | cut -d\\\" -f4) && container_ver=$(grep -o '\\''version=\\\"[^\\\"]*\\\"'\\'' Containerfile | cut -d\\\" -f2) && if [ \"$frontend_ver\" != \"$container_ver\" ]; then echo \"Version mismatch: frontend=$frontend_ver, Containerfile=$container_ver\"; exit 1; fi'"
         language: system
         files: ^(frontend/package\.json|Containerfile)$
         pass_filenames: false

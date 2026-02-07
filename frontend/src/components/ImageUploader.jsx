@@ -42,13 +42,6 @@ function ImageUploader({
   const handleFileSelect = async (file) => {
     if (!file) return;
 
-    console.log('[ImageUploader] File selected:', {
-      name: file.name,
-      type: file.type,
-      size: file.size,
-      lastModified: file.lastModified
-    });
-
     // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowedTypes.includes(file.type)) {
@@ -69,7 +62,6 @@ function ImageUploader({
       const base64Data = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
-          console.log('[ImageUploader] File read successfully, size:', e.target.result?.length);
           const dataUrl = e.target.result;
           const base64 = dataUrl.split(',')[1];
           resolve(base64);
@@ -137,20 +129,12 @@ function ImageUploader({
   };
 
   const handleInputChange = (e) => {
-    console.log('[ImageUploader] handleInputChange called', {
-      hasFiles: !!e.target.files,
-      fileCount: e.target.files?.length,
-      firstFile: e.target.files?.[0]?.name
-    });
     if (e.target.files && e.target.files[0]) {
       handleFileSelect(e.target.files[0]);
-    } else {
-      console.log('[ImageUploader] No file in input change event');
     }
   };
 
   const handleClick = () => {
-    console.log('[ImageUploader] handleClick called, fileInputRef:', !!fileInputRef.current);
     fileInputRef.current?.click();
   };
 

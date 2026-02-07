@@ -8,11 +8,10 @@ const DEFAULT_PARK_BOUNDS = [
   [41.45, -81.50]   // Northeast corner
 ];
 
-function ParkNews({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [deleting, setDeleting] = useState(null);
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [typeFilters, setTypeFilters] = useState({
@@ -65,7 +64,6 @@ function ParkNews({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFe
     currentBounds[1][1] !== stableBoundsRef.current[1][1]);
 
   if (boundsChanged) {
-    console.log('[ParkNews] Thumbnail bounds UPDATE - Bypass:', bypassViewportFilter, 'SW:', currentBounds[0], 'NE:', currentBounds[1]);
     stableBoundsRef.current = currentBounds;
   }
 
@@ -110,29 +108,6 @@ function ParkNews({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFe
 
     return filtered;
   }, [news, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
-
-  const handleDelete = async (newsId) => {
-    if (!confirm('Delete this news item?')) return;
-
-    setDeleting(newsId);
-    try {
-      const response = await fetch(`/api/admin/news/${newsId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        setNews(prev => prev.filter(n => n.id !== newsId));
-      } else {
-        alert('Failed to delete news item');
-      }
-    } catch (err) {
-      console.error('Error deleting news:', err);
-      alert('Failed to delete news item');
-    } finally {
-      setDeleting(null);
-    }
-  };
 
   if (loading) {
     return (
@@ -257,7 +232,6 @@ function ParkNews({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFe
         {/* Map thumbnail sidebar */}
         {mapState && (
           <div className="map-thumbnail-sidebar">
-            {console.log('[ParkNews] Passing to MapThumbnail - thumbnailBounds SW:', thumbnailBounds[0], 'NE:', thumbnailBounds[1])}
             <MapThumbnail
               bounds={thumbnailBounds}
               aspectRatio={mapState.aspectRatio || 1.5}

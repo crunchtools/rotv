@@ -501,8 +501,8 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    const result = JSON.parse(jsonMatch[0]);
-    const status = result.status;
+    const parsedStatus = JSON.parse(jsonMatch[0]);
+    const status = parsedStatus.status;
 
     if (!status || status.status === 'unknown') {
       console.log(`[Trail Status] No current status found for ${poi.name}`);
@@ -664,7 +664,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
     // Get MTB trails to collect status for
     let trails;
     if (poiIds && poiIds.length > 0) {
-      const result = await pool.query(`
+      const trailsQuery = await pool.query(`
         SELECT id, name, poi_type, status_url, brief_description
         FROM pois
         WHERE id = ANY($1)
@@ -672,16 +672,16 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
         AND status_url != ''
         ORDER BY name
       `, [poiIds]);
-      trails = result.rows;
+      trails = trailsQuery.rows;
     } else {
-      const result = await pool.query(`
+      const trailsQuery = await pool.query(`
         SELECT id, name, poi_type, status_url, brief_description
         FROM pois
         WHERE status_url IS NOT NULL
         AND status_url != ''
         ORDER BY name
       `);
-      trails = result.rows;
+      trails = trailsQuery.rows;
     }
 
     if (trails.length === 0) {
@@ -858,12 +858,12 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
           console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] Starting trail ${poiId} (Slot ${slotId}, ${inFlight} in flight)`);
 
           // Collect status
-          const result = await collectTrailStatus(pool, poi, sheets, 'America/New_York');
+          const statusCollection = await collectTrailStatus(pool, poi, sheets, 'America/New_York');
 
-          console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] ✓ ${poi.name}: ${result.statusFound} status found`);
+          console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] ✓ ${poi.name}: ${statusCollection.statusFound} status found`);
 
-          totalStatusFound += result.statusFound;
-          totalStatusSaved += result.statusSaved;
+          totalStatusFound += statusCollection.statusFound;
+          totalStatusSaved += statusCollection.statusSaved;
 
           // Mark as processed
           processedPois.add(poiId);
@@ -978,18 +978,18 @@ export async function getJobStatus(pool, jobId) {
   // Check if jobId is a UUID (pg_boss_job_id) or integer (table id)
   const isUuid = typeof jobId === 'string' && jobId.includes('-');
 
-  const result = await pool.query(
+  const jobQuery = await pool.query(
     isUuid
       ? `SELECT * FROM trail_status_job_status WHERE pg_boss_job_id = $1`
       : `SELECT * FROM trail_status_job_status WHERE id = $1`,
     [jobId]
   );
 
-  if (result.rows.length === 0) {
+  if (jobQuery.rows.length === 0) {
     return null;
   }
 
-  const job = result.rows[0];
+  const job = jobQuery.rows[0];
   return {
     jobId: job.id,
     jobType: job.job_type,
@@ -1014,7 +1014,7 @@ export async function cancelJob(pool, jobId) {
   // Get current AI usage before cancelling
   const currentUsage = getJobUsage();
 
-  const result = await pool.query(`
+  const cancelUpdate = await pool.query(`
     UPDATE trail_status_job_status
     SET status = 'cancelled',
         completed_at = NOW(),
@@ -1023,7 +1023,7 @@ export async function cancelJob(pool, jobId) {
     RETURNING id
   `, [jobId, JSON.stringify(currentUsage)]);
 
-  return result.rowCount > 0;
+  return cancelUpdate.rowCount > 0;
 }
 
 /**
@@ -1033,12 +1033,12 @@ export async function cancelJob(pool, jobId) {
  * @returns {Object|null} - Latest status or null
  */
 export async function getLatestTrailStatus(pool, poiId) {
-  const result = await pool.query(`
+  const statusQuery = await pool.query(`
     SELECT * FROM trail_status
     WHERE poi_id = $1
     ORDER BY created_at DESC
     LIMIT 1
   `, [poiId]);
 
-  return result.rows.length > 0 ? result.rows[0] : null;
+  return statusQuery.rows.length > 0 ? statusQuery.rows[0] : null;
 }

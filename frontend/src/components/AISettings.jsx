@@ -51,7 +51,7 @@ function AISettings() {
       } else if (response.status === 401 || response.status === 403) {
         setError('Please log in as admin to view AI settings');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch settings');
     } finally {
       setLoading(false);
@@ -88,7 +88,7 @@ function AISettings() {
         const err = await response.json();
         setError(err.error || 'Failed to save API key');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to save API key');
     } finally {
       setSaving(false);
@@ -112,7 +112,7 @@ function AISettings() {
       } else {
         setError(result.error || 'API key test failed');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to test API key');
     } finally {
       setTesting(false);
@@ -139,7 +139,7 @@ function AISettings() {
       } else {
         setError('Failed to save prompt');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to save prompt');
     } finally {
       setSaving(false);

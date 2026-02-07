@@ -71,8 +71,7 @@ describe('JavaScript Renderer', () => {
     }, 25000);
 
     it('should ignore SSL errors', async () => {
-      // Test with a site that has SSL issues (if it ever comes back up)
-      // For now, just verify the ignoreHTTPSErrors flag is working
+      // Verifies the ignoreHTTPSErrors flag works with self-signed certs
       const result = await renderJavaScriptPage('https://self-signed.badssl.com/', {
         waitTime: 1000,
         timeout: 8000,

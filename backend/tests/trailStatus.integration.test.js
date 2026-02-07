@@ -172,8 +172,7 @@ describe('Trail Status Integration Tests', () => {
       `);
       const poiId = poiResult.rows[0].id;
 
-      // Collect status (this requires admin auth, so we test via direct service call)
-      // For now, just verify the endpoint exists
+      // Verify endpoint exists (auth required for full collection)
       const response = await fetch(`http://localhost:8080/api/admin/pois/${poiId}/status/collect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }

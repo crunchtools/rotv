@@ -57,7 +57,7 @@ const PHASE_CONFIG = {
   }
 };
 
-function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, type }) {
+function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, _type }) {
   const [progress, setProgress] = useState(null);
   const [finalStats, setFinalStats] = useState(null);
   const startTimeRef = React.useRef(Date.now());
@@ -83,13 +83,11 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
 
         if (response.ok) {
           const data = await response.json();
-          console.log('[CollectionStatus] Fetched progress:', data.phase, 'completed:', data.completed);
 
           // Only update if we have meaningful progress
           if (data.phase !== 'idle') {
             // Sync our start time with backend's start time on first fetch
             if (data.startTime && startTimeRef.current > data.startTime) {
-              console.log('[CollectionStatus] Syncing start time with backend:', data.startTime);
               startTimeRef.current = data.startTime;
             }
 
@@ -115,7 +113,6 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
       fetchProgress(); // Initial fetch
     } else if (progress?.completed) {
       // When collection just completed, fetch one final time to ensure we have complete data
-      console.log('[CollectionStatus] Collection completed, fetching final progress');
       finalFetchTimeout = setTimeout(fetchProgress, 500);
     }
 
@@ -136,8 +133,6 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
     // Capture progress when it completes (even if still collecting)
     if (progress?.completed && !finalStats) {
       const completionTime = Date.now() - startTimeRef.current;
-      console.log('[CollectionStatus] FREEZING TIMER - completionTime:', completionTime, 'ms =', (completionTime/1000).toFixed(1), 's');
-      console.log('[CollectionStatus] startTimeRef.current:', startTimeRef.current, 'Date.now():', Date.now());
       setFinalStats(progress);
       setFrozenElapsedTime(completionTime); // Freeze the timer at completion
     }
@@ -149,18 +144,15 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
 
   // Don't hide if we have finalStats, even if current progress is 'idle'
   if (!displayProgress || (displayProgress.phase === 'idle' && !finalStats)) {
-    console.log('[CollectionStatus] Returning null - displayProgress:', displayProgress, 'finalStats:', finalStats);
     return null;
   }
 
   // Hide old completed progress when a new collection is starting
   // (isCollecting=true means user just clicked refresh, but we might have fetched old completed progress)
   if (isCollecting && displayProgress.completed && !finalStats) {
-    console.log('[CollectionStatus] Hiding stale completed progress - waiting for new collection to start');
     return null;
   }
 
-  console.log('[CollectionStatus] Rendering - phase:', displayProgress.phase, 'completed:', displayProgress.completed, 'isCollecting:', isCollecting, 'frozenElapsedTime:', frozenElapsedTime, 'elapsed:', elapsed);
 
   const phaseConfig = PHASE_CONFIG[displayProgress.phase] || PHASE_CONFIG.initializing;
   const elapsedSeconds = (elapsed / 1000).toFixed(1);

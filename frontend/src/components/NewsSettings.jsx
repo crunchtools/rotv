@@ -96,13 +96,10 @@ function NewsSettings() {
   const handleCancelJob = async () => {
     if (!activeJobId) return;
     try {
-      const response = await fetch(`/api/admin/news/job/${activeJobId}/cancel`, {
+      await fetch(`/api/admin/news/job/${activeJobId}/cancel`, {
         method: 'POST',
         credentials: 'include'
       });
-      if (response.ok) {
-        console.log('Job cancellation requested');
-      }
     } catch (err) {
       console.error('Error cancelling job:', err);
     }

@@ -35,7 +35,7 @@ function SyncSettings({ onDataRefresh }) {
         const err = await response.json();
         setError(err.error || 'Failed to fetch sync status');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to connect to server');
     } finally {
       setLoading(false);
@@ -113,7 +113,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || `Failed to update ${key} ID`);
       }
-    } catch (err) {
+    } catch {
       setError(`Failed to update ${key} ID`);
     } finally {
       setSavingDriveId(null);
@@ -160,7 +160,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Sync failed');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to sync changes');
     } finally {
       setSyncing(false);
@@ -189,7 +189,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Push failed');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to push to Google Drive');
     } finally {
       setSyncing(false);
@@ -222,7 +222,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Pull failed');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to pull from Google Drive');
     } finally {
       setSyncing(false);
@@ -251,7 +251,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Clear failed');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to clear sync queue');
     } finally {
       setSyncing(false);
@@ -276,7 +276,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Failed to create spreadsheet');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to create spreadsheet');
     } finally {
       setSyncing(false);
@@ -310,7 +310,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Failed to connect spreadsheet');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to connect spreadsheet');
     } finally {
       setSyncing(false);
@@ -339,7 +339,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Failed to disconnect');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to disconnect spreadsheet');
     } finally {
       setSyncing(false);
@@ -383,7 +383,7 @@ function SyncSettings({ onDataRefresh }) {
       } else {
         setError(result.error || 'Failed to wipe database');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to wipe database');
     } finally {
       setSyncing(false);
@@ -846,7 +846,7 @@ function SyncSettings({ onDataRefresh }) {
           {syncing ? 'Wiping...' : 'Wipe Local Database'}
         </button>
         <p className="danger-hint">
-          Use "Pull All" to restore data after wiping.
+          Use &quot;Pull All&quot; to restore data after wiping.
         </p>
       </div>
     </div>

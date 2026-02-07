@@ -35,17 +35,6 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
     return 'trail';
   };
 
-  // Get type label
-  const getTypeLabel = () => {
-    const type = getPoiType();
-    if (type === 'virtual') return 'Organization';
-    if (type === 'mtb') return 'MTB Trailhead';
-    if (type === 'destination') return 'Destination';
-    if (type === 'river') return 'River';
-    if (type === 'boundary') return 'Boundary';
-    return 'Trail';
-  };
-
   const poiType = getPoiType();
 
   return (

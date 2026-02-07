@@ -23,7 +23,7 @@ const ResultsTab = memo(function ResultsTab({
   onSelectDestination,
   onSelectLinearFeature,
   mapState,
-  boundsToFit,
+  _boundsToFit,
   cachedMtbBoundsRef,  // Pre-calculated MTB bounds for instant access
   onMapClick,
   initialShowMtbOnly = false,
@@ -50,7 +50,6 @@ const ResultsTab = memo(function ResultsTab({
 
   // Transition state - tracks when we're leaving MTB mode but bypassViewportFilter hasn't caught up yet
   const [isInTransition, setIsInTransition] = useState(false);
-  const prevActiveSubTabRef = useRef(activeSubTab);
 
   // Update sub-tab when initialShowMtbOnly or initialShowOrganizationsOnly changes (e.g., from route navigation)
   // But skip if we initiated the navigation ourselves
@@ -115,13 +114,11 @@ const ResultsTab = memo(function ResultsTab({
     // This prevents the list from becoming empty during map zoom animations
     const useAllPois = activeSubTab === 'mtb' || activeSubTab === 'organizations' || bypassViewportFilter || isInTransition;
 
-    console.log('[ResultsTab] activeSubTab:', activeSubTab, 'bypassViewportFilter:', bypassViewportFilter, 'isInTransition:', isInTransition, 'useAllPois:', useAllPois);
 
     let sourceDestinations = useAllPois ? (allDestinations || []) : (viewportFilteredDestinations || []);
     let sourceLinear = useAllPois ? (allLinearFeatures || []) : (viewportFilteredLinearFeatures || []);
     let sourceVirtual = useAllPois ? (allVirtualPois || []) : (viewportFilteredVirtualPois || []);
 
-    console.log('[ResultsTab] sourceDestinations:', sourceDestinations?.length, 'sourceLinear:', sourceLinear?.length);
 
     // When in MTB mode, filter to only MTB trailheads (POIs with status_url)
     if (activeSubTab === 'mtb') {
@@ -192,7 +189,7 @@ const ResultsTab = memo(function ResultsTab({
       totalCount: total,
       thumbnailDestinations: sourceDestinations // For MapThumbnail - use source destinations (MTB trailheads or all destinations during transition)
     };
-  }, [activeSubTab, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, allDestinations, allLinearFeatures, searchText, typeFilters, bypassViewportFilter, isInTransition]);
+  }, [activeSubTab, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, allDestinations, allLinearFeatures, allVirtualPois, searchText, typeFilters, bypassViewportFilter, isInTransition]);
 
   // Event delegation handler - single handler for all tiles
   const handleListClick = useCallback((e) => {
@@ -222,7 +219,6 @@ const ResultsTab = memo(function ResultsTab({
   // Clear transition state when App.jsx bypassViewportFilter catches up
   useEffect(() => {
     if (bypassViewportFilter && isInTransition) {
-      console.log('[ResultsTab transition] Bypass filter active - clearing transition');
       setIsInTransition(false);
     }
   }, [bypassViewportFilter, isInTransition]);
@@ -253,7 +249,6 @@ const ResultsTab = memo(function ResultsTab({
     currentBounds[1][1] !== stableBoundsRef.current[1][1]);
 
   if (boundsChanged) {
-    console.log('[ResultsTab] Thumbnail bounds UPDATE - Mode:', activeSubTab, 'Bypass:', bypassViewportFilter, 'SW:', currentBounds[0], 'NE:', currentBounds[1]);
     stableBoundsRef.current = currentBounds;
   }
 
@@ -267,7 +262,6 @@ const ResultsTab = memo(function ResultsTab({
     // If leaving MTB mode, immediately set transition state
     // This ensures the next render has the correct POI list and bounds
     if (activeSubTab === 'mtb' && tab === 'all') {
-      console.log('[ResultsTab handleSubTabChange] Leaving MTB mode - setting transition = true');
       setIsInTransition(true);
     }
 
@@ -387,7 +381,6 @@ const ResultsTab = memo(function ResultsTab({
           </div>
           {mapState && (
             <div className="map-thumbnail-sidebar">
-              {console.log('[ResultsTab] Passing to MapThumbnail - thumbnailBounds SW:', thumbnailBounds[0], 'NE:', thumbnailBounds[1])}
               <MapThumbnail
                 bounds={thumbnailBounds}
                 aspectRatio={mapState.aspectRatio || 1.5}

@@ -273,7 +273,11 @@ ENVFILE
         GOURMAND_EXIT_CODE=0
         echo ""
         echo "Running Gourmand AI slop detection..."
-        if command -v gourmand &> /dev/null; then
+        GOURMAND_BIN="$HOME/.cargo/bin/gourmand"
+        if [ -x "$GOURMAND_BIN" ]; then
+            "$GOURMAND_BIN" --full .
+            GOURMAND_EXIT_CODE=$?
+        elif command -v gourmand &> /dev/null; then
             gourmand --full .
             GOURMAND_EXIT_CODE=$?
         else
@@ -282,15 +286,31 @@ ENVFILE
             echo "  CI will still run Gourmand checks on pull requests"
         fi
 
+        # Run ESLint on JavaScript/React code
+        ESLINT_EXIT_CODE=0
         echo ""
-        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ]; then
-            echo "✓ Tests and Gourmand checks completed successfully"
+        echo "Running ESLint on JavaScript/React code..."
+        if [ -d "node_modules" ]; then
+            npm run lint
+            ESLINT_EXIT_CODE=$?
+        else
+            echo "⚠ Node dependencies not installed (skipping ESLint)"
+            echo "  Install with: npm install"
+        fi
+
+        echo ""
+        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ] && [ $ESLINT_EXIT_CODE -eq 0 ]; then
+            echo "✓ Tests, Gourmand, and ESLint checks completed successfully"
         else
             if [ $TEST_EXIT_CODE -ne 0 ]; then
                 echo "❌ Tests failed"
             fi
             if [ $GOURMAND_EXIT_CODE -ne 0 ]; then
                 echo "❌ Gourmand detected issues"
+            fi
+            if [ $ESLINT_EXIT_CODE -ne 0 ]; then
+                echo "❌ ESLint found issues"
+                echo "   Try: npm run lint:fix"
             fi
             exit 1
         fi
@@ -305,13 +325,46 @@ ENVFILE
 
     gourmand)
         echo "Running Gourmand AI slop detection..."
-        if command -v gourmand &> /dev/null; then
+        GOURMAND_BIN="$HOME/.cargo/bin/gourmand"
+        if [ -x "$GOURMAND_BIN" ]; then
+            "$GOURMAND_BIN" --full .
+        elif command -v gourmand &> /dev/null; then
             gourmand --full .
         else
             echo "❌ Gourmand not installed"
             echo ""
             echo "Install with:"
             echo "  cargo install --git https://codeberg.org/mattdm/gourmand.git"
+            exit 1
+        fi
+        ;;
+
+    lint)
+        echo "Running ESLint on JavaScript/React code..."
+        ESLINT_EXIT_CODE=0
+
+        # Check if node_modules exists
+        if [ ! -d "node_modules" ]; then
+            echo "❌ Dependencies not installed"
+            echo ""
+            echo "Install with:"
+            echo "  npm install"
+            exit 1
+        fi
+
+        # Run ESLint
+        npm run lint
+        ESLINT_EXIT_CODE=$?
+
+        if [ $ESLINT_EXIT_CODE -eq 0 ]; then
+            echo ""
+            echo "✓ ESLint checks passed"
+        else
+            echo ""
+            echo "❌ ESLint found issues"
+            echo ""
+            echo "Try auto-fixing with:"
+            echo "  npm run lint:fix"
             exit 1
         fi
         ;;
@@ -472,8 +525,9 @@ ENVFILE
         echo "  seed           Pull fresh data from production server via SSH"
         echo ""
         echo "TESTING COMMANDS"
-        echo "  test           Run full test suite (174 tests) + Gourmand checks"
+        echo "  test           Run full test suite (174 tests) + Gourmand + ESLint"
         echo "  gourmand       Run Gourmand AI slop detection only (fast iteration)"
+        echo "  lint           Run ESLint on JavaScript/React code (fast iteration)"
         echo ""
         echo "DEBUGGING COMMANDS"
         echo "  logs           Follow all container logs (stdout/stderr)"

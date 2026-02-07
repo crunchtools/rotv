@@ -755,8 +755,8 @@ app.get('/api/pois', async (req, res) => {
 
     query += ` ORDER BY p.poi_type, p.name`;
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const poisQuery = await pool.query(query, params);
+    res.json(poisQuery.rows);
   } catch (error) {
     console.error('Error fetching POIs:', error);
     res.status(500).json({ error: 'Failed to fetch POIs' });
@@ -765,7 +765,7 @@ app.get('/api/pois', async (req, res) => {
 
 app.get('/api/pois/:id', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const poiQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
@@ -779,10 +779,10 @@ app.get('/api/pois/:id', async (req, res) => {
       WHERE p.id = $1`,
       [req.params.id]
     );
-    if (result.rows.length === 0) {
+    if (poiQuery.rows.length === 0) {
       return res.status(404).json({ error: 'POI not found' });
     }
-    res.json(result.rows[0]);
+    res.json(poiQuery.rows[0]);
   } catch (error) {
     console.error('Error fetching POI:', error);
     res.status(500).json({ error: 'Failed to fetch POI' });
@@ -793,16 +793,16 @@ app.get('/api/pois/:id', async (req, res) => {
 app.get('/api/pois/:id/image', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
+    const imageQuery = await pool.query(
       'SELECT image_data, image_mime_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
       [id]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].image_data) {
+    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const { image_data, image_mime_type } = result.rows[0];
+    const { image_data, image_mime_type } = imageQuery.rows[0];
     res.setHeader('Content-Type', image_mime_type || 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -828,13 +828,13 @@ function sendThumbnail(res, imageData) {
 }
 
 // Helper to add to memory cache with LRU eviction
-function addToMemoryCache(key, data) {
+function addToMemoryCache(key, thumbnailImageData) {
   if (thumbnailMemoryCache.size >= MEMORY_CACHE_MAX_SIZE) {
     // Remove oldest entry (first key in Map)
     const firstKey = thumbnailMemoryCache.keys().next().value;
     thumbnailMemoryCache.delete(firstKey);
   }
-  thumbnailMemoryCache.set(key, data);
+  thumbnailMemoryCache.set(key, thumbnailImageData);
 }
 
 // Helper to clear all thumbnail cache entries for a specific POI
@@ -886,16 +886,16 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     }
 
     // Fetch original image and POI type
-    const result = await pool.query(
+    const imageQuery = await pool.query(
       'SELECT image_data, poi_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
       [id]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].image_data) {
+    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const isVirtualPoi = result.rows[0].poi_type === 'virtual';
+    const isVirtualPoi = imageQuery.rows[0].poi_type === 'virtual';
 
     // Generate thumbnail
     // Use 'contain' for organization logos (virtual POIs) to show full logo without cropping
@@ -910,7 +910,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
           position: 'center'
         };
 
-    const thumbnail = await sharp(result.rows[0].image_data)
+    const thumbnail = await sharp(imageQuery.rows[0].image_data)
       .resize(width, height, resizeOptions)
       .jpeg({
         quality: quality,
@@ -966,14 +966,14 @@ app.get('/api/filters', async (req, res) => {
 // Get all organizations that can be used as property owners
 app.get('/api/owner-organizations', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const organizationsQuery = await pool.query(`
       SELECT id, name, brief_description
       FROM pois
       WHERE poi_type = 'virtual'
         AND (deleted IS NULL OR deleted = FALSE)
       ORDER BY name
     `);
-    res.json(result.rows);
+    res.json(organizationsQuery.rows);
   } catch (error) {
     console.error('Error fetching owner organizations:', error);
     res.status(500).json({ error: 'Failed to fetch owner organizations' });
@@ -984,7 +984,7 @@ app.get('/api/owner-organizations', async (req, res) => {
 app.get('/api/pois/:id/associations', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(`
+    const associationsQuery = await pool.query(`
       SELECT a.id, a.virtual_poi_id, a.physical_poi_id, a.association_type,
              vp.name as virtual_poi_name, vp.poi_type as virtual_poi_type,
              pp.name as physical_poi_name, pp.poi_type as physical_poi_type,
@@ -997,7 +997,7 @@ app.get('/api/pois/:id/associations', async (req, res) => {
         AND (pp.deleted IS NULL OR pp.deleted = FALSE)
       ORDER BY a.created_at DESC
     `, [id]);
-    res.json(result.rows);
+    res.json(associationsQuery.rows);
   } catch (error) {
     console.error('Error fetching POI associations:', error);
     res.status(500).json({ error: 'Failed to fetch associations' });
@@ -1007,7 +1007,7 @@ app.get('/api/pois/:id/associations', async (req, res) => {
 // Get all associations (for frontend state management)
 app.get('/api/associations', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const associationsQuery = await pool.query(`
       SELECT a.id, a.virtual_poi_id, a.physical_poi_id, a.association_type,
              a.created_at, a.updated_at
       FROM poi_associations a
@@ -1017,7 +1017,7 @@ app.get('/api/associations', async (req, res) => {
         AND (pp.deleted IS NULL OR pp.deleted = FALSE)
       ORDER BY a.virtual_poi_id, a.physical_poi_id
     `);
-    res.json(result.rows);
+    res.json(associationsQuery.rows);
   } catch (error) {
     console.error('Error fetching all associations:', error);
     res.status(500).json({ error: 'Failed to fetch associations' });
@@ -1040,7 +1040,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
     }
 
     // Find virtual POIs that have at least one associated physical POI within bounds
-    const result = await pool.query(`
+    const virtualPoisQuery = await pool.query(`
       SELECT DISTINCT vp.id, vp.name, vp.poi_type, vp.property_owner,
              vp.brief_description, vp.era_id, e.name as era_name, vp.era, vp.historical_description,
              vp.primary_activities, vp.surface, vp.pets, vp.cell_signal,
@@ -1061,7 +1061,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
       ORDER BY vp.name
     `, [south, west, north, east]);
 
-    res.json(result.rows);
+    res.json(virtualPoisQuery.rows);
   } catch (error) {
     console.error('Error fetching virtual POIs in viewport:', error);
     res.status(500).json({ error: 'Failed to fetch virtual POIs' });
@@ -1071,7 +1071,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
 // Legacy API endpoints for backward compatibility during transition
 app.get('/api/destinations', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const destinationsQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
@@ -1086,7 +1086,7 @@ app.get('/api/destinations', async (req, res) => {
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY p.name
     `);
-    res.json(result.rows);
+    res.json(destinationsQuery.rows);
   } catch (error) {
     console.error('Error fetching destinations:', error);
     res.status(500).json({ error: 'Failed to fetch destinations' });
@@ -1095,7 +1095,7 @@ app.get('/api/destinations', async (req, res) => {
 
 app.get('/api/destinations/:id', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const destinationQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
@@ -1108,10 +1108,10 @@ app.get('/api/destinations/:id', async (req, res) => {
       WHERE p.id = $1`,
       [req.params.id]
     );
-    if (result.rows.length === 0) {
+    if (destinationQuery.rows.length === 0) {
       return res.status(404).json({ error: 'Destination not found' });
     }
-    res.json(result.rows[0]);
+    res.json(destinationQuery.rows[0]);
   } catch (error) {
     console.error('Error fetching destination:', error);
     res.status(500).json({ error: 'Failed to fetch destination' });
@@ -1122,16 +1122,16 @@ app.get('/api/destinations/:id', async (req, res) => {
 app.get('/api/destinations/:id/image', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
+    const imageQuery = await pool.query(
       'SELECT image_data, image_mime_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
       [id]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].image_data) {
+    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const { image_data, image_mime_type } = result.rows[0];
+    const { image_data, image_mime_type } = imageQuery.rows[0];
     res.setHeader('Content-Type', image_mime_type || 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1145,7 +1145,7 @@ app.get('/api/destinations/:id/image', async (req, res) => {
 // Legacy linear-features endpoints for backward compatibility
 app.get('/api/linear-features', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const linearFeaturesQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_type as feature_type, p.geometry,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
@@ -1160,7 +1160,7 @@ app.get('/api/linear-features', async (req, res) => {
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY p.poi_type, p.name
     `);
-    res.json(result.rows);
+    res.json(linearFeaturesQuery.rows);
   } catch (error) {
     console.error('Error fetching linear features:', error);
     res.status(500).json({ error: 'Failed to fetch linear features' });
@@ -1169,7 +1169,7 @@ app.get('/api/linear-features', async (req, res) => {
 
 app.get('/api/linear-features/:id', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const linearFeatureQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_type as feature_type, p.geometry,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
@@ -1183,10 +1183,10 @@ app.get('/api/linear-features/:id', async (req, res) => {
       WHERE p.id = $1`,
       [req.params.id]
     );
-    if (result.rows.length === 0) {
+    if (linearFeatureQuery.rows.length === 0) {
       return res.status(404).json({ error: 'Linear feature not found' });
     }
-    res.json(result.rows[0]);
+    res.json(linearFeatureQuery.rows[0]);
   } catch (error) {
     console.error('Error fetching linear feature:', error);
     res.status(500).json({ error: 'Failed to fetch linear feature' });
@@ -1196,16 +1196,16 @@ app.get('/api/linear-features/:id', async (req, res) => {
 app.get('/api/linear-features/:id/image', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
+    const imageQuery = await pool.query(
       'SELECT image_data, image_mime_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
       [id]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].image_data) {
+    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const { image_data, image_mime_type } = result.rows[0];
+    const { image_data, image_mime_type } = imageQuery.rows[0];
     res.setHeader('Content-Type', image_mime_type || 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1225,7 +1225,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
   try {
     const { id } = req.params;
     const limit = parseInt(req.query.limit) || 50;
-    const result = await pool.query(`
+    const newsQuery = await pool.query(`
       SELECT id, title, summary, source_url, source_name, news_type, published_at, created_at
       FROM poi_news
       WHERE poi_id = $1
@@ -1235,7 +1235,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
         created_at DESC
       LIMIT $2
     `, [id, limit]);
-    res.json(result.rows);
+    res.json(newsQuery.rows);
   } catch (error) {
     console.error('Error fetching POI news:', error);
     res.status(500).json({ error: 'Failed to fetch news' });
@@ -1257,8 +1257,8 @@ app.get('/api/pois/:id/events', async (req, res) => {
     }
     query += ` ORDER BY start_date ASC LIMIT $2`;
 
-    const result = await pool.query(query, [id, limit]);
-    res.json(result.rows);
+    const eventsQuery = await pool.query(query, [id, limit]);
+    res.json(eventsQuery.rows);
   } catch (error) {
     console.error('Error fetching POI events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
@@ -1315,8 +1315,8 @@ app.get('/api/trails/mtb', async (req, res) => {
       ORDER BY name
     `;
 
-    const result = await pool.query(query);
-    const trails = result.rows;
+    const trailsQuery = await pool.query(query);
+    const trails = trailsQuery.rows;
 
     // Optionally fetch latest status for each trail
     if (includeStatus) {
@@ -1344,7 +1344,7 @@ app.get('/api/trails/mtb', async (req, res) => {
 // Get all MTB trails with status data for Status Tab (public)
 app.get('/api/trail-status/mtb-trails', async (req, res) => {
   try {
-    const result = await pool.query(`
+    const trailStatusQuery = await pool.query(`
       SELECT
         p.id,
         p.name,
@@ -1369,11 +1369,12 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
       ) ts ON true
       WHERE p.status_url IS NOT NULL
         AND p.status_url != ''
+        AND p.poi_type = 'point'
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY p.name
     `);
 
-    res.json(result.rows);
+    res.json(trailStatusQuery.rows);
   } catch (error) {
     console.error('Error fetching MTB trail status:', error);
     res.status(500).json({ error: 'Failed to fetch MTB trail status' });
@@ -1384,7 +1385,7 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
 app.get('/api/news/recent', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 20;
-    const result = await pool.query(`
+    const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.published_at, n.created_at, p.id as poi_id, p.name as poi_name, p.poi_type
       FROM poi_news n
@@ -1393,7 +1394,7 @@ app.get('/api/news/recent', async (req, res) => {
       ORDER BY COALESCE(n.published_at, n.created_at) DESC
       LIMIT $1
     `, [limit]);
-    res.json(result.rows);
+    res.json(recentNewsQuery.rows);
   } catch (error) {
     console.error('Error fetching recent news:', error);
     res.status(500).json({ error: 'Failed to fetch recent news' });
@@ -1404,7 +1405,7 @@ app.get('/api/news/recent', async (req, res) => {
 app.get('/api/events/upcoming', async (req, res) => {
   try {
     const daysAhead = parseInt(req.query.days) || 30;
-    const result = await pool.query(`
+    const upcomingEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
              e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
       FROM poi_events e
@@ -1414,7 +1415,7 @@ app.get('/api/events/upcoming', async (req, res) => {
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY e.start_date ASC
     `, [daysAhead]);
-    res.json(result.rows);
+    res.json(upcomingEventsQuery.rows);
   } catch (error) {
     console.error('Error fetching upcoming events:', error);
     res.status(500).json({ error: 'Failed to fetch upcoming events' });
@@ -1425,18 +1426,18 @@ app.get('/api/events/upcoming', async (req, res) => {
 app.get('/api/icons/:name.svg', async (req, res) => {
   try {
     const iconName = req.params.name;
-    const result = await pool.query(
+    const iconQuery = await pool.query(
       'SELECT svg_content FROM icons WHERE name = $1 AND svg_content IS NOT NULL',
       [iconName]
     );
 
-    if (result.rows.length === 0 || !result.rows[0].svg_content) {
+    if (iconQuery.rows.length === 0 || !iconQuery.rows[0].svg_content) {
       return res.status(404).json({ error: 'Icon not found' });
     }
 
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.send(result.rows[0].svg_content);
+    res.send(iconQuery.rows[0].svg_content);
   } catch (error) {
     console.error('Error serving icon:', error);
     res.status(500).json({ error: 'Failed to serve icon' });
@@ -1448,16 +1449,16 @@ app.get('/api/icons/:name.svg', async (req, res) => {
 app.get('/share/destination/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
+    const poiQuery = await pool.query(
       `SELECT id, name, brief_description, image_mime_type FROM pois WHERE id = $1`,
       [id]
     );
 
-    if (result.rows.length === 0) {
+    if (poiQuery.rows.length === 0) {
       return res.redirect('/');
     }
 
-    const poi = result.rows[0];
+    const poi = poiQuery.rows[0];
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
     const appUrl = `${baseUrl}/?poi=${encodeURIComponent(poi.name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'))}`;
     const imageUrl = poi.image_mime_type ? `${baseUrl}/api/pois/${poi.id}/thumbnail` : `${baseUrl}/icons/default.svg`;
@@ -1514,16 +1515,16 @@ app.get('/share/destination/:id', async (req, res) => {
 app.get('/share/linear-feature/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await pool.query(
+    const featureQuery = await pool.query(
       `SELECT id, name, poi_type, brief_description, image_mime_type FROM pois WHERE id = $1`,
       [id]
     );
 
-    if (result.rows.length === 0) {
+    if (featureQuery.rows.length === 0) {
       return res.redirect('/');
     }
 
-    const feature = result.rows[0];
+    const feature = featureQuery.rows[0];
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
     const appUrl = `${baseUrl}/?feature=${encodeURIComponent(feature.name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'))}`;
     const imageUrl = feature.image_mime_type ? `${baseUrl}/api/pois/${feature.id}/thumbnail` : `${baseUrl}/icons/layers/${feature.poi_type === 'trail' ? 'trails' : 'rivers'}.svg`;
@@ -1599,14 +1600,14 @@ app.use(async (req, res, next) => {
     const poiSlug = req.query.poi;
     try {
       // Look up POI by matching slug against name
-      const result = await pool.query(`
+      const poisQuery = await pool.query(`
         SELECT id, name, poi_type, brief_description, image_mime_type
         FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
       `);
 
       // Find matching POI by slug
-      const poi = result.rows.find(p => generateSlug(p.name) === poiSlug);
+      const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
 
       if (poi) {
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
@@ -1741,9 +1742,9 @@ async function start() {
     // Register scheduled news collection handler (daily job for all POIs)
     await registerNewsCollectionHandler(async () => {
       console.log('Running scheduled news collection for all POIs...');
-      const result = await runNewsCollection(pool, null);
-      if (result.totalPois > 0) {
-        console.log(`News collection completed: ${result.newsFound} news items, ${result.eventsFound} events found`);
+      const newsCollectionResult = await runNewsCollection(pool, null);
+      if (newsCollectionResult.totalPois > 0) {
+        console.log(`News collection completed: ${newsCollectionResult.newsFound} news items, ${newsCollectionResult.eventsFound} events found`);
       } else {
         console.log('No POIs to collect');
       }
@@ -1763,11 +1764,11 @@ async function start() {
       console.log('Running scheduled trail status collection for all MTB trails...');
       const { runTrailStatusCollection } = await import('./services/trailStatusService.js');
       const boss = app.get('boss');
-      const result = await runTrailStatusCollection(pool, boss, {
+      const trailStatusResult = await runTrailStatusCollection(pool, boss, {
         jobType: 'scheduled_collection'
       });
-      if (result.totalTrails > 0) {
-        console.log(`Trail status collection started for ${result.totalTrails} trails`);
+      if (trailStatusResult.totalTrails > 0) {
+        console.log(`Trail status collection started for ${trailStatusResult.totalTrails} trails`);
       } else {
         console.log('No MTB trails to collect');
       }

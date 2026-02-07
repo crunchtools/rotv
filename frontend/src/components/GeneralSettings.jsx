@@ -33,7 +33,7 @@ function GeneralSettings() {
 
       setSaveMessage({ type: 'success', text: 'Timezone saved successfully!' });
       setTimeout(() => setSaveMessage(null), 3000);
-    } catch (error) {
+    } catch {
       setSaveMessage({ type: 'error', text: 'Failed to save timezone' });
     } finally {
       setSaving(false);

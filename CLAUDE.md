@@ -108,8 +108,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 | `docs/DEVELOPMENT_ARCHITECTURE.md` | Container workflow, ephemeral storage |
 | `docs/NEWS_EVENTS_ARCHITECTURE.md` | AI-powered content collection |
 | `docs/TRAIL_STATUS_ARCHITECTURE.md` | Trail condition monitoring |
-| `docs/CI_CD_TESTING.md` | GitHub Actions, test suite |
-| `docs/TEST_COVERAGE.md` | Test coverage details |
+| `docs/CI_CD_TESTING.md` | GitHub Actions, test suite, code quality tools |
 
 ---
 

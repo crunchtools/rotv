@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet-draw/dist/leaflet.draw.css';
@@ -44,9 +44,7 @@ function VirtualPoiCreator({ isActive, onCancel, destinations, linearFeatures, o
     rectangleHandlerRef.current = rectangleHandler;
 
     // Auto-start drawing mode
-    console.log('Enabling rectangle drawing mode');
     rectangleHandler.enable();
-    console.log('Rectangle handler enabled:', rectangleHandler.enabled());
 
     // Handle rectangle creation
     const onDrawCreated = (e) => {
@@ -68,9 +66,6 @@ function VirtualPoiCreator({ isActive, onCancel, destinations, linearFeatures, o
       }
 
       // Debug logging
-      console.log('Rectangle drawn with bounds:', { south, west, north, east });
-      console.log('Destinations:', destinations?.length || 0);
-      console.log('Linear features:', linearFeatures?.length || 0);
 
       // Manual bounds checking function
       const isPointInBounds = (lat, lng) => {
@@ -83,11 +78,6 @@ function VirtualPoiCreator({ isActive, onCancel, destinations, linearFeatures, o
         ...(linearFeatures || []).map(f => ({ ...f, _type: f.feature_type || 'trail' }))
       ];
 
-      console.log('Total POIs to check:', allPois.length);
-      console.log('Active filters - visibleTypes:', visibleTypes ? Array.from(visibleTypes) : 'none',
-                  'showTrails:', showTrails, 'showRivers:', showRivers,
-                  'visibleBoundaries:', visibleBoundaries ? visibleBoundaries.size : 0);
-
       const poisInBounds = allPois.filter(poi => {
         if (poi._type === 'point' && poi.latitude && poi.longitude) {
           // Check if POI type is visible in legend
@@ -99,7 +89,6 @@ function VirtualPoiCreator({ isActive, onCancel, destinations, linearFeatures, o
           const lat = parseFloat(poi.latitude);
           const lng = parseFloat(poi.longitude);
           const contains = isPointInBounds(lat, lng);
-          if (contains) console.log('Found point POI:', poi.name, 'type:', iconType);
           return contains;
         } else if ((poi._type === 'trail' || poi._type === 'river' || poi._type === 'boundary') && poi.geometry) {
           // Check if the linear feature's layer is visible
@@ -112,13 +101,11 @@ function VirtualPoiCreator({ isActive, onCancel, destinations, linearFeatures, o
             const geojson = typeof poi.geometry === 'string' ? JSON.parse(poi.geometry) : poi.geometry;
             if (geojson.type === 'LineString') {
               const contains = geojson.coordinates.some(([lng, lat]) => isPointInBounds(lat, lng));
-              if (contains) console.log('Found linear POI:', poi.name, 'type:', poi._type);
               return contains;
             } else if (geojson.type === 'MultiLineString') {
               const contains = geojson.coordinates.some(line =>
                 line.some(([lng, lat]) => isPointInBounds(lat, lng))
               );
-              if (contains) console.log('Found multiline POI:', poi.name, 'type:', poi._type);
               return contains;
             }
           } catch (err) {
@@ -128,7 +115,6 @@ function VirtualPoiCreator({ isActive, onCancel, destinations, linearFeatures, o
         return false;
       });
 
-      console.log('POIs found in bounds:', poisInBounds.length, poisInBounds.map(p => p.name));
 
       // Call callback with found POIs
       if (onPoisSelected && poisInBounds.length > 0) {

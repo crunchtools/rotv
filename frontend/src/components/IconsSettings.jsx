@@ -3,7 +3,6 @@ import IconGeneratorModal from './IconGeneratorModal';
 
 function IconsSettings() {
   const [icons, setIcons] = useState([]);
-  const [activities, setActivities] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -27,7 +26,7 @@ function IconsSettings() {
       } else {
         setError('Failed to fetch icons');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch icons');
     } finally {
       setLoading(false);
@@ -40,8 +39,7 @@ function IconsSettings() {
         credentials: 'include'
       });
       if (response.ok) {
-        const data = await response.json();
-        setActivities(data);
+        await response.json(); // Data not used, just fetch for potential future use
       }
     } catch (err) {
       console.error('Failed to fetch activities:', err);
@@ -101,7 +99,7 @@ function IconsSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to update icon');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to update icon');
     } finally {
       setSaving(false);
@@ -150,7 +148,7 @@ function IconsSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to delete icon');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to delete icon');
     }
   };
@@ -222,33 +220,6 @@ function IconsSettings() {
   // Handle new icon saved from generator
   const handleIconGenerated = (newIcon) => {
     setIcons(prev => [...prev, newIcon]);
-  };
-
-  // Get icon source - either static file or API for generated icons
-  const getIconSrc = (icon) => {
-    if (icon.svg_content) {
-      return `/api/icons/${icon.name}.svg`;
-    }
-    return `/icons/${icon.svg_filename || 'default.svg'}`;
-  };
-
-  // Render icon preview - inline SVG for generated icons, img for static
-  const renderIconPreview = (icon, className = 'icon-preview') => {
-    if (icon.svg_content) {
-      return (
-        <div
-          className={className}
-          dangerouslySetInnerHTML={{ __html: icon.svg_content }}
-        />
-      );
-    }
-    return (
-      <img
-        src={`/icons/${icon.svg_filename || 'default.svg'}`}
-        alt={icon.label}
-        className={className}
-      />
-    );
   };
 
   if (loading) {
