@@ -15,11 +15,10 @@ function formatDateForCalendar(dateString) {
   return date.toISOString().replace(/-|:|\.\d{3}/g, '').slice(0, 15) + 'Z';
 }
 
-function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [deleting, setDeleting] = useState(null);
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [typeFilters, setTypeFilters] = useState({
@@ -73,7 +72,6 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
     currentBounds[1][1] !== stableBoundsRef.current[1][1]);
 
   if (boundsChanged) {
-    console.log('[ParkEvents] Thumbnail bounds UPDATE - Bypass:', bypassViewportFilter, 'SW:', currentBounds[0], 'NE:', currentBounds[1]);
     stableBoundsRef.current = currentBounds;
   }
 
@@ -119,29 +117,6 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
 
     return filtered;
   }, [events, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
-
-  const handleDelete = async (eventId) => {
-    if (!confirm('Delete this event?')) return;
-
-    setDeleting(eventId);
-    try {
-      const response = await fetch(`/api/admin/events/${eventId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        setEvents(prev => prev.filter(e => e.id !== eventId));
-      } else {
-        alert('Failed to delete event');
-      }
-    } catch (err) {
-      console.error('Error deleting event:', err);
-      alert('Failed to delete event');
-    } finally {
-      setDeleting(null);
-    }
-  };
 
   const generateCalendarUrl = (event) => {
     const title = encodeURIComponent(event.title);
@@ -353,7 +328,6 @@ END:VCALENDAR`;
         {/* Map thumbnail sidebar */}
         {mapState && (
           <div className="map-thumbnail-sidebar">
-            {console.log('[ParkEvents] Passing to MapThumbnail - thumbnailBounds SW:', thumbnailBounds[0], 'NE:', thumbnailBounds[1])}
             <MapThumbnail
               bounds={thumbnailBounds}
               aspectRatio={mapState.aspectRatio || 1.5}

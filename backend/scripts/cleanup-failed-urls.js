@@ -166,11 +166,11 @@ async function main() {
     const failedNewsNetwork = [];
 
     await processInBatches(newsToTest, async (item) => {
-      const result = await testUrl(item.source_url);
-      if (!result.success) {
-        failedNewsNetwork.push({ ...item, error: result.error, status: result.status });
+      const urlTest = await testUrl(item.source_url);
+      if (!urlTest.success) {
+        failedNewsNetwork.push({ ...item, error: urlTest.error, status: urlTest.status });
       }
-      return result;
+      return urlTest;
     }, CONCURRENT_REQUESTS);
 
     // Test remaining event URLs
@@ -178,11 +178,11 @@ async function main() {
     const failedEventsNetwork = [];
 
     await processInBatches(eventsToTest, async (item) => {
-      const result = await testUrl(item.source_url);
-      if (!result.success) {
-        failedEventsNetwork.push({ ...item, error: result.error, status: result.status });
+      const urlTest = await testUrl(item.source_url);
+      if (!urlTest.success) {
+        failedEventsNetwork.push({ ...item, error: urlTest.error, status: urlTest.status });
       }
-      return result;
+      return urlTest;
     }, CONCURRENT_REQUESTS);
 
     // Combine results

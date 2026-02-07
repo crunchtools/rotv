@@ -93,25 +93,6 @@ function getDestinationIconTypeFromConfig(dest, iconConfig) {
 const PARK_CENTER = [41.26, -81.55];
 const DEFAULT_ZOOM = 11;
 
-// Get marker color based on property owner
-function getOwnerColor(owner) {
-  if (!owner) return '#f57c00';
-  const ownerLower = owner.toLowerCase();
-  if (ownerLower.includes('federal') || ownerLower.includes('nps')) return '#2d5016';
-  if (ownerLower.includes('private')) return '#7b2d8e';
-  if (ownerLower.includes('local') || ownerLower.includes('metro') || ownerLower.includes('county')) return '#1565c0';
-  return '#f57c00';
-}
-
-function getOwnerType(owner) {
-  if (!owner) return 'other';
-  const ownerLower = owner.toLowerCase();
-  if (ownerLower.includes('federal') || ownerLower.includes('nps')) return 'federal';
-  if (ownerLower.includes('private')) return 'private';
-  if (ownerLower.includes('local') || ownerLower.includes('metro') || ownerLower.includes('county')) return 'local';
-  return 'other';
-}
-
 function Legend({
   // Layer toggles
   showNpsMap, onToggleNpsMap,
@@ -125,15 +106,15 @@ function Legend({
   // Search
   searchQuery, onSearchChange,
   // Popup control
-  isExpanded, onClose,
+  isExpanded, _onClose,
   // Edit mode flag for mobile spacing
   editMode,
   // Admin/Edit features
-  activeTab, iconConfig, onOpenAdmin,
-  onFileSelect, selectedFileName, importType, onImportTypeChange,
-  onImportFile, importingFile, importMessage, onDismissMessage
+  _activeTab, iconConfig, _onOpenAdmin,
+  _onFileSelect, _selectedFileName, _importType, _onImportTypeChange,
+  _onImportFile, _importingFile, _importMessage, _onDismissMessage
 }) {
-  const isEditTab = activeTab === 'edit';
+  // isEditTab removed - activeTab is already used directly in render
 
   // Convert iconConfig to the format needed for legend display, then merge with layer icons
   const iconTypes = useMemo(() => {
@@ -285,7 +266,7 @@ function Legend({
 // Component to handle map clicks - right-click for POI creation, left-click to deselect
 function MapClickHandler({ isAdmin, editMode, onRightClick, onMapClick }) {
   useMapEvents({
-    click: (e) => {
+    click: () => {
       // Left click on map (not on a marker) deselects current selection
       if (onMapClick) {
         onMapClick();
@@ -389,10 +370,7 @@ function BoundsFitter({ boundsToFit }) {
   const prevBounds = useRef(null);
 
   useEffect(() => {
-    console.log('[BoundsFitter] boundsToFit:', boundsToFit, 'prevBounds:', prevBounds.current);
     if (boundsToFit && JSON.stringify(boundsToFit) !== JSON.stringify(prevBounds.current)) {
-      console.log('[BoundsFitter] Fitting map to bounds:', boundsToFit);
-      console.log('[BoundsFitter] Bounds SW:', boundsToFit[0], 'NE:', boundsToFit[1]);
 
       // Calculate geographic size to determine if we need extra zoom out
       const latRange = boundsToFit[1][0] - boundsToFit[0][0];
@@ -405,14 +383,10 @@ function BoundsFitter({ boundsToFit }) {
       const padding = geoSize >= 0.3 ? [20, 20] : [50, 50];
       const maxZoom = geoSize >= 0.3 ? 12 : undefined; // Limit zoom for large areas
 
-      console.log('[BoundsFitter] Geographic size:', geoSize, 'using padding:', padding);
 
       // boundsToFit is already in Leaflet format: [[lat, lng], [lat, lng]]
       map.fitBounds(boundsToFit, { padding, maxZoom });
       prevBounds.current = boundsToFit;
-      console.log('[BoundsFitter] Map fitted');
-    } else {
-      console.log('[BoundsFitter] Skipping - bounds unchanged or null');
     }
   }, [boundsToFit, map]);
 
@@ -497,18 +471,6 @@ function MapMoveTracker({ onMapMove }) {
   return null;
 }
 
-// Helper to calculate distance between two lat/lng points in miles (Haversine formula)
-function getDistanceMiles(lat1, lng1, lat2, lng2) {
-  const R = 3959; // Earth's radius in miles
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
 // Component to track which POIs are visible in the current map viewport
 function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries }) {
   const map = useMap();
@@ -524,15 +486,12 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
 
       // Add visible point destinations
       if (destinations && destinations.length > 0) {
-        let destFilteredOut = 0;
-        let destIncluded = 0;
         destinations.forEach(dest => {
           if (!dest.latitude || !dest.longitude) return;
 
           // Check if POI type is visible in legend
           const iconType = getDestinationIconType(dest);
           if (!visibleTypes.has(iconType)) {
-            destFilteredOut++;
             return;
           }
 
@@ -541,7 +500,6 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
           const lng = parseFloat(dest.longitude);
           if (bounds.contains([lat, lng])) {
             visibleIds.push(dest.id);
-            destIncluded++;
           }
         });
       }
@@ -556,7 +514,6 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
                                     visibleTypes.has('boundary');
 
       if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
-        let linearIncluded = 0;
         linearFeatures.forEach(feature => {
           // Check if the feature's layer is visible
           let isLayerVisible = false;
@@ -576,7 +533,6 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
             const geoBounds = getGeometryBounds(feature.geometry);
             if (boundsIntersect(bounds, geoBounds)) {
               visibleIds.push(feature.id);
-              linearIncluded++;
             }
           }
         });
@@ -602,7 +558,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
           aspectRatio: width / height
         });
       }
-    } catch (e) {
+    } catch {
       // Map not ready yet, will try again on next event
     }
   }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries]);
@@ -861,7 +817,7 @@ function createViewSelectedIcon(iconUrl) {
 
 // Simple marker component - draggable state controlled by key prop
 // hasSelection indicates if ANY marker is currently selected (used to suppress hover tooltips)
-function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDragEnd, mapMoveCount, hasSelection }) {
+function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDragEnd, _mapMoveCount, hasSelection }) {
   const markerRef = useRef(null);
   const map = useMap();
 
@@ -910,7 +866,6 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
       const marker = markerRef.current;
       if (marker) {
         const { lat, lng } = marker.getLatLng();
-        console.log(`Drag ended for ${dest.name}: ${lat}, ${lng}`);
         onDragEnd(dest, lat, lng);
       }
     }
@@ -1030,7 +985,7 @@ const DEFAULT_NPS_MAP_BOUNDS = [
 // Default icon type IDs for initializing the filter (before config loads)
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
+function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
   const [showAdmin, setShowAdmin] = useState(false);
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [mapBounds, setMapBounds] = useState(DEFAULT_NPS_MAP_BOUNDS);
@@ -1041,12 +996,9 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   const [importingFile, setImportingFile] = useState(false);
   const [importMessage, setImportMessage] = useState(null);
   const [isCreatingVirtualPoi, setIsCreatingVirtualPoi] = useState(false);
-  const fileRef = useRef(null); // Store File object in ref to avoid React re-renders
   const [visiblePoiIds, setVisiblePoiIds] = useState([]);
-
-  // Admin news refresh state
-  const [refreshingNews, setRefreshingNews] = useState(false);
   const [refreshResult, setRefreshResult] = useState(null);
+  const fileRef = useRef(null); // Store File object in ref to avoid React re-renders
 
   // Track map moves to trigger tooltip direction recalculation
   const [mapMoveCount, setMapMoveCount] = useState(0);
@@ -1060,86 +1012,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
       onVisiblePoisChange(visibleIds);
     }
   }, [onVisiblePoisChange]);
-
-  // Handle admin news refresh for visible POIs
-  const handleRefreshNews = useCallback(async () => {
-    if (refreshingNews || visiblePoiIds.length === 0) return;
-
-    setRefreshingNews(true);
-    setRefreshResult(null);
-
-    try {
-      // Start the job
-      const response = await fetch('/api/admin/news/collect-batch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ poiIds: visiblePoiIds })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        setRefreshResult({ type: 'error', message: error.error || 'Failed to start job' });
-        setRefreshingNews(false);
-        return;
-      }
-
-      const { jobId, totalPois } = await response.json();
-      setRefreshResult({ type: 'progress', message: `Starting... (0/${totalPois} POIs)` });
-
-      // Poll for job status
-      const pollInterval = setInterval(async () => {
-        try {
-          const statusResponse = await fetch(`/api/admin/news/job/${jobId}`, {
-            credentials: 'include'
-          });
-
-          if (statusResponse.ok) {
-            const status = await statusResponse.json();
-            const progress = status.total_pois > 0
-              ? `${status.pois_processed}/${status.total_pois} POIs`
-              : `${status.pois_processed} POIs`;
-
-            if (status.status === 'running') {
-              setRefreshResult({
-                type: 'progress',
-                message: `Processing ${progress} - Found ${status.news_found} news, ${status.events_found} events`
-              });
-            } else if (status.status === 'completed') {
-              clearInterval(pollInterval);
-              setRefreshingNews(false);
-              setRefreshResult({
-                type: 'success',
-                message: `Done! Found ${status.news_found} news, ${status.events_found} events from ${status.pois_processed} POIs`
-              });
-              setTimeout(() => setRefreshResult(null), 8000);
-              // Trigger refresh of News and Events pages
-              onNewsRefresh && onNewsRefresh();
-            } else if (status.status === 'failed') {
-              clearInterval(pollInterval);
-              setRefreshingNews(false);
-              setRefreshResult({
-                type: 'error',
-                message: status.error_message || 'Job failed'
-              });
-            }
-          }
-        } catch (pollError) {
-          console.error('Error polling job status:', pollError);
-        }
-      }, 1500); // Poll every 1.5 seconds
-
-      // Safety timeout - stop polling after 5 minutes
-      setTimeout(() => {
-        clearInterval(pollInterval);
-        setRefreshingNews(false);
-      }, 300000);
-
-    } catch (error) {
-      setRefreshResult({ type: 'error', message: error.message });
-      setRefreshingNews(false);
-    }
-  }, [refreshingNews, visiblePoiIds]);
 
   // Icon config is fetched in App.jsx on mount and passed as prop
   // We receive iconConfig but don't fetch or modify visibleTypes here
@@ -1228,7 +1100,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
       let geojson;
       try {
         geojson = JSON.parse(content);
-      } catch (e) {
+      } catch {
         setImportMessage({ type: 'error', text: 'Invalid JSON file' });
         setImportingFile(false);
         return;
@@ -1268,11 +1140,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   // Clear import message
   const handleDismissMessage = () => {
     setImportMessage(null);
-  };
-
-  // Cancel file selection
-  const handleCancelImport = () => {
-    setSelectedFile(null);
   };
 
   // Handle marker drag end
@@ -1337,12 +1204,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   // Style functions for linear features (trails and rivers)
   // Uses editMode from closure to differentiate Edit (orange) vs View (blue) selected colors
   const getLinearFeatureStyle = useCallback((feature, isSelected) => {
-    // Use thicker lines for easier clicking (weight 6 normal, 8 selected)
-    const baseStyle = {
-      weight: isSelected ? 8 : 6,
-      opacity: isSelected ? 1 : 0.8
-    };
-
     // Selected colors: Edit mode = orange (#FF8C00), View mode = blue (#0066CC)
     const editSelectedColor = '#FF8C00';
     const viewSelectedColor = '#0066CC';
@@ -1383,11 +1244,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
   // Track if anything is selected (used to suppress hover tooltips on other features)
   // Virtual POIs (organizations) don't count since they don't appear on the map
   const hasAnySelection = !!((selectedDestination && selectedDestination.poi_type !== 'virtual') || selectedLinearFeature);
-
-  // GeoJSON key to force re-render when selection or mode changes
-  const linearFeaturesKey = useMemo(() => {
-    return `linear-${selectedLinearFeature?.id || 'none'}-${editMode ? 'edit' : 'view'}-${hasAnySelection}`;
-  }, [selectedLinearFeature, editMode, hasAnySelection]);
 
   return (
     <div className={`map-container ${editMode ? 'edit-mode-active' : ''}`}>
@@ -1455,7 +1311,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                     fill: false,
                     opacity: 1
                   })}
-                  onEachFeature={(geoFeature, layer) => {
+                  onEachFeature={(_geoFeature, layer) => {
                     // Set pointer-events to stroke only (no fill interaction)
                     layer.on('add', () => {
                       const el = layer.getElement();
@@ -1502,7 +1358,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                   key={`boundary-visible-${feature.id}-${isSelected}-${editMode}-${hasAnySelection}`}
                   data={geojsonData}
                   style={() => getLinearFeatureStyle(feature, isSelected)}
-                  onEachFeature={(geoFeature, layer) => {
+                  onEachFeature={(_geoFeature, layer) => {
                     layer.on('add', () => {
                       const el = layer.getElement();
                       if (el) {

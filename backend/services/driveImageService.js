@@ -9,11 +9,11 @@ const GEOSPATIAL_FOLDER_NAME = 'Geospatial';
  * Get a Drive setting from the database
  */
 export async function getDriveSetting(pool, key) {
-  const result = await pool.query(
+  const settingQuery = await pool.query(
     'SELECT value FROM drive_settings WHERE key = $1',
     [key]
   );
-  return result.rows[0]?.value || null;
+  return settingQuery.rows[0]?.value || null;
 }
 
 /**
@@ -33,9 +33,9 @@ export async function setDriveSetting(pool, key, value) {
  * Get all Drive settings as an object
  */
 export async function getAllDriveSettings(pool) {
-  const result = await pool.query('SELECT key, value FROM drive_settings');
+  const settingsQuery = await pool.query('SELECT key, value FROM drive_settings');
   const settings = {};
-  for (const row of result.rows) {
+  for (const row of settingsQuery.rows) {
     settings[row.key] = row.value;
   }
   return settings;

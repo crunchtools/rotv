@@ -3420,7 +3420,6 @@ export async function pullAssociationsFromSheets(sheets, pool) {
 }
 
 // Export constants for admin routes
-export const SPREADSHEET_ID = null; // No longer used - app creates its own
 export const SHEET_NAME = APP_SHEET_NAME;
 export const ACTIVITIES_SHEET = ACTIVITIES_SHEET_NAME;
 export const ERAS_SHEET = ERAS_SHEET_NAME;

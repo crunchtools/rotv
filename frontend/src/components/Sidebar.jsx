@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import ImageUploader from './ImageUploader';
-import NewsEvents from './NewsEvents';
 import CollectionStatus from './CollectionStatus';
 import ThumbnailCarousel from './ThumbnailCarousel';
 import { formatDateTime } from './NewsEventsShared';
@@ -24,7 +23,7 @@ function ShareModal({ isOpen, onClose, poiName, poiDescription }) {
       await navigator.clipboard.writeText(appUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
+    } catch {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = appUrl;
@@ -52,7 +51,7 @@ function ShareModal({ isOpen, onClose, poiName, poiDescription }) {
     <div className="share-modal-overlay" onClick={onClose}>
       <div className="share-modal" onClick={(e) => e.stopPropagation()}>
         <div className="share-modal-header">
-          <h3>Share "{poiName}"</h3>
+          <h3>Share &quot;{poiName}&quot;</h3>
           <button className="share-modal-close" onClick={onClose}>&times;</button>
         </div>
 
@@ -208,7 +207,7 @@ function EditableCellSignal({ level, onChange }) {
 }
 
 // Read-only view component - works for both destinations and linear features
-function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null, showNpsMap, onToggleNpsMap }) {
+function ReadOnlyView({ destination, isLinearFeature, _isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap }) {
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
   const imageUrl = destination.image_mime_type
@@ -227,11 +226,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
     if (destination.poi_type === 'point' && destination.status_url) return '/icons/thumbnails/trail.svg';
     return '/icons/thumbnails/destination.svg';
   };
-
-  // Debug logging for virtual POI detection
-  if (destination.poi_type === 'virtual') {
-    console.log('[Sidebar View] Virtual POI detected:', destination.name, 'poi_type:', destination.poi_type);
-  }
 
   return (
     <div className="view-container">
@@ -376,7 +370,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, showImage = true,
 }
 
 // Edit view component - works for both destinations and linear features
-function EditView({ destination, editedData, setEditedData, onSave, onCancel, onDelete, saving, deleting, onPreviewCoordsChange, isNewPOI, isNewOrganization, onImageUpdate, isLinearFeature, showImage = true }) {
+function EditView({ destination, editedData, setEditedData, onSave, onCancel, onDelete, saving, deleting, onPreviewCoordsChange, isNewPOI, isNewOrganization, _onImageUpdate, isLinearFeature, showImage = true }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [aiError, setAiError] = useState(null);
   const [researchSources, setResearchSources] = useState(null);
@@ -385,7 +379,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [promptType, setPromptType] = useState(null); // 'brief' or 'historical'
   const [editablePrompt, setEditablePrompt] = useState('');
-  const [loadingPrompt, setLoadingPrompt] = useState(false);
+  const [loadingPrompt] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   // Research state
@@ -581,39 +575,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       setAiError(err.message);
     } finally {
       setResearching(false);
-    }
-  };
-
-  // Open prompt editor and fetch the interpolated template
-  const handleOpenPromptEditor = async (type) => {
-    setPromptType(type);
-    setShowPromptEditor(true);
-    setLoadingPrompt(true);
-    setAiError(null);
-
-    try {
-      const response = await fetch('/api/admin/ai/prompt-preview', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          destination: editedData,
-          promptType: type
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to load prompt');
-      }
-
-      const result = await response.json();
-      setEditablePrompt(result.prompt);
-    } catch (err) {
-      setAiError(err.message);
-      setShowPromptEditor(false);
-    } finally {
-      setLoadingPrompt(false);
     }
   };
 
@@ -1160,23 +1121,19 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
     const stored = localStorage.getItem(`news-collecting-${poiId}`);
     return stored === 'true';
   });
-  const [collectResult, setCollectResult] = useState(null);
   const [collectionSession, setCollectionSession] = useState(0);
   const [showCompletedStatus, setShowCompletedStatus] = useState(false);
+  const [, setCollectResult] = useState(null);
 
   const fetchNews = async () => {
     if (!poiId) {
-      console.log('[fetchNews] No poiId, skipping fetch');
       return;
     }
-    console.log(`[fetchNews] Fetching news for POI ${poiId}...`);
     setLoading(true);
     try {
       const response = await fetch(`/api/pois/${poiId}/news?limit=50`);
-      console.log(`[fetchNews] Response status: ${response.status} ${response.statusText}`);
       if (response.ok) {
         const data = await response.json();
-        console.log(`[fetchNews] Received ${data.length} news items:`, data.map(n => n.title.substring(0, 40)));
         setNews(data);
         if (onCountChange) onCountChange(data.length);
       } else {
@@ -1186,7 +1143,6 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
       console.error('[fetchNews] Error fetching POI news:', err);
     } finally {
       setLoading(false);
-      console.log(`[fetchNews] Loading complete, news count: ${news.length}`);
     }
   };
 
@@ -1200,7 +1156,8 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
         setCollecting(false);
       }, 2000);
     }
-  }, [poiId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poiId]); // fetchNews and collecting intentionally excluded to avoid re-fetching on state changes
 
   // Clear completed status when editMode changes
   useEffect(() => {
@@ -1237,13 +1194,11 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
 
         // If collection is already running, just attach to it
         if (result.alreadyRunning) {
-          console.log('Collection already running, attaching to existing job');
           // The status widget will poll and show the current progress
           // Don't change collecting state - keep it true to show widget
           return;
         }
 
-        console.log('[handleCollectNews] Collection successful, result:', result);
         setCollectResult({
           type: 'success',
           newsFound: result.newsFound,
@@ -1251,9 +1206,7 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
           newsDuplicate: result.newsDuplicate || 0
         });
         // Refresh the news list
-        console.log('[handleCollectNews] Calling fetchNews to refresh list...');
         await fetchNews();
-        console.log('[handleCollectNews] fetchNews completed');
         shouldStopCollecting = true;
       } else {
         const error = await response.json();
@@ -1283,7 +1236,6 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
         credentials: 'include'
       });
       if (response.ok) {
-        console.log('[PoiNews] Cancellation requested');
         // The status widget will update to show cancelled state
         setTimeout(() => {
           setCollecting(false);
@@ -1345,12 +1297,10 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
             key={`news-${collectionSession}`}
             poiId={poiId}
             isCollecting={collecting}
-            onComplete={(data) => {
-              console.log('[Sidebar] Collection completed:', data);
+            onComplete={(_data) => {
               // Keep showing status even after completion
             }}
             onClose={() => {
-              console.log('[Sidebar] User closed status widget');
               setShowCompletedStatus(false);
             }}
             onCancel={handleCancelCollection}
@@ -1404,9 +1354,9 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
     const stored = localStorage.getItem(`events-collecting-${poiId}`);
     return stored === 'true';
   });
-  const [collectResult, setCollectResult] = useState(null);
   const [collectionSession, setCollectionSession] = useState(0);
   const [showCompletedStatus, setShowCompletedStatus] = useState(false);
+  const [, setCollectResult] = useState(null);
 
   const fetchEvents = async () => {
     if (!poiId) return;
@@ -1435,7 +1385,8 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
         setCollecting(false);
       }, 2000);
     }
-  }, [poiId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poiId]); // fetchEvents and collecting intentionally excluded to avoid re-fetching on state changes
 
   // Clear completed status when editMode changes
   useEffect(() => {
@@ -1472,7 +1423,6 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
 
         // If collection is already running, just attach to it
         if (result.alreadyRunning) {
-          console.log('Collection already running, attaching to existing job');
           // The status widget will poll and show the current progress
           // Don't change collecting state - keep it true to show widget
           return;
@@ -1515,7 +1465,6 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
         credentials: 'include'
       });
       if (response.ok) {
-        console.log('[PoiEvents] Cancellation requested');
         // The status widget will update to show cancelled state
         setTimeout(() => {
           setCollecting(false);
@@ -1595,12 +1544,10 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
             key={`events-${collectionSession}`}
             poiId={poiId}
             isCollecting={collecting}
-            onComplete={(data) => {
-              console.log('[Sidebar] Collection completed:', data);
+            onComplete={(_data) => {
               // Keep showing status even after completion
             }}
             onClose={() => {
-              console.log('[Sidebar] User closed status widget');
               setShowCompletedStatus(false);
             }}
             onCancel={handleCancelCollection}
@@ -1663,6 +1610,55 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
   const [selectedNewPois, setSelectedNewPois] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
 
+  // Get available POIs for adding (must be before early return to satisfy Rules of Hooks)
+  const availablePois = useMemo(() => {
+    if (!isOpen || !poi) return [];
+
+    const isVirtualPoi = poi.poi_type === 'virtual';
+    if (!isVirtualPoi) return [];
+
+    // Find associations for this POI
+    const poiAssociations = (associations || []).filter(assoc =>
+      assoc.virtual_poi_id === poi.id || assoc.physical_poi_id === poi.id
+    );
+
+    // Calculate currently associated POI IDs
+    const currentIds = new Set();
+
+    // Add associated POIs from associations
+    poiAssociations.forEach(assoc => {
+      if (isVirtualPoi) {
+        currentIds.add(assoc.physical_poi_id);
+      } else {
+        currentIds.add(assoc.virtual_poi_id);
+      }
+    });
+
+    // Add owned POIs
+    (allDestinations || []).forEach(d => {
+      if (Number(d.owner_id) === Number(poi.id)) {
+        currentIds.add(d.id);
+      }
+    });
+    (allLinearFeatures || []).forEach(f => {
+      if (Number(f.owner_id) === Number(poi.id)) {
+        currentIds.add(f.id);
+      }
+    });
+
+    // Add owner org (if this POI is owned by someone)
+    if (poi.owner_id) {
+      currentIds.add(Number(poi.owner_id));
+    }
+
+    const allPhysicalPois = [
+      ...(allDestinations || []).map(d => ({ ...d, _type: 'point' })),
+      ...(allLinearFeatures || []).map(f => ({ ...f, _type: f.feature_type || 'trail' }))
+    ];
+
+    return allPhysicalPois.filter(p => !currentIds.has(p.id));
+  }, [isOpen, poi, associations, allDestinations, allLinearFeatures]);
+
   if (!isOpen || !poi) return null;
 
   // Find associations for this POI
@@ -1716,18 +1712,6 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
     ...regularAssociations.filter(a => (!ownerOrg || a.id !== ownerOrg.id) && !ownedPois.some(p => p.id === a.id))
   ];
 
-  // Get available POIs for adding (not currently associated)
-  const availablePois = useMemo(() => {
-    if (!isVirtualPoi) return []; // Only virtual POIs can add associations
-
-    const currentIds = new Set(associatedPoisWithAssocId.map(p => p.id));
-    const allPhysicalPois = [
-      ...(allDestinations || []).map(d => ({ ...d, _type: 'point' })),
-      ...(allLinearFeatures || []).map(f => ({ ...f, _type: f.feature_type || 'trail' }))
-    ];
-
-    return allPhysicalPois.filter(p => !currentIds.has(p.id));
-  }, [isVirtualPoi, associatedPoisWithAssocId, allDestinations, allLinearFeatures]);
 
   const handleDeleteAssociation = async (assocId, poiName) => {
     if (!confirm(`Remove association with "${poiName}"?`)) return;
@@ -2004,24 +1988,26 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
     : null;
 
   // Get owned POIs (for virtual POIs/organizations) - POIs that have this org as their owner
-  const ownedPois = isVirtualPoi
-    ? [
-        ...(allDestinations || []).filter(d => Number(d.owner_id) === Number(poi.id)),
-        ...(allLinearFeatures || []).filter(f => Number(f.owner_id) === Number(poi.id))
-      ].map(p => ({
-        ...p,
-        _isLinear: !!(allLinearFeatures || []).find(f => f.id === p.id),
-        _isVirtual: false,
-        _isOwned: true
-      })).sort((a, b) => a.name.localeCompare(b.name))
-    : [];
+  const ownedPois = useMemo(() => {
+    return isVirtualPoi
+      ? [
+          ...(allDestinations || []).filter(d => Number(d.owner_id) === Number(poi.id)),
+          ...(allLinearFeatures || []).filter(f => Number(f.owner_id) === Number(poi.id))
+        ].map(p => ({
+          ...p,
+          _isLinear: !!(allLinearFeatures || []).find(f => f.id === p.id),
+          _isVirtual: false,
+          _isOwned: true
+        })).sort((a, b) => a.name.localeCompare(b.name))
+      : [];
+  }, [isVirtualPoi, poi.id, allDestinations, allLinearFeatures]);
 
   // Combine: owner first (for physical POIs), owned POIs first (for virtual POIs), then regular associations
-  const associatedPoisWithAssocId = [
+  const associatedPoisWithAssocId = useMemo(() => [
     ...(ownerOrg ? [{ ...ownerOrg, _isVirtual: true, _isLinear: false, _isOwner: true }] : []),
     ...ownedPois.filter(p => !regularAssociations.some(a => a.id === p.id)),
     ...regularAssociations.filter(a => (!ownerOrg || a.id !== ownerOrg.id) && !ownedPois.some(p => p.id === a.id))
-  ];
+  ], [ownerOrg, ownedPois, regularAssociations]);
 
   // Get available POIs for adding (not currently associated)
   const availablePois = useMemo(() => {
@@ -2317,24 +2303,20 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
 }
 
 // POI-specific Trail Status component
-function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, onBackToMtbList }) {
+function TrailStatus({ poiId, _poiName, isAdmin, editMode, _selectedFromMtbList, _onBackToMtbList }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [collecting, setCollecting] = useState(false);
 
   const fetchStatus = async () => {
     if (!poiId) {
-      console.log('[fetchStatus] No poiId, skipping fetch');
       return;
     }
-    console.log(`[fetchStatus] Fetching status for trail ${poiId}...`);
     setLoading(true);
     try {
       const response = await fetch(`/api/pois/${poiId}/status`);
-      console.log(`[fetchStatus] Response status: ${response.status} ${response.statusText}`);
       if (response.ok) {
         const data = await response.json();
-        console.log(`[fetchStatus] Received status:`, data);
         setStatus(data);
       } else {
         console.error(`[fetchStatus] Request failed: ${response.status} ${response.statusText}`);
@@ -2348,7 +2330,8 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
 
   useEffect(() => {
     fetchStatus();
-  }, [poiId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poiId]); // fetchStatus intentionally excluded to avoid re-fetching on function reference changes
 
   const handleCollect = async () => {
     if (!poiId) return;
@@ -2361,8 +2344,7 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
       });
 
       if (response.ok) {
-        const result = await response.json();
-        console.log('[handleCollect] Collection successful:', result);
+        await response.json(); // Result not used
 
         // Refresh status
         await fetchStatus();
@@ -2442,7 +2424,7 @@ function TrailStatus({ poiId, poiName, isAdmin, editMode, selectedFromMtbList, o
           No trail status information available.
           {isAdmin && editMode && (
             <p style={{ marginTop: '1rem', fontSize: '0.9rem', color: '#666' }}>
-              Use the "Collect Status" button above to gather current trail conditions.
+              Use the &quot;Collect Status&quot; button above to gather current trail conditions.
             </p>
           )}
         </div>
@@ -2461,17 +2443,17 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const [showAssociationsModal, setShowAssociationsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [pendingImage, setPendingImage] = useState(null);
-  const [newsCount, setNewsCount] = useState(0);
-  const [eventsCount, setEventsCount] = useState(0);
+  const [, setNewsCount] = useState(0);
+  const [, setEventsCount] = useState(0);
+  const [, setCollectResult] = useState(null);
   const [trailStatus, setTrailStatus] = useState(null);
 
-  // State for new organization creation
-  const [organizationData, setOrganizationData] = useState({
+  /* const [organizationData, setOrganizationData] = useState({
     name: '',
     brief_description: '',
     property_owner: '',
     more_info_link: ''
-  });
+  }); */
   const [selectedPoiIds, setSelectedPoiIds] = useState(new Set());
 
   // Initialize organization data when newOrganization changes
@@ -2485,9 +2467,9 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const activePoi = destination || linearFeature;
 
   // Check if this POI has associations
-  const hasAssociations = activePoi && associations?.some(assoc =>
+  /* const hasAssociations = activePoi && associations?.some(assoc =>
     assoc.virtual_poi_id === activePoi.id || assoc.physical_poi_id === activePoi.id
-  );
+  ); */
 
   // Wrapper functions to switch to Info tab when selecting from associations
   const handleSelectDestinationFromAssociations = React.useCallback((poi) => {
@@ -2696,7 +2678,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       .catch(err => {
         console.error('Failed to fetch trail status:', err);
       });
-  }, [displayItem?.id, displayItem?.status_url]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [displayItem?.id, displayItem?.status_url]); // Only depend on specific properties, not whole displayItem object
 
   // Handler for saving new organization
   const handleSaveNewOrganization = async () => {
@@ -2843,7 +2826,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
       // Exclude geometry from save payload - it's not editable via sidebar
       // and including it makes the request too large
-      const { geometry, ...dataWithoutGeometry } = editedData;
+      const { geometry: _geometry, ...dataWithoutGeometry } = editedData;
 
       // Then save other fields
       const response = await fetch(`/api/admin/linear-features/${linearFeature.id}`, {

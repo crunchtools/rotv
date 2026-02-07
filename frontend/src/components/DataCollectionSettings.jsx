@@ -73,6 +73,103 @@ function DataCollectionSettings() {
   useEffect(() => {
     if (!newsActiveJobId && !trailActiveJobId) return;
 
+    // Define polling functions inside effect to avoid exhaustive-deps warnings
+    const pollNewsStatus = async () => {
+      try {
+        const response = await fetch(`/api/admin/news/job/${newsActiveJobId}`, {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const status = await response.json();
+
+          // Fetch AI stats FIRST to prevent badge flicker
+          if (status.status === 'running' || status.status === 'completed' || status.status === 'cancelled') {
+            try {
+              const statsResponse = await fetch('/api/admin/news/ai-stats', {
+                credentials: 'include'
+              });
+              if (statsResponse.ok) {
+                const stats = await statsResponse.json();
+                setNewsAiStats(stats);
+              }
+            } catch (statsErr) {
+              console.error('Error fetching news AI stats:', statsErr);
+            }
+          }
+
+          // Update progress and slots AFTER stats are fetched
+          setNewsProgress(status);
+
+          // Backend-managed slots: Just use what the backend sends
+          if (status.displaySlots) {
+            setNewsJobSlots(status.displaySlots);
+          }
+
+          // Stop polling only when job is done AND all display slots have finished
+          const isJobDone = status.status === 'completed' || status.status === 'cancelled';
+          const noActiveSlots = !status.displaySlots || status.displaySlots.every(s => !s.poiId || s.status === 'completed');
+
+          if (isJobDone && noActiveSlots) {
+            setNewsCollecting(false);
+            setNewsActiveJobId(null); // Clear job ID to stop polling
+            fetchJobHistory();
+          } else if (isJobDone && !noActiveSlots) {
+            // Job is done but there are still active slots
+          }
+        }
+      } catch (err) {
+        console.error('Error polling news status:', err);
+      }
+    };
+
+    const pollTrailStatus = async () => {
+      try {
+        const response = await fetch(`/api/admin/trail-status/job-status/${trailActiveJobId}`, {
+          credentials: 'include'
+        });
+        if (response.ok) {
+          const status = await response.json();
+
+          // Fetch AI stats FIRST to prevent badge flicker
+          if (status.status === 'running' || status.status === 'completed' || status.status === 'cancelled') {
+            try {
+              const statsResponse = await fetch('/api/admin/trail-status/ai-stats', {
+                credentials: 'include'
+              });
+              if (statsResponse.ok) {
+                const stats = await statsResponse.json();
+                setTrailAiStats(stats);
+              }
+            } catch (statsErr) {
+              console.error('Error fetching trail AI stats:', statsErr);
+            }
+          }
+
+          // Update progress and slots AFTER stats are fetched
+          setTrailProgress(status);
+
+          // Backend-managed slots: Just use what the backend sends
+          if (status.displaySlots) {
+            setTrailJobSlots(status.displaySlots);
+          }
+
+          // Stop polling only when job is done AND all display slots have finished
+          const isJobDone = status.status === 'completed' || status.status === 'cancelled';
+          const noActiveSlots = !status.displaySlots || status.displaySlots.every(s => !s.poiId || s.status === 'completed');
+
+          if (isJobDone && noActiveSlots) {
+            setTrailCollecting(false);
+            setTrailActiveJobId(null); // Clear job ID to stop polling
+            fetchJobHistory();
+          } else if (isJobDone && !noActiveSlots) {
+            // Job is done but there are still active slots
+          }
+        }
+      } catch (err) {
+        console.error('Error polling trail status:', err);
+      }
+    };
+
     const pollInterval = setInterval(async () => {
       if (newsActiveJobId) {
         await pollNewsStatus();
@@ -84,108 +181,6 @@ function DataCollectionSettings() {
 
     return () => clearInterval(pollInterval);
   }, [newsActiveJobId, trailActiveJobId]);
-
-  const pollNewsStatus = async () => {
-    try {
-      const response = await fetch(`/api/admin/news/job/${newsActiveJobId}`, {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const status = await response.json();
-
-        // Fetch AI stats FIRST to prevent badge flicker
-        if (status.status === 'running' || status.status === 'completed' || status.status === 'cancelled') {
-          try {
-            const statsResponse = await fetch('/api/admin/news/ai-stats', {
-              credentials: 'include'
-            });
-            if (statsResponse.ok) {
-              const stats = await statsResponse.json();
-              setNewsAiStats(stats);
-            }
-          } catch (statsErr) {
-            console.error('Error fetching news AI stats:', statsErr);
-          }
-        }
-
-        // Update progress and slots AFTER stats are fetched
-        setNewsProgress(status);
-
-        // Backend-managed slots: Just use what the backend sends
-        if (status.displaySlots) {
-          console.log('[News] Received displaySlots:', JSON.stringify(status.displaySlots, null, 2));
-          setNewsJobSlots(status.displaySlots);
-        }
-
-        // Stop polling only when job is done AND all display slots have finished
-        const isJobDone = status.status === 'completed' || status.status === 'cancelled';
-        const noActiveSlots = !status.displaySlots || status.displaySlots.every(s => !s.poiId || s.status === 'completed');
-
-        if (isJobDone && noActiveSlots) {
-          console.log('[News] Job finished and all slots completed, stopping polling');
-          setNewsCollecting(false);
-          setNewsActiveJobId(null); // Clear job ID to stop polling
-          fetchJobHistory();
-        } else if (isJobDone && !noActiveSlots) {
-          const activeCount = status.displaySlots?.filter(s => s.poiId && s.status === 'active').length || 0;
-          console.log(`[News] Job ${status.status} but ${activeCount} slots still finishing...`);
-        }
-      }
-    } catch (err) {
-      console.error('Error polling news status:', err);
-    }
-  };
-
-  const pollTrailStatus = async () => {
-    try {
-      const response = await fetch(`/api/admin/trail-status/job-status/${trailActiveJobId}`, {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const status = await response.json();
-
-        // Fetch AI stats FIRST to prevent badge flicker
-        if (status.status === 'running' || status.status === 'completed' || status.status === 'cancelled') {
-          try {
-            const statsResponse = await fetch('/api/admin/trail-status/ai-stats', {
-              credentials: 'include'
-            });
-            if (statsResponse.ok) {
-              const stats = await statsResponse.json();
-              setTrailAiStats(stats);
-            }
-          } catch (statsErr) {
-            console.error('Error fetching trail AI stats:', statsErr);
-          }
-        }
-
-        // Update progress and slots AFTER stats are fetched
-        setTrailProgress(status);
-
-        // Backend-managed slots: Just use what the backend sends
-        if (status.displaySlots) {
-          console.log('[Trail] Received displaySlots:', JSON.stringify(status.displaySlots, null, 2));
-          setTrailJobSlots(status.displaySlots);
-        }
-
-        // Stop polling only when job is done AND all display slots have finished
-        const isJobDone = status.status === 'completed' || status.status === 'cancelled';
-        const noActiveSlots = !status.displaySlots || status.displaySlots.every(s => !s.poiId || s.status === 'completed');
-
-        if (isJobDone && noActiveSlots) {
-          console.log('[Trail] Job finished and all slots completed, stopping polling');
-          setTrailCollecting(false);
-          setTrailActiveJobId(null); // Clear job ID to stop polling
-          fetchJobHistory();
-        } else if (isJobDone && !noActiveSlots) {
-          const activeCount = status.displaySlots?.filter(s => s.poiId && s.status === 'active').length || 0;
-          console.log(`[Trail] Job ${status.status} but ${activeCount} slots still finishing...`);
-        }
-      }
-    } catch (err) {
-      console.error('Error polling trail status:', err);
-    }
-  };
 
   const checkForRunningJobs = async () => {
     try {
@@ -834,7 +829,6 @@ function DataCollectionSettings() {
           {/* Active Jobs Table - shows each concurrent POI being processed */}
           {(() => {
             const isJobRunning = newsProgress.status === 'running';
-            const isJobCancelled = newsProgress.status === 'cancelled';
 
             // Use fixed slots (jobs never move between slots)
             const slots = newsJobSlots;
@@ -986,7 +980,6 @@ function DataCollectionSettings() {
           {/* Active Jobs Table - shows each concurrent trail being processed */}
           {(() => {
             const isJobRunning = trailProgress.status === 'running';
-            const isJobCancelled = trailProgress.status === 'cancelled';
 
             // Use fixed slots (jobs never move between slots)
             const slots = trailJobSlots;
@@ -1283,8 +1276,8 @@ function DataCollectionSettings() {
                   <li>Install browser extension: <a href="https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm" target="_blank" rel="noopener noreferrer">Cookie-Editor for Chrome</a> or <a href="https://addons.mozilla.org/en-US/firefox/addon/cookie-editor/" target="_blank" rel="noopener noreferrer">Firefox</a></li>
                   <li>Log in to Twitter in the opened tab</li>
                   <li>Click the Cookie-Editor extension icon</li>
-                  <li>Click "Export" button (bottom right)</li>
-                  <li>Select "JSON" format</li>
+                  <li>Click &quot;Export&quot; button (bottom right)</li>
+                  <li>Select &quot;JSON&quot; format</li>
                   <li>Copy the JSON and paste below</li>
                 </ol>
                 <textarea

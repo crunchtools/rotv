@@ -465,8 +465,7 @@ describe('Trail Status Slot Architecture Integration Tests', () => {
     }, TEST_TIMEOUT * 2);
 
     it('should reuse completed slots for new trails', async () => {
-      // This test would require running a job long enough to see slot reuse
-      // For now, we verify the structure supports it
+      // Verify structure supports slot reuse (full test would require extended job run)
       const latestResponse = await request(BASE_URL)
         .get('/api/admin/trail-status/job-status/latest')
         .set('Cookie', authCookie || '')

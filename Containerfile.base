@@ -8,7 +8,7 @@ LABEL maintainer="fatherlinux"
 LABEL description="ROTV Base - PostgreSQL 17, Node.js, Playwright infrastructure"
 LABEL version="1.0.0"
 
-# Install systemd, Node.js and Chromium dependencies for Playwright
+# Install systemd, Node.js, and Chromium dependencies for Playwright
 RUN dnf install -y systemd nodejs npm procps-ng \
     # Playwright/Chromium system dependencies
     nspr nss alsa-lib atk cups-libs gtk3 \

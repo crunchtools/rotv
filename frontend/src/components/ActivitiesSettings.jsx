@@ -25,7 +25,7 @@ function ActivitiesSettings() {
       } else {
         setError('Failed to fetch activities');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch activities');
     } finally {
       setLoading(false);
@@ -58,7 +58,7 @@ function ActivitiesSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to add activity');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to add activity');
     } finally {
       setSaving(false);
@@ -97,7 +97,7 @@ function ActivitiesSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to update activity');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to update activity');
     } finally {
       setSaving(false);
@@ -120,46 +120,8 @@ function ActivitiesSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to delete activity');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to delete activity');
-    }
-  };
-
-  const handleMoveUp = async (index) => {
-    if (index === 0) return;
-    const newOrder = [...activities];
-    [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
-    setActivities(newOrder);
-
-    // Save new order to backend
-    try {
-      await fetch('/api/admin/activities/reorder', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ orderedIds: newOrder.map(a => a.id) })
-      });
-    } catch (err) {
-      console.error('Failed to save order:', err);
-    }
-  };
-
-  const handleMoveDown = async (index) => {
-    if (index === activities.length - 1) return;
-    const newOrder = [...activities];
-    [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
-    setActivities(newOrder);
-
-    // Save new order to backend
-    try {
-      await fetch('/api/admin/activities/reorder', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ orderedIds: newOrder.map(a => a.id) })
-      });
-    } catch (err) {
-      console.error('Failed to save order:', err);
     }
   };
 
@@ -218,8 +180,8 @@ function ActivitiesSettings() {
         credentials: 'include',
         body: JSON.stringify({ orderedIds: newOrder.map(a => a.id) })
       });
-    } catch (err) {
-      console.error('Failed to save order:', err);
+    } catch {
+      console.error('Failed to save order');
     }
   };
 
@@ -238,8 +200,8 @@ function ActivitiesSettings() {
         credentials: 'include',
         body: JSON.stringify({ orderedIds: sorted.map(a => a.id) })
       });
-    } catch (err) {
-      console.error('Failed to save order:', err);
+    } catch {
+      console.error('Failed to save order');
     }
   };
 

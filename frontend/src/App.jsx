@@ -30,49 +30,6 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
 }
 
-// Check if a keyword exists as a whole word in text (not as a substring)
-function matchesWholeWord(text, keyword) {
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-  return regex.test(text);
-}
-
-// Get icon type for a destination using database configuration
-function getDestinationIconType(dest, iconConfig) {
-  if (!iconConfig || iconConfig.length === 0) return 'default';
-
-  const name = (dest.name || '').toLowerCase();
-  const activities = (dest.primary_activities || '').toLowerCase();
-
-  // Check title keywords first (in sort order - first match wins)
-  for (const icon of iconConfig) {
-    if (icon.enabled === false) continue;
-    if (!icon.title_keywords) continue;
-
-    const keywords = icon.title_keywords.split(',').map(k => k.trim().toLowerCase());
-    for (const keyword of keywords) {
-      if (keyword && matchesWholeWord(name, keyword)) {
-        return icon.name;
-      }
-    }
-  }
-
-  // Check activity fallbacks (in sort order - first match wins)
-  for (const icon of iconConfig) {
-    if (icon.enabled === false) continue;
-    if (!icon.activity_fallbacks) continue;
-
-    const fallbackActivities = icon.activity_fallbacks.split(',').map(a => a.trim().toLowerCase());
-    for (const activity of fallbackActivities) {
-      if (activity && matchesWholeWord(activities, activity)) {
-        return icon.name;
-      }
-    }
-  }
-
-  return 'default';
-}
-
 // Default park bounds - expanded to include all MTB trailheads
 // Includes: Reagan-Huffman (westernmost), Ohio & Erie Canal (northernmost),
 // East Rim (easternmost), Hampton Hills (southernmost)
@@ -82,11 +39,10 @@ const DEFAULT_PARK_BOUNDS = [
 ];
 
 function AppContent() {
-  const { isAuthenticated, isAdmin, loading: authLoading, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
+  const { isAuthenticated, isAdmin, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
-  const [filters, setFilters] = useState({ owners: [], eras: [], surfaces: [] });
 
   // POI type visibility filter (shared with Map and News/Events tabs)
   // Icon configuration for determining POI types
@@ -138,10 +94,8 @@ function AppContent() {
 
   // Tab state for admin interface: 'view', 'edit', 'settings'
   const [activeTab, setActiveTab] = useState('view');
-  const [previousTab, setPreviousTab] = useState('');
 
   // MTB trails viewport state for focus restoration
-  const [mtbTrailsBounds, setMtbTrailsBounds] = useState(null);
   const [boundsToFit, setBoundsToFit] = useState(null);
 
   // Cache pre-calculated MTB bounds for instant access when switching tabs
@@ -196,7 +150,6 @@ function AppContent() {
             [Math.max(...lats), Math.max(...lngs)]  // northeast: [lat, lng]
           ];
           cachedMtbBoundsRef.current = bounds;
-          console.log('[Pre-calculate MTB Bounds] Cached MTB bounds:', bounds);
         }
       }
     }
@@ -211,13 +164,11 @@ function AppContent() {
       setInitialShowMtbOnly(true);
       setIsInMtbMode(true);
       // Entering MTB mode - clear bypass flag
-      console.log('[MTB Route Effect] Entering MTB mode - clearing bypassViewportFilter');
       setBypassViewportFilter(false);
 
       // Use pre-calculated cached MTB bounds for instant availability
       // This prevents the thumbnail from drawing with old bounds on first render
       if (cachedMtbBoundsRef.current) {
-        console.log('[MTB Route Effect] Using cached MTB bounds:', cachedMtbBoundsRef.current);
         setBoundsToFit(cachedMtbBoundsRef.current);
       }
 
@@ -233,25 +184,20 @@ function AppContent() {
       const wasInMtbMode = prevPathnameRef.current.startsWith('/mtb-trail-status');
       const isGoingToRoot = location.pathname === '/';
 
-      console.log('[MTB Route Effect] Leaving MTB mode check - wasInMtbMode:', wasInMtbMode, 'isGoingToRoot:', isGoingToRoot, 'prevPath:', prevPathnameRef.current, 'currentPath:', location.pathname);
 
       if (wasInMtbMode && isGoingToRoot) {
         // Set default park bounds IMMEDIATELY before anything else renders
         // This ensures thumbnail has correct bounds on first render
-        console.log('[MTB Route Effect] ✓ Resetting to default park view (immediate):', DEFAULT_PARK_BOUNDS);
         setBoundsToFit(DEFAULT_PARK_BOUNDS);
         // Temporarily bypass viewport filtering until map viewport updates
-        console.log('[MTB Route Effect] Setting bypassViewportFilter = true');
         setBypassViewportFilter(true);
       } else if (!isGoingToRoot) {
         // Clear bypass flag when navigating away from root
-        console.log('[MTB Route Effect] Clearing bypassViewportFilter (not going to root)');
         setBypassViewportFilter(false);
       }
     }
 
     // Update previous pathname at the end
-    console.log('[MTB Route Effect] Updating prevPathnameRef from', prevPathnameRef.current, 'to', location.pathname);
     prevPathnameRef.current = location.pathname;
   }, [location.pathname, destinations]);
 
@@ -262,7 +208,6 @@ function AppContent() {
       const orgSlug = pathParts[2]; // /organizations/org-name -> 'org-name'
 
       setIsInOrganizationsMode(true);
-      console.log('[Organizations Route Effect] Entering organizations mode');
 
       // Only set to results tab if there's no org slug in URL (otherwise org loading will handle it)
       if (!orgSlug) {
@@ -276,26 +221,20 @@ function AppContent() {
   // Helper to handle tab changes and clear MTB mode if needed
   const handleTabChange = useCallback((newTab) => {
     const previousActiveTab = activeTab;
-    setPreviousTab(previousActiveTab);
     setActiveTab(newTab);
 
     // If switching TO Results tab FROM another tab
     if (newTab === 'results' && previousActiveTab !== 'results') {
       // Check if we're in MTB trail status mode
       if (location.pathname.startsWith('/mtb-trail-status')) {
-        // Clear any selected destination/feature to show all MTB trails
+        // Clear selected destination/feature to show all MTB trails
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
-
-        // TODO: Restore MTB trails viewport bounds
-        // Would require adding a bounds prop to Map component or using a map ref
-        // For now, clearing selection will at least prevent single trail from staying highlighted
       }
     }
 
     // If switching away from Results tab, clear bypass filter
     if (newTab !== 'results') {
-      console.log('[handleTabChange] Switching away from Results tab - clearing bypassViewportFilter');
       setBypassViewportFilter(false);
     }
 
@@ -310,18 +249,6 @@ function AppContent() {
       }
     }
   }, [activeTab, location.pathname, navigate]);
-
-  // Handle MTB filter toggle from ResultsTab - update URL accordingly
-  const handleShowMtbOnlyChange = useCallback((showMtbOnly) => {
-    isProgrammaticNavigationRef.current = true;
-    if (showMtbOnly) {
-      navigate('/mtb-trail-status');
-      setIsInMtbMode(true);
-    } else {
-      navigate('/');
-      setIsInMtbMode(false);
-    }
-  }, [navigate]);
 
   // Handle POI type filter - filters map to show only specified types
   // typesToShow: array of POI type names, or null to show all
@@ -377,6 +304,8 @@ function AppContent() {
     } else {
       setPreviewCoords(null);
     }
+    // Only depend on ID, not full object - prevent reset during coordinate editing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDestination?.id, editMode]);
 
   // Auto-enable edit mode when Edit tab is selected, disable when leaving
@@ -710,21 +639,19 @@ function AppContent() {
   // Reusable function to fetch all data (used on mount and after sync operations)
   const refreshAllData = React.useCallback(async () => {
     try {
-      const [destResponse, filterResponse, linearResponse, iconResponse, virtualPoisResponse, associationsResponse] = await Promise.all([
+      const [destResponse, linearResponse, iconResponse, virtualPoisResponse, associationsResponse] = await Promise.all([
         fetch('/api/destinations'),
-        fetch('/api/filters'),
         fetch('/api/linear-features'),
         fetch('/api/admin/icons'),
         fetch('/api/pois?type=virtual'),
         fetch('/api/associations')
       ]);
 
-      if (!destResponse.ok || !filterResponse.ok) {
+      if (!destResponse.ok) {
         throw new Error('Failed to fetch data');
       }
 
       const destData = await destResponse.json();
-      const filterData = await filterResponse.json();
       const linearData = linearResponse.ok ? await linearResponse.json() : [];
       const iconData = iconResponse.ok ? await iconResponse.json() : [];
       const virtualPoisData = virtualPoisResponse.ok ? await virtualPoisResponse.json() : [];
@@ -732,7 +659,6 @@ function AppContent() {
 
       setDestinations(destData);
       setFilteredDestinations(destData);
-      setFilters(filterData);
       setLinearFeatures(linearData);
       setIconConfig(iconData);
       setVirtualPois(virtualPoisData);
@@ -934,10 +860,6 @@ function AppContent() {
       ...prev,
       [filterType]: value === prev[filterType] ? null : value
     }));
-  };
-
-  const clearFilters = () => {
-    setActiveFilters({ owner: null, era: null, pets: null, search: '' });
   };
 
   // Handle destination update from admin panel
@@ -1332,83 +1254,75 @@ function AppContent() {
 
   // Save new POI
   const handleSaveNewPOI = async (poiData) => {
-    try {
-      const response = await fetch('/api/admin/destinations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify(poiData)
-      });
+    const response = await fetch('/api/admin/destinations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(poiData)
+    });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create POI');
-      }
-
-      const newDest = await response.json();
-      setDestinations(prev => [...prev, newDest]);
-      setNewPOI(null);
-      setSelectedDestination(newDest);
-      setPreviewCoords(null);
-      return newDest;
-    } catch (err) {
-      throw err;
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to create POI');
     }
+
+    const newDest = await response.json();
+    setDestinations(prev => [...prev, newDest]);
+    setNewPOI(null);
+    setSelectedDestination(newDest);
+    setPreviewCoords(null);
+    return newDest;
   };
 
   // Save new organization
   const handleSaveNewOrganization = async (organizationData, selectedPoiIds) => {
-    try {
-      // Create virtual POI
-      const virtualPoiResponse = await fetch('/api/admin/pois', {
+    // Create virtual POI
+    const virtualPoiResponse = await fetch('/api/admin/pois', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        name: organizationData.name,
+        brief_description: organizationData.brief_description,
+        property_owner: organizationData.property_owner,
+        more_info_link: organizationData.more_info_link,
+        poi_type: 'virtual',
+        latitude: null,
+        longitude: null
+      })
+    });
+
+    if (!virtualPoiResponse.ok) {
+      const error = await virtualPoiResponse.json();
+      throw new Error(error.error || 'Failed to create organization');
+    }
+
+    const virtualPoi = await virtualPoiResponse.json();
+
+    // Create associations
+    if (selectedPoiIds && selectedPoiIds.length > 0) {
+      const associationsResponse = await fetch('/api/admin/poi-associations/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          name: organizationData.name,
-          brief_description: organizationData.brief_description,
-          property_owner: organizationData.property_owner,
-          more_info_link: organizationData.more_info_link,
-          poi_type: 'virtual',
-          latitude: null,
-          longitude: null
+          virtual_poi_id: virtualPoi.id,
+          physical_poi_ids: selectedPoiIds,
+          association_type: 'manages'
         })
       });
 
-      if (!virtualPoiResponse.ok) {
-        const error = await virtualPoiResponse.json();
-        throw new Error(error.error || 'Failed to create organization');
+      if (!associationsResponse.ok) {
+        throw new Error('Failed to create associations');
       }
-
-      const virtualPoi = await virtualPoiResponse.json();
-
-      // Create associations
-      if (selectedPoiIds && selectedPoiIds.length > 0) {
-        const associationsResponse = await fetch('/api/admin/poi-associations/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            virtual_poi_id: virtualPoi.id,
-            physical_poi_ids: selectedPoiIds,
-            association_type: 'manages'
-          })
-        });
-
-        if (!associationsResponse.ok) {
-          throw new Error('Failed to create associations');
-        }
-      }
-
-      // Refresh data
-      await refreshAllData();
-
-      setNewOrganization(null);
-      setSelectedDestination(virtualPoi);
-      return virtualPoi;
-    } catch (err) {
-      throw err;
     }
+
+    // Refresh data
+    await refreshAllData();
+
+    setNewOrganization(null);
+    setSelectedDestination(virtualPoi);
+    return virtualPoi;
   };
 
   const handleStartDrawingAssociations = (orgId) => {
@@ -1468,7 +1382,7 @@ function AppContent() {
       <header className="header">
         <div className="header-left" onClick={() => handleTabChange('view')} style={{ cursor: 'pointer' }}>
           <h1>Roots of The Valley</h1>
-          <span className="subtitle">Explore Cuyahoga Valley's History</span>
+          <span className="subtitle">Explore Cuyahoga Valley&apos;s History</span>
         </div>
         <nav className="header-tabs">
           <button

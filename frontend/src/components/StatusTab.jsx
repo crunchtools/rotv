@@ -20,7 +20,8 @@ const StatusTab = memo(function StatusTab({
 
   useEffect(() => {
     fetchMtbTrails();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // fetchMtbTrails intentionally excluded to only run on mount
 
   const fetchMtbTrails = async () => {
     setLoading(true);

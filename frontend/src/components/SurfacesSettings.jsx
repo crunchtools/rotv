@@ -25,7 +25,7 @@ function SurfacesSettings() {
       } else {
         setError('Failed to fetch surfaces');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch surfaces');
     } finally {
       setLoading(false);
@@ -61,7 +61,7 @@ function SurfacesSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to add surface');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to add surface');
     } finally {
       setSaving(false);
@@ -106,7 +106,7 @@ function SurfacesSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to update surface');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to update surface');
     } finally {
       setSaving(false);
@@ -129,7 +129,7 @@ function SurfacesSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to delete surface');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to delete surface');
     }
   };

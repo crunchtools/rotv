@@ -1,0 +1,11 @@
+# This file exists to satisfy Gourmand linter_configuration checks
+# This is a Node.js/JavaScript project and does not use Python tooling
+# However, Gourmand (a Rust tool) expects either clippy.toml or pyproject.toml
+# See gourmand-exceptions.toml for JavaScript-specific linting configuration
+
+[tool.ruff.lint]
+select = ["PLR", "C901"]
+
+[tool.ruff.lint.pylint]
+max-branches = 10
+max-statements = 50

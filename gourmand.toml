@@ -1,0 +1,30 @@
+# Gourmand Configuration
+# AI slop detection for maintaining code quality
+# See https://codeberg.org/mattdm/gourmand for documentation
+
+[global]
+# Paths to exclude from all checks
+excluded_paths = [
+    ".specify/**",
+    "docs/**",
+    "frontend/dist/**",
+    "node_modules/**",
+    ".git/**",
+    "*.min.js",
+    "*.min.css",
+    # Backend test scripts are manual debugging utilities
+    "backend/test-*.js",
+]
+
+[checks]
+# Disable checks that don't apply to JavaScript/Node.js projects
+linter_configuration = false  # Expects clippy.toml (Rust) or pyproject.toml (Python)
+
+[severity]
+# Override severity levels for specific checks
+# check_name = "warning"  # Options: error, warning, info
+
+[output]
+# Output format options
+format = "text"  # Options: text, json, github
+color = true

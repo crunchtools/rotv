@@ -16,11 +16,11 @@ export function configurePassport(pool) {
       // Handle both old format (object with id) and new format (just id)
       const userId = typeof sessionData === 'object' ? sessionData.id : sessionData;
 
-      const result = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
-      if (result.rows.length === 0) {
+      const userQuery = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
+      if (userQuery.rows.length === 0) {
         return done(null, false);
       }
-      done(null, result.rows[0]);
+      done(null, userQuery.rows[0]);
     } catch (error) {
       done(error);
     }
@@ -35,12 +35,12 @@ export function configurePassport(pool) {
     const isAdmin = email && email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
     // Check if user exists
-    let result = await pool.query(
+    let userLookup = await pool.query(
       'SELECT * FROM users WHERE oauth_provider = $1 AND oauth_provider_id = $2',
       [provider, providerId]
     );
 
-    if (result.rows.length > 0) {
+    if (userLookup.rows.length > 0) {
       // Update existing user - always update credentials for admins
       const updateFields = ['last_login_at = CURRENT_TIMESTAMP', 'picture_url = $1', 'name = $2'];
       const updateValues = [pictureUrl, name];
@@ -50,15 +50,15 @@ export function configurePassport(pool) {
         updateValues.push(JSON.stringify(credentials));
       }
 
-      updateValues.push(result.rows[0].id);
+      updateValues.push(userLookup.rows[0].id);
 
       await pool.query(
         `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${updateValues.length}`,
         updateValues
       );
 
-      result = await pool.query('SELECT * FROM users WHERE id = $1', [result.rows[0].id]);
-      return result.rows[0];
+      userLookup = await pool.query('SELECT * FROM users WHERE id = $1', [userLookup.rows[0].id]);
+      return userLookup.rows[0];
     }
 
     // Create new user

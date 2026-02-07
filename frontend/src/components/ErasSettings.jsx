@@ -25,7 +25,7 @@ function ErasSettings() {
       } else {
         setError('Failed to fetch eras');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to fetch eras');
     } finally {
       setLoading(false);
@@ -63,7 +63,7 @@ function ErasSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to add era');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to add era');
     } finally {
       setSaving(false);
@@ -112,7 +112,7 @@ function ErasSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to update era');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to update era');
     } finally {
       setSaving(false);
@@ -135,7 +135,7 @@ function ErasSettings() {
         const err = await response.json();
         setError(err.error || 'Failed to delete era');
       }
-    } catch (err) {
+    } catch {
       setError('Failed to delete era');
     }
   };

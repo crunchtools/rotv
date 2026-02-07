@@ -100,19 +100,19 @@ export async function createGeminiClient(pool, sheets = null) {
   }
 
   // Otherwise check database (production path)
-  let result = await pool.query(
+  let apiKeyQuery = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
   );
 
   // If not in database and sheets client provided, try to pull from Integration sheet
-  if ((!result.rows.length || !result.rows[0].value) && sheets) {
+  if ((!apiKeyQuery.rows.length || !apiKeyQuery.rows[0].value) && sheets) {
     try {
       console.log('Gemini API key not in database, attempting to restore from Google Sheet...');
       const { pullIntegrationFromSheets } = await import('./sheetsSync.js');
       await pullIntegrationFromSheets(sheets, pool);
 
       // Re-check database after pull
-      result = await pool.query(
+      apiKeyQuery = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
       );
     } catch (pullError) {
@@ -120,24 +120,24 @@ export async function createGeminiClient(pool, sheets = null) {
     }
   }
 
-  if (!result.rows.length || !result.rows[0].value) {
+  if (!apiKeyQuery.rows.length || !apiKeyQuery.rows[0].value) {
     throw new Error('Gemini API key not configured. Please add your API key in Settings, or pull from Google Sheet (Integration tab).');
   }
 
-  return new GoogleGenerativeAI(result.rows[0].value);
+  return new GoogleGenerativeAI(apiKeyQuery.rows[0].value);
 }
 
 /**
  * Get prompt template from database with fallback to defaults
  */
 export async function getPromptTemplate(pool, promptKey) {
-  const result = await pool.query(
+  const templateQuery = await pool.query(
     'SELECT value FROM admin_settings WHERE key = $1',
     [promptKey]
   );
 
-  if (result.rows.length && result.rows[0].value) {
-    return result.rows[0].value;
+  if (templateQuery.rows.length && templateQuery.rows[0].value) {
+    return templateQuery.rows[0].value;
   }
 
   return getDefaultPrompt(promptKey);
@@ -183,8 +183,8 @@ export async function generateText(pool, promptKey, destination, sheets = null) 
 
   console.log(`Generating ${promptKey} for destination: ${destination.name} (with Google Search)`);
 
-  const result = await model.generateContent(prompt);
-  const response = result.response;
+  const generation = await model.generateContent(prompt);
+  const response = generation.response;
   const text = response.text();
 
   return text;
@@ -206,8 +206,8 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
 
   console.log(`Generating with custom prompt (${customPrompt.length} chars, with Google Search)`);
 
-  const result = await model.generateContent(customPrompt);
-  const response = result.response;
+  const generation = await model.generateContent(customPrompt);
+  const response = generation.response;
   const text = response.text();
 
   return text;
@@ -254,8 +254,8 @@ export async function researchLocation(pool, destination, availableActivities = 
 
   console.log(`Researching location: ${destination.name} (with Google Search, ${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
 
-  const result = await model.generateContent(prompt);
-  const response = result.response;
+  const generation = await model.generateContent(prompt);
+  const response = generation.response;
   const text = response.text();
 
   try {
@@ -291,8 +291,8 @@ export async function researchLocation(pool, destination, availableActivities = 
       jsonText = jsonText.substring(0, endIndex);
     }
 
-    const data = JSON.parse(jsonText);
-    return data;
+    const researchData = JSON.parse(jsonText);
+    return researchData;
   } catch (e) {
     console.error('Failed to parse research response as JSON:', e);
     console.error('Raw response:', text);
@@ -307,8 +307,8 @@ export async function testApiKey(pool, sheets = null) {
   const genAI = await createGeminiClient(pool, sheets);
   const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
-  const result = await model.generateContent('Respond with exactly: API key verified');
-  const text = result.response.text();
+  const verification = await model.generateContent('Respond with exactly: API key verified');
+  const text = verification.response.text();
 
   return text;
 }
@@ -374,8 +374,8 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
 
   console.log(`Generating icon SVG for: ${description} (color: ${color})`);
 
-  const result = await model.generateContent(prompt);
-  const response = result.response;
+  const iconGeneration = await model.generateContent(prompt);
+  const response = iconGeneration.response;
   let text = response.text();
 
   // Clean up the response - extract just the SVG

@@ -1,12 +1,14 @@
 {
   "name": "rotv-frontend",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "description": "Roots of The Valley - Frontend",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

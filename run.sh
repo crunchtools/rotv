@@ -269,12 +269,50 @@ ENVFILE
         podman stop "$CONTAINER_NAME" >/dev/null 2>&1
         podman rm "$CONTAINER_NAME" >/dev/null 2>&1
 
+        # Run Gourmand AI slop detection on the host (needs full git repo)
+        GOURMAND_EXIT_CODE=0
         echo ""
-        if [ $TEST_EXIT_CODE -eq 0 ]; then
-            echo "✓ Tests completed successfully"
+        echo "Running Gourmand AI slop detection..."
+        GOURMAND_BIN="$HOME/.cargo/bin/gourmand"
+        if [ -x "$GOURMAND_BIN" ]; then
+            "$GOURMAND_BIN" --full .
+            GOURMAND_EXIT_CODE=$?
+        elif command -v gourmand &> /dev/null; then
+            gourmand --full .
+            GOURMAND_EXIT_CODE=$?
         else
-            echo "❌ Tests failed"
-            exit $TEST_EXIT_CODE
+            echo "⚠ Gourmand not installed locally (skipping)"
+            echo "  Install with: cargo install --git https://codeberg.org/mattdm/gourmand.git"
+            echo "  CI will still run Gourmand checks on pull requests"
+        fi
+
+        # Run ESLint on JavaScript/React code
+        ESLINT_EXIT_CODE=0
+        echo ""
+        echo "Running ESLint on JavaScript/React code..."
+        if [ -d "node_modules" ]; then
+            npm run lint
+            ESLINT_EXIT_CODE=$?
+        else
+            echo "⚠ Node dependencies not installed (skipping ESLint)"
+            echo "  Install with: npm install"
+        fi
+
+        echo ""
+        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ] && [ $ESLINT_EXIT_CODE -eq 0 ]; then
+            echo "✓ Tests, Gourmand, and ESLint checks completed successfully"
+        else
+            if [ $TEST_EXIT_CODE -ne 0 ]; then
+                echo "❌ Tests failed"
+            fi
+            if [ $GOURMAND_EXIT_CODE -ne 0 ]; then
+                echo "❌ Gourmand detected issues"
+            fi
+            if [ $ESLINT_EXIT_CODE -ne 0 ]; then
+                echo "❌ ESLint found issues"
+                echo "   Try: npm run lint:fix"
+            fi
+            exit 1
         fi
         ;;
 
@@ -283,6 +321,52 @@ ENVFILE
         podman stop "$CONTAINER_NAME" 2>/dev/null || true
         podman rm "$CONTAINER_NAME" 2>/dev/null || true
         echo "✓ Container stopped"
+        ;;
+
+    gourmand)
+        echo "Running Gourmand AI slop detection..."
+        GOURMAND_BIN="$HOME/.cargo/bin/gourmand"
+        if [ -x "$GOURMAND_BIN" ]; then
+            "$GOURMAND_BIN" --full .
+        elif command -v gourmand &> /dev/null; then
+            gourmand --full .
+        else
+            echo "❌ Gourmand not installed"
+            echo ""
+            echo "Install with:"
+            echo "  cargo install --git https://codeberg.org/mattdm/gourmand.git"
+            exit 1
+        fi
+        ;;
+
+    lint)
+        echo "Running ESLint on JavaScript/React code..."
+        ESLINT_EXIT_CODE=0
+
+        # Check if node_modules exists
+        if [ ! -d "node_modules" ]; then
+            echo "❌ Dependencies not installed"
+            echo ""
+            echo "Install with:"
+            echo "  npm install"
+            exit 1
+        fi
+
+        # Run ESLint
+        npm run lint
+        ESLINT_EXIT_CODE=$?
+
+        if [ $ESLINT_EXIT_CODE -eq 0 ]; then
+            echo ""
+            echo "✓ ESLint checks passed"
+        else
+            echo ""
+            echo "❌ ESLint found issues"
+            echo ""
+            echo "Try auto-fixing with:"
+            echo "  npm run lint:fix"
+            exit 1
+        fi
         ;;
 
     logs)
@@ -426,67 +510,59 @@ ENVFILE
     help|*)
         echo "Roots of The Valley - Container Management"
         echo ""
-        echo "Usage: ./run.sh [command]"
+        echo "Usage: ./run.sh <command>"
         echo ""
-        echo "Build Commands:"
-        echo "  build       Build application image (pulls base from quay.io if needed)"
-        echo "  build-base  Build base image locally (PostgreSQL, Node.js, Playwright)"
-        echo "  build-all   Build both base and application images"
+        echo "BUILD COMMANDS"
+        echo "  build          Build app image (~60s, pulls base from quay.io)"
+        echo "  build-base     Build base image locally (PostgreSQL, Node.js, Playwright)"
+        echo "  build-all      Build both base and app images from scratch"
         echo ""
-        echo "Main Commands:"
-        echo "  seed        Pull production data to seed local development"
-        echo "  start       Start the application container (ephemeral storage)"
-        echo "  test        Run integration tests (ephemeral storage)"
-        echo "  stop        Stop and remove the container"
-        echo "  reload-app  Hot reload code changes (dev only, ALWAYS rebuild before PR)"
+        echo "DEVELOPMENT COMMANDS"
+        echo "  start          Start container with ephemeral storage + seed data"
+        echo "  stop           Stop and remove the running container"
+        echo "  reload-app     Hot reload code changes (~3s, dev only)"
+        echo "                 WARNING: Always run 'build' before creating a PR"
+        echo "  seed           Pull fresh data from production server via SSH"
         echo ""
-        echo "Utility Commands:"
-        echo "  logs            Follow container logs"
-        echo "  logs-backend    Follow backend service logs (systemd journal)"
-        echo "  logs-db         Follow PostgreSQL service logs (systemd journal)"
-        echo "  status          Show systemd service status"
-        echo "  restart-backend Restart backend service only"
-        echo "  restart-db      Restart PostgreSQL service only"
-        echo "  shell           Open bash shell in running container"
-        echo "  push            Push application image to quay.io/fatherlinux/rotv"
-        echo "  push-base       Push base image to quay.io/fatherlinux/rotv-base"
-        echo "  push-all        Push both images to quay.io"
+        echo "TESTING COMMANDS"
+        echo "  test           Run full test suite (174 tests) + Gourmand + ESLint"
+        echo "  gourmand       Run Gourmand AI slop detection only (fast iteration)"
+        echo "  lint           Run ESLint on JavaScript/React code (fast iteration)"
         echo ""
-        echo "Storage & Data Workflow:"
-        echo "  Development (default): Ephemeral storage + Production seed data"
-        echo "    1. ./run.sh seed         # Pull latest data from production (one-time)"
-        echo "    2. ./run.sh start        # Starts with ephemeral storage + seed data"
-        echo "    3. Make changes, restart # Each restart = fresh copy of prod data"
+        echo "DEBUGGING COMMANDS"
+        echo "  logs           Follow all container logs (stdout/stderr)"
+        echo "  logs-backend   Follow Node.js backend logs (systemd journal)"
+        echo "  logs-db        Follow PostgreSQL logs (systemd journal)"
+        echo "  status         Show status of all systemd services"
+        echo "  shell          Open interactive bash shell in container"
+        echo "  restart-backend  Restart Node.js backend service only"
+        echo "  restart-db       Restart PostgreSQL service only"
         echo ""
-        echo "    Benefits:"
-        echo "    - Real production data for testing"
-        echo "    - Clean slate on every restart"
-        echo "    - No permission issues"
-        echo "    - Fast startup"
+        echo "DEPLOYMENT COMMANDS"
+        echo "  push           Push app image to quay.io/fatherlinux/rotv"
+        echo "  push-base      Push base image to quay.io/fatherlinux/rotv-base"
+        echo "  push-all       Push both images to quay.io"
         echo ""
-        echo "  Production: Persistent storage (on production server)"
-        echo "    - Set PERSISTENT_DATA=true to enable"
-        echo "    - Set DATA_DIR=/path/to/storage (default: ~/.rotv/pgdata)"
-        echo "    - Data survives container restarts"
-        echo "    - Example: PERSISTENT_DATA=true ./run.sh start"
+        echo "QUICK START"
+        echo "  1. ./run.sh build       # Build container image"
+        echo "  2. ./run.sh seed        # Pull production data (first time only)"
+        echo "  3. ./run.sh start       # Start at http://localhost:8080"
+        echo "  4. ./run.sh test        # Run tests before PR"
         echo ""
-        echo "Environment variables (set in .env file or export):"
-        echo "  PERSISTENT_DATA      Enable persistent storage (default: false)"
-        echo "  PRODUCTION_HOST      Production server (default: sven.dc3.crunchtools.com)"
-        echo "  PRODUCTION_PORT      SSH port (default: 22422)"
-        echo "  DATA_DIR             PostgreSQL data directory (default: ~/.rotv/pgdata)"
-        echo "  GOOGLE_CLIENT_ID     Google OAuth client ID"
-        echo "  GOOGLE_CLIENT_SECRET Google OAuth client secret"
-        echo "  GEMINI_API_KEY       Google Gemini API key"
-        echo "  SESSION_SECRET       Session encryption key"
-        echo "  ADMIN_EMAIL          Email for admin user"
+        echo "DEVELOPMENT WORKFLOW"
+        echo "  ./run.sh reload-app     # Hot reload after code changes (~3s)"
+        echo "  ./run.sh restart-db     # Restart PostgreSQL if needed (~5s)"
+        echo "  ./run.sh build && ./run.sh test  # MANDATORY before PR"
         echo ""
-        echo "Quick Start (Development):"
-        echo "  1. cp .env.example .env    # Copy and fill in credentials"
-        echo "  2. ./run.sh build          # Build container image"
-        echo "  3. ./run.sh seed           # Pull production data (one-time)"
-        echo "  4. ./run.sh start          # Start with ephemeral storage + seed data"
-        echo "  5. ./run.sh test           # Run tests"
+        echo "ENVIRONMENT VARIABLES (set in .env or export)"
+        echo "  GEMINI_API_KEY         Google Gemini API key (required for AI features)"
+        echo "  PERPLEXITY_API_KEY     Perplexity API key (required for AI features)"
+        echo "  GOOGLE_CLIENT_ID       Google OAuth client ID"
+        echo "  GOOGLE_CLIENT_SECRET   Google OAuth client secret"
+        echo "  SESSION_SECRET         Session encryption key"
+        echo "  ADMIN_EMAIL            Admin user email address"
+        echo "  PERSISTENT_DATA        Set 'true' for persistent storage (production)"
+        echo "  DATA_DIR               PostgreSQL data dir (default: ~/.rotv/pgdata)"
         echo ""
         ;;
 esac

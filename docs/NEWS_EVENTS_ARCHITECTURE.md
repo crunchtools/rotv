@@ -2,7 +2,7 @@
 
 ## Introduction: How It Works
 
-The News & Events collection system automatically discovers, extracts, and organizes relevant news articles and upcoming events for every destination in the Roots of The Valley application. This intelligent system combines multiple cutting-edge technologies to deliver accurate, up-to-date information while eliminating duplicates and ensuring data quality.
+The News & Events collection system automatically discovers, extracts, and organizes relevant news articles and upcoming events for every destination in the Roots of The Valley application. This system combines Playwright browser rendering, Gemini AI content extraction, and PostgreSQL deduplication to deliver accurate, up-to-date information.
 
 ### The Problem We're Solving
 

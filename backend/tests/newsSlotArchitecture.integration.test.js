@@ -48,9 +48,8 @@ describe('News/Events Slot Architecture Integration Tests', () => {
     // 2. A valid session cookie is set up
     // 3. Tests are run in an environment where auth is pre-configured
 
-    // Try to authenticate (implementation depends on your auth setup)
-    // For now, we'll proceed without explicit authentication
-    // If tests fail with 401/403, authentication setup is needed
+    // Tests run without explicit authentication
+    // Auth failures (401/403) indicate auth setup is needed
   });
 
   describe('POST /api/admin/news/collect', () => {
