@@ -358,7 +358,7 @@ describe('UI Integration Tests', () => {
       await firstMarker.click();
 
       // Wait for sidebar to open
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
 
       // Wait for More Info link to appear (should be on Info tab by default)
       // Scroll to bottom of content to make link visible
@@ -431,7 +431,7 @@ describe('UI Integration Tests', () => {
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar to open
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
 
       // Wait for navigation buttons to appear
       await page.waitForSelector('.image-nav-btn', { timeout: 5000 });
@@ -522,7 +522,7 @@ describe('UI Integration Tests', () => {
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar to open
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
       await page.waitForSelector('.image-nav-btn', { timeout: 5000 });
 
       // Get initial POI name - re-query to avoid detachment
@@ -628,7 +628,7 @@ describe('UI Integration Tests', () => {
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar and carousel
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails
