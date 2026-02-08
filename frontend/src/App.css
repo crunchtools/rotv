@@ -9,6 +9,12 @@
   }
 }
 
+@media (max-width: 360px) {
+  :root {
+    --header-height: 92px; /* Extra narrow screens need slightly more height */
+  }
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -2743,6 +2749,36 @@ body {
   /* Position orange banner below mobile header */
   .edit-mode-banner {
     top: 5.5rem;
+  }
+}
+
+/* Extra narrow screens (Samsung S25 and similar ~360px width) */
+@media (max-width: 360px) {
+  .header {
+    gap: 0.15rem; /* Reduce gap between title and tabs */
+    padding: 0.35rem 0.5rem; /* Reduce vertical padding */
+    height: 92px; /* Slightly increase height to prevent cutoff */
+  }
+
+  .header-left h1 {
+    font-size: 1.1rem; /* Slightly smaller title */
+  }
+
+  .header-left .subtitle {
+    font-size: 0.7rem; /* Slightly smaller subtitle */
+  }
+
+  .header-tabs {
+    padding: 0.2rem 0.4rem; /* Reduce tab container padding */
+  }
+
+  .tab-btn {
+    padding: 0.35rem 0.75rem; /* Reduce tab button padding */
+    font-size: 0.8rem; /* Slightly smaller font */
+  }
+
+  .tab-dropdown {
+    top: 5.75rem; /* Adjust dropdown position for slightly taller header */
   }
 }
 

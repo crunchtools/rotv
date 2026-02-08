@@ -668,6 +668,73 @@ describe('UI Integration Tests', () => {
       // Reset viewport
       await page.setViewportSize({ width: 1280, height: 720 });
     }, 40000);
+
+    it('should not cut off navigation tabs on Samsung S25 narrow screens', async () => {
+      // Samsung Galaxy S25 has ~360px width - this was causing nav cutoff
+      await page.setViewportSize({ width: 360, height: 800 });
+
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      // Wait for header to render
+      await page.waitForSelector('.header', { timeout: 10000 });
+      await page.waitForSelector('.header-tabs', { timeout: 5000 });
+      await page.waitForSelector('.tab-btn', { timeout: 5000 });
+
+      // Check that navigation tabs are fully visible and not cut off
+      const navVisibility = await page.evaluate(() => {
+        const header = document.querySelector('.header');
+        const headerTabs = document.querySelector('.header-tabs');
+        const tabButtons = Array.from(document.querySelectorAll('.tab-btn'));
+
+        if (!header || !headerTabs || tabButtons.length === 0) {
+          return { error: 'Navigation elements not found' };
+        }
+
+        const headerRect = header.getBoundingClientRect();
+        const headerTabsRect = headerTabs.getBoundingClientRect();
+
+        // Check each tab button
+        const tabsStatus = tabButtons.map((btn, index) => {
+          const btnRect = btn.getBoundingClientRect();
+          return {
+            index,
+            text: btn.textContent.trim(),
+            top: btnRect.top,
+            bottom: btnRect.bottom,
+            height: btnRect.height,
+            isFullyVisible: btnRect.bottom <= headerRect.bottom && btnRect.top >= headerRect.top,
+            isCutOffAtBottom: btnRect.bottom > headerRect.bottom,
+            visibleHeight: Math.min(btnRect.bottom, headerRect.bottom) - Math.max(btnRect.top, headerRect.top)
+          };
+        });
+
+        return {
+          headerHeight: headerRect.height,
+          headerBottom: headerRect.bottom,
+          headerTabsBottom: headerTabsRect.bottom,
+          tabs: tabsStatus,
+          allTabsFullyVisible: tabsStatus.every(tab => tab.isFullyVisible),
+          anyTabCutOff: tabsStatus.some(tab => tab.isCutOffAtBottom)
+        };
+      });
+
+      // Assertions
+      expect(navVisibility.error).toBeUndefined();
+      expect(navVisibility.headerHeight).toBeGreaterThan(0);
+
+      // All tabs should be fully visible - not cut off at bottom
+      expect(navVisibility.allTabsFullyVisible).toBe(true);
+      expect(navVisibility.anyTabCutOff).toBe(false);
+
+      // Each tab should have reasonable visible height (at least 24px for clickability)
+      navVisibility.tabs.forEach(tab => {
+        expect(tab.visibleHeight).toBeGreaterThanOrEqual(24);
+        expect(tab.isCutOffAtBottom).toBe(false);
+      });
+
+      // Reset viewport
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }, 30000);
   });
 
   describe('Header Visibility', () => {
