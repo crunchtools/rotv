@@ -1,17 +1,10 @@
+# Immich Media Server - All-in-one UBI10 container
+# Uses standard RHEL packages and configurations where possible
+
 # Extract Immich application from official image
 FROM ghcr.io/immich-app/immich-server:release AS immich-source
 
-# Build minimal Redis from source
-FROM registry.access.redhat.com/ubi10/ubi-init:latest AS redis-build
-RUN dnf install -y gcc gcc-c++ make wget tar && \
-    cd /tmp && \
-    wget http://download.redis.io/redis-stable.tar.gz && \
-    tar xzf redis-stable.tar.gz && \
-    cd redis-stable && \
-    make MALLOC=libc && \
-    make install PREFIX=/usr/local
-
-# Build pgvector extension for PostgreSQL
+# Build pgvector extension for PostgreSQL (not available in repos)
 FROM registry.access.redhat.com/ubi10/ubi-init:latest AS pgvector-build
 RUN dnf install -y gcc make git postgresql-server-devel redhat-rpm-config && \
     cd /tmp && \
@@ -20,7 +13,7 @@ RUN dnf install -y gcc make git postgresql-server-devel redhat-rpm-config && \
     make && \
     make install DESTDIR=/pgvector-install
 
-# Build libvips from source
+# Build libvips from source (not available in UBI repos)
 FROM registry.access.redhat.com/ubi10/ubi-init:latest AS vips-build
 RUN dnf install -y \
     gcc gcc-c++ make wget xz \
@@ -42,11 +35,11 @@ RUN dnf install -y \
 # Final image
 FROM registry.access.redhat.com/ubi10/ubi-init:latest
 
-# Install PostgreSQL 16, Node.js 22, libvips runtime deps, and utilities
+# Install all packages from standard RHEL repos (valkey is Redis-compatible)
 RUN dnf install -y \
-    postgresql \
     postgresql-server \
     postgresql-contrib \
+    valkey \
     nodejs \
     npm \
     sudo \
@@ -60,9 +53,6 @@ RUN dnf install -y \
     librsvg2 && \
     dnf clean all
 
-# Copy Redis binaries from build stage
-COPY --from=redis-build /usr/local/bin/redis-* /usr/local/bin/
-
 # Copy libvips from build stage
 COPY --from=vips-build /usr/local/lib64/libvips* /usr/lib64/
 COPY --from=vips-build /usr/local/lib64/pkgconfig/vips* /usr/lib64/pkgconfig/
@@ -71,157 +61,116 @@ COPY --from=vips-build /usr/local/lib64/pkgconfig/vips* /usr/lib64/pkgconfig/
 COPY --from=pgvector-build /pgvector-install/usr/ /usr/
 RUN ldconfig
 
-# Initialize PostgreSQL manually (systemd not available during build)
-RUN mkdir -p /var/lib/pgsql/data && \
-    chown -R postgres:postgres /var/lib/pgsql && \
-    su - postgres -c "/usr/bin/initdb -D /var/lib/pgsql/data"
-
-# Copy Immich application from official image
+# Copy Immich application and geodata from official image
 COPY --from=immich-source /usr/src/app /usr/src/app
-
-# Copy geodata for reverse geocoding initialization
 COPY --from=immich-source /build /build
 
-# Create Immich user
+# Create Immich user and set up directories
 RUN useradd -r -s /bin/false immich && \
     mkdir -p /usr/src/app/upload && \
     chown -R immich:immich /usr/src/app
 
-# Create database initialization script
-RUN printf '#!/bin/bash\n\
-set -e\n\
-\n\
-# Wait for PostgreSQL to start\n\
-until pg_isready -U postgres > /dev/null 2>&1; do\n\
-  sleep 1\n\
-done\n\
-\n\
-# Create database and user if they do not exist\n\
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = '\''immich'\''" | grep -q 1 || \\\n\
-  sudo -u postgres createdb immich\n\
-\n\
-sudo -u postgres psql -tc "SELECT 1 FROM pg_user WHERE usename = '\''immich'\''" | grep -q 1 || \\\n\
-  sudo -u postgres psql -c "CREATE USER immich WITH PASSWORD '\''immich'\'';" \n\
-\n\
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE immich TO immich;"\n\
-sudo -u postgres psql -d immich -c "GRANT ALL ON SCHEMA public TO immich;"\n\
-sudo -u postgres psql -d immich -c "ALTER DATABASE immich OWNER TO immich;"\n\
-\n\
-# Create all required extensions as superuser\n\
-sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS vector;"\n\
-sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS cube;"\n\
-sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance;"\n\
-sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"\n\
-sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS unaccent;"\n\
-\n\
-echo "Immich database initialized with all extensions"\n' > /usr/local/bin/init-immich-db.sh && \
-    chmod +x /usr/local/bin/init-immich-db.sh
+# Configure PostgreSQL - initialize database in standard PGDATA location
+RUN mkdir -p /var/lib/pgsql/data && \
+    chown -R postgres:postgres /var/lib/pgsql && \
+    sudo -u postgres /usr/bin/initdb -D /var/lib/pgsql/data
 
-# Create Redis systemd service
-RUN printf '[Unit]\n\
-Description=Redis In-Memory Data Store\n\
-After=network.target\n\
-\n\
-[Service]\n\
-Type=forking\n\
-PIDFile=/run/redis/redis.pid\n\
-ExecStart=/usr/local/bin/redis-server --daemonize yes --pidfile /run/redis/redis.pid\n\
-ExecStop=/usr/local/bin/redis-cli shutdown\n\
-Restart=always\n\
-RuntimeDirectory=redis\n\
-\n\
-[Install]\n\
-WantedBy=multi-user.target\n' > /etc/systemd/system/redis.service
+# Configure Valkey (Redis-compatible) - bind to localhost only
+RUN sed -i 's/^bind .*/bind 127.0.0.1/' /etc/valkey/valkey.conf
 
-# Create PostgreSQL systemd service override
-RUN mkdir -p /etc/systemd/system/postgresql.service.d && \
-    printf '[Service]\nEnvironment="PGDATA=/var/lib/pgsql/data"\n' > \
-    /etc/systemd/system/postgresql.service.d/override.conf
+# Create database initialization script in standard location
+RUN cat > /usr/local/bin/init-immich-db.sh << 'EOF'
+#!/bin/bash
+set -e
 
-# Create database init systemd service
-RUN printf '[Unit]\n\
-Description=Initialize Immich Database\n\
-After=postgresql.service\n\
-Requires=postgresql.service\n\
-Before=immich-server.service\n\
-\n\
-[Service]\n\
-Type=oneshot\n\
-RemainAfterExit=yes\n\
-ExecStart=/usr/local/bin/init-immich-db.sh\n\
-\n\
-[Install]\n\
-WantedBy=multi-user.target\n' > /etc/systemd/system/immich-db-init.service
+# Wait for PostgreSQL to start
+until pg_isready -U postgres > /dev/null 2>&1; do
+  sleep 1
+done
 
-# Create Immich server systemd service
-RUN printf '[Unit]\n\
-Description=Immich Server\n\
-After=network.target postgresql.service redis.service immich-db-init.service\n\
-Requires=postgresql.service redis.service immich-db-init.service\n\
-\n\
-[Service]\n\
-Type=simple\n\
-User=immich\n\
-WorkingDirectory=/usr/src/app/server\n\
-Environment="NODE_ENV=production"\n\
-Environment="DB_HOSTNAME=localhost"\n\
-Environment="DB_PORT=5432"\n\
-Environment="DB_USERNAME=immich"\n\
-Environment="DB_PASSWORD=immich"\n\
-Environment="DB_DATABASE_NAME=immich"\n\
-Environment="REDIS_HOSTNAME=localhost"\n\
-Environment="REDIS_PORT=6379"\n\
-Environment="UPLOAD_LOCATION=/usr/src/app/upload"\n\
-Environment="IMMICH_MACHINE_LEARNING_ENABLED=false"\n\
-Environment="DISABLE_REVERSE_GEOCODING=true"\n\
-Environment="DISABLE_TYPESENSE=true"\n\
-Environment="IMMICH_WORKERS_INCLUDE=api"\n\
-ExecStart=/usr/bin/node dist/main\n\
-Restart=always\n\
-RestartSec=10\n\
-\n\
-[Install]\n\
-WantedBy=multi-user.target\n' > /etc/systemd/system/immich-server.service
+# Create database and user if they do not exist
+sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = 'immich'" | grep -q 1 || \
+  sudo -u postgres createdb immich
 
-# Create Immich microservices systemd service (disabled for now due to geodata memory issues)
-RUN printf '[Unit]\n\
-Description=Immich Microservices\n\
-After=network.target postgresql.service redis.service immich-server.service\n\
-Requires=postgresql.service redis.service\n\
-\n\
-[Service]\n\
-Type=simple\n\
-User=immich\n\
-WorkingDirectory=/usr/src/app/server\n\
-Environment="NODE_ENV=production"\n\
-Environment="DB_HOSTNAME=localhost"\n\
-Environment="DB_PORT=5432"\n\
-Environment="DB_USERNAME=immich"\n\
-Environment="DB_PASSWORD=immich"\n\
-Environment="DB_DATABASE_NAME=immich"\n\
-Environment="REDIS_HOSTNAME=localhost"\n\
-Environment="REDIS_PORT=6379"\n\
-Environment="UPLOAD_LOCATION=/usr/src/app/upload"\n\
-Environment="IMMICH_MACHINE_LEARNING_ENABLED=false"\n\
-Environment="DISABLE_REVERSE_GEOCODING=true"\n\
-Environment="DISABLE_TYPESENSE=true"\n\
-ExecStart=/usr/bin/node dist/workers/microservices\n\
-Restart=always\n\
-RestartSec=10\n\
-\n\
-[Install]\n\
-WantedBy=multi-user.target\n' > /etc/systemd/system/immich-microservices.service
+sudo -u postgres psql -tc "SELECT 1 FROM pg_user WHERE usename = 'immich'" | grep -q 1 || \
+  sudo -u postgres psql -c "CREATE USER immich WITH PASSWORD 'immich';"
 
-# Enable services (microservices disabled due to geodata memory issues)
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE immich TO immich;"
+sudo -u postgres psql -d immich -c "GRANT ALL ON SCHEMA public TO immich;"
+sudo -u postgres psql -d immich -c "ALTER DATABASE immich OWNER TO immich;"
+
+# Create required extensions as superuser
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS vector;"
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS cube;"
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance;"
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS unaccent;"
+
+echo "Immich database initialized with all extensions"
+EOF
+RUN chmod +x /usr/local/bin/init-immich-db.sh
+
+# Create Immich environment file in standard location
+RUN cat > /etc/immich.env << 'EOF'
+NODE_ENV=production
+DB_HOSTNAME=localhost
+DB_PORT=5432
+DB_USERNAME=immich
+DB_PASSWORD=immich
+DB_DATABASE_NAME=immich
+REDIS_HOSTNAME=localhost
+REDIS_PORT=6379
+UPLOAD_LOCATION=/usr/src/app/upload
+IMMICH_MACHINE_LEARNING_ENABLED=false
+IMMICH_WORKERS_INCLUDE=api
+EOF
+
+# Create database init service (oneshot, runs after postgresql)
+RUN cat > /etc/systemd/system/immich-db-init.service << 'EOF'
+[Unit]
+Description=Initialize Immich Database
+After=postgresql.service
+Requires=postgresql.service
+Before=immich-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/init-immich-db.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Create Immich server service
+RUN cat > /etc/systemd/system/immich-server.service << 'EOF'
+[Unit]
+Description=Immich Server
+After=network.target postgresql.service valkey.service immich-db-init.service
+Requires=postgresql.service valkey.service immich-db-init.service
+
+[Service]
+Type=simple
+User=immich
+WorkingDirectory=/usr/src/app/server
+EnvironmentFile=/etc/immich.env
+ExecStart=/usr/bin/node dist/main
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable services using standard unit files
 RUN systemctl enable postgresql && \
-    systemctl enable redis && \
+    systemctl enable valkey && \
     systemctl enable immich-db-init && \
     systemctl enable immich-server
 
-# Expose Immich port (Immich listens on 2283 by default)
 EXPOSE 2283
 
 LABEL version="2.5.5"
-LABEL description="Immich Media Server - All-in-one container"
+LABEL description="Immich Media Server - All-in-one UBI10 container"
 
 CMD ["/sbin/init"]
