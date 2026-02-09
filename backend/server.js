@@ -35,6 +35,7 @@ import {
   processTrailStatusCollectionJob
 } from './services/trailStatusService.js';
 import { createSheetsService } from './services/sheetsSync.js';
+import immichService from './services/immichService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1228,10 +1229,30 @@ app.get('/api/theme-config', async (req, res) => {
     );
 
     if (result.rows.length > 0) {
-      res.json({ seasonal_themes: result.rows[0].value });
+      const config = typeof result.rows[0].value === 'string'
+        ? JSON.parse(result.rows[0].value)
+        : result.rows[0].value;
+
+      // Resolve video URLs from Immich
+      const themes = config.themes || [];
+      const videoUrls = {};
+
+      for (const theme of themes) {
+        if (theme.enabled) {
+          const url = await immichService.getThemeVideoUrl(theme.id);
+          if (url) {
+            videoUrls[theme.id] = url;
+          }
+        }
+      }
+
+      res.json({
+        seasonal_themes: result.rows[0].value,
+        video_urls: videoUrls
+      });
     } else {
       // Return empty config if not set
-      res.json({ seasonal_themes: null });
+      res.json({ seasonal_themes: null, video_urls: {} });
     }
   } catch (error) {
     console.error('Error fetching theme config:', error);
@@ -1762,6 +1783,21 @@ async function setupAiSearchDefaults() {
       ADD COLUMN IF NOT EXISTS last_news_collection TIMESTAMP
     `);
 
+    // Initialize Immich settings if not present
+    const immichDefaults = [
+      { key: 'immich_server_url', value: process.env.IMMICH_SERVER_URL || '' },
+      { key: 'immich_api_key', value: process.env.IMMICH_API_KEY || '' },
+      { key: 'immich_album_id', value: process.env.IMMICH_ALBUM_ID || '' }
+    ];
+
+    for (const { key, value } of immichDefaults) {
+      await pool.query(`
+        INSERT INTO admin_settings (key, value, updated_at)
+        VALUES ($1, $2, CURRENT_TIMESTAMP)
+        ON CONFLICT (key) DO NOTHING
+      `, [key, value]);
+    }
+
     console.log('[AI Search] Default configuration verified');
   } catch (error) {
     console.error('[AI Search] Error setting up defaults:', error.message);
@@ -1770,6 +1806,9 @@ async function setupAiSearchDefaults() {
 
 async function start() {
   await initDatabase();
+
+  // Initialize Immich service for theme video delivery
+  await immichService.initialize(pool);
 
   // Ensure news job checkpoint columns exist for resumability
   await ensureNewsJobCheckpointColumns(pool);

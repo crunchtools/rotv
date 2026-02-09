@@ -9,15 +9,40 @@ RUN dnf install -y gcc gcc-c++ make wget tar && \
     tar xzf redis-stable.tar.gz && \
     cd redis-stable && \
     make MALLOC=libc && \
-    make install PREFIX=/usr/local && \
-    dnf remove -y gcc gcc-c++ make wget tar && \
-    dnf clean all
+    make install PREFIX=/usr/local
+
+# Build pgvector extension for PostgreSQL
+FROM registry.access.redhat.com/ubi10/ubi-init:latest AS pgvector-build
+RUN dnf install -y gcc make git postgresql-server-devel redhat-rpm-config && \
+    cd /tmp && \
+    git clone --branch v0.7.4 https://github.com/pgvector/pgvector.git && \
+    cd pgvector && \
+    make && \
+    make install DESTDIR=/pgvector-install
+
+# Build libvips from source
+FROM registry.access.redhat.com/ubi10/ubi-init:latest AS vips-build
+RUN dnf install -y \
+    gcc gcc-c++ make wget xz \
+    meson ninja-build pkg-config \
+    glib2-devel expat-devel \
+    libjpeg-turbo-devel libpng-devel \
+    libtiff-devel libwebp-devel \
+    libexif-devel lcms2-devel \
+    librsvg2-devel && \
+    cd /tmp && \
+    wget https://github.com/libvips/libvips/releases/download/v8.15.2/vips-8.15.2.tar.xz && \
+    tar xf vips-8.15.2.tar.xz && \
+    cd vips-8.15.2 && \
+    meson setup build --prefix=/usr/local --buildtype=release && \
+    cd build && \
+    ninja && \
+    ninja install
 
 # Final image
 FROM registry.access.redhat.com/ubi10/ubi-init:latest
 
-# Install PostgreSQL 16, Node.js 22, and utilities
-# TODO: Need to add libvips dependencies for Sharp image processing
+# Install PostgreSQL 16, Node.js 22, libvips runtime deps, and utilities
 RUN dnf install -y \
     postgresql \
     postgresql-server \
@@ -27,11 +52,24 @@ RUN dnf install -y \
     sudo \
     curl \
     ca-certificates \
-    procps-ng && \
+    procps-ng \
+    glib2 expat \
+    libjpeg-turbo libpng \
+    libtiff libwebp \
+    libexif lcms2 \
+    librsvg2 && \
     dnf clean all
 
 # Copy Redis binaries from build stage
 COPY --from=redis-build /usr/local/bin/redis-* /usr/local/bin/
+
+# Copy libvips from build stage
+COPY --from=vips-build /usr/local/lib64/libvips* /usr/lib64/
+COPY --from=vips-build /usr/local/lib64/pkgconfig/vips* /usr/lib64/pkgconfig/
+
+# Copy pgvector extension from build stage
+COPY --from=pgvector-build /pgvector-install/usr/ /usr/
+RUN ldconfig
 
 # Initialize PostgreSQL manually (systemd not available during build)
 RUN mkdir -p /var/lib/pgsql/data && \
@@ -40,6 +78,9 @@ RUN mkdir -p /var/lib/pgsql/data && \
 
 # Copy Immich application from official image
 COPY --from=immich-source /usr/src/app /usr/src/app
+
+# Copy geodata for reverse geocoding initialization
+COPY --from=immich-source /build /build
 
 # Create Immich user
 RUN useradd -r -s /bin/false immich && \
@@ -66,7 +107,14 @@ sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE immich TO immich;"\n\
 sudo -u postgres psql -d immich -c "GRANT ALL ON SCHEMA public TO immich;"\n\
 sudo -u postgres psql -d immich -c "ALTER DATABASE immich OWNER TO immich;"\n\
 \n\
-echo "Immich database initialized"\n' > /usr/local/bin/init-immich-db.sh && \
+# Create all required extensions as superuser\n\
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS vector;"\n\
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS cube;"\n\
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS earthdistance;"\n\
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS pg_trgm;"\n\
+sudo -u postgres psql -d immich -c "CREATE EXTENSION IF NOT EXISTS unaccent;"\n\
+\n\
+echo "Immich database initialized with all extensions"\n' > /usr/local/bin/init-immich-db.sh && \
     chmod +x /usr/local/bin/init-immich-db.sh
 
 # Create Redis systemd service
@@ -127,6 +175,7 @@ Environment="UPLOAD_LOCATION=/usr/src/app/upload"\n\
 Environment="IMMICH_MACHINE_LEARNING_ENABLED=false"\n\
 Environment="DISABLE_REVERSE_GEOCODING=true"\n\
 Environment="DISABLE_TYPESENSE=true"\n\
+Environment="IMMICH_WORKERS_INCLUDE=api"\n\
 ExecStart=/usr/bin/node dist/main\n\
 Restart=always\n\
 RestartSec=10\n\
@@ -134,7 +183,7 @@ RestartSec=10\n\
 [Install]\n\
 WantedBy=multi-user.target\n' > /etc/systemd/system/immich-server.service
 
-# Create Immich microservices systemd service
+# Create Immich microservices systemd service (disabled for now due to geodata memory issues)
 RUN printf '[Unit]\n\
 Description=Immich Microservices\n\
 After=network.target postgresql.service redis.service immich-server.service\n\
@@ -163,15 +212,14 @@ RestartSec=10\n\
 [Install]\n\
 WantedBy=multi-user.target\n' > /etc/systemd/system/immich-microservices.service
 
-# Enable all services
+# Enable services (microservices disabled due to geodata memory issues)
 RUN systemctl enable postgresql && \
     systemctl enable redis && \
     systemctl enable immich-db-init && \
-    systemctl enable immich-server && \
-    systemctl enable immich-microservices
+    systemctl enable immich-server
 
-# Expose Immich port
-EXPOSE 3001
+# Expose Immich port (Immich listens on 2283 by default)
+EXPOSE 2283
 
 LABEL version="2.5.5"
 LABEL description="Immich Media Server - All-in-one container"

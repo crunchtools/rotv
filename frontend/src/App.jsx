@@ -9,6 +9,7 @@ import SyncSettings from './components/SyncSettings';
 import AISettings from './components/AISettings';
 import GeneralSettings from './components/GeneralSettings';
 import ThemesSettings from './components/ThemesSettings';
+import ImmichSettings from './components/ImmichSettings';
 import ActivitiesSettings from './components/ActivitiesSettings';
 import ErasSettings from './components/ErasSettings';
 import SurfacesSettings from './components/SurfacesSettings';
@@ -42,7 +43,7 @@ const DEFAULT_PARK_BOUNDS = [
 
 function AppContent() {
   const { isAuthenticated, isAdmin, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
-  const { activeTheme, isNightMode } = useSeasonalTheme();
+  const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
@@ -1405,7 +1406,7 @@ function AppContent() {
             loop
             muted
             playsInline
-            src={`/theme-videos/${activeTheme}.mp4`}
+            src={videoUrls[activeTheme] || `/theme-videos/${activeTheme}.mp4`}
             onLoadedData={(e) => { e.target.playbackRate = 0.7; }}
           />
         )}
@@ -1631,6 +1632,12 @@ function AppContent() {
                 Themes
               </button>
               <button
+                className={`settings-tab-btn ${settingsTab === 'immich' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('immich')}
+              >
+                Immich
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'activities' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('activities')}
               >
@@ -1671,6 +1678,7 @@ function AppContent() {
             <div className="settings-tab-content">
               {settingsTab === 'general' && <GeneralSettings />}
               {settingsTab === 'themes' && <ThemesSettings />}
+              {settingsTab === 'immich' && <ImmichSettings />}
               {settingsTab === 'activities' && <ActivitiesSettings />}
               {settingsTab === 'eras' && <ErasSettings />}
               {settingsTab === 'surfaces' && <SurfacesSettings />}

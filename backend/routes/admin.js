@@ -85,6 +85,7 @@ import {
   clearProgress as clearTrailProgress,
   getDisplaySlots as getTrailDisplaySlots
 } from '../services/trailStatusService.js';
+import immichService from '../services/immichService.js';
 
 const router = express.Router();
 
@@ -551,7 +552,10 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       'ai_search_primary_limit',
       'twitter_username',
       'twitter_password',
-      'seasonal_themes'
+      'seasonal_themes',
+      'immich_server_url',
+      'immich_api_key',
+      'immich_album_id'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
@@ -4403,6 +4407,16 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         elapsed_ms: elapsed,
         timestamp: new Date().toISOString()
       });
+    }
+  });
+
+  // Test Immich connection
+  router.post('/test-immich', isAdmin, async (req, res) => {
+    try {
+      const result = await immichService.testConnection();
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
   });
 
