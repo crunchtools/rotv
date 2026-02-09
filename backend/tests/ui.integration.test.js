@@ -802,9 +802,10 @@ describe('UI Integration Tests', () => {
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
       await page.waitForSelector('.results-type-filters', { timeout: 10000 });
 
-      // Verify all 4 filter badges are initially visible (only in Results tab)
+      // Verify filter badges are initially visible (dynamic based on icon config + layers)
       const filterChips = page.locator('.results-tab-wrapper .type-filter-chip');
-      expect(await filterChips.count()).toBe(4);
+      const initialCount = await filterChips.count();
+      expect(initialCount).toBeGreaterThanOrEqual(3); // At least trails, rivers, boundaries
 
       // Click all badges to deselect them
       await page.evaluate(() => {
@@ -816,16 +817,16 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(500);
 
       // Verify all badges are still visible even when deselected
-      expect(await filterChips.count()).toBe(4);
+      expect(await filterChips.count()).toBe(initialCount);
       expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
 
-      // Verify badges are clickable to re-enable filters
-      const destinationChip = page.locator('.results-tab-wrapper .type-filter-chip.destination');
-      await destinationChip.evaluate(el => el.click());
+      // Verify badges are clickable to re-enable filters (use first chip)
+      const firstChip = page.locator('.results-tab-wrapper .type-filter-chip').first();
+      await firstChip.evaluate(el => el.click());
       await page.waitForTimeout(300);
 
       // Verify the badge is now active
-      const isActive = await destinationChip.evaluate(el => el.classList.contains('active'));
+      const isActive = await firstChip.evaluate(el => el.classList.contains('active'));
       expect(isActive).toBe(true);
     }, 30000);
 
@@ -841,9 +842,10 @@ describe('UI Integration Tests', () => {
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
       await page.waitForSelector('.results-type-filters', { timeout: 10000 });
 
-      // Verify all 4 filter badges are initially visible
+      // Verify filter badges are initially visible (dynamic based on icon config + layers)
       const filterChips = page.locator('.results-tab-wrapper .type-filter-chip');
-      expect(await filterChips.count()).toBe(4);
+      const initialCount = await filterChips.count();
+      expect(initialCount).toBeGreaterThanOrEqual(3); // At least trails, rivers, boundaries
       expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
 
       // Type search text - scope to Results tab only
@@ -852,7 +854,7 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(500);
 
       // Verify filter badges are still visible during search
-      expect(await filterChips.count()).toBe(4);
+      expect(await filterChips.count()).toBe(initialCount);
       expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
 
       // Verify results count is displayed
@@ -864,7 +866,7 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(500);
 
       // Badges should still be visible
-      expect(await filterChips.count()).toBe(4);
+      expect(await filterChips.count()).toBe(initialCount);
     }, 30000);
   });
 });

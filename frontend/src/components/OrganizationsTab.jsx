@@ -5,7 +5,8 @@ import ResultsTile from './ResultsTile';
 const OrganizationsTab = memo(function OrganizationsTab({
   allVirtualPois,
   selectedDestination,
-  onSelectDestination
+  onSelectDestination,
+  iconConfig
 }) {
   const [searchText, setSearchText] = useState('');
 
@@ -115,6 +116,7 @@ const OrganizationsTab = memo(function OrganizationsTab({
                   isLinear={false}
                   isVirtual={true}
                   isSelected={isSelected}
+                  iconConfig={iconConfig}
                 />
               );
             })}

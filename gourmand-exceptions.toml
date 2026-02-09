@@ -676,3 +676,10 @@ justification = "Technical debt: Playwright render results use generic 'result' 
 check = "generic_names"
 path = "backend/routes/admin.js"
 justification = "Technical debt: Admin route handlers use generic 'result' and 'data' variable names for database queries and API responses. Should be refactored in future code quality PR."
+
+# Single-use helpers - Icon utility shared logic (Issue #73)
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "frontend/src/utils/iconUtils.js"
+justification = "getDestinationIconTypeFromConfig is shared between Map.jsx (for map marker icons) and getIconUrlForPOI (for ResultsTile icons). Extracted from Map.jsx to avoid duplication when implementing Issue #73 (replacing letter badges with icons in Results lists). This is legitimate code reuse, not single-use extraction."

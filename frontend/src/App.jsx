@@ -700,6 +700,20 @@ function AppContent() {
     }
   }, [iconConfig]);
 
+  // Initialize visibleBoundaries to only show CVNP boundary by default
+  const hasInitializedBoundaries = useRef(false);
+  useEffect(() => {
+    if (linearFeatures && linearFeatures.length > 0 && !hasInitializedBoundaries.current) {
+      const cvnpBoundary = linearFeatures.find(
+        f => f.feature_type === 'boundary' && f.name === 'Cuyahoga Valley National Park'
+      );
+      if (cvnpBoundary) {
+        setVisibleBoundaries(new Set([cvnpBoundary.id]));
+      }
+      hasInitializedBoundaries.current = true;
+    }
+  }, [linearFeatures]);
+
   // Auto-scroll header tabs to show Login button on mobile
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
@@ -1527,6 +1541,7 @@ function AppContent() {
             onFilterByTypes={handleFilterByTypes}
             bypassViewportFilter={bypassViewportFilter}
             visiblePoiCount={visiblePoiCount}
+            iconConfig={iconConfig}
           />
         </main>
       )}

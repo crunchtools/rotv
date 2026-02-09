@@ -2,6 +2,7 @@ import React, { useMemo, useCallback, memo, useState, useEffect, useRef } from '
 import { useNavigate } from 'react-router-dom';
 import ResultsTile from './ResultsTile';
 import MapThumbnail from './MapThumbnail';
+import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 
 // Default park bounds - same as used in App.jsx
 // Expanded to include all MTB trailheads (especially western ones like Reagan-Huffman)
@@ -30,7 +31,8 @@ const ResultsTab = memo(function ResultsTab({
   initialShowOrganizationsOnly = false,  // Whether to show organizations sub-tab (controlled by URL)
   onFilterByTypes,  // Callback to filter by POI types: array of types or null for all
   bypassViewportFilter = false,  // Temporarily show all POIs (bypass viewport filtering)
-  visiblePoiCount  // Global POI count from App.jsx
+  visiblePoiCount,  // Global POI count from App.jsx
+  iconConfig  // Icon configuration for rendering POI icons
 }) {
   const navigate = useNavigate();
   const isNavigatingRef = useRef(false);
@@ -40,13 +42,31 @@ const ResultsTab = memo(function ResultsTab({
     initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all'
   );
   const [searchText, setSearchText] = useState('');
-  const [typeFilters, setTypeFilters] = useState({
-    destination: true,
-    trail: true,
-    river: true,
-    boundary: true
-  });
+
+  // Generate initial filter types from iconConfig + layer types
+  const allFilterTypes = useMemo(() => {
+    const types = new Set(['trails', 'rivers', 'boundaries']); // Layer types
+    if (iconConfig && iconConfig.length > 0) {
+      iconConfig.forEach(icon => {
+        if (icon.enabled !== false) {
+          types.add(icon.name);
+        }
+      });
+    } else {
+      // Fallback default POI types
+      ['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge',
+       'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default'].forEach(t => types.add(t));
+    }
+    return types;
+  }, [iconConfig]);
+
+  const [enabledFilters, setEnabledFilters] = useState(() => new Set(allFilterTypes));
   const [mtbTrailStatuses, setMtbTrailStatuses] = useState({});
+
+  // Update enabled filters when allFilterTypes changes (iconConfig loads)
+  useEffect(() => {
+    setEnabledFilters(new Set(allFilterTypes));
+  }, [allFilterTypes]);
 
   // Transition state - tracks when we're leaving MTB mode but bypassViewportFilter hasn't caught up yet
   const [isInTransition, setIsInTransition] = useState(false);
@@ -135,13 +155,13 @@ const ResultsTab = memo(function ResultsTab({
       ...d,
       _isLinear: false,
       _isVirtual: false,
-      _poiType: (d.status_url && d.status_url.trim() !== '') ? 'mtb' : 'destination'
+      _poiType: getDestinationIconTypeFromConfig(d, iconConfig)
     }));
     const linear = sourceLinear.map(f => ({
       ...f,
       _isLinear: true,
       _isVirtual: false,
-      _poiType: f.feature_type || 'trail'
+      _poiType: f.feature_type === 'trail' ? 'trails' : f.feature_type === 'river' ? 'rivers' : 'boundaries'
     }));
     const virtual = sourceVirtual.map(v => ({
       ...v,
@@ -167,7 +187,7 @@ const ResultsTab = memo(function ResultsTab({
 
     // Type filter (only applies to Points of Interest subtab)
     if (activeSubTab === 'all') {
-      filtered = filtered.filter(poi => typeFilters[poi._poiType]);
+      filtered = filtered.filter(poi => enabledFilters.has(poi._poiType));
     }
 
     // Sort alphabetically
@@ -189,7 +209,7 @@ const ResultsTab = memo(function ResultsTab({
       totalCount: total,
       thumbnailDestinations: sourceDestinations // For MapThumbnail - use source destinations (MTB trailheads or all destinations during transition)
     };
-  }, [activeSubTab, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, allDestinations, allLinearFeatures, allVirtualPois, searchText, typeFilters, bypassViewportFilter, isInTransition]);
+  }, [activeSubTab, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, bypassViewportFilter, isInTransition, iconConfig]);
 
   // Event delegation handler - single handler for all tiles
   const handleListClick = useCallback((e) => {
@@ -215,6 +235,72 @@ const ResultsTab = memo(function ResultsTab({
   // Organizations mode: use count of organizations (sortedPois.length since it's filtered to only organizations)
   // Other modes: use global POI count from App.jsx
   const poiCount = activeSubTab === 'organizations' ? sortedPois.length : visiblePoiCount;
+
+  // Generate filter chips dynamically from iconConfig
+  const filterChips = useMemo(() => {
+    const chips = [];
+
+    // POI type chips
+    if (iconConfig && iconConfig.length > 0) {
+      iconConfig.forEach(icon => {
+        if (icon.enabled !== false) {
+          const iconUrl = icon.svg_content
+            ? `/api/icons/${icon.name}.svg`
+            : `/icons/${icon.svg_filename || `${icon.name}.svg`}`;
+
+          chips.push({
+            id: icon.name,
+            label: icon.name === 'trail' ? 'Trailheads' : (icon.label || icon.name),
+            iconUrl,
+            type: 'poi'
+          });
+        }
+      });
+    }
+
+    // Layer chips (trails, rivers, boundaries)
+    chips.push({
+      id: 'trails',
+      label: 'Trails',
+      iconUrl: '/icons/layers/trails.svg',
+      type: 'layer'
+    });
+    chips.push({
+      id: 'rivers',
+      label: 'Rivers',
+      iconUrl: '/icons/layers/rivers.svg',
+      type: 'layer'
+    });
+    chips.push({
+      id: 'boundaries',
+      label: 'Boundaries',
+      iconUrl: '/icons/layers/boundaries.svg',
+      type: 'layer'
+    });
+
+    // Sort alphabetically
+    return chips.sort((a, b) => a.label.localeCompare(b.label));
+  }, [iconConfig]);
+
+  const toggleFilter = useCallback((typeId) => {
+    setEnabledFilters(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(typeId)) {
+        newSet.delete(typeId);
+      } else {
+        newSet.add(typeId);
+      }
+      return newSet;
+    });
+  }, []);
+
+  const showAllFilters = useCallback(() => {
+    setEnabledFilters(new Set(allFilterTypes));
+  }, [allFilterTypes]);
+
+  const hideAllFilters = useCallback(() => {
+    setEnabledFilters(new Set());
+  }, []);
 
   // Clear transition state when App.jsx bypassViewportFilter catches up
   useEffect(() => {
@@ -321,36 +407,24 @@ const ResultsTab = memo(function ResultsTab({
             onChange={(e) => setSearchText(e.target.value)}
           />
           {activeSubTab === 'all' && (
-            <div className="results-type-filters">
-              <div
-                className={`type-filter-chip destination ${typeFilters.destination ? 'active' : 'inactive'}`}
-                onClick={() => setTypeFilters(prev => ({ ...prev, destination: !prev.destination }))}
-              >
-                <span className="type-filter-icon">D</span>
-                Destination
+            <>
+              <div className="results-filter-actions">
+                <button onClick={showAllFilters} className="filter-action-btn">All</button>
+                <button onClick={hideAllFilters} className="filter-action-btn">None</button>
               </div>
-              <div
-                className={`type-filter-chip trail ${typeFilters.trail ? 'active' : 'inactive'}`}
-                onClick={() => setTypeFilters(prev => ({ ...prev, trail: !prev.trail }))}
-              >
-                <span className="type-filter-icon">T</span>
-                Trail
+              <div className="results-type-filters">
+                {filterChips.map(chip => (
+                  <div
+                    key={chip.id}
+                    className={`type-filter-chip ${chip.id} ${enabledFilters.has(chip.id) ? 'active' : 'inactive'}`}
+                    onClick={() => toggleFilter(chip.id)}
+                  >
+                    <img src={chip.iconUrl} alt={chip.label} className="type-filter-icon" />
+                    {chip.label}
+                  </div>
+                ))}
               </div>
-              <div
-                className={`type-filter-chip river ${typeFilters.river ? 'active' : 'inactive'}`}
-                onClick={() => setTypeFilters(prev => ({ ...prev, river: !prev.river }))}
-              >
-                <span className="type-filter-icon">R</span>
-                River
-              </div>
-              <div
-                className={`type-filter-chip boundary ${typeFilters.boundary ? 'active' : 'inactive'}`}
-                onClick={() => setTypeFilters(prev => ({ ...prev, boundary: !prev.boundary }))}
-              >
-                <span className="type-filter-icon">B</span>
-                Boundary
-              </div>
-            </div>
+            </>
           )}
           <div className="results-count">
             Showing {poiCount} of {totalCount} POIs
@@ -433,36 +507,24 @@ const ResultsTab = memo(function ResultsTab({
           onChange={(e) => setSearchText(e.target.value)}
         />
         {activeSubTab === 'all' && (
-          <div className="results-type-filters">
-            <div
-              className={`type-filter-chip destination ${typeFilters.destination ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, destination: !prev.destination }))}
-            >
-              <span className="type-filter-icon">D</span>
-              Destination
+          <>
+            <div className="results-filter-actions">
+              <button onClick={showAllFilters} className="filter-action-btn">All</button>
+              <button onClick={hideAllFilters} className="filter-action-btn">None</button>
             </div>
-            <div
-              className={`type-filter-chip trail ${typeFilters.trail ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, trail: !prev.trail }))}
-            >
-              <span className="type-filter-icon">T</span>
-              Trail
+            <div className="results-type-filters">
+              {filterChips.map(chip => (
+                <div
+                  key={chip.id}
+                  className={`type-filter-chip ${chip.id} ${enabledFilters.has(chip.id) ? 'active' : 'inactive'}`}
+                  onClick={() => toggleFilter(chip.id)}
+                >
+                  <img src={chip.iconUrl} alt={chip.label} className="type-filter-icon" />
+                  {chip.label}
+                </div>
+              ))}
             </div>
-            <div
-              className={`type-filter-chip river ${typeFilters.river ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, river: !prev.river }))}
-            >
-              <span className="type-filter-icon">R</span>
-              River
-            </div>
-            <div
-              className={`type-filter-chip boundary ${typeFilters.boundary ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, boundary: !prev.boundary }))}
-            >
-              <span className="type-filter-icon">B</span>
-              Boundary
-            </div>
-          </div>
+          </>
         )}
         <div className="results-count">
           Showing {poiCount} of {totalCount} POIs
@@ -488,6 +550,7 @@ const ResultsTab = memo(function ResultsTab({
                   isSelected={isSelected}
                   showStatusInfo={activeSubTab === 'mtb'}
                   statusData={mtbTrailStatuses[poi.id]}
+                  iconConfig={iconConfig}
                 />
               );
             })}
