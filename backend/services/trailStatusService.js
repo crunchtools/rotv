@@ -7,7 +7,7 @@
  */
 
 import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats } from './aiSearchFactory.js';
-import { renderJavaScriptPage, isJavaScriptHeavySite } from './jsRenderer.js';
+import { renderJavaScriptPage } from './jsRenderer.js';
 
 // Dispatch interval: start one new trail job every N milliseconds
 const DISPATCH_INTERVAL_MS = 1500;
@@ -391,36 +391,33 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    // Check if status URL needs JavaScript rendering
+    // Always render status URLs for accuracy (MTB trail status pages are typically dynamic)
     let renderedContent = null;
     if (statusUrl && statusUrl !== 'No dedicated status page') {
-      const isJsHeavy = await isJavaScriptHeavySite(statusUrl);
-      if (isJsHeavy) {
-        console.log(`[Trail Status] 🌐 Status URL is JavaScript-heavy, rendering...`);
-        updateProgress(poi.id, {
-          phase: 'rendering',
-          message: 'Rendering JavaScript status page...',
-          steps: ['Initialized', 'Rendering page']
-        });
+      console.log(`[Trail Status] 🌐 Rendering status page with browser...`);
+      updateProgress(poi.id, {
+        phase: 'rendering',
+        message: 'Rendering status page...',
+        steps: ['Initialized', 'Rendering page']
+      });
 
-        try {
-          const rendered = await renderJavaScriptPage(statusUrl, {
-            twitterCredentials
-          });
-          // Check if we got meaningful content (minimum 500 chars)
-          const MIN_CONTENT_LENGTH = 500;
-          if (rendered.success && rendered.text && rendered.text.length >= MIN_CONTENT_LENGTH) {
-            renderedContent = rendered.text;
-            console.log(`[Trail Status] ✓ Rendered page (${renderedContent.length} chars)`);
-          } else if (rendered.success && rendered.text) {
-            console.log(`[Trail Status] ⚠️ Rendered page has insufficient content (${rendered.text.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
-            console.log(`[Trail Status] This may indicate login wall, empty page, or rendering failure - skipping rendered content`);
-          } else {
-            console.error(`[Trail Status] ⚠️ Rendering failed or no content extracted`);
-          }
-        } catch (renderError) {
-          console.error(`[Trail Status] ⚠️ Rendering failed: ${renderError.message}, continuing with AI search`);
+      try {
+        const rendered = await renderJavaScriptPage(statusUrl, {
+          twitterCredentials
+        });
+        // Check if we got meaningful content (minimum 500 chars)
+        const MIN_CONTENT_LENGTH = 500;
+        if (rendered.success && rendered.text && rendered.text.length >= MIN_CONTENT_LENGTH) {
+          renderedContent = rendered.text;
+          console.log(`[Trail Status] ✓ Rendered page (${renderedContent.length} chars)`);
+        } else if (rendered.success && rendered.text) {
+          console.log(`[Trail Status] ⚠️ Rendered page has insufficient content (${rendered.text.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
+          console.log(`[Trail Status] This may indicate login wall, empty page, or rendering failure - skipping rendered content`);
+        } else {
+          console.error(`[Trail Status] ⚠️ Rendering failed or no content extracted`);
         }
+      } catch (renderError) {
+        console.error(`[Trail Status] ⚠️ Rendering failed: ${renderError.message}, continuing with AI search`);
       }
     }
 
