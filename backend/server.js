@@ -1233,16 +1233,19 @@ app.get('/api/theme-config', async (req, res) => {
         ? JSON.parse(result.rows[0].value)
         : result.rows[0].value;
 
-      // Resolve video URLs from Immich
+      // Generate proxy URLs for theme videos (use Immich if configured, else static fallback)
       const themes = config.themes || [];
       const videoUrls = {};
 
       for (const theme of themes) {
         if (theme.enabled) {
-          const url = await immichService.getThemeVideoUrl(theme.id);
-          if (url) {
-            videoUrls[theme.id] = url;
+          // Check if Immich has this video
+          const immichUrl = await immichService.getThemeVideoUrl(theme.id);
+          if (immichUrl) {
+            // Return proxy URL that fetches from Immich
+            videoUrls[theme.id] = `/api/theme-video/${theme.id}`;
           }
+          // If no Immich URL, frontend will use static fallback path
         }
       }
 
@@ -1257,6 +1260,72 @@ app.get('/api/theme-config', async (req, res) => {
   } catch (error) {
     console.error('Error fetching theme config:', error);
     res.status(500).json({ error: 'Failed to fetch theme configuration' });
+  }
+});
+
+// Theme video proxy endpoint - streams videos from Immich
+app.get('/api/theme-video/:theme', async (req, res) => {
+  try {
+    const { theme } = req.params;
+
+    // Validate theme name (prevent path traversal)
+    const validThemes = ['christmas', 'newyears', 'halloween', 'winter', 'spring', 'summer', 'fall', 'night'];
+    if (!validThemes.includes(theme)) {
+      return res.status(404).json({ error: 'Theme not found' });
+    }
+
+    // Get the Immich URL for this theme
+    const immichUrl = await immichService.getThemeVideoUrl(theme);
+    if (!immichUrl) {
+      // Fallback to static video
+      const staticPath = path.join(__dirname, '..', 'frontend', 'public', 'theme-videos', `${theme}.mp4`);
+      return res.sendFile(staticPath);
+    }
+
+    // Parse the URL to extract asset ID
+    const urlParts = immichUrl.match(/\/api\/assets\/([^/]+)\/original/);
+    if (!urlParts) {
+      return res.status(500).json({ error: 'Invalid Immich URL format' });
+    }
+
+    // Fetch from Immich with API key in header
+    const immichResponse = await fetch(`${immichService.serverUrl}/api/assets/${urlParts[1]}/original`, {
+      headers: {
+        'x-api-key': immichService.apiKey
+      }
+    });
+
+    if (!immichResponse.ok) {
+      console.error(`[Immich] Failed to fetch video: ${immichResponse.status}`);
+      // Fallback to static video
+      const staticPath = path.join(__dirname, '..', 'frontend', 'public', 'theme-videos', `${theme}.mp4`);
+      return res.sendFile(staticPath);
+    }
+
+    // Set response headers
+    res.set('Content-Type', immichResponse.headers.get('content-type') || 'video/mp4');
+    res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+
+    const contentLength = immichResponse.headers.get('content-length');
+    if (contentLength) {
+      res.set('Content-Length', contentLength);
+    }
+
+    // Stream the response
+    const reader = immichResponse.body.getReader();
+    const pump = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(Buffer.from(value));
+      }
+      res.end();
+    };
+    await pump();
+
+  } catch (error) {
+    console.error(`[Theme Video] Error streaming video:`, error);
+    res.status(500).json({ error: 'Failed to stream video' });
   }
 });
 

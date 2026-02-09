@@ -1,4 +1,4 @@
-const NodeCache = require('node-cache');
+import NodeCache from 'node-cache';
 
 // 1-hour URL cache (3600 seconds)
 const urlCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
@@ -117,4 +117,4 @@ class ImmichService {
   }
 }
 
-module.exports = new ImmichService();
+export default new ImmichService();
