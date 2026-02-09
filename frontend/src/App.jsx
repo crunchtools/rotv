@@ -2,11 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { useAuth } from './hooks/useAuth';
+import useSeasonalTheme from './hooks/useSeasonalTheme';
 import Map from './components/Map';
 import Sidebar from './components/Sidebar';
 import SyncSettings from './components/SyncSettings';
 import AISettings from './components/AISettings';
 import GeneralSettings from './components/GeneralSettings';
+import ThemesSettings from './components/ThemesSettings';
 import ActivitiesSettings from './components/ActivitiesSettings';
 import ErasSettings from './components/ErasSettings';
 import SurfacesSettings from './components/SurfacesSettings';
@@ -40,6 +42,7 @@ const DEFAULT_PARK_BOUNDS = [
 
 function AppContent() {
   const { isAuthenticated, isAdmin, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
+  const { activeTheme, isNightMode } = useSeasonalTheme();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
@@ -1393,12 +1396,25 @@ function AppContent() {
 
   return (
     <div className="app">
-      <header className="header">
-        <div className="header-left" onClick={() => handleTabChange('view')} style={{ cursor: 'pointer' }}>
-          <h1>Roots of The Valley</h1>
-          <span className="subtitle">Explore Cuyahoga Valley&apos;s History</span>
-        </div>
-        <nav className="header-tabs">
+      <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
+        {activeTheme && (
+          <video
+            key={activeTheme}
+            className="theme-video"
+            autoPlay
+            loop
+            muted
+            playsInline
+            src={`/theme-videos/${activeTheme}.mp4`}
+            onLoadedData={(e) => { e.target.playbackRate = 0.7; }}
+          />
+        )}
+        <div className="header-content-wrapper">
+          <div className="header-left" onClick={() => handleTabChange('view')} style={{ cursor: 'pointer' }}>
+            <h1>Roots of The Valley</h1>
+            <span className="subtitle">Explore Cuyahoga Valley&apos;s History</span>
+          </div>
+          <nav className="header-tabs">
           <button
             className={`tab-btn ${activeTab === 'view' ? 'active' : ''}`}
             onClick={() => handleTabChange('view')}
@@ -1515,7 +1531,8 @@ function AppContent() {
               )}
             </div>
           )}
-        </nav>
+          </nav>
+        </div>
       </header>
 
       {/* Results tab content - only render when active to avoid processing 300+ tiles on every re-render */}
@@ -1608,6 +1625,12 @@ function AppContent() {
                 General
               </button>
               <button
+                className={`settings-tab-btn ${settingsTab === 'themes' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('themes')}
+              >
+                Themes
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'activities' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('activities')}
               >
@@ -1647,6 +1670,7 @@ function AppContent() {
 
             <div className="settings-tab-content">
               {settingsTab === 'general' && <GeneralSettings />}
+              {settingsTab === 'themes' && <ThemesSettings />}
               {settingsTab === 'activities' && <ActivitiesSettings />}
               {settingsTab === 'eras' && <ErasSettings />}
               {settingsTab === 'surfaces' && <SurfacesSettings />}

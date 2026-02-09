@@ -1712,6 +1712,31 @@ async function setupAiSearchDefaults() {
       `, [key, value]);
     }
 
+    // Initialize seasonal themes configuration
+    const themeCheck = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'seasonal_themes'"
+    );
+    if (themeCheck.rows.length === 0) {
+      const defaultConfig = {
+        themes: [
+          { id: 'christmas', name: 'Christmas', enabled: true, startDate: '12/01', endDate: '12/26', priority: 1 },
+          { id: 'newyears', name: "New Year's", enabled: true, startDate: '12/27', endDate: '01/02', priority: 2 },
+          { id: 'halloween', name: 'Halloween', enabled: true, startDate: '10/25', endDate: '10/31', priority: 3 },
+          { id: 'winter', name: 'Winter', enabled: true, startDate: '01/03', endDate: '03/19', priority: 4 },
+          { id: 'spring', name: 'Spring', enabled: true, startDate: '03/20', endDate: '06/20', priority: 5 },
+          { id: 'summer', name: 'Summer', enabled: true, startDate: '06/21', endDate: '09/22', priority: 6 },
+          { id: 'fall', name: 'Fall', enabled: true, startDate: '09/23', endDate: '11/30', priority: 7 }
+        ],
+        nightMode: { enabled: true, startHour: 23, endHour: 5 }
+      };
+
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, updated_at)
+         VALUES ('seasonal_themes', $1, CURRENT_TIMESTAMP)`,
+        [JSON.stringify(defaultConfig)]
+      );
+    }
+
     // Ensure last_news_collection column exists for tracking
     await pool.query(`
       ALTER TABLE pois
