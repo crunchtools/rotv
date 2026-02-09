@@ -1,7 +1,8 @@
 import React, { memo } from 'react';
+import { getIconUrlForPOI } from '../utils/iconUtils';
 
 // Individual POI tile for the Results tab
-const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status, showStatusInfo, statusData }) {
+const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status, showStatusInfo, statusData, iconConfig }) {
   // Use thumbnail endpoint for fast, cached small images
   // Include updated_at for cache busting when image changes
   const imageUrl = poi.image_mime_type
@@ -59,9 +60,13 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
 
         {/* Badges row */}
         <div className="results-tile-badges">
-          <span className={`poi-type-icon ${poiType}`}>
-            {poiType === 'virtual' ? 'O' : poiType === 'mtb' ? 'M' : poiType === 'destination' ? 'D' : poiType === 'trail' ? 'T' : poiType === 'river' ? 'R' : 'B'}
-          </span>
+          <img
+            src={getIconUrlForPOI(poi, iconConfig, poiType)}
+            alt={poiType}
+            className="poi-type-icon"
+            width="20"
+            height="20"
+          />
           {showStatusBadge && status && (
             <span className={`status-badge status-${status.status}`}>
               {status.status.toUpperCase()}

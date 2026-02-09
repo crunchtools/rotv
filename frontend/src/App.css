@@ -9897,23 +9897,12 @@ body {
 
 /* POI Type Icons */
 .poi-type-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: white;
   flex-shrink: 0;
+  object-fit: contain;
+  display: block;
 }
-
-.poi-type-icon.destination { background: #2e7d32; } /* Green */
-.poi-type-icon.mtb { background: #e65100; } /* Orange - MTB Trailhead */
-.poi-type-icon.trail { background: #795548; } /* Brown */
-.poi-type-icon.river { background: #1565c0; } /* Blue */
-.poi-type-icon.boundary { background: #7b2d8e; } /* Purple */
 
 /* POI Type Badge for Sidebar */
 .poi-type-badge {
@@ -10200,6 +10189,25 @@ body {
   border-color: #4CAF50;
 }
 
+.results-filter-actions {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.filter-action-btn {
+  padding: 0.15rem 0.4rem;
+  font-size: 0.65rem;
+  background: #f0f0f0;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.filter-action-btn:hover {
+  background: #e0e0e0;
+}
+
 .results-type-filters {
   display: flex;
   flex-wrap: wrap;
@@ -10233,7 +10241,7 @@ body {
   border-color: currentColor;
 }
 
-.type-filter-icon {
+span.type-filter-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -10246,53 +10254,16 @@ body {
   flex-shrink: 0;
 }
 
-.type-filter-chip.destination {
-  color: #E53935;
+img.type-filter-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  object-fit: contain;
+  display: inline-block;
+  vertical-align: middle;
 }
 
-.type-filter-chip.destination.active {
-  background: #ffebee;
-}
 
-.type-filter-chip.destination .type-filter-icon {
-  background-color: #E53935;
-}
-
-.type-filter-chip.trail {
-  color: #43A047;
-}
-
-.type-filter-chip.trail.active {
-  background: #e8f5e9;
-}
-
-.type-filter-chip.trail .type-filter-icon {
-  background-color: #43A047;
-}
-
-.type-filter-chip.river {
-  color: #1E88E5;
-}
-
-.type-filter-chip.river.active {
-  background: #e3f2fd;
-}
-
-.type-filter-chip.river .type-filter-icon {
-  background-color: #1E88E5;
-}
-
-.type-filter-chip.boundary {
-  color: #7B1FA2;
-}
-
-.type-filter-chip.boundary.active {
-  background: #f3e5f5;
-}
-
-.type-filter-chip.boundary .type-filter-icon {
-  background-color: #7B1FA2;
-}
 
 .type-filter-chip.organization,
 .type-filter-chip.virtual {

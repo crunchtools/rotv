@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Marker, Tooltip, useMap, ImageOverlay, GeoJSON
 import L from 'leaflet';
 import MapAdmin from './MapAdmin';
 import VirtualPoiCreator from './VirtualPoiCreator';
+import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 
 // Custom icon definitions
 const createIcon = (iconUrl) => L.icon({
@@ -38,55 +39,6 @@ function createIconsFromConfig(iconConfig) {
     icons['default'] = createIcon('/icons/default.svg');
   }
   return icons;
-}
-
-// Check if a keyword exists as a whole word in text (not as a substring)
-// e.g., "house" should match "Lock House" but not "Lighthouse"
-function matchesWholeWord(text, keyword) {
-  // Escape special regex characters in keyword
-  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  // Match keyword with word boundaries
-  const regex = new RegExp(`\\b${escaped}\\b`, 'i');
-  return regex.test(text);
-}
-
-// Get icon type for a destination using database configuration
-function getDestinationIconTypeFromConfig(dest, iconConfig) {
-  // Check for MTB trailhead first (has status_url)
-  if (dest.status_url && dest.status_url.trim() !== '') {
-    return 'mtb-trailhead';
-  }
-
-  const name = (dest.name || '').toLowerCase();
-  const activities = (dest.primary_activities || '').toLowerCase();
-
-  // Check title keywords (in sort order - first match wins)
-  for (const icon of iconConfig) {
-    if (icon.enabled === false) continue;
-    if (!icon.title_keywords) continue;
-
-    const keywords = icon.title_keywords.split(',').map(k => k.trim().toLowerCase());
-    for (const keyword of keywords) {
-      if (keyword && matchesWholeWord(name, keyword)) {
-        return icon.name;
-      }
-    }
-  }
-
-  // Check activity fallbacks (in sort order - first match wins)
-  for (const icon of iconConfig) {
-    if (icon.enabled === false) continue;
-    if (!icon.activity_fallbacks) continue;
-
-    const fallbackActivities = icon.activity_fallbacks.split(',').map(a => a.trim().toLowerCase());
-    for (const activity of fallbackActivities) {
-      if (activity && matchesWholeWord(activities, activity)) {
-        return icon.name;
-      }
-    }
-  }
-
-  return 'default';
 }
 
 // Cuyahoga Valley National Park center coordinates
