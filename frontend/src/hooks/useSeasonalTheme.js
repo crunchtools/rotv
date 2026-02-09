@@ -8,11 +8,13 @@ export default function useSeasonalTheme() {
   // Fetch config on mount and when updated
   useEffect(() => {
     const fetchConfig = () => {
-      fetch('/api/admin/settings', { credentials: 'include' })
+      fetch('/api/theme-config')
         .then(res => res.json())
-        .then(settings => {
-          if (settings.seasonal_themes?.value) {
-            const parsed = JSON.parse(settings.seasonal_themes.value);
+        .then(data => {
+          if (data.seasonal_themes) {
+            const parsed = typeof data.seasonal_themes === 'string'
+              ? JSON.parse(data.seasonal_themes)
+              : data.seasonal_themes;
             setConfig(parsed);
           }
         })
@@ -50,6 +52,7 @@ export default function useSeasonalTheme() {
 
       const now = new Date();
       const theme = calculateActiveTheme(config, now);
+      console.log('[Theme Debug] Hour:', now.getHours(), 'Active theme:', theme.activeTheme, 'Night mode:', theme.isNightMode);
       setActiveTheme(theme.activeTheme);
       setIsNightMode(theme.isNightMode);
     };

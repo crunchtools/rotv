@@ -1220,6 +1220,25 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Public theme configuration endpoint (no auth required)
+app.get('/api/theme-config', async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'seasonal_themes'"
+    );
+
+    if (result.rows.length > 0) {
+      res.json({ seasonal_themes: result.rows[0].value });
+    } else {
+      // Return empty config if not set
+      res.json({ seasonal_themes: null });
+    }
+  } catch (error) {
+    console.error('Error fetching theme config:', error);
+    res.status(500).json({ error: 'Failed to fetch theme configuration' });
+  }
+});
+
 // Public news and events endpoints
 app.get('/api/pois/:id/news', async (req, res) => {
   try {

@@ -5,13 +5,13 @@
 
 @media (max-width: 768px) {
   :root {
-    --header-height: 88px; /* Mobile header height (shorter) */
+    --header-height: 104px; /* Mobile header height - increased to prevent button cutoff */
   }
 }
 
 @media (max-width: 360px) {
   :root {
-    --header-height: 96px; /* Extra narrow screens need slightly more height */
+    --header-height: 108px; /* Extra narrow screens need more height to prevent cutoff */
   }
 }
 
@@ -48,8 +48,8 @@ body {
   left: 0;
   right: 0;
   z-index: 10000;
-  height: var(--header-height); /* Fixed height - responsive via CSS variable */
-  overflow: hidden; /* Clip video background */
+  min-height: var(--header-height); /* Minimum height - can grow for content */
+  overflow: visible; /* Allow buttons to show, video clipped separately */
 }
 
 .header-left {
@@ -112,11 +112,13 @@ body {
   top: 0;
   left: 0;
   width: 100%;
-  height: 100%;
+  height: var(--header-height); /* Clip to header height */
+  max-height: var(--header-height);
   object-fit: cover;
   opacity: 0.25;
   z-index: 0;
   pointer-events: none;
+  overflow: hidden;
 }
 
 /* Header content wrapper sits above video */
@@ -128,7 +130,7 @@ body {
   align-items: center;
   gap: 0.5rem;
   width: 100%;
-  height: 100%;
+  /* Removed height: 100% to allow natural sizing and prevent cutoff */
 }
 
 /* Night mode - darker background */
