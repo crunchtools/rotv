@@ -550,7 +550,8 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       'ai_search_fallback',
       'ai_search_primary_limit',
       'twitter_username',
-      'twitter_password'
+      'twitter_password',
+      'seasonal_themes'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });

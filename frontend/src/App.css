@@ -11,7 +11,7 @@
 
 @media (max-width: 360px) {
   :root {
-    --header-height: 92px; /* Extra narrow screens need slightly more height */
+    --header-height: 96px; /* Extra narrow screens need slightly more height */
   }
 }
 
@@ -49,6 +49,7 @@ body {
   right: 0;
   z-index: 10000;
   height: var(--header-height); /* Fixed height - responsive via CSS variable */
+  overflow: hidden; /* Clip video background */
 }
 
 .header-left {
@@ -103,6 +104,47 @@ body {
   background: rgba(255, 255, 255, 0.95);
   color: #2d5016;
   font-weight: 600;
+}
+
+/* ===== Seasonal Theme Video Backgrounds ===== */
+.theme-video {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.25;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Header content wrapper sits above video */
+.header-content-wrapper {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  height: 100%;
+}
+
+/* Night mode - darker background */
+.header.theme-night {
+  background: linear-gradient(135deg, #1a2e0d 0%, #2d4a16 100%);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .theme-video {
+    opacity: 0.20; /* More subtle on mobile */
+  }
+
+  .header-content-wrapper {
+    gap: 0.25rem; /* Reduced gap on mobile to prevent nav cutoff */
+  }
 }
 
 /* Tab-based Login/Account */
@@ -2758,7 +2800,11 @@ body {
   .header {
     gap: 0.15rem; /* Reduce gap between title and tabs */
     padding: 0.35rem 0.5rem; /* Reduce vertical padding */
-    height: 92px; /* Slightly increase height to prevent cutoff */
+    height: 96px; /* Slightly increase height to prevent cutoff */
+  }
+
+  .header-content-wrapper {
+    gap: 0.15rem; /* Match header gap on narrow screens */
   }
 
   .header-left h1 {
@@ -5492,6 +5538,261 @@ body {
   background: #f9f9f9;
   border-radius: 6px;
   text-align: center;
+}
+
+/* Themes Settings */
+.theme-settings {
+  padding: 0;
+}
+
+.theme-settings .settings-section h3 {
+  color: #2d5016;
+  font-size: 1.2rem;
+  margin-bottom: 0.75rem;
+  font-weight: 600;
+}
+
+.theme-settings .settings-description {
+  color: #666;
+  margin-bottom: 1.5rem;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+/* Theme Preview Banner */
+.theme-preview-banner {
+  background: linear-gradient(135deg, #4a7c23 0%, #6b9e3e 100%);
+  color: white;
+  padding: 1rem 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.theme-preview-banner span {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.stop-preview-btn {
+  background: white;
+  color: #4a7c23;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.stop-preview-btn:hover {
+  background: #f0f0f0;
+  transform: translateY(-1px);
+}
+
+/* Theme Table */
+.theme-table-container {
+  margin-bottom: 2rem;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.theme-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+}
+
+.theme-table thead {
+  background: linear-gradient(135deg, #4a7c23 0%, #6b9e3e 100%);
+  color: white;
+}
+
+.theme-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.theme-table tbody tr {
+  border-bottom: 1px solid #e0e0e0;
+  transition: background-color 0.2s ease;
+}
+
+.theme-table tbody tr:hover {
+  background-color: #f8f9fa;
+}
+
+.theme-table tbody tr.testing {
+  background-color: #e8f4dd;
+}
+
+.theme-table td {
+  padding: 1rem;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.theme-table .checkbox-cell {
+  text-align: center;
+  width: 80px;
+}
+
+.theme-table .checkbox-cell input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.theme-table .theme-name {
+  font-weight: 600;
+  color: #2d5016;
+  min-width: 120px;
+}
+
+.date-input-table {
+  width: 100%;
+  max-width: 100px;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #333;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.date-input-table:hover {
+  border-color: #4a7c23;
+}
+
+.date-input-table:focus {
+  outline: none;
+  border-color: #4a7c23;
+  box-shadow: 0 0 0 3px rgba(74, 124, 35, 0.1);
+}
+
+.test-btn {
+  background: #4a7c23;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.25rem;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.85rem;
+}
+
+.test-btn:hover {
+  background: #3d6a1e;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.test-btn.active {
+  background: #d9534f;
+}
+
+.test-btn.active:hover {
+  background: #c9302c;
+}
+
+/* Night Mode Section */
+.night-mode-section {
+  background: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.night-mode-section h4 {
+  color: #2d5016;
+  font-size: 1rem;
+  margin: 0 0 1rem 0;
+  font-weight: 600;
+}
+
+.night-mode-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-end;
+}
+
+.night-mode-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #333;
+  font-weight: 500;
+}
+
+.night-mode-controls label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+}
+
+.night-mode-controls label span {
+  font-weight: 500;
+}
+
+.hour-input {
+  max-width: 120px;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  color: #333;
+  background: white;
+  transition: all 0.2s ease;
+}
+
+.hour-input:hover {
+  border-color: #4a7c23;
+}
+
+.hour-input:focus {
+  outline: none;
+  border-color: #4a7c23;
+  box-shadow: 0 0 0 3px rgba(74, 124, 35, 0.1);
+}
+
+/* Mobile adjustments */
+@media (max-width: 768px) {
+  .theme-table {
+    font-size: 0.85rem;
+  }
+
+  .theme-table th,
+  .theme-table td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .theme-preview-banner {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+
+  .night-mode-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .hour-input {
+    max-width: 100%;
+  }
 }
 
 /* Collection Status Component */
