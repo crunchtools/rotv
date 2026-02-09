@@ -83,7 +83,9 @@ describe('Header Button Visibility Tests', () => {
     }, 30000);
 
     it('should display Login button on narrow mobile screen', async () => {
+      // Wait for the Login button to be visible (may take time to render on mobile)
       const loginButton = page.locator('button:has-text("Login")').first();
+      await loginButton.waitFor({ state: 'visible', timeout: 10000 });
 
       // Button should be visible
       const isVisible = await loginButton.isVisible();

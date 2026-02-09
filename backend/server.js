@@ -35,6 +35,7 @@ import {
   processTrailStatusCollectionJob
 } from './services/trailStatusService.js';
 import { createSheetsService } from './services/sheetsSync.js';
+import immichService from './services/immichService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1228,14 +1229,103 @@ app.get('/api/theme-config', async (req, res) => {
     );
 
     if (result.rows.length > 0) {
-      res.json({ seasonal_themes: result.rows[0].value });
+      const config = typeof result.rows[0].value === 'string'
+        ? JSON.parse(result.rows[0].value)
+        : result.rows[0].value;
+
+      // Generate proxy URLs for theme videos (use Immich if configured, else static fallback)
+      const themes = config.themes || [];
+      const videoUrls = {};
+
+      for (const theme of themes) {
+        if (theme.enabled) {
+          // Check if Immich has this video
+          const immichUrl = await immichService.getThemeVideoUrl(theme.id);
+          if (immichUrl) {
+            // Return proxy URL that fetches from Immich
+            videoUrls[theme.id] = `/api/theme-video/${theme.id}`;
+          }
+          // If no Immich URL, frontend will use static fallback path
+        }
+      }
+
+      res.json({
+        seasonal_themes: result.rows[0].value,
+        video_urls: videoUrls
+      });
     } else {
       // Return empty config if not set
-      res.json({ seasonal_themes: null });
+      res.json({ seasonal_themes: null, video_urls: {} });
     }
   } catch (error) {
     console.error('Error fetching theme config:', error);
     res.status(500).json({ error: 'Failed to fetch theme configuration' });
+  }
+});
+
+// Theme video proxy endpoint - streams videos from Immich
+app.get('/api/theme-video/:theme', async (req, res) => {
+  try {
+    const { theme } = req.params;
+
+    // Validate theme name (prevent path traversal)
+    const validThemes = ['christmas', 'newyears', 'halloween', 'winter', 'spring', 'summer', 'fall', 'night'];
+    if (!validThemes.includes(theme)) {
+      return res.status(404).json({ error: 'Theme not found' });
+    }
+
+    // Get the Immich URL for this theme
+    const immichUrl = await immichService.getThemeVideoUrl(theme);
+    if (!immichUrl) {
+      // Fallback to static video
+      const staticPath = path.join(__dirname, '..', 'frontend', 'public', 'theme-videos', `${theme}.mp4`);
+      return res.sendFile(staticPath);
+    }
+
+    // Parse the URL to extract asset ID
+    const urlParts = immichUrl.match(/\/api\/assets\/([^/]+)\/original/);
+    if (!urlParts) {
+      return res.status(500).json({ error: 'Invalid Immich URL format' });
+    }
+
+    // Fetch from Immich with API key in header
+    const immichResponse = await fetch(`${immichService.serverUrl}/api/assets/${urlParts[1]}/original`, {
+      headers: {
+        'x-api-key': immichService.apiKey
+      }
+    });
+
+    if (!immichResponse.ok) {
+      console.error(`[Immich] Failed to fetch video: ${immichResponse.status}`);
+      // Fallback to static video
+      const staticPath = path.join(__dirname, '..', 'frontend', 'public', 'theme-videos', `${theme}.mp4`);
+      return res.sendFile(staticPath);
+    }
+
+    // Set response headers
+    res.set('Content-Type', immichResponse.headers.get('content-type') || 'video/mp4');
+    res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+
+    const contentLength = immichResponse.headers.get('content-length');
+    if (contentLength) {
+      res.set('Content-Length', contentLength);
+    }
+
+    // Stream the response
+    const reader = immichResponse.body.getReader();
+    const pump = async () => {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        res.write(Buffer.from(value));
+      }
+      res.end();
+    };
+    await pump();
+
+  } catch (error) {
+    console.error(`[Theme Video] Error streaming video:`, error);
+    res.status(500).json({ error: 'Failed to stream video' });
   }
 });
 
@@ -1762,6 +1852,21 @@ async function setupAiSearchDefaults() {
       ADD COLUMN IF NOT EXISTS last_news_collection TIMESTAMP
     `);
 
+    // Initialize Immich settings if not present
+    const immichDefaults = [
+      { key: 'immich_server_url', value: process.env.IMMICH_SERVER_URL || '' },
+      { key: 'immich_api_key', value: process.env.IMMICH_API_KEY || '' },
+      { key: 'immich_album_id', value: process.env.IMMICH_ALBUM_ID || '' }
+    ];
+
+    for (const { key, value } of immichDefaults) {
+      await pool.query(`
+        INSERT INTO admin_settings (key, value, updated_at)
+        VALUES ($1, $2, CURRENT_TIMESTAMP)
+        ON CONFLICT (key) DO NOTHING
+      `, [key, value]);
+    }
+
     console.log('[AI Search] Default configuration verified');
   } catch (error) {
     console.error('[AI Search] Error setting up defaults:', error.message);
@@ -1770,6 +1875,9 @@ async function setupAiSearchDefaults() {
 
 async function start() {
   await initDatabase();
+
+  // Initialize Immich service for theme video delivery
+  await immichService.initialize(pool);
 
   // Ensure news job checkpoint columns exist for resumability
   await ensureNewsJobCheckpointColumns(pool);

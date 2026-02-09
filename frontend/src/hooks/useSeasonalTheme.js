@@ -4,6 +4,7 @@ export default function useSeasonalTheme() {
   const [config, setConfig] = useState(null);
   const [activeTheme, setActiveTheme] = useState(null);
   const [isNightMode, setIsNightMode] = useState(false);
+  const [videoUrls, setVideoUrls] = useState({});
 
   // Fetch config on mount and when updated
   useEffect(() => {
@@ -16,6 +17,11 @@ export default function useSeasonalTheme() {
               ? JSON.parse(data.seasonal_themes)
               : data.seasonal_themes;
             setConfig(parsed);
+          }
+
+          // Store video URLs
+          if (data.video_urls) {
+            setVideoUrls(data.video_urls);
           }
         })
         .catch(err => console.error('Failed to fetch theme config:', err));
@@ -87,7 +93,7 @@ export default function useSeasonalTheme() {
     };
   }, [config]);
 
-  return { activeTheme, isNightMode };
+  return { activeTheme, isNightMode, videoUrls };
 }
 
 function calculateActiveTheme(config, now) {
