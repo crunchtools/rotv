@@ -683,3 +683,17 @@ justification = "Technical debt: Admin route handlers use generic 'result' and '
 check = "single_use_helpers"
 path = "frontend/src/utils/iconUtils.js"
 justification = "getDestinationIconTypeFromConfig is shared between Map.jsx (for map marker icons) and getIconUrlForPOI (for ResultsTile icons). Extracted from Map.jsx to avoid duplication when implementing Issue #73 (replacing letter badges with icons in Results lists). This is legitimate code reuse, not single-use extraction."
+
+# Migration script - one-time use, functions provide logical separation
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/scripts/migrate-poi-images.js"
+justification = "One-time migration script for Issue #1 Part 3. Functions (loadImmichSettings, uploadToImmich, addToAlbum, tagAsset, migrate) provide logical separation for a complex sequential workflow. Script runs once and will be removed after migration is stable."
+
+# Theme hook - date calculation helpers improve readability
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "frontend/src/hooks/useSeasonalTheme.js"
+justification = "calculateActiveTheme and isDateInRange encapsulate complex date comparison logic for seasonal theme selection. Inlining would reduce readability of the main useEffect hook."

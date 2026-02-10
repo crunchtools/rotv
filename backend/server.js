@@ -802,7 +802,7 @@ app.get('/api/pois/:id/image', async (req, res) => {
 
     // Check if POI has Immich asset
     const poiQuery = await pool.query(
-      'SELECT immich_primary_asset_id, image_data, image_mime_type FROM pois WHERE id = $1',
+      'SELECT immich_primary_asset_id FROM pois WHERE id = $1',
       [id]
     );
 
@@ -812,28 +812,21 @@ app.get('/api/pois/:id/image', async (req, res) => {
 
     const poi = poiQuery.rows[0];
 
-    // Try Immich first
-    if (poi.immich_primary_asset_id && immichService.initialized) {
-      const result = await immichService.fetchAssetData(poi.immich_primary_asset_id);
-      if (result.success) {
-        res.setHeader('Content-Type', result.contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.send(result.data);
-      }
-      // If Immich fetch failed, fall through to PostgreSQL
-      console.warn(`[POI Image] Immich fetch failed for POI ${id}, falling back to PostgreSQL`);
-    }
-
-    // Fallback to PostgreSQL
-    if (!poi.image_data) {
+    // Serve from Immich
+    if (!poi.immich_primary_asset_id || !immichService.initialized) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    res.setHeader('Content-Type', poi.image_mime_type || 'image/jpeg');
+    const result = await immichService.fetchAssetData(poi.immich_primary_asset_id);
+    if (!result.success) {
+      console.error(`[POI Image] Immich fetch failed for POI ${id}:`, result.error);
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    res.setHeader('Content-Type', result.contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(poi.image_data);
+    res.send(result.data);
   } catch (error) {
     console.error('Error serving POI image:', error);
     res.status(500).json({ error: 'Failed to serve image' });
@@ -874,112 +867,46 @@ function clearThumbnailCacheForPoi(poiId) {
   console.log(`Cleared memory cache for POI ${poiId}`);
 }
 
-// Serve optimized thumbnails with configurable size
-// Priority: Memory (L1) -> Immich -> Database (L2) -> Generate
-// Sizes: small (200x200), medium (400x300), default (1200x630)
+// Serve thumbnails from Immich with memory cache
+// Priority: Memory cache -> Immich
 app.get('/api/pois/:id/thumbnail', async (req, res) => {
   try {
     const { id } = req.params;
-    const sizeParam = req.query.size || 'default';
-    const cacheKey = `${id}-${sizeParam}`;
+    const cacheKey = `${id}-thumbnail`;
 
-    // L1: Check memory cache first (fastest)
+    // Check memory cache first (fastest)
     if (thumbnailMemoryCache.has(cacheKey)) {
       return sendThumbnail(res, thumbnailMemoryCache.get(cacheKey));
     }
 
-    // Check if POI has Immich asset - serve Immich thumbnail if available
+    // Get Immich asset ID
     const poiCheck = await pool.query(
       'SELECT immich_primary_asset_id FROM pois WHERE id = $1',
       [id]
     );
 
-    if (poiCheck.rows.length > 0 && poiCheck.rows[0].immich_primary_asset_id && immichService.initialized) {
-      // Map size param to Immich thumbnail size
-      const immichSize = sizeParam === 'small' ? 'thumbnail' : 'preview';
-      const result = await immichService.fetchThumbnailData(poiCheck.rows[0].immich_primary_asset_id, immichSize);
-
-      if (result.success) {
-        // Cache in memory for future requests
-        addToMemoryCache(cacheKey, result.data);
-        res.setHeader('Content-Type', result.contentType);
-        res.setHeader('Cache-Control', 'public, max-age=604800');
-        res.setHeader('Access-Control-Allow-Origin', '*');
-        return res.send(result.data);
-      }
-      // If Immich fetch failed, continue to PostgreSQL fallback
-      console.warn(`[Thumbnail] Immich fetch failed for POI ${id}, falling back to PostgreSQL`);
+    if (poiCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'POI not found' });
     }
 
-    // L2: Check database cache
-    const dbCache = await pool.query(
-      'SELECT image_data FROM thumbnail_cache WHERE poi_id = $1 AND size = $2',
-      [id, sizeParam]
-    );
-
-    if (dbCache.rows.length > 0) {
-      const cachedData = dbCache.rows[0].image_data;
-      // Promote to memory cache
-      addToMemoryCache(cacheKey, cachedData);
-      return sendThumbnail(res, cachedData);
-    }
-
-    // Cache miss - need to generate thumbnail
-    // Determine dimensions based on size param
-    let width, height, quality;
-    if (sizeParam === 'small') {
-      width = 200; height = 200; quality = 70;
-    } else if (sizeParam === 'medium') {
-      width = 400; height = 300; quality = 75;
-    } else {
-      width = 1200; height = 630; quality = 80;
-    }
-
-    // Fetch original image and POI type
-    const imageQuery = await pool.query(
-      'SELECT image_data, poi_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
-      [id]
-    );
-
-    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
+    const assetId = poiCheck.rows[0].immich_primary_asset_id;
+    if (!assetId || !immichService.initialized) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const isVirtualPoi = imageQuery.rows[0].poi_type === 'virtual';
+    // Fetch from Immich
+    const result = await immichService.fetchThumbnailData(assetId, 'thumbnail');
+    if (!result.success) {
+      console.error(`[Thumbnail] Immich fetch failed for POI ${id}:`, result.error);
+      return res.status(404).json({ error: 'Image not found' });
+    }
 
-    // Generate thumbnail
-    // Use 'contain' for organization logos (virtual POIs) to show full logo without cropping
-    // Use 'cover' for photos (destinations, trails) to fill the frame
-    const resizeOptions = isVirtualPoi
-      ? {
-          fit: 'contain',
-          background: { r: 255, g: 255, b: 255, alpha: 1 } // White background for logos
-        }
-      : {
-          fit: 'cover',
-          position: 'center'
-        };
-
-    const thumbnail = await sharp(imageQuery.rows[0].image_data)
-      .resize(width, height, resizeOptions)
-      .jpeg({
-        quality: quality,
-        progressive: true
-      })
-      .toBuffer();
-
-    // Store in L2 (database) - persistent cache
-    await pool.query(
-      `INSERT INTO thumbnail_cache (poi_id, size, image_data)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (poi_id, size) DO UPDATE SET image_data = $3, created_at = CURRENT_TIMESTAMP`,
-      [id, sizeParam, thumbnail]
-    );
-
-    // Store in L1 (memory)
-    addToMemoryCache(cacheKey, thumbnail);
-
-    sendThumbnail(res, thumbnail);
+    // Cache in memory for future requests
+    addToMemoryCache(cacheKey, result.data);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(result.data);
   } catch (error) {
     console.error('Error serving POI thumbnail:', error);
     res.status(500).json({ error: 'Failed to serve thumbnail' });
