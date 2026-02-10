@@ -744,7 +744,7 @@ app.get('/api/pois', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
@@ -776,7 +776,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
@@ -1021,7 +1021,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
       SELECT DISTINCT vp.id, vp.name, vp.poi_type, vp.property_owner,
              vp.brief_description, vp.era_id, e.name as era_name, vp.era, vp.historical_description,
              vp.primary_activities, vp.surface, vp.pets, vp.cell_signal,
-             vp.more_info_link, vp.image_mime_type, vp.image_drive_file_id,
+             vp.more_info_link, vp.image_mime_type, vp.immich_primary_asset_id, vp.image_drive_file_id,
              vp.locally_modified, vp.deleted, vp.synced,
              vp.created_at, vp.updated_at
       FROM pois vp
@@ -1053,7 +1053,7 @@ app.get('/api/destinations', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_mime_type, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
+             p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1077,7 +1077,7 @@ app.get('/api/destinations/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_mime_type, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
+             p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1095,30 +1095,6 @@ app.get('/api/destinations/:id', async (req, res) => {
   }
 });
 
-// Legacy destination image endpoint - redirect to unified pois endpoint
-app.get('/api/destinations/:id/image', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const imageQuery = await pool.query(
-      'SELECT image_data, image_mime_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
-      [id]
-    );
-
-    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
-      return res.status(404).json({ error: 'Image not found' });
-    }
-
-    const { image_data, image_mime_type } = imageQuery.rows[0];
-    res.setHeader('Content-Type', image_mime_type || 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(image_data);
-  } catch (error) {
-    console.error('Error serving destination image:', error);
-    res.status(500).json({ error: 'Failed to serve image' });
-  }
-});
-
 // Legacy linear-features endpoints for backward compatibility
 app.get('/api/linear-features', async (req, res) => {
   try {
@@ -1127,7 +1103,7 @@ app.get('/api/linear-features', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
@@ -1151,7 +1127,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
       FROM pois p
@@ -1167,29 +1143,6 @@ app.get('/api/linear-features/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching linear feature:', error);
     res.status(500).json({ error: 'Failed to fetch linear feature' });
-  }
-});
-
-app.get('/api/linear-features/:id/image', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const imageQuery = await pool.query(
-      'SELECT image_data, image_mime_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
-      [id]
-    );
-
-    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
-      return res.status(404).json({ error: 'Image not found' });
-    }
-
-    const { image_data, image_mime_type } = imageQuery.rows[0];
-    res.setHeader('Content-Type', image_mime_type || 'image/jpeg');
-    res.setHeader('Cache-Control', 'public, max-age=86400');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(image_data);
-  } catch (error) {
-    console.error('Error serving linear feature image:', error);
-    res.status(500).json({ error: 'Failed to serve image' });
   }
 });
 
@@ -1253,9 +1206,7 @@ app.get('/api/theme-video/:theme', async (req, res) => {
     // Get the Immich URL for this theme
     const immichUrl = await immichService.getThemeVideoUrl(theme);
     if (!immichUrl) {
-      // Fallback to static video
-      const staticPath = path.join(__dirname, '..', 'frontend', 'public', 'theme-videos', `${theme}.mp4`);
-      return res.sendFile(staticPath);
+      return res.status(404).json({ error: 'Theme video not available' });
     }
 
     // Parse the URL to extract asset ID
@@ -1273,9 +1224,7 @@ app.get('/api/theme-video/:theme', async (req, res) => {
 
     if (!immichResponse.ok) {
       console.error(`[Immich] Failed to fetch video: ${immichResponse.status}`);
-      // Fallback to static video
-      const staticPath = path.join(__dirname, '..', 'frontend', 'public', 'theme-videos', `${theme}.mp4`);
-      return res.sendFile(staticPath);
+      return res.status(502).json({ error: 'Failed to fetch video from Immich' });
     }
 
     // Set response headers
@@ -1828,21 +1777,6 @@ async function setupAiSearchDefaults() {
       ADD COLUMN IF NOT EXISTS last_news_collection TIMESTAMP
     `);
 
-    // Initialize Immich settings if not present
-    const immichDefaults = [
-      { key: 'immich_server_url', value: process.env.IMMICH_SERVER_URL || '' },
-      { key: 'immich_api_key', value: process.env.IMMICH_API_KEY || '' },
-      { key: 'immich_album_id', value: process.env.IMMICH_ALBUM_ID || '' }
-    ];
-
-    for (const { key, value } of immichDefaults) {
-      await pool.query(`
-        INSERT INTO admin_settings (key, value, updated_at)
-        VALUES ($1, $2, CURRENT_TIMESTAMP)
-        ON CONFLICT (key) DO NOTHING
-      `, [key, value]);
-    }
-
     console.log('[AI Search] Default configuration verified');
   } catch (error) {
     console.error('[AI Search] Error setting up defaults:', error.message);
@@ -1852,8 +1786,8 @@ async function setupAiSearchDefaults() {
 async function start() {
   await initDatabase();
 
-  // Initialize Immich service for theme video delivery
-  await immichService.initialize(pool);
+  // Initialize Immich service for theme video and POI image delivery
+  immichService.initialize();
 
   // Ensure news job checkpoint columns exist for resumability
   await ensureNewsJobCheckpointColumns(pool);

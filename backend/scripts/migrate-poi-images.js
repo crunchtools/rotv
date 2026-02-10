@@ -25,39 +25,18 @@ const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/rotv'
 });
 
-let immichServerUrl = process.env.IMMICH_SERVER_URL;
-let immichApiKey = process.env.IMMICH_API_KEY;
-let immichPoiAlbumId = process.env.IMMICH_POI_ALBUM_ID;
+const immichServerUrl = process.env.IMMICH_SERVER_URL;
+const immichApiKey = process.env.IMMICH_API_KEY;
+const immichAlbumId = process.env.IMMICH_ALBUM_ID;
 
-async function loadImmichSettings() {
-  try {
-    const settingsQuery = await pool.query(
-      `SELECT key, value FROM admin_settings
-       WHERE key IN ('immich_server_url', 'immich_api_key', 'immich_poi_album_id')`
-    );
-
-    settingsQuery.rows.forEach(row => {
-      if (row.key === 'immich_server_url' && !immichServerUrl) {
-        immichServerUrl = row.value;
-      }
-      if (row.key === 'immich_api_key' && !immichApiKey) {
-        immichApiKey = row.value;
-      }
-      if (row.key === 'immich_poi_album_id' && !immichPoiAlbumId) {
-        immichPoiAlbumId = row.value;
-      }
-    });
-
-    if (!immichServerUrl || !immichApiKey) {
-      throw new Error('Immich not configured. Set IMMICH_SERVER_URL and IMMICH_API_KEY.');
-    }
-
-    console.log(`[Config] Immich server: ${immichServerUrl}`);
-    console.log(`[Config] POI album: ${immichPoiAlbumId || '(not set)'}`);
-  } catch (error) {
-    console.error('[Config] Failed to load settings:', error.message);
+function loadImmichSettings() {
+  if (!immichServerUrl || !immichApiKey || !immichAlbumId) {
+    console.error('[Config] Immich not configured. Set IMMICH_SERVER_URL, IMMICH_API_KEY, and IMMICH_ALBUM_ID.');
     process.exit(1);
   }
+
+  console.log(`[Config] Immich server: ${immichServerUrl}`);
+  console.log(`[Config] Album: ${immichAlbumId}`);
 }
 
 async function uploadToImmich(imageBuffer, poiId, poiName, mimeType) {
@@ -89,7 +68,7 @@ async function uploadToImmich(imageBuffer, poiId, poiName, mimeType) {
 
     const asset = await response.json();
 
-    if (immichPoiAlbumId) {
+    if (immichAlbumId) {
       await addToAlbum(asset.id);
     }
 
@@ -103,7 +82,7 @@ async function uploadToImmich(imageBuffer, poiId, poiName, mimeType) {
 
 async function addToAlbum(assetId) {
   try {
-    await fetch(`${immichServerUrl}/api/albums/${immichPoiAlbumId}/assets`, {
+    await fetch(`${immichServerUrl}/api/albums/${immichAlbumId}/assets`, {
       method: 'PUT',
       headers: {
         'x-api-key': immichApiKey,
@@ -139,7 +118,7 @@ async function migrate() {
   console.log('='.repeat(60));
   console.log();
 
-  await loadImmichSettings();
+  loadImmichSettings();
   console.log();
 
   const poisQuery = await pool.query(`

@@ -552,11 +552,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       'ai_search_primary_limit',
       'twitter_username',
       'twitter_password',
-      'seasonal_themes',
-      'immich_server_url',
-      'immich_api_key',
-      'immich_album_id',
-      'immich_poi_album_id'
+      'seasonal_themes'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
