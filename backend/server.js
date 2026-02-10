@@ -895,9 +895,8 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     );
 
     if (poiCheck.rows.length > 0 && poiCheck.rows[0].immich_primary_asset_id && immichService.initialized) {
-      // Map size param to Immich thumbnail size
-      const immichSize = sizeParam === 'small' ? 'thumbnail' : 'preview';
-      const result = await immichService.fetchThumbnailData(poiCheck.rows[0].immich_primary_asset_id, immichSize);
+      // Always use 'thumbnail' - Immich preview may not exist for all assets
+      const result = await immichService.fetchThumbnailData(poiCheck.rows[0].immich_primary_asset_id, 'thumbnail');
 
       if (result.success) {
         // Cache in memory for future requests
