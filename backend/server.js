@@ -720,6 +720,11 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_poi_assoc_physical ON poi_associations(physical_poi_id)
     `);
 
+    // Add Immich asset ID column for POI images (Phase 3 of Issue #1)
+    await client.query(`
+      ALTER TABLE pois ADD COLUMN IF NOT EXISTS immich_primary_asset_id VARCHAR(255)
+    `);
+
     // NOTE: Trails and rivers should only be imported via Google Sheets sync
     // The importGeoJSONFeatures function is available via admin route for manual import if needed
 
@@ -790,24 +795,45 @@ app.get('/api/pois/:id', async (req, res) => {
   }
 });
 
-// Serve POI images from database (public endpoint)
+// Serve POI images - checks Immich first, falls back to PostgreSQL
 app.get('/api/pois/:id/image', async (req, res) => {
   try {
     const { id } = req.params;
-    const imageQuery = await pool.query(
-      'SELECT image_data, image_mime_type FROM pois WHERE id = $1 AND image_data IS NOT NULL',
+
+    // Check if POI has Immich asset
+    const poiQuery = await pool.query(
+      'SELECT immich_primary_asset_id, image_data, image_mime_type FROM pois WHERE id = $1',
       [id]
     );
 
-    if (imageQuery.rows.length === 0 || !imageQuery.rows[0].image_data) {
+    if (poiQuery.rows.length === 0) {
+      return res.status(404).json({ error: 'POI not found' });
+    }
+
+    const poi = poiQuery.rows[0];
+
+    // Try Immich first
+    if (poi.immich_primary_asset_id && immichService.initialized) {
+      const result = await immichService.fetchAssetData(poi.immich_primary_asset_id);
+      if (result.success) {
+        res.setHeader('Content-Type', result.contentType);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.send(result.data);
+      }
+      // If Immich fetch failed, fall through to PostgreSQL
+      console.warn(`[POI Image] Immich fetch failed for POI ${id}, falling back to PostgreSQL`);
+    }
+
+    // Fallback to PostgreSQL
+    if (!poi.image_data) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const { image_data, image_mime_type } = imageQuery.rows[0];
-    res.setHeader('Content-Type', image_mime_type || 'image/jpeg');
+    res.setHeader('Content-Type', poi.image_mime_type || 'image/jpeg');
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(image_data);
+    res.send(poi.image_data);
   } catch (error) {
     console.error('Error serving POI image:', error);
     res.status(500).json({ error: 'Failed to serve image' });
@@ -849,7 +875,7 @@ function clearThumbnailCacheForPoi(poiId) {
 }
 
 // Serve optimized thumbnails with configurable size
-// Two-tier cache: Memory (L1) -> Database (L2) -> Generate
+// Priority: Memory (L1) -> Immich -> Database (L2) -> Generate
 // Sizes: small (200x200), medium (400x300), default (1200x630)
 app.get('/api/pois/:id/thumbnail', async (req, res) => {
   try {
@@ -860,6 +886,29 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     // L1: Check memory cache first (fastest)
     if (thumbnailMemoryCache.has(cacheKey)) {
       return sendThumbnail(res, thumbnailMemoryCache.get(cacheKey));
+    }
+
+    // Check if POI has Immich asset - serve Immich thumbnail if available
+    const poiCheck = await pool.query(
+      'SELECT immich_primary_asset_id FROM pois WHERE id = $1',
+      [id]
+    );
+
+    if (poiCheck.rows.length > 0 && poiCheck.rows[0].immich_primary_asset_id && immichService.initialized) {
+      // Map size param to Immich thumbnail size
+      const immichSize = sizeParam === 'small' ? 'thumbnail' : 'preview';
+      const result = await immichService.fetchThumbnailData(poiCheck.rows[0].immich_primary_asset_id, immichSize);
+
+      if (result.success) {
+        // Cache in memory for future requests
+        addToMemoryCache(cacheKey, result.data);
+        res.setHeader('Content-Type', result.contentType);
+        res.setHeader('Cache-Control', 'public, max-age=604800');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        return res.send(result.data);
+      }
+      // If Immich fetch failed, continue to PostgreSQL fallback
+      console.warn(`[Thumbnail] Immich fetch failed for POI ${id}, falling back to PostgreSQL`);
     }
 
     // L2: Check database cache

@@ -1,17 +1,8 @@
 # Immich Media Server - All-in-one UBI10 container
-# Uses standard RHEL packages and configurations where possible
+# Uses standard RHEL/EPEL packages where possible
 
 # Extract Immich application from official image
 FROM ghcr.io/immich-app/immich-server:release AS immich-source
-
-# Build pgvector extension for PostgreSQL (not available in repos)
-FROM registry.access.redhat.com/ubi10/ubi-init:latest AS pgvector-build
-RUN dnf install -y gcc make git postgresql-server-devel redhat-rpm-config && \
-    cd /tmp && \
-    git clone --branch v0.7.4 https://github.com/pgvector/pgvector.git && \
-    cd pgvector && \
-    make && \
-    make install DESTDIR=/pgvector-install
 
 # Build libvips from source (not available in UBI repos)
 FROM registry.access.redhat.com/ubi10/ubi-init:latest AS vips-build
@@ -32,10 +23,27 @@ RUN dnf install -y \
     ninja && \
     ninja install
 
+# Build pgvector 0.7.4 from source (EPEL has 0.6.2, Immich needs 0.7.4)
+FROM registry.access.redhat.com/ubi10/ubi-init:latest AS pgvector-build
+RUN dnf install -y \
+    gcc gcc-c++ make wget \
+    redhat-rpm-config \
+    postgresql-server-devel && \
+    cd /tmp && \
+    wget https://github.com/pgvector/pgvector/archive/refs/tags/v0.7.4.tar.gz && \
+    tar xf v0.7.4.tar.gz && \
+    cd pgvector-0.7.4 && \
+    make && \
+    make install DESTDIR=/pgvector-install
+
 # Final image
 FROM registry.access.redhat.com/ubi10/ubi-init:latest
 
-# Install all packages from standard RHEL repos (valkey is Redis-compatible)
+# Install EPEL and RPMFusion for full ffmpeg with codecs
+RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
+    dnf install -y https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-10.noarch.rpm
+
+# Install all packages from RHEL/EPEL/RPMFusion repos (excluding pgvector - built from source)
 RUN dnf install -y \
     postgresql-server \
     postgresql-contrib \
@@ -50,20 +58,23 @@ RUN dnf install -y \
     libjpeg-turbo libpng \
     libtiff libwebp \
     libexif lcms2 \
-    librsvg2 && \
+    librsvg2 \
+    ffmpeg && \
     dnf clean all
 
-# Copy libvips from build stage
+# Copy libvips from build stage (not available as RPM)
 COPY --from=vips-build /usr/local/lib64/libvips* /usr/lib64/
 COPY --from=vips-build /usr/local/lib64/pkgconfig/vips* /usr/lib64/pkgconfig/
 
-# Copy pgvector extension from build stage
+# Copy pgvector 0.7.4 from build stage
 COPY --from=pgvector-build /pgvector-install/usr/ /usr/
-RUN ldconfig
 
 # Copy Immich application and geodata from official image
 COPY --from=immich-source /usr/src/app /usr/src/app
 COPY --from=immich-source /build /build
+
+# Run ldconfig to pick up all libraries
+RUN ldconfig
 
 # Create Immich user and set up directories
 RUN useradd -r -s /bin/false immich && \
@@ -122,7 +133,7 @@ REDIS_HOSTNAME=localhost
 REDIS_PORT=6379
 UPLOAD_LOCATION=/usr/src/app/upload
 IMMICH_MACHINE_LEARNING_ENABLED=false
-IMMICH_WORKERS_INCLUDE=api
+IMMICH_WORKERS_INCLUDE=api,microservices
 EOF
 
 # Create database init service (oneshot, runs after postgresql)

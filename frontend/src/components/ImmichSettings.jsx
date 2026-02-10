@@ -4,6 +4,7 @@ function ImmichSettings() {
   const [serverUrl, setServerUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [albumId, setAlbumId] = useState('');
+  const [poiAlbumId, setPoiAlbumId] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -19,6 +20,7 @@ function ImmichSettings() {
         setServerUrl(data.immich_server_url?.value || '');
         setApiKey(data.immich_api_key?.value || '');
         setAlbumId(data.immich_album_id?.value || '');
+        setPoiAlbumId(data.immich_poi_album_id?.value || '');
         setError(null);
       } else if (response.status === 401 || response.status === 403) {
         setError('Admin access required');
@@ -43,7 +45,8 @@ function ImmichSettings() {
       const updates = [
         { key: 'immich_server_url', value: serverUrl },
         { key: 'immich_api_key', value: apiKey },
-        { key: 'immich_album_id', value: albumId }
+        { key: 'immich_album_id', value: albumId },
+        { key: 'immich_poi_album_id', value: poiAlbumId }
       ];
 
       for (const update of updates) {
@@ -96,7 +99,7 @@ function ImmichSettings() {
     <div className="immich-settings">
       <h3>Immich Asset Management</h3>
       <p className="settings-description">
-        Configure connection to Immich server for theme video storage.
+        Configure connection to Immich server for theme videos and POI images.
       </p>
 
       {error && <div className="sync-error">{error}</div>}
@@ -123,7 +126,7 @@ function ImmichSettings() {
       </div>
 
       <div className="config-row">
-        <label>Album ID</label>
+        <label>Theme Videos Album ID</label>
         <input
           type="text"
           value={albumId}
@@ -131,6 +134,17 @@ function ImmichSettings() {
           placeholder="Album ID containing theme videos"
         />
         <small>Find this in Immich album URL: /albums/[ALBUM_ID]</small>
+      </div>
+
+      <div className="config-row">
+        <label>POI Images Album ID</label>
+        <input
+          type="text"
+          value={poiAlbumId}
+          onChange={(e) => setPoiAlbumId(e.target.value)}
+          placeholder="Album ID for POI images (optional)"
+        />
+        <small>POI images will be organized in this album</small>
       </div>
 
       <div className="button-group">
@@ -160,9 +174,10 @@ function ImmichSettings() {
       <div className="immich-info">
         <h4>How It Works</h4>
         <ul>
-          <li>Videos are fetched from Immich server on demand</li>
+          <li>Theme videos and POI images are stored in Immich</li>
           <li>URLs are cached for 1 hour to minimize API calls</li>
-          <li>Falls back to embedded videos if Immich unavailable</li>
+          <li>Falls back to embedded videos/PostgreSQL if Immich unavailable</li>
+          <li>New POI image uploads are automatically saved to Immich</li>
           <li>All environments (dev/test/prod) use the same Immich instance</li>
         </ul>
       </div>

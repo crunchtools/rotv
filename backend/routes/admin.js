@@ -555,7 +555,8 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       'seasonal_themes',
       'immich_server_url',
       'immich_api_key',
-      'immich_album_id'
+      'immich_album_id',
+      'immich_poi_album_id'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
@@ -2143,7 +2144,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
   });
 
   // Upload image for a destination
-  // Stores image in database (for all users) AND uploads to Drive (for backup/restore)
+  // Stores image in database (for all users), uploads to Immich (primary), AND uploads to Drive (for backup)
   router.post('/destinations/:id/image', isAdmin, imageUpload.single('image'), async (req, res) => {
     const { id } = req.params;
 
@@ -2153,14 +2154,14 @@ export function createAdminRouter(pool, clearThumbnailCache) {
 
     try {
       // Check if destination exists
-      const destCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      const destCheck = await pool.query('SELECT id, name, image_drive_file_id, immich_primary_asset_id FROM pois WHERE id = $1', [id]);
       if (destCheck.rows.length === 0) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
       const destination = destCheck.rows[0];
 
-      // Store image in database (primary storage - accessible by all users)
+      // Store image in database (fallback storage - accessible by all users)
       // Image URL is computed from ID: /api/destinations/{id}/image
       await pool.query(
         `UPDATE pois
@@ -2172,6 +2173,45 @@ export function createAdminRouter(pool, clearThumbnailCache) {
 
       // Invalidate thumbnail cache for this POI
       await pool.query('DELETE FROM thumbnail_cache WHERE poi_id = $1', [id]);
+
+      // Upload to Immich (primary storage)
+      let immichAssetId = null;
+      if (immichService.initialized) {
+        try {
+          // Delete existing Immich asset if present
+          if (destination.immich_primary_asset_id) {
+            await immichService.deleteAsset(destination.immich_primary_asset_id);
+            console.log(`Deleted old Immich asset: ${destination.immich_primary_asset_id}`);
+          }
+
+          // Generate filename and upload to Immich
+          const ext = req.file.mimetype.split('/')[1];
+          const sanitizedName = destination.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const filename = `${sanitizedName}-${Date.now()}.${ext}`;
+
+          const result = await immichService.uploadPoiImage(
+            req.file.buffer,
+            id,
+            filename,
+            req.file.mimetype
+          );
+
+          if (result.success) {
+            immichAssetId = result.assetId;
+            // Update Immich asset ID reference
+            await pool.query(
+              'UPDATE pois SET immich_primary_asset_id = $1 WHERE id = $2',
+              [immichAssetId, id]
+            );
+            console.log(`Uploaded image to Immich: ${immichAssetId}`);
+          } else {
+            console.warn(`Failed to upload to Immich (non-fatal):`, result.error);
+          }
+        } catch (immichError) {
+          console.warn(`Failed to upload image to Immich (non-fatal):`, immichError.message);
+          // Continue - image is stored in database
+        }
+      }
 
       // Also upload to Drive for backup (if user has OAuth credentials)
       let driveFileId = null;
@@ -2210,6 +2250,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
         success: true,
         message: 'Image uploaded successfully',
         image_url: `/api/destinations/${id}/image`,
+        immich_asset_id: immichAssetId,
         drive_file_id: driveFileId
       });
     } catch (error) {
@@ -2246,14 +2287,14 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       }
 
       // Check if destination exists
-      const destCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      const destCheck = await pool.query('SELECT id, name, image_drive_file_id, immich_primary_asset_id FROM pois WHERE id = $1', [id]);
       if (destCheck.rows.length === 0) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
       const destination = destCheck.rows[0];
 
-      // Store image in database
+      // Store image in database (fallback storage)
       await pool.query(
         `UPDATE pois
          SET image_data = $1, image_mime_type = $2,
@@ -2268,6 +2309,38 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       // Clear in-memory thumbnail cache
       if (clearThumbnailCache) {
         clearThumbnailCache(id);
+      }
+
+      // Upload to Immich (primary storage)
+      let immichAssetId = null;
+      if (immichService.initialized) {
+        try {
+          // Delete existing Immich asset if present
+          if (destination.immich_primary_asset_id) {
+            await immichService.deleteAsset(destination.immich_primary_asset_id);
+            console.log(`Deleted old Immich asset: ${destination.immich_primary_asset_id}`);
+          }
+
+          // Generate filename and upload to Immich
+          const ext = mimeType.split('/')[1];
+          const sanitizedName = destination.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const filename = `${sanitizedName}-${Date.now()}.${ext}`;
+
+          const result = await immichService.uploadPoiImage(buffer, id, filename, mimeType);
+
+          if (result.success) {
+            immichAssetId = result.assetId;
+            await pool.query(
+              'UPDATE pois SET immich_primary_asset_id = $1 WHERE id = $2',
+              [immichAssetId, id]
+            );
+            console.log(`Uploaded image to Immich: ${immichAssetId}`);
+          } else {
+            console.warn(`Failed to upload to Immich (non-fatal):`, result.error);
+          }
+        } catch (immichError) {
+          console.warn('Failed to upload to Immich (non-fatal):', immichError.message);
+        }
       }
 
       // Also upload to Drive as backup if user has OAuth
@@ -2305,6 +2378,7 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       res.json({
         success: true,
         message: 'Image uploaded successfully',
+        immich_asset_id: immichAssetId,
         drive_file_id: driveFileId
       });
     } catch (error) {
@@ -2314,21 +2388,31 @@ export function createAdminRouter(pool, clearThumbnailCache) {
   });
 
   // Delete image from a destination
-  // Clears image from database AND deletes from Drive backup
+  // Clears image from database, Immich, AND Drive backup
   router.delete('/destinations/:id/image', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
       // Check if destination exists and has an image
-      const destCheck = await pool.query('SELECT id, name, image_data, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      const destCheck = await pool.query('SELECT id, name, image_data, image_drive_file_id, immich_primary_asset_id FROM pois WHERE id = $1', [id]);
       if (destCheck.rows.length === 0) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
       const destination = destCheck.rows[0];
 
-      if (!destination.image_data && !destination.image_drive_file_id) {
+      if (!destination.image_data && !destination.image_drive_file_id && !destination.immich_primary_asset_id) {
         return res.status(400).json({ error: 'Destination has no image' });
+      }
+
+      // Delete from Immich if present
+      if (destination.immich_primary_asset_id && immichService.initialized) {
+        try {
+          await immichService.deleteAsset(destination.immich_primary_asset_id);
+          console.log(`Deleted image from Immich: ${destination.immich_primary_asset_id}`);
+        } catch (immichError) {
+          console.warn(`Failed to delete from Immich (non-fatal):`, immichError.message);
+        }
       }
 
       // Delete from Drive if present and user has OAuth
@@ -2345,11 +2429,14 @@ export function createAdminRouter(pool, clearThumbnailCache) {
       // Clear all image data from database
       await pool.query(
         `UPDATE pois
-         SET image_data = NULL, image_mime_type = NULL, image_drive_file_id = NULL,
+         SET image_data = NULL, image_mime_type = NULL, image_drive_file_id = NULL, immich_primary_asset_id = NULL,
              updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
          WHERE id = $1`,
         [id]
       );
+
+      // Invalidate thumbnail cache for this POI
+      await pool.query('DELETE FROM thumbnail_cache WHERE poi_id = $1', [id]);
 
       console.log(`Admin ${req.user.email} deleted image for destination ${id}`);
       res.json({
