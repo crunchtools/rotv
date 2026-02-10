@@ -1178,6 +1178,14 @@ app.get('/api/theme-config', async (req, res) => {
         }
       }
 
+      // Also add night video if night mode is enabled
+      if (config.nightMode?.enabled) {
+        const nightUrl = await immichService.getThemeVideoUrl('night');
+        if (nightUrl) {
+          videoUrls['night'] = `/api/theme-video/night`;
+        }
+      }
+
       res.json({
         seasonal_themes: result.rows[0].value,
         video_urls: videoUrls
