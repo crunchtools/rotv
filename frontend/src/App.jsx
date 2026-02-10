@@ -9,7 +9,6 @@ import SyncSettings from './components/SyncSettings';
 import AISettings from './components/AISettings';
 import GeneralSettings from './components/GeneralSettings';
 import ThemesSettings from './components/ThemesSettings';
-import ImmichSettings from './components/ImmichSettings';
 import ActivitiesSettings from './components/ActivitiesSettings';
 import ErasSettings from './components/ErasSettings';
 import SurfacesSettings from './components/SurfacesSettings';
@@ -1398,7 +1397,7 @@ function AppContent() {
   return (
     <div className="app">
       <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
-        {activeTheme && (
+        {activeTheme && videoUrls[activeTheme] && (
           <video
             key={activeTheme}
             className="theme-video"
@@ -1406,7 +1405,7 @@ function AppContent() {
             loop
             muted
             playsInline
-            src={videoUrls[activeTheme] || `/theme-videos/${activeTheme}.mp4`}
+            src={videoUrls[activeTheme]}
             onLoadedData={(e) => { e.target.playbackRate = 0.7; }}
           />
         )}
@@ -1632,12 +1631,6 @@ function AppContent() {
                 Themes
               </button>
               <button
-                className={`settings-tab-btn ${settingsTab === 'immich' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('immich')}
-              >
-                Immich
-              </button>
-              <button
                 className={`settings-tab-btn ${settingsTab === 'activities' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('activities')}
               >
@@ -1678,7 +1671,6 @@ function AppContent() {
             <div className="settings-tab-content">
               {settingsTab === 'general' && <GeneralSettings />}
               {settingsTab === 'themes' && <ThemesSettings />}
-              {settingsTab === 'immich' && <ImmichSettings />}
               {settingsTab === 'activities' && <ActivitiesSettings />}
               {settingsTab === 'eras' && <ErasSettings />}
               {settingsTab === 'surfaces' && <SurfacesSettings />}

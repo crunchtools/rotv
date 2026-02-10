@@ -7,44 +7,23 @@ class ImmichService {
     this.serverUrl = null;
     this.apiKey = null;
     this.albumId = null;
-    this.poiAlbumId = null;
     this.initialized = false;
   }
 
-  async initialize(pool) {
-    try {
-      const settingsQuery = await pool.query(
-        `SELECT key, value FROM admin_settings
-         WHERE key IN ('immich_server_url', 'immich_api_key', 'immich_album_id', 'immich_poi_album_id')`
-      );
+  initialize() {
+    this.serverUrl = process.env.IMMICH_SERVER_URL || null;
+    this.apiKey = process.env.IMMICH_API_KEY || null;
+    this.albumId = process.env.IMMICH_ALBUM_ID || null;
 
-      const settings = {};
-      settingsQuery.rows.forEach(row => {
-        settings[row.key] = row.value;
-      });
+    this.initialized = !!(this.serverUrl && this.apiKey && this.albumId);
 
-      this.serverUrl = process.env.IMMICH_SERVER_URL || settings.immich_server_url || null;
-      this.apiKey = process.env.IMMICH_API_KEY || settings.immich_api_key || null;
-      this.albumId = process.env.IMMICH_ALBUM_ID || settings.immich_album_id || null;
-      this.poiAlbumId = process.env.IMMICH_POI_ALBUM_ID || settings.immich_poi_album_id || null;
-
-      this.initialized = !!(this.serverUrl && this.apiKey && this.albumId);
-
-      if (this.initialized) {
-        console.log(`[Immich] Initialized with server: ${this.serverUrl}`);
-        if (this.poiAlbumId) {
-          console.log(`[Immich] POI album configured: ${this.poiAlbumId}`);
-        }
-      } else {
-        console.warn('[Immich] Not configured - using fallback static videos');
-      }
-
-      return this.initialized;
-    } catch (error) {
-      console.error('[Immich] Initialization failed:', error);
-      this.initialized = false;
-      return false;
+    if (this.initialized) {
+      console.log(`[Immich] Initialized with server: ${this.serverUrl}, album: ${this.albumId}`);
+    } else {
+      console.warn('[Immich] Not configured - set IMMICH_SERVER_URL, IMMICH_API_KEY, and IMMICH_ALBUM_ID');
     }
+
+    return this.initialized;
   }
 
   async getThemeVideoUrl(themeName) {
@@ -187,9 +166,7 @@ class ImmichService {
       const asset = await response.json();
       console.log(`[Immich] Uploaded POI image for POI ${poiId}: ${asset.id}`);
 
-      if (this.poiAlbumId) {
-        await this.addAssetToAlbum(asset.id, this.poiAlbumId);
-      }
+      await this.addAssetToAlbum(asset.id, this.albumId);
 
       await this.tagAsset(asset.id, [`poi_${poiId}`, 'type_primary']);
 

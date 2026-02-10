@@ -97,7 +97,7 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
 
   // Get thumbnail image URL or default icon
   const getThumbnailUrl = (poi) => {
-    if (poi.image_mime_type) {
+    if (poi.immich_primary_asset_id) {
       return `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`;
     }
 
