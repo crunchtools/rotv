@@ -31,10 +31,8 @@ function ThemesSettings() {
     fetchSettings();
   }, [fetchSettings]);
 
-  // Cleanup preview mode when component unmounts
   useEffect(() => {
     return () => {
-      // If user navigates away while testing, stop the preview
       if (sessionStorage.getItem('theme-preview')) {
         sessionStorage.removeItem('theme-preview');
         window.dispatchEvent(new CustomEvent('theme-preview-change'));
@@ -59,7 +57,6 @@ function ThemesSettings() {
         setMessage({ type: 'success', text: 'Theme settings saved successfully!' });
         setTimeout(() => setMessage(null), 3000);
 
-        // Stop any active preview and notify hook to reload config
         stopTesting();
         window.dispatchEvent(new CustomEvent('theme-config-updated'));
       } else {
@@ -80,9 +77,7 @@ function ThemesSettings() {
 
   const testTheme = (themeId) => {
     setTestingTheme(themeId);
-    // Store in sessionStorage so useSeasonalTheme hook can pick it up
     sessionStorage.setItem('theme-preview', themeId);
-    // Dispatch custom event to notify the hook
     window.dispatchEvent(new CustomEvent('theme-preview-change'));
   };
 
@@ -162,7 +157,6 @@ function ThemesSettings() {
                   </td>
                 </tr>
               ))}
-              {/* Night Mode Row */}
               <tr className={testingTheme === 'night' ? 'testing' : ''}>
                 <td className="checkbox-cell">
                   <input

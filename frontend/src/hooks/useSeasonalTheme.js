@@ -6,22 +6,20 @@ export default function useSeasonalTheme() {
   const [isNightMode, setIsNightMode] = useState(false);
   const [videoUrls, setVideoUrls] = useState({});
 
-  // Fetch config on mount and when updated
   useEffect(() => {
     const fetchConfig = () => {
       fetch('/api/theme-config')
         .then(res => res.json())
-        .then(data => {
-          if (data.seasonal_themes) {
-            const parsed = typeof data.seasonal_themes === 'string'
-              ? JSON.parse(data.seasonal_themes)
-              : data.seasonal_themes;
+        .then(themeConfig => {
+          if (themeConfig.seasonal_themes) {
+            const parsed = typeof themeConfig.seasonal_themes === 'string'
+              ? JSON.parse(themeConfig.seasonal_themes)
+              : themeConfig.seasonal_themes;
             setConfig(parsed);
           }
 
-          // Store video URLs
-          if (data.video_urls) {
-            setVideoUrls(data.video_urls);
+          if (themeConfig.video_urls) {
+            setVideoUrls(themeConfig.video_urls);
           }
         })
         .catch(err => console.error('Failed to fetch theme config:', err));
@@ -29,7 +27,6 @@ export default function useSeasonalTheme() {
 
     fetchConfig();
 
-    // Listen for config updates from Settings page
     const handleConfigUpdate = () => fetchConfig();
     window.addEventListener('theme-config-updated', handleConfigUpdate);
 
@@ -38,12 +35,10 @@ export default function useSeasonalTheme() {
     };
   }, []);
 
-  // Calculate active theme
   useEffect(() => {
     if (!config) return;
 
     const updateTheme = () => {
-      // Check for preview mode
       const previewTheme = sessionStorage.getItem('theme-preview');
       if (previewTheme) {
         if (previewTheme === 'night') {
@@ -63,22 +58,18 @@ export default function useSeasonalTheme() {
       setIsNightMode(theme.isNightMode);
     };
 
-    // Initial calculation
     updateTheme();
 
-    // Listen for preview changes
     const handlePreviewChange = () => updateTheme();
     window.addEventListener('theme-preview-change', handlePreviewChange);
 
-    // Re-check at midnight
     const midnightCheck = setInterval(() => {
       const now = new Date();
       if (now.getHours() === 0 && now.getMinutes() === 0) {
         updateTheme();
       }
-    }, 60000); // Check every minute around midnight
+    }, 60000);
 
-    // Re-check at night mode boundaries
     const nightModeCheck = setInterval(() => {
       const hour = new Date().getHours();
       if (hour === config.nightMode.startHour || hour === config.nightMode.endHour) {
@@ -102,11 +93,9 @@ function calculateActiveTheme(config, now) {
   const monthDay = `${month}/${day}`;
   const hour = now.getHours();
 
-  // Check night mode
   const nightModeEnabled = config.nightMode.enabled &&
     (hour >= config.nightMode.startHour || hour < config.nightMode.endHour);
 
-  // If night mode is active, prioritize it
   if (nightModeEnabled) {
     return {
       activeTheme: 'night',
@@ -114,7 +103,6 @@ function calculateActiveTheme(config, now) {
     };
   }
 
-  // Find active theme by priority
   const enabledThemes = config.themes
     .filter(t => t.enabled && isDateInRange(monthDay, t.startDate, t.endDate))
     .sort((a, b) => a.priority - b.priority);
@@ -126,7 +114,6 @@ function calculateActiveTheme(config, now) {
 }
 
 function isDateInRange(current, start, end) {
-  // Handle year-wrap case (e.g., 12/27 to 01/02)
   if (start > end) {
     return current >= start || current <= end;
   }

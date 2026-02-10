@@ -18,29 +18,25 @@
 import pg from 'pg';
 import dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config();
 
 const { Pool } = pg;
-
-// Database connection
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/rotv'
 });
 
-// Immich configuration
 let immichServerUrl = process.env.IMMICH_SERVER_URL;
 let immichApiKey = process.env.IMMICH_API_KEY;
 let immichPoiAlbumId = process.env.IMMICH_POI_ALBUM_ID;
 
 async function loadImmichSettings() {
   try {
-    const result = await pool.query(
+    const settingsQuery = await pool.query(
       `SELECT key, value FROM admin_settings
        WHERE key IN ('immich_server_url', 'immich_api_key', 'immich_poi_album_id')`
     );
 
-    result.rows.forEach(row => {
+    settingsQuery.rows.forEach(row => {
       if (row.key === 'immich_server_url' && !immichServerUrl) {
         immichServerUrl = row.value;
       }
@@ -66,12 +62,10 @@ async function loadImmichSettings() {
 
 async function uploadToImmich(imageBuffer, poiId, poiName, mimeType) {
   try {
-    // Generate filename
     const ext = mimeType.split('/')[1] || 'jpg';
     const sanitizedName = poiName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const filename = `poi-${poiId}-${sanitizedName}.${ext}`;
 
-    // Create form data
     const formData = new FormData();
     const blob = new Blob([imageBuffer], { type: mimeType });
     formData.append('assetData', blob, filename);
@@ -95,12 +89,10 @@ async function uploadToImmich(imageBuffer, poiId, poiName, mimeType) {
 
     const asset = await response.json();
 
-    // Add to POI album if configured
     if (immichPoiAlbumId) {
       await addToAlbum(asset.id);
     }
 
-    // Add description with POI tag
     await tagAsset(asset.id, poiId);
 
     return { success: true, assetId: asset.id };
@@ -150,8 +142,7 @@ async function migrate() {
   await loadImmichSettings();
   console.log();
 
-  // Get all POIs with images that haven't been migrated yet
-  const result = await pool.query(`
+  const poisQuery = await pool.query(`
     SELECT id, name, image_data, image_mime_type
     FROM pois
     WHERE image_data IS NOT NULL
@@ -159,7 +150,7 @@ async function migrate() {
     ORDER BY id
   `);
 
-  const pois = result.rows;
+  const pois = poisQuery.rows;
   console.log(`[Migration] Found ${pois.length} POIs with images to migrate`);
   console.log();
 
@@ -184,7 +175,6 @@ async function migrate() {
     );
 
     if (uploadResult.success) {
-      // Update database with Immich asset ID
       await pool.query(
         'UPDATE pois SET immich_primary_asset_id = $1 WHERE id = $2',
         [uploadResult.assetId, poi.id]
@@ -197,7 +187,6 @@ async function migrate() {
       failures.push({ id: poi.id, name: poi.name, error: uploadResult.error });
     }
 
-    // Small delay to avoid overwhelming the server
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
@@ -219,7 +208,6 @@ async function migrate() {
   await pool.end();
 }
 
-// Run migration
 migrate().catch(error => {
   console.error('Migration failed:', error);
   process.exit(1);

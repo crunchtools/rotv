@@ -509,6 +509,11 @@ check = "deferred_work"
 path = "frontend/src/components/UserMenu.jsx"
 justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
 
+[[exceptions]]
+check = "deferred_work"
+path = "frontend/src/components/ImmichSettings.jsx"
+justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
+
 # Random scripts - container entrypoint and OAuth utility
 
 [[exceptions]]

@@ -1,26 +1,25 @@
 import NodeCache from 'node-cache';
 
-// 1-hour URL cache (3600 seconds)
 const urlCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 
 class ImmichService {
   constructor() {
     this.serverUrl = null;
     this.apiKey = null;
-    this.albumId = null;  // Theme videos album
-    this.poiAlbumId = null;  // POI images album
+    this.albumId = null;
+    this.poiAlbumId = null;
     this.initialized = false;
   }
 
   async initialize(pool) {
     try {
-      const result = await pool.query(
+      const settingsQuery = await pool.query(
         `SELECT key, value FROM admin_settings
          WHERE key IN ('immich_server_url', 'immich_api_key', 'immich_album_id', 'immich_poi_album_id')`
       );
 
       const settings = {};
-      result.rows.forEach(row => {
+      settingsQuery.rows.forEach(row => {
         settings[row.key] = row.value;
       });
 
@@ -50,10 +49,9 @@ class ImmichService {
 
   async getThemeVideoUrl(themeName) {
     if (!this.initialized) {
-      return null; // Triggers fallback to static video
+      return null;
     }
 
-    // Check cache first
     const cacheKey = `video:${themeName}`;
     const cachedUrl = urlCache.get(cacheKey);
     if (cachedUrl) {
@@ -62,7 +60,6 @@ class ImmichService {
     }
 
     try {
-      // Get album assets
       const response = await fetch(`${this.serverUrl}/api/albums/${this.albumId}`, {
         headers: {
           'x-api-key': this.apiKey,
@@ -75,8 +72,6 @@ class ImmichService {
       }
 
       const album = await response.json();
-
-      // Find asset matching theme name (e.g., "christmas.mp4")
       const asset = album.assets.find(a =>
         a.originalFileName.toLowerCase() === `${themeName.toLowerCase()}.mp4`
       );
@@ -86,10 +81,7 @@ class ImmichService {
         return null;
       }
 
-      // Generate download URL
       const downloadUrl = `${this.serverUrl}/api/assets/${asset.id}/original?key=${this.apiKey}`;
-
-      // Cache for 1 hour
       urlCache.set(cacheKey, downloadUrl);
       console.log(`[Immich] Generated URL for ${themeName}, cached for 1 hour`);
 
@@ -111,8 +103,8 @@ class ImmichService {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        return { success: true, message: 'Connected to Immich', data };
+        const pingResponse = await response.json();
+        return { success: true, message: 'Connected to Immich', data: pingResponse };
       } else {
         return { success: false, error: `HTTP ${response.status}` };
       }
@@ -120,8 +112,6 @@ class ImmichService {
       return { success: false, error: error.message };
     }
   }
-
-  // ========== POI Image Methods ==========
 
   /**
    * Get the original image URL for a POI asset
@@ -133,17 +123,13 @@ class ImmichService {
       return null;
     }
 
-    // Check cache
     const cacheKey = `poi:${assetId}`;
     const cachedUrl = urlCache.get(cacheKey);
     if (cachedUrl) {
       return cachedUrl;
     }
 
-    // Immich original asset endpoint
     const url = `${this.serverUrl}/api/assets/${assetId}/original`;
-
-    // Cache for 1 hour
     urlCache.set(cacheKey, url);
     return url;
   }
@@ -159,7 +145,6 @@ class ImmichService {
       return null;
     }
 
-    // Immich thumbnail endpoint - size can be 'thumbnail' or 'preview'
     const immichSize = size === 'small' ? 'thumbnail' : 'preview';
     return `${this.serverUrl}/api/assets/${assetId}/${immichSize}`;
   }
@@ -178,16 +163,9 @@ class ImmichService {
     }
 
     try {
-      // Create form data for multipart upload
       const formData = new FormData();
-
-      // Create a Blob from the buffer
       const blob = new Blob([imageBuffer], { type: mimeType });
-
-      // Immich expects 'assetData' as the file field
       formData.append('assetData', blob, filename);
-
-      // Add device metadata (required by Immich)
       formData.append('deviceAssetId', `poi-${poiId}-${Date.now()}`);
       formData.append('deviceId', 'rotv-backend');
       formData.append('fileCreatedAt', new Date().toISOString());
@@ -209,12 +187,10 @@ class ImmichService {
       const asset = await response.json();
       console.log(`[Immich] Uploaded POI image for POI ${poiId}: ${asset.id}`);
 
-      // Add to POI album if configured
       if (this.poiAlbumId) {
         await this.addAssetToAlbum(asset.id, this.poiAlbumId);
       }
 
-      // Add tags for POI association
       await this.tagAsset(asset.id, [`poi_${poiId}`, 'type_primary']);
 
       return { success: true, assetId: asset.id };
@@ -249,14 +225,12 @@ class ImmichService {
   }
 
   /**
-   * Tag an asset with labels
+   * Tag an asset with labels (stores in description field)
    * @param {string} assetId - Immich asset ID
    * @param {string[]} tags - Array of tag names
    */
   async tagAsset(assetId, tags) {
     try {
-      // Immich uses a different tagging system - we'll store tags in description
-      // or use the 'tags' feature if available in newer versions
       const response = await fetch(`${this.serverUrl}/api/assets/${assetId}`, {
         method: 'PUT',
         headers: {
@@ -300,7 +274,6 @@ class ImmichService {
         throw new Error(`Delete failed: ${response.status}`);
       }
 
-      // Clear from cache
       urlCache.del(`poi:${assetId}`);
       console.log(`[Immich] Deleted asset: ${assetId}`);
 
@@ -332,12 +305,12 @@ class ImmichService {
         throw new Error(`Fetch failed: ${response.status}`);
       }
 
-      const data = await response.arrayBuffer();
+      const imageBuffer = await response.arrayBuffer();
       const contentType = response.headers.get('content-type') || 'image/jpeg';
 
       return {
         success: true,
-        data: Buffer.from(data),
+        data: Buffer.from(imageBuffer),
         contentType
       };
     } catch (error) {
@@ -368,12 +341,12 @@ class ImmichService {
         throw new Error(`Fetch failed: ${response.status}`);
       }
 
-      const data = await response.arrayBuffer();
+      const thumbnailBuffer = await response.arrayBuffer();
       const contentType = response.headers.get('content-type') || 'image/jpeg';
 
       return {
         success: true,
-        data: Buffer.from(data),
+        data: Buffer.from(thumbnailBuffer),
         contentType
       };
     } catch (error) {
