@@ -1,18 +1,45 @@
-# Application layer for Roots of The Valley
-# Builds on top of rotv-base which contains PostgreSQL, Node.js, and Playwright
-# For local development: run ./run.sh build-base first if base image doesn't exist
+# Roots of The Valley — single-stage build on ubi10-core
+# Services: PostgreSQL 17 (pgdg), Node.js, Playwright/Chromium
 
-# Use the base image from quay.io (or local build)
-ARG BASE_IMAGE=quay.io/fatherlinux/rotv-base:latest
-FROM ${BASE_IMAGE}
+FROM quay.io/crunchtools/ubi10-core:latest
 
-# Labels - bump version here to force app layer rebuild
-LABEL maintainer="fatherlinux"
+LABEL maintainer="fatherlinux <scott.mccarty@crunchtools.com>"
 LABEL description="Roots of The Valley - Cuyahoga Valley National Park destination explorer"
-LABEL version="1.16.0"
 
-# Build environment: 'production' (default) or 'test' (includes dev deps)
-ARG BUILD_ENV=production
+# Install Node.js and Playwright/Chromium system dependencies
+# No RHSM needed — all packages in UBI + pgdg repos
+RUN dnf install -y nodejs npm \
+    nspr nss alsa-lib atk cups-libs gtk3 \
+    libXcomposite libXdamage libXrandr libxkbcommon \
+    mesa-libgbm pango libdrm \
+    libxshmfence libX11 libXext libXfixes \
+    && dnf clean all
+
+# Install Playwright globally with Chromium
+RUN npm install -g playwright && npx playwright install chromium
+
+# Add PostgreSQL 17 from official pgdg repository (no RHSM needed)
+RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
+    dnf install -y postgresql17-server postgresql17 && \
+    dnf clean all
+
+# Create symlinks for PostgreSQL commands
+RUN ln -s /usr/pgsql-17/bin/initdb /usr/local/bin/initdb && \
+    ln -s /usr/pgsql-17/bin/pg_ctl /usr/local/bin/pg_ctl && \
+    ln -s /usr/pgsql-17/bin/postgres /usr/local/bin/postgres && \
+    ln -s /usr/pgsql-17/bin/psql /usr/local/bin/psql && \
+    ln -s /usr/pgsql-17/bin/pg_isready /usr/local/bin/pg_isready
+
+# PostgreSQL user (runs as uid 70 for pgdg compatibility)
+RUN useradd -u 70 -m -s /bin/bash postgres || true
+
+# PostgreSQL data directory (bind-mounted at runtime)
+ENV PGDATA=/data/pgdata
+RUN mkdir -p /data/pgdata && chown postgres:postgres /data/pgdata
+
+# Environment
+ENV NODE_ENV=development PORT=8080 STATIC_PATH=/app/public
+ENV PGHOST=localhost PGPORT=5432 PGDATABASE=rotv PGUSER=postgres PGPASSWORD=rotv
 
 WORKDIR /app
 
@@ -24,11 +51,7 @@ RUN cd frontend && npm run build
 
 # Install backend dependencies
 COPY backend/package*.json ./
-RUN if [ "$BUILD_ENV" = "test" ]; then \
-      npm install; \
-    else \
-      npm install --only=production; \
-    fi
+RUN npm install --only=production
 
 # Copy backend code
 COPY backend/ ./
@@ -36,113 +59,14 @@ COPY backend/ ./
 # Move built frontend to public directory
 RUN mv frontend/dist public && rm -rf frontend
 
-# Create systemd unit file for backend Node.js server
-RUN cat > /etc/systemd/system/rotv-backend.service <<'EOF'
-[Unit]
-Description=Roots of The Valley Backend API Server
-After=postgresql.service
-Requires=postgresql.service
+# Copy systemd units and scripts
+COPY rootfs/ /
 
-[Service]
-Type=simple
-WorkingDirectory=/app
-Environment=NODE_ENV=development
-Environment=NODE_PATH=/usr/local/lib/node_modules
-Environment=PORT=8080
-Environment=STATIC_PATH=/app/public
-Environment=PGHOST=localhost
-Environment=PGPORT=5432
-Environment=PGDATABASE=rotv
-Environment=PGUSER=postgres
-Environment=PGPASSWORD=rotv
-
-# Pass through environment variables from container
-EnvironmentFile=-/etc/rotv/environment
-
-# Start Node.js server
-ExecStart=/usr/bin/node /app/server.js
-
-# Auto-restart on failure
-Restart=always
-RestartSec=5s
-
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Create initialization script for database setup
-RUN cat > /usr/local/bin/rotv-init.sh <<'EOF'
-#!/bin/bash
-set -e
-
-echo "Waiting for PostgreSQL to be ready..."
-for i in {1..30}; do
-  if pg_isready -h localhost -p 5432 -U postgres >/dev/null 2>&1; then
-    echo "PostgreSQL is ready"
-    break
-  fi
-  if [ $i -eq 30 ]; then
-    echo "PostgreSQL failed to start"
-    exit 1
-  fi
-  sleep 1
-done
-
-# Create database
-echo "Creating database..."
-cd /app
-psql -U postgres -d postgres -c "CREATE DATABASE rotv;" 2>/dev/null || echo "Database already exists"
-
-# Import seed data if available (contains schema + data)
-if [ -f /tmp/seed-data.sql ]; then
-  echo "Importing seed data (schema + data)..."
-  psql -U postgres -d rotv -f /tmp/seed-data.sql
-  echo "Seed data imported"
-fi
-
-# Run migrations to add new columns
-echo "Running schema migrations..."
-for migration in /app/migrations/*.sql; do
-  if [ -f "$migration" ]; then
-    echo "Running migration: $(basename $migration)"
-    psql -U postgres -d rotv -f "$migration"
-  fi
-done
-echo "Migrations complete"
-
-echo "Database initialization complete"
-EOF
-RUN chmod +x /usr/local/bin/rotv-init.sh
-
-# Create oneshot systemd service for database initialization
-RUN cat > /etc/systemd/system/rotv-init.service <<'EOF'
-[Unit]
-Description=Initialize ROTV Database
-After=postgresql.service
-Before=rotv-backend.service
-Requires=postgresql.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/rotv-init.sh
-RemainAfterExit=yes
-
-StandardOutput=journal
-StandardError=journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable services
-RUN systemctl enable rotv-init.service rotv-backend.service
+# Make scripts executable and enable services
+RUN chmod +x /usr/local/bin/rotv-init.sh && \
+    systemctl enable postgresql rotv-init rotv-backend
 
 # Create directory for environment file
 RUN mkdir -p /etc/rotv
 
 EXPOSE 8080
-
-# systemd is already set as CMD in base image

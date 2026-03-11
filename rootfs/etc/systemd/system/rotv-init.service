@@ -1,0 +1,13 @@
+[Unit]
+Description=Initialize ROTV Database
+After=postgresql.service
+Before=rotv-backend.service
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rotv-init.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

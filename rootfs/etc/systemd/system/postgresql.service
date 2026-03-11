@@ -1,0 +1,25 @@
+[Unit]
+Description=PostgreSQL 17 Database Server
+After=syslog.target network.target
+
+[Service]
+Type=forking
+User=postgres
+Group=postgres
+
+Environment=PGDATA=/data/pgdata
+Environment=PGPORT=5432
+
+ExecStartPre=+/bin/bash -c 'mkdir -p /data/pgdata && chown -R postgres:postgres /data/pgdata && chmod 700 /data/pgdata'
+ExecStartPre=+/bin/bash -c 'mkdir -p /tmp/pgsocket && chmod 1777 /tmp/pgsocket'
+ExecStartPre=/bin/bash -c 'if [ ! -f /data/pgdata/PG_VERSION ]; then /usr/pgsql-17/bin/initdb -D /data/pgdata; fi'
+
+ExecStart=/usr/pgsql-17/bin/pg_ctl start -D /data/pgdata -l /tmp/postgresql.log -o "-p 5432"
+ExecStop=/usr/pgsql-17/bin/pg_ctl stop -D /data/pgdata -m fast
+ExecReload=/usr/pgsql-17/bin/pg_ctl reload -D /data/pgdata
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
