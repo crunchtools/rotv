@@ -8,8 +8,6 @@ import passport from 'passport';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import sharp from 'sharp';
-
 import { configurePassport } from './config/passport.js';
 import authRoutes from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
@@ -35,7 +33,7 @@ import {
   processTrailStatusCollectionJob
 } from './services/trailStatusService.js';
 import { createSheetsService } from './services/sheetsSync.js';
-import immichService from './services/immichService.js';
+import imageServerClient from './services/imageServerClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,7 +97,7 @@ app.use(passport.session());
 app.use('/auth', authRoutes);
 
 // Mount admin routes
-app.use('/api/admin', createAdminRouter(pool, clearThumbnailCacheForPoi));
+app.use('/api/admin', createAdminRouter(pool));
 
 // Import trails and rivers from GeoJSON files into unified pois table
 async function importGeoJSONFeatures(client) {
@@ -584,23 +582,6 @@ async function initDatabase() {
       ALTER TABLE news_job_status ADD COLUMN IF NOT EXISTS ai_usage TEXT
     `);
 
-    // Thumbnail cache table - persists across server restarts
-    // This is a cache table that can be safely truncated/dropped without data loss
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS thumbnail_cache (
-        id SERIAL PRIMARY KEY,
-        poi_id INTEGER NOT NULL,
-        size VARCHAR(20) NOT NULL DEFAULT 'default',
-        image_data BYTEA NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(poi_id, size)
-      )
-    `);
-    // Index for fast lookups
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_thumbnail_cache_lookup ON thumbnail_cache(poi_id, size)
-    `);
-
     // Add boundary_type and boundary_color columns for multiple boundary support
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_type TEXT
@@ -720,7 +701,7 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_poi_assoc_physical ON poi_associations(physical_poi_id)
     `);
 
-    // Add Immich asset ID column for POI images (Phase 3 of Issue #1)
+    // Legacy: Immich asset ID column — kept for migration, will be dropped after image server migration (#97)
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS immich_primary_asset_id VARCHAR(255)
     `);
@@ -795,31 +776,24 @@ app.get('/api/pois/:id', async (req, res) => {
   }
 });
 
-// Serve POI images - checks Immich first, falls back to PostgreSQL
+// Serve POI images from image server
 app.get('/api/pois/:id/image', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if POI has Immich asset
-    const poiQuery = await pool.query(
-      'SELECT immich_primary_asset_id FROM pois WHERE id = $1',
-      [id]
-    );
-
-    if (poiQuery.rows.length === 0) {
-      return res.status(404).json({ error: 'POI not found' });
-    }
-
-    const poi = poiQuery.rows[0];
-
-    // Serve from Immich
-    if (!poi.immich_primary_asset_id || !immichService.initialized) {
+    if (!imageServerClient.initialized) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const result = await immichService.fetchAssetData(poi.immich_primary_asset_id);
+    // Get primary asset from image server
+    const asset = await imageServerClient.getPrimaryAsset(id);
+    if (!asset) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const result = await imageServerClient.fetchAssetData(asset.id);
     if (!result.success) {
-      console.error(`[POI Image] Immich fetch failed for POI ${id}:`, result.error);
+      console.error(`[POI Image] Fetch failed for POI ${id}:`, result.error);
       return res.status(404).json({ error: 'Image not found' });
     }
 
@@ -833,76 +807,27 @@ app.get('/api/pois/:id/image', async (req, res) => {
   }
 });
 
-// Two-tier thumbnail cache:
-// L1: In-memory Map (fastest, cleared on restart)
-// L2: Database table (persistent, unlimited size)
-const thumbnailMemoryCache = new Map();
-const MEMORY_CACHE_MAX_SIZE = 500; // Max in-memory thumbnails (LRU eviction)
-
-// Helper to send thumbnail response
-function sendThumbnail(res, imageData) {
-  res.setHeader('Content-Type', 'image/jpeg');
-  res.setHeader('Cache-Control', 'public, max-age=604800'); // 1 week browser cache
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.send(imageData);
-}
-
-// Helper to add to memory cache with LRU eviction
-function addToMemoryCache(key, thumbnailImageData) {
-  if (thumbnailMemoryCache.size >= MEMORY_CACHE_MAX_SIZE) {
-    // Remove oldest entry (first key in Map)
-    const firstKey = thumbnailMemoryCache.keys().next().value;
-    thumbnailMemoryCache.delete(firstKey);
-  }
-  thumbnailMemoryCache.set(key, thumbnailImageData);
-}
-
-// Helper to clear all thumbnail cache entries for a specific POI
-function clearThumbnailCacheForPoi(poiId) {
-  const sizes = ['small', 'medium', 'default'];
-  sizes.forEach(size => {
-    const cacheKey = `${poiId}-${size}`;
-    thumbnailMemoryCache.delete(cacheKey);
-  });
-  console.log(`Cleared memory cache for POI ${poiId}`);
-}
-
-// Serve thumbnails from Immich with memory cache
-// Priority: Memory cache -> Immich
+// Serve thumbnails from image server (pre-generated, no caching needed on ROTV side)
 app.get('/api/pois/:id/thumbnail', async (req, res) => {
   try {
     const { id } = req.params;
-    const cacheKey = `${id}-thumbnail`;
 
-    // Check memory cache first (fastest)
-    if (thumbnailMemoryCache.has(cacheKey)) {
-      return sendThumbnail(res, thumbnailMemoryCache.get(cacheKey));
-    }
-
-    // Get Immich asset ID
-    const poiCheck = await pool.query(
-      'SELECT immich_primary_asset_id FROM pois WHERE id = $1',
-      [id]
-    );
-
-    if (poiCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'POI not found' });
-    }
-
-    const assetId = poiCheck.rows[0].immich_primary_asset_id;
-    if (!assetId || !immichService.initialized) {
+    if (!imageServerClient.initialized) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    // Fetch from Immich
-    const result = await immichService.fetchThumbnailData(assetId, 'thumbnail');
+    // Get primary asset from image server
+    const asset = await imageServerClient.getPrimaryAsset(id);
+    if (!asset) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const result = await imageServerClient.fetchThumbnailData(asset.id);
     if (!result.success) {
-      console.error(`[Thumbnail] Immich fetch failed for POI ${id}:`, result.error);
+      console.error(`[Thumbnail] Fetch failed for POI ${id}:`, result.error);
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    // Cache in memory for future requests
-    addToMemoryCache(cacheKey, result.data);
     res.setHeader('Content-Type', result.contentType);
     res.setHeader('Cache-Control', 'public, max-age=604800');
     res.setHeader('Access-Control-Allow-Origin', '*');
@@ -1162,26 +1087,19 @@ app.get('/api/theme-config', async (req, res) => {
         ? JSON.parse(result.rows[0].value)
         : result.rows[0].value;
 
-      // Generate proxy URLs for theme videos (use Immich if configured, else static fallback)
+      // Generate proxy URLs for theme videos via image server
       const themes = config.themes || [];
       const videoUrls = {};
 
-      for (const theme of themes) {
-        if (theme.enabled) {
-          // Check if Immich has this video
-          const immichUrl = await immichService.getThemeVideoUrl(theme.id);
-          if (immichUrl) {
-            // Return proxy URL that fetches from Immich
+      if (imageServerClient.initialized) {
+        for (const theme of themes) {
+          if (theme.enabled) {
             videoUrls[theme.id] = `/api/theme-video/${theme.id}`;
           }
-          // If no Immich URL, frontend will use static fallback path
         }
-      }
 
-      // Also add night video if night mode is enabled
-      if (config.nightMode?.enabled) {
-        const nightUrl = await immichService.getThemeVideoUrl('night');
-        if (nightUrl) {
+        // Also add night video if night mode is enabled
+        if (config.nightMode?.enabled) {
           videoUrls['night'] = `/api/theme-video/night`;
         }
       }
@@ -1200,7 +1118,7 @@ app.get('/api/theme-config', async (req, res) => {
   }
 });
 
-// Theme video proxy endpoint - streams videos from Immich
+// Theme video proxy endpoint - serves videos from image server
 app.get('/api/theme-video/:theme', async (req, res) => {
   try {
     const { theme } = req.params;
@@ -1211,54 +1129,23 @@ app.get('/api/theme-video/:theme', async (req, res) => {
       return res.status(404).json({ error: 'Theme not found' });
     }
 
-    // Get the Immich URL for this theme
-    const immichUrl = await immichService.getThemeVideoUrl(theme);
-    if (!immichUrl) {
+    if (!imageServerClient.initialized) {
       return res.status(404).json({ error: 'Theme video not available' });
     }
 
-    // Parse the URL to extract asset ID
-    const urlParts = immichUrl.match(/\/api\/assets\/([^/]+)\/original/);
-    if (!urlParts) {
-      return res.status(500).json({ error: 'Invalid Immich URL format' });
+    // Fetch video data from image server
+    const result = await imageServerClient.fetchThemeVideoData(theme);
+    if (!result.success) {
+      return res.status(404).json({ error: 'Theme video not available' });
     }
 
-    // Fetch from Immich with API key in header
-    const immichResponse = await fetch(`${immichService.serverUrl}/api/assets/${urlParts[1]}/original`, {
-      headers: {
-        'x-api-key': immichService.apiKey
-      }
-    });
-
-    if (!immichResponse.ok) {
-      console.error(`[Immich] Failed to fetch video: ${immichResponse.status}`);
-      return res.status(502).json({ error: 'Failed to fetch video from Immich' });
-    }
-
-    // Set response headers
-    res.set('Content-Type', immichResponse.headers.get('content-type') || 'video/mp4');
-    res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
-
-    const contentLength = immichResponse.headers.get('content-length');
-    if (contentLength) {
-      res.set('Content-Length', contentLength);
-    }
-
-    // Stream the response
-    const reader = immichResponse.body.getReader();
-    const pump = async () => {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(Buffer.from(value));
-      }
-      res.end();
-    };
-    await pump();
-
+    res.set('Content-Type', result.contentType);
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.set('Content-Length', String(result.data.length));
+    res.send(result.data);
   } catch (error) {
-    console.error(`[Theme Video] Error streaming video:`, error);
-    res.status(500).json({ error: 'Failed to stream video' });
+    console.error(`[Theme Video] Error serving video:`, error);
+    res.status(500).json({ error: 'Failed to serve video' });
   }
 });
 
@@ -1794,8 +1681,8 @@ async function setupAiSearchDefaults() {
 async function start() {
   await initDatabase();
 
-  // Initialize Immich service for theme video and POI image delivery
-  immichService.initialize();
+  // Initialize image server client for theme video and POI image delivery
+  imageServerClient.initialize();
 
   // Ensure news job checkpoint columns exist for resumability
   await ensureNewsJobCheckpointColumns(pool);

@@ -210,7 +210,7 @@ function EditableCellSignal({ level, onChange }) {
 function ReadOnlyView({ destination, isLinearFeature, _isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap }) {
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
-  const imageUrl = destination.immich_primary_asset_id
+  const imageUrl = destination.image_mime_type
     ? `/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`
     : null;
 
@@ -651,7 +651,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         !isNewPOI && destination?.id ? (
           <ImageUploader
             destinationId={destination.id}
-            hasImage={!!editedData.immich_primary_asset_id}
+            hasImage={!!editedData.image_mime_type}
             pendingImage={pendingImage}
             onPendingImageChange={setPendingImage}
             updatedAt={editedData.updated_at}
@@ -1800,7 +1800,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
               {associatedPoisWithAssocId.map(associatedPoi => {
                 // Use thumbnail endpoint for fast, cached small images
                 // Include updated_at for cache busting when image changes
-                const imageUrl = associatedPoi.immich_primary_asset_id
+                const imageUrl = associatedPoi.image_mime_type
                   ? `/api/pois/${associatedPoi.id}/thumbnail?size=small&v=${associatedPoi.updated_at || Date.now()}`
                   : null;
 
@@ -2128,7 +2128,7 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
             {associatedPoisWithAssocId.map(associatedPoi => {
               // Use thumbnail endpoint for fast, cached small images
               // Include updated_at for cache busting when image changes
-              const imageUrl = associatedPoi.immich_primary_asset_id
+              const imageUrl = associatedPoi.image_mime_type
                 ? `/api/pois/${associatedPoi.id}/thumbnail?size=small&v=${associatedPoi.updated_at || Date.now()}`
                 : null;
 
@@ -2924,7 +2924,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   if (isLinearFeature) {
     // Use thumbnail service for faster loading
     // Include updated_at for cache busting when image changes
-    const linearImageUrl = linearFeature?.immich_primary_asset_id
+    const linearImageUrl = linearFeature?.image_mime_type
       ? `/api/pois/${linearFeature.id}/thumbnail?size=medium&v=${linearFeature.updated_at || Date.now()}`
       : null;
 
@@ -3024,7 +3024,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         {isEditing && linearFeature?.id ? (
           <ImageUploader
             destinationId={linearFeature.id}
-            hasImage={!!linearFeature.immich_primary_asset_id}
+            hasImage={!!linearFeature.image_mime_type}
             pendingImage={pendingImage}
             onPendingImageChange={setPendingImage}
             updatedAt={linearFeature.updated_at}
@@ -3140,11 +3140,11 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 isNewPOI={false}
                 isLinearFeature={true}
                 showImage={false}
-                onImageUpdate={(hasImage, driveFileId, immichAssetId) => {
+                onImageUpdate={(hasImage, driveFileId) => {
                   if (onLinearFeatureUpdate) {
                     onLinearFeatureUpdate({
                       ...linearFeature,
-                      immich_primary_asset_id: hasImage ? immichAssetId : null,
+                      image_mime_type: hasImage ? 'image/jpeg' : null,
                       image_drive_file_id: driveFileId
                     });
                   }
@@ -3253,7 +3253,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
-  const imageUrl = destination?.immich_primary_asset_id
+  const imageUrl = destination?.image_mime_type
     ? `/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`
     : null;
 
@@ -3335,7 +3335,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       {isEditing && destination?.id ? (
         <ImageUploader
           destinationId={destination.id}
-          hasImage={!!destination.immich_primary_asset_id}
+          hasImage={!!destination.image_mime_type}
           pendingImage={pendingImage}
           onPendingImageChange={setPendingImage}
           updatedAt={destination.updated_at}
@@ -3452,11 +3452,11 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               isNewPOI={isNewPOI}
               isNewOrganization={isNewOrganization}
               showImage={false}
-              onImageUpdate={(hasImage, driveFileId, immichAssetId) => {
+              onImageUpdate={(hasImage, driveFileId) => {
                 if (onDestinationUpdate) {
                   onDestinationUpdate({
                     ...destination,
-                    immich_primary_asset_id: hasImage ? immichAssetId : null,
+                    image_mime_type: hasImage ? 'image/jpeg' : null,
                     image_drive_file_id: driveFileId
                   });
                 }
