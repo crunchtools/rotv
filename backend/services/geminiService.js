@@ -173,9 +173,8 @@ export async function generateText(pool, promptKey, destination, sheets = null) 
   // Enable Google Search grounding for better factual content
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.0-flash',
-    tools: [{
-      googleSearch: {}
-    }]
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature: 0 }
   });
 
   const template = await getPromptTemplate(pool, promptKey);
@@ -199,9 +198,8 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
   // Enable Google Search grounding
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.0-flash',
-    tools: [{
-      googleSearch: {}
-    }]
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature: 0 }
   });
 
   console.log(`Generating with custom prompt (${customPrompt.length} chars, with Google Search)`);
@@ -228,9 +226,8 @@ export async function researchLocation(pool, destination, availableActivities = 
   // Enable Google Search grounding for research
   const model = genAI.getGenerativeModel({
     model: 'gemini-2.0-flash',
-    tools: [{
-      googleSearch: {}
-    }]
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature: 0 }
   });
 
   // Build the prompt with the activities, eras, and surfaces lists
