@@ -355,15 +355,6 @@ export async function queueModerationJob(contentType, contentId) {
 export async function scheduleModerationSweep(cronExpression = '*/15 * * * *') {
   const scheduler = getJobScheduler();
 
-  try {
-    await scheduler.createQueue(JOB_NAMES.CONTENT_MODERATION_SWEEP);
-    console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' created`);
-  } catch (error) {
-    if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' may already exist`);
-    }
-  }
-
   await scheduler.schedule(JOB_NAMES.CONTENT_MODERATION_SWEEP, cronExpression, {}, {
     tz: 'America/New_York'
   });
@@ -377,6 +368,15 @@ export async function scheduleModerationSweep(cronExpression = '*/15 * * * *') {
  */
 export async function registerModerationSweepHandler(handler) {
   const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.CONTENT_MODERATION_SWEEP);
+    console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' may already exist`);
+    }
+  }
 
   await scheduler.work(JOB_NAMES.CONTENT_MODERATION_SWEEP, async (job) => {
     console.log('Starting moderation sweep job:', job.id);
