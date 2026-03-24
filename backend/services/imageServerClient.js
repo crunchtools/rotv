@@ -33,8 +33,8 @@ class ImageServerClient {
     try {
       const response = await fetch(`${this.serverUrl}/api/health`);
       if (response.ok) {
-        const data = await response.json();
-        return { success: true, message: 'Connected to image server', data };
+        const healthStatus = await response.json();
+        return { success: true, message: 'Connected to image server', data: healthStatus };
       } else {
         return { success: false, error: `HTTP ${response.status}` };
       }

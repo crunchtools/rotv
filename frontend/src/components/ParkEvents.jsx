@@ -38,7 +38,7 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/events/upcoming?days=90');
+      const response = await fetch('/api/events/upcoming');
       if (response.ok) {
         const data = await response.json();
         setEvents(data);

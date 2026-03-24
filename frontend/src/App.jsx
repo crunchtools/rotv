@@ -16,6 +16,7 @@ import IconsSettings from './components/IconsSettings';
 import ParkNews from './components/ParkNews';
 import ParkEvents from './components/ParkEvents';
 import DataCollectionSettings from './components/DataCollectionSettings';
+import ModerationInbox from './components/ModerationInbox';
 import ResultsTab from './components/ResultsTab';
 
 // Default icon type IDs for initializing the filter
@@ -106,6 +107,9 @@ function AppContent() {
 
   // Settings sub-tab state: 'general', 'activities', 'news', 'google'
   const [settingsTab, setSettingsTab] = useState('general');
+
+  // Moderation queue pending count for badge
+  const [moderationCount, setModerationCount] = useState(0);
 
   // News refresh trigger - increments when news collection completes
   const [newsRefreshTrigger, setNewsRefreshTrigger] = useState(0);
@@ -287,6 +291,25 @@ function AppContent() {
       setActiveTab('view');
     }
   }, [isAdmin, activeTab]);
+
+  // Fetch moderation pending count for admin badge
+  useEffect(() => {
+    if (!isAdmin) return;
+    const fetchCount = async () => {
+      try {
+        const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include' });
+        if (response.ok) {
+          const data = await response.json();
+          setModerationCount(data.count);
+        }
+      } catch (err) {
+        // Silently ignore — badge just won't show
+      }
+    };
+    fetchCount();
+    const interval = setInterval(fetchCount, 60000); // Refresh every minute
+    return () => clearInterval(interval);
+  }, [isAdmin]);
 
   // Preview coordinates for real-time editing sync between Map and Sidebar
   const [previewCoords, setPreviewCoords] = useState(null);
@@ -1661,10 +1684,28 @@ function AppContent() {
                 Data Collection
               </button>
               <button
+                className={`settings-tab-btn ${settingsTab === 'moderation' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('moderation')}
+                style={{ position: 'relative' }}
+              >
+                Moderation
+                {moderationCount > 0 && (
+                  <span style={{
+                    position: 'absolute', top: '-4px', right: '-4px',
+                    backgroundColor: '#f44336', color: 'white',
+                    borderRadius: '50%', width: '18px', height: '18px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.7rem', fontWeight: 'bold'
+                  }}>
+                    {moderationCount > 99 ? '99+' : moderationCount}
+                  </span>
+                )}
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('google')}
               >
-                Google Integration
+                Google
               </button>
             </nav>
 
@@ -1676,6 +1717,7 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
+              {settingsTab === 'moderation' && <ModerationInbox />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
                   <SyncSettings onDataRefresh={refreshAllData} />

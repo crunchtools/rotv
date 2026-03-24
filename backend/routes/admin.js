@@ -3,7 +3,7 @@ import multer from 'multer';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { isAdmin } from '../middleware/auth.js';
+import { isAdmin, isAuthenticated } from '../middleware/auth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -73,7 +73,18 @@ import {
   requestCancellation,
   getDisplaySlots as getNewsDisplaySlots
 } from '../services/newsService.js';
-import { submitBatchNewsJob } from '../services/jobScheduler.js';
+import { submitBatchNewsJob, queueModerationJob } from '../services/jobScheduler.js';
+import {
+  getQueue as getModerationQueue,
+  getPendingCount as getModerationPendingCount,
+  getItemDetail as getModerationItemDetail,
+  approveItem,
+  rejectItem,
+  bulkApprove,
+  editAndPublish,
+  requeueItem,
+  createItem
+} from '../services/moderationService.js';
 import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
 import {
   collectTrailStatus,
@@ -552,7 +563,11 @@ export function createAdminRouter(pool) {
       'ai_search_primary_limit',
       'twitter_username',
       'twitter_password',
-      'seasonal_themes'
+      'seasonal_themes',
+      'moderation_enabled',
+      'moderation_auto_approve_threshold',
+      'moderation_auto_approve_enabled',
+      'photo_submissions_enabled'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
@@ -4461,6 +4476,210 @@ export function createAdminRouter(pool) {
       res.json(result);
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ============================================
+  // Moderation Queue Routes (#106)
+  // ============================================
+
+  // Get paginated moderation queue
+  router.get('/moderation/queue', isAdmin, async (req, res) => {
+    try {
+      const { page = 1, limit = 20, type, status = 'pending' } = req.query;
+      const result = await getModerationQueue(pool, {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        contentType: type || null,
+        status
+      });
+      res.json(result);
+    } catch (error) {
+      console.error('Error fetching moderation queue:', error);
+      res.status(500).json({ error: 'Failed to fetch moderation queue' });
+    }
+  });
+
+  // Get pending count for badge
+  router.get('/moderation/queue/count', isAdmin, async (req, res) => {
+    try {
+      const count = await getModerationPendingCount(pool);
+      res.json({ count });
+    } catch (error) {
+      console.error('Error fetching moderation count:', error);
+      res.status(500).json({ error: 'Failed to fetch count' });
+    }
+  });
+
+  // Get full item detail with AI reasoning
+  router.get('/moderation/item/:type/:id', isAdmin, async (req, res) => {
+    try {
+      const { type, id } = req.params;
+      const item = await getModerationItemDetail(pool, type, parseInt(id));
+      if (!item) {
+        return res.status(404).json({ error: 'Item not found' });
+      }
+      res.json(item);
+    } catch (error) {
+      console.error('Error fetching moderation item:', error);
+      res.status(500).json({ error: 'Failed to fetch item' });
+    }
+  });
+
+  // Approve a single item
+  router.post('/moderation/approve', isAdmin, async (req, res) => {
+    try {
+      const { type, id } = req.body;
+      if (!type || !id) {
+        return res.status(400).json({ error: 'type and id are required' });
+      }
+      await approveItem(pool, type, id, req.user.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error approving item:', error);
+      res.status(500).json({ error: 'Failed to approve item' });
+    }
+  });
+
+  // Reject a single item
+  router.post('/moderation/reject', isAdmin, async (req, res) => {
+    try {
+      const { type, id, reason } = req.body;
+      if (!type || !id) {
+        return res.status(400).json({ error: 'type and id are required' });
+      }
+      await rejectItem(pool, type, id, req.user.id, reason);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error rejecting item:', error);
+      res.status(500).json({ error: 'Failed to reject item' });
+    }
+  });
+
+  // Bulk approve
+  router.post('/moderation/bulk-approve', isAdmin, async (req, res) => {
+    try {
+      const { items } = req.body;
+      if (!items || !Array.isArray(items)) {
+        return res.status(400).json({ error: 'items array is required' });
+      }
+      const result = await bulkApprove(pool, items, req.user.id);
+      res.json(result);
+    } catch (error) {
+      console.error('Error bulk approving:', error);
+      res.status(500).json({ error: 'Failed to bulk approve' });
+    }
+  });
+
+  // Edit and publish
+  router.post('/moderation/edit-publish', isAdmin, async (req, res) => {
+    try {
+      const { type, id, edits } = req.body;
+      if (!type || !id || !edits) {
+        return res.status(400).json({ error: 'type, id, and edits are required' });
+      }
+      await editAndPublish(pool, type, id, edits, req.user.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error edit-publishing:', error);
+      res.status(500).json({ error: 'Failed to edit and publish' });
+    }
+  });
+
+  // Requeue for re-review
+  router.post('/moderation/requeue', isAdmin, async (req, res) => {
+    try {
+      const { type, id } = req.body;
+      if (!type || !id) {
+        return res.status(400).json({ error: 'type and id are required' });
+      }
+      await requeueItem(pool, type, id);
+      // Queue a new moderation job
+      await queueModerationJob(type, id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error requeuing item:', error);
+      res.status(500).json({ error: 'Failed to requeue item' });
+    }
+  });
+
+  // Create new content item (admin)
+  router.post('/moderation/create', isAdmin, async (req, res) => {
+    try {
+      const { type, fields } = req.body;
+      if (!type || !fields || !fields.title || !fields.poi_id) {
+        return res.status(400).json({ error: 'type, fields.title, and fields.poi_id are required' });
+      }
+      if (type === 'event' && !fields.start_date) {
+        return res.status(400).json({ error: 'fields.start_date is required for events' });
+      }
+      const newId = await createItem(pool, type, fields, req.user.id);
+      res.json({ success: true, id: newId });
+    } catch (error) {
+      console.error('Error creating content:', error);
+      res.status(500).json({ error: 'Failed to create content' });
+    }
+  });
+
+  // ============================================
+  // Photo Submission Route (public, authenticated)
+  // ============================================
+
+  const photoUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    fileFilter: (req, file, cb) => {
+      if (file.mimetype.startsWith('image/')) {
+        cb(null, true);
+      } else {
+        cb(new Error('Only image files are allowed'));
+      }
+    }
+  });
+
+  router.post('/photos/submit', isAuthenticated, photoUpload.single('file'), async (req, res) => {
+    try {
+      // Check if photo submissions are enabled
+      const enabledResult = await pool.query(
+        "SELECT value FROM admin_settings WHERE key = 'photo_submissions_enabled'"
+      );
+      const enabled = enabledResult.rows.length && enabledResult.rows[0].value === 'true';
+      if (!enabled) {
+        return res.status(403).json({ error: 'Photo submissions are currently disabled' });
+      }
+
+      const { poi_id, caption } = req.body;
+      if (!req.file || !poi_id) {
+        return res.status(400).json({ error: 'file and poi_id are required' });
+      }
+
+      // Upload to image server
+      const uploadResult = await imageServerClient.uploadImage(
+        req.file.buffer,
+        parseInt(poi_id),
+        'submission',
+        req.file.originalname,
+        req.file.mimetype
+      );
+
+      if (!uploadResult.success) {
+        return res.status(500).json({ error: 'Failed to upload image: ' + uploadResult.error });
+      }
+
+      // Create photo_submissions record
+      const result = await pool.query(
+        `INSERT INTO photo_submissions (poi_id, image_server_asset_id, original_filename, submitted_by, caption)
+         VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+        [parseInt(poi_id), uploadResult.assetId, req.file.originalname, req.user.id, caption || null]
+      );
+
+      // Queue moderation job
+      await queueModerationJob('photo', result.rows[0].id);
+
+      res.json({ success: true, submissionId: result.rows[0].id });
+    } catch (error) {
+      console.error('Error submitting photo:', error);
+      res.status(500).json({ error: 'Failed to submit photo' });
     }
   });
 

@@ -1237,9 +1237,10 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       }
 
       // Save the news item with the RESOLVED URL (not the redirect)
+      // New items enter as 'pending' for moderation review
       await pool.query(`
-        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, published_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, published_at, moderation_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
       `, [
         poiId,
         item.title,
@@ -1320,9 +1321,10 @@ export async function saveEventItems(pool, poiId, eventItems) {
       }
 
       // Save the event with the RESOLVED URL (not the redirect)
+      // New items enter as 'pending' for moderation review
       await pool.query(`
-        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, moderation_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
       `, [
         poiId,
         item.title,
@@ -1826,6 +1828,7 @@ export async function getNewsForPoi(pool, poiId, limit = 10) {
     SELECT id, title, summary, source_url, source_name, news_type, published_at, created_at
     FROM poi_news
     WHERE poi_id = $1
+      AND moderation_status IN ('published', 'auto_approved')
     ORDER BY COALESCE(published_at, created_at) DESC
     LIMIT $2
   `, [poiId, limit]);
@@ -1844,6 +1847,7 @@ export async function getEventsForPoi(pool, poiId, upcomingOnly = true) {
     SELECT id, title, description, start_date, end_date, event_type, location_details, source_url, created_at
     FROM poi_events
     WHERE poi_id = $1
+      AND moderation_status IN ('published', 'auto_approved')
   `;
 
   if (upcomingOnly) {
@@ -1867,6 +1871,7 @@ export async function getRecentNews(pool, limit = 20) {
            n.published_at, n.created_at, p.id as poi_id, p.name as poi_name, p.poi_type
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
+    WHERE n.moderation_status IN ('published', 'auto_approved')
     ORDER BY COALESCE(n.published_at, n.created_at) DESC
     LIMIT $1
   `, [limit]);
@@ -1887,6 +1892,7 @@ export async function getUpcomingEvents(pool, daysAhead = 30) {
     JOIN pois p ON e.poi_id = p.id
     WHERE e.start_date >= CURRENT_DATE
       AND e.start_date <= CURRENT_DATE + INTERVAL '1 day' * $1
+      AND e.moderation_status IN ('published', 'auto_approved')
     ORDER BY e.start_date ASC
   `, [daysAhead]);
 

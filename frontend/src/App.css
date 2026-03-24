@@ -4574,6 +4574,7 @@ body {
   border-bottom: 2px solid #e0e0e0;
   background: transparent;
   padding: 0;
+  flex-wrap: wrap;
 }
 
 .settings-tab-btn {
