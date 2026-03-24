@@ -91,7 +91,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
         ...(filteredVirtualPois || []).map(v => v.id)
       ]);
       // Always include news from POIs without map coordinates (boundary, virtual, trails without geometry)
-      const unmappableTypes = new Set(['boundary', 'virtual']);
+      const unmappableTypes = new Set(['boundary', 'virtual', 'trail']);
       filtered = filtered.filter(item =>
         visiblePoiIds.has(item.poi_id) || unmappableTypes.has(item.poi_type)
       );

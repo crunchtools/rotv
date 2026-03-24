@@ -97,7 +97,7 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
         ...(filteredLinearFeatures || []).map(f => f.id),
         ...(filteredVirtualPois || []).map(v => v.id)
       ]);
-      const unmappableTypes = new Set(['boundary', 'virtual']);
+      const unmappableTypes = new Set(['boundary', 'virtual', 'trail']);
       filtered = filtered.filter(item =>
         visiblePoiIds.has(item.poi_id) || unmappableTypes.has(item.poi_type)
       );
