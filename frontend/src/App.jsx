@@ -1705,7 +1705,7 @@ function AppContent() {
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('google')}
               >
-                Google Integration
+                Google
               </button>
             </nav>
 

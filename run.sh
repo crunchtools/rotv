@@ -10,7 +10,7 @@ CONTAINER_NAME="rotv"
 USE_PERSISTENT="${PERSISTENT_DATA:-false}"
 DATA_DIR="${DATA_DIR:-$HOME/.rotv/pgdata}"
 SEED_DATA_FILE="$HOME/.rotv/seed-data.sql"
-PRODUCTION_HOST="${PRODUCTION_HOST:-sven.dc3.crunchtools.com}"
+PRODUCTION_HOST="${PRODUCTION_HOST:-lotor.dc3.crunchtools.com}"
 PRODUCTION_PORT="${PRODUCTION_PORT:-22422}"
 PRODUCTION_CONTAINER="${PRODUCTION_CONTAINER:-rootsofthevalley.org}"
 

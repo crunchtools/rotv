@@ -1442,7 +1442,6 @@ app.get('/api/news/recent', async (req, res) => {
 // All upcoming events across the park (public)
 app.get('/api/events/upcoming', async (req, res) => {
   try {
-    const daysAhead = parseInt(req.query.days) || 30;
     const upcomingEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
              e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
@@ -1450,10 +1449,9 @@ app.get('/api/events/upcoming', async (req, res) => {
       JOIN pois p ON e.poi_id = p.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
         AND e.start_date >= CURRENT_DATE
-        AND e.start_date <= CURRENT_DATE + INTERVAL '1 day' * $1
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY e.start_date ASC
-    `, [daysAhead]);
+    `);
     res.json(upcomingEventsQuery.rows);
   } catch (error) {
     console.error('Error fetching upcoming events:', error);

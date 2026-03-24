@@ -82,7 +82,8 @@ import {
   rejectItem,
   bulkApprove,
   editAndPublish,
-  requeueItem
+  requeueItem,
+  createItem
 } from '../services/moderationService.js';
 import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
 import {
@@ -4485,11 +4486,12 @@ export function createAdminRouter(pool) {
   // Get paginated moderation queue
   router.get('/moderation/queue', isAdmin, async (req, res) => {
     try {
-      const { page = 1, limit = 20, type } = req.query;
+      const { page = 1, limit = 20, type, status = 'pending' } = req.query;
       const result = await getModerationQueue(pool, {
         page: parseInt(page),
         limit: parseInt(limit),
-        contentType: type || null
+        contentType: type || null,
+        status
       });
       res.json(result);
     } catch (error) {
@@ -4598,6 +4600,24 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error requeuing item:', error);
       res.status(500).json({ error: 'Failed to requeue item' });
+    }
+  });
+
+  // Create new content item (admin)
+  router.post('/moderation/create', isAdmin, async (req, res) => {
+    try {
+      const { type, fields } = req.body;
+      if (!type || !fields || !fields.title || !fields.poi_id) {
+        return res.status(400).json({ error: 'type, fields.title, and fields.poi_id are required' });
+      }
+      if (type === 'event' && !fields.start_date) {
+        return res.status(400).json({ error: 'fields.start_date is required for events' });
+      }
+      const newId = await createItem(pool, type, fields, req.user.id);
+      res.json({ success: true, id: newId });
+    } catch (error) {
+      console.error('Error creating content:', error);
+      res.status(500).json({ error: 'Failed to create content' });
     }
   });
 

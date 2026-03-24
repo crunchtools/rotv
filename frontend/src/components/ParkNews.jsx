@@ -90,7 +90,11 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
         ...(filteredLinearFeatures || []).map(f => f.id),
         ...(filteredVirtualPois || []).map(v => v.id)
       ]);
-      filtered = filtered.filter(item => visiblePoiIds.has(item.poi_id));
+      // Always include news from POIs without map coordinates (boundary, virtual, trails without geometry)
+      const unmappableTypes = new Set(['boundary', 'virtual']);
+      filtered = filtered.filter(item =>
+        visiblePoiIds.has(item.poi_id) || unmappableTypes.has(item.poi_type)
+      );
     }
 
     // Apply text search filter
@@ -103,8 +107,8 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
       );
     }
 
-    // Apply type filter
-    filtered = filtered.filter(item => typeFilters[item.news_type || 'general']);
+    // Apply type filter (unknown types default to visible)
+    filtered = filtered.filter(item => typeFilters[item.news_type || 'general'] !== false);
 
     return filtered;
   }, [news, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);

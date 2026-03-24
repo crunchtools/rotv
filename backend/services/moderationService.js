@@ -6,6 +6,33 @@
 
 import { moderateContent, moderatePhoto } from './geminiService.js';
 
+async function fetchSourceContent(url) {
+  if (!url || !url.trim()) return { reachable: false, reason: 'no source URL', content: null };
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: controller.signal,
+      headers: { 'User-Agent': 'ROTV-Moderation/1.0' },
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+    if (!response.ok) return { reachable: false, reason: `HTTP ${response.status}`, content: null };
+    const html = await response.text();
+    const textContent = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 3000);
+    return { reachable: true, content: textContent };
+  } catch (error) {
+    return { reachable: false, reason: error.name === 'AbortError' ? 'timeout' : error.message, content: null };
+  }
+}
+
 const TABLE_MAP = {
   news: 'poi_news',
   event: 'poi_events',
@@ -22,11 +49,12 @@ export async function processItem(pool, contentType, contentId) {
   console.log(`[Moderation] Processing ${contentType} #${contentId}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_auto_reject_floor')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const autoApproveEnabled = settings.moderation_auto_approve_enabled !== 'false';
   const threshold = parseFloat(settings.moderation_auto_approve_threshold) || 0.9;
+  const rejectFloor = parseFloat(settings.moderation_auto_reject_floor) || 0.5;
 
   let scoring;
 
@@ -40,13 +68,69 @@ export async function processItem(pool, contentType, contentId) {
     if (!newsQuery.rows.length) return;
     const row = newsQuery.rows[0];
 
+    const dupCheck = await pool.query(
+      `SELECT id FROM poi_news WHERE LOWER(title) = LOWER($1) AND id != $2
+       AND moderation_status IN ('published', 'auto_approved') LIMIT 1`,
+      [row.title, contentId]
+    );
+    if (dupCheck.rows.length) {
+      await pool.query(
+        `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        [`Rejected: duplicate of approved news #${dupCheck.rows[0].id}`, contentId]
+      );
+      console.log(`[Moderation] news #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
+      return;
+    }
+
+    if (!row.source_url || !row.source_url.trim()) {
+      scoring = { confidence_score: 0, reasoning: 'Rejected: no source URL (Read More link required)', issues: ['missing_source_url'] };
+      await pool.query(
+        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'pending' WHERE id = $3`,
+        [scoring.confidence_score, scoring.reasoning, contentId]
+      );
+      console.log(`[Moderation] news #${contentId}: rejected (no source URL)`);
+      return;
+    }
+
+    const sourceCheck = await fetchSourceContent(row.source_url);
+    if (!sourceCheck.reachable) {
+      await pool.query(
+        `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
+      );
+      console.log(`[Moderation] news #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
+      return;
+    }
+
     scoring = await moderateContent(pool, {
       type: 'news',
       title: row.title,
       summary: row.summary,
       source_url: row.source_url,
+      source_page_content: sourceCheck.content,
       poi_name: row.poi_name
     });
+
+    const issuesList = scoring.issues || [];
+    const rejectionIssues = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
+    const foundIssue = rejectionIssues.find(i => issuesList.includes(i));
+    if (foundIssue) {
+      await pool.query(
+        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
+        [scoring.confidence_score, scoring.reasoning, contentId]
+      );
+      console.log(`[Moderation] news #${contentId}: rejected (${foundIssue})`);
+      return;
+    }
+
+    if (scoring.confidence_score < rejectFloor) {
+      await pool.query(
+        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
+        [scoring.confidence_score, scoring.reasoning, contentId]
+      );
+      console.log(`[Moderation] news #${contentId}: rejected (score ${scoring.confidence_score} below floor ${rejectFloor})`);
+      return;
+    }
 
     const resolvedStatus = autoApproveEnabled && scoring.confidence_score >= threshold
       ? 'auto_approved' : 'pending';
@@ -58,7 +142,7 @@ export async function processItem(pool, contentType, contentId) {
 
   } else if (contentType === 'event') {
     const eventQuery = await pool.query(
-      `SELECT e.id, e.title, e.description, e.source_url, p.name as poi_name
+      `SELECT e.id, e.title, e.description, e.source_url, e.start_date, p.name as poi_name
        FROM poi_events e
        LEFT JOIN pois p ON e.poi_id = p.id
        WHERE e.id = $1`, [contentId]
@@ -66,13 +150,63 @@ export async function processItem(pool, contentType, contentId) {
     if (!eventQuery.rows.length) return;
     const row = eventQuery.rows[0];
 
+    const dupCheck = await pool.query(
+      `SELECT id FROM poi_events WHERE LOWER(title) = LOWER($1) AND start_date = $2 AND id != $3
+       AND moderation_status IN ('published', 'auto_approved') LIMIT 1`,
+      [row.title, row.start_date, contentId]
+    );
+    if (dupCheck.rows.length) {
+      await pool.query(
+        `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        [`Rejected: duplicate of approved event #${dupCheck.rows[0].id}`, contentId]
+      );
+      console.log(`[Moderation] event #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
+      return;
+    }
+
+    let eventSourceContent = null;
+    if (row.source_url && row.source_url.trim()) {
+      const sourceCheck = await fetchSourceContent(row.source_url);
+      if (!sourceCheck.reachable) {
+        await pool.query(
+          `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+          [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
+        );
+        console.log(`[Moderation] event #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
+        return;
+      }
+      eventSourceContent = sourceCheck.content;
+    }
+
     scoring = await moderateContent(pool, {
       type: 'event',
       title: row.title,
       summary: row.description,
       source_url: row.source_url,
+      source_page_content: eventSourceContent,
       poi_name: row.poi_name
     });
+
+    const issuesList = scoring.issues || [];
+    const rejectionIssues = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
+    const foundIssue = rejectionIssues.find(i => issuesList.includes(i));
+    if (foundIssue) {
+      await pool.query(
+        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
+        [scoring.confidence_score, scoring.reasoning, contentId]
+      );
+      console.log(`[Moderation] event #${contentId}: rejected (${foundIssue})`);
+      return;
+    }
+
+    if (scoring.confidence_score < rejectFloor) {
+      await pool.query(
+        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
+        [scoring.confidence_score, scoring.reasoning, contentId]
+      );
+      console.log(`[Moderation] event #${contentId}: rejected (score ${scoring.confidence_score} below floor ${rejectFloor})`);
+      return;
+    }
 
     const resolvedStatus = autoApproveEnabled && scoring.confidence_score >= threshold
       ? 'auto_approved' : 'pending';
@@ -203,35 +337,55 @@ export async function bulkApprove(pool, items, adminUserId) {
 }
 
 export async function editAndPublish(pool, contentType, contentId, edits, adminUserId) {
+  const EDITABLE_NEWS = ['title', 'summary', 'source_url', 'source_name', 'news_type', 'poi_id'];
+  const EDITABLE_EVENT = ['title', 'description', 'start_date', 'end_date', 'event_type', 'location_details', 'source_url', 'poi_id'];
+  const EDITABLE_PHOTO = ['caption', 'poi_id'];
+
+  const allowedFields = contentType === 'news' ? EDITABLE_NEWS
+    : contentType === 'event' ? EDITABLE_EVENT : EDITABLE_PHOTO;
+  const table = TABLE_MAP[contentType];
+
+  const setClauses = [];
+  const values = [adminUserId, contentId];
+  let idx = 3;
+
+  for (const field of allowedFields) {
+    if (edits[field] !== undefined) {
+      setClauses.push(`${field} = $${idx}`);
+      values.push(edits[field]);
+      idx++;
+    }
+  }
+
+  setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);
+  await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $2`, values);
+}
+
+export async function createItem(pool, contentType, fields, adminUserId) {
   if (contentType === 'news') {
-    const setClauses = [];
-    const values = [adminUserId, contentId];
-    let idx = 3;
-
-    if (edits.title) { setClauses.push(`title = $${idx}`); values.push(edits.title); idx++; }
-    if (edits.summary) { setClauses.push(`summary = $${idx}`); values.push(edits.summary); idx++; }
-
-    setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);
-    await pool.query(`UPDATE poi_news SET ${setClauses.join(', ')} WHERE id = $2`, values);
+    const inserted = await pool.query(
+      `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, moderation_status, submitted_by)
+       VALUES ($1, $2, $3, $4, $5, $6, 'published', $7) RETURNING id`,
+      [fields.poi_id, fields.title, fields.summary || null, fields.source_url || null,
+       fields.source_name || null, fields.news_type || 'general', adminUserId]
+    );
+    return inserted.rows[0].id;
   } else if (contentType === 'event') {
-    const setClauses = [];
-    const values = [adminUserId, contentId];
-    let idx = 3;
-
-    if (edits.title) { setClauses.push(`title = $${idx}`); values.push(edits.title); idx++; }
-    if (edits.description) { setClauses.push(`description = $${idx}`); values.push(edits.description); idx++; }
-
-    setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);
-    await pool.query(`UPDATE poi_events SET ${setClauses.join(', ')} WHERE id = $2`, values);
+    const inserted = await pool.query(
+      `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, moderation_status, submitted_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', $9) RETURNING id`,
+      [fields.poi_id, fields.title, fields.description || null, fields.start_date,
+       fields.end_date || null, fields.event_type || null, fields.location_details || null,
+       fields.source_url || null, adminUserId]
+    );
+    return inserted.rows[0].id;
   } else if (contentType === 'photo') {
-    const setClauses = [];
-    const values = [adminUserId, contentId];
-    let idx = 3;
-
-    if (edits.caption) { setClauses.push(`caption = $${idx}`); values.push(edits.caption); idx++; }
-
-    setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);
-    await pool.query(`UPDATE photo_submissions SET ${setClauses.join(', ')} WHERE id = $2`, values);
+    const inserted = await pool.query(
+      `INSERT INTO photo_submissions (poi_id, caption, moderation_status, submitted_by)
+       VALUES ($1, $2, 'published', $3) RETURNING id`,
+      [fields.poi_id, fields.caption || null, adminUserId]
+    );
+    return inserted.rows[0].id;
   }
 }
 
@@ -246,20 +400,45 @@ export async function requeueItem(pool, contentType, contentId) {
   );
 }
 
-export async function getQueue(pool, { page = 1, limit = 20, contentType = null } = {}) {
+export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending' } = {}) {
   const offset = (page - 1) * limit;
+  const statusList = status === 'all'
+    ? ['pending', 'published', 'auto_approved', 'rejected']
+    : status === 'approved'
+      ? ['published', 'auto_approved']
+      : [status];
+
+  const baseQuery = `
+    SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
+           moderation_status, confidence_score, ai_reasoning,
+           submitted_by, moderated_by, moderated_at, created_at, source_url
+    FROM poi_news WHERE moderation_status = ANY($1)
+    UNION ALL
+    SELECT id, 'event' AS content_type, poi_id, title, description,
+           moderation_status, confidence_score, ai_reasoning,
+           submitted_by, moderated_by, moderated_at, created_at, source_url
+    FROM poi_events WHERE moderation_status = ANY($1)
+    UNION ALL
+    SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
+           moderation_status, confidence_score, ai_reasoning,
+           submitted_by, moderated_by, moderated_at, created_at, NULL AS source_url
+    FROM photo_submissions WHERE moderation_status = ANY($1)`;
 
   if (contentType) {
+    const wrappedQuery = `SELECT * FROM (${baseQuery}) AS q WHERE content_type = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4`;
+    const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q WHERE content_type = $2`;
     const [queueItems, countRow] = await Promise.all([
-      pool.query(`SELECT * FROM moderation_queue WHERE content_type = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3`, [contentType, limit, offset]),
-      pool.query(`SELECT COUNT(*) FROM moderation_queue WHERE content_type = $1`, [contentType])
+      pool.query(wrappedQuery, [statusList, contentType, limit, offset]),
+      pool.query(countQuery, [statusList, contentType])
     ]);
     return { items: queueItems.rows, total: parseInt(countRow.rows[0].count), page, limit };
   }
 
+  const wrappedQuery = `SELECT * FROM (${baseQuery}) AS q ORDER BY created_at DESC LIMIT $2 OFFSET $3`;
+  const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q`;
   const [queueItems, countRow] = await Promise.all([
-    pool.query(`SELECT * FROM moderation_queue ORDER BY created_at DESC LIMIT $1 OFFSET $2`, [limit, offset]),
-    pool.query(`SELECT COUNT(*) FROM moderation_queue`)
+    pool.query(wrappedQuery, [statusList, limit, offset]),
+    pool.query(countQuery, [statusList])
   ]);
   return { items: queueItems.rows, total: parseInt(countRow.rows[0].count), page, limit };
 }
