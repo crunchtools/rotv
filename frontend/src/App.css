@@ -10585,138 +10585,55 @@ img.type-filter-icon {
 }
 
 /* News type filter chips */
-.type-filter-chip.closure {
-  color: #d32f2f;
-}
+.type-filter-chip.general { color: #6a1b9a; }
+.type-filter-chip.general.active { background: #f3e5f5; }
+.type-filter-chip.general .type-filter-icon { background-color: #6a1b9a; }
 
-.type-filter-chip.closure.active {
-  background: #ffebee;
-}
+.type-filter-chip.alert { color: #c62828; }
+.type-filter-chip.alert.active { background: #ffebee; }
+.type-filter-chip.alert .type-filter-icon { background-color: #c62828; }
 
-.type-filter-chip.closure .type-filter-icon {
-  background-color: #d32f2f;
-}
+.type-filter-chip.wildlife { color: #2e7d32; }
+.type-filter-chip.wildlife.active { background: #e8f5e9; }
+.type-filter-chip.wildlife .type-filter-icon { background-color: #2e7d32; }
 
-.type-filter-chip.seasonal {
-  color: #1976d2;
-}
-
-.type-filter-chip.seasonal.active {
-  background: #e3f2fd;
-}
-
-.type-filter-chip.seasonal .type-filter-icon {
-  background-color: #1976d2;
-}
-
-.type-filter-chip.maintenance {
-  color: #f57c00;
-}
-
-.type-filter-chip.maintenance.active {
-  background: #fff3e0;
-}
-
-.type-filter-chip.maintenance .type-filter-icon {
-  background-color: #f57c00;
-}
-
-.type-filter-chip.wildlife {
-  color: #388e3c;
-}
-
-.type-filter-chip.wildlife.active {
-  background: #e8f5e9;
-}
-
-.type-filter-chip.wildlife .type-filter-icon {
-  background-color: #388e3c;
-}
-
-.type-filter-chip.general {
-  color: #616161;
-}
-
-.type-filter-chip.general.active {
-  background: #f5f5f5;
-}
-
-.type-filter-chip.general .type-filter-icon {
-  background-color: #616161;
-}
+.type-filter-chip.infrastructure { color: #f57c00; }
+.type-filter-chip.infrastructure.active { background: #fff3e0; }
+.type-filter-chip.infrastructure .type-filter-icon { background-color: #f57c00; }
 
 /* Event type filter chips */
-.type-filter-chip.guided-tour {
-  color: #0288d1;
-}
+.type-filter-chip.hike { color: #2e7d32; }
+.type-filter-chip.hike.active { background: #e8f5e9; }
+.type-filter-chip.hike .type-filter-icon { background-color: #2e7d32; }
 
-.type-filter-chip.guided-tour.active {
-  background: #e1f5fe;
-}
+.type-filter-chip.race { color: #e65100; }
+.type-filter-chip.race.active { background: #fff3e0; }
+.type-filter-chip.race .type-filter-icon { background-color: #e65100; }
 
-.type-filter-chip.guided-tour .type-filter-icon {
-  background-color: #0288d1;
-}
+.type-filter-chip.concert { color: #d81b60; }
+.type-filter-chip.concert.active { background: #fce4ec; }
+.type-filter-chip.concert .type-filter-icon { background-color: #d81b60; }
 
-.type-filter-chip.program {
-  color: #7b1fa2;
-}
+.type-filter-chip.festival { color: #c62828; }
+.type-filter-chip.festival.active { background: #ffebee; }
+.type-filter-chip.festival .type-filter-icon { background-color: #c62828; }
 
-.type-filter-chip.program.active {
-  background: #f3e5f5;
-}
+.type-filter-chip.program { color: #6a1b9a; }
+.type-filter-chip.program.active { background: #f3e5f5; }
+.type-filter-chip.program .type-filter-icon { background-color: #6a1b9a; }
 
-.type-filter-chip.program .type-filter-icon {
-  background-color: #7b1fa2;
-}
+.type-filter-chip.volunteer { color: #4caf50; }
+.type-filter-chip.volunteer.active { background: #e8f5e9; }
+.type-filter-chip.volunteer .type-filter-icon { background-color: #4caf50; }
 
-.type-filter-chip.festival {
-  color: #c2185b;
-}
+.type-filter-chip.arts { color: #1565c0; }
+.type-filter-chip.arts.active { background: #e3f2fd; }
+.type-filter-chip.arts .type-filter-icon { background-color: #1565c0; }
 
-.type-filter-chip.festival.active {
-  background: #fce4ec;
-}
-
-.type-filter-chip.festival .type-filter-icon {
-  background-color: #c2185b;
-}
-
-.type-filter-chip.volunteer {
-  color: #689f38;
-}
-
-.type-filter-chip.volunteer.active {
-  background: #f1f8e9;
-}
-
-.type-filter-chip.volunteer .type-filter-icon {
-  background-color: #689f38;
-}
-
-.type-filter-chip.educational {
-  color: #e64a19;
-}
-
-.type-filter-chip.educational.active {
-  background: #fbe9e7;
-}
-
-.type-filter-chip.educational .type-filter-icon {
-  background-color: #e64a19;
-}
-
-.type-filter-chip.concert {
-  color: #d81b60;
-}
-
-.type-filter-chip.concert.active {
-  background: #fce4ec;
-}
-
-.type-filter-chip.concert .type-filter-icon {
-  background-color: #d81b60;
-}
+/* Shared type: community (used by both news and events) */
+.type-filter-chip.community { color: #ff9800; }
+.type-filter-chip.community.active { background: #fff3e0; }
+.type-filter-chip.community .type-filter-icon { background-color: #ff9800; }
 
 .results-count {
   font-size: 0.85rem;

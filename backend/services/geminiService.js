@@ -445,41 +445,59 @@ ${sourceSection}
 Claimed POI: ${content.poi_name || '(unknown)'}
 
 IMPORTANT: The claimed POI is an admin-curated location in our database.
-If content is associated with a POI, it IS geographically relevant by definition.
 Do NOT reject content just because a venue (e.g. Blossom Music Center) is "near"
-rather than "inside" the park — if it's a POI in our system, it belongs.
+rather than "inside" the park — venues near the park are valid POIs.
+
+However, a valid POI does NOT mean all content about that POI is relevant.
+This site is "Roots of The Valley" — a guide to Cuyahoga Valley National Park.
+Content must connect to the park's mission: nature, trails, outdoor recreation,
+conservation, local history, ecology, wildlife, community stewardship, scenic
+railroads, canal towpath heritage, or arts/culture organizations that serve the valley.
+
+For broad POIs like cities (e.g., "City of Cleveland", "City of Akron"):
+- A nature photography exhibit in Cleveland → RELEVANT (arts + nature)
+- A trail race through Akron → RELEVANT (outdoor recreation)
+- A random bar show or concert in Cleveland → NOT RELEVANT (generic entertainment)
+- A restaurant opening → NOT RELEVANT (urban dining)
+- A community cleanup of a creek → RELEVANT (conservation + community)
+Ask: "Would a Cuyahoga Valley National Park visitor care about this?"
+If not, add "off_mission" to issues and score 0.0.
 
 Score 0.0-1.0 on these criteria:
-1. Geographic relevance: The POI list is curated by admins — do not reject content
-   just because a POI is "near" rather than "inside" the park. However, you MUST verify
-   the content is actually about Northeast Ohio / Cuyahoga Valley region. A name match
-   alone is not enough — "Missing Link Trail" in CVNP is different from "Missing Link
-   Snowmobile Club" in upstate New York. If the content describes a location clearly
-   outside the CVNP region (different state, different country), add "wrong_geography"
-   to issues and score 0.0.
-2. Factual accuracy and source credibility
-3. Content safety
-4. Whether the source page actually contains this content
-5. TIMELINESS: Is this actual news/event (timely, new information) or just a static
+1. Geographic relevance: Verify the content is about Northeast Ohio / Cuyahoga Valley
+   region. A name match alone is not enough — "Missing Link Trail" in CVNP is different
+   from "Missing Link Snowmobile Club" in upstate New York. If the content describes a
+   location clearly outside the CVNP region (different state, different country), add
+   "wrong_geography" to issues and score 0.0.
+2. Mission relevance: Does the content connect to nature, trails, outdoor recreation,
+   conservation, local history, ecology, wildlife, community stewardship, heritage, or
+   arts/culture organizations serving the valley? Generic urban entertainment, nightlife,
+   dining, sports, or commercial activity unrelated to the park mission should be rejected.
+   Add "off_mission" to issues and score 0.0.
+3. Factual accuracy and source credibility
+4. Content safety
+5. Whether the source page actually contains this content
+6. TIMELINESS: Is this actual news/event (timely, new information) or just a static
    reference page (permanent visitor info, place description, general park page)?
    Static pages that describe a location, trail, or facility are NOT news.
    Score static/reference content 0.0 and add "static_reference_page" to issues.
-6. POI RELEVANCE: Remove the POI name from the content and re-read it. Is the article
+7. POI RELEVANCE: Remove the POI name from the content and re-read it. Is the article
    STILL about that POI? If not, the POI is just a geographic reference and the content
    is NOT relevant. The true test: what is the HEADLINE TOPIC of this content?
    - "Bus rapid transit lanes on West 25th" → topic is transit policy, NOT a bridge
    - "Bridge closure for construction" → topic IS the bridge
    - "Obituary for Jane Doe" → topic is a person, NOT a cemetery
-   - "Concert at Blossom" → topic IS an event at the venue
+   - "Concert at Blossom Music Center" → topic IS an event at a park venue (RELEVANT)
+   - "Concert at a random Cleveland bar" → generic entertainment (NOT RELEVANT)
    - "Restaurant opening new location in Streetsboro" → topic is a DIFFERENT location,
      NOT the existing POI. News about other branches/locations of the same business
      is NOT relevant to the POI in our system.
    If the headline topic is NOT the specific POI location, add "wrong_poi" and score 0.0.
-7. CONTENT TYPE: If this is classified as "${content.type}", is that correct?
+8. CONTENT TYPE: If this is classified as "${content.type}", is that correct?
    If content labeled "news" is actually an event announcement (has a specific date,
    time, and venue for a future gathering/activity), add "misclassified_type" to issues
    and score 0.0. Event announcements belong in the events system, not news.
-8. PRIVATE/PERSONAL CONTENT: Reject content about private individuals' personal events
+9. PRIVATE/PERSONAL CONTENT: Reject content about private individuals' personal events
    that happen to take place at a park location. Examples: wedding photography blog posts,
    personal trip reports, engagement announcements, family reunion recaps. These are not
    park news — they are private moments. Add "private_content" to issues and score 0.0.
