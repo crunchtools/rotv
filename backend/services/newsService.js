@@ -421,6 +421,23 @@ TIMEZONE CONTEXT:
 Search for recent news and upcoming events SPECIFICALLY about: "{{name}}"
 Location type: {{poi_type}}
 
+MISSION SCOPE — Roots of The Valley:
+This is a guide to Cuyahoga Valley National Park and surrounding communities. Content must connect
+to the park's themes: nature, trails, outdoor recreation, conservation, local history, ecology,
+wildlife, community stewardship, scenic railroads, canal towpath heritage, or the arts/culture
+organizations that serve the valley.
+
+For broad POIs like cities, townships, or metro park districts:
+- ONLY collect events/news that relate to the mission above
+- A generic concert at a Cleveland bar is NOT relevant
+- A nature photography exhibit in Cleveland IS relevant
+- A trail race through Akron IS relevant
+- A random restaurant opening in Akron is NOT relevant
+- Outdoor festivals celebrating nature, history, or community near the valley ARE relevant
+- Generic urban nightlife, sports, dining, or entertainment are NOT relevant
+
+Ask yourself: "Would a visitor to Cuyahoga Valley National Park care about this?" If not, skip it.
+
 PRIORITY SOURCES TO SEARCH (check these first):
 - National Park Service (NPS) - nps.gov/cuva
 - Ohio Department of Transportation (ODOT) - transportation.ohio.gov
@@ -524,7 +541,7 @@ Return a JSON object with this exact structure:
       "source_name": "Source name (e.g., NPS.gov, Cleveland.com)",
       "source_url": "URL if available, or null",
       "published_date": "YYYY-MM-DD in ISO 8601 format, or null if unknown",
-      "news_type": "general|closure|seasonal|maintenance|wildlife"
+      "news_type": "general|alert|wildlife|infrastructure|community"
     }
   ],
   "events": [
@@ -533,7 +550,7 @@ Return a JSON object with this exact structure:
       "description": "Brief description - must specify this event is at {{name}}",
       "start_date": "YYYY-MM-DD in ISO 8601 format",
       "end_date": "YYYY-MM-DD in ISO 8601 format, or null if single day",
-      "event_type": "guided-tour|program|festival|volunteer|educational|concert",
+      "event_type": "hike|race|concert|festival|program|volunteer|arts|community|alert",
       "location_details": "Must be at or near {{name}} specifically",
       "source_url": "Registration or info URL if available"
     }
@@ -984,12 +1001,18 @@ TIMEZONE CONTEXT:
 - CRITICAL: Copy dates EXACTLY as they appear. Do NOT add or subtract days.
 - Example: "August 26, 2024" → "2024-08-26" (not 2024-08-25 or 2024-08-27)
 
+MISSION SCOPE — Roots of The Valley:
+Only include news that connects to Cuyahoga Valley National Park themes: nature, trails,
+outdoor recreation, conservation, local history, ecology, wildlife, community stewardship,
+scenic railroads, canal towpath heritage, or arts/culture organizations that serve the valley.
+Skip generic urban news, restaurant openings, nightlife, sports, or entertainment unrelated
+to the park's mission. Ask: "Would a CVNP visitor care about this?"
+
 Focus on:
 - Press releases from the organization
-- News articles from local/regional media
-- Industry publication coverage
-- Award announcements
-- Major initiatives or programs
+- News articles from local/regional media about nature, parks, trails, conservation
+- Award announcements related to the park mission
+- Major initiatives or programs tied to outdoor recreation, heritage, or ecology
 
 Return ONLY news from external sources (not from ${poi.name}'s own website).
 
@@ -1002,7 +1025,7 @@ Use this exact JSON structure:
       "source_name": "Source name (e.g., PR Newswire, Cleveland.com)",
       "source_url": "URL from Google Search results",
       "published_date": "YYYY-MM-DD in ISO 8601 format",
-      "news_type": "general|closure|seasonal|maintenance|wildlife"
+      "news_type": "general|alert|wildlife|infrastructure|community"
     }
   ]
 }

@@ -56,23 +56,23 @@ export function formatDateTime(dateString) {
  * News type configuration
  */
 export const NEWS_TYPES = {
-  closure: { icon: 'X', label: 'Closure', color: '#c62828' },
-  seasonal: { icon: 'S', label: 'Seasonal', color: '#1565c0' },
-  maintenance: { icon: 'W', label: 'Maintenance', color: '#f57c00' },
-  wildlife: { icon: 'A', label: 'Wildlife', color: '#2e7d32' },
-  general: { icon: 'N', label: 'General', color: '#6a1b9a' }
+  general: { icon: 'N', label: 'General', color: '#6a1b9a' },
+  alert: { icon: '!', label: 'Alert', color: '#c62828' },
+  wildlife: { icon: 'W', label: 'Wildlife', color: '#2e7d32' },
+  infrastructure: { icon: 'I', label: 'Infrastructure', color: '#f57c00' },
+  community: { icon: 'M', label: 'Community', color: '#1565c0' }
 };
 
-/**
- * Event type configuration
- */
 export const EVENT_TYPES = {
-  'guided-tour': { icon: 'T', label: 'Tour', color: '#1565c0' },
-  'program': { icon: 'P', label: 'Program', color: '#6a1b9a' },
+  'hike': { icon: 'H', label: 'Hike', color: '#2e7d32' },
+  'race': { icon: 'R', label: 'Race', color: '#e65100' },
+  'concert': { icon: 'C', label: 'Concert', color: '#e91e63' },
   'festival': { icon: 'F', label: 'Festival', color: '#c62828' },
-  'volunteer': { icon: 'V', label: 'Volunteer', color: '#2e7d32' },
-  'educational': { icon: 'E', label: 'Educational', color: '#f57c00' },
-  'concert': { icon: 'C', label: 'Concert', color: '#e91e63' }
+  'program': { icon: 'P', label: 'Program', color: '#6a1b9a' },
+  'volunteer': { icon: 'V', label: 'Volunteer', color: '#4caf50' },
+  'arts': { icon: 'A', label: 'Arts', color: '#1565c0' },
+  'community': { icon: 'M', label: 'Community', color: '#ff9800' },
+  'alert': { icon: '!', label: 'Alert', color: '#f44336' }
 };
 
 /**

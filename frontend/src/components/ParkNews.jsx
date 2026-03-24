@@ -15,11 +15,11 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [typeFilters, setTypeFilters] = useState({
-    closure: true,
-    seasonal: true,
-    maintenance: true,
+    general: true,
+    alert: true,
     wildlife: true,
-    general: true
+    infrastructure: true,
+    community: true
   });
 
   useEffect(() => {
@@ -83,18 +83,6 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
         hasLinearFeatures && filteredLinearFeatures.length === 0 &&
         hasVirtualPois && filteredVirtualPois.length === 0) {
       filtered = [];
-    } else if (filteredDestinations || filteredLinearFeatures || filteredVirtualPois) {
-      // Combine visible IDs from point destinations, linear features, and virtual POIs (organizations)
-      const visiblePoiIds = new Set([
-        ...(filteredDestinations || []).map(d => d.id),
-        ...(filteredLinearFeatures || []).map(f => f.id),
-        ...(filteredVirtualPois || []).map(v => v.id)
-      ]);
-      // Always include news from POIs without map coordinates (boundary, virtual, trails without geometry)
-      const unmappableTypes = new Set(['boundary', 'virtual', 'trail']);
-      filtered = filtered.filter(item =>
-        visiblePoiIds.has(item.poi_id) || unmappableTypes.has(item.poi_type)
-      );
     }
 
     // Apply text search filter
@@ -147,41 +135,22 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
           onChange={(e) => setSearchText(e.target.value)}
         />
         <div className="results-type-filters">
-          <div
-            className={`type-filter-chip closure ${typeFilters.closure ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, closure: !prev.closure }))}
-          >
-            <span className="type-filter-icon">X</span>
-            Closure
-          </div>
-          <div
-            className={`type-filter-chip seasonal ${typeFilters.seasonal ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, seasonal: !prev.seasonal }))}
-          >
-            <span className="type-filter-icon">S</span>
-            Seasonal
-          </div>
-          <div
-            className={`type-filter-chip maintenance ${typeFilters.maintenance ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, maintenance: !prev.maintenance }))}
-          >
-            <span className="type-filter-icon">W</span>
-            Maintenance
-          </div>
-          <div
-            className={`type-filter-chip wildlife ${typeFilters.wildlife ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, wildlife: !prev.wildlife }))}
-          >
-            <span className="type-filter-icon">A</span>
-            Wildlife
-          </div>
-          <div
-            className={`type-filter-chip general ${typeFilters.general ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, general: !prev.general }))}
-          >
-            <span className="type-filter-icon">N</span>
-            General
-          </div>
+          {[
+            { key: 'general', icon: 'N', label: 'General' },
+            { key: 'alert', icon: '!', label: 'Alert' },
+            { key: 'wildlife', icon: 'W', label: 'Wildlife' },
+            { key: 'infrastructure', icon: 'I', label: 'Infrastructure' },
+            { key: 'community', icon: 'M', label: 'Community' },
+          ].map(f => (
+            <div
+              key={f.key}
+              className={`type-filter-chip ${f.key} ${typeFilters[f.key] ? 'active' : 'inactive'}`}
+              onClick={() => setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] }))}
+            >
+              <span className="type-filter-icon">{f.icon}</span>
+              {f.label}
+            </div>
+          ))}
         </div>
         <div className="results-count">
           Showing {filteredNews.length} of {news.length} news items

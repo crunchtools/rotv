@@ -22,12 +22,15 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [typeFilters, setTypeFilters] = useState({
-    'guided-tour': true,
-    'program': true,
+    'hike': true,
+    'race': true,
+    'concert': true,
     'festival': true,
+    'program': true,
     'volunteer': true,
-    'educational': true,
-    'concert': true
+    'arts': true,
+    'community': true,
+    'alert': true
   });
 
   useEffect(() => {
@@ -91,16 +94,6 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
         hasLinearFeatures && filteredLinearFeatures.length === 0 &&
         hasVirtualPois && filteredVirtualPois.length === 0) {
       filtered = [];
-    } else if (filteredDestinations || filteredLinearFeatures || filteredVirtualPois) {
-      const visiblePoiIds = new Set([
-        ...(filteredDestinations || []).map(d => d.id),
-        ...(filteredLinearFeatures || []).map(f => f.id),
-        ...(filteredVirtualPois || []).map(v => v.id)
-      ]);
-      const unmappableTypes = new Set(['boundary', 'virtual', 'trail']);
-      filtered = filtered.filter(item =>
-        visiblePoiIds.has(item.poi_id) || unmappableTypes.has(item.poi_type)
-      );
     }
 
     // Apply text search filter
@@ -115,7 +108,7 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
     }
 
     // Apply type filter
-    filtered = filtered.filter(item => typeFilters[item.event_type || 'program']);
+    filtered = filtered.filter(item => typeFilters[item.event_type || 'program'] !== false);
 
     return filtered;
   }, [events, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
@@ -203,48 +196,26 @@ END:VCALENDAR`;
           onChange={(e) => setSearchText(e.target.value)}
         />
         <div className="results-type-filters">
-          <div
-            className={`type-filter-chip guided-tour ${typeFilters['guided-tour'] ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, 'guided-tour': !prev['guided-tour'] }))}
-          >
-            <span className="type-filter-icon">T</span>
-            Tour
-          </div>
-          <div
-            className={`type-filter-chip program ${typeFilters['program'] ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, 'program': !prev['program'] }))}
-          >
-            <span className="type-filter-icon">P</span>
-            Program
-          </div>
-          <div
-            className={`type-filter-chip festival ${typeFilters['festival'] ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, 'festival': !prev['festival'] }))}
-          >
-            <span className="type-filter-icon">F</span>
-            Festival
-          </div>
-          <div
-            className={`type-filter-chip volunteer ${typeFilters['volunteer'] ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, 'volunteer': !prev['volunteer'] }))}
-          >
-            <span className="type-filter-icon">V</span>
-            Volunteer
-          </div>
-          <div
-            className={`type-filter-chip educational ${typeFilters['educational'] ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, 'educational': !prev['educational'] }))}
-          >
-            <span className="type-filter-icon">E</span>
-            Educational
-          </div>
-          <div
-            className={`type-filter-chip concert ${typeFilters['concert'] ? 'active' : 'inactive'}`}
-            onClick={() => setTypeFilters(prev => ({ ...prev, 'concert': !prev['concert'] }))}
-          >
-            <span className="type-filter-icon">C</span>
-            Concert
-          </div>
+          {[
+            { key: 'hike', icon: 'H', label: 'Hike' },
+            { key: 'race', icon: 'R', label: 'Race' },
+            { key: 'concert', icon: 'C', label: 'Concert' },
+            { key: 'festival', icon: 'F', label: 'Festival' },
+            { key: 'program', icon: 'P', label: 'Program' },
+            { key: 'volunteer', icon: 'V', label: 'Volunteer' },
+            { key: 'arts', icon: 'A', label: 'Arts' },
+            { key: 'community', icon: 'M', label: 'Community' },
+            { key: 'alert', icon: '!', label: 'Alert' },
+          ].map(f => (
+            <div
+              key={f.key}
+              className={`type-filter-chip ${f.key} ${typeFilters[f.key] ? 'active' : 'inactive'}`}
+              onClick={() => setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] }))}
+            >
+              <span className="type-filter-icon">{f.icon}</span>
+              {f.label}
+            </div>
+          ))}
         </div>
         <div className="results-count">
           Showing {filteredEvents.length} of {events.length} events
