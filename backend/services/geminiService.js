@@ -172,7 +172,7 @@ export async function generateText(pool, promptKey, destination, sheets = null) 
 
   // Enable Google Search grounding for better factual content
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
@@ -197,7 +197,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
 
   // Enable Google Search grounding
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
@@ -225,7 +225,7 @@ export async function researchLocation(pool, destination, availableActivities = 
 
   // Enable Google Search grounding for research
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
@@ -302,7 +302,7 @@ export async function researchLocation(pool, destination, availableActivities = 
  */
 export async function testApiKey(pool, sheets = null) {
   const genAI = await createGeminiClient(pool, sheets);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
   const verification = await model.generateContent('Respond with exactly: API key verified');
   const text = verification.response.text();
@@ -347,7 +347,7 @@ export async function generateIconSvg(pool, description, color, sheets = null) {
 
   // Don't use Google Search for icon generation - we want creative output
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash'
+    model: 'gemini-2.5-flash'
   });
 
   const prompt = `You are an icon designer. Generate a simple, minimal SVG map marker icon.
@@ -417,7 +417,7 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
 export async function moderateContent(pool, content, sheets = null) {
   const genAI = await createGeminiClient(pool, sheets);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: { temperature: 0 }
   });
 
@@ -508,7 +508,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
 export async function moderatePhoto(pool, photo, sheets = null) {
   const genAI = await createGeminiClient(pool, sheets);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-2.5-flash',
     generationConfig: { temperature: 0 }
   });
 

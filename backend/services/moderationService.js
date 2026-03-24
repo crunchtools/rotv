@@ -142,7 +142,7 @@ export async function processItem(pool, contentType, contentId) {
 
   } else if (contentType === 'event') {
     const eventQuery = await pool.query(
-      `SELECT e.id, e.title, e.description, e.source_url, e.start_date, p.name as poi_name
+      `SELECT e.id, e.title, e.description, e.source_url, e.start_date, e.ai_generated, p.name as poi_name
        FROM poi_events e
        LEFT JOIN pois p ON e.poi_id = p.id
        WHERE e.id = $1`, [contentId]
@@ -161,6 +161,15 @@ export async function processItem(pool, contentType, contentId) {
         [`Rejected: duplicate of approved event #${dupCheck.rows[0].id}`, contentId]
       );
       console.log(`[Moderation] event #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
+      return;
+    }
+
+    if (row.ai_generated && (!row.source_url || !row.source_url.trim())) {
+      await pool.query(
+        `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        ['Rejected: AI-generated event without source URL', contentId]
+      );
+      console.log(`[Moderation] event #${contentId}: rejected (AI-generated, no source URL)`);
       return;
     }
 
