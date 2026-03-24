@@ -3,6 +3,8 @@ name: Build and Push Container Image
 on:
   push:
     branches: [main, master]
+  pull_request:
+    branches: [main, master]
   repository_dispatch:
     types: [parent-image-updated]
   workflow_dispatch:
@@ -27,7 +29,6 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Quay.io
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -41,6 +42,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=pr
             type=sha,prefix=
 
       - name: Build and push
@@ -48,7 +50,7 @@ jobs:
         with:
           context: .
           file: Containerfile
-          push: ${{ github.event_name != 'pull_request' }}
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
