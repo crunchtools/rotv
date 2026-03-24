@@ -1264,6 +1264,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
       SELECT id, title, summary, source_url, source_name, news_type, published_at, created_at
       FROM poi_news
       WHERE poi_id = $1
+        AND moderation_status IN ('published', 'auto_approved')
       ORDER BY
         CASE WHEN published_at IS NULL THEN 1 ELSE 0 END,
         published_at DESC NULLS LAST,
@@ -1286,6 +1287,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
       SELECT id, title, description, start_date, end_date, event_type, location_details, source_url, created_at
       FROM poi_events
       WHERE poi_id = $1
+        AND moderation_status IN ('published', 'auto_approved')
     `;
     if (upcomingOnly) {
       query += ` AND start_date >= CURRENT_DATE`;
@@ -1425,7 +1427,8 @@ app.get('/api/news/recent', async (req, res) => {
              n.published_at, n.created_at, p.id as poi_id, p.name as poi_name, p.poi_type
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
-      WHERE (p.deleted IS NULL OR p.deleted = FALSE)
+      WHERE n.moderation_status IN ('published', 'auto_approved')
+        AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY COALESCE(n.published_at, n.created_at) DESC
       LIMIT $1
     `, [limit]);
@@ -1445,7 +1448,8 @@ app.get('/api/events/upcoming', async (req, res) => {
              e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
-      WHERE e.start_date >= CURRENT_DATE
+      WHERE e.moderation_status IN ('published', 'auto_approved')
+        AND e.start_date >= CURRENT_DATE
         AND e.start_date <= CURRENT_DATE + INTERVAL '1 day' * $1
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY e.start_date ASC
