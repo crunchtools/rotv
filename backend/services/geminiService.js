@@ -410,3 +410,87 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
 
   return text;
 }
+
+/**
+ * Moderate text content (news/events) using Gemini Flash
+ * @param {Pool} pool - Database connection pool
+ * @param {Object} content - { type, title, summary, source_url, poi_name }
+ * @returns {Object} - { confidence_score, reasoning, issues }
+ */
+export async function moderateContent(pool, content, sheets = null) {
+  const genAI = await createGeminiClient(pool, sheets);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+  const prompt = `You are a content moderator for Cuyahoga Valley National Park.
+Evaluate this ${content.type} for accuracy and relevance.
+Title: ${content.title}
+Summary: ${content.summary || '(none)'}
+Source: ${content.source_url || '(none)'}
+Claimed POI: ${content.poi_name || '(unknown)'}
+
+Score 0.0-1.0 on: geographic relevance to CVNP/Metro Parks,
+factual accuracy, source credibility, content safety.
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{"confidence_score": 0.0, "reasoning": "...", "issues": []}`;
+
+  const geminiResponse = await model.generateContent(prompt);
+  const text = geminiResponse.response.text().trim();
+
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+  try {
+    return JSON.parse(jsonMatch[1].trim());
+  } catch {
+    console.error('[Gemini] Failed to parse moderation response:', text);
+    return { confidence_score: 0.5, reasoning: 'Failed to parse AI response', issues: ['parse_error'] };
+  }
+}
+
+/**
+ * Moderate a photo submission using Gemini Vision
+ * @param {Pool} pool - Database connection pool
+ * @param {Object} photo - { poi_name, image_url }
+ * @returns {Object} - { confidence_score, reasoning, flags }
+ */
+export async function moderatePhoto(pool, photo, sheets = null) {
+  const genAI = await createGeminiClient(pool, sheets);
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+  const prompt = `You are reviewing a photo submitted for ${photo.poi_name} at
+Cuyahoga Valley National Park. Does this photo:
+1. Appear to show a park/nature/trail scene?
+2. Contain NSFW content?
+3. Contain identifiable faces (privacy concern)?
+4. Appear relevant to the claimed location?
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{"confidence_score": 0.0, "reasoning": "...", "flags": []}`;
+
+  try {
+    // If we have an image URL, fetch and include it
+    if (photo.image_url) {
+      const imageResponse = await fetch(photo.image_url);
+      if (imageResponse.ok) {
+        const imageBuffer = await imageResponse.arrayBuffer();
+        const base64 = Buffer.from(imageBuffer).toString('base64');
+        const mimeType = imageResponse.headers.get('content-type') || 'image/jpeg';
+
+        const visionResponse = await model.generateContent([
+          prompt,
+          { inlineData: { data: base64, mimeType } }
+        ]);
+        const visionText = visionResponse.response.text().trim();
+        const visionMatch = visionText.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, visionText];
+        return JSON.parse(visionMatch[1].trim());
+      }
+    }
+
+    const fallbackResponse = await model.generateContent(prompt + '\n\nNote: Image could not be loaded for visual review. Score conservatively.');
+    const fallbackText = fallbackResponse.response.text().trim();
+    const fallbackMatch = fallbackText.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, fallbackText];
+    return JSON.parse(fallbackMatch[1].trim());
+  } catch (error) {
+    console.error('[Gemini] Photo moderation failed:', error.message);
+    return { confidence_score: 0.3, reasoning: 'Photo moderation failed: ' + error.message, flags: ['review_failed'] };
+  }
+}

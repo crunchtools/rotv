@@ -53,6 +53,16 @@ function DataCollectionSettings() {
   const [playwrightLoading, setPlaywrightLoading] = useState(true);
   const [playwrightTesting, setPlaywrightTesting] = useState(false);
 
+  // Moderation configuration state
+  const [moderationConfig, setModerationConfig] = useState({
+    enabled: true,
+    autoApproveEnabled: true,
+    autoApproveThreshold: 0.9,
+    photoSubmissionsEnabled: false
+  });
+  const [moderationConfigLoading, setModerationConfigLoading] = useState(true);
+  const [moderationConfigSaving, setModerationConfigSaving] = useState(false);
+
   useEffect(() => {
     checkForRunningJobs();
     fetchJobHistory();
@@ -60,6 +70,7 @@ function DataCollectionSettings() {
     fetchTwitterCredentials();
     fetchTwitterAuthStatus();
     fetchPlaywrightStatus();
+    fetchModerationConfig();
   }, []);
 
   // Auto-dismiss result notifications after 5 seconds
@@ -562,6 +573,55 @@ function DataCollectionSettings() {
       });
     } finally {
       setPlaywrightLoading(false);
+    }
+  };
+
+  const fetchModerationConfig = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) {
+        const settings = await response.json();
+        setModerationConfig({
+          enabled: settings.moderation_enabled?.value !== 'false',
+          autoApproveEnabled: settings.moderation_auto_approve_enabled?.value !== 'false',
+          autoApproveThreshold: parseFloat(settings.moderation_auto_approve_threshold?.value) || 0.9,
+          photoSubmissionsEnabled: settings.photo_submissions_enabled?.value === 'true'
+        });
+      }
+    } catch (err) {
+      console.error('Error fetching moderation config:', err);
+    } finally {
+      setModerationConfigLoading(false);
+    }
+  };
+
+  const handleSaveModerationConfig = async () => {
+    setModerationConfigSaving(true);
+    setResult(null);
+    try {
+      const settings = [
+        { key: 'moderation_enabled', value: String(moderationConfig.enabled) },
+        { key: 'moderation_auto_approve_enabled', value: String(moderationConfig.autoApproveEnabled) },
+        { key: 'moderation_auto_approve_threshold', value: String(moderationConfig.autoApproveThreshold) },
+        { key: 'photo_submissions_enabled', value: String(moderationConfig.photoSubmissionsEnabled) }
+      ];
+      for (const setting of settings) {
+        const response = await fetch(`/api/admin/settings/${setting.key}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ value: setting.value })
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || 'Failed to save setting');
+        }
+      }
+      setResult({ type: 'success', message: 'Moderation configuration saved' });
+    } catch (err) {
+      setResult({ type: 'error', message: `Failed to save moderation config: ${err.message}` });
+    } finally {
+      setModerationConfigSaving(false);
     }
   };
 
@@ -1315,6 +1375,91 @@ function DataCollectionSettings() {
                 </div>
               </div>
             )}
+          </>
+        )}
+      </div>
+
+      {/* Moderation Configuration */}
+      <div className="ai-config-section">
+        <h4>Content Moderation</h4>
+        <p className="settings-description">
+          Configure AI-powered moderation for news, events, and photo submissions.
+          New content is reviewed by LLM before publishing.
+        </p>
+
+        {moderationConfigLoading ? (
+          <p>Loading configuration...</p>
+        ) : (
+          <>
+            <div className="config-row">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={moderationConfig.enabled}
+                  onChange={e => setModerationConfig({...moderationConfig, enabled: e.target.checked})}
+                  disabled={moderationConfigSaving}
+                />
+                Enable Moderation
+              </label>
+              <span className="config-hint">
+                When disabled, new content auto-publishes without review
+              </span>
+            </div>
+
+            <div className="config-row">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={moderationConfig.autoApproveEnabled}
+                  onChange={e => setModerationConfig({...moderationConfig, autoApproveEnabled: e.target.checked})}
+                  disabled={moderationConfigSaving || !moderationConfig.enabled}
+                />
+                Auto-Approve High Confidence
+              </label>
+              <span className="config-hint">
+                Automatically publish items scoring above the threshold
+              </span>
+            </div>
+
+            <div className="config-row">
+              <label>Auto-Approve Threshold:</label>
+              <input
+                type="number"
+                value={moderationConfig.autoApproveThreshold}
+                onChange={e => setModerationConfig({...moderationConfig, autoApproveThreshold: parseFloat(e.target.value) || 0})}
+                min="0"
+                max="1"
+                step="0.05"
+                disabled={moderationConfigSaving || !moderationConfig.enabled || !moderationConfig.autoApproveEnabled}
+                style={{ width: '80px' }}
+              />
+              <span className="config-hint">
+                Score 0.0-1.0 (recommended: 0.9)
+              </span>
+            </div>
+
+            <div className="config-row">
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={moderationConfig.photoSubmissionsEnabled}
+                  onChange={e => setModerationConfig({...moderationConfig, photoSubmissionsEnabled: e.target.checked})}
+                  disabled={moderationConfigSaving}
+                />
+                Allow Photo Submissions
+              </label>
+              <span className="config-hint">
+                Let authenticated users submit photos for POIs
+              </span>
+            </div>
+
+            <button
+              className="action-btn primary"
+              onClick={handleSaveModerationConfig}
+              disabled={moderationConfigSaving || newsCollecting || trailCollecting}
+            >
+              {moderationConfigSaving ? 'Saving...' : 'Save Moderation Configuration'}
+            </button>
           </>
         )}
       </div>

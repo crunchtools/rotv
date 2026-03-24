@@ -20,8 +20,12 @@ import {
   scheduleTrailStatusCollection,
   registerTrailStatusHandler,
   registerBatchTrailStatusHandler,
+  registerModerationHandler,
+  registerModerationSweepHandler,
+  scheduleModerationSweep,
   stopJobScheduler
 } from './services/jobScheduler.js';
+import { processItem, processPendingItems } from './services/moderationService.js';
 import {
   runNewsCollection,
   processNewsCollectionJob,
@@ -704,6 +708,108 @@ async function initDatabase() {
     // Legacy: Immich asset ID column — kept for migration, will be dropped after image server migration (#97)
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS immich_primary_asset_id VARCHAR(255)
+    `);
+
+    // ============================================================
+    // Moderation Queue (#106) — columns, table, views, indexes
+    // ============================================================
+
+    // Moderation columns on poi_news
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) DEFAULT 'published'`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2)`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderated_by INTEGER REFERENCES users(id)`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_moderation ON poi_news(moderation_status)`);
+
+    // Moderation columns on poi_events
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) DEFAULT 'published'`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2)`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderated_by INTEGER REFERENCES users(id)`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_moderation ON poi_events(moderation_status)`);
+
+    // Photo submissions table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS photo_submissions (
+        id SERIAL PRIMARY KEY,
+        poi_id INTEGER REFERENCES pois(id) ON DELETE CASCADE,
+        image_server_asset_id VARCHAR(255),
+        original_filename VARCHAR(500),
+        submitted_by INTEGER REFERENCES users(id),
+        caption TEXT,
+        moderation_status VARCHAR(20) DEFAULT 'pending',
+        confidence_score DECIMAL(3,2),
+        ai_reasoning TEXT,
+        moderated_by INTEGER REFERENCES users(id),
+        moderated_at TIMESTAMP,
+        weekly_newsletter BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_photo_submissions_status ON photo_submissions(moderation_status)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_photo_submissions_poi ON photo_submissions(poi_id)`);
+
+    // Unified moderation queue view
+    await client.query(`
+      CREATE OR REPLACE VIEW moderation_queue AS
+        SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
+               moderation_status, confidence_score, ai_reasoning,
+               submitted_by, moderated_by, moderated_at, created_at
+        FROM poi_news WHERE moderation_status = 'pending'
+        UNION ALL
+        SELECT id, 'event' AS content_type, poi_id, title, description,
+               moderation_status, confidence_score, ai_reasoning,
+               submitted_by, moderated_by, moderated_at, created_at
+        FROM poi_events WHERE moderation_status = 'pending'
+        UNION ALL
+        SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
+               moderation_status, confidence_score, ai_reasoning,
+               submitted_by, moderated_by, moderated_at, created_at
+        FROM photo_submissions WHERE moderation_status = 'pending'
+        ORDER BY created_at DESC
+    `);
+
+    // Newsletter digest view (schema only, no email integration)
+    await client.query(`
+      CREATE OR REPLACE VIEW newsletter_digest AS
+        SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
+               created_at, moderated_at
+        FROM poi_news
+        WHERE moderation_status IN ('published', 'auto_approved')
+          AND weekly_newsletter = TRUE
+          AND created_at >= NOW() - INTERVAL '7 days'
+        UNION ALL
+        SELECT id, 'event' AS content_type, poi_id, title, description,
+               created_at, moderated_at
+        FROM poi_events
+        WHERE moderation_status IN ('published', 'auto_approved')
+          AND weekly_newsletter = TRUE
+          AND created_at >= NOW() - INTERVAL '7 days'
+        UNION ALL
+        SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
+               created_at, moderated_at
+        FROM photo_submissions
+        WHERE moderation_status IN ('approved', 'auto_approved')
+          AND weekly_newsletter = TRUE
+          AND created_at >= NOW() - INTERVAL '7 days'
+        ORDER BY created_at DESC
+    `);
+
+    // Default moderation settings
+    await client.query(`
+      INSERT INTO admin_settings (key, value, updated_at)
+      VALUES
+        ('moderation_enabled', 'true', CURRENT_TIMESTAMP),
+        ('moderation_auto_approve_threshold', '0.9', CURRENT_TIMESTAMP),
+        ('moderation_auto_approve_enabled', 'true', CURRENT_TIMESTAMP),
+        ('photo_submissions_enabled', 'false', CURRENT_TIMESTAMP)
+      ON CONFLICT (key) DO NOTHING
     `);
 
     // NOTE: Trails and rivers should only be imported via Google Sheets sync
@@ -1740,6 +1846,19 @@ async function start() {
     // Schedule trail status collection once daily at 6 AM Eastern (same as news collection)
     const trailStatusInterval = '0 6 * * *';  // Daily at 6 AM
     await scheduleTrailStatusCollection(trailStatusInterval);
+
+    // Register content moderation handler (processes individual items)
+    await registerModerationHandler(async (contentType, contentId) => {
+      await processItem(pool, contentType, contentId);
+    });
+
+    // Register moderation sweep handler (catches unprocessed items)
+    await registerModerationSweepHandler(async () => {
+      await processPendingItems(pool);
+    });
+
+    // Schedule moderation sweep every 15 minutes
+    await scheduleModerationSweep('*/15 * * * *');
 
     // Make boss available to routes
     app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));

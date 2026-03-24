@@ -12,7 +12,9 @@ const JOB_NAMES = {
   NEWS_COLLECTION_POI: 'news-collection-poi',   // Individual POI processing
   NEWS_BATCH: 'news-batch-collection',          // Admin-triggered batch collection
   TRAIL_STATUS_COLLECTION: 'trail-status-collection',  // Scheduled trail status collection
-  TRAIL_STATUS_BATCH: 'trail-status-batch-collect'     // Admin-triggered trail status batch
+  TRAIL_STATUS_BATCH: 'trail-status-batch-collect',    // Admin-triggered trail status batch
+  CONTENT_MODERATION: 'content-moderation',            // LLM moderation for individual items
+  CONTENT_MODERATION_SWEEP: 'content-moderation-sweep' // Scheduled sweep for unprocessed items
 };
 
 /**
@@ -291,6 +293,99 @@ export async function registerBatchTrailStatusHandler(handler) {
         console.error(`[pg-boss] Batch trail status collection job failed:`, error);
         throw error; // Re-throw to mark job as failed in pg-boss
       }
+    }
+  });
+}
+
+/**
+ * Register handler for content moderation (individual items)
+ * @param {Function} handler - Async function(contentType, contentId) to moderate a single item
+ */
+export async function registerModerationHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.CONTENT_MODERATION);
+    console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.CONTENT_MODERATION, {
+    teamSize: 3,
+    teamConcurrency: 1
+  }, async (jobs) => {
+    const jobList = Array.isArray(jobs) ? jobs : [jobs];
+    for (const job of jobList) {
+      try {
+        await handler(job.data.contentType, job.data.contentId);
+      } catch (error) {
+        console.error(`[pg-boss] Moderation failed for ${job.data.contentType} #${job.data.contentId}:`, error.message);
+        throw error;
+      }
+    }
+  });
+}
+
+/**
+ * Queue a content moderation job for a single item
+ * @param {string} contentType - 'news', 'event', or 'photo'
+ * @param {number} contentId - ID of the content to moderate
+ */
+export async function queueModerationJob(contentType, contentId) {
+  const scheduler = getJobScheduler();
+
+  return scheduler.send(JOB_NAMES.CONTENT_MODERATION, {
+    contentType,
+    contentId,
+    queuedAt: new Date().toISOString()
+  }, {
+    retryLimit: 2,
+    retryDelay: 30,
+    expireInMinutes: 15
+  });
+}
+
+/**
+ * Schedule the moderation sweep job (every 15 minutes)
+ * @param {string} cronExpression - Cron expression
+ */
+export async function scheduleModerationSweep(cronExpression = '*/15 * * * *') {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.CONTENT_MODERATION_SWEEP);
+    console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' may already exist`);
+    }
+  }
+
+  await scheduler.schedule(JOB_NAMES.CONTENT_MODERATION_SWEEP, cronExpression, {}, {
+    tz: 'America/New_York'
+  });
+
+  console.log(`Moderation sweep scheduled with cron: ${cronExpression}`);
+}
+
+/**
+ * Register handler for moderation sweep
+ * @param {Function} handler - Async function() to process all pending items
+ */
+export async function registerModerationSweepHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  await scheduler.work(JOB_NAMES.CONTENT_MODERATION_SWEEP, async (job) => {
+    console.log('Starting moderation sweep job:', job.id);
+    try {
+      await handler();
+      console.log('Moderation sweep job completed:', job.id);
+    } catch (error) {
+      console.error('Moderation sweep job failed:', error);
+      throw error;
     }
   });
 }
