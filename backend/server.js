@@ -1786,23 +1786,23 @@ async function setupAiSearchDefaults() {
 async function start() {
   await initDatabase();
 
-  // Normalize content types to canonical taxonomy (idempotent)
+  // Normalize content types to canonical taxonomy (idempotent, skips already-canonical rows)
   try {
-    await pool.query(`
-      UPDATE poi_events SET event_type = 'hike' WHERE event_type IN ('guided-tour', 'hiking', 'hikes & outdoor adventures', 'trail', 'recreation', 'scenic-drive', 'wildlife viewing', 'tour');
-      UPDATE poi_events SET event_type = 'race' WHERE event_type IN ('sports', 'sporting', 'sport', 'sporting event', 'trail-race', 'trail run', 'trail-run', 'trail running', 'marathon', 'running', 'run/walk', 'fun-run', 'athletics', 'fitness', 'tournament');
-      UPDATE poi_events SET event_type = 'concert' WHERE event_type IN ('music', 'tribute', 'comedy', 'performance', 'dance');
-      UPDATE poi_events SET event_type = 'festival' WHERE event_type IN ('fair', 'expo', 'celebration', 'special events', 'special', 'special-events', 'family-Friendly');
-      UPDATE poi_events SET event_type = 'volunteer' WHERE event_type IN ('Trail Work & Volunteer Opportunities', 'charity');
-      UPDATE poi_events SET event_type = 'arts' WHERE event_type IN ('theater', 'arts & theatre', 'film', 'exhibition', 'exhibits', 'on exhibit', 'visual arts');
-      UPDATE poi_events SET event_type = 'community' WHERE event_type IN ('meeting', 'Meeting', 'networking', 'Networking', 'Meetup', 'Meetups', 'meetup', 'social', 'dining', 'conference', 'convention', 'rally', 'government', 'management/planning', 'Management/Planning', 'hobbies', 'trivia', 'religious', 'worship', 'pilgrimage', 'ceremony', 'wellness', 'seminar', 'workshop', 'retreat', 'Day Camps');
-      UPDATE poi_events SET event_type = 'alert' WHERE event_type IN ('closure', 'maintenance', 'seasonal');
-      UPDATE poi_events SET event_type = 'program' WHERE event_type IN ('educational', 'nature education');
+    const { rowCount } = await pool.query(`
+      UPDATE poi_events SET event_type = 'hike' WHERE LOWER(event_type) IN ('guided-tour', 'hiking', 'hikes & outdoor adventures', 'trail', 'recreation', 'scenic-drive', 'wildlife viewing', 'tour') AND event_type != 'hike';
+      UPDATE poi_events SET event_type = 'race' WHERE LOWER(event_type) IN ('sports', 'sporting', 'sport', 'sporting event', 'trail-race', 'trail run', 'trail-run', 'trail running', 'marathon', 'running', 'run/walk', 'fun-run', 'athletics', 'fitness', 'tournament') AND event_type != 'race';
+      UPDATE poi_events SET event_type = 'concert' WHERE LOWER(event_type) IN ('music', 'tribute', 'comedy', 'performance', 'dance') AND event_type != 'concert';
+      UPDATE poi_events SET event_type = 'festival' WHERE LOWER(event_type) IN ('fair', 'expo', 'celebration', 'special events', 'special', 'special-events', 'family-friendly') AND event_type != 'festival';
+      UPDATE poi_events SET event_type = 'volunteer' WHERE LOWER(event_type) IN ('trail work & volunteer opportunities', 'charity') AND event_type != 'volunteer';
+      UPDATE poi_events SET event_type = 'arts' WHERE LOWER(event_type) IN ('theater', 'arts & theatre', 'film', 'exhibition', 'exhibits', 'on exhibit', 'visual arts') AND event_type != 'arts';
+      UPDATE poi_events SET event_type = 'community' WHERE LOWER(event_type) IN ('meeting', 'networking', 'meetup', 'meetups', 'social', 'dining', 'conference', 'convention', 'rally', 'government', 'management/planning', 'hobbies', 'trivia', 'religious', 'worship', 'pilgrimage', 'ceremony', 'wellness', 'seminar', 'workshop', 'retreat', 'day camps') AND event_type != 'community';
+      UPDATE poi_events SET event_type = 'alert' WHERE LOWER(event_type) IN ('closure', 'maintenance', 'seasonal') AND event_type != 'alert';
+      UPDATE poi_events SET event_type = 'program' WHERE LOWER(event_type) IN ('educational', 'nature education') AND event_type != 'program';
       UPDATE poi_events SET event_type = 'program' WHERE event_type NOT IN ('hike', 'race', 'concert', 'festival', 'program', 'volunteer', 'arts', 'community', 'alert');
-      UPDATE poi_news SET news_type = 'alert' WHERE news_type IN ('closure', 'maintenance', 'seasonal');
+      UPDATE poi_news SET news_type = 'alert' WHERE LOWER(news_type) IN ('closure', 'maintenance', 'seasonal') AND news_type != 'alert';
       UPDATE poi_news SET news_type = 'general' WHERE news_type NOT IN ('general', 'alert', 'wildlife', 'infrastructure', 'community');
     `);
-    console.log('Content types normalized');
+    if (rowCount > 0) console.log(`Content types normalized (${rowCount} rows updated)`);
   } catch (err) {
     console.error('Content type normalization failed:', err.message);
   }
