@@ -92,13 +92,15 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
         hasVirtualPois && filteredVirtualPois.length === 0) {
       filtered = [];
     } else if (filteredDestinations || filteredLinearFeatures || filteredVirtualPois) {
-      // Combine visible IDs from point destinations, linear features, and virtual POIs (organizations)
       const visiblePoiIds = new Set([
         ...(filteredDestinations || []).map(d => d.id),
         ...(filteredLinearFeatures || []).map(f => f.id),
         ...(filteredVirtualPois || []).map(v => v.id)
       ]);
-      filtered = filtered.filter(item => visiblePoiIds.has(item.poi_id));
+      const unmappableTypes = new Set(['boundary', 'virtual']);
+      filtered = filtered.filter(item =>
+        visiblePoiIds.has(item.poi_id) || unmappableTypes.has(item.poi_type)
+      );
     }
 
     // Apply text search filter
