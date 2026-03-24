@@ -85,7 +85,7 @@ export async function processItem(pool, contentType, contentId) {
     if (!row.source_url || !row.source_url.trim()) {
       scoring = { confidence_score: 0, reasoning: 'Rejected: no source URL (Read More link required)', issues: ['missing_source_url'] };
       await pool.query(
-        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'pending' WHERE id = $3`,
+        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
         [scoring.confidence_score, scoring.reasoning, contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (no source URL)`);
