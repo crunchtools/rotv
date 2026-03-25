@@ -111,6 +111,57 @@ export async function matchItemsToPois(pool, items) {
 }
 
 /**
+ * Resolve a newsletter tracking URL to its final destination.
+ * Newsletter HTML is full of tracking redirects (hive.co, mailchimp, etc).
+ * Uses HEAD with redirect: follow to chase the final URL.
+ * @param {string} url - URL to resolve
+ * @returns {string|null} Final destination URL, or null if unresolvable
+ */
+async function resolveNewsletterUrl(url) {
+  if (!url) return null;
+
+  try {
+    const response = await fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(10000)
+    });
+
+    const finalUrl = response.url;
+
+    if (finalUrl && finalUrl !== url) {
+      console.log(`[Newsletter] URL resolved: ${url.substring(0, 50)}... -> ${finalUrl.substring(0, 80)}`);
+      return finalUrl;
+    }
+
+    return url;
+  } catch (error) {
+    console.log(`[Newsletter] URL resolution failed: ${url.substring(0, 50)}... (${error.message})`);
+    return null;
+  }
+}
+
+/**
+ * Resolve all source URLs in extracted items.
+ * @param {Array} items - Items with source_url fields
+ * @returns {Array} Items with resolved source URLs
+ */
+async function resolveItemUrls(items) {
+  if (!items || items.length === 0) return [];
+
+  const resolved = [];
+  for (const item of items) {
+    if (item.source_url) {
+      const finalUrl = await resolveNewsletterUrl(item.source_url);
+      resolved.push({ ...item, source_url: finalUrl });
+    } else {
+      resolved.push(item);
+    }
+  }
+  return resolved;
+}
+
+/**
  * Create Gemini client from API key in admin_settings or env
  */
 async function createGeminiClient(pool) {
@@ -244,14 +295,18 @@ export async function processNewsletter(pool, emailData) {
     const extracted = await extractWithGemini(pool, markdown, subject);
     console.log(`[Newsletter] Gemini extracted: ${extracted.news?.length || 0} news, ${extracted.events?.length || 0} events`);
 
-    // Step 4: Match items to POIs
-    const matchedNews = await matchItemsToPois(pool, extracted.news || []);
-    const matchedEvents = await matchItemsToPois(pool, extracted.events || []);
+    // Step 4: Resolve tracking URLs to final destinations
+    const resolvedNews = await resolveItemUrls(extracted.news || []);
+    const resolvedEvents = await resolveItemUrls(extracted.events || []);
+
+    // Step 5: Match items to POIs
+    const matchedNews = await matchItemsToPois(pool, resolvedNews);
+    const matchedEvents = await matchItemsToPois(pool, resolvedEvents);
 
     let newsInserted = 0;
     let eventsInserted = 0;
 
-    // Step 5: Insert news items
+    // Step 6: Insert news items
     for (const item of matchedNews) {
       try {
         const result = await pool.query(`
@@ -278,7 +333,7 @@ export async function processNewsletter(pool, emailData) {
       }
     }
 
-    // Step 6: Insert event items
+    // Step 7: Insert event items
     for (const item of matchedEvents) {
       if (!item.start_date) continue; // Events require a start date
 
@@ -308,7 +363,7 @@ export async function processNewsletter(pool, emailData) {
       }
     }
 
-    // Step 7: Update newsletter_emails record
+    // Step 8: Update newsletter_emails record
     await pool.query(`
       UPDATE newsletter_emails
       SET processed = TRUE, news_extracted = $1, events_extracted = $2, processed_at = CURRENT_TIMESTAMP
