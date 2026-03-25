@@ -14,7 +14,8 @@ const JOB_NAMES = {
   TRAIL_STATUS_COLLECTION: 'trail-status-collection',  // Scheduled trail status collection
   TRAIL_STATUS_BATCH: 'trail-status-batch-collect',    // Admin-triggered trail status batch
   CONTENT_MODERATION: 'content-moderation',            // LLM moderation for individual items
-  CONTENT_MODERATION_SWEEP: 'content-moderation-sweep' // Scheduled sweep for unprocessed items
+  CONTENT_MODERATION_SWEEP: 'content-moderation-sweep', // Scheduled sweep for unprocessed items
+  NEWSLETTER_PROCESS: 'newsletter-process'              // Process inbound newsletter email
 };
 
 /**
@@ -387,6 +388,49 @@ export async function registerModerationSweepHandler(handler) {
       console.error('Moderation sweep job failed:', error);
       throw error;
     }
+  });
+}
+
+/**
+ * Register handler for newsletter email processing
+ * @param {Function} handler - async (emailId) => void
+ */
+export async function registerNewsletterHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.NEWSLETTER_PROCESS);
+    console.log(`Queue '${JOB_NAMES.NEWSLETTER_PROCESS}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.NEWSLETTER_PROCESS}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.NEWSLETTER_PROCESS, async (job) => {
+    try {
+      await handler(job.data.emailId);
+    } catch (error) {
+      console.error(`[pg-boss] Newsletter processing failed for email #${job.data.emailId}:`, error.message);
+      throw error;
+    }
+  });
+}
+
+/**
+ * Queue a newsletter email for background processing
+ * @param {number} emailId - ID of the newsletter_emails row to process
+ */
+export async function queueNewsletterJob(emailId) {
+  const scheduler = getJobScheduler();
+
+  return scheduler.send(JOB_NAMES.NEWSLETTER_PROCESS, {
+    emailId,
+    queuedAt: new Date().toISOString()
+  }, {
+    retryLimit: 2,
+    retryDelay: 60,
+    expireInMinutes: 30
   });
 }
 

@@ -82,6 +82,8 @@ describe('Database Schema Tests', () => {
     expect(columns).toContain('source_url');
     expect(columns).toContain('published_at');
     expect(columns).toContain('created_at');
+    expect(columns).toContain('content_source');
+    expect(columns).not.toContain('ai_generated');
   });
 
   it('should have poi_events table with correct structure', async () => {
@@ -101,6 +103,29 @@ describe('Database Schema Tests', () => {
     expect(columns).toContain('start_date');
     expect(columns).toContain('source_url');
     expect(columns).toContain('created_at');
+    expect(columns).toContain('content_source');
+    expect(columns).not.toContain('ai_generated');
+  });
+
+  it('should have newsletter_emails table', async () => {
+    const result = await pool.query(`
+      SELECT column_name, data_type
+      FROM information_schema.columns
+      WHERE table_name = 'newsletter_emails'
+      ORDER BY ordinal_position
+    `);
+
+    expect(result.rows.length).toBeGreaterThan(0);
+
+    const columns = result.rows.map(r => r.column_name);
+    expect(columns).toContain('id');
+    expect(columns).toContain('from_address');
+    expect(columns).toContain('subject');
+    expect(columns).toContain('body_html');
+    expect(columns).toContain('body_markdown');
+    expect(columns).toContain('processed');
+    expect(columns).toContain('news_extracted');
+    expect(columns).toContain('events_extracted');
   });
 
   it('should have foreign key constraints', async () => {

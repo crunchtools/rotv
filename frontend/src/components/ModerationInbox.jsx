@@ -40,6 +40,7 @@ function ModerationInbox() {
   const [creating, setCreating] = useState(null); // 'news', 'event', 'photo', or null
   const [createFields, setCreateFields] = useState({});
   const [pois, setPois] = useState([]);
+  const [sourceFilter, setSourceFilter] = useState(null);
   const LIMIT = 20;
 
   const fetchQueue = useCallback(async () => {
@@ -47,6 +48,7 @@ function ModerationInbox() {
     try {
       const params = new URLSearchParams({ page, limit: LIMIT, status: statusFilter });
       if (filter) params.set('type', filter);
+      if (sourceFilter) params.set('source', sourceFilter);
       const response = await fetch(`/api/admin/moderation/queue?${params}`, {
         credentials: 'include'
       });
@@ -60,7 +62,7 @@ function ModerationInbox() {
     } finally {
       setLoading(false);
     }
-  }, [page, filter, statusFilter]);
+  }, [page, filter, statusFilter, sourceFilter]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -223,6 +225,18 @@ function ModerationInbox() {
     }
   };
 
+  const getSourceBadge = (source) => {
+    switch (source) {
+      case 'ai': return { label: 'AI', color: '#ff9800' };
+      case 'human': return { label: 'Human', color: '#607d8b' };
+      case 'newsletter': return { label: 'Newsletter', color: '#00897b' };
+      case 'feed': return { label: 'Feed', color: '#5c6bc0' };
+      case 'api': return { label: 'API', color: '#8d6e63' };
+      case 'community': return { label: 'Community', color: '#26a69a' };
+      default: return null;
+    }
+  };
+
   const getStatusBadge = (status) => {
     switch (status) {
       case 'published': return { label: 'Approved', color: '#4caf50' };
@@ -351,6 +365,21 @@ function ModerationInbox() {
             {f.label}
           </button>
         ))}
+
+        <span style={{ color: '#ccc', fontSize: '1.1rem', margin: '0 2px' }}>|</span>
+
+        {/* Source filters */}
+        {[
+          { label: 'All Sources', value: null },
+          { label: 'AI', value: 'ai' },
+          { label: 'Human', value: 'human' },
+          { label: 'Newsletter', value: 'newsletter' },
+        ].map(f => (
+          <button key={`src-${f.label}`} onClick={() => { setSourceFilter(f.value); setPage(1); }}
+            style={pillActive(sourceFilter === f.value)}>
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {/* Create form */}
@@ -450,6 +479,16 @@ function ModerationInbox() {
                       }}>
                         {item.content_type}
                       </span>
+
+                      {item.content_source && getSourceBadge(item.content_source) && (
+                        <span style={{
+                          backgroundColor: getSourceBadge(item.content_source).color,
+                          color: 'white', padding: '1px 8px', borderRadius: '10px',
+                          fontSize: '0.72rem', fontWeight: 'bold'
+                        }}>
+                          {getSourceBadge(item.content_source).label}
+                        </span>
+                      )}
 
                       {!isPending && (
                         <span style={{

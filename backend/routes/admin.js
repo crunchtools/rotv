@@ -4486,12 +4486,13 @@ export function createAdminRouter(pool) {
   // Get paginated moderation queue
   router.get('/moderation/queue', isAdmin, async (req, res) => {
     try {
-      const { page = 1, limit = 20, type, status = 'pending' } = req.query;
+      const { page = 1, limit = 20, type, status = 'pending', source } = req.query;
       const result = await getModerationQueue(pool, {
         page: parseInt(page),
         limit: parseInt(limit),
         contentType: type || null,
-        status
+        status,
+        contentSource: source || null
       });
       res.json(result);
     } catch (error) {

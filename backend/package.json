@@ -29,10 +29,12 @@
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
+    "mailparser": "^3.7.2",
     "pg": "^8.11.3",
     "pg-boss": "^12.5.4",
     "playwright": "1.58.1",
     "sharp": "^0.33.5",
+    "smtp-server": "^3.13.6",
     "turndown": "^7.2.2"
   },
   "devDependencies": {

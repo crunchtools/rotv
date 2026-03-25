@@ -23,6 +23,7 @@ import {
   registerModerationHandler,
   registerModerationSweepHandler,
   scheduleModerationSweep,
+  registerNewsletterHandler,
   stopJobScheduler
 } from './services/jobScheduler.js';
 import { processItem, processPendingItems } from './services/moderationService.js';
@@ -38,6 +39,7 @@ import {
 } from './services/trailStatusService.js';
 import { createSheetsService } from './services/sheetsSync.js';
 import imageServerClient from './services/imageServerClient.js';
+import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -531,7 +533,7 @@ async function initDatabase() {
         source_name VARCHAR(255),
         news_type VARCHAR(50) DEFAULT 'general',
         published_at DATE,
-        ai_generated BOOLEAN DEFAULT TRUE,
+        content_source VARCHAR(20) DEFAULT 'ai',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -552,7 +554,7 @@ async function initDatabase() {
         location_details TEXT,
         source_url TEXT,
         calendar_event_id VARCHAR(255),
-        ai_generated BOOLEAN DEFAULT TRUE,
+        content_source VARCHAR(20) DEFAULT 'ai',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -760,17 +762,20 @@ async function initDatabase() {
       CREATE OR REPLACE VIEW moderation_queue AS
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
                moderation_status, confidence_score, ai_reasoning,
-               submitted_by, moderated_by, moderated_at, created_at
+               submitted_by, moderated_by, moderated_at, created_at,
+               content_source
         FROM poi_news WHERE moderation_status = 'pending'
         UNION ALL
         SELECT id, 'event' AS content_type, poi_id, title, description,
                moderation_status, confidence_score, ai_reasoning,
-               submitted_by, moderated_by, moderated_at, created_at
+               submitted_by, moderated_by, moderated_at, created_at,
+               content_source
         FROM poi_events WHERE moderation_status = 'pending'
         UNION ALL
         SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
                moderation_status, confidence_score, ai_reasoning,
-               submitted_by, moderated_by, moderated_at, created_at
+               submitted_by, moderated_by, moderated_at, created_at,
+               NULL AS content_source
         FROM photo_submissions WHERE moderation_status = 'pending'
         ORDER BY created_at DESC
     `);
@@ -779,21 +784,21 @@ async function initDatabase() {
     await client.query(`
       CREATE OR REPLACE VIEW newsletter_digest AS
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
-               created_at, moderated_at
+               created_at, moderated_at, content_source
         FROM poi_news
         WHERE moderation_status IN ('published', 'auto_approved')
           AND weekly_newsletter = TRUE
           AND created_at >= NOW() - INTERVAL '7 days'
         UNION ALL
         SELECT id, 'event' AS content_type, poi_id, title, description,
-               created_at, moderated_at
+               created_at, moderated_at, content_source
         FROM poi_events
         WHERE moderation_status IN ('published', 'auto_approved')
           AND weekly_newsletter = TRUE
           AND created_at >= NOW() - INTERVAL '7 days'
         UNION ALL
         SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
-               created_at, moderated_at
+               created_at, moderated_at, NULL AS content_source
         FROM photo_submissions
         WHERE moderation_status IN ('approved', 'auto_approved')
           AND weekly_newsletter = TRUE
@@ -1725,6 +1730,7 @@ app.get('*', (req, res) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
+let activeSmtpServer = null;
 
 /**
  * Set up AI search provider defaults
@@ -1891,6 +1897,11 @@ async function start() {
     // Schedule moderation sweep every 15 minutes
     await scheduleModerationSweep('*/15 * * * *');
 
+    // Register newsletter email processing handler
+    await registerNewsletterHandler(async (emailId) => {
+      await processNewsletterById(pool, emailId);
+    });
+
     // Make boss available to routes
     app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));
 
@@ -1915,6 +1926,9 @@ async function start() {
     // Continue without scheduler - manual triggers still work via admin route
   }
 
+  // Start SMTP server for inbound newsletter emails
+  activeSmtpServer = startSmtpServer(pool);
+
   app.listen(PORT, '::', () => {
     console.log(`Roots of The Valley API running on port ${PORT}`);
   });
@@ -1923,12 +1937,14 @@ async function start() {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
+  if (activeSmtpServer) activeSmtpServer.close();
   await stopJobScheduler();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...');
+  if (activeSmtpServer) activeSmtpServer.close();
   await stopJobScheduler();
   process.exit(0);
 });
