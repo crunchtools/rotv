@@ -407,12 +407,15 @@ export async function registerNewsletterHandler(handler) {
     }
   }
 
-  await scheduler.work(JOB_NAMES.NEWSLETTER_PROCESS, async (job) => {
-    try {
-      await handler(job.data.emailId);
-    } catch (error) {
-      console.error(`[pg-boss] Newsletter processing failed for email #${job.data.emailId}:`, error.message);
-      throw error;
+  await scheduler.work(JOB_NAMES.NEWSLETTER_PROCESS, async (jobs) => {
+    const jobList = Array.isArray(jobs) ? jobs : [jobs];
+    for (const job of jobList) {
+      try {
+        await handler(job.data.emailId);
+      } catch (error) {
+        console.error(`[pg-boss] Newsletter processing failed for email #${job.data.emailId}:`, error.message);
+        throw error;
+      }
     }
   });
 }
