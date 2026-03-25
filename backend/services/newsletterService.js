@@ -111,24 +111,15 @@ export async function matchItemsToPois(pool, items) {
 }
 
 /**
- * Check if a URL is a tracking/redirect URL that should be dropped.
- * Newsletter HTML is full of these — they're opaque, multi-layered,
- * and resolve to garbage destinations. Better to have no URL than a broken one.
- * @param {string} url - URL to check
- * @returns {boolean} True if the URL is a tracking URL or dead end
+ * Check if a resolved URL is a dead end (generic homepage, error page, etc.)
+ * @param {string} url - Resolved URL to check
+ * @returns {boolean} True if the URL is useless
  */
-function isTrackingOrDeadEndUrl(url) {
+function isDeadEndUrl(url) {
   if (!url) return true;
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
-    // Known tracking/redirect domains
-    if (host.includes('hive.co') || host.includes('mail-tracking.')
-      || host.includes('mailchimp.com') || host.includes('list-manage.com')
-      || host.includes('constantcontact.com') || host.includes('sendgrid.net')
-      || host.includes('mailgun.') || host.includes('campaign-archive.com')) {
-      return true;
-    }
     // google.com/?!=! and similar garbage from broken tracking redirects
     if (host === 'www.google.com' || host === 'google.com') {
       return parsed.pathname === '/' || parsed.pathname === '';
@@ -140,82 +131,81 @@ function isTrackingOrDeadEndUrl(url) {
 }
 
 /**
- * Extract the final destination from a JS-redirect intermediary URL.
- * Some tracking services (hive.co) resolve to a JS redirect page with
- * the real URL in a query parameter like ?next_url=<encoded_url>.
- * @param {string} url - URL that may be a JS redirect intermediary
- * @returns {string|null} Extracted destination URL, or null
+ * Follow a URL via HEAD request with redirect: follow.
+ * @param {string} url - URL to follow
+ * @returns {string|null} Final URL after HTTP redirects, or null on failure
  */
-function extractJsRedirectTarget(url) {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    // hive.co pattern: /shortlink/js-redirect?next_url=<encoded>
-    if (parsed.pathname.includes('js-redirect') || parsed.pathname.includes('js_redirect')) {
-      const nextUrl = parsed.searchParams.get('next_url')
-        || parsed.searchParams.get('next')
-        || parsed.searchParams.get('url')
-        || parsed.searchParams.get('redirect_url');
-      if (nextUrl) {
-        // Validate it's actually a URL
-        new URL(nextUrl);
-        return nextUrl;
-      }
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Resolve a newsletter tracking URL to its final destination.
- * Newsletter HTML is full of tracking redirects (hive.co, mailchimp, etc).
- * Uses HEAD with redirect: follow, then handles JS redirect intermediaries
- * and filters out dead-end URLs.
- * @param {string} url - URL to resolve
- * @returns {string|null} Final destination URL, or null if unresolvable
- */
-async function resolveNewsletterUrl(url) {
-  if (!url) return null;
-
-  // Drop known tracking URLs before even making a request
-  if (isTrackingOrDeadEndUrl(url)) {
-    console.log(`[Newsletter] Tracking URL dropped: ${url.substring(0, 80)}`);
-    return null;
-  }
-
+async function followRedirects(url) {
   try {
     const response = await fetch(url, {
       method: 'HEAD',
       redirect: 'follow',
       signal: AbortSignal.timeout(10000)
     });
-
-    let finalUrl = response.url || url;
-
-    // Check for JS redirect intermediary (e.g. hive.co/shortlink/js-redirect?next_url=...)
-    const jsTarget = extractJsRedirectTarget(finalUrl);
-    if (jsTarget) {
-      console.log(`[Newsletter] JS redirect extracted: ${finalUrl.substring(0, 60)}... -> ${jsTarget.substring(0, 80)}`);
-      finalUrl = jsTarget;
-    }
-
-    // Drop tracking/dead-end URLs after resolution
-    if (isTrackingOrDeadEndUrl(finalUrl)) {
-      console.log(`[Newsletter] Resolved URL is tracking/dead-end, dropped: ${finalUrl.substring(0, 80)}`);
-      return null;
-    }
-
-    if (finalUrl !== url) {
-      console.log(`[Newsletter] URL resolved: ${url.substring(0, 50)}... -> ${finalUrl.substring(0, 80)}`);
-    }
-
-    return finalUrl;
+    return response.url || url;
   } catch (error) {
-    console.log(`[Newsletter] URL resolution failed: ${url.substring(0, 50)}... (${error.message})`);
+    console.log(`[Newsletter] HEAD failed for ${url.substring(0, 60)}... (${error.message})`);
     return null;
   }
+}
+
+/**
+ * Resolve a newsletter tracking URL to its final destination.
+ *
+ * Newsletter tracking URLs (hive.co, mailchimp, etc.) use multi-layer
+ * redirect chains. This function follows the full chain:
+ *   1. HEAD follow on the tracking URL → lands on JS redirect page
+ *   2. Extract next_url from JS redirect query params
+ *   3. HEAD follow on the extracted shortlink → final destination
+ *
+ * @param {string} url - URL to resolve
+ * @returns {string|null} Final destination URL, or null if unresolvable
+ */
+async function resolveNewsletterUrl(url) {
+  if (!url) return null;
+
+  // Step 1: Follow HTTP redirects on the original tracking URL
+  let resolved = await followRedirects(url);
+  if (!resolved) return null;
+
+  // Step 2: If we landed on a JS redirect page, extract the embedded URL
+  try {
+    const parsed = new URL(resolved);
+    if (parsed.pathname.includes('js-redirect') || parsed.pathname.includes('js_redirect')) {
+      const nextUrl = parsed.searchParams.get('next_url')
+        || parsed.searchParams.get('next')
+        || parsed.searchParams.get('url')
+        || parsed.searchParams.get('redirect_url');
+      if (nextUrl) {
+        new URL(nextUrl); // validate
+        console.log(`[Newsletter] JS redirect hop: ${resolved.substring(0, 50)}... -> ${nextUrl.substring(0, 80)}`);
+        resolved = nextUrl;
+      }
+    }
+  } catch {
+    // Not a JS redirect page, continue with what we have
+  }
+
+  // Step 3: If resolved URL is still a shortlink/redirect, follow it again
+  if (resolved !== url) {
+    const finalHop = await followRedirects(resolved);
+    if (finalHop && finalHop !== resolved) {
+      console.log(`[Newsletter] Final hop: ${resolved.substring(0, 50)}... -> ${finalHop.substring(0, 80)}`);
+      resolved = finalHop;
+    }
+  }
+
+  // Drop dead-end URLs (google.com homepage, etc.)
+  if (isDeadEndUrl(resolved)) {
+    console.log(`[Newsletter] Dead-end URL dropped: ${resolved.substring(0, 80)}`);
+    return null;
+  }
+
+  if (resolved !== url) {
+    console.log(`[Newsletter] URL resolved: ${url.substring(0, 50)}... -> ${resolved.substring(0, 80)}`);
+  }
+
+  return resolved;
 }
 
 /**
