@@ -40,6 +40,6 @@ export function contentMatchesItem(markdown, item) {
   const titleWords = item.title.toLowerCase().replace(/[^\w\s]/g, '').split(/\s+/)
     .filter(w => w.length > 3);
   if (titleWords.length === 0) return false;
-  const matchCount = titleWords.filter(w => text.includes(w)).length;
+  const matchCount = titleWords.filter(w => new RegExp(`\\b${w}\\b`).test(text)).length;
   return (matchCount / titleWords.length) >= 0.6;
 }
