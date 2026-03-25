@@ -111,9 +111,59 @@ export async function matchItemsToPois(pool, items) {
 }
 
 /**
+ * Check if a resolved URL is a dead end (generic homepage, error page, etc.)
+ * These come from tracking services that don't properly redirect.
+ * @param {string} url - Resolved URL to check
+ * @returns {boolean} True if the URL is useless
+ */
+function isDeadEndUrl(url) {
+  if (!url) return true;
+  try {
+    const parsed = new URL(url);
+    // google.com/?!=! and similar garbage from broken tracking redirects
+    if (parsed.hostname === 'www.google.com' || parsed.hostname === 'google.com') {
+      return parsed.pathname === '/' || parsed.pathname === '';
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * Extract the final destination from a JS-redirect intermediary URL.
+ * Some tracking services (hive.co) resolve to a JS redirect page with
+ * the real URL in a query parameter like ?next_url=<encoded_url>.
+ * @param {string} url - URL that may be a JS redirect intermediary
+ * @returns {string|null} Extracted destination URL, or null
+ */
+function extractJsRedirectTarget(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    // hive.co pattern: /shortlink/js-redirect?next_url=<encoded>
+    if (parsed.pathname.includes('js-redirect') || parsed.pathname.includes('js_redirect')) {
+      const nextUrl = parsed.searchParams.get('next_url')
+        || parsed.searchParams.get('next')
+        || parsed.searchParams.get('url')
+        || parsed.searchParams.get('redirect_url');
+      if (nextUrl) {
+        // Validate it's actually a URL
+        new URL(nextUrl);
+        return nextUrl;
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolve a newsletter tracking URL to its final destination.
  * Newsletter HTML is full of tracking redirects (hive.co, mailchimp, etc).
- * Uses HEAD with redirect: follow to chase the final URL.
+ * Uses HEAD with redirect: follow, then handles JS redirect intermediaries
+ * and filters out dead-end URLs.
  * @param {string} url - URL to resolve
  * @returns {string|null} Final destination URL, or null if unresolvable
  */
@@ -127,14 +177,26 @@ async function resolveNewsletterUrl(url) {
       signal: AbortSignal.timeout(10000)
     });
 
-    const finalUrl = response.url;
+    let finalUrl = response.url || url;
 
-    if (finalUrl && finalUrl !== url) {
-      console.log(`[Newsletter] URL resolved: ${url.substring(0, 50)}... -> ${finalUrl.substring(0, 80)}`);
-      return finalUrl;
+    // Check for JS redirect intermediary (e.g. hive.co/shortlink/js-redirect?next_url=...)
+    const jsTarget = extractJsRedirectTarget(finalUrl);
+    if (jsTarget) {
+      console.log(`[Newsletter] JS redirect extracted: ${finalUrl.substring(0, 60)}... -> ${jsTarget.substring(0, 80)}`);
+      finalUrl = jsTarget;
     }
 
-    return url;
+    // Drop dead-end URLs (google.com homepage, etc.)
+    if (isDeadEndUrl(finalUrl)) {
+      console.log(`[Newsletter] Dead-end URL dropped: ${finalUrl.substring(0, 80)}`);
+      return null;
+    }
+
+    if (finalUrl !== url) {
+      console.log(`[Newsletter] URL resolved: ${url.substring(0, 50)}... -> ${finalUrl.substring(0, 80)}`);
+    }
+
+    return finalUrl;
   } catch (error) {
     console.log(`[Newsletter] URL resolution failed: ${url.substring(0, 50)}... (${error.message})`);
     return null;
