@@ -116,7 +116,7 @@ export async function processItem(pool, contentType, contentId) {
 
   } else if (contentType === 'event') {
     const eventQuery = await pool.query(
-      `SELECT e.id, e.title, e.description, e.source_url, e.start_date, e.ai_generated, p.name as poi_name
+      `SELECT e.id, e.title, e.description, e.source_url, e.start_date, e.content_source, p.name as poi_name
        FROM poi_events e
        LEFT JOIN pois p ON e.poi_id = p.id
        WHERE e.id = $1`, [contentId]
@@ -138,12 +138,12 @@ export async function processItem(pool, contentType, contentId) {
       return;
     }
 
-    if (row.ai_generated && (!row.source_url || !row.source_url.trim())) {
+    if (row.content_source !== 'human' && (!row.source_url || !row.source_url.trim())) {
       await pool.query(
         `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-        ['Rejected: AI-generated event without source URL', contentId]
+        ['Rejected: non-human event without source URL', contentId]
       );
-      console.log(`[Moderation] event #${contentId}: rejected (AI-generated, no source URL)`);
+      console.log(`[Moderation] event #${contentId}: rejected (non-human, no source URL)`);
       return;
     }
 
@@ -347,16 +347,16 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
 export async function createItem(pool, contentType, fields, adminUserId) {
   if (contentType === 'news') {
     const inserted = await pool.query(
-      `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, moderation_status, submitted_by)
-       VALUES ($1, $2, $3, $4, $5, $6, 'published', $7) RETURNING id`,
+      `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, moderation_status, submitted_by, content_source)
+       VALUES ($1, $2, $3, $4, $5, $6, 'published', $7, 'human') RETURNING id`,
       [fields.poi_id, fields.title, fields.summary || null, fields.source_url || null,
        fields.source_name || null, fields.news_type || 'general', adminUserId]
     );
     return inserted.rows[0].id;
   } else if (contentType === 'event') {
     const inserted = await pool.query(
-      `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, moderation_status, submitted_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', $9) RETURNING id`,
+      `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, moderation_status, submitted_by, content_source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', $9, 'human') RETURNING id`,
       [fields.poi_id, fields.title, fields.description || null, fields.start_date,
        fields.end_date || null, fields.event_type || null, fields.location_details || null,
        fields.source_url || null, adminUserId]
@@ -383,7 +383,7 @@ export async function requeueItem(pool, contentType, contentId) {
   );
 }
 
-export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending' } = {}) {
+export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null } = {}) {
   const offset = (page - 1) * limit;
   const statusList = status === 'all'
     ? ['pending', 'published', 'auto_approved', 'rejected']
@@ -394,34 +394,49 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
   const baseQuery = `
     SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
            moderation_status, confidence_score, ai_reasoning,
-           submitted_by, moderated_by, moderated_at, created_at, source_url
+           submitted_by, moderated_by, moderated_at, created_at, source_url,
+           content_source
     FROM poi_news WHERE moderation_status = ANY($1)
     UNION ALL
     SELECT id, 'event' AS content_type, poi_id, title, description,
            moderation_status, confidence_score, ai_reasoning,
-           submitted_by, moderated_by, moderated_at, created_at, source_url
+           submitted_by, moderated_by, moderated_at, created_at, source_url,
+           content_source
     FROM poi_events WHERE moderation_status = ANY($1)
     UNION ALL
     SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
            moderation_status, confidence_score, ai_reasoning,
-           submitted_by, moderated_by, moderated_at, created_at, NULL AS source_url
+           submitted_by, moderated_by, moderated_at, created_at, NULL AS source_url,
+           NULL AS content_source
     FROM photo_submissions WHERE moderation_status = ANY($1)`;
 
+  // Build WHERE clauses for outer query
+  const filters = [];
+  const params = [statusList];
+  let paramIdx = 2;
+
   if (contentType) {
-    const wrappedQuery = `SELECT * FROM (${baseQuery}) AS q WHERE content_type = $2 ORDER BY created_at DESC LIMIT $3 OFFSET $4`;
-    const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q WHERE content_type = $2`;
-    const [queueItems, countRow] = await Promise.all([
-      pool.query(wrappedQuery, [statusList, contentType, limit, offset]),
-      pool.query(countQuery, [statusList, contentType])
-    ]);
-    return { items: queueItems.rows, total: parseInt(countRow.rows[0].count), page, limit };
+    filters.push(`content_type = $${paramIdx}`);
+    params.push(contentType);
+    paramIdx++;
+  }
+  if (contentSource) {
+    filters.push(`content_source = $${paramIdx}`);
+    params.push(contentSource);
+    paramIdx++;
   }
 
-  const wrappedQuery = `SELECT * FROM (${baseQuery}) AS q ORDER BY created_at DESC LIMIT $2 OFFSET $3`;
-  const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q`;
+  const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+
+  const wrappedQuery = `SELECT * FROM (${baseQuery}) AS q ${whereClause} ORDER BY created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+  const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q ${whereClause}`;
+
+  params.push(limit, offset);
+  const countParams = params.slice(0, -2); // count query doesn't need limit/offset
+
   const [queueItems, countRow] = await Promise.all([
-    pool.query(wrappedQuery, [statusList, limit, offset]),
-    pool.query(countQuery, [statusList])
+    pool.query(wrappedQuery, params),
+    pool.query(countQuery, countParams)
   ]);
   return { items: queueItems.rows, total: parseInt(countRow.rows[0].count), page, limit };
 }

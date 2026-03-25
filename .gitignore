@@ -12,6 +12,9 @@ dist/
 *.jpeg
 Screenshot*
 
+# Local media assets
+media/
+
 # Gourmand reports and cache
 gourmand-report.txt
 .gourmand-cache/

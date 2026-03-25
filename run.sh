@@ -158,6 +158,7 @@ ENVFILE
             --privileged \
             --network=pasta:--dns-forward,8.8.8.8 \
             -p 8080:8080 \
+            -p 2525:25 \
             --tmpfs /run \
             -v ~/.rotv/environment:/etc/rotv/environment:ro,Z \
             $STORAGE_MOUNT \
@@ -232,6 +233,7 @@ ENVFILE
             --privileged \
             --network=pasta:--dns-forward,8.8.8.8 \
             -p 8080:8080 \
+            -p 2525:25 \
             --tmpfs /run \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
             -v ~/.rotv/environment:/etc/rotv/environment:ro,Z \
@@ -255,6 +257,10 @@ ENVFILE
         # Import seed data into the database the server is using
         echo "Importing seed data..."
         podman exec "$CONTAINER_NAME" psql -U postgres -d rotv -f /tmp/seed-data.sql 2>&1 | grep -c "^COPY" | xargs echo "Imported rows from tables:"
+
+        # Re-run migrations after seed import (seed data may restore old schema)
+        echo "Re-running migrations..."
+        podman exec "$CONTAINER_NAME" sh -c 'for m in /app/migrations/*.sql; do [ -f "$m" ] && psql -U postgres -d rotv -f "$m"; done' 2>&1 | grep -i "notice\|error" || true
 
         echo "✓ Test database ready"
         echo ""

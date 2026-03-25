@@ -70,3 +70,4 @@ RUN chmod +x /usr/local/bin/rotv-init.sh && \
 RUN mkdir -p /etc/rotv
 
 EXPOSE 8080
+EXPOSE 25
