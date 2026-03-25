@@ -6,6 +6,7 @@
 
 import { moderateContent, moderatePhoto } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
+import { deepCrawlForArticle } from './deepCrawler.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -85,9 +86,44 @@ export async function processItem(pool, contentType, contentId) {
       poi_name: row.poi_name
     });
 
-    const issuesList = scoring.issues || [];
+    let issuesList = scoring.issues || [];
     const rejectionIssues = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
-    const foundIssue = rejectionIssues.find(i => issuesList.includes(i));
+    let foundIssue = rejectionIssues.find(i => issuesList.includes(i));
+
+    if (foundIssue === 'content_not_on_source_page') {
+      console.log(`[Moderation] news #${contentId}: content not on source page, attempting deep crawl...`);
+      try {
+        const crawlResult = await deepCrawlForArticle(
+          row.source_url,
+          { title: row.title, summary: row.summary },
+          { maxDepth: 2, maxPages: 5, timeoutMs: 60000 }
+        );
+
+        if (crawlResult.foundUrl) {
+          console.log(`[Moderation] news #${contentId}: deep crawl found article at ${crawlResult.foundUrl}`);
+          await pool.query(`UPDATE poi_news SET source_url = $1 WHERE id = $2`, [crawlResult.foundUrl, contentId]);
+
+          scoring = await moderateContent(pool, {
+            type: 'news',
+            title: row.title,
+            summary: row.summary,
+            source_url: crawlResult.foundUrl,
+            source_page_content: crawlResult.foundContent,
+            poi_name: row.poi_name
+          });
+
+          issuesList = scoring.issues || [];
+          foundIssue = rejectionIssues.find(i => issuesList.includes(i));
+        } else {
+          console.log(`[Moderation] news #${contentId}: deep crawl checked ${crawlResult.pagesChecked} pages, no match`);
+          scoring.reasoning += ` Deep crawl checked ${crawlResult.pagesChecked} pages but could not find article.`;
+        }
+      } catch (crawlError) {
+        console.error(`[Moderation] news #${contentId}: deep crawl failed: ${crawlError.message}`);
+        scoring.reasoning += ` Deep crawl failed: ${crawlError.message}`;
+      }
+    }
+
     if (foundIssue) {
       await pool.query(
         `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
@@ -170,15 +206,50 @@ export async function processItem(pool, contentType, contentId) {
       poi_name: row.poi_name
     });
 
-    const issuesList = scoring.issues || [];
-    const rejectionIssues = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
-    const foundIssue = rejectionIssues.find(i => issuesList.includes(i));
-    if (foundIssue) {
+    let eventIssuesList = scoring.issues || [];
+    const eventRejectionIssues = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
+    let eventFoundIssue = eventRejectionIssues.find(i => eventIssuesList.includes(i));
+
+    if (eventFoundIssue === 'content_not_on_source_page') {
+      console.log(`[Moderation] event #${contentId}: content not on source page, attempting deep crawl...`);
+      try {
+        const crawlResult = await deepCrawlForArticle(
+          row.source_url,
+          { title: row.title, summary: row.description },
+          { maxDepth: 2, maxPages: 5, timeoutMs: 60000 }
+        );
+
+        if (crawlResult.foundUrl) {
+          console.log(`[Moderation] event #${contentId}: deep crawl found event at ${crawlResult.foundUrl}`);
+          await pool.query(`UPDATE poi_events SET source_url = $1 WHERE id = $2`, [crawlResult.foundUrl, contentId]);
+
+          scoring = await moderateContent(pool, {
+            type: 'event',
+            title: row.title,
+            summary: row.description,
+            source_url: crawlResult.foundUrl,
+            source_page_content: crawlResult.foundContent,
+            poi_name: row.poi_name
+          });
+
+          eventIssuesList = scoring.issues || [];
+          eventFoundIssue = eventRejectionIssues.find(i => eventIssuesList.includes(i));
+        } else {
+          console.log(`[Moderation] event #${contentId}: deep crawl checked ${crawlResult.pagesChecked} pages, no match`);
+          scoring.reasoning += ` Deep crawl checked ${crawlResult.pagesChecked} pages but could not find event.`;
+        }
+      } catch (crawlError) {
+        console.error(`[Moderation] event #${contentId}: deep crawl failed: ${crawlError.message}`);
+        scoring.reasoning += ` Deep crawl failed: ${crawlError.message}`;
+      }
+    }
+
+    if (eventFoundIssue) {
       await pool.query(
         `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
         [scoring.confidence_score, scoring.reasoning, contentId]
       );
-      console.log(`[Moderation] event #${contentId}: rejected (${foundIssue})`);
+      console.log(`[Moderation] event #${contentId}: rejected (${eventFoundIssue})`);
       return;
     }
 
@@ -410,7 +481,6 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            NULL AS content_source
     FROM photo_submissions WHERE moderation_status = ANY($1)`;
 
-  // Build WHERE clauses for outer query
   const filters = [];
   const params = [statusList];
   let paramIdx = 2;

@@ -63,7 +63,6 @@ describe('Newsletter Content Extraction', () => {
     `;
 
     const result = extractContentFromEmail(html, null);
-    // Should not have more than 2 consecutive newlines
     expect(result).not.toMatch(/\n{3,}/);
   });
 });

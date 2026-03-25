@@ -42,7 +42,7 @@ export default [
     },
   },
   {
-    files: ['**/jsRenderer.js', 'test-*.js'],
+    files: ['**/jsRenderer.js', '**/contentExtractor.js', 'test-*.js'],
     languageOptions: {
       globals: {
         ...globals.node,

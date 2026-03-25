@@ -9,6 +9,8 @@
 import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats } from './aiSearchFactory.js';
 import { pushNewsToSheets, pushEventsToSheets } from './sheetsSync.js';
 import { extractPageContent } from './contentExtractor.js';
+import { calculateSimilarity } from './textUtils.js';
+import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -252,30 +254,6 @@ export function requestCancellation(poiId) {
 export function isCancellationRequested(poiId) {
   const progress = collectionProgress.get(poiId);
   return progress?.cancellationRequested === true;
-}
-
-/**
- * Calculate simple string similarity (0-1) using word overlap
- * @param {string} str1 - First string
- * @param {string} str2 - Second string
- * @returns {number} - Similarity score 0-1
- */
-function calculateSimilarity(str1, str2) {
-  if (!str1 || !str2) return 0;
-
-  const normalize = (str) => str.toLowerCase().replace(/[^\w\s]/g, '').trim();
-  const s1 = normalize(str1);
-  const s2 = normalize(str2);
-
-  if (s1 === s2) return 1;
-
-  const words1 = new Set(s1.split(/\s+/));
-  const words2 = new Set(s2.split(/\s+/));
-
-  const intersection = new Set([...words1].filter(x => words2.has(x)));
-  const union = new Set([...words1, ...words2]);
-
-  return union.size > 0 ? intersection.size / union.size : 0;
 }
 
 /**
@@ -884,12 +862,9 @@ Extract ALL news from this content using these relaxed criteria.`;
       let matchCount = 0;
       let overrideCount = 0;
       result.events.forEach(event => {
-        // Override if no URL, or if URL is just an index/list page (ends with / or /news or /events)
+        // Override if no URL, or if URL is a generic/index page
         const hasIndexUrl = event.source_url && (
-          event.source_url.endsWith('/news/') ||
-          event.source_url.endsWith('/news') ||
-          event.source_url.endsWith('/events/') ||
-          event.source_url.endsWith('/events') ||
+          isGenericUrl(event.source_url) ||
           event.source_url === eventsUrl  // Exactly matches the events page URL
         );
 
@@ -922,12 +897,9 @@ Extract ALL news from this content using these relaxed criteria.`;
       let matchCount = 0;
       let overrideCount = 0;
       result.news.forEach(newsItem => {
-        // Override if no URL, or if URL is just an index/list page (ends with / or /news or /events)
+        // Override if no URL, or if URL is a generic/index page
         const hasIndexUrl = newsItem.source_url && (
-          newsItem.source_url.endsWith('/news/') ||
-          newsItem.source_url.endsWith('/news') ||
-          newsItem.source_url.endsWith('/events/') ||
-          newsItem.source_url.endsWith('/events') ||
+          isGenericUrl(newsItem.source_url) ||
           newsItem.source_url === newsUrl  // Exactly matches the news page URL
         );
 
@@ -946,6 +918,53 @@ Extract ALL news from this content using these relaxed criteria.`;
       console.log(`[Link Matcher] Matched ${matchCount} news items to deep links (${overrideCount} index URLs overridden)`);
     } else {
       console.log(`[Link Matcher] Skipping news link matching - conditions not met`);
+    }
+
+    // DEEP CRAWL PHASE: For items with generic/index URLs, try to find the actual article page
+    const allItems = [
+      ...(result.events || []).map(e => ({ ...e, _type: 'event' })),
+      ...(result.news || []).map(n => ({ ...n, _type: 'news' }))
+    ];
+    const deepCrawlCandidates = allItems.filter(item =>
+      item.source_url && item.source_url !== 'N/A' && isGenericUrl(item.source_url)
+    );
+
+    if (deepCrawlCandidates.length > 0) {
+      updateProgress(poi.id, {
+        phase: 'deep_crawling',
+        message: `Deep crawling ${deepCrawlCandidates.length} generic URLs...`,
+        steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links', 'Deep crawling']
+      });
+
+      console.log(`[Deep Crawl] ${deepCrawlCandidates.length} items have generic source URLs, attempting deep crawl...`);
+      let deepCrawlFixed = 0;
+
+      for (const item of deepCrawlCandidates) {
+        checkCancellation();
+        try {
+          const crawlResult = await deepCrawlForArticle(item.source_url, item, {
+            maxDepth: 1,
+            maxPages: 3,
+            timeoutMs: 30000
+          });
+          if (crawlResult.foundUrl) {
+            console.log(`[Deep Crawl] ✓ "${item.title.substring(0, 50)}..." → ${crawlResult.foundUrl}`);
+            // Update the original item in the results array
+            const sourceArray = item._type === 'event' ? result.events : result.news;
+            const original = sourceArray.find(i => i.title === item.title && i.source_url === item.source_url);
+            if (original) {
+              original.source_url = crawlResult.foundUrl;
+              deepCrawlFixed++;
+            }
+          } else {
+            console.log(`[Deep Crawl] ✗ No match for "${item.title.substring(0, 50)}..." (checked ${crawlResult.pagesChecked} pages)`);
+          }
+        } catch (error) {
+          console.error(`[Deep Crawl] Error crawling for "${item.title.substring(0, 50)}...": ${error.message}`);
+        }
+      }
+
+      console.log(`[Deep Crawl] Fixed ${deepCrawlFixed}/${deepCrawlCandidates.length} generic URLs`);
     }
 
     let allNews = result.news || [];
