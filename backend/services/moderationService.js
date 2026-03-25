@@ -34,13 +34,16 @@ export async function processItem(pool, contentType, contentId) {
 
   if (contentType === 'news') {
     const newsQuery = await pool.query(
-      `SELECT n.id, n.title, n.summary, n.source_url, p.name as poi_name
+      `SELECT n.id, n.title, n.summary, n.source_url, n.content_source, p.name as poi_name
        FROM poi_news n
        LEFT JOIN pois p ON n.poi_id = p.id
        WHERE n.id = $1`, [contentId]
     );
     if (!newsQuery.rows.length) return;
     const row = newsQuery.rows[0];
+
+    // Newsletter content uses the email as its source — skip URL verification
+    const isNewsletter = row.content_source === 'newsletter';
 
     const dupCheck = await pool.query(
       `SELECT id FROM poi_news WHERE LOWER(title) = LOWER($1) AND id != $2
@@ -56,7 +59,7 @@ export async function processItem(pool, contentType, contentId) {
       return;
     }
 
-    if (!row.source_url || !row.source_url.trim()) {
+    if (!isNewsletter && (!row.source_url || !row.source_url.trim())) {
       scoring = { confidence_score: 0, reasoning: 'Rejected: no source URL (Read More link required)', issues: ['missing_source_url'] };
       await pool.query(
         `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
@@ -66,14 +69,23 @@ export async function processItem(pool, contentType, contentId) {
       return;
     }
 
-    const sourceCheck = await extractPageContent(row.source_url);
-    if (!sourceCheck.reachable) {
-      await pool.query(
-        `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-        [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
-      );
-      console.log(`[Moderation] news #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
-      return;
+    let newsSourceContent = null;
+    if (row.source_url && row.source_url.trim()) {
+      const sourceCheck = await extractPageContent(row.source_url);
+      if (!sourceCheck.reachable) {
+        if (isNewsletter) {
+          console.log(`[Moderation] news #${contentId}: newsletter source URL unreachable, proceeding without verification`);
+        } else {
+          await pool.query(
+            `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+            [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
+          );
+          console.log(`[Moderation] news #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
+          return;
+        }
+      } else {
+        newsSourceContent = sourceCheck.markdown;
+      }
     }
 
     scoring = await moderateContent(pool, {
@@ -81,7 +93,7 @@ export async function processItem(pool, contentType, contentId) {
       title: row.title,
       summary: row.summary,
       source_url: row.source_url,
-      source_page_content: sourceCheck.markdown,
+      source_page_content: newsSourceContent,
       poi_name: row.poi_name
     });
 
@@ -138,7 +150,10 @@ export async function processItem(pool, contentType, contentId) {
       return;
     }
 
-    if (row.content_source !== 'human' && (!row.source_url || !row.source_url.trim())) {
+    // Newsletter content uses the email as its source — skip URL verification
+    const isNewsletter = row.content_source === 'newsletter';
+
+    if (!isNewsletter && row.content_source !== 'human' && (!row.source_url || !row.source_url.trim())) {
       await pool.query(
         `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         ['Rejected: non-human event without source URL', contentId]
@@ -151,14 +166,20 @@ export async function processItem(pool, contentType, contentId) {
     if (row.source_url && row.source_url.trim()) {
       const sourceCheck = await extractPageContent(row.source_url);
       if (!sourceCheck.reachable) {
-        await pool.query(
-          `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-          [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
-        );
-        console.log(`[Moderation] event #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
-        return;
+        if (isNewsletter) {
+          // Newsletter items can proceed without URL verification
+          console.log(`[Moderation] event #${contentId}: newsletter source URL unreachable, proceeding without verification`);
+        } else {
+          await pool.query(
+            `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+            [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
+          );
+          console.log(`[Moderation] event #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
+          return;
+        }
+      } else {
+        eventSourceContent = sourceCheck.markdown;
       }
-      eventSourceContent = sourceCheck.markdown;
     }
 
     scoring = await moderateContent(pool, {
