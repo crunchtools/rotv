@@ -46,6 +46,9 @@ export function isGenericUrl(url) {
  * @param {boolean} options.sameOriginOnly - Only follow same-origin links (default true)
  * @param {number} options.timeoutMs - Overall timeout in ms (default 60000)
  * @param {Function} options.extractor - Content extraction function (default: extractPageContent). Accepts (url, opts).
+ * @param {Object} options.prefetched - Pre-rendered listing page data to skip Level 0 render
+ * @param {string} options.prefetched.markdown - Page content as markdown
+ * @param {Array} options.prefetched.links - Extracted links from the page
  * @returns {Promise<{foundUrl: string|null, foundContent: string|null, pagesChecked: number}>}
  */
 export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
@@ -54,7 +57,8 @@ export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
     maxPages = 5,
     sameOriginOnly = true,
     timeoutMs = 60000,
-    extractor = extractPageContent
+    extractor = extractPageContent,
+    prefetched = null
   } = options;
 
   const visited = new Set();
@@ -115,8 +119,33 @@ export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
     return { candidateLinks };
   }
 
-  const level0 = await crawlLevel([sourceUrl], 0);
-  if (level0.foundUrl) return { ...level0, pagesChecked };
+  let level0;
+  if (prefetched && prefetched.markdown) {
+    visited.add(sourceUrl);
+    if (contentMatchesItem(prefetched.markdown, item)) {
+      console.log(`[Deep Crawler] Match found at depth 0 (prefetched): ${sourceUrl}`);
+      return { foundUrl: sourceUrl, foundContent: prefetched.markdown, pagesChecked: 0 };
+    }
+    const candidateLinks = [];
+    if (prefetched.links && maxDepth > 0) {
+      for (const link of prefetched.links) {
+        if (sameOriginOnly) {
+          try {
+            if (new URL(link.url).origin !== sourceOrigin) continue;
+          } catch { continue; }
+        }
+        const desc = item.summary || item.description;
+        const score =
+          (item.title ? calculateSimilarity(item.title, link.text) * 3 + calculateSimilarity(item.title, link.context) * 2 : 0) +
+          (desc ? calculateSimilarity(desc, link.text) + calculateSimilarity(desc, link.context) * 0.5 : 0);
+        candidateLinks.push({ ...link, score });
+      }
+    }
+    level0 = { candidateLinks };
+  } else {
+    level0 = await crawlLevel([sourceUrl], 0);
+    if (level0.foundUrl) return { ...level0, pagesChecked };
+  }
 
   let currentCandidates = level0.candidateLinks || [];
 

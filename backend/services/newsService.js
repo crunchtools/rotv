@@ -967,27 +967,60 @@ Extract ALL news from this content using these relaxed criteria.`;
       console.log(`[Deep Crawl] ${deepCrawlCandidates.length} items have generic source URLs, attempting deep crawl...`);
       let deepCrawlFixed = 0;
 
+      // Group candidates by source_url to avoid rendering the same listing page multiple times
+      const bySourceUrl = new Map();
       for (const item of deepCrawlCandidates) {
+        const group = bySourceUrl.get(item.source_url) || [];
+        group.push(item);
+        bySourceUrl.set(item.source_url, group);
+      }
+
+      for (const [sourceUrl, items] of bySourceUrl) {
         checkCancellation();
+        console.log(`[Deep Crawl] Crawling ${sourceUrl} for ${items.length} items...`);
+
+        let prefetched = null;
         try {
-          const crawlResult = await deepCrawlForArticle(item.source_url, item, {
-            maxDepth: 2,
-            maxPages: 5,
-            timeoutMs: 45000
+          const listingPage = await extractPageContent(sourceUrl, {
+            timeout: 25000,
+            hardTimeout: 45000,
+            extractLinks: true
           });
-          if (crawlResult.foundUrl) {
-            console.log(`[Deep Crawl] ✓ "${item.title.substring(0, 50)}..." → ${crawlResult.foundUrl}`);
-            const sourceArray = item._type === 'event' ? result.events : result.news;
-            const original = sourceArray.find(i => i.title === item.title && i.source_url === item.source_url);
-            if (original) {
-              original.source_url = crawlResult.foundUrl;
-              deepCrawlFixed++;
-            }
+          if (listingPage.reachable) {
+            prefetched = { markdown: listingPage.markdown, links: listingPage.links || [] };
+            console.log(`[Deep Crawl] Extracted ${prefetched.links.length} links from listing page`);
           } else {
-            console.log(`[Deep Crawl] ✗ No match for "${item.title.substring(0, 50)}..." (checked ${crawlResult.pagesChecked} pages)`);
+            console.log(`[Deep Crawl] Failed to render listing page: ${listingPage.reason || 'no content'}`);
+            continue;
           }
         } catch (error) {
-          console.error(`[Deep Crawl] Error crawling for "${item.title.substring(0, 50)}...": ${error.message}`);
+          console.error(`[Deep Crawl] Error rendering listing page ${sourceUrl}: ${error.message}`);
+          continue;
+        }
+
+        for (const item of items) {
+          checkCancellation();
+          try {
+            const crawlResult = await deepCrawlForArticle(sourceUrl, item, {
+              maxDepth: 2,
+              maxPages: 5,
+              timeoutMs: 45000,
+              prefetched
+            });
+            if (crawlResult.foundUrl) {
+              console.log(`[Deep Crawl] ✓ "${item.title.substring(0, 50)}..." → ${crawlResult.foundUrl}`);
+              const sourceArray = item._type === 'event' ? result.events : result.news;
+              const original = sourceArray.find(i => i.title === item.title && i.source_url === item.source_url);
+              if (original) {
+                original.source_url = crawlResult.foundUrl;
+                deepCrawlFixed++;
+              }
+            } else {
+              console.log(`[Deep Crawl] ✗ No match for "${item.title.substring(0, 50)}..." (checked ${crawlResult.pagesChecked} pages)`);
+            }
+          } catch (error) {
+            console.error(`[Deep Crawl] Error crawling for "${item.title.substring(0, 50)}...": ${error.message}`);
+          }
         }
       }
 
