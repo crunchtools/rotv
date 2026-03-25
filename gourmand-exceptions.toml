@@ -702,3 +702,10 @@ justification = "One-time migration script for Issue #1 Part 3. Functions (loadI
 check = "single_use_helpers"
 path = "frontend/src/hooks/useSeasonalTheme.js"
 justification = "calculateActiveTheme and isDateInRange encapsulate complex date comparison logic for seasonal theme selection. Inlining would reduce readability of the main useEffect hook."
+
+# Newsletter service - exported functions with independent test coverage
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/newsletterService.js"
+justification = "extractContentFromEmail is exported and independently tested in newsletter.unit.test.js (5 test cases). processNewsletter is the core processing entry point called by processNewsletterById after DB lookup — separation keeps data-access and processing logic distinct."

@@ -15,7 +15,6 @@ const turndown = new TurndownService({
   codeBlockStyle: 'fenced'
 });
 
-// Remove images and iframes from markdown output — we only need text
 turndown.remove(['img', 'iframe', 'video', 'audio', 'svg', 'canvas', 'figure']);
 
 /**
@@ -46,7 +45,6 @@ export async function extractPageContent(url, options = {}) {
   let hardTimeoutId;
 
   try {
-    // Hard timeout safety net
     const hardTimeoutPromise = new Promise((_, reject) => {
       hardTimeoutId = setTimeout(() => {
         reject(new Error(`Content extraction timed out after ${hardTimeout}ms`));
@@ -72,7 +70,6 @@ export async function extractPageContent(url, options = {}) {
 
       const page = await context.newPage();
 
-      // Block unnecessary resources to speed up rendering
       await page.route('**/*', (route) => {
         const type = route.request().resourceType();
         if (['image', 'media', 'font', 'stylesheet'].includes(type)) {
@@ -82,7 +79,6 @@ export async function extractPageContent(url, options = {}) {
         }
       });
 
-      // Navigate with networkidle, fall back to domcontentloaded
       try {
         await page.goto(url, { waitUntil: 'networkidle', timeout });
       } catch (navError) {
@@ -95,11 +91,9 @@ export async function extractPageContent(url, options = {}) {
 
       await page.waitForTimeout(dynamicContentWait);
 
-      // Get rendered HTML
       const html = await page.content();
       const pageTitle = await page.title();
 
-      // Extract links before closing browser (if requested for deep-link matching)
       let links = [];
       if (extractLinks) {
         links = await page.evaluate(() => {
@@ -156,7 +150,6 @@ export async function extractPageContent(url, options = {}) {
       await browser.close();
       browser = null;
 
-      // Parse with Readability
       const dom = new JSDOM(html, { url });
       const reader = new Readability(dom.window.document, {
         charThreshold: 100
@@ -164,10 +157,8 @@ export async function extractPageContent(url, options = {}) {
       const article = reader.parse();
 
       if (!article || !article.content || article.content.trim().length < 50) {
-        // Readability couldn't extract — fall back to body text
         const fallbackDom = new JSDOM(html, { url });
         const body = fallbackDom.window.document.body;
-        // Remove script/style/nav elements
         for (const tag of ['script', 'style', 'nav', 'header', 'footer', 'aside']) {
           body.querySelectorAll(tag).forEach(el => el.remove());
         }
@@ -181,10 +172,7 @@ export async function extractPageContent(url, options = {}) {
         };
       }
 
-      // Convert article HTML to markdown
       let markdown = turndown.turndown(article.content);
-
-      // Clean up excessive whitespace
       markdown = markdown.replace(/\n{3,}/g, '\n\n').trim();
 
       return {
@@ -196,8 +184,7 @@ export async function extractPageContent(url, options = {}) {
       };
     })();
 
-    const result = await Promise.race([extractionPromise, hardTimeoutPromise]);
-    return result;
+    return await Promise.race([extractionPromise, hardTimeoutPromise]);
 
   } catch (error) {
     return {
