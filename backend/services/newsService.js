@@ -920,14 +920,42 @@ Extract ALL news from this content using these relaxed criteria.`;
       console.log(`[Link Matcher] Skipping news link matching - conditions not met`);
     }
 
-    // DEEP CRAWL PHASE: For items with generic/index URLs, try to find the actual article page
+    // BACKFILL: Items with no source_url get the POI's events/news listing page as a starting point
+    const hasEventsUrl = poi.events_url && poi.events_url.trim();
+    const hasNewsUrl = poi.news_url && poi.news_url.trim();
+    if (result.events && hasEventsUrl) {
+      let backfilled = 0;
+      for (const event of result.events) {
+        if (!event.source_url || event.source_url === 'N/A') {
+          event.source_url = poi.events_url;
+          backfilled++;
+        }
+      }
+      if (backfilled > 0) console.log(`[Deep Crawl] Backfilled ${backfilled} events with events_url: ${poi.events_url}`);
+    }
+    if (result.news && hasNewsUrl) {
+      let backfilled = 0;
+      for (const newsItem of result.news) {
+        if (!newsItem.source_url || newsItem.source_url === 'N/A') {
+          newsItem.source_url = poi.news_url;
+          backfilled++;
+        }
+      }
+      if (backfilled > 0) console.log(`[Deep Crawl] Backfilled ${backfilled} news with news_url: ${poi.news_url}`);
+    }
+
+    // DEEP CRAWL PHASE: For items with generic/index/listing URLs, crawl to find actual article pages
     const allItems = [
       ...(result.events || []).map(e => ({ ...e, _type: 'event' })),
       ...(result.news || []).map(n => ({ ...n, _type: 'news' }))
     ];
-    const deepCrawlCandidates = allItems.filter(item =>
-      item.source_url && item.source_url !== 'N/A' && isGenericUrl(item.source_url)
-    );
+    const deepCrawlCandidates = allItems.filter(item => {
+      if (!item.source_url || item.source_url === 'N/A') return false;
+      if (isGenericUrl(item.source_url)) return true;
+      if (hasEventsUrl && item.source_url === poi.events_url) return true;
+      if (hasNewsUrl && item.source_url === poi.news_url) return true;
+      return false;
+    });
 
     if (deepCrawlCandidates.length > 0) {
       updateProgress(poi.id, {
@@ -943,13 +971,12 @@ Extract ALL news from this content using these relaxed criteria.`;
         checkCancellation();
         try {
           const crawlResult = await deepCrawlForArticle(item.source_url, item, {
-            maxDepth: 1,
-            maxPages: 3,
-            timeoutMs: 30000
+            maxDepth: 2,
+            maxPages: 5,
+            timeoutMs: 45000
           });
           if (crawlResult.foundUrl) {
             console.log(`[Deep Crawl] ✓ "${item.title.substring(0, 50)}..." → ${crawlResult.foundUrl}`);
-            // Update the original item in the results array
             const sourceArray = item._type === 'event' ? result.events : result.news;
             const original = sourceArray.find(i => i.title === item.title && i.source_url === item.source_url);
             if (original) {
