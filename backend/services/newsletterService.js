@@ -111,6 +111,31 @@ export async function matchItemsToPois(pool, items) {
 }
 
 /**
+ * Strip tracking/analytics parameters from a resolved URL.
+ * Newsletter redirect chains append hive, UTM, and other tracking params.
+ * @param {string} url - URL to clean
+ * @returns {string} URL with tracking params removed
+ */
+function stripTrackingParams(url) {
+  try {
+    const parsed = new URL(url);
+    const trackingPrefixes = ['utm_', 'h_sid', 'h_slt', 'h_', 'mc_', 'fbclid', 'gclid', 'ref', 'trk'];
+    const keysToRemove = [];
+    for (const key of parsed.searchParams.keys()) {
+      if (trackingPrefixes.some(p => key.startsWith(p))) {
+        keysToRemove.push(key);
+      }
+    }
+    for (const key of keysToRemove) {
+      parsed.searchParams.delete(key);
+    }
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Check if a resolved URL is a dead end (generic homepage, error page, etc.)
  * @param {string} url - Resolved URL to check
  * @returns {boolean} True if the URL is useless
@@ -123,6 +148,10 @@ function isDeadEndUrl(url) {
     // google.com/?!=! and similar garbage from broken tracking redirects
     if (host === 'www.google.com' || host === 'google.com') {
       return parsed.pathname === '/' || parsed.pathname === '';
+    }
+    // Still on a tracking/redirect domain after resolution — dead end
+    if (host.includes('hive.co') || host.includes('mail-tracking.')) {
+      return true;
     }
     return false;
   } catch {
@@ -195,11 +224,14 @@ async function resolveNewsletterUrl(url) {
     }
   }
 
-  // Drop dead-end URLs (google.com homepage, etc.)
+  // Drop dead-end URLs (google.com homepage, hive.co still, etc.)
   if (isDeadEndUrl(resolved)) {
     console.log(`[Newsletter] Dead-end URL dropped: ${resolved.substring(0, 80)}`);
     return null;
   }
+
+  // Strip tracking parameters from the final destination
+  resolved = stripTrackingParams(resolved);
 
   if (resolved !== url) {
     console.log(`[Newsletter] URL resolved: ${url.substring(0, 50)}... -> ${resolved.substring(0, 80)}`);
