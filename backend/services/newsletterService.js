@@ -111,17 +111,26 @@ export async function matchItemsToPois(pool, items) {
 }
 
 /**
- * Check if a resolved URL is a dead end (generic homepage, error page, etc.)
- * These come from tracking services that don't properly redirect.
- * @param {string} url - Resolved URL to check
- * @returns {boolean} True if the URL is useless
+ * Check if a URL is a tracking/redirect URL that should be dropped.
+ * Newsletter HTML is full of these — they're opaque, multi-layered,
+ * and resolve to garbage destinations. Better to have no URL than a broken one.
+ * @param {string} url - URL to check
+ * @returns {boolean} True if the URL is a tracking URL or dead end
  */
-function isDeadEndUrl(url) {
+function isTrackingOrDeadEndUrl(url) {
   if (!url) return true;
   try {
     const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    // Known tracking/redirect domains
+    if (host.includes('hive.co') || host.includes('mail-tracking.')
+      || host.includes('mailchimp.com') || host.includes('list-manage.com')
+      || host.includes('constantcontact.com') || host.includes('sendgrid.net')
+      || host.includes('mailgun.') || host.includes('campaign-archive.com')) {
+      return true;
+    }
     // google.com/?!=! and similar garbage from broken tracking redirects
-    if (parsed.hostname === 'www.google.com' || parsed.hostname === 'google.com') {
+    if (host === 'www.google.com' || host === 'google.com') {
       return parsed.pathname === '/' || parsed.pathname === '';
     }
     return false;
@@ -170,6 +179,12 @@ function extractJsRedirectTarget(url) {
 async function resolveNewsletterUrl(url) {
   if (!url) return null;
 
+  // Drop known tracking URLs before even making a request
+  if (isTrackingOrDeadEndUrl(url)) {
+    console.log(`[Newsletter] Tracking URL dropped: ${url.substring(0, 80)}`);
+    return null;
+  }
+
   try {
     const response = await fetch(url, {
       method: 'HEAD',
@@ -186,9 +201,9 @@ async function resolveNewsletterUrl(url) {
       finalUrl = jsTarget;
     }
 
-    // Drop dead-end URLs (google.com homepage, etc.)
-    if (isDeadEndUrl(finalUrl)) {
-      console.log(`[Newsletter] Dead-end URL dropped: ${finalUrl.substring(0, 80)}`);
+    // Drop tracking/dead-end URLs after resolution
+    if (isTrackingOrDeadEndUrl(finalUrl)) {
+      console.log(`[Newsletter] Resolved URL is tracking/dead-end, dropped: ${finalUrl.substring(0, 80)}`);
       return null;
     }
 
