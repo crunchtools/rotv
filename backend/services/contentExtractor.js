@@ -26,6 +26,7 @@ turndown.remove(['img', 'iframe', 'video', 'audio', 'svg', 'canvas', 'figure']);
  * @param {number} options.hardTimeout - Hard timeout for entire operation (default: 45000)
  * @param {number} options.maxLength - Max markdown length to return (default: 8000)
  * @param {boolean} options.extractLinks - Also extract <a> links with context for deep-link matching (default: false)
+ * @param {number} options.dynamicContentWait - Wait time in ms for dynamic content after navigation (default: 2000)
  * @returns {Promise<{markdown: string, title: string, excerpt: string, reachable: boolean, links?: Array, reason?: string}>}
  */
 export async function extractPageContent(url, options = {}) {
@@ -33,7 +34,8 @@ export async function extractPageContent(url, options = {}) {
     timeout = 15000,
     hardTimeout = 45000,
     maxLength = 100000,
-    extractLinks = false
+    extractLinks = false,
+    dynamicContentWait = 2000
   } = options;
 
   if (!url || !url.trim()) {
@@ -91,8 +93,7 @@ export async function extractPageContent(url, options = {}) {
         }
       }
 
-      // Brief wait for dynamic content
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(dynamicContentWait);
 
       // Get rendered HTML
       const html = await page.content();
@@ -119,18 +120,14 @@ export async function extractPageContent(url, options = {}) {
 
             const linkText = anchor.innerText?.trim() || anchor.textContent?.trim() || '';
 
-            // Walk up to find event/article container for context
             let contextText = '';
             let parent = anchor.parentElement;
             let depth = 0;
-            while (parent && depth < 3) {
-              const classList = Array.from(parent.classList || []);
+            const MAX_PARENT_DEPTH = 3;
+            const containerRegex = /\b(event|article|news|card|item|post)\b/i;
+            while (parent && depth < MAX_PARENT_DEPTH) {
               const className = parent.className || '';
-              const isContainer = classList.some(c =>
-                c.includes('event') || c.includes('article') || c.includes('news') ||
-                c.includes('card') || c.includes('item') || c.includes('post')
-              ) || className.includes('event') || className.includes('article');
-              if (isContainer) {
+              if (containerRegex.test(className)) {
                 contextText = parent.innerText?.trim() || '';
                 break;
               }
