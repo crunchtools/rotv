@@ -659,8 +659,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
 
     console.log(`[AI Research] Rendering events page with Readability pipeline: ${eventsPageToRender}`);
     const extracted = await extractPageContent(eventsPageToRender, {
-      timeout: 20000,
-      hardTimeout: 45000,
+      timeout: 30000,
+      hardTimeout: 60000,
       extractLinks: true
     });
 
@@ -696,8 +696,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
 
     console.log(`[AI Research] Rendering news page with Readability pipeline: ${newsPageToRender}`);
     const extracted = await extractPageContent(newsPageToRender, {
-      timeout: 20000,
-      hardTimeout: 45000,
+      timeout: 30000,
+      hardTimeout: 60000,
       extractLinks: true
     });
 
@@ -944,30 +944,26 @@ Extract ALL news from this content using these relaxed criteria.`;
       if (backfilled > 0) console.log(`[Deep Crawl] Backfilled ${backfilled} news with news_url: ${poi.news_url}`);
     }
 
-    // DEEP CRAWL PHASE: For items with generic/index/listing URLs, crawl to find actual article pages
+    // DEEP CRAWL PHASE: Render each source URL, check if content matches, crawl deeper if not
     const allItems = [
       ...(result.events || []).map(e => ({ ...e, _type: 'event' })),
       ...(result.news || []).map(n => ({ ...n, _type: 'news' }))
     ];
-    const deepCrawlCandidates = allItems.filter(item => {
-      if (!item.source_url || item.source_url === 'N/A') return false;
-      if (isGenericUrl(item.source_url)) return true;
-      if (hasEventsUrl && item.source_url === poi.events_url) return true;
-      if (hasNewsUrl && item.source_url === poi.news_url) return true;
-      return false;
-    });
+    const deepCrawlCandidates = allItems.filter(item =>
+      item.source_url && item.source_url !== 'N/A'
+    );
 
     if (deepCrawlCandidates.length > 0) {
       updateProgress(poi.id, {
         phase: 'deep_crawling',
-        message: `Deep crawling ${deepCrawlCandidates.length} generic URLs...`,
-        steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links', 'Deep crawling']
+        message: `Verifying ${deepCrawlCandidates.length} source URLs...`,
+        steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links', 'Verifying sources']
       });
 
-      console.log(`[Deep Crawl] ${deepCrawlCandidates.length} items have generic source URLs, attempting deep crawl...`);
+      console.log(`[Deep Crawl] Verifying ${deepCrawlCandidates.length} items have content on their source URLs...`);
       let deepCrawlFixed = 0;
+      let alreadyCorrect = 0;
 
-      // Group candidates by source_url to avoid rendering the same listing page multiple times
       const bySourceUrl = new Map();
       for (const item of deepCrawlCandidates) {
         const group = bySourceUrl.get(item.source_url) || [];
@@ -977,24 +973,24 @@ Extract ALL news from this content using these relaxed criteria.`;
 
       for (const [sourceUrl, items] of bySourceUrl) {
         checkCancellation();
-        console.log(`[Deep Crawl] Crawling ${sourceUrl} for ${items.length} items...`);
+        console.log(`[Deep Crawl] Rendering ${sourceUrl} for ${items.length} items...`);
 
         let prefetched = null;
         try {
-          const listingPage = await extractPageContent(sourceUrl, {
-            timeout: 25000,
-            hardTimeout: 45000,
+          const page = await extractPageContent(sourceUrl, {
+            timeout: 30000,
+            hardTimeout: 60000,
             extractLinks: true
           });
-          if (listingPage.reachable) {
-            prefetched = { markdown: listingPage.markdown, links: listingPage.links || [] };
-            console.log(`[Deep Crawl] Extracted ${prefetched.links.length} links from listing page`);
+          if (page.reachable) {
+            prefetched = { markdown: page.markdown, links: page.links || [] };
+            console.log(`[Deep Crawl] Rendered ${sourceUrl}: ${prefetched.links.length} links`);
           } else {
-            console.log(`[Deep Crawl] Failed to render listing page: ${listingPage.reason || 'no content'}`);
+            console.log(`[Deep Crawl] Could not render ${sourceUrl}: ${page.reason || 'no content'}`);
             continue;
           }
         } catch (error) {
-          console.error(`[Deep Crawl] Error rendering listing page ${sourceUrl}: ${error.message}`);
+          console.error(`[Deep Crawl] Error rendering ${sourceUrl}: ${error.message}`);
           continue;
         }
 
@@ -1007,7 +1003,7 @@ Extract ALL news from this content using these relaxed criteria.`;
               timeoutMs: 45000,
               prefetched
             });
-            if (crawlResult.foundUrl) {
+            if (crawlResult.foundUrl && crawlResult.foundUrl !== sourceUrl) {
               console.log(`[Deep Crawl] ✓ "${item.title.substring(0, 50)}..." → ${crawlResult.foundUrl}`);
               const sourceArray = item._type === 'event' ? result.events : result.news;
               const original = sourceArray.find(i => i.title === item.title && i.source_url === item.source_url);
@@ -1015,6 +1011,8 @@ Extract ALL news from this content using these relaxed criteria.`;
                 original.source_url = crawlResult.foundUrl;
                 deepCrawlFixed++;
               }
+            } else if (crawlResult.foundUrl === sourceUrl) {
+              alreadyCorrect++;
             } else {
               console.log(`[Deep Crawl] ✗ No match for "${item.title.substring(0, 50)}..." (checked ${crawlResult.pagesChecked} pages)`);
             }
@@ -1024,7 +1022,7 @@ Extract ALL news from this content using these relaxed criteria.`;
         }
       }
 
-      console.log(`[Deep Crawl] Fixed ${deepCrawlFixed}/${deepCrawlCandidates.length} generic URLs`);
+      console.log(`[Deep Crawl] Results: ${alreadyCorrect} already correct, ${deepCrawlFixed} fixed, ${deepCrawlCandidates.length - alreadyCorrect - deepCrawlFixed} unresolved`);
     }
 
     let allNews = result.news || [];
