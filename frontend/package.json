@@ -1,6 +1,6 @@
 {
   "name": "rotv-frontend",
-  "version": "1.19.0",
+  "version": "1.19.1",
   "description": "Roots of The Valley - Frontend",
   "type": "module",
   "scripts": {
