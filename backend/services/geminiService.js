@@ -425,7 +425,7 @@ export async function moderateContent(pool, content, sheets = null) {
   if (content.source_page_content) {
     sourceSection = `
 Source URL: ${content.source_url}
-Source Page Content (first 3000 chars):
+Source Page Content (rendered and converted to markdown):
 ---
 ${content.source_page_content}
 ---

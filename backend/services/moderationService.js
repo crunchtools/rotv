@@ -5,33 +5,7 @@
  */
 
 import { moderateContent, moderatePhoto } from './geminiService.js';
-
-async function fetchSourceContent(url) {
-  if (!url || !url.trim()) return { reachable: false, reason: 'no source URL', content: null };
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const response = await fetch(url, {
-      method: 'GET',
-      signal: controller.signal,
-      headers: { 'User-Agent': 'ROTV-Moderation/1.0' },
-      redirect: 'follow'
-    });
-    clearTimeout(timeout);
-    if (!response.ok) return { reachable: false, reason: `HTTP ${response.status}`, content: null };
-    const html = await response.text();
-    const textContent = html
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 3000);
-    return { reachable: true, content: textContent };
-  } catch (error) {
-    return { reachable: false, reason: error.name === 'AbortError' ? 'timeout' : error.message, content: null };
-  }
-}
+import { extractPageContent } from './contentExtractor.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -92,7 +66,7 @@ export async function processItem(pool, contentType, contentId) {
       return;
     }
 
-    const sourceCheck = await fetchSourceContent(row.source_url);
+    const sourceCheck = await extractPageContent(row.source_url);
     if (!sourceCheck.reachable) {
       await pool.query(
         `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
@@ -107,7 +81,7 @@ export async function processItem(pool, contentType, contentId) {
       title: row.title,
       summary: row.summary,
       source_url: row.source_url,
-      source_page_content: sourceCheck.content,
+      source_page_content: sourceCheck.markdown,
       poi_name: row.poi_name
     });
 
@@ -175,7 +149,7 @@ export async function processItem(pool, contentType, contentId) {
 
     let eventSourceContent = null;
     if (row.source_url && row.source_url.trim()) {
-      const sourceCheck = await fetchSourceContent(row.source_url);
+      const sourceCheck = await extractPageContent(row.source_url);
       if (!sourceCheck.reachable) {
         await pool.query(
           `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
@@ -184,7 +158,7 @@ export async function processItem(pool, contentType, contentId) {
         console.log(`[Moderation] event #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
         return;
       }
-      eventSourceContent = sourceCheck.content;
+      eventSourceContent = sourceCheck.markdown;
     }
 
     scoring = await moderateContent(pool, {
