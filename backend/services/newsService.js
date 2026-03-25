@@ -8,7 +8,7 @@
 
 import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats } from './aiSearchFactory.js';
 import { pushNewsToSheets, pushEventsToSheets } from './sheetsSync.js';
-import { renderJavaScriptPage, isJavaScriptHeavySite, extractEventContent } from './jsRenderer.js';
+import { extractPageContent } from './contentExtractor.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -281,7 +281,7 @@ function calculateSimilarity(str1, str2) {
 /**
  * Match an event or news item to extracted links from the page
  * @param {Object} item - Event or news item with title, description, start_date/published_date
- * @param {Array} links - Array of link objects from jsRenderer
+ * @param {Array} links - Array of link objects from contentExtractor
  * @param {string} type - 'event' or 'news'
  * @returns {string|null} - Matched URL or null
  */
@@ -611,27 +611,6 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     }
   }
 
-  // Fetch Twitter credentials from database
-  let twitterCredentials = null;
-  try {
-    const credResult = await pool.query(
-      `SELECT key, value FROM admin_settings WHERE key IN ('twitter_username', 'twitter_password')`
-    );
-    const credentials = {};
-    credResult.rows.forEach(row => {
-      if (row.key === 'twitter_username') credentials.username = row.value;
-      if (row.key === 'twitter_password') credentials.password = row.value;
-    });
-    if (credentials.username && credentials.password) {
-      twitterCredentials = credentials;
-      console.log('[News/Events] ✓ Twitter credentials loaded from database');
-    } else {
-      console.log('[News/Events] ⚠️ Twitter credentials not configured in database');
-    }
-  } catch (credErr) {
-    console.error('[News/Events] Error fetching Twitter credentials:', credErr.message);
-  }
-
   // Preserve slotId and jobId if they exist (set by job processing loop)
   const existingProgress = collectionProgress.get(poi.id);
   const slotId = existingProgress?.slotId;
@@ -681,98 +660,90 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     }
   };
 
-  // Check if we need to render JavaScript-heavy pages
+  // Extract content from dedicated pages using Playwright + Readability + Turndown
+  // This renders ALL pages (not just JS-heavy ones) for clean markdown extraction
   let renderedEventsContent = '';
   let renderedNewsContent = '';
   let usedDedicatedNewsUrl = false;
   let eventsLinks = [];
   let newsLinks = [];
 
-  // Only render events page if we're collecting events
-  // If no dedicated events URL, fall back to checking the main website
+  // Only extract events page if we're collecting events
   const eventsPageToRender = eventsUrl !== 'No dedicated events page' ? eventsUrl : website;
   checkCancellation(); // Check before rendering events
-  if (collectionType !== 'news' && eventsPageToRender !== 'No website available' && await isJavaScriptHeavySite(eventsPageToRender)) {
-    console.log(`[AI Research] Rendering events page (collectionType: ${collectionType})`);
+  if (collectionType !== 'news' && eventsPageToRender !== 'No website available') {
+    console.log(`[AI Research] Extracting events page content (collectionType: ${collectionType})`);
     updateProgress(poi.id, {
       phase: 'rendering_events',
-      message: 'Rendering JavaScript-heavy Events page with browser...',
-      steps: ['Initialized', 'Rendering events page']
+      message: 'Extracting events page content...',
+      steps: ['Initialized', 'Extracting events page']
     });
 
-    console.log(`[AI Research] 🌐 Detected JS-heavy events page, rendering with Playwright...`);
-    const rendered = await renderJavaScriptPage(eventsPageToRender, {
-      waitTime: 4000,
+    console.log(`[AI Research] Rendering events page with Readability pipeline: ${eventsPageToRender}`);
+    const extracted = await extractPageContent(eventsPageToRender, {
       timeout: 20000,
-      twitterCredentials
+      hardTimeout: 45000,
+      extractLinks: true
     });
 
-    if (rendered.success) {
-      // Check if we got meaningful content (minimum 500 chars)
-      const MIN_CONTENT_LENGTH = 500;
-      if (rendered.text && rendered.text.length >= MIN_CONTENT_LENGTH) {
-        // Use full rendered text, not just extracted keywords
-        // This ensures we don't filter out important event details
-        renderedEventsContent = rendered.text.substring(0, 15000); // Increased limit
-        eventsLinks = rendered.links || []; // Store extracted links
-        console.log(`[AI Research] ✓ Rendered events page: ${renderedEventsContent.length} chars (from ${rendered.text.length} total)`);
+    if (extracted.reachable && extracted.markdown) {
+      const MIN_CONTENT_LENGTH = 200;
+      if (extracted.markdown.length >= MIN_CONTENT_LENGTH) {
+        renderedEventsContent = extracted.markdown;
+        eventsLinks = extracted.links || [];
+        console.log(`[AI Research] ✓ Extracted events page: ${renderedEventsContent.length} chars markdown, ${eventsLinks.length} links`);
 
         updateProgress(poi.id, {
-          message: `Rendered events page (${eventsLinks.length} links found)`,
-          steps: ['Initialized', 'Rendered events page']
+          message: `Extracted events page (${eventsLinks.length} links found)`,
+          steps: ['Initialized', 'Extracted events page']
         });
       } else {
-        console.log(`[AI Research] ⚠️ Rendered events page has insufficient content (${rendered.text?.length || 0} chars, need ${MIN_CONTENT_LENGTH}+)`);
-        console.log(`[AI Research] This may indicate login wall, empty page, or rendering failure - skipping rendered content`);
+        console.log(`[AI Research] ⚠️ Events page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
       }
     } else {
-      console.log(`[AI Research] ❌ Failed to render events page: ${rendered.error}`);
+      console.log(`[AI Research] ❌ Failed to extract events page: ${extracted.reason || 'no content'}`);
     }
   }
 
-  // Only render news page if we're collecting news
-  // If no dedicated news URL, fall back to checking the main website
+  // Only extract news page if we're collecting news
   const newsPageToRender = newsUrl !== 'No dedicated news page' ? newsUrl : website;
   checkCancellation(); // Check before rendering news
-  if (collectionType !== 'events' && newsPageToRender !== 'No website available' && await isJavaScriptHeavySite(newsPageToRender)) {
-    console.log(`[AI Research] Rendering news page (collectionType: ${collectionType})`);
+  if (collectionType !== 'events' && newsPageToRender !== 'No website available') {
+    console.log(`[AI Research] Extracting news page content (collectionType: ${collectionType})`);
     updateProgress(poi.id, {
       phase: 'rendering_news',
-      message: 'Rendering JavaScript-heavy News page with browser...',
-      steps: ['Initialized', 'Rendering news page']
+      message: 'Extracting news page content...',
+      steps: ['Initialized', 'Extracting news page']
     });
 
-    console.log(`[AI Research] 🌐 Detected JS-heavy news page, rendering with Playwright...`);
-    const rendered = await renderJavaScriptPage(newsPageToRender, {
-      waitTime: 4000,
+    console.log(`[AI Research] Rendering news page with Readability pipeline: ${newsPageToRender}`);
+    const extracted = await extractPageContent(newsPageToRender, {
       timeout: 20000,
-      twitterCredentials
+      hardTimeout: 45000,
+      extractLinks: true
     });
 
-    if (rendered.success) {
-      // Check if we got meaningful content (minimum 500 chars)
-      const MIN_CONTENT_LENGTH = 500;
-      if (rendered.text && rendered.text.length >= MIN_CONTENT_LENGTH) {
-        // Use full rendered text for news as well
-        renderedNewsContent = rendered.text.substring(0, 15000); // Increased limit
-        newsLinks = rendered.links || []; // Store extracted links
-        usedDedicatedNewsUrl = true; // Mark that we used dedicated news URL
-        console.log(`[AI Research] ✓ Rendered news page: ${renderedNewsContent.length} chars (from ${rendered.text.length} total)`);
+    if (extracted.reachable && extracted.markdown) {
+      const MIN_CONTENT_LENGTH = 200;
+      if (extracted.markdown.length >= MIN_CONTENT_LENGTH) {
+        renderedNewsContent = extracted.markdown;
+        newsLinks = extracted.links || [];
+        usedDedicatedNewsUrl = true;
+        console.log(`[AI Research] ✓ Extracted news page: ${renderedNewsContent.length} chars markdown, ${newsLinks.length} links`);
 
         updateProgress(poi.id, {
-          message: `Rendered news page (${newsLinks.length} links found)`,
-          steps: ['Initialized', 'Rendered news page']
+          message: `Extracted news page (${newsLinks.length} links found)`,
+          steps: ['Initialized', 'Extracted news page']
         });
       } else {
-        console.log(`[AI Research] ⚠️ Rendered news page has insufficient content (${rendered.text?.length || 0} chars, need ${MIN_CONTENT_LENGTH}+)`);
-        console.log(`[AI Research] This may indicate login wall, empty page, or rendering failure - skipping rendered content`);
+        console.log(`[AI Research] ⚠️ News page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
       }
     } else {
-      console.log(`[AI Research] ❌ Failed to render news page: ${rendered.error}`);
+      console.log(`[AI Research] ❌ Failed to extract news page: ${extracted.reason || 'no content'}`);
     }
   }
 
-  // Build prompt with rendered content if available
+  // Build prompt with extracted content if available
   let prompt = NEWS_COLLECTION_PROMPT
     .replace(/\{\{timezone\}\}/g, timezone)
     .replace('{{name}}', poi.name)
@@ -782,9 +753,9 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     .replace('{{eventsUrl}}', eventsUrl)
     .replace('{{newsUrl}}', newsUrl);
 
-  // Add rendered content to prompt if we have it
+  // Add extracted markdown content to prompt if we have it
   if (renderedEventsContent) {
-    prompt += `\n\nRENDERED EVENTS PAGE CONTENT:\nWe rendered the JavaScript-heavy events page and extracted this content:\n\n${renderedEventsContent}\n\n**SPECIAL INSTRUCTIONS FOR RENDERED EVENTS PAGE:**
+    prompt += `\n\nEXTRACTED EVENTS PAGE CONTENT (markdown):\nWe rendered the events page and extracted this content:\n\n${renderedEventsContent}\n\n**SPECIAL INSTRUCTIONS FOR EXTRACTED EVENTS PAGE:**
 Since this content comes directly from the organization's dedicated events page, use RELAXED requirements:
 - You only need 75% confidence (not 95%) that an event is relevant
 - Events listed on this official page can be assumed to be associated with "${poi.name}" even if the name isn't explicitly mentioned in every listing
@@ -792,11 +763,11 @@ Since this content comes directly from the organization's dedicated events page,
 - Still exclude past events - only include upcoming/current events
 - Still require proper date formatting (YYYY-MM-DD) - interpret all dates in ${timezone} timezone
 
-Extract ALL events from this rendered content using these relaxed criteria.`;
+Extract ALL events from this content using these relaxed criteria.`;
   }
 
   if (renderedNewsContent) {
-    prompt += `\n\nRENDERED NEWS PAGE CONTENT:\nWe rendered the JavaScript-heavy news page and extracted this content:\n\n${renderedNewsContent}\n\n**SPECIAL INSTRUCTIONS FOR RENDERED NEWS PAGE:**
+    prompt += `\n\nEXTRACTED NEWS PAGE CONTENT (markdown):\nWe rendered the news page and extracted this content:\n\n${renderedNewsContent}\n\n**SPECIAL INSTRUCTIONS FOR EXTRACTED NEWS PAGE:**
 Since this content comes directly from the organization's dedicated news page, use RELAXED requirements:
 - You only need 75% confidence (not 95%) that a news item is relevant
 - News items on this official page can be assumed to be associated with "${poi.name}" even if not explicitly mentioned
@@ -809,7 +780,7 @@ Since this content comes directly from the organization's dedicated news page, u
   - Only use "published_date": null if absolutely no date information can be extracted
 - Prefer to include items even if dates are uncertain
 
-Extract ALL news from this rendered content using these relaxed criteria.`;
+Extract ALL news from this content using these relaxed criteria.`;
   }
 
   checkCancellation(); // Check before AI search
