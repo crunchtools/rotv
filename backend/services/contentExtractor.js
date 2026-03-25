@@ -83,7 +83,7 @@ export async function extractPageContent(url, options = {}) {
         await page.goto(url, { waitUntil: 'networkidle', timeout });
       } catch (navError) {
         if (navError.message.includes('imeout')) {
-          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: Math.min(timeout, 10000) });
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout });
         } else {
           throw navError;
         }

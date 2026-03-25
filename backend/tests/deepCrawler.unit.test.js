@@ -267,4 +267,63 @@ describe('deepCrawlForArticle', () => {
     expect(result.foundUrl).toBeNull();
     expect(result.pagesChecked).toBe(0);
   });
+
+  it('should use prefetched data and skip Level 0 render', async () => {
+    let renderCalls = [];
+    const extractor = async (url) => {
+      renderCalls.push(url);
+      if (url === 'https://example.com/news/trail-closure') {
+        return {
+          reachable: true,
+          markdown: 'Brandywine Falls trail closure announced for this weekend. Hikers should plan alternate routes.',
+          links: []
+        };
+      }
+      return { reachable: false, markdown: null, reason: 'not found' };
+    };
+
+    const result = await deepCrawlForArticle(
+      'https://example.com',
+      { title: 'Brandywine Falls Trail Closure This Weekend' },
+      {
+        maxDepth: 1,
+        maxPages: 3,
+        extractor,
+        prefetched: {
+          markdown: 'Welcome to our park. See latest news below.',
+          links: [
+            { url: 'https://example.com/news/trail-closure', text: 'Brandywine Falls Trail Closure', context: 'Trail closure notice for this weekend', className: '', parentClassName: '' }
+          ]
+        }
+      }
+    );
+
+    expect(result.foundUrl).toBe('https://example.com/news/trail-closure');
+    expect(renderCalls).not.toContain('https://example.com');
+    expect(result.pagesChecked).toBe(1);
+  });
+
+  it('should match on prefetched page content without rendering', async () => {
+    let renderCalls = [];
+    const extractor = async (url) => {
+      renderCalls.push(url);
+      return { reachable: false, markdown: null, reason: 'not found' };
+    };
+
+    const result = await deepCrawlForArticle(
+      'https://example.com/article',
+      { title: 'Brandywine Falls Trail Closure This Weekend' },
+      {
+        extractor,
+        prefetched: {
+          markdown: 'Brandywine Falls trail closure announced for this weekend. Hikers should plan alternate routes during maintenance.',
+          links: []
+        }
+      }
+    );
+
+    expect(result.foundUrl).toBe('https://example.com/article');
+    expect(renderCalls).toHaveLength(0);
+    expect(result.pagesChecked).toBe(0);
+  });
 });
