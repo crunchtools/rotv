@@ -981,8 +981,9 @@ Extract ALL news from this content using these relaxed criteria.`;
     checkCancellation(); // Check before link matching
 
     // Match events/news to extracted links for deep linking
-    // Only override source_url if it's missing/null (don't override URLs from Google Search)
-    console.log(`[Link Matcher] Checking conditions - events: ${result.events?.length || 0}, eventsLinks: ${eventsLinks.length}`);
+    // When search grounding is off, always override — Gemini fabricates URLs from patterns
+    // When search grounding is on, only override missing/generic URLs (AI has real search results)
+    console.log(`[Link Matcher] Checking conditions - events: ${result.events?.length || 0}, eventsLinks: ${eventsLinks.length}, searchGrounding: ${useSearchGrounding}`);
     if (result.events && result.events.length > 0 && eventsLinks.length > 0) {
       updateProgress(poi.id, {
         phase: 'matching_links',
@@ -1000,8 +1001,15 @@ Extract ALL news from this content using these relaxed criteria.`;
           event.source_url === eventsUrl  // Exactly matches the events page URL
         );
 
-        if (!event.source_url || event.source_url === 'N/A' || hasIndexUrl) {
-          if (hasIndexUrl) {
+        // Without search grounding, always override — AI-generated URLs are fabricated
+        const shouldOverride = !useSearchGrounding ||
+          !event.source_url || event.source_url === 'N/A' || hasIndexUrl;
+
+        if (shouldOverride) {
+          if (!useSearchGrounding && event.source_url && event.source_url !== 'N/A' && !hasIndexUrl) {
+            console.log(`[Link Matcher] Overriding AI-fabricated URL for "${event.title.substring(0, 40)}..."`);
+            overrideCount++;
+          } else if (hasIndexUrl) {
             console.log(`[Link Matcher] Overriding index URL for "${event.title.substring(0, 40)}..."`);
             overrideCount++;
           }
@@ -1012,12 +1020,12 @@ Extract ALL news from this content using these relaxed criteria.`;
           }
         }
       });
-      console.log(`[Link Matcher] Matched ${matchCount} events to deep links (${overrideCount} index URLs overridden)`);
+      console.log(`[Link Matcher] Matched ${matchCount} events to deep links (${overrideCount} URLs overridden)`);
     } else {
       console.log(`[Link Matcher] Skipping event link matching - conditions not met`);
     }
 
-    console.log(`[Link Matcher] Checking conditions - news: ${result.news?.length || 0}, newsLinks: ${newsLinks.length}`);
+    console.log(`[Link Matcher] Checking conditions - news: ${result.news?.length || 0}, newsLinks: ${newsLinks.length}, searchGrounding: ${useSearchGrounding}`);
     if (result.news && result.news.length > 0 && newsLinks.length > 0) {
       updateProgress(poi.id, {
         phase: 'matching_links',
@@ -1035,8 +1043,15 @@ Extract ALL news from this content using these relaxed criteria.`;
           newsItem.source_url === newsUrl  // Exactly matches the news page URL
         );
 
-        if (!newsItem.source_url || newsItem.source_url === 'N/A' || hasIndexUrl) {
-          if (hasIndexUrl) {
+        // Without search grounding, always override — AI-generated URLs are fabricated
+        const shouldOverride = !useSearchGrounding ||
+          !newsItem.source_url || newsItem.source_url === 'N/A' || hasIndexUrl;
+
+        if (shouldOverride) {
+          if (!useSearchGrounding && newsItem.source_url && newsItem.source_url !== 'N/A' && !hasIndexUrl) {
+            console.log(`[Link Matcher] Overriding AI-fabricated URL for "${newsItem.title.substring(0, 40)}..."`);
+            overrideCount++;
+          } else if (hasIndexUrl) {
             console.log(`[Link Matcher] Overriding index URL for "${newsItem.title.substring(0, 40)}..."`);
             overrideCount++;
           }
