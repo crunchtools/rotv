@@ -545,6 +545,82 @@ IMPORTANT:
 - EVENTS must be upcoming (future dates) or currently happening - do NOT include past events`;
 
 /**
+ * Crawl same-origin sub-pages beneath a dedicated events/news URL to build richer content.
+ * When a POI has a dedicated URL (e.g. /excursions), sites often organize content into
+ * sub-pages (e.g. /excursions/themed-events, /excursions/fun-games). This function
+ * renders those sub-pages and combines their markdown + links for Gemini.
+ *
+ * @param {string} pageUrl - The dedicated page URL (events_url or news_url)
+ * @param {Array} pageLinks - Links extracted from the dedicated page
+ * @param {number} poiId - POI ID for logging
+ * @param {Function} checkCancellation - Cancellation checker function
+ * @param {Object} options - Optional overrides
+ * @param {Function} options.extractor - Page extraction function (for testing)
+ * @param {number} options.maxPages - Max sub-pages to render (default 10)
+ * @returns {Object|null} - { markdown, links, pagesRendered } or null if insufficient content
+ */
+async function crawlSubPages(pageUrl, pageLinks, poiId, checkCancellation, options = {}) {
+  const { extractor = extractPageContent, maxPages = 10 } = options;
+
+  // Parse page URL to get origin and path prefix
+  let pageOrigin, pagePath;
+  try {
+    const parsed = new URL(pageUrl);
+    pageOrigin = parsed.origin;
+    pagePath = parsed.pathname.replace(/\/+$/, '');
+  } catch { return null; }
+
+  // Filter to unique same-origin sub-page links
+  const seen = new Set();
+  const subPageLinks = pageLinks.filter(link => {
+    try {
+      const parsed = new URL(link.url);
+      if (parsed.origin !== pageOrigin) return false;
+      const linkPath = parsed.pathname.replace(/\/+$/, '');
+      if (linkPath === pagePath || !linkPath.startsWith(pagePath + '/')) return false;
+      if (seen.has(link.url)) return false;
+      seen.add(link.url);
+      return true;
+    } catch { return false; }
+  });
+
+  if (subPageLinks.length < 2) return null;
+
+  console.log(`[AI Research] Sub-page crawl: found ${subPageLinks.length} sub-pages under ${pagePath}`);
+
+  let combinedMarkdown = '';
+  let combinedLinks = [...pageLinks];
+  let pagesRendered = 0;
+
+  for (const subLink of subPageLinks.slice(0, maxPages)) {
+    checkCancellation();
+    pagesRendered++;
+    const sectionName = subLink.text?.trim() || subLink.url.split('/').pop().replace(/-/g, ' ');
+    console.log(`[AI Research]   Crawling sub-page ${pagesRendered}/${Math.min(subPageLinks.length, maxPages)}: ${subLink.url}`);
+
+    try {
+      const extracted = await extractor(subLink.url, {
+        timeout: 30000, hardTimeout: 60000, extractLinks: true
+      });
+
+      if (extracted.reachable && extracted.markdown?.length > 50) {
+        combinedMarkdown += `## ${sectionName}\n\n${extracted.markdown}\n\n`;
+        if (extracted.links) combinedLinks.push(...extracted.links);
+        console.log(`[AI Research]   ✓ ${extracted.markdown.length} chars, ${(extracted.links || []).length} links`);
+      } else {
+        console.log(`[AI Research]   ✗ Insufficient content (${extracted.markdown?.length || 0} chars)`);
+      }
+    } catch (err) {
+      console.log(`[AI Research]   ✗ Error: ${err.message}`);
+    }
+  }
+
+  return combinedMarkdown.length >= 200
+    ? { markdown: combinedMarkdown, links: combinedLinks, pagesRendered }
+    : null;
+}
+
+/**
  * Collect news and events for a specific POI
  * @param {Pool} pool - Database connection pool
  * @param {Object} poi - POI object with id, name, poi_type, primary_activities, more_info_link, events_url, news_url
@@ -684,6 +760,24 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     }
   }
 
+  // SUB-PAGE CRAWL: When POI has a dedicated events URL, crawl sub-pages for richer content
+  if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page' && eventsLinks.length > 0) {
+    const subPageResult = await crawlSubPages(eventsPageToRender, eventsLinks, poi.id, checkCancellation);
+    if (subPageResult) {
+      if (renderedEventsContent) {
+        renderedEventsContent += '\n\n' + subPageResult.markdown;
+      } else {
+        renderedEventsContent = subPageResult.markdown;
+      }
+      eventsLinks = subPageResult.links;
+      console.log(`[AI Research] ✓ Sub-page crawl: ${subPageResult.markdown.length} chars from ${subPageResult.pagesRendered} sub-pages, ${eventsLinks.length} total links`);
+      updateProgress(poi.id, {
+        message: `Enriched events from ${subPageResult.pagesRendered} sub-pages`,
+        steps: ['Initialized', 'Sub-pages crawled']
+      });
+    }
+  }
+
   // Only extract news page if we're collecting news
   const newsPageToRender = newsUrl !== 'No dedicated news page' ? newsUrl : website;
   checkCancellation(); // Check before rendering news
@@ -720,6 +814,26 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       }
     } else {
       console.log(`[AI Research] ❌ Failed to extract news page: ${extracted.reason || 'no content'}`);
+    }
+  }
+
+  // SUB-PAGE CRAWL: When POI has a dedicated news URL, crawl sub-pages for richer content
+  if (collectionType !== 'events' && newsUrl !== 'No dedicated news page' && newsLinks.length > 0) {
+    const subPageResult = await crawlSubPages(newsPageToRender, newsLinks, poi.id, checkCancellation);
+    if (subPageResult) {
+      if (renderedNewsContent) {
+        renderedNewsContent += '\n\n' + subPageResult.markdown;
+        usedDedicatedNewsUrl = true;
+      } else {
+        renderedNewsContent = subPageResult.markdown;
+        usedDedicatedNewsUrl = true;
+      }
+      newsLinks = subPageResult.links;
+      console.log(`[AI Research] ✓ Sub-page crawl (news): ${subPageResult.markdown.length} chars from ${subPageResult.pagesRendered} sub-pages, ${newsLinks.length} total links`);
+      updateProgress(poi.id, {
+        message: `Enriched news from ${subPageResult.pagesRendered} sub-pages`,
+        steps: ['Initialized', 'Sub-pages crawled']
+      });
     }
   }
 
