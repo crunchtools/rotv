@@ -884,14 +884,30 @@ Extract ALL news from this content using these relaxed criteria.`;
     const currentProgress = getCollectionProgress(poi.id);
     const initialProvider = currentProgress?.provider || 'perplexity';
 
+    // When we have rich crawled content from a dedicated URL, skip search grounding —
+    // the LLM just needs to extract structured data from what we already have
+    const hasDedicatedEventsContent = eventsUrl !== 'No dedicated events page' && renderedEventsContent;
+    const hasDedicatedNewsContent = newsUrl !== 'No dedicated news page' && renderedNewsContent;
+    const useSearchGrounding = !hasDedicatedEventsContent && !hasDedicatedNewsContent;
+
+    const aiOptions = {};
+    if (!useSearchGrounding) {
+      aiOptions.useSearchGrounding = false;
+      // Force Gemini for extraction — Perplexity always searches, defeating the purpose
+      aiOptions.forceProvider = 'gemini';
+      console.log(`[AI Research] Using Gemini without search grounding (have crawled content from dedicated URLs)`);
+    }
+
     updateProgress(poi.id, {
       phase: 'ai_search',
-      message: 'Searching with AI (Perplexity web search)...',
-      steps: ['Initialized', 'Rendered pages', 'Searching with AI']
+      message: useSearchGrounding
+        ? 'Searching with AI (web search)...'
+        : 'Extracting events/news from crawled content...',
+      steps: ['Initialized', 'Rendered pages', useSearchGrounding ? 'Searching with AI' : 'Extracting from content']
     });
 
-    debugLog(`[AI Research POI ${poi.id}] ====== BEFORE AI CALL (provider=${initialProvider}) ======`);
-    const aiResult = await generateTextWithCustomPrompt(pool, prompt, sheets);
+    debugLog(`[AI Research POI ${poi.id}] ====== BEFORE AI CALL (provider=${initialProvider}, searchGrounding=${useSearchGrounding}) ======`);
+    const aiResult = await generateTextWithCustomPrompt(pool, prompt, sheets, aiOptions);
     debugLog(`[AI Research POI ${poi.id}] ====== AFTER AI CALL ======`);
     debugLog(`[AI Research POI ${poi.id}] aiResult: ${JSON.stringify({
       type: typeof aiResult,
