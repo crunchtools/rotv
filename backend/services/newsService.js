@@ -676,7 +676,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
           steps: ['Initialized', 'Extracted events page']
         });
       } else {
-        console.log(`[AI Research] ⚠️ Events page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
+        eventsLinks = extracted.links || [];
+        console.log(`[AI Research] ⚠️ Events page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+), kept ${eventsLinks.length} links`);
       }
     } else {
       console.log(`[AI Research] ❌ Failed to extract events page: ${extracted.reason || 'no content'}`);
@@ -714,7 +715,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
           steps: ['Initialized', 'Extracted news page']
         });
       } else {
-        console.log(`[AI Research] ⚠️ News page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
+        newsLinks = extracted.links || [];
+        console.log(`[AI Research] ⚠️ News page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+), kept ${newsLinks.length} links`);
       }
     } else {
       console.log(`[AI Research] ❌ Failed to extract news page: ${extracted.reason || 'no content'}`);
