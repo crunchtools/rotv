@@ -52,7 +52,7 @@ export async function extractPageContent(url, options = {}) {
     });
 
     const extractionPromise = (async () => {
-      browser = await chromium.launch({
+      const launchOptions = {
         headless: true,
         args: [
           '--no-sandbox',
@@ -61,7 +61,11 @@ export async function extractPageContent(url, options = {}) {
           '--disable-accelerated-2d-canvas',
           '--disable-gpu'
         ]
-      });
+      };
+      if (process.env.PLAYWRIGHT_PROXY) {
+        launchOptions.proxy = { server: process.env.PLAYWRIGHT_PROXY };
+      }
+      browser = await chromium.launch(launchOptions);
 
       const context = await browser.newContext({
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
