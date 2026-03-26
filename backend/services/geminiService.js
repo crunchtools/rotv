@@ -192,17 +192,20 @@ export async function generateText(pool, promptKey, destination, sheets = null) 
 /**
  * Generate text content using a custom prompt with Google Search grounding
  */
-export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = null) {
+export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = null, options = {}) {
+  const { useSearchGrounding = true } = options;
   const genAI = await createGeminiClient(pool, sheets);
 
-  // Enable Google Search grounding
-  const model = genAI.getGenerativeModel({
+  const modelConfig = {
     model: 'gemini-2.5-flash',
-    tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
-  });
+  };
+  if (useSearchGrounding) {
+    modelConfig.tools = [{ googleSearch: {} }];
+  }
+  const model = genAI.getGenerativeModel(modelConfig);
 
-  console.log(`Generating with custom prompt (${customPrompt.length} chars, with Google Search)`);
+  console.log(`Generating with custom prompt (${customPrompt.length} chars, ${useSearchGrounding ? 'with' : 'without'} Google Search)`);
 
   const generation = await model.generateContent(customPrompt);
   const response = generation.response;
