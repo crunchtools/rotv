@@ -707,7 +707,7 @@ function filterDetailLinks(detailLinks, sourceUrl) {
  * @returns {Object} - { pages: [{url, markdown, title}], totalPagesRendered, totalDetailPages }
  */
 async function crawlWithClassification(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
-  const { maxDepth = 2, maxPages = 15, maxDetailPages = 10, extractor = extractPageContent } = options;
+  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, renderDelayMs = 1500, extractor = extractPageContent } = options;
   const visited = new Set();
   let totalPagesRendered = 0;
   const collectedPages = []; // { url, markdown, title }
@@ -719,6 +719,11 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
       if (visited.has(url) || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) break;
       visited.add(url);
       totalPagesRendered++;
+
+      // Delay between renders to avoid rate limiting (Wix, etc.)
+      if (totalPagesRendered > 1) {
+        await new Promise(resolve => setTimeout(resolve, renderDelayMs));
+      }
 
       console.log(`[Classifier] Rendering (depth=${depth}, page=${totalPagesRendered}): ${url}`);
       const extracted = await extractor(url, { timeout: 30000, hardTimeout: 60000, extractLinks: true });
