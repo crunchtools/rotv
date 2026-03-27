@@ -1052,6 +1052,11 @@ ${classifiedEventsContent}
 - Still exclude past events - only include upcoming/current events
 - Still require proper date formatting (YYYY-MM-DD) - interpret all dates in ${timezone} timezone
 
+**MULTIPLE DATES ON ONE PAGE**
+- If a single page lists multiple dates for the same event (e.g., "March 21" and "May 31"), create a SEPARATE event entry for each date
+- Each entry gets the same title, description, and source_url but a different start_date
+- This is common for recurring excursions — treat each date as its own event
+
 Extract ALL events from this content using these relaxed criteria.`;
   } else if (renderedEventsContent) {
     prompt += `\n\nEXTRACTED EVENTS PAGE CONTENT (markdown):\nWe rendered the events page and extracted this content:\n\n${renderedEventsContent}\n\n**SPECIAL INSTRUCTIONS FOR EXTRACTED EVENTS PAGE:**
