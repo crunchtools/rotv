@@ -621,6 +621,133 @@ async function crawlSubPages(pageUrl, pageLinks, poiId, checkCancellation, optio
 }
 
 /**
+ * Classify a web page as LISTING, DETAIL, or HYBRID using Gemini.
+ * Sends first 3000 chars of markdown + first 20 links, returns classification.
+ *
+ * @param {Pool} pool - Database connection pool
+ * @param {string} markdown - Page markdown content
+ * @param {Array} links - Extracted links from the page
+ * @param {string} url - The page URL
+ * @param {string} contentType - 'event' or 'news'
+ * @param {Object} sheets - Optional sheets client for API key restore
+ * @returns {Object} - { pageType, detailLinks, reasoning }
+ */
+async function classifyPage(pool, markdown, links, url, contentType, sheets) {
+  const prompt = `Classify this web page. Based on the content, is it:
+A) LISTING — lists multiple ${contentType}s with links to individual pages
+B) DETAIL — describes a single ${contentType} with dates/descriptions/details
+C) HYBRID — contains inline ${contentType} details AND links to more pages
+
+PAGE URL: ${url}
+CONTENT (first 3000 chars):
+${markdown.substring(0, 3000)}
+
+LINKS (first 20):
+${links.slice(0, 20).map(l => `- "${(l.text || '').substring(0, 60)}" → ${l.url}`).join('\n')}
+
+Return ONLY valid JSON:
+{"page_type": "listing|detail|hybrid", "reasoning": "one sentence", "detail_links": ["url1", "url2"]}
+For LISTING/HYBRID: populate detail_links with URLs to individual ${contentType} pages (max 15).
+For DETAIL: detail_links should be empty.`;
+
+  const result = await generateTextWithCustomPrompt(pool, prompt, sheets, {
+    useSearchGrounding: false,
+    forceProvider: 'gemini'
+  });
+
+  // Parse JSON from response (handle markdown code blocks)
+  const text = result.response || result;
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return { pageType: 'listing', detailLinks: links.map(l => l.url).slice(0, 15), reasoning: 'parse failure fallback' };
+  }
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return { pageType: parsed.page_type, detailLinks: parsed.detail_links || [], reasoning: parsed.reasoning };
+  } catch {
+    return { pageType: 'listing', detailLinks: links.map(l => l.url).slice(0, 15), reasoning: 'parse failure fallback' };
+  }
+}
+
+/**
+ * Filter detail links to same-origin, deduplicate, and cap at 15.
+ *
+ * @param {Array} detailLinks - URLs returned by the classifier
+ * @param {string} sourceUrl - The page URL that produced these links
+ * @returns {Array} - Filtered, deduplicated URLs
+ */
+function filterDetailLinks(detailLinks, sourceUrl) {
+  if (!detailLinks?.length) return [];
+  let sourceOrigin;
+  try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
+  const seen = new Set();
+  return detailLinks.filter(link => {
+    try {
+      const parsed = new URL(link);
+      if (parsed.origin !== sourceOrigin) return false;
+      if (seen.has(link)) return false;
+      seen.add(link);
+      return true;
+    } catch { return false; }
+  }).slice(0, 15);
+}
+
+/**
+ * Recursive AI-classified tree walker for dedicated URL crawling.
+ * Visits each page, asks Gemini to classify it, follows links on listing pages,
+ * collects content from detail pages. URLs come from actual page visits — no fabrication.
+ *
+ * @param {Pool} pool - Database connection pool
+ * @param {string} startUrl - The starting URL to crawl
+ * @param {string} contentType - 'event' or 'news'
+ * @param {Object} poi - POI object for context
+ * @param {Object} sheets - Optional sheets client
+ * @param {Function} checkCancellation - Cancellation checker
+ * @param {Object} options - Optional overrides
+ * @returns {Object} - { pages: [{url, markdown, title}], totalPagesRendered, totalDetailPages }
+ */
+async function crawlWithClassification(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
+  const { maxDepth = 2, maxPages = 15, maxDetailPages = 10, extractor = extractPageContent } = options;
+  const visited = new Set();
+  let totalPagesRendered = 0;
+  const collectedPages = []; // { url, markdown, title }
+
+  async function processLevel(urls, depth) {
+    if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
+    for (const url of urls) {
+      checkCancellation();
+      if (visited.has(url) || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) break;
+      visited.add(url);
+      totalPagesRendered++;
+
+      console.log(`[Classifier] Rendering (depth=${depth}, page=${totalPagesRendered}): ${url}`);
+      const extracted = await extractor(url, { timeout: 30000, hardTimeout: 60000, extractLinks: true });
+      if (!extracted.reachable || !extracted.markdown) {
+        console.log(`[Classifier] ✗ Failed to render: ${extracted.reason || 'no content'}`);
+        continue;
+      }
+
+      const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets);
+      console.log(`[Classifier] ${url} → ${classification.pageType} (${classification.reasoning})`);
+
+      if (classification.pageType === 'detail') {
+        collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
+      } else if (classification.pageType === 'listing') {
+        const validLinks = filterDetailLinks(classification.detailLinks, url);
+        await processLevel(validLinks, depth + 1);
+      } else if (classification.pageType === 'hybrid') {
+        collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
+        const validLinks = filterDetailLinks(classification.detailLinks, url);
+        if (validLinks.length > 0) await processLevel(validLinks, depth + 1);
+      }
+    }
+  }
+
+  await processLevel([startUrl], 0);
+  return { pages: collectedPages, totalPagesRendered, totalDetailPages: collectedPages.length };
+}
+
+/**
  * Collect news and events for a specific POI
  * @param {Pool} pool - Database connection pool
  * @param {Object} poi - POI object with id, name, poi_type, primary_activities, more_info_link, events_url, news_url
@@ -722,118 +849,176 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   let eventsLinks = [];
   let newsLinks = [];
 
-  // Only extract events page if we're collecting events
-  const eventsPageToRender = eventsUrl !== 'No dedicated events page' ? eventsUrl : website;
-  checkCancellation(); // Check before rendering events
-  if (collectionType !== 'news' && eventsPageToRender !== 'No website available') {
-    console.log(`[AI Research] Extracting events page content (collectionType: ${collectionType})`);
-    updateProgress(poi.id, {
-      phase: 'rendering_events',
-      message: 'Extracting events page content...',
-      steps: ['Initialized', 'Extracting events page']
-    });
+  // Classifier flags — when true, URLs come from actual page visits (no fabrication)
+  let usedClassifier = false;
+  let classifiedEventsContent = null;
+  let usedNewsClassifier = false;
+  let classifiedNewsContent = null;
 
-    console.log(`[AI Research] Rendering events page with Readability pipeline: ${eventsPageToRender}`);
-    const extracted = await extractPageContent(eventsPageToRender, {
-      timeout: 30000,
-      hardTimeout: 60000,
-      extractLinks: true
-    });
-
-    if (extracted.reachable && extracted.markdown) {
-      const MIN_CONTENT_LENGTH = 200;
-      if (extracted.markdown.length >= MIN_CONTENT_LENGTH) {
-        renderedEventsContent = extracted.markdown;
-        eventsLinks = extracted.links || [];
-        console.log(`[AI Research] ✓ Extracted events page: ${renderedEventsContent.length} chars markdown, ${eventsLinks.length} links`);
-
-        updateProgress(poi.id, {
-          message: `Extracted events page (${eventsLinks.length} links found)`,
-          steps: ['Initialized', 'Extracted events page']
-        });
-      } else {
-        eventsLinks = extracted.links || [];
-        console.log(`[AI Research] ⚠️ Events page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+), kept ${eventsLinks.length} links`);
-      }
-    } else {
-      console.log(`[AI Research] ❌ Failed to extract events page: ${extracted.reason || 'no content'}`);
-    }
-  }
-
-  // SUB-PAGE CRAWL: When POI has a dedicated events URL, crawl sub-pages for richer content
-  if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page' && eventsLinks.length > 0) {
-    const subPageResult = await crawlSubPages(eventsPageToRender, eventsLinks, poi.id, checkCancellation);
-    if (subPageResult) {
-      if (renderedEventsContent) {
-        renderedEventsContent += '\n\n' + subPageResult.markdown;
-      } else {
-        renderedEventsContent = subPageResult.markdown;
-      }
-      eventsLinks = subPageResult.links;
-      console.log(`[AI Research] ✓ Sub-page crawl: ${subPageResult.markdown.length} chars from ${subPageResult.pagesRendered} sub-pages, ${eventsLinks.length} total links`);
+  // CLASSIFIER PATH: When POI has a dedicated events URL, use AI page classification
+  if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page') {
+    try {
+      checkCancellation();
       updateProgress(poi.id, {
-        message: `Enriched events from ${subPageResult.pagesRendered} sub-pages`,
-        steps: ['Initialized', 'Sub-pages crawled']
+        phase: 'classifying_events',
+        message: 'Analyzing events pages...',
+        steps: ['Initialized', 'Classifying events pages']
       });
+      const crawlResult = await crawlWithClassification(pool, eventsUrl, 'event', poi, sheets, checkCancellation);
+
+      if (crawlResult.pages.length > 0) {
+        classifiedEventsContent = crawlResult.pages.map(p => `### Event Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
+        usedClassifier = true;
+        console.log(`[AI Research] Classifier found ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered)`);
+      } else {
+        console.log(`[AI Research] Classifier found no event detail pages, falling back to legacy crawl`);
+      }
+    } catch (err) {
+      console.log(`[Classifier] ⚠️ Classification failed: ${err.message}, falling back to legacy crawl`);
     }
   }
 
-  // Only extract news page if we're collecting news
-  const newsPageToRender = newsUrl !== 'No dedicated news page' ? newsUrl : website;
-  checkCancellation(); // Check before rendering news
-  if (collectionType !== 'events' && newsPageToRender !== 'No website available') {
-    console.log(`[AI Research] Extracting news page content (collectionType: ${collectionType})`);
-    updateProgress(poi.id, {
-      phase: 'rendering_news',
-      message: 'Extracting news page content...',
-      steps: ['Initialized', 'Extracting news page']
-    });
-
-    console.log(`[AI Research] Rendering news page with Readability pipeline: ${newsPageToRender}`);
-    const extracted = await extractPageContent(newsPageToRender, {
-      timeout: 30000,
-      hardTimeout: 60000,
-      extractLinks: true
-    });
-
-    if (extracted.reachable && extracted.markdown) {
-      const MIN_CONTENT_LENGTH = 200;
-      if (extracted.markdown.length >= MIN_CONTENT_LENGTH) {
-        renderedNewsContent = extracted.markdown;
-        newsLinks = extracted.links || [];
-        usedDedicatedNewsUrl = true;
-        console.log(`[AI Research] ✓ Extracted news page: ${renderedNewsContent.length} chars markdown, ${newsLinks.length} links`);
-
-        updateProgress(poi.id, {
-          message: `Extracted news page (${newsLinks.length} links found)`,
-          steps: ['Initialized', 'Extracted news page']
-        });
-      } else {
-        newsLinks = extracted.links || [];
-        console.log(`[AI Research] ⚠️ News page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+), kept ${newsLinks.length} links`);
-      }
-    } else {
-      console.log(`[AI Research] ❌ Failed to extract news page: ${extracted.reason || 'no content'}`);
-    }
-  }
-
-  // SUB-PAGE CRAWL: When POI has a dedicated news URL, crawl sub-pages for richer content
-  if (collectionType !== 'events' && newsUrl !== 'No dedicated news page' && newsLinks.length > 0) {
-    const subPageResult = await crawlSubPages(newsPageToRender, newsLinks, poi.id, checkCancellation);
-    if (subPageResult) {
-      if (renderedNewsContent) {
-        renderedNewsContent += '\n\n' + subPageResult.markdown;
-        usedDedicatedNewsUrl = true;
-      } else {
-        renderedNewsContent = subPageResult.markdown;
-        usedDedicatedNewsUrl = true;
-      }
-      newsLinks = subPageResult.links;
-      console.log(`[AI Research] ✓ Sub-page crawl (news): ${subPageResult.markdown.length} chars from ${subPageResult.pagesRendered} sub-pages, ${newsLinks.length} total links`);
+  // LEGACY EVENTS PATH: Only runs if classifier didn't produce results
+  if (!usedClassifier) {
+    // Only extract events page if we're collecting events
+    const eventsPageToRender = eventsUrl !== 'No dedicated events page' ? eventsUrl : website;
+    checkCancellation(); // Check before rendering events
+    if (collectionType !== 'news' && eventsPageToRender !== 'No website available') {
+      console.log(`[AI Research] Extracting events page content (collectionType: ${collectionType})`);
       updateProgress(poi.id, {
-        message: `Enriched news from ${subPageResult.pagesRendered} sub-pages`,
-        steps: ['Initialized', 'Sub-pages crawled']
+        phase: 'rendering_events',
+        message: 'Extracting events page content...',
+        steps: ['Initialized', 'Extracting events page']
       });
+
+      console.log(`[AI Research] Rendering events page with Readability pipeline: ${eventsPageToRender}`);
+      const extracted = await extractPageContent(eventsPageToRender, {
+        timeout: 30000,
+        hardTimeout: 60000,
+        extractLinks: true
+      });
+
+      if (extracted.reachable && extracted.markdown) {
+        const MIN_CONTENT_LENGTH = 200;
+        if (extracted.markdown.length >= MIN_CONTENT_LENGTH) {
+          renderedEventsContent = extracted.markdown;
+          eventsLinks = extracted.links || [];
+          console.log(`[AI Research] ✓ Extracted events page: ${renderedEventsContent.length} chars markdown, ${eventsLinks.length} links`);
+
+          updateProgress(poi.id, {
+            message: `Extracted events page (${eventsLinks.length} links found)`,
+            steps: ['Initialized', 'Extracted events page']
+          });
+        } else {
+          eventsLinks = extracted.links || [];
+          console.log(`[AI Research] ⚠️ Events page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+), kept ${eventsLinks.length} links`);
+        }
+      } else {
+        console.log(`[AI Research] ❌ Failed to extract events page: ${extracted.reason || 'no content'}`);
+      }
+    }
+
+    // SUB-PAGE CRAWL: When POI has a dedicated events URL, crawl sub-pages for richer content
+    if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page' && eventsLinks.length > 0) {
+      const subPageResult = await crawlSubPages(eventsPageToRender, eventsLinks, poi.id, checkCancellation);
+      if (subPageResult) {
+        if (renderedEventsContent) {
+          renderedEventsContent += '\n\n' + subPageResult.markdown;
+        } else {
+          renderedEventsContent = subPageResult.markdown;
+        }
+        eventsLinks = subPageResult.links;
+        console.log(`[AI Research] ✓ Sub-page crawl: ${subPageResult.markdown.length} chars from ${subPageResult.pagesRendered} sub-pages, ${eventsLinks.length} total links`);
+        updateProgress(poi.id, {
+          message: `Enriched events from ${subPageResult.pagesRendered} sub-pages`,
+          steps: ['Initialized', 'Sub-pages crawled']
+        });
+      }
+    }
+  }
+
+  // CLASSIFIER PATH: When POI has a dedicated news URL, use AI page classification
+  if (collectionType !== 'events' && newsUrl !== 'No dedicated news page') {
+    try {
+      checkCancellation();
+      updateProgress(poi.id, {
+        phase: 'classifying_news',
+        message: 'Analyzing news pages...',
+        steps: ['Initialized', 'Classifying news pages']
+      });
+      const crawlResult = await crawlWithClassification(pool, newsUrl, 'news', poi, sheets, checkCancellation);
+
+      if (crawlResult.pages.length > 0) {
+        classifiedNewsContent = crawlResult.pages.map(p => `### News Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
+        usedNewsClassifier = true;
+        console.log(`[AI Research] Classifier found ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered)`);
+      } else {
+        console.log(`[AI Research] Classifier found no news detail pages, falling back to legacy crawl`);
+      }
+    } catch (err) {
+      console.log(`[Classifier] ⚠️ News classification failed: ${err.message}, falling back to legacy crawl`);
+    }
+  }
+
+  // LEGACY NEWS PATH: Only runs if classifier didn't produce results
+  if (!usedNewsClassifier) {
+    // Only extract news page if we're collecting news
+    const newsPageToRender = newsUrl !== 'No dedicated news page' ? newsUrl : website;
+    checkCancellation(); // Check before rendering news
+    if (collectionType !== 'events' && newsPageToRender !== 'No website available') {
+      console.log(`[AI Research] Extracting news page content (collectionType: ${collectionType})`);
+      updateProgress(poi.id, {
+        phase: 'rendering_news',
+        message: 'Extracting news page content...',
+        steps: ['Initialized', 'Extracting news page']
+      });
+
+      console.log(`[AI Research] Rendering news page with Readability pipeline: ${newsPageToRender}`);
+      const extracted = await extractPageContent(newsPageToRender, {
+        timeout: 30000,
+        hardTimeout: 60000,
+        extractLinks: true
+      });
+
+      if (extracted.reachable && extracted.markdown) {
+        const MIN_CONTENT_LENGTH = 200;
+        if (extracted.markdown.length >= MIN_CONTENT_LENGTH) {
+          renderedNewsContent = extracted.markdown;
+          newsLinks = extracted.links || [];
+          usedDedicatedNewsUrl = true;
+          console.log(`[AI Research] ✓ Extracted news page: ${renderedNewsContent.length} chars markdown, ${newsLinks.length} links`);
+
+          updateProgress(poi.id, {
+            message: `Extracted news page (${newsLinks.length} links found)`,
+            steps: ['Initialized', 'Extracted news page']
+          });
+        } else {
+          newsLinks = extracted.links || [];
+          console.log(`[AI Research] ⚠️ News page has insufficient content (${extracted.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+), kept ${newsLinks.length} links`);
+        }
+      } else {
+        console.log(`[AI Research] ❌ Failed to extract news page: ${extracted.reason || 'no content'}`);
+      }
+    }
+
+    // SUB-PAGE CRAWL: When POI has a dedicated news URL, crawl sub-pages for richer content
+    if (collectionType !== 'events' && newsUrl !== 'No dedicated news page' && newsLinks.length > 0) {
+      const subPageResult = await crawlSubPages(newsPageToRender, newsLinks, poi.id, checkCancellation);
+      if (subPageResult) {
+        if (renderedNewsContent) {
+          renderedNewsContent += '\n\n' + subPageResult.markdown;
+          usedDedicatedNewsUrl = true;
+        } else {
+          renderedNewsContent = subPageResult.markdown;
+          usedDedicatedNewsUrl = true;
+        }
+        newsLinks = subPageResult.links;
+        console.log(`[AI Research] ✓ Sub-page crawl (news): ${subPageResult.markdown.length} chars from ${subPageResult.pagesRendered} sub-pages, ${newsLinks.length} total links`);
+        updateProgress(poi.id, {
+          message: `Enriched news from ${subPageResult.pagesRendered} sub-pages`,
+          steps: ['Initialized', 'Sub-pages crawled']
+        });
+      }
     }
   }
 
@@ -848,7 +1033,22 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     .replace('{{newsUrl}}', newsUrl);
 
   // Add extracted markdown content to prompt if we have it
-  if (renderedEventsContent) {
+  if (usedClassifier && classifiedEventsContent) {
+    prompt += `\n\nCLASSIFIED EVENT PAGES:
+We visited the organization's events pages and identified individual event detail pages.
+Each section below is from a REAL page we visited — the URL is verified.
+
+${classifiedEventsContent}
+
+**CRITICAL: URL INSTRUCTIONS**
+- For each event, set source_url to the EXACT page URL shown in the "### Event Page:" header
+- Do NOT invent, modify, or guess URLs — use ONLY the URLs provided above
+- Use RELAXED filtering (75% confidence) since these are from the organization's own site
+- Still exclude past events - only include upcoming/current events
+- Still require proper date formatting (YYYY-MM-DD) - interpret all dates in ${timezone} timezone
+
+Extract ALL events from this content using these relaxed criteria.`;
+  } else if (renderedEventsContent) {
     prompt += `\n\nEXTRACTED EVENTS PAGE CONTENT (markdown):\nWe rendered the events page and extracted this content:\n\n${renderedEventsContent}\n\n**SPECIAL INSTRUCTIONS FOR EXTRACTED EVENTS PAGE:**
 Since this content comes directly from the organization's dedicated events page, use RELAXED requirements:
 - You only need 75% confidence (not 95%) that an event is relevant
@@ -860,7 +1060,27 @@ Since this content comes directly from the organization's dedicated events page,
 Extract ALL events from this content using these relaxed criteria.`;
   }
 
-  if (renderedNewsContent) {
+  if (usedNewsClassifier && classifiedNewsContent) {
+    prompt += `\n\nCLASSIFIED NEWS PAGES:
+We visited the organization's news pages and identified individual news detail pages.
+Each section below is from a REAL page we visited — the URL is verified.
+
+${classifiedNewsContent}
+
+**CRITICAL: URL INSTRUCTIONS**
+- For each news item, set source_url to the EXACT page URL shown in the "### News Page:" header
+- Do NOT invent, modify, or guess URLs — use ONLY the URLs provided above
+- Use RELAXED filtering (75% confidence) since these are from the organization's own site
+- Include ALL news items regardless of age
+- **IMPORTANT FOR DATES**: Try hard to extract dates from news titles and content:
+  - Look for month names, dates, or year references in the title (e.g., "April 2025 Newsletter", "July Newsletter", "May 9", "October 9")
+  - If the title has a month name, try to infer the year (use current year 2026 if recent, or 2025 if it seems past)
+  - If you find a partial date like "May 9" or "October Newsletter", estimate the full date in ISO 8601 format (YYYY-MM-DD)
+  - Remember: interpret all dates in ${timezone} timezone
+  - Only use "published_date": null if absolutely no date information can be extracted
+
+Extract ALL news from this content using these relaxed criteria.`;
+  } else if (renderedNewsContent) {
     prompt += `\n\nEXTRACTED NEWS PAGE CONTENT (markdown):\nWe rendered the news page and extracted this content:\n\n${renderedNewsContent}\n\n**SPECIAL INSTRUCTIONS FOR EXTRACTED NEWS PAGE:**
 Since this content comes directly from the organization's dedicated news page, use RELAXED requirements:
 - You only need 75% confidence (not 95%) that a news item is relevant
@@ -886,9 +1106,13 @@ Extract ALL news from this content using these relaxed criteria.`;
 
     // When we have rich crawled content from a dedicated URL, skip search grounding —
     // the LLM just needs to extract structured data from what we already have
+    // Classifier path always disables search grounding (we have real crawled content)
+    // Legacy path checks for dedicated URL content as before
     const hasDedicatedEventsContent = eventsUrl !== 'No dedicated events page' && renderedEventsContent;
     const hasDedicatedNewsContent = newsUrl !== 'No dedicated news page' && renderedNewsContent;
-    const useSearchGrounding = !hasDedicatedEventsContent && !hasDedicatedNewsContent;
+    const useSearchGrounding = (usedClassifier || usedNewsClassifier)
+      ? false
+      : (!hasDedicatedEventsContent && !hasDedicatedNewsContent);
 
     const aiOptions = {};
     if (!useSearchGrounding) {
@@ -981,90 +1205,99 @@ Extract ALL news from this content using these relaxed criteria.`;
     checkCancellation(); // Check before link matching
 
     // Match events/news to extracted links for deep linking
+    // Skip when classifier was used — URLs come from actual page visits, no matching needed
     // When search grounding is off, always override — Gemini fabricates URLs from patterns
     // When search grounding is on, only override missing/generic URLs (AI has real search results)
-    console.log(`[Link Matcher] Checking conditions - events: ${result.events?.length || 0}, eventsLinks: ${eventsLinks.length}, searchGrounding: ${useSearchGrounding}`);
-    if (result.events && result.events.length > 0 && eventsLinks.length > 0) {
-      updateProgress(poi.id, {
-        phase: 'matching_links',
-        message: `Matching ${result.events.length} events to deep links...`,
-        steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links']
-      });
+    if (!usedClassifier) {
+      console.log(`[Link Matcher] Checking conditions - events: ${result.events?.length || 0}, eventsLinks: ${eventsLinks.length}, searchGrounding: ${useSearchGrounding}`);
+      if (result.events && result.events.length > 0 && eventsLinks.length > 0) {
+        updateProgress(poi.id, {
+          phase: 'matching_links',
+          message: `Matching ${result.events.length} events to deep links...`,
+          steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links']
+        });
 
-      console.log(`[Link Matcher] Attempting to match ${result.events.length} events to ${eventsLinks.length} links...`);
-      let matchCount = 0;
-      let overrideCount = 0;
-      result.events.forEach(event => {
-        // Override if no URL, or if URL is a generic/index page
-        const hasIndexUrl = event.source_url && (
-          isGenericUrl(event.source_url) ||
-          event.source_url === eventsUrl  // Exactly matches the events page URL
-        );
+        console.log(`[Link Matcher] Attempting to match ${result.events.length} events to ${eventsLinks.length} links...`);
+        let matchCount = 0;
+        let overrideCount = 0;
+        result.events.forEach(event => {
+          // Override if no URL, or if URL is a generic/index page
+          const hasIndexUrl = event.source_url && (
+            isGenericUrl(event.source_url) ||
+            event.source_url === eventsUrl  // Exactly matches the events page URL
+          );
 
-        // Without search grounding, always override — AI-generated URLs are fabricated
-        const shouldOverride = !useSearchGrounding ||
-          !event.source_url || event.source_url === 'N/A' || hasIndexUrl;
+          // Without search grounding, always override — AI-generated URLs are fabricated
+          const shouldOverride = !useSearchGrounding ||
+            !event.source_url || event.source_url === 'N/A' || hasIndexUrl;
 
-        if (shouldOverride) {
-          if (!useSearchGrounding && event.source_url && event.source_url !== 'N/A' && !hasIndexUrl) {
-            console.log(`[Link Matcher] Overriding AI-fabricated URL for "${event.title.substring(0, 40)}..."`);
-            overrideCount++;
-          } else if (hasIndexUrl) {
-            console.log(`[Link Matcher] Overriding index URL for "${event.title.substring(0, 40)}..."`);
-            overrideCount++;
+          if (shouldOverride) {
+            if (!useSearchGrounding && event.source_url && event.source_url !== 'N/A' && !hasIndexUrl) {
+              console.log(`[Link Matcher] Overriding AI-fabricated URL for "${event.title.substring(0, 40)}..."`);
+              overrideCount++;
+            } else if (hasIndexUrl) {
+              console.log(`[Link Matcher] Overriding index URL for "${event.title.substring(0, 40)}..."`);
+              overrideCount++;
+            }
+            const matchedUrl = matchItemToLink(event, eventsLinks, 'event');
+            if (matchedUrl) {
+              event.source_url = matchedUrl;
+              matchCount++;
+            }
           }
-          const matchedUrl = matchItemToLink(event, eventsLinks, 'event');
-          if (matchedUrl) {
-            event.source_url = matchedUrl;
-            matchCount++;
-          }
-        }
-      });
-      console.log(`[Link Matcher] Matched ${matchCount} events to deep links (${overrideCount} URLs overridden)`);
+        });
+        console.log(`[Link Matcher] Matched ${matchCount} events to deep links (${overrideCount} URLs overridden)`);
+      } else {
+        console.log(`[Link Matcher] Skipping event link matching - conditions not met`);
+      }
     } else {
-      console.log(`[Link Matcher] Skipping event link matching - conditions not met`);
+      console.log(`[Link Matcher] Skipping event link matching — classifier provided real URLs`);
     }
 
-    console.log(`[Link Matcher] Checking conditions - news: ${result.news?.length || 0}, newsLinks: ${newsLinks.length}, searchGrounding: ${useSearchGrounding}`);
-    if (result.news && result.news.length > 0 && newsLinks.length > 0) {
-      updateProgress(poi.id, {
-        phase: 'matching_links',
-        message: `Matching ${result.news.length} news items to deep links...`,
-        steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links']
-      });
+    if (!usedNewsClassifier) {
+      console.log(`[Link Matcher] Checking conditions - news: ${result.news?.length || 0}, newsLinks: ${newsLinks.length}, searchGrounding: ${useSearchGrounding}`);
+      if (result.news && result.news.length > 0 && newsLinks.length > 0) {
+        updateProgress(poi.id, {
+          phase: 'matching_links',
+          message: `Matching ${result.news.length} news items to deep links...`,
+          steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links']
+        });
 
-      console.log(`[Link Matcher] Attempting to match ${result.news.length} news items to ${newsLinks.length} links...`);
-      let matchCount = 0;
-      let overrideCount = 0;
-      result.news.forEach(newsItem => {
-        // Override if no URL, or if URL is a generic/index page
-        const hasIndexUrl = newsItem.source_url && (
-          isGenericUrl(newsItem.source_url) ||
-          newsItem.source_url === newsUrl  // Exactly matches the news page URL
-        );
+        console.log(`[Link Matcher] Attempting to match ${result.news.length} news items to ${newsLinks.length} links...`);
+        let matchCount = 0;
+        let overrideCount = 0;
+        result.news.forEach(newsItem => {
+          // Override if no URL, or if URL is a generic/index page
+          const hasIndexUrl = newsItem.source_url && (
+            isGenericUrl(newsItem.source_url) ||
+            newsItem.source_url === newsUrl  // Exactly matches the news page URL
+          );
 
-        // Without search grounding, always override — AI-generated URLs are fabricated
-        const shouldOverride = !useSearchGrounding ||
-          !newsItem.source_url || newsItem.source_url === 'N/A' || hasIndexUrl;
+          // Without search grounding, always override — AI-generated URLs are fabricated
+          const shouldOverride = !useSearchGrounding ||
+            !newsItem.source_url || newsItem.source_url === 'N/A' || hasIndexUrl;
 
-        if (shouldOverride) {
-          if (!useSearchGrounding && newsItem.source_url && newsItem.source_url !== 'N/A' && !hasIndexUrl) {
-            console.log(`[Link Matcher] Overriding AI-fabricated URL for "${newsItem.title.substring(0, 40)}..."`);
-            overrideCount++;
-          } else if (hasIndexUrl) {
-            console.log(`[Link Matcher] Overriding index URL for "${newsItem.title.substring(0, 40)}..."`);
-            overrideCount++;
+          if (shouldOverride) {
+            if (!useSearchGrounding && newsItem.source_url && newsItem.source_url !== 'N/A' && !hasIndexUrl) {
+              console.log(`[Link Matcher] Overriding AI-fabricated URL for "${newsItem.title.substring(0, 40)}..."`);
+              overrideCount++;
+            } else if (hasIndexUrl) {
+              console.log(`[Link Matcher] Overriding index URL for "${newsItem.title.substring(0, 40)}..."`);
+              overrideCount++;
+            }
+            const matchedUrl = matchItemToLink(newsItem, newsLinks, 'news');
+            if (matchedUrl) {
+              newsItem.source_url = matchedUrl;
+              matchCount++;
+            }
           }
-          const matchedUrl = matchItemToLink(newsItem, newsLinks, 'news');
-          if (matchedUrl) {
-            newsItem.source_url = matchedUrl;
-            matchCount++;
-          }
-        }
-      });
-      console.log(`[Link Matcher] Matched ${matchCount} news items to deep links (${overrideCount} index URLs overridden)`);
+        });
+        console.log(`[Link Matcher] Matched ${matchCount} news items to deep links (${overrideCount} index URLs overridden)`);
+      } else {
+        console.log(`[Link Matcher] Skipping news link matching - conditions not met`);
+      }
     } else {
-      console.log(`[Link Matcher] Skipping news link matching - conditions not met`);
+      console.log(`[Link Matcher] Skipping news link matching — classifier provided real URLs`);
     }
 
     // BACKFILL: Items with no source_url get the POI's events/news listing page as a starting point
@@ -1091,7 +1324,11 @@ Extract ALL news from this content using these relaxed criteria.`;
       if (backfilled > 0) console.log(`[Deep Crawl] Backfilled ${backfilled} news with news_url: ${poi.news_url}`);
     }
 
-    // DEEP CRAWL PHASE: Render each source URL, check if content matches, crawl deeper if not
+    // DEEP CRAWL PHASE: Skip when classifier was used — URLs are from actual page visits
+    if (usedClassifier || usedNewsClassifier) {
+      console.log(`[Deep Crawl] Skipping — classifier provided verified URLs`);
+    }
+
     const allItems = [
       ...(result.events || []).map(e => ({ ...e, _type: 'event' })),
       ...(result.news || []).map(n => ({ ...n, _type: 'news' }))
@@ -1100,7 +1337,7 @@ Extract ALL news from this content using these relaxed criteria.`;
       item.source_url && item.source_url !== 'N/A'
     );
 
-    if (deepCrawlCandidates.length > 0) {
+    if (!usedClassifier && !usedNewsClassifier && deepCrawlCandidates.length > 0) {
       updateProgress(poi.id, {
         phase: 'deep_crawling',
         message: `Verifying ${deepCrawlCandidates.length} source URLs...`,
