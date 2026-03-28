@@ -323,6 +323,29 @@ function ModerationInbox() {
           }}>
             {total}
           </span>
+          {/* Purge rejected button */}
+          {statusFilter === 'rejected' && total > 0 && (
+            <button
+              onClick={async () => {
+                const typeLabel = filter ? filter + 's' : 'items';
+                if (!window.confirm(`Delete all ${total} rejected ${typeLabel}? This cannot be undone.`)) return;
+                try {
+                  const response = await fetch('/api/admin/moderation/purge-rejected', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', body: JSON.stringify({ type: filter || null })
+                  });
+                  if (response.ok) {
+                    const data = await response.json();
+                    notify('success', `Purged ${data.deleted} rejected items`);
+                    fetchQueue();
+                  }
+                } catch (err) { notify('error', err.message); }
+              }}
+              style={btnStyle('#b71c1c')}
+            >
+              Purge Rejected
+            </button>
+          )}
           {/* Create button */}
           <div style={{ position: 'relative' }}>
             <button
