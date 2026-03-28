@@ -21,6 +21,9 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
   const [error, setError] = useState(null);
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
+  const [activeSubTab, setActiveSubTab] = useState('future');
+  const [pastEvents, setPastEvents] = useState([]);
+  const [pastLoading, setPastLoading] = useState(false);
   const [typeFilters, setTypeFilters] = useState({
     'hike': true,
     'race': true,
@@ -56,6 +59,27 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
     }
   };
 
+  useEffect(() => {
+    if (activeSubTab === 'past' && pastEvents.length === 0 && !pastLoading) {
+      fetchPastEvents();
+    }
+  }, [activeSubTab]);
+
+  const fetchPastEvents = async () => {
+    setPastLoading(true);
+    try {
+      const response = await fetch('/api/events/past?limit=50');
+      if (response.ok) {
+        const data = await response.json();
+        setPastEvents(data);
+      }
+    } catch (err) {
+      console.error('Error fetching past events:', err);
+    } finally {
+      setPastLoading(false);
+    }
+  };
+
   // Simple, direct bounds computation - matches ResultsTab pattern
   let currentBounds;
   if (bypassViewportFilter) {
@@ -81,13 +105,14 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
   const thumbnailBounds = stableBoundsRef.current;
 
   // Filter events based on visible POIs (destinations, linear features, and organizations)
+  const sourceEvents = activeSubTab === 'future' ? events : pastEvents;
   const filteredEvents = React.useMemo(() => {
     const hasDestinations = Array.isArray(filteredDestinations);
     const hasLinearFeatures = Array.isArray(filteredLinearFeatures);
     const hasVirtualPois = Array.isArray(filteredVirtualPois);
 
     // Start with all events or filter by visible POIs
-    let filtered = events;
+    let filtered = sourceEvents;
 
     // If all filters are explicitly empty arrays, show no events (all filters deselected)
     if (hasDestinations && filteredDestinations.length === 0 &&
@@ -111,7 +136,7 @@ function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinea
     filtered = filtered.filter(item => typeFilters[item.event_type || 'program'] !== false);
 
     return filtered;
-  }, [events, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
+  }, [sourceEvents, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
 
   const generateCalendarUrl = (event) => {
     const title = encodeURIComponent(event.title);
@@ -162,19 +187,36 @@ END:VCALENDAR`;
     URL.revokeObjectURL(url);
   };
 
-  if (loading) {
+  const isLoading = activeSubTab === 'future' ? loading : pastLoading;
+  const tabLabel = activeSubTab === 'future' ? 'Future Events' : 'Past Events';
+
+  if (isLoading) {
     return (
       <div className="park-events-tab">
-        <h2>Upcoming Events</h2>
+        <h2>{tabLabel}</h2>
+        <div className="results-subtabs">
+          <button
+            className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('future')}
+          >
+            Future
+          </button>
+          <button
+            className={`results-subtab ${activeSubTab === 'past' ? 'active' : ''}`}
+            onClick={() => setActiveSubTab('past')}
+          >
+            Past
+          </button>
+        </div>
         <div className="loading-indicator">Loading events...</div>
       </div>
     );
   }
 
-  if (error) {
+  if (error && activeSubTab === 'future') {
     return (
       <div className="park-events-tab">
-        <h2>Upcoming Events</h2>
+        <h2>{tabLabel}</h2>
         <div className="error-message">{error}</div>
       </div>
     );
@@ -183,8 +225,24 @@ END:VCALENDAR`;
   return (
     <div className="park-events-tab">
       <div className="news-events-header">
-        <h2>Upcoming Events</h2>
+        <h2>{tabLabel}</h2>
         <p className="tab-subtitle">Events across Cuyahoga Valley National Park</p>
+      </div>
+
+      {/* Sub-tabs */}
+      <div className="results-subtabs">
+        <button
+          className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('future')}
+        >
+          Future
+        </button>
+        <button
+          className={`results-subtab ${activeSubTab === 'past' ? 'active' : ''}`}
+          onClick={() => setActiveSubTab('past')}
+        >
+          Past
+        </button>
       </div>
 
       <div className="results-filters">
@@ -218,7 +276,7 @@ END:VCALENDAR`;
           ))}
         </div>
         <div className="results-count">
-          Showing {filteredEvents.length} of {events.length} events
+          Showing {filteredEvents.length} of {sourceEvents.length} events
         </div>
       </div>
 
@@ -226,9 +284,9 @@ END:VCALENDAR`;
         <div className="news-events-content">
           {filteredEvents.length === 0 ? (
             <p className="no-content">
-              {events.length > 0
+              {sourceEvents.length > 0
                 ? 'No events match the current filters. Try adjusting the type filters above or the map view.'
-                : 'No upcoming events found.'}
+                : activeSubTab === 'future' ? 'No upcoming events found.' : 'No past events found.'}
             </p>
           ) : (
           <div className="park-events-list">
