@@ -213,8 +213,10 @@ export async function processItem(pool, contentType, contentId) {
       return;
     }
 
-    const resolvedStatus = autoApproveEnabled && scoring.confidence_score >= threshold
-      ? 'auto_approved' : 'pending';
+    // Hold items with unknown publication date for human review regardless of score
+    const resolvedStatus = newsDateConf === 'unknown' ? 'pending'
+      : autoApproveEnabled && scoring.confidence_score >= threshold ? 'auto_approved'
+      : 'pending';
 
     await pool.query(
       `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3,
@@ -307,8 +309,10 @@ export async function processItem(pool, contentType, contentId) {
       return;
     }
 
-    const resolvedStatus = autoApproveEnabled && scoring.confidence_score >= threshold
-      ? 'auto_approved' : 'pending';
+    // Hold items with unknown publication date for human review regardless of score
+    const resolvedStatus = eventDateConf === 'unknown' ? 'pending'
+      : autoApproveEnabled && scoring.confidence_score >= threshold ? 'auto_approved'
+      : 'pending';
 
     await pool.query(
       `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3,
