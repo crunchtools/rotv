@@ -4,7 +4,7 @@
  * Processes pending items via pg-boss queue, auto-approves high-confidence content.
  */
 
-import { moderateContent, moderatePhoto } from './geminiService.js';
+import { moderateContent, moderatePhoto, createGeminiClient } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle } from './deepCrawler.js';
 
@@ -450,6 +450,103 @@ export async function requeueItem(pool, contentType, contentId) {
      WHERE id = $1`,
     [contentId]
   );
+}
+
+/**
+ * Fix the source URL for a news/event item via Gemini with Google Search grounding.
+ * Searches the web to find the correct URL, updates the item, then requeues for moderation.
+ */
+export async function researchItem(pool, contentType, contentId) {
+  if (contentType !== 'news' && contentType !== 'event') {
+    throw new Error('Fix URL is only available for news and event items (not photos)');
+  }
+
+  const table = TABLE_MAP[contentType];
+  const descField = contentType === 'news' ? 'summary' : 'description';
+
+  const itemQuery = await pool.query(
+    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, p.name AS poi_name
+     FROM ${table} t
+     LEFT JOIN pois p ON t.poi_id = p.id
+     WHERE t.id = $1`,
+    [contentId]
+  );
+  if (!itemQuery.rows.length) {
+    throw new Error(`${contentType} #${contentId} not found`);
+  }
+  const item = itemQuery.rows[0];
+  const oldUrl = item.source_url || null;
+
+  const typeLabel = contentType === 'news' ? 'news article' : 'event';
+  const prompt = `Search the web for this ${typeLabel} and tell me what you find:
+
+Title: "${item.title}"
+${item.description ? `Description: "${item.description}"` : ''}
+${item.poi_name ? `Location/Organization: ${item.poi_name}` : ''}
+
+Tell me: Did you find this specific ${typeLabel}? What website is it on? Is it still available?
+Summarize what you found in 1-2 sentences.`;
+
+  console.log(`[Moderation] Fixing URL for ${contentType} #${contentId}: "${item.title}"`);
+
+  const genAI = await createGeminiClient(pool);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature: 0 }
+  });
+
+  const generation = await model.generateContent(prompt);
+  const response = generation.response;
+  const aiNotes = response.text();
+
+  const candidates = response.candidates || [];
+  const groundingChunks = candidates[0]?.groundingMetadata?.groundingChunks || [];
+
+  const candidateUrls = [];
+  for (const chunk of groundingChunks) {
+    let uri = chunk?.web?.uri;
+    if (!uri) continue;
+    // Vertex AI wraps results in redirect URLs — resolve to actual destination
+    if (uri.includes('vertexaisearch.cloud.google.com/grounding-api-redirect')) {
+      try {
+        const res = await fetch(uri, { method: 'HEAD', redirect: 'manual' });
+        uri = res.headers.get('location') || uri;
+      } catch (e) { /* keep original URI */ }
+    }
+    if (uri !== oldUrl) {
+      candidateUrls.push(uri);
+    }
+  }
+
+  console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: found ${candidateUrls.length} candidate URLs from grounding`);
+  if (candidateUrls.length > 0) {
+    console.log(`[Moderation]   Candidates: ${candidateUrls.join(', ')}`);
+  }
+
+  let sourceUrlUpdated = false;
+  let newUrl = candidateUrls.length > 0 ? candidateUrls[0] : null;
+
+  if (newUrl && newUrl !== oldUrl) {
+    await pool.query(
+      `UPDATE ${table} SET source_url = $1 WHERE id = $2`,
+      [newUrl, contentId]
+    );
+    sourceUrlUpdated = true;
+    console.log(`[Moderation] Fix URL updated ${contentType} #${contentId}: ${oldUrl || '(none)'} -> ${newUrl}`);
+  } else {
+    console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: no new URL found`);
+  }
+
+  await requeueItem(pool, contentType, contentId);
+
+  return {
+    researched: true,
+    source_url_updated: sourceUrlUpdated,
+    old_url: oldUrl,
+    new_url: newUrl,
+    ai_notes: aiNotes || null
+  };
 }
 
 export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null } = {}) {

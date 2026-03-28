@@ -41,6 +41,7 @@ function ModerationInbox() {
   const [createFields, setCreateFields] = useState({});
   const [pois, setPois] = useState([]);
   const [sourceFilter, setSourceFilter] = useState(null);
+  const [researchingItem, setResearchingItem] = useState(null);
   const LIMIT = 20;
 
   const fetchQueue = useCallback(async () => {
@@ -130,6 +131,30 @@ function ModerationInbox() {
       });
       if (response.ok) { notify('success', `${type} #${id} requeued`); fetchQueue(); }
     } catch (err) { notify('error', err.message); }
+  };
+
+  const handleResearch = async (type, id) => {
+    const itemKey = `${type}:${id}`;
+    setResearchingItem(itemKey);
+    try {
+      const response = await fetch('/api/admin/moderation/research', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ type, id })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.source_url_updated) {
+          notify('success', `${type} #${id} — URL fixed: ${data.new_url}`);
+        } else {
+          notify('success', `${type} #${id} — no better URL found, requeued`);
+        }
+        fetchQueue();
+      } else {
+        const err = await response.json();
+        notify('error', err.error || 'Research failed');
+      }
+    } catch (err) { notify('error', err.message); }
+    finally { setResearchingItem(null); }
   };
 
   const startEditing = async (item) => {
@@ -608,6 +633,14 @@ function ModerationInbox() {
                           style={btnStyle('#4caf50')}>Approve</button>
                         <button onClick={() => handleReject(item.content_type, item.id)}
                           style={btnStyle('#f44336')}>Reject</button>
+                        {item.content_type !== 'photo' && (
+                          <button
+                            onClick={() => handleResearch(item.content_type, item.id)}
+                            disabled={researchingItem === `${item.content_type}:${item.id}`}
+                            style={btnStyle(researchingItem === `${item.content_type}:${item.id}` ? '#90caf9' : '#1565c0')}>
+                            {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
+                          </button>
+                        )}
                         <button onClick={() => startEditing(item)}
                           style={btnStyle('transparent', '#e65100', '1px solid #ff9800')}>Edit</button>
                       </>
@@ -616,6 +649,18 @@ function ModerationInbox() {
                       <>
                         <button onClick={() => handleRequeue(item.content_type, item.id)}
                           style={btnStyle('transparent', '#e65100', '1px solid #ff9800')}>Requeue</button>
+                        {item.content_type !== 'photo' && (
+                          <button
+                            onClick={() => handleResearch(item.content_type, item.id)}
+                            disabled={researchingItem === `${item.content_type}:${item.id}`}
+                            style={btnStyle(
+                              researchingItem === `${item.content_type}:${item.id}` ? '#90caf9' : 'transparent',
+                              researchingItem === `${item.content_type}:${item.id}` ? 'white' : '#1565c0',
+                              researchingItem === `${item.content_type}:${item.id}` ? 'none' : '1px solid #42a5f5'
+                            )}>
+                            {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
+                          </button>
+                        )}
                         <button onClick={() => startEditing(item)}
                           style={btnStyle('transparent', '#1565c0', '1px solid #42a5f5')}>Edit</button>
                       </>

@@ -20,6 +20,7 @@ import {
   approveItem,
   rejectItem,
   requeueItem,
+  researchItem,
   bulkApprove,
   createItem,
   editAndPublish,
@@ -43,7 +44,8 @@ import {
 
 import {
   submitBatchNewsJob,
-  queueNewsletterJob
+  queueNewsletterJob,
+  queueModerationJob
 } from './jobScheduler.js';
 
 // Dummy admin user ID for MCP operations (no real user session)
@@ -282,6 +284,28 @@ function registerTools(server, pool, boss) {
     async ({ content_type, id }) => {
       await requeueItem(pool, content_type, id);
       return { content: [{ type: 'text', text: `Requeued ${content_type} #${id} for re-moderation` }] };
+    }
+  );
+
+  server.tool(
+    'queue_research',
+    'Fix source URL via AI web search, then requeue for moderation',
+    {
+      content_type: z.enum(['news', 'event']).describe('Content type (photos not supported)'),
+      id: z.number().describe('Content item ID')
+    },
+    async ({ content_type, id }) => {
+      const result = await researchItem(pool, content_type, id);
+      await queueModerationJob(content_type, id);
+      let msg = `Researched ${content_type} #${id}. `;
+      if (result.source_url_updated) {
+        msg += `URL updated: ${result.old_url || '(none)'} → ${result.new_url}. `;
+      } else {
+        msg += `No URL change. `;
+      }
+      if (result.ai_notes) msg += `Notes: ${result.ai_notes}`;
+      msg += `Item requeued for moderation.`;
+      return { content: [{ type: 'text', text: msg }] };
     }
   );
 
