@@ -453,18 +453,17 @@ export async function requeueItem(pool, contentType, contentId) {
 }
 
 /**
- * Research a news/event item via Gemini with Google Search grounding.
- * Looks up the item on the web to find the correct source URL, then requeues for moderation.
+ * Fix the source URL for a news/event item via Gemini with Google Search grounding.
+ * Searches the web to find the correct URL, updates the item, then requeues for moderation.
  */
 export async function researchItem(pool, contentType, contentId) {
   if (contentType !== 'news' && contentType !== 'event') {
-    throw new Error('Research is only available for news and event items (not photos)');
+    throw new Error('Fix URL is only available for news and event items (not photos)');
   }
 
   const table = TABLE_MAP[contentType];
   const descField = contentType === 'news' ? 'summary' : 'description';
 
-  // Fetch current item data
   const itemQuery = await pool.query(
     `SELECT t.id, t.title, t.${descField} AS description, t.source_url, p.name AS poi_name
      FROM ${table} t
@@ -478,25 +477,17 @@ export async function researchItem(pool, contentType, contentId) {
   const item = itemQuery.rows[0];
   const oldUrl = item.source_url || null;
 
-  // Build a targeted research prompt
   const typeLabel = contentType === 'news' ? 'news article' : 'event';
-  const prompt = `Find the exact webpage for this ${typeLabel}. I need the specific URL where this content is published.
+  const prompt = `Search the web for this ${typeLabel} and tell me what you find:
 
 Title: "${item.title}"
 ${item.description ? `Description: "${item.description}"` : ''}
 ${item.poi_name ? `Location/Organization: ${item.poi_name}` : ''}
-${oldUrl ? `Previous URL (may be broken or wrong): ${oldUrl}` : 'No URL currently on file.'}
 
-Search the web and return a JSON object with:
-- "found": boolean - whether you found the specific page
-- "source_url": string or null - the exact URL of the page (not a search results page)
-- "title_correction": string or null - corrected title if the original has errors
-- "summary_correction": string or null - corrected summary/description if obviously wrong
-- "notes": string - brief explanation of what you found or why you couldn't find it
+Tell me: Did you find this specific ${typeLabel}? What website is it on? Is it still available?
+Summarize what you found in 1-2 sentences.`;
 
-Return ONLY valid JSON, no markdown code blocks.`;
-
-  console.log(`[Moderation] Researching ${contentType} #${contentId}: "${item.title}"`);
+  console.log(`[Moderation] Fixing URL for ${contentType} #${contentId}: "${item.title}"`);
 
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
@@ -506,71 +497,47 @@ Return ONLY valid JSON, no markdown code blocks.`;
   });
 
   const generation = await model.generateContent(prompt);
-  const text = generation.response.text();
+  const response = generation.response;
+  const aiNotes = response.text();
 
-  // Parse JSON response (handle markdown code blocks)
-  let jsonText = text;
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonText = jsonMatch[1].trim();
-  }
-  const firstBrace = jsonText.indexOf('{');
-  if (firstBrace > 0) {
-    jsonText = jsonText.substring(firstBrace);
-  }
-  let braceCount = 0;
-  let endIndex = -1;
-  for (let i = 0; i < jsonText.length; i++) {
-    if (jsonText[i] === '{') braceCount++;
-    if (jsonText[i] === '}') braceCount--;
-    if (braceCount === 0 && jsonText[i] === '}') {
-      endIndex = i + 1;
-      break;
+  const candidates = response.candidates || [];
+  const groundingChunks = candidates[0]?.groundingMetadata?.groundingChunks || [];
+
+  const candidateUrls = [];
+  for (const chunk of groundingChunks) {
+    let uri = chunk?.web?.uri;
+    if (!uri) continue;
+    // Vertex AI wraps results in redirect URLs — resolve to actual destination
+    if (uri.includes('vertexaisearch.cloud.google.com/grounding-api-redirect')) {
+      try {
+        const res = await fetch(uri, { method: 'HEAD', redirect: 'manual' });
+        uri = res.headers.get('location') || uri;
+      } catch (e) { /* keep original URI */ }
+    }
+    if (uri !== oldUrl) {
+      candidateUrls.push(uri);
     }
   }
-  if (endIndex > 0) {
-    jsonText = jsonText.substring(0, endIndex);
-  }
 
-  let research;
-  try {
-    research = JSON.parse(jsonText);
-  } catch (e) {
-    console.error(`[Moderation] Research response not valid JSON:`, text);
-    throw new Error('AI returned invalid format during research');
+  console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: found ${candidateUrls.length} candidate URLs from grounding`);
+  if (candidateUrls.length > 0) {
+    console.log(`[Moderation]   Candidates: ${candidateUrls.join(', ')}`);
   }
 
   let sourceUrlUpdated = false;
-  const newUrl = research.source_url || null;
+  let newUrl = candidateUrls.length > 0 ? candidateUrls[0] : null;
 
-  // Update the item if we found a new/better URL
-  if (research.found && newUrl && newUrl !== oldUrl) {
-    const setClauses = [`source_url = $1`];
-    const values = [newUrl, contentId];
-    let idx = 3;
-
-    if (research.title_correction) {
-      setClauses.push(`title = $${idx}`);
-      values.push(research.title_correction);
-      idx++;
-    }
-    if (research.summary_correction) {
-      setClauses.push(`${descField} = $${idx}`);
-      values.push(research.summary_correction);
-      idx++;
-    }
-
+  if (newUrl && newUrl !== oldUrl) {
     await pool.query(
-      `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $2`,
-      values
+      `UPDATE ${table} SET source_url = $1 WHERE id = $2`,
+      [newUrl, contentId]
     );
     sourceUrlUpdated = true;
-    console.log(`[Moderation] Research updated ${contentType} #${contentId}: ${oldUrl || '(none)'} -> ${newUrl}`);
+    console.log(`[Moderation] Fix URL updated ${contentType} #${contentId}: ${oldUrl || '(none)'} -> ${newUrl}`);
   } else {
-    console.log(`[Moderation] Research for ${contentType} #${contentId}: no URL update (found=${research.found})`);
+    console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: no new URL found`);
   }
 
-  // Requeue for re-moderation regardless
   await requeueItem(pool, contentType, contentId);
 
   return {
@@ -578,7 +545,7 @@ Return ONLY valid JSON, no markdown code blocks.`;
     source_url_updated: sourceUrlUpdated,
     old_url: oldUrl,
     new_url: newUrl,
-    ai_notes: research.notes || null
+    ai_notes: aiNotes || null
   };
 }
 

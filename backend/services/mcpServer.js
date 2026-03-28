@@ -289,7 +289,7 @@ function registerTools(server, pool, boss) {
 
   server.tool(
     'queue_research',
-    'Research item via AI web search to find/fix source URL, then requeue for moderation',
+    'Fix source URL via AI web search, then requeue for moderation',
     {
       content_type: z.enum(['news', 'event']).describe('Content type (photos not supported)'),
       id: z.number().describe('Content item ID')

@@ -144,9 +144,9 @@ function ModerationInbox() {
       if (response.ok) {
         const data = await response.json();
         if (data.source_url_updated) {
-          notify('success', `${type} #${id} researched — URL updated to ${data.new_url}`);
+          notify('success', `${type} #${id} — URL fixed: ${data.new_url}`);
         } else {
-          notify('success', `${type} #${id} researched — no URL change. ${data.ai_notes || ''}`);
+          notify('success', `${type} #${id} — no better URL found, requeued`);
         }
         fetchQueue();
       } else {
@@ -638,7 +638,7 @@ function ModerationInbox() {
                             onClick={() => handleResearch(item.content_type, item.id)}
                             disabled={researchingItem === `${item.content_type}:${item.id}`}
                             style={btnStyle(researchingItem === `${item.content_type}:${item.id}` ? '#90caf9' : '#1565c0')}>
-                            {researchingItem === `${item.content_type}:${item.id}` ? 'Researching...' : 'Research'}
+                            {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
                           </button>
                         )}
                         <button onClick={() => startEditing(item)}
@@ -658,7 +658,7 @@ function ModerationInbox() {
                               researchingItem === `${item.content_type}:${item.id}` ? 'white' : '#1565c0',
                               researchingItem === `${item.content_type}:${item.id}` ? 'none' : '1px solid #42a5f5'
                             )}>
-                            {researchingItem === `${item.content_type}:${item.id}` ? 'Researching...' : 'Research'}
+                            {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
                           </button>
                         )}
                         <button onClick={() => startEditing(item)}
