@@ -10641,6 +10641,40 @@ img.type-filter-icon {
   font-weight: 500;
 }
 
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 16px 0;
+  margin-top: 8px;
+}
+
+.pagination-btn {
+  padding: 8px 20px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: var(--accent);
+  color: white;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pagination-info {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
 .results-tab-list {
   display: flex;
   flex-direction: column;
