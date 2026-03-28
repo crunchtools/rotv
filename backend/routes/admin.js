@@ -83,6 +83,7 @@ import {
   bulkApprove,
   editAndPublish,
   requeueItem,
+  researchItem,
   createItem,
   purgeRejected
 } from '../services/moderationService.js';
@@ -4602,6 +4603,26 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error requeuing item:', error);
       res.status(500).json({ error: 'Failed to requeue item' });
+    }
+  });
+
+  // Research item via AI web search to find/fix source URL, then requeue
+  router.post('/moderation/research', isAdmin, async (req, res) => {
+    try {
+      const { type, id } = req.body;
+      if (!type || !id) {
+        return res.status(400).json({ error: 'type and id are required' });
+      }
+      if (type === 'photo') {
+        return res.status(400).json({ error: 'Research is not available for photos' });
+      }
+      const result = await researchItem(pool, type, id);
+      // Queue a moderation job for the requeued item
+      await queueModerationJob(type, id);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('Error researching item:', error);
+      res.status(500).json({ error: error.message || 'Failed to research item' });
     }
   });
 

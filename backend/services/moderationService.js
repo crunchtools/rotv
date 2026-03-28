@@ -4,7 +4,7 @@
  * Processes pending items via pg-boss queue, auto-approves high-confidence content.
  */
 
-import { moderateContent, moderatePhoto } from './geminiService.js';
+import { moderateContent, moderatePhoto, createGeminiClient } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle } from './deepCrawler.js';
 
@@ -450,6 +450,136 @@ export async function requeueItem(pool, contentType, contentId) {
      WHERE id = $1`,
     [contentId]
   );
+}
+
+/**
+ * Research a news/event item via Gemini with Google Search grounding.
+ * Looks up the item on the web to find the correct source URL, then requeues for moderation.
+ */
+export async function researchItem(pool, contentType, contentId) {
+  if (contentType !== 'news' && contentType !== 'event') {
+    throw new Error('Research is only available for news and event items (not photos)');
+  }
+
+  const table = TABLE_MAP[contentType];
+  const descField = contentType === 'news' ? 'summary' : 'description';
+
+  // Fetch current item data
+  const itemQuery = await pool.query(
+    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, p.name AS poi_name
+     FROM ${table} t
+     LEFT JOIN pois p ON t.poi_id = p.id
+     WHERE t.id = $1`,
+    [contentId]
+  );
+  if (!itemQuery.rows.length) {
+    throw new Error(`${contentType} #${contentId} not found`);
+  }
+  const item = itemQuery.rows[0];
+  const oldUrl = item.source_url || null;
+
+  // Build a targeted research prompt
+  const typeLabel = contentType === 'news' ? 'news article' : 'event';
+  const prompt = `Find the exact webpage for this ${typeLabel}. I need the specific URL where this content is published.
+
+Title: "${item.title}"
+${item.description ? `Description: "${item.description}"` : ''}
+${item.poi_name ? `Location/Organization: ${item.poi_name}` : ''}
+${oldUrl ? `Previous URL (may be broken or wrong): ${oldUrl}` : 'No URL currently on file.'}
+
+Search the web and return a JSON object with:
+- "found": boolean - whether you found the specific page
+- "source_url": string or null - the exact URL of the page (not a search results page)
+- "title_correction": string or null - corrected title if the original has errors
+- "summary_correction": string or null - corrected summary/description if obviously wrong
+- "notes": string - brief explanation of what you found or why you couldn't find it
+
+Return ONLY valid JSON, no markdown code blocks.`;
+
+  console.log(`[Moderation] Researching ${contentType} #${contentId}: "${item.title}"`);
+
+  const genAI = await createGeminiClient(pool);
+  const model = genAI.getGenerativeModel({
+    model: 'gemini-2.5-flash',
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature: 0 }
+  });
+
+  const generation = await model.generateContent(prompt);
+  const text = generation.response.text();
+
+  // Parse JSON response (handle markdown code blocks)
+  let jsonText = text;
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    jsonText = jsonMatch[1].trim();
+  }
+  const firstBrace = jsonText.indexOf('{');
+  if (firstBrace > 0) {
+    jsonText = jsonText.substring(firstBrace);
+  }
+  let braceCount = 0;
+  let endIndex = -1;
+  for (let i = 0; i < jsonText.length; i++) {
+    if (jsonText[i] === '{') braceCount++;
+    if (jsonText[i] === '}') braceCount--;
+    if (braceCount === 0 && jsonText[i] === '}') {
+      endIndex = i + 1;
+      break;
+    }
+  }
+  if (endIndex > 0) {
+    jsonText = jsonText.substring(0, endIndex);
+  }
+
+  let research;
+  try {
+    research = JSON.parse(jsonText);
+  } catch (e) {
+    console.error(`[Moderation] Research response not valid JSON:`, text);
+    throw new Error('AI returned invalid format during research');
+  }
+
+  let sourceUrlUpdated = false;
+  const newUrl = research.source_url || null;
+
+  // Update the item if we found a new/better URL
+  if (research.found && newUrl && newUrl !== oldUrl) {
+    const setClauses = [`source_url = $1`];
+    const values = [newUrl, contentId];
+    let idx = 3;
+
+    if (research.title_correction) {
+      setClauses.push(`title = $${idx}`);
+      values.push(research.title_correction);
+      idx++;
+    }
+    if (research.summary_correction) {
+      setClauses.push(`${descField} = $${idx}`);
+      values.push(research.summary_correction);
+      idx++;
+    }
+
+    await pool.query(
+      `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $2`,
+      values
+    );
+    sourceUrlUpdated = true;
+    console.log(`[Moderation] Research updated ${contentType} #${contentId}: ${oldUrl || '(none)'} -> ${newUrl}`);
+  } else {
+    console.log(`[Moderation] Research for ${contentType} #${contentId}: no URL update (found=${research.found})`);
+  }
+
+  // Requeue for re-moderation regardless
+  await requeueItem(pool, contentType, contentId);
+
+  return {
+    researched: true,
+    source_url_updated: sourceUrlUpdated,
+    old_url: oldUrl,
+    new_url: newUrl,
+    ai_notes: research.notes || null
+  };
 }
 
 export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null } = {}) {
