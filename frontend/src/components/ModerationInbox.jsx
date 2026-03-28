@@ -272,10 +272,25 @@ function ModerationInbox() {
     }
   };
 
+  const getDateConfidenceBadge = (confidence) => {
+    switch (confidence) {
+      case 'exact': return { label: 'Exact', color: '#4caf50' };
+      case 'estimated': return { label: 'Est.', color: '#ff9800' };
+      case 'unknown': return { label: 'No Date', color: '#f44336' };
+      default: return null;
+    }
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  };
+
+  const formatPubDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   };
 
   const isPending = statusFilter === 'pending';
@@ -583,10 +598,29 @@ function ModerationInbox() {
                       </div>
                     )}
 
-                    {/* Timestamp */}
-                    <div style={{ fontSize: '0.73rem', color: '#aaa', marginTop: '2px' }}>
-                      {formatDate(item.created_at)}
-                      {item.moderated_at && <span> &middot; Moderated {formatDate(item.moderated_at)}</span>}
+                    {/* Timestamp + Publication Date */}
+                    <div style={{ fontSize: '0.73rem', color: '#aaa', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                      <span>{formatDate(item.created_at)}</span>
+                      {item.moderated_at && <span>&middot; Moderated {formatDate(item.moderated_at)}</span>}
+                      {item.content_type !== 'photo' && (() => {
+                        const confBadge = getDateConfidenceBadge(item.date_confidence);
+                        if (!confBadge) return null;
+                        return (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                            <span>&middot;</span>
+                            {item.publication_date ? (
+                              <span>Pub: {formatPubDate(item.publication_date)}</span>
+                            ) : null}
+                            <span style={{
+                              backgroundColor: confBadge.color, color: 'white',
+                              padding: '0px 5px', borderRadius: '8px',
+                              fontSize: '0.65rem', fontWeight: 'bold'
+                            }}>
+                              {confBadge.label}
+                            </span>
+                          </span>
+                        );
+                      })()}
                     </div>
 
                     {/* AI reasoning (expanded) */}
