@@ -1461,6 +1461,28 @@ app.get('/api/events/upcoming', async (req, res) => {
   }
 });
 
+// All past events across the park (public)
+app.get('/api/events/past', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 50;
+    const pastEventsQuery = await pool.query(`
+      SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
+      FROM poi_events e
+      JOIN pois p ON e.poi_id = p.id
+      WHERE e.moderation_status IN ('published', 'auto_approved')
+        AND e.start_date < CURRENT_DATE
+        AND (p.deleted IS NULL OR p.deleted = FALSE)
+      ORDER BY e.start_date DESC
+      LIMIT $1
+    `, [limit]);
+    res.json(pastEventsQuery.rows);
+  } catch (error) {
+    console.error('Error fetching past events:', error);
+    res.status(500).json({ error: 'Failed to fetch past events' });
+  }
+});
+
 // Serve generated icons from database (public endpoint)
 app.get('/api/icons/:name.svg', async (req, res) => {
   try {
