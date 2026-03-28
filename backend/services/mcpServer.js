@@ -775,10 +775,17 @@ export function startMcpServer(pool, boss, port = 3001) {
 
     // Bearer token auth
     const authHeader = req.headers.authorization;
+    const expectedToken = process.env.MCP_ADMIN_TOKEN;
+    if (!expectedToken) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const expected = Buffer.from(process.env.MCP_ADMIN_TOKEN || '');
+    const expected = Buffer.from(expectedToken);
     const provided = Buffer.from(token || '');
-    if (expected.length === 0 || expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
+    if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Unauthorized' }));
       return;
