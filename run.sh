@@ -32,6 +32,7 @@ ENV_ARGS=""
 [ -n "$FACEBOOK_APP_ID" ] && ENV_ARGS="$ENV_ARGS -e FACEBOOK_APP_ID=$FACEBOOK_APP_ID"
 [ -n "$FACEBOOK_APP_SECRET" ] && ENV_ARGS="$ENV_ARGS -e FACEBOOK_APP_SECRET=$FACEBOOK_APP_SECRET"
 [ -n "$ADMIN_EMAIL" ] && ENV_ARGS="$ENV_ARGS -e ADMIN_EMAIL=$ADMIN_EMAIL"
+[ -n "$MCP_ADMIN_TOKEN" ] && ENV_ARGS="$ENV_ARGS -e MCP_ADMIN_TOKEN=$MCP_ADMIN_TOKEN"
 
 case "${1:-help}" in
     build-base)
@@ -151,7 +152,12 @@ ADMIN_EMAIL=$ADMIN_EMAIL
 TWITTER_USERNAME=$TWITTER_USERNAME
 TWITTER_PASSWORD=$TWITTER_PASSWORD
 IMAGE_SERVER_URL=$IMAGE_SERVER_URL
+MCP_ADMIN_TOKEN=$MCP_ADMIN_TOKEN
 ENVFILE
+
+        # Build MCP port mapping if token is configured
+        MCP_PORT_MAP=""
+        [ -n "$MCP_ADMIN_TOKEN" ] && MCP_PORT_MAP="-p 3001:3001"
 
         podman run -d \
             --name "$CONTAINER_NAME" \
@@ -159,6 +165,7 @@ ENVFILE
             --network=pasta:--dns-forward,8.8.8.8 \
             -p 8080:8080 \
             -p 2525:25 \
+            $MCP_PORT_MAP \
             --tmpfs /run \
             -v ~/.rotv/environment:/etc/rotv/environment:ro,Z \
             $STORAGE_MOUNT \

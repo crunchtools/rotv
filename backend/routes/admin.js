@@ -83,7 +83,8 @@ import {
   bulkApprove,
   editAndPublish,
   requeueItem,
-  createItem
+  createItem,
+  purgeRejected
 } from '../services/moderationService.js';
 import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
 import {
@@ -4601,6 +4602,18 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error requeuing item:', error);
       res.status(500).json({ error: 'Failed to requeue item' });
+    }
+  });
+
+  // Purge all rejected items
+  router.post('/moderation/purge-rejected', isAdmin, async (req, res) => {
+    try {
+      const { type } = req.body;
+      const result = await purgeRejected(pool, type || null);
+      res.json(result);
+    } catch (error) {
+      console.error('Error purging rejected items:', error);
+      res.status(500).json({ error: 'Failed to purge rejected items' });
     }
   });
 

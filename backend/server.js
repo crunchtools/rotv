@@ -40,6 +40,7 @@ import {
 import { createSheetsService } from './services/sheetsSync.js';
 import imageServerClient from './services/imageServerClient.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
+import { startMcpServer } from './services/mcpServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1950,6 +1951,11 @@ async function start() {
 
   // Start SMTP server for inbound newsletter emails
   activeSmtpServer = startSmtpServer(pool);
+
+  // Start MCP admin server (only if token is configured)
+  if (process.env.MCP_ADMIN_TOKEN) {
+    startMcpServer(pool, app.get('boss'), parseInt(process.env.MCP_PORT || '3001'));
+  }
 
   app.listen(PORT, '::', () => {
     console.log(`Roots of The Valley API running on port ${PORT}`);

@@ -71,3 +71,4 @@ RUN mkdir -p /etc/rotv
 
 EXPOSE 8080
 EXPOSE 25
+EXPOSE 3001

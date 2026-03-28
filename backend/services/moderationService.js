@@ -421,6 +421,26 @@ export async function createItem(pool, contentType, fields, adminUserId) {
   }
 }
 
+export async function purgeRejected(pool, contentType) {
+  if (contentType) {
+    const table = TABLE_MAP[contentType];
+    if (!table) throw new Error(`Unknown content type: ${contentType}`);
+    const result = await pool.query(
+      `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
+    );
+    return { deleted: result.rowCount };
+  }
+  // Purge all three tables
+  let total = 0;
+  for (const table of Object.values(TABLE_MAP)) {
+    const result = await pool.query(
+      `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
+    );
+    total += result.rowCount;
+  }
+  return { deleted: total };
+}
+
 export async function requeueItem(pool, contentType, contentId) {
   const table = TABLE_MAP[contentType];
   await pool.query(
