@@ -1264,13 +1264,13 @@ app.get('/api/pois/:id/news', async (req, res) => {
     const { id } = req.params;
     const limit = parseInt(req.query.limit) || 50;
     const newsQuery = await pool.query(`
-      SELECT id, title, summary, source_url, source_name, news_type, published_at, created_at
+      SELECT id, title, summary, source_url, source_name, news_type,
+             published_at, publication_date, date_confidence, created_at
       FROM poi_news
       WHERE poi_id = $1
         AND moderation_status IN ('published', 'auto_approved')
       ORDER BY
-        CASE WHEN published_at IS NULL THEN 1 ELSE 0 END,
-        published_at DESC NULLS LAST,
+        COALESCE(publication_date, created_at::date) DESC,
         created_at DESC
       LIMIT $2
     `, [id, limit]);
@@ -1427,12 +1427,13 @@ app.get('/api/news/recent', async (req, res) => {
     const limit = parseInt(req.query.limit) || 500;
     const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.published_at, n.created_at, p.id as poi_id, p.name as poi_name, p.poi_type
+             n.published_at, n.publication_date, n.date_confidence, n.created_at,
+             p.id as poi_id, p.name as poi_name, p.poi_type
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
       WHERE n.moderation_status IN ('published', 'auto_approved')
         AND (p.deleted IS NULL OR p.deleted = FALSE)
-      ORDER BY COALESCE(n.published_at, n.created_at) DESC
+      ORDER BY COALESCE(n.publication_date, n.created_at::date) DESC, n.created_at DESC
       LIMIT $1
     `, [limit]);
     res.json(recentNewsQuery.rows);
