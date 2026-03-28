@@ -11,6 +11,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
 import http from 'http';
+import crypto from 'crypto';
 
 import {
   getQueue,
@@ -775,7 +776,9 @@ export function startMcpServer(pool, boss, port = 3001) {
     // Bearer token auth
     const authHeader = req.headers.authorization;
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    if (token !== process.env.MCP_ADMIN_TOKEN) {
+    const expected = Buffer.from(process.env.MCP_ADMIN_TOKEN || '');
+    const provided = Buffer.from(token || '');
+    if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Unauthorized' }));
       return;
