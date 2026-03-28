@@ -764,19 +764,19 @@ async function initDatabase() {
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
                moderation_status, confidence_score, ai_reasoning,
                submitted_by, moderated_by, moderated_at, created_at,
-               content_source
+               content_source, publication_date, date_confidence
         FROM poi_news WHERE moderation_status = 'pending'
         UNION ALL
         SELECT id, 'event' AS content_type, poi_id, title, description,
                moderation_status, confidence_score, ai_reasoning,
                submitted_by, moderated_by, moderated_at, created_at,
-               content_source
+               content_source, publication_date, date_confidence
         FROM poi_events WHERE moderation_status = 'pending'
         UNION ALL
         SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
                moderation_status, confidence_score, ai_reasoning,
                submitted_by, moderated_by, moderated_at, created_at,
-               NULL AS content_source
+               NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR(10) AS date_confidence
         FROM photo_submissions WHERE moderation_status = 'pending'
         ORDER BY created_at DESC
     `);
