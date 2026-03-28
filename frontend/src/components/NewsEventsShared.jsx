@@ -12,6 +12,7 @@ import React from 'react';
 export function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '';
   return date.toLocaleDateString('en-US', {
     month: '2-digit',
     day: '2-digit',
@@ -43,7 +44,9 @@ export function formatDateWithWeekday(dateString) {
  */
 export function formatPublicationDate(dateString) {
   if (!dateString) return '';
-  return new Date(dateString + 'T00:00:00Z').toLocaleDateString('en-US', {
+  const date = new Date(dateString + 'T00:00:00Z');
+  if (isNaN(date.getTime())) return '';
+  return date.toLocaleDateString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
   });
 }
