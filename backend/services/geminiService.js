@@ -505,8 +505,20 @@ Score 0.0-1.0 on these criteria:
    personal trip reports, engagement announcements, family reunion recaps. These are not
    park news — they are private moments. Add "private_content" to issues and score 0.0.
 
+PUBLICATION DATE EXTRACTION (does NOT affect scoring):
+Extract or estimate when this content was originally published or when the event occurred.
+- If the source page has a clear publication date, byline date, or article timestamp,
+  set publication_date to that date (YYYY-MM-DD) and date_confidence to "exact".
+- If no explicit date but you can estimate from context clues (seasonal references,
+  "this spring", references to known dated events, copyright years, URL date patterns),
+  set your best estimate and date_confidence to "estimated".
+- If you cannot determine any date at all, set publication_date to null and
+  date_confidence to "unknown".
+NOTE: Old content is NOT a reason to reject. ROTV is a living history journal.
+Publication date is for sorting/filtering only.
+
 Return ONLY valid JSON (no markdown, no code blocks):
-{"confidence_score": 0.0, "reasoning": "...", "issues": []}`;
+{"confidence_score": 0.0, "reasoning": "...", "issues": [], "publication_date": "YYYY-MM-DD", "date_confidence": "exact"}`;
 
   const geminiResponse = await model.generateContent(prompt);
   const text = geminiResponse.response.text().trim();

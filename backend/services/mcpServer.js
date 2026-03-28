@@ -118,7 +118,8 @@ function registerTools(server, pool, boss) {
     async ({ poi_id, limit }) => {
       const result = await pool.query(`
         SELECT id, title, summary, source_url, source_name, news_type,
-               published_at, moderation_status, confidence_score, content_source, created_at
+               published_at, moderation_status, confidence_score, content_source,
+               publication_date, date_confidence, created_at
         FROM poi_news
         WHERE poi_id = $1
         ORDER BY created_at DESC
@@ -138,7 +139,8 @@ function registerTools(server, pool, boss) {
     async ({ poi_id, limit }) => {
       const result = await pool.query(`
         SELECT id, title, description, start_date, end_date, event_type,
-               location_details, source_url, moderation_status, confidence_score, content_source, created_at
+               location_details, source_url, moderation_status, confidence_score, content_source,
+               publication_date, date_confidence, created_at
         FROM poi_events
         WHERE poi_id = $1
         ORDER BY start_date DESC

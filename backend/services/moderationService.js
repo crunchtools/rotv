@@ -16,6 +16,32 @@ const TABLE_MAP = {
 
 const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
 
+/**
+ * Extract and validate publication date fields from AI scoring response.
+ * Returns { publicationDate, dateConfidence } with safe defaults.
+ */
+function extractDateFields(scoring) {
+  let publicationDate = null;
+  let dateConfidence = 'unknown';
+
+  if (scoring.publication_date) {
+    const parsed = new Date(scoring.publication_date);
+    if (!isNaN(parsed.getTime())) {
+      publicationDate = scoring.publication_date;
+      dateConfidence = scoring.date_confidence || 'estimated';
+    }
+  } else if (scoring.date_confidence) {
+    dateConfidence = scoring.date_confidence;
+  }
+
+  // Ensure confidence is a valid enum value
+  if (!['exact', 'estimated', 'unknown'].includes(dateConfidence)) {
+    dateConfidence = 'unknown';
+  }
+
+  return { publicationDate, dateConfidence };
+}
+
 async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
   const table = TABLE_MAP[contentType];
   const summary = contentType === 'news' ? row.summary : row.description;
@@ -133,10 +159,13 @@ export async function processItem(pool, contentType, contentId) {
       ({ scoring, foundIssue } = await attemptDeepCrawl(pool, 'news', contentId, row, scoring));
     }
 
+    const { publicationDate: newsPubDate, dateConfidence: newsDateConf } = extractDateFields(scoring);
+
     if (foundIssue) {
       await pool.query(
-        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
-        [scoring.confidence_score, scoring.reasoning, contentId]
+        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
+         publication_date = $3, date_confidence = $4 WHERE id = $5`,
+        [scoring.confidence_score, scoring.reasoning, newsPubDate, newsDateConf, contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (${foundIssue})`);
       return;
@@ -144,8 +173,9 @@ export async function processItem(pool, contentType, contentId) {
 
     if (scoring.confidence_score < rejectFloor) {
       await pool.query(
-        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
-        [scoring.confidence_score, scoring.reasoning, contentId]
+        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
+         publication_date = $3, date_confidence = $4 WHERE id = $5`,
+        [scoring.confidence_score, scoring.reasoning, newsPubDate, newsDateConf, contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (score ${scoring.confidence_score} below floor ${rejectFloor})`);
       return;
@@ -155,8 +185,9 @@ export async function processItem(pool, contentType, contentId) {
       ? 'auto_approved' : 'pending';
 
     await pool.query(
-      `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3 WHERE id = $4`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
+      `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3,
+       publication_date = $4, date_confidence = $5 WHERE id = $6`,
+      [scoring.confidence_score, scoring.reasoning, resolvedStatus, newsPubDate, newsDateConf, contentId]
     );
 
   } else if (contentType === 'event') {
@@ -222,10 +253,13 @@ export async function processItem(pool, contentType, contentId) {
       ({ scoring, foundIssue: eventFoundIssue } = await attemptDeepCrawl(pool, 'event', contentId, row, scoring));
     }
 
+    const { publicationDate: eventPubDate, dateConfidence: eventDateConf } = extractDateFields(scoring);
+
     if (eventFoundIssue) {
       await pool.query(
-        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
-        [scoring.confidence_score, scoring.reasoning, contentId]
+        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
+         publication_date = $3, date_confidence = $4 WHERE id = $5`,
+        [scoring.confidence_score, scoring.reasoning, eventPubDate, eventDateConf, contentId]
       );
       console.log(`[Moderation] event #${contentId}: rejected (${eventFoundIssue})`);
       return;
@@ -233,8 +267,9 @@ export async function processItem(pool, contentType, contentId) {
 
     if (scoring.confidence_score < rejectFloor) {
       await pool.query(
-        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
-        [scoring.confidence_score, scoring.reasoning, contentId]
+        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
+         publication_date = $3, date_confidence = $4 WHERE id = $5`,
+        [scoring.confidence_score, scoring.reasoning, eventPubDate, eventDateConf, contentId]
       );
       console.log(`[Moderation] event #${contentId}: rejected (score ${scoring.confidence_score} below floor ${rejectFloor})`);
       return;
@@ -244,8 +279,9 @@ export async function processItem(pool, contentType, contentId) {
       ? 'auto_approved' : 'pending';
 
     await pool.query(
-      `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3 WHERE id = $4`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
+      `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3,
+       publication_date = $4, date_confidence = $5 WHERE id = $6`,
+      [scoring.confidence_score, scoring.reasoning, resolvedStatus, eventPubDate, eventDateConf, contentId]
     );
 
   } else if (contentType === 'photo') {
@@ -561,19 +597,19 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
     SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
            moderation_status, confidence_score, ai_reasoning,
            submitted_by, moderated_by, moderated_at, created_at, source_url,
-           content_source
+           content_source, publication_date, date_confidence
     FROM poi_news WHERE moderation_status = ANY($1)
     UNION ALL
     SELECT id, 'event' AS content_type, poi_id, title, description,
            moderation_status, confidence_score, ai_reasoning,
            submitted_by, moderated_by, moderated_at, created_at, source_url,
-           content_source
+           content_source, publication_date, date_confidence
     FROM poi_events WHERE moderation_status = ANY($1)
     UNION ALL
     SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
            moderation_status, confidence_score, ai_reasoning,
            submitted_by, moderated_by, moderated_at, created_at, NULL AS source_url,
-           NULL AS content_source
+           NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR AS date_confidence
     FROM photo_submissions WHERE moderation_status = ANY($1)`;
 
   const filters = [];
