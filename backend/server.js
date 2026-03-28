@@ -1423,7 +1423,7 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
 // All recent news across the park (public)
 app.get('/api/news/recent', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 20;
+    const limit = parseInt(req.query.limit) || 500;
     const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.published_at, n.created_at, p.id as poi_id, p.name as poi_name, p.poi_type

@@ -14,6 +14,8 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
   const [error, setError] = useState(null);
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 50;
   const [typeFilters, setTypeFilters] = useState({
     general: true,
     alert: true,
@@ -30,7 +32,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('/api/news/recent?limit=50');
+      const response = await fetch('/api/news/recent');
       if (response.ok) {
         const data = await response.json();
         setNews(data);
@@ -101,6 +103,12 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
     return filtered;
   }, [news, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
 
+  const totalPages = Math.ceil(filteredNews.length / PAGE_SIZE);
+  const paginatedNews = filteredNews.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
   if (loading) {
     return (
       <div className="park-news-tab">
@@ -132,7 +140,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
           className="results-search-input"
           placeholder="Search news by title, summary, or location..."
           value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
+          onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
         />
         <div className="results-type-filters">
           {[
@@ -145,7 +153,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
             <div
               key={f.key}
               className={`type-filter-chip ${f.key} ${typeFilters[f.key] ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] }))}
+              onClick={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}
             >
               <span className="type-filter-icon">{f.icon}</span>
               {f.label}
@@ -153,7 +161,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
           ))}
         </div>
         <div className="results-count">
-          Showing {filteredNews.length} of {news.length} news items
+          Showing {filteredNews.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, filteredNews.length)}`} of {filteredNews.length} news items
         </div>
       </div>
 
@@ -167,7 +175,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
             </p>
           ) : (
           <div className="park-news-list">
-        {filteredNews.map(item => (
+        {paginatedNews.map(item => (
           <div key={item.id} className={`park-news-item ${item.news_type || 'general'}`}>
             <div className="park-news-header">
               <NewsTypeIcon type={item.news_type} />
@@ -200,6 +208,27 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
           </div>
         ))}
           </div>
+          )}
+          {totalPages > 1 && (
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(p => p - 1)}
+                disabled={currentPage === 1}
+              >
+                Back
+              </button>
+              <span className="pagination-info">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
           )}
         </div>
         {/* Map thumbnail sidebar */}
