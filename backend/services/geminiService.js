@@ -9,6 +9,9 @@ if (!globalThis.fetch) {
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Gemini model — configurable via environment variable, defaults to gemini-2.5-flash
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
 // Default prompt templates - designed to avoid generic AI slop
 const DEFAULT_PROMPTS = {
   gemini_prompt_brief: `You are a local historian writing for the Cuyahoga Valley National Park visitor guide.
@@ -172,7 +175,7 @@ export async function generateText(pool, promptKey, destination, sheets = null) 
 
   // Enable Google Search grounding for better factual content
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODEL,
     tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
@@ -197,7 +200,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
   const genAI = await createGeminiClient(pool, sheets);
 
   const modelConfig = {
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODEL,
     generationConfig: { temperature: 0 }
   };
   if (useSearchGrounding) {
@@ -228,7 +231,7 @@ export async function researchLocation(pool, destination, availableActivities = 
 
   // Enable Google Search grounding for research
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODEL,
     tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
@@ -305,7 +308,7 @@ export async function researchLocation(pool, destination, availableActivities = 
  */
 export async function testApiKey(pool, sheets = null) {
   const genAI = await createGeminiClient(pool, sheets);
-  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
 
   const verification = await model.generateContent('Respond with exactly: API key verified');
   const text = verification.response.text();
@@ -350,7 +353,7 @@ export async function generateIconSvg(pool, description, color, sheets = null) {
 
   // Don't use Google Search for icon generation - we want creative output
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash'
+    model: GEMINI_MODEL
   });
 
   const prompt = `You are an icon designer. Generate a simple, minimal SVG map marker icon.
@@ -420,7 +423,7 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
 export async function moderateContent(pool, content, sheets = null) {
   const genAI = await createGeminiClient(pool, sheets);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODEL,
     generationConfig: { temperature: 0 }
   });
 
@@ -541,7 +544,7 @@ Return ONLY valid JSON (no markdown, no code blocks):
 export async function moderatePhoto(pool, photo, sheets = null) {
   const genAI = await createGeminiClient(pool, sheets);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODEL,
     generationConfig: { temperature: 0 }
   });
 

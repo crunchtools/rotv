@@ -36,6 +36,19 @@ export function formatDateWithWeekday(dateString) {
 }
 
 /**
+ * Format a date-only string (YYYY-MM-DD) for display, avoiding timezone shift.
+ * Uses UTC to prevent off-by-one day for users west of UTC.
+ * @param {string} dateString - YYYY-MM-DD date string
+ * @returns {string} - Formatted date (e.g., "Mar 15, 2025")
+ */
+export function formatPublicationDate(dateString) {
+  if (!dateString) return '';
+  return new Date(dateString + 'T00:00:00Z').toLocaleDateString('en-US', {
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
+  });
+}
+
+/**
  * Format a date with time in US format (MM/DD/YYYY h:mm AM/PM)
  * @param {string} dateString - ISO date string
  * @returns {string} - Formatted date with time

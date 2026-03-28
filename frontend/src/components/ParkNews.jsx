@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
-import { formatDate, NewsTypeIcon } from './NewsEventsShared';
+import { formatDate, formatPublicationDate, NewsTypeIcon } from './NewsEventsShared';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -193,7 +193,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
             {item.summary && <p className="park-news-summary">{item.summary}</p>}
             <div className="park-news-meta">
               {item.source_name && <span className="news-source">{item.source_name}</span>}
-              {item.publication_date && <span className="news-date">{new Date(item.publication_date + 'T00:00:00').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>}
+              {item.publication_date && <span className="news-date">{formatPublicationDate(item.publication_date)}</span>}
               {!item.publication_date && item.published_at && <span className="news-date">{formatDate(item.published_at)}</span>}
               {item.source_url && (
                 <a

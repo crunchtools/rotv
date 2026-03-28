@@ -33,6 +33,7 @@ END $$;
 -- ============================================================
 -- 4. Update moderation_queue VIEW to include new columns
 -- ============================================================
+DROP VIEW IF EXISTS moderation_queue CASCADE;
 CREATE OR REPLACE VIEW moderation_queue AS
   SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
          moderation_status, confidence_score, ai_reasoning,

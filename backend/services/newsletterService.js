@@ -9,6 +9,7 @@ import { simpleParser } from 'mailparser';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GEMINI_MODEL } from './geminiService.js';
 import { queueModerationJob, queueNewsletterJob } from './jobScheduler.js';
 
 const turndown = new TurndownService({
@@ -233,7 +234,7 @@ export async function processNewsletter(pool, emailData) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
+      model: GEMINI_MODEL,
       generationConfig: { temperature: 0 }
     });
 

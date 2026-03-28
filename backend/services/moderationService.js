@@ -4,7 +4,7 @@
  * Processes pending items via pg-boss queue, auto-approves high-confidence content.
  */
 
-import { moderateContent, moderatePhoto, createGeminiClient } from './geminiService.js';
+import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle } from './deepCrawler.js';
 
@@ -17,6 +17,34 @@ const TABLE_MAP = {
 const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
 
 /**
+ * Validate that a URL is a safe, public http/https URL.
+ * Blocks internal IPs, localhost, metadata endpoints, and non-http schemes.
+ */
+function isSafePublicUrl(urlStr) {
+  try {
+    const parsed = new URL(urlStr);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    // Block localhost and loopback
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
+    // Block cloud metadata endpoints
+    if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return false;
+    // Block private IP ranges (10.x, 172.16-31.x, 192.168.x)
+    const parts = hostname.split('.');
+    if (parts.length === 4 && parts.every(p => /^\d+$/.test(p))) {
+      const [a, b] = parts.map(Number);
+      if (a === 10) return false;
+      if (a === 172 && b >= 16 && b <= 31) return false;
+      if (a === 192 && b === 168) return false;
+      if (a === 0) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Extract and validate publication date fields from AI scoring response.
  * Returns { publicationDate, dateConfidence } with safe defaults.
  */
@@ -25,10 +53,14 @@ function extractDateFields(scoring) {
   let dateConfidence = 'unknown';
 
   if (scoring.publication_date) {
-    const parsed = new Date(scoring.publication_date);
-    if (!isNaN(parsed.getTime())) {
-      publicationDate = scoring.publication_date;
-      dateConfidence = scoring.date_confidence || 'estimated';
+    // Validate YYYY-MM-DD format strictly — don't trust Date constructor parsing
+    const dateStr = String(scoring.publication_date);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+        publicationDate = dateStr;
+        dateConfidence = scoring.date_confidence || 'estimated';
+      }
     }
   } else if (scoring.date_confidence) {
     dateConfidence = scoring.date_confidence;
@@ -527,7 +559,7 @@ Summarize what you found in 1-2 sentences.`;
 
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
-    model: 'gemini-2.5-flash',
+    model: GEMINI_MODEL,
     tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
@@ -548,7 +580,14 @@ Summarize what you found in 1-2 sentences.`;
       try {
         const res = await fetch(uri, { method: 'HEAD', redirect: 'manual' });
         uri = res.headers.get('location') || uri;
-      } catch (e) { /* keep original URI */ }
+      } catch (e) {
+        console.warn(`[Moderation] Failed to resolve grounding redirect for ${contentType} #${contentId}:`, e.message);
+      }
+    }
+    // SSRF protection: only allow public http/https URLs
+    if (!isSafePublicUrl(uri)) {
+      console.warn(`[Moderation] Blocked non-public URL from grounding: ${uri}`);
+      continue;
     }
     if (uri !== oldUrl) {
       candidateUrls.push(uri);

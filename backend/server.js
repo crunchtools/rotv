@@ -758,9 +758,10 @@ async function initDatabase() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_photo_submissions_status ON photo_submissions(moderation_status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_photo_submissions_poi ON photo_submissions(poi_id)`);
 
-    // Unified moderation queue view
+    // Unified moderation queue view (DROP first to allow column changes)
+    await client.query(`DROP VIEW IF EXISTS moderation_queue CASCADE`);
     await client.query(`
-      CREATE OR REPLACE VIEW moderation_queue AS
+      CREATE VIEW moderation_queue AS
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
                moderation_status, confidence_score, ai_reasoning,
                submitted_by, moderated_by, moderated_at, created_at,
@@ -781,9 +782,10 @@ async function initDatabase() {
         ORDER BY created_at DESC
     `);
 
-    // Newsletter digest view (schema only, no email integration)
+    // Newsletter digest view (DROP first to allow column changes)
+    await client.query(`DROP VIEW IF EXISTS newsletter_digest CASCADE`);
     await client.query(`
-      CREATE OR REPLACE VIEW newsletter_digest AS
+      CREATE VIEW newsletter_digest AS
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
                created_at, moderated_at, content_source
         FROM poi_news
