@@ -86,7 +86,8 @@ import {
   researchItem,
   fixDate,
   createItem,
-  purgeRejected
+  purgeRejected,
+  processItem
 } from '../services/moderationService.js';
 import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
 import {
@@ -4618,8 +4619,6 @@ export function createAdminRouter(pool) {
         return res.status(400).json({ error: 'Fix URL is not available for photos' });
       }
       const result = await researchItem(pool, type, id);
-      // Queue a moderation job for the requeued item
-      await queueModerationJob(type, id);
       res.json({ success: true, ...result });
     } catch (error) {
       console.error('Error fixing URL:', error);

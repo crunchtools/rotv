@@ -126,8 +126,8 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
  * @param {string} contentType - 'news', 'event', or 'photo'
  * @param {number} contentId - ID of the content to moderate
  */
-export async function processItem(pool, contentType, contentId) {
-  console.log(`[Moderation] Processing ${contentType} #${contentId}`);
+export async function processItem(pool, contentType, contentId, { forceStatus = null } = {}) {
+  console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
     `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_auto_reject_floor')`
@@ -223,7 +223,8 @@ export async function processItem(pool, contentType, contentId) {
     }
 
     // Hold items with unknown publication date for human review regardless of score
-    const resolvedStatus = newsDateConf === 'unknown' ? 'pending'
+    const resolvedStatus = forceStatus ? forceStatus
+      : newsDateConf === 'unknown' ? 'pending'
       : autoApproveEnabled && scoring.confidence_score >= threshold ? 'auto_approved'
       : 'pending';
 
@@ -320,7 +321,8 @@ export async function processItem(pool, contentType, contentId) {
     }
 
     // Hold items with unknown publication date for human review regardless of score
-    const resolvedStatus = eventDateConf === 'unknown' ? 'pending'
+    const resolvedStatus = forceStatus ? forceStatus
+      : eventDateConf === 'unknown' ? 'pending'
       : autoApproveEnabled && scoring.confidence_score >= threshold ? 'auto_approved'
       : 'pending';
 
@@ -349,7 +351,8 @@ export async function processItem(pool, contentType, contentId) {
       image_url: imageUrl
     });
 
-    const resolvedStatus = autoApproveEnabled && scoring.confidence_score >= threshold
+    const resolvedStatus = forceStatus ? forceStatus
+      : autoApproveEnabled && scoring.confidence_score >= threshold
       ? 'auto_approved' : 'pending';
 
     await pool.query(
@@ -631,8 +634,6 @@ Summarize what you found in 1-2 sentences.`;
   } else {
     console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: no new URL found`);
   }
-
-  await requeueItem(pool, contentType, contentId);
 
   return {
     researched: true,
