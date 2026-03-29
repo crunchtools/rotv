@@ -96,11 +96,10 @@ function ModerationInbox() {
   };
 
   const handleReject = async (type, id) => {
-    const reason = prompt('Rejection reason (optional):');
     try {
       const response = await fetch('/api/admin/moderation/reject', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ type, id, reason: reason || '' })
+        credentials: 'include', body: JSON.stringify({ type, id, reason: '' })
       });
       if (response.ok) { notify('success', `${type} #${id} rejected`); fetchQueue(); }
     } catch (err) { notify('error', err.message); }
@@ -379,6 +378,13 @@ function ModerationInbox() {
   const btnStyle = (bg, color = 'white', border = 'none') => ({
     padding: '5px 12px', border, borderRadius: '6px',
     backgroundColor: bg, color, cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500'
+  });
+
+  const actionBtn = (disabled = false) => ({
+    padding: '4px 0', border: '1px solid #bbb', borderRadius: '5px',
+    backgroundColor: disabled ? '#e0e0e0' : '#f5f5f5', color: disabled ? '#999' : '#333',
+    cursor: disabled ? 'default' : 'pointer', fontSize: '0.75rem', fontWeight: '500',
+    width: '72px', textAlign: 'center'
   });
 
   return (
@@ -687,67 +693,53 @@ function ModerationInbox() {
                   </div>
 
                   {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: '4px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '200px' }}>
+                  <div style={{ display: 'flex', gap: '3px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '160px' }}>
                     <button onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
-                      style={btnStyle('transparent', '#666', '1px solid #ddd')}>
-                      {isExpanded ? 'Less' : 'More'}
-                    </button>
+                      style={actionBtn()}>{isExpanded ? 'Less' : 'More'}</button>
                     {isPending && (
                       <>
                         <button onClick={() => handleApprove(item.content_type, item.id)}
-                          style={btnStyle('#4caf50')}>Approve</button>
+                          style={actionBtn()}>Approve</button>
                         <button onClick={() => handleReject(item.content_type, item.id)}
-                          style={btnStyle('#f44336')}>Reject</button>
+                          style={actionBtn()}>Reject</button>
                         {item.content_type !== 'photo' && (
-                          <button
-                            onClick={() => handleResearch(item.content_type, item.id)}
-                            disabled={researchingItem === `${item.content_type}:${item.id}`}
-                            style={btnStyle(researchingItem === `${item.content_type}:${item.id}` ? '#90caf9' : '#1565c0')}>
-                            {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
+                          <button onClick={() => handleResearch(item.content_type, item.id)}
+                            disabled={researchingItem === itemKey}
+                            style={actionBtn(researchingItem === itemKey)}>
+                            {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
                           </button>
                         )}
                         {item.content_type !== 'photo' && (!item.publication_date || item.date_confidence === 'unknown') && (
-                          <button
-                            onClick={() => handleFixDate(item.content_type, item.id)}
-                            disabled={fixingDateItem === `${item.content_type}:${item.id}`}
-                            style={btnStyle(fixingDateItem === `${item.content_type}:${item.id}` ? '#a5d6a7' : '#2e7d32')}>
-                            {fixingDateItem === `${item.content_type}:${item.id}` ? 'Finding...' : 'Fix Date'}
+                          <button onClick={() => handleFixDate(item.content_type, item.id)}
+                            disabled={fixingDateItem === itemKey}
+                            style={actionBtn(fixingDateItem === itemKey)}>
+                            {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
                           </button>
                         )}
                         <button onClick={() => startEditing(item)}
-                          style={btnStyle('transparent', '#e65100', '1px solid #ff9800')}>Edit</button>
+                          style={actionBtn()}>Edit</button>
                       </>
                     )}
                     {!isPending && (
                       <>
                         <button onClick={() => handleRequeue(item.content_type, item.id)}
-                          style={btnStyle('transparent', '#e65100', '1px solid #ff9800')}>Requeue</button>
+                          style={actionBtn()}>Requeue</button>
                         {item.content_type !== 'photo' && (
-                          <button
-                            onClick={() => handleResearch(item.content_type, item.id)}
-                            disabled={researchingItem === `${item.content_type}:${item.id}`}
-                            style={btnStyle(
-                              researchingItem === `${item.content_type}:${item.id}` ? '#90caf9' : 'transparent',
-                              researchingItem === `${item.content_type}:${item.id}` ? 'white' : '#1565c0',
-                              researchingItem === `${item.content_type}:${item.id}` ? 'none' : '1px solid #42a5f5'
-                            )}>
-                            {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
+                          <button onClick={() => handleResearch(item.content_type, item.id)}
+                            disabled={researchingItem === itemKey}
+                            style={actionBtn(researchingItem === itemKey)}>
+                            {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
                           </button>
                         )}
                         {item.content_type !== 'photo' && (!item.publication_date || item.date_confidence === 'unknown') && (
-                          <button
-                            onClick={() => handleFixDate(item.content_type, item.id)}
-                            disabled={fixingDateItem === `${item.content_type}:${item.id}`}
-                            style={btnStyle(
-                              fixingDateItem === `${item.content_type}:${item.id}` ? '#a5d6a7' : 'transparent',
-                              fixingDateItem === `${item.content_type}:${item.id}` ? 'white' : '#2e7d32',
-                              fixingDateItem === `${item.content_type}:${item.id}` ? 'none' : '1px solid #66bb6a'
-                            )}>
-                            {fixingDateItem === `${item.content_type}:${item.id}` ? 'Finding...' : 'Fix Date'}
+                          <button onClick={() => handleFixDate(item.content_type, item.id)}
+                            disabled={fixingDateItem === itemKey}
+                            style={actionBtn(fixingDateItem === itemKey)}>
+                            {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
                           </button>
                         )}
                         <button onClick={() => startEditing(item)}
-                          style={btnStyle('transparent', '#1565c0', '1px solid #42a5f5')}>Edit</button>
+                          style={actionBtn()}>Edit</button>
                       </>
                     )}
                   </div>
