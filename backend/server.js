@@ -721,6 +721,7 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) DEFAULT 'published'`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2)`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS ai_issues TEXT`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderated_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
@@ -731,6 +732,7 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) DEFAULT 'published'`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2)`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS ai_issues TEXT`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderated_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
