@@ -1,6 +1,6 @@
 {
   "name": "rotv-backend",
-  "version": "1.9.0",
+  "version": "0.0.0",
   "description": "Roots of The Valley - Backend API",
   "main": "server.js",
   "type": "module",

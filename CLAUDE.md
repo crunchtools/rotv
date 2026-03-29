@@ -68,9 +68,8 @@ Before making any changes, read these documents in order:
 4. ./run.sh test (must pass)
 5. git commit
 6. User verification in browser
-7. Version bump (if releasing)
-8. git push + gh pr create
-9. After merge: tag, clean up branch
+7. git push + gh pr create
+8. After merge: git tag vX.Y.Z, clean up branch
 ```
 
 **Full workflow details:** See `.specify/memory/constitution.md` Section III.
@@ -79,11 +78,7 @@ Before making any changes, read these documents in order:
 
 ## Version Tracking
 
-| File | Purpose |
-|------|---------|
-| `frontend/package.json` | Source of truth for release version |
-| `backend/package.json` | Backend version (independent) |
-| `Containerfile` LABEL | Must match frontend version |
+Git tags are the single source of truth for versioning. Use `git tag --sort=-v:refname | head -1` to find the current version. Do not track versions in `package.json` or other code files.
 
 ---
 
@@ -114,6 +109,6 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 
 ## Recent Changes
 
-- **v1.16.0** - Current version
+- See `git tag --sort=-v:refname` for version history
 - See git log for recent commits
 - See `.specify/specs/` for feature specifications
