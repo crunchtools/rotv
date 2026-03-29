@@ -117,12 +117,14 @@ function registerTools(server, pool, boss) {
     },
     async ({ poi_id, limit }) => {
       const result = await pool.query(`
-        SELECT id, title, summary, source_url, source_name, news_type,
-               published_at, moderation_status, confidence_score, content_source,
-               publication_date, date_confidence, created_at
-        FROM poi_news
-        WHERE poi_id = $1
-        ORDER BY created_at DESC
+        SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
+               n.published_at, n.moderation_status, n.confidence_score, n.content_source,
+               n.publication_date, n.date_confidence, n.created_at,
+               COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
+                         FROM poi_news_urls u WHERE u.news_id = n.id), '[]'::json) AS additional_urls
+        FROM poi_news n
+        WHERE n.poi_id = $1
+        ORDER BY n.created_at DESC
         LIMIT $2
       `, [poi_id, limit]);
       return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
@@ -138,12 +140,14 @@ function registerTools(server, pool, boss) {
     },
     async ({ poi_id, limit }) => {
       const result = await pool.query(`
-        SELECT id, title, description, start_date, end_date, event_type,
-               location_details, source_url, moderation_status, confidence_score, content_source,
-               publication_date, date_confidence, created_at
-        FROM poi_events
-        WHERE poi_id = $1
-        ORDER BY start_date DESC
+        SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
+               e.location_details, e.source_url, e.moderation_status, e.confidence_score, e.content_source,
+               e.publication_date, e.date_confidence, e.created_at,
+               COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
+                         FROM poi_event_urls u WHERE u.event_id = e.id), '[]'::json) AS additional_urls
+        FROM poi_events e
+        WHERE e.poi_id = $1
+        ORDER BY e.start_date DESC
         LIMIT $2
       `, [poi_id, limit]);
       return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
@@ -196,16 +200,12 @@ function registerTools(server, pool, boss) {
       owner_id: z.number().optional().describe('ID of virtual POI that owns/manages this POI')
     },
     async (args) => {
-      const fields = ['name', 'poi_type'];
-      const values = [args.name, args.poi_type];
-
-      for (const col of ['brief_description', 'latitude', 'longitude', 'news_url', 'events_url', 'status_url', 'more_info_link', 'owner_id']) {
-        if (args[col] !== undefined) {
-          fields.push(col);
-          values.push(args[col]);
-        }
+      if (args.poi_type !== 'virtual' && (args.latitude === undefined || args.longitude === undefined)) {
+        return { content: [{ type: 'text', text: `POI type '${args.poi_type}' requires latitude and longitude.` }], isError: true };
       }
 
+      const fields = Object.keys(args).filter(key => args[key] !== undefined);
+      const values = fields.map(key => args[key]);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
       const result = await pool.query(
         `INSERT INTO pois (${fields.join(', ')}) VALUES (${placeholders}) RETURNING id, name, poi_type`,
