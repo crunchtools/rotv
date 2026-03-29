@@ -633,6 +633,94 @@ Summarize what you found in 1-2 sentences.`;
   };
 }
 
+/**
+ * Fix the publication date for a news/event item via Gemini with Google Search grounding.
+ * Searches the web to find the publication date, updates the item.
+ */
+export async function fixDate(pool, contentType, contentId) {
+  if (contentType !== 'news' && contentType !== 'event') {
+    throw new Error('Fix Date is only available for news and event items');
+  }
+
+  const table = TABLE_MAP[contentType];
+  const descField = contentType === 'news' ? 'summary' : 'description';
+
+  const itemQuery = await pool.query(
+    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date, t.date_confidence, p.name AS poi_name
+     FROM ${table} t
+     LEFT JOIN pois p ON t.poi_id = p.id
+     WHERE t.id = $1`,
+    [contentId]
+  );
+  if (!itemQuery.rows.length) {
+    throw new Error(`${contentType} #${contentId} not found`);
+  }
+  const item = itemQuery.rows[0];
+
+  const typeLabel = contentType === 'news' ? 'news article' : 'event';
+  const prompt = `Find the publication date for this ${typeLabel}:
+
+Title: "${item.title}"
+${item.description ? `Description: "${item.description}"` : ''}
+${item.source_url ? `Source URL: ${item.source_url}` : ''}
+${item.poi_name ? `Location/Organization: ${item.poi_name}` : ''}
+
+Search the web and find when this was published. Look for:
+- Publication date, byline date, or article timestamp on the source page
+- Date in the URL pattern (e.g., /2025/03/article-name)
+- References to specific dated events that pin down the timeframe
+
+Return ONLY valid JSON (no markdown, no code blocks):
+{"publication_date": "YYYY-MM-DD", "date_confidence": "exact", "reasoning": "Found date in..."}
+
+If exact date found, use date_confidence "exact".
+If estimated from context, use "estimated".
+If truly impossible to determine, use "unknown" and set publication_date to null.`;
+
+  console.log(`[Moderation] Fixing date for ${contentType} #${contentId}: "${item.title}"`);
+
+  const genAI = await createGeminiClient(pool);
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature: 0 }
+  });
+
+  const generation = await model.generateContent(prompt);
+  const text = generation.response.text().trim();
+
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+  let result;
+  try {
+    result = JSON.parse(jsonMatch[1].trim());
+  } catch {
+    console.error('[Moderation] Failed to parse fix-date response:', text);
+    return { date_updated: false, reasoning: 'Failed to parse AI response' };
+  }
+
+  const { publicationDate, dateConfidence } = extractDateFields(result);
+
+  if (publicationDate) {
+    await pool.query(
+      `UPDATE ${table} SET publication_date = $1, date_confidence = $2 WHERE id = $3`,
+      [publicationDate, dateConfidence, contentId]
+    );
+    console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: ${publicationDate} (${dateConfidence})`);
+    return {
+      date_updated: true,
+      publication_date: publicationDate,
+      date_confidence: dateConfidence,
+      reasoning: result.reasoning || null
+    };
+  }
+
+  console.log(`[Moderation] Fix date for ${contentType} #${contentId}: no date found`);
+  return {
+    date_updated: false,
+    reasoning: result.reasoning || 'Could not determine publication date'
+  };
+}
+
 export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null } = {}) {
   const offset = (page - 1) * limit;
   const statusList = status === 'all'

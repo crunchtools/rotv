@@ -21,6 +21,7 @@ import {
   rejectItem,
   requeueItem,
   researchItem,
+  fixDate,
   bulkApprove,
   createItem,
   editAndPublish,
@@ -307,6 +308,26 @@ function registerTools(server, pool, boss) {
       }
       if (result.ai_notes) msg += `Notes: ${result.ai_notes}`;
       msg += `Item requeued for moderation.`;
+      return { content: [{ type: 'text', text: msg }] };
+    }
+  );
+
+  server.tool(
+    'queue_fix_date',
+    'Fix publication date via AI web search for a news/event item',
+    {
+      content_type: z.enum(['news', 'event']).describe('Content type (photos not supported)'),
+      id: z.number().describe('Content item ID')
+    },
+    async ({ content_type, id }) => {
+      const result = await fixDate(pool, content_type, id);
+      let msg = `Fix date for ${content_type} #${id}: `;
+      if (result.date_updated) {
+        msg += `Date set to ${result.publication_date} (${result.date_confidence}).`;
+      } else {
+        msg += `Could not determine date.`;
+      }
+      if (result.reasoning) msg += ` ${result.reasoning}`;
       return { content: [{ type: 'text', text: msg }] };
     }
   );

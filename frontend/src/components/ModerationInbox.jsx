@@ -44,6 +44,7 @@ function ModerationInbox() {
   const [pois, setPois] = useState([]);
   const [sourceFilter, setSourceFilter] = useState(null);
   const [researchingItem, setResearchingItem] = useState(null);
+  const [fixingDateItem, setFixingDateItem] = useState(null);
   const LIMIT = 20;
 
   const fetchQueue = useCallback(async () => {
@@ -157,6 +158,30 @@ function ModerationInbox() {
       }
     } catch (err) { notify('error', err.message); }
     finally { setResearchingItem(null); }
+  };
+
+  const handleFixDate = async (type, id) => {
+    const itemKey = `${type}:${id}`;
+    setFixingDateItem(itemKey);
+    try {
+      const response = await fetch('/api/admin/moderation/fix-date', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({ type, id })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.date_updated) {
+          notify('success', `${type} #${id} — date set: ${data.publication_date} (${data.date_confidence})`);
+        } else {
+          notify('success', `${type} #${id} — could not determine date`);
+        }
+        fetchQueue();
+      } else {
+        const err = await response.json();
+        notify('error', err.error || 'Fix Date failed');
+      }
+    } catch (err) { notify('error', err.message); }
+    finally { setFixingDateItem(null); }
   };
 
   const startEditing = async (item) => {
@@ -681,6 +706,14 @@ function ModerationInbox() {
                             {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
                           </button>
                         )}
+                        {item.content_type !== 'photo' && (!item.publication_date || item.date_confidence === 'unknown') && (
+                          <button
+                            onClick={() => handleFixDate(item.content_type, item.id)}
+                            disabled={fixingDateItem === `${item.content_type}:${item.id}`}
+                            style={btnStyle(fixingDateItem === `${item.content_type}:${item.id}` ? '#a5d6a7' : '#2e7d32')}>
+                            {fixingDateItem === `${item.content_type}:${item.id}` ? 'Finding...' : 'Fix Date'}
+                          </button>
+                        )}
                         <button onClick={() => startEditing(item)}
                           style={btnStyle('transparent', '#e65100', '1px solid #ff9800')}>Edit</button>
                       </>
@@ -699,6 +732,18 @@ function ModerationInbox() {
                               researchingItem === `${item.content_type}:${item.id}` ? 'none' : '1px solid #42a5f5'
                             )}>
                             {researchingItem === `${item.content_type}:${item.id}` ? 'Fixing URL...' : 'Fix URL'}
+                          </button>
+                        )}
+                        {item.content_type !== 'photo' && (!item.publication_date || item.date_confidence === 'unknown') && (
+                          <button
+                            onClick={() => handleFixDate(item.content_type, item.id)}
+                            disabled={fixingDateItem === `${item.content_type}:${item.id}`}
+                            style={btnStyle(
+                              fixingDateItem === `${item.content_type}:${item.id}` ? '#a5d6a7' : 'transparent',
+                              fixingDateItem === `${item.content_type}:${item.id}` ? 'white' : '#2e7d32',
+                              fixingDateItem === `${item.content_type}:${item.id}` ? 'none' : '1px solid #66bb6a'
+                            )}>
+                            {fixingDateItem === `${item.content_type}:${item.id}` ? 'Finding...' : 'Fix Date'}
                           </button>
                         )}
                         <button onClick={() => startEditing(item)}

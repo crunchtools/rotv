@@ -84,6 +84,7 @@ import {
   editAndPublish,
   requeueItem,
   researchItem,
+  fixDate,
   createItem,
   purgeRejected
 } from '../services/moderationService.js';
@@ -4623,6 +4624,24 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error fixing URL:', error);
       res.status(500).json({ error: error.message || 'Failed to fix URL' });
+    }
+  });
+
+  // Fix publication date via AI web search
+  router.post('/moderation/fix-date', isAdmin, async (req, res) => {
+    try {
+      const { type, id } = req.body;
+      if (!type || !id) {
+        return res.status(400).json({ error: 'type and id are required' });
+      }
+      if (type === 'photo') {
+        return res.status(400).json({ error: 'Fix Date is not available for photos' });
+      }
+      const result = await fixDate(pool, type, id);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('Error fixing date:', error);
+      res.status(500).json({ error: error.message || 'Failed to fix date' });
     }
   });
 
