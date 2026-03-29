@@ -441,8 +441,8 @@ export async function bulkApprove(pool, items, adminUserId) {
 }
 
 export async function editAndPublish(pool, contentType, contentId, edits, adminUserId) {
-  const EDITABLE_NEWS = ['title', 'summary', 'source_url', 'source_name', 'news_type', 'poi_id'];
-  const EDITABLE_EVENT = ['title', 'description', 'start_date', 'end_date', 'event_type', 'location_details', 'source_url', 'poi_id'];
+  const EDITABLE_NEWS = ['title', 'summary', 'source_url', 'source_name', 'news_type', 'poi_id', 'publication_date'];
+  const EDITABLE_EVENT = ['title', 'description', 'start_date', 'end_date', 'event_type', 'location_details', 'source_url', 'poi_id', 'publication_date'];
   const EDITABLE_PHOTO = ['caption', 'poi_id'];
 
   const allowedFields = contentType === 'news' ? EDITABLE_NEWS
@@ -459,6 +459,11 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
       values.push(edits[field]);
       idx++;
     }
+  }
+
+  // When admin sets publication_date, mark confidence as 'exact'
+  if (edits.publication_date) {
+    setClauses.push(`date_confidence = 'exact'`);
   }
 
   setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);

@@ -7,6 +7,7 @@ const FIELD_CONFIGS = {
     { key: 'source_url', label: 'Source URL', type: 'text' },
     { key: 'source_name', label: 'Source Name', type: 'text' },
     { key: 'news_type', label: 'Type', type: 'select', options: ['general', 'closure', 'seasonal', 'maintenance', 'wildlife'] },
+    { key: 'publication_date', label: 'Publication Date', type: 'date' },
     { key: 'poi_id', label: 'POI', type: 'poi' },
   ],
   event: [
@@ -17,6 +18,7 @@ const FIELD_CONFIGS = {
     { key: 'event_type', label: 'Event Type', type: 'text' },
     { key: 'location_details', label: 'Location Details', type: 'text' },
     { key: 'source_url', label: 'Source URL', type: 'text' },
+    { key: 'publication_date', label: 'Publication Date', type: 'date' },
     { key: 'poi_id', label: 'POI', type: 'poi' },
   ],
   photo: [
@@ -170,6 +172,8 @@ function ModerationInbox() {
         for (const fc of fieldConfigs) {
           if (fc.type === 'datetime-local' && detail[fc.key]) {
             fields[fc.key] = new Date(detail[fc.key]).toISOString().slice(0, 16);
+          } else if (fc.type === 'date' && detail[fc.key]) {
+            fields[fc.key] = new Date(detail[fc.key]).toISOString().slice(0, 10);
           } else {
             fields[fc.key] = detail[fc.key] || '';
           }
