@@ -1632,6 +1632,25 @@ function normalizeNewsTitle(title) {
 }
 
 /**
+ * Normalize a URL for duplicate detection.
+ * Strips trailing slashes, removes fragment, lowercases, and normalizes
+ * common path variations (e.g., /plan-your-visit/alerts/ → /alerts).
+ * @param {string} url - Original URL
+ * @returns {string|null} - Normalized URL or null
+ */
+function normalizeUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    // Lowercase host, strip trailing slash, remove fragment
+    let normalized = parsed.origin + parsed.pathname.replace(/\/+$/, '') + parsed.search;
+    return normalized.toLowerCase();
+  } catch {
+    return url.toLowerCase().replace(/\/+$/, '');
+  }
+}
+
+/**
  * Save news items to database
  * @param {Pool} pool - Database connection pool
  * @param {number} poiId - POI ID
@@ -1678,25 +1697,28 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       // Normalize the title for duplicate checking
       const normalizedTitle = normalizeNewsTitle(item.title);
 
-      // Check if duplicate exists using BOTH URL and normalized title
+      // Check if duplicate exists using URL (cross-POI) and title (same POI)
       // This catches:
-      // 1. Exact URL matches (same article from rendered page)
-      // 2. Resolved URL matches (same article from Google Search after redirect resolution)
-      // 3. Title variants like "Article | January 30" vs "Article | 2026-01-30"
+      // 1. Same normalized URL across ANY POI (alerts pages, blog indexes)
+      // 2. Same title within the same POI
+      // 3. Title variants like "Article | January 30" vs "Article | 2026-01-30" (same POI)
+      const normalizedUrl = normalizeUrl(resolvedUrl);
       const existing = await pool.query(
-        `SELECT id, title, source_url FROM poi_news
-         WHERE poi_id = $1
-         AND (
-           ($2::text IS NOT NULL AND source_url = $2::text)
-           OR title = $3
-           OR REGEXP_REPLACE(title, '\\s*\\|\\s*(\\d{4}-\\d{2}-\\d{2}|[A-Z][a-z]+\\s+\\d{1,2}(,\\s*\\d{4})?)\\s*$', '', 'i') = $4
+        `SELECT id, title, source_url, poi_id FROM poi_news
+         WHERE (
+           ($1::text IS NOT NULL AND LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = $1::text)
+           OR (poi_id = $2 AND title = $3)
+           OR (poi_id = $2 AND REGEXP_REPLACE(title, '\\s*\\|\\s*(\\d{4}-\\d{2}-\\d{2}|[A-Z][a-z]+\\s+\\d{1,2}(,\\s*\\d{4})?)\\s*$', '', 'i') = $4)
          )`,
-        [poiId, resolvedUrl, item.title, normalizedTitle]
+        [normalizedUrl, poiId, item.title, normalizedTitle]
       );
 
       if (existing.rows.length > 0) {
         duplicateCount++;
-        const reason = existing.rows[0].source_url === resolvedUrl ? 'same URL' : 'similar title';
+        const matchedUrl = normalizeUrl(existing.rows[0].source_url);
+        const reason = matchedUrl === normalizedUrl
+          ? (existing.rows[0].poi_id === poiId ? 'same URL' : 'same URL (different POI)')
+          : 'similar title';
         console.log(`Skipping duplicate (${reason}): "${item.title}"`);
         continue; // Skip duplicate
       }
@@ -1763,24 +1785,26 @@ export async function saveEventItems(pool, poiId, eventItems) {
         continue;
       }
 
-      // Check if duplicate exists using BOTH URL and title+date
+      // Check if duplicate exists using URL (cross-POI) and title+date (same POI)
       // This catches:
-      // 1. Exact URL matches (same event from rendered page)
-      // 2. Resolved URL matches (same event from Google Search after redirect resolution)
-      // 3. Same title + start_date (existing logic)
+      // 1. Same normalized URL across ANY POI
+      // 2. Same title + start_date within same POI
+      const normalizedEventUrl = normalizeUrl(resolvedUrl);
       const existing = await pool.query(
-        `SELECT id, title, source_url FROM poi_events
-         WHERE poi_id = $1
-         AND (
-           ($2::text IS NOT NULL AND source_url = $2::text)
-           OR (title = $3 AND start_date = $4)
+        `SELECT id, title, source_url, poi_id FROM poi_events
+         WHERE (
+           ($1::text IS NOT NULL AND LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = $1::text)
+           OR (poi_id = $2 AND title = $3 AND start_date = $4)
          )`,
-        [poiId, resolvedUrl, item.title, item.start_date]
+        [normalizedEventUrl, poiId, item.title, item.start_date]
       );
 
       if (existing.rows.length > 0) {
         duplicateCount++;
-        const reason = existing.rows[0].source_url === resolvedUrl ? 'same URL' : 'same title+date';
+        const matchedEventUrl = normalizeUrl(existing.rows[0].source_url);
+        const reason = matchedEventUrl === normalizedEventUrl
+          ? (existing.rows[0].poi_id === poiId ? 'same URL' : 'same URL (different POI)')
+          : 'same title+date';
         console.log(`Skipping duplicate event (${reason}): "${item.title}"`);
         continue; // Skip duplicate
       }
