@@ -1,6 +1,6 @@
 /**
  * ROTV Admin MCP Server
- * Provides 30 admin tools for managing ROTV content, moderation queue,
+ * Provides 31 admin tools for managing ROTV content, moderation queue,
  * jobs, newsletters, and settings via the Model Context Protocol.
  *
  * Transport: Streamable HTTP on a separate port (default 3001)
@@ -45,8 +45,7 @@ import {
 
 import {
   submitBatchNewsJob,
-  queueNewsletterJob,
-  queueModerationJob
+  queueNewsletterJob
 } from './jobScheduler.js';
 
 // Dummy admin user ID for MCP operations (no real user session)
@@ -59,7 +58,7 @@ const MCP_ADMIN_USER_ID = null;
 function registerTools(server, pool, boss) {
 
   // ============================================================
-  // POI Tools (6)
+  // POI Tools (7)
   // ============================================================
 
   server.tool(
@@ -181,6 +180,42 @@ function registerTools(server, pool, boss) {
     }
   );
 
+  server.tool(
+    'poi_create',
+    'Create a new POI (point of interest or virtual organization)',
+    {
+      name: z.string().describe('POI name'),
+      poi_type: z.enum(['point', 'trail', 'river', 'boundary', 'virtual']).describe('POI type (use virtual for organizations)'),
+      brief_description: z.string().optional().describe('Short description'),
+      latitude: z.number().optional().describe('Latitude (not needed for virtual POIs)'),
+      longitude: z.number().optional().describe('Longitude (not needed for virtual POIs)'),
+      news_url: z.string().url().optional().describe('URL for news collection'),
+      events_url: z.string().url().optional().describe('URL for events collection'),
+      status_url: z.string().url().optional().describe('URL for trail status collection'),
+      more_info_link: z.string().url().optional().describe('External link for more info'),
+      owner_id: z.number().optional().describe('ID of virtual POI that owns/manages this POI')
+    },
+    async (args) => {
+      const fields = ['name', 'poi_type'];
+      const values = [args.name, args.poi_type];
+
+      for (const col of ['brief_description', 'latitude', 'longitude', 'news_url', 'events_url', 'status_url', 'more_info_link', 'owner_id']) {
+        if (args[col] !== undefined) {
+          fields.push(col);
+          values.push(args[col]);
+        }
+      }
+
+      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await pool.query(
+        `INSERT INTO pois (${fields.join(', ')}) VALUES (${placeholders}) RETURNING id, name, poi_type`,
+        values
+      );
+      const row = result.rows[0];
+      return { content: [{ type: 'text', text: `Created POI #${row.id}: ${row.name} (${row.poi_type})` }] };
+    }
+  );
+
   // ============================================================
   // Queue & Moderation Tools (6)
   // ============================================================
@@ -292,14 +327,13 @@ function registerTools(server, pool, boss) {
 
   server.tool(
     'queue_research',
-    'Fix source URL via AI web search, then requeue for moderation',
+    'Fix source URL via AI web search',
     {
       content_type: z.enum(['news', 'event']).describe('Content type (photos not supported)'),
       id: z.number().describe('Content item ID')
     },
     async ({ content_type, id }) => {
       const result = await researchItem(pool, content_type, id);
-      await queueModerationJob(content_type, id);
       let msg = `Researched ${content_type} #${id}. `;
       if (result.source_url_updated) {
         msg += `URL updated: ${result.old_url || '(none)'} → ${result.new_url}. `;
@@ -307,7 +341,6 @@ function registerTools(server, pool, boss) {
         msg += `No URL change. `;
       }
       if (result.ai_notes) msg += `Notes: ${result.ai_notes}`;
-      msg += `Item requeued for moderation.`;
       return { content: [{ type: 'text', text: msg }] };
     }
   );
