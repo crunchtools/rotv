@@ -1691,11 +1691,11 @@ function AppContent() {
                 Moderation
                 {moderationCount > 0 && (
                   <span style={{
-                    position: 'absolute', top: '-4px', right: '-4px',
+                    marginLeft: '4px',
                     backgroundColor: '#f44336', color: 'white',
-                    borderRadius: '50%', width: '18px', height: '18px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '0.7rem', fontWeight: 'bold'
+                    borderRadius: '10px', minWidth: '18px', height: '18px', padding: '0 5px',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.7rem', fontWeight: 'bold', verticalAlign: 'middle'
                   }}>
                     {moderationCount > 99 ? '99+' : moderationCount}
                   </span>

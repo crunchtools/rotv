@@ -326,16 +326,17 @@ function ModerationInbox() {
   const isPending = statusFilter === 'pending';
   const totalPages = Math.ceil(total / LIMIT);
 
-  const pillActive = (active) => ({
-    padding: '5px 14px',
-    borderRadius: '16px',
-    border: 'none',
-    backgroundColor: active ? '#333' : '#f0f0f0',
+  const filterBtn = (active) => ({
+    padding: '5px 0',
+    borderRadius: '6px',
+    border: '1px solid #ddd',
+    backgroundColor: active ? '#333' : '#f5f5f5',
     color: active ? 'white' : '#555',
     cursor: 'pointer',
-    fontSize: '0.82rem',
+    fontSize: '0.78rem',
     fontWeight: active ? '600' : '400',
-    transition: 'all 0.15s ease'
+    flex: 1,
+    textAlign: 'center'
   });
 
   const renderFieldInput = (fc, values, setValues) => {
@@ -393,13 +394,6 @@ function ModerationInbox() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <h3 style={{ margin: 0 }}>Moderation Queue</h3>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          <span style={{
-            backgroundColor: total > 0 && isPending ? '#f44336' : '#888',
-            color: 'white', padding: '2px 10px', borderRadius: '12px',
-            fontSize: '0.82rem', fontWeight: 'bold'
-          }}>
-            {total}
-          </span>
           {/* Purge rejected button */}
           {statusFilter === 'rejected' && total > 0 && (
             <button
@@ -435,51 +429,50 @@ function ModerationInbox() {
         </div>
       </div>
 
-      {/* Filter bar — single row */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '12px', flexWrap: 'wrap', alignItems: 'center' }}>
-        {/* Status filters */}
-        {[
-          { label: 'All', value: 'all' },
-          { label: 'Pending', value: 'pending' },
-          { label: 'Approved', value: 'approved' },
-          { label: 'Auto', value: 'auto_approved' },
-          { label: 'Rejected', value: 'rejected' },
-        ].map(f => (
-          <button key={f.value} onClick={() => { setStatusFilter(f.value); setPage(1); setSelectedItems(new Set()); }}
-            style={pillActive(statusFilter === f.value)}>
-            {f.label}
-          </button>
-        ))}
-
-        <span style={{ color: '#ccc', fontSize: '1.1rem', margin: '0 2px' }}>|</span>
-
-        {/* Type filters */}
-        {[
-          { label: 'All Types', value: null },
-          { label: 'News', value: 'news' },
-          { label: 'Events', value: 'event' },
-          { label: 'Photos', value: 'photo' },
-        ].map(f => (
-          <button key={f.label} onClick={() => { setFilter(f.value); setPage(1); }}
-            style={pillActive(filter === f.value)}>
-            {f.label}
-          </button>
-        ))}
-
-        <span style={{ color: '#ccc', fontSize: '1.1rem', margin: '0 2px' }}>|</span>
-
-        {/* Source filters */}
-        {[
-          { label: 'All Sources', value: null },
-          { label: 'AI', value: 'ai' },
-          { label: 'Human', value: 'human' },
-          { label: 'Newsletter', value: 'newsletter' },
-        ].map(f => (
-          <button key={`src-${f.label}`} onClick={() => { setSourceFilter(f.value); setPage(1); }}
-            style={pillActive(sourceFilter === f.value)}>
-            {f.label}
-          </button>
-        ))}
+      {/* Filter rows — stacked: Types, Sources, Status */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
+        {/* Row 1: Type filters */}
+        <div style={{ display: 'flex', gap: '3px' }}>
+          {[
+            { label: 'All Types', value: null },
+            { label: 'News', value: 'news' },
+            { label: 'Events', value: 'event' },
+            { label: 'Photos', value: 'photo' },
+          ].map(f => (
+            <button key={f.label} onClick={() => { setFilter(f.value); setPage(1); }}
+              style={filterBtn(filter === f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {/* Row 2: Source filters */}
+        <div style={{ display: 'flex', gap: '3px' }}>
+          {[
+            { label: 'All Sources', value: null },
+            { label: 'AI', value: 'ai' },
+            { label: 'Human', value: 'human' },
+            { label: 'Newsletter', value: 'newsletter' },
+          ].map(f => (
+            <button key={`src-${f.label}`} onClick={() => { setSourceFilter(f.value); setPage(1); }}
+              style={filterBtn(sourceFilter === f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {/* Row 3: Status filters */}
+        <div style={{ display: 'flex', gap: '3px' }}>
+          {[
+            { label: 'All', value: 'all' },
+            { label: 'Pending', value: 'pending' },
+            { label: 'Approved', value: 'approved' },
+            { label: 'Rejected', value: 'rejected' },
+          ].map(f => (
+            <button key={f.value} onClick={() => { setStatusFilter(f.value); setPage(1); setSelectedItems(new Set()); }}
+              style={filterBtn(statusFilter === f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Create form */}
@@ -592,11 +585,11 @@ function ModerationInbox() {
 
                       {!isPending && (
                         <span style={{
-                          backgroundColor: statusBadge.color, color: 'white',
-                          padding: '1px 8px', borderRadius: '10px',
+                          backgroundColor: item.moderation_status === 'rejected' ? '#f44336' : '#4caf50',
+                          color: 'white', padding: '1px 8px', borderRadius: '10px',
                           fontSize: '0.72rem', fontWeight: 'bold'
                         }}>
-                          {statusBadge.label}
+                          {item.moderation_status === 'rejected' ? 'Rejected' : 'Approved'}
                         </span>
                       )}
 
@@ -639,41 +632,47 @@ function ModerationInbox() {
                     <div style={{ fontSize: '0.73rem', color: '#aaa', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
                       <span>{formatDate(item.created_at)}</span>
                       {item.moderated_at && <span>&middot; Moderated {formatDate(item.moderated_at)}</span>}
-                      {item.content_type !== 'photo' && (() => {
-                        const confBadge = getDateConfidenceBadge(item.date_confidence);
-                        if (!confBadge) return null;
-                        return (
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
-                            <span>&middot;</span>
-                            {item.publication_date ? (
-                              <span>Pub: {formatPubDate(item.publication_date)}</span>
-                            ) : null}
-                            <span style={{
-                              backgroundColor: confBadge.color, color: 'white',
-                              padding: '0px 5px', borderRadius: '8px',
-                              fontSize: '0.65rem', fontWeight: 'bold'
-                            }}>
-                              {confBadge.label}
-                            </span>
-                          </span>
-                        );
-                      })()}
+                      {item.content_type !== 'photo' && item.publication_date && (
+                        <span>&middot; Pub: {formatPubDate(item.publication_date)}</span>
+                      )}
                     </div>
 
-                    {/* AI reasoning (expanded) */}
-                    {isExpanded && item.ai_reasoning && (
-                      <div style={{
-                        marginTop: '8px', padding: '8px', backgroundColor: '#f7f7f7',
-                        borderRadius: '6px', fontSize: '0.82rem', color: '#444', lineHeight: '1.4'
-                      }}>
-                        <strong>AI:</strong> {item.ai_reasoning}
-                      </div>
-                    )}
+                    {/* Triage chips — No Date, No URL / Wrong URL, Other */}
+                    {item.content_type !== 'photo' && (() => {
+                      const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
+                      const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
+                      const hasNoDate = !item.publication_date || item.date_confidence === 'unknown';
+                      const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
+                      const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
+                      const hasOther = issues.some(i => !urlIssueCodes.includes(i));
+                      if (!hasNoDate && !hasUrlIssue && !hasOther) return null;
+                      const chipStyle = (color) => ({
+                        padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem',
+                        fontWeight: 'bold', backgroundColor: color, color: 'white'
+                      });
+                      return (
+                        <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
+                          {hasNoDate && <span style={chipStyle('#e65100')}>No Date</span>}
+                          {hasUrlIssue && <span style={chipStyle('#e65100')}>{urlLabel}</span>}
+                          {hasOther && <span style={chipStyle('#b71c1c')}>Other</span>}
+                        </div>
+                      );
+                    })()}
 
                     {/* Edit form (expanded, all fields) */}
                     {isEditing && (
                       <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px',
                         padding: '12px', backgroundColor: '#fffbe6', borderRadius: '6px', border: '1px solid #ffe082' }}>
+                        <div style={{ padding: '8px', backgroundColor: '#fff8e1', borderRadius: '4px',
+                          fontSize: '0.8rem', color: '#555', lineHeight: '1.4', marginBottom: '4px' }}>
+                          {item.ai_reasoning && (<><strong>AI Analysis:</strong> {item.ai_reasoning}<br/></>)}
+                          <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                            Status: {item.moderation_status === 'auto_approved' ? 'Auto-approved by AI' :
+                              item.moderation_status === 'published' ? 'Approved by human' :
+                              item.moderation_status}
+                            {item.confidence_score != null && ` · Score: ${(item.confidence_score * 100).toFixed(0)}%`}
+                          </span>
+                        </div>
                         {(FIELD_CONFIGS[item.content_type] || []).map(fc => (
                           <div key={fc.key}>
                             <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
@@ -693,54 +692,40 @@ function ModerationInbox() {
                   </div>
 
                   {/* Action buttons */}
-                  <div style={{ display: 'flex', gap: '3px', flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '160px' }}>
-                    <button onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
-                      style={actionBtn()}>{isExpanded ? 'Less' : 'More'}</button>
-                    {isPending && (
-                      <>
-                        <button onClick={() => handleApprove(item.content_type, item.id)}
-                          style={actionBtn()}>Approve</button>
-                        <button onClick={() => handleReject(item.content_type, item.id)}
-                          style={actionBtn()}>Reject</button>
-                        {item.content_type !== 'photo' && (
-                          <button onClick={() => handleResearch(item.content_type, item.id)}
-                            disabled={researchingItem === itemKey}
-                            style={actionBtn(researchingItem === itemKey)}>
-                            {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
-                          </button>
-                        )}
-                        {item.content_type !== 'photo' && (!item.publication_date || item.date_confidence === 'unknown') && (
-                          <button onClick={() => handleFixDate(item.content_type, item.id)}
-                            disabled={fixingDateItem === itemKey}
-                            style={actionBtn(fixingDateItem === itemKey)}>
-                            {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
-                          </button>
-                        )}
-                        <button onClick={() => startEditing(item)}
-                          style={actionBtn()}>Edit</button>
-                      </>
-                    )}
-                    {!isPending && (
-                      <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0, alignItems: 'flex-end' }}>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      <button onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
+                        style={actionBtn()}>{isExpanded ? 'Less' : 'More'}</button>
+                      <button onClick={() => startEditing(item)}
+                        style={actionBtn()}>Edit</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: '3px' }}>
+                      {isPending && (
+                        <>
+                          <button onClick={() => handleApprove(item.content_type, item.id)}
+                            style={actionBtn()}>Approve</button>
+                          <button onClick={() => handleReject(item.content_type, item.id)}
+                            style={actionBtn()}>Reject</button>
+                        </>
+                      )}
+                      {!isPending && (
                         <button onClick={() => handleRequeue(item.content_type, item.id)}
                           style={actionBtn()}>Requeue</button>
-                        {item.content_type !== 'photo' && (
-                          <button onClick={() => handleResearch(item.content_type, item.id)}
-                            disabled={researchingItem === itemKey}
-                            style={actionBtn(researchingItem === itemKey)}>
-                            {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
-                          </button>
-                        )}
-                        {item.content_type !== 'photo' && (!item.publication_date || item.date_confidence === 'unknown') && (
-                          <button onClick={() => handleFixDate(item.content_type, item.id)}
-                            disabled={fixingDateItem === itemKey}
-                            style={actionBtn(fixingDateItem === itemKey)}>
-                            {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
-                          </button>
-                        )}
-                        <button onClick={() => startEditing(item)}
-                          style={actionBtn()}>Edit</button>
-                      </>
+                      )}
+                    </div>
+                    {item.content_type !== 'photo' && (
+                      <div style={{ display: 'flex', gap: '3px' }}>
+                        <button onClick={() => handleFixDate(item.content_type, item.id)}
+                          disabled={fixingDateItem === itemKey}
+                          style={actionBtn(fixingDateItem === itemKey)}>
+                          {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
+                        </button>
+                        <button onClick={() => handleResearch(item.content_type, item.id)}
+                          disabled={researchingItem === itemKey}
+                          style={actionBtn(researchingItem === itemKey)}>
+                          {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
