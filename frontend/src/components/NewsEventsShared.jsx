@@ -44,7 +44,9 @@ export function formatDateWithWeekday(dateString) {
  */
 export function formatPublicationDate(dateString) {
   if (!dateString) return '';
-  const date = new Date(dateString + 'T00:00:00Z');
+  // Handle both YYYY-MM-DD and full ISO timestamps (e.g., 2026-03-27T00:00:00.000Z)
+  const str = String(dateString);
+  const date = str.includes('T') ? new Date(str) : new Date(str + 'T00:00:00Z');
   if (isNaN(date.getTime())) return '';
   return date.toLocaleDateString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'

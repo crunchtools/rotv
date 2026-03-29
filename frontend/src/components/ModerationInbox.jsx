@@ -289,7 +289,9 @@ function ModerationInbox() {
 
   const formatPubDate = (dateStr) => {
     if (!dateStr) return '';
-    const d = new Date(dateStr + 'T00:00:00Z');
+    const str = String(dateStr);
+    const d = str.includes('T') ? new Date(str) : new Date(str + 'T00:00:00Z');
+    if (isNaN(d.getTime())) return '';
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
   };
 
