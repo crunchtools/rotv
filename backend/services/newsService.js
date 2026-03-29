@@ -716,7 +716,8 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
     for (const url of urls) {
       checkCancellation();
-      if (visited.has(url) || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) break;
+      if (totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) break;
+      if (visited.has(url)) continue;
       visited.add(url);
       totalPagesRendered++;
 
