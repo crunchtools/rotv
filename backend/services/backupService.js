@@ -1,9 +1,6 @@
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { spawn } from 'child_process';
 import { Readable } from 'stream';
 import { getDriveSetting, setDriveSetting } from './driveImageService.js';
-
-const execAsync = promisify(exec);
 
 const BACKUPS_FOLDER_NAME = 'Backups';
 
@@ -56,18 +53,25 @@ export async function triggerBackup(pool, drive) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').slice(0, 19);
   const filename = `rotv-backup-${timestamp}.sql`;
 
-  // Run pg_dump using environment variables (same ones the app uses)
+  // Stream pg_dump output to avoid buffering large dumps in memory
   const pgHost = process.env.PGHOST || 'localhost';
-  const pgPort = process.env.PGPORT || 5432;
+  const pgPort = process.env.PGPORT || '5432';
   const pgDatabase = process.env.PGDATABASE || 'rotv';
   const pgUser = process.env.PGUSER || 'rotv';
 
-  const env = { ...process.env, PGPASSWORD: process.env.PGPASSWORD || 'rotv' };
-  const cmd = `pg_dump -h ${pgHost} -p ${pgPort} -U ${pgUser} ${pgDatabase}`;
-
-  const { stdout: sqlDump } = await execAsync(cmd, {
-    env,
-    maxBuffer: 100 * 1024 * 1024 // 100MB max
+  const sqlDump = await new Promise((resolve, reject) => {
+    const chunks = [];
+    const proc = spawn('pg_dump', ['-h', pgHost, '-p', pgPort, '-U', pgUser, pgDatabase], {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe']
+    });
+    proc.stdout.on('data', (chunk) => chunks.push(chunk));
+    proc.stderr.on('data', (data) => console.warn('[Backup] pg_dump stderr:', data.toString()));
+    proc.on('close', (code) => {
+      if (code !== 0) return reject(new Error(`pg_dump exited with code ${code}`));
+      resolve(Buffer.concat(chunks).toString('utf-8'));
+    });
+    proc.on('error', reject);
   });
 
   // Ensure backups folder exists
