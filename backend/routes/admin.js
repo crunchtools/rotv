@@ -87,7 +87,11 @@ import {
   fixDate,
   createItem,
   purgeRejected,
-  processItem
+  processItem,
+  mergeItems,
+  getMergeCandidates,
+  addItemUrl,
+  removeItemUrl
 } from '../services/moderationService.js';
 import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
 import {
@@ -4591,6 +4595,21 @@ export function createAdminRouter(pool) {
     }
   });
 
+  // Save edits without publishing
+  router.post('/moderation/save', isAdmin, async (req, res) => {
+    try {
+      const { type, id, edits } = req.body;
+      if (!type || !id || !edits) {
+        return res.status(400).json({ error: 'type, id, and edits are required' });
+      }
+      await editAndPublish(pool, type, id, edits, req.user.id, { publish: false });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving edits:', error);
+      res.status(500).json({ error: 'Failed to save edits' });
+    }
+  });
+
   // Requeue for re-review
   router.post('/moderation/requeue', isAdmin, async (req, res) => {
     try {
@@ -4671,6 +4690,69 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error creating content:', error);
       res.status(500).json({ error: 'Failed to create content' });
+    }
+  });
+
+  // Get merge candidates — other items from the same POI
+  router.get('/moderation/merge-candidates/:type/:id', isAdmin, async (req, res) => {
+    try {
+      const { type, id } = req.params;
+      if (!['news', 'event'].includes(type)) {
+        return res.status(400).json({ error: 'type must be news or event' });
+      }
+      const candidates = await getMergeCandidates(pool, type, parseInt(id));
+      res.json(candidates);
+    } catch (error) {
+      console.error('Error fetching merge candidates:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch merge candidates' });
+    }
+  });
+
+  // Merge two news/event items (moves source URLs into target, deletes source)
+  router.post('/moderation/merge', isAdmin, async (req, res) => {
+    try {
+      const { type, sourceId, targetId } = req.body;
+      if (!type || !sourceId || !targetId) {
+        return res.status(400).json({ error: 'type, sourceId, and targetId are required' });
+      }
+      if (!['news', 'event'].includes(type)) {
+        return res.status(400).json({ error: 'Merge is only supported for news and event items' });
+      }
+      const result = await mergeItems(pool, type, parseInt(sourceId), parseInt(targetId));
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('Error merging items:', error);
+      res.status(500).json({ error: error.message || 'Failed to merge items' });
+    }
+  });
+
+  // Add a URL to an existing news/event item
+  router.post('/moderation/add-url', isAdmin, async (req, res) => {
+    try {
+      const { type, id, url, sourceName } = req.body;
+      if (!type || !id || !url) {
+        return res.status(400).json({ error: 'type, id, and url are required' });
+      }
+      const result = await addItemUrl(pool, type, parseInt(id), url, sourceName || null);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('Error adding URL:', error);
+      res.status(500).json({ error: error.message || 'Failed to add URL' });
+    }
+  });
+
+  // Remove a URL from a news/event item
+  router.post('/moderation/remove-url', isAdmin, async (req, res) => {
+    try {
+      const { type, id, urlId } = req.body;
+      if (!type || !id || !urlId) {
+        return res.status(400).json({ error: 'type, id, and urlId are required' });
+      }
+      const result = await removeItemUrl(pool, type, parseInt(id), parseInt(urlId));
+      res.json({ success: true, ...result });
+    } catch (error) {
+      console.error('Error removing URL:', error);
+      res.status(500).json({ error: error.message || 'Failed to remove URL' });
     }
   });
 

@@ -453,7 +453,7 @@ export async function bulkApprove(pool, items, adminUserId) {
   return { approved };
 }
 
-export async function editAndPublish(pool, contentType, contentId, edits, adminUserId) {
+export async function editAndPublish(pool, contentType, contentId, edits, adminUserId, { publish = true } = {}) {
   const EDITABLE_NEWS = ['title', 'summary', 'source_url', 'source_name', 'news_type', 'poi_id', 'publication_date'];
   const EDITABLE_EVENT = ['title', 'description', 'start_date', 'end_date', 'event_type', 'location_details', 'source_url', 'poi_id', 'publication_date'];
   const EDITABLE_PHOTO = ['caption', 'poi_id'];
@@ -479,7 +479,11 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
     setClauses.push(`date_confidence = 'exact'`);
   }
 
-  setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);
+  if (publish) {
+    setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);
+  }
+
+  if (setClauses.length === 0) return;
   await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $2`, values);
 }
 
@@ -744,19 +748,22 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
     SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
            moderation_status, confidence_score, ai_reasoning, ai_issues,
            submitted_by, moderated_by, moderated_at, created_at, source_url,
-           content_source, publication_date, date_confidence
+           content_source, publication_date, date_confidence,
+           (SELECT COUNT(*) FROM poi_news_urls WHERE news_id = poi_news.id)::int AS additional_url_count
     FROM poi_news WHERE moderation_status = ANY($1)
     UNION ALL
     SELECT id, 'event' AS content_type, poi_id, title, description,
            moderation_status, confidence_score, ai_reasoning, ai_issues,
            submitted_by, moderated_by, moderated_at, created_at, source_url,
-           content_source, publication_date, date_confidence
+           content_source, publication_date, date_confidence,
+           (SELECT COUNT(*) FROM poi_event_urls WHERE event_id = poi_events.id)::int AS additional_url_count
     FROM poi_events WHERE moderation_status = ANY($1)
     UNION ALL
     SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
            moderation_status, confidence_score, ai_reasoning, NULL AS ai_issues,
            submitted_by, moderated_by, moderated_at, created_at, NULL AS source_url,
-           NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR AS date_confidence
+           NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR AS date_confidence,
+           0 AS additional_url_count
     FROM photo_submissions WHERE moderation_status = ANY($1)`;
 
   const filters = [];
@@ -796,8 +803,14 @@ export async function getPendingCount(pool) {
 
 export async function getItemDetail(pool, contentType, contentId) {
   const queryMap = {
-    news: `SELECT n.*, p.name as poi_name FROM poi_news n LEFT JOIN pois p ON n.poi_id = p.id WHERE n.id = $1`,
-    event: `SELECT e.*, p.name as poi_name FROM poi_events e LEFT JOIN pois p ON e.poi_id = p.id WHERE e.id = $1`,
+    news: `SELECT n.*, p.name as poi_name,
+             COALESCE((SELECT json_agg(json_build_object('id', u.id, 'url', u.url, 'source_name', u.source_name))
+                       FROM poi_news_urls u WHERE u.news_id = n.id), '[]'::json) AS additional_urls
+           FROM poi_news n LEFT JOIN pois p ON n.poi_id = p.id WHERE n.id = $1 GROUP BY n.id, p.name`,
+    event: `SELECT e.*, p.name as poi_name,
+              COALESCE((SELECT json_agg(json_build_object('id', u.id, 'url', u.url, 'source_name', u.source_name))
+                        FROM poi_event_urls u WHERE u.event_id = e.id), '[]'::json) AS additional_urls
+            FROM poi_events e LEFT JOIN pois p ON e.poi_id = p.id WHERE e.id = $1 GROUP BY e.id, p.name`,
     photo: `SELECT ps.*, p.name as poi_name FROM photo_submissions ps LEFT JOIN pois p ON ps.poi_id = p.id WHERE ps.id = $1`
   };
 
@@ -806,4 +819,158 @@ export async function getItemDetail(pool, contentType, contentId) {
 
   const detailQuery = await pool.query(sql, [contentId]);
   return detailQuery.rows[0] || null;
+}
+
+export async function mergeItems(pool, contentType, sourceId, targetId) {
+  if (!['news', 'event'].includes(contentType)) {
+    throw new Error('Merge is only supported for news and event items');
+  }
+  if (sourceId === targetId) {
+    throw new Error('Cannot merge an item into itself');
+  }
+
+  const table = contentType === 'news' ? 'poi_news' : 'poi_events';
+  const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
+  const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
+
+  // Verify both items exist
+  const [sourceRow, targetRow] = await Promise.all([
+    pool.query(`SELECT id, source_url, source_name FROM ${table} WHERE id = $1`, [sourceId]),
+    pool.query(`SELECT id, source_url FROM ${table} WHERE id = $1`, [targetId])
+  ]);
+
+  if (sourceRow.rows.length === 0) throw new Error(`Source ${contentType} #${sourceId} not found`);
+  if (targetRow.rows.length === 0) throw new Error(`Target ${contentType} #${targetId} not found`);
+
+  const source = sourceRow.rows[0];
+  const target = targetRow.rows[0];
+  let movedUrls = 0;
+
+  // Move source's primary source_url to target's junction table
+  if (source.source_url && source.source_url !== target.source_url) {
+    const inserted = await pool.query(
+      `INSERT INTO ${urlTable} (${fkColumn}, url, source_name)
+       SELECT $1, $2, $3
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ${urlTable} WHERE ${fkColumn} = $1 AND url = $2
+       )
+       RETURNING id`,
+      [targetId, source.source_url, source.source_name || null]
+    );
+    movedUrls += inserted.rows.length;
+  }
+
+  // Move any of source's junction table URLs to target
+  const sourceUrls = await pool.query(
+    `SELECT url, source_name FROM ${urlTable} WHERE ${fkColumn} = $1`,
+    [sourceId]
+  );
+  for (const row of sourceUrls.rows) {
+    if (row.url === target.source_url) continue;
+    const ins = await pool.query(
+      `INSERT INTO ${urlTable} (${fkColumn}, url, source_name)
+       SELECT $1, $2, $3
+       WHERE NOT EXISTS (
+         SELECT 1 FROM ${urlTable} WHERE ${fkColumn} = $1 AND url = $2
+       )
+       RETURNING id`,
+      [targetId, row.url, row.source_name]
+    );
+    movedUrls += ins.rows.length;
+  }
+
+  // Delete source item (CASCADE will clean up its junction table entries)
+  await pool.query(`DELETE FROM ${table} WHERE id = $1`, [sourceId]);
+
+  console.log(`[Moderation] Merged ${contentType} #${sourceId} into #${targetId} (${movedUrls} URLs moved)`);
+  return { merged: true, sourceId, targetId, movedUrls };
+}
+
+export async function getMergeCandidates(pool, contentType, contentId) {
+  if (!['news', 'event'].includes(contentType)) {
+    throw new Error('Merge is only supported for news and event items');
+  }
+
+  const table = contentType === 'news' ? 'poi_news' : 'poi_events';
+  const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
+  const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
+
+  // Get the POI for this item
+  const item = await pool.query(`SELECT poi_id FROM ${table} WHERE id = $1`, [contentId]);
+  if (item.rows.length === 0) throw new Error(`${contentType} #${contentId} not found`);
+  const poiId = item.rows[0].poi_id;
+
+  // Get all other items from the same POI
+  const result = await pool.query(`
+    SELECT id, title, source_url, moderation_status, created_at,
+           publication_date,
+           (SELECT COUNT(*) FROM ${urlTable} WHERE ${fkColumn} = ${table}.id)::int AS additional_url_count
+    FROM ${table}
+    WHERE poi_id = $1 AND id != $2
+    ORDER BY created_at DESC
+    LIMIT 50
+  `, [poiId, contentId]);
+
+  return result.rows;
+}
+
+export async function addItemUrl(pool, contentType, contentId, url, sourceName) {
+  if (!['news', 'event'].includes(contentType)) {
+    throw new Error('Additional URLs are only supported for news and event items');
+  }
+  if (!url) throw new Error('URL is required');
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new Error('URL must use http or https protocol');
+    }
+  } catch (e) {
+    if (e.message.includes('protocol')) throw e;
+    throw new Error('Invalid URL format');
+  }
+
+  const table = contentType === 'news' ? 'poi_news' : 'poi_events';
+  const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
+  const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
+
+  // Verify item exists
+  const item = await pool.query(`SELECT id, source_url FROM ${table} WHERE id = $1`, [contentId]);
+  if (item.rows.length === 0) throw new Error(`${contentType} #${contentId} not found`);
+
+  // Don't add if it matches the primary source_url
+  if (item.rows[0].source_url === url) {
+    return { added: false, reason: 'URL matches primary source_url' };
+  }
+
+  const result = await pool.query(
+    `INSERT INTO ${urlTable} (${fkColumn}, url, source_name)
+     SELECT $1, $2, $3
+     WHERE NOT EXISTS (
+       SELECT 1 FROM ${urlTable} WHERE ${fkColumn} = $1 AND url = $2
+     )
+     RETURNING id`,
+    [contentId, url, sourceName || null]
+  );
+
+  if (result.rows.length === 0) {
+    return { added: false, reason: 'URL already exists' };
+  }
+
+  console.log(`[Moderation] Added URL to ${contentType} #${contentId}: ${url}`);
+  return { added: true, urlId: result.rows[0].id };
+}
+
+export async function removeItemUrl(pool, contentType, contentId, urlId) {
+  if (!['news', 'event'].includes(contentType)) {
+    throw new Error('Additional URLs are only supported for news and event items');
+  }
+
+  const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
+  const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
+  const result = await pool.query(`DELETE FROM ${urlTable} WHERE id = $1 AND ${fkColumn} = $2 RETURNING id`, [urlId, contentId]);
+
+  if (result.rows.length === 0) throw new Error('URL not found');
+
+  console.log(`[Moderation] Removed URL #${urlId} from ${contentType} #${contentId}`);
+  return { removed: true };
 }

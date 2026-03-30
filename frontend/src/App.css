@@ -2117,6 +2117,12 @@ body {
   text-decoration: underline;
 }
 
+.news-sources-group, .event-sources-group {
+  display: inline-flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .event-links {
   display: flex;
   gap: 1rem;

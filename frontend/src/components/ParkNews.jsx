@@ -195,7 +195,16 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
               {item.source_name && <span className="news-source">{item.source_name}</span>}
               {item.publication_date && <span className="news-date">{formatPublicationDate(item.publication_date)}</span>}
               {!item.publication_date && item.published_at && <span className="news-date">{formatDate(item.published_at)}</span>}
-              {item.source_url && (
+              {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
+                <span className="news-sources-group">
+                  <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">Source</a>
+                  {item.additional_urls.map((u, i) => (
+                    <a key={i} href={u.url} target="_blank" rel="noopener noreferrer" className="news-link">
+                      {u.source_name || `Source ${i + 2}`}
+                    </a>
+                  ))}
+                </span>
+              ) : item.source_url ? (
                 <a
                   href={item.source_url}
                   target="_blank"
@@ -204,7 +213,7 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
                 >
                   Read more
                 </a>
-              )}
+              ) : null}
             </div>
           </div>
         ))}

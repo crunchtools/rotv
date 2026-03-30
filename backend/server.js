@@ -563,6 +563,30 @@ async function initDatabase() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_poi_id ON poi_events(poi_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_start_date ON poi_events(start_date)`);
 
+    // Junction tables for multiple URLs per news/event item
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS poi_news_urls (
+        id SERIAL PRIMARY KEY,
+        news_id INTEGER NOT NULL REFERENCES poi_news(id) ON DELETE CASCADE,
+        url TEXT NOT NULL,
+        source_name VARCHAR(255),
+        discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_news_urls_unique ON poi_news_urls(news_id, url)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_urls_url ON poi_news_urls(url)`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS poi_event_urls (
+        id SERIAL PRIMARY KEY,
+        event_id INTEGER NOT NULL REFERENCES poi_events(id) ON DELETE CASCADE,
+        url TEXT NOT NULL,
+        source_name VARCHAR(255),
+        discovered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_poi_event_urls_unique ON poi_event_urls(event_id, url)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_event_urls_url ON poi_event_urls(url)`);
+
     // News job status tracking
     await client.query(`
       CREATE TABLE IF NOT EXISTS news_job_status (
@@ -1268,14 +1292,16 @@ app.get('/api/pois/:id/news', async (req, res) => {
     const { id } = req.params;
     const limit = parseInt(req.query.limit) || 50;
     const newsQuery = await pool.query(`
-      SELECT id, title, summary, source_url, source_name, news_type,
-             published_at, publication_date, date_confidence, created_at
-      FROM poi_news
-      WHERE poi_id = $1
-        AND moderation_status IN ('published', 'auto_approved')
+      SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
+             n.published_at, n.publication_date, n.date_confidence, n.created_at,
+             COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
+                       FROM poi_news_urls u WHERE u.news_id = n.id), '[]'::json) AS additional_urls
+      FROM poi_news n
+      WHERE n.poi_id = $1
+        AND n.moderation_status IN ('published', 'auto_approved')
       ORDER BY
-        COALESCE(publication_date, created_at::date) DESC,
-        created_at DESC
+        COALESCE(n.publication_date, n.created_at::date) DESC,
+        n.created_at DESC
       LIMIT $2
     `, [id, limit]);
     res.json(newsQuery.rows);
@@ -1291,15 +1317,17 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const upcomingOnly = req.query.upcoming !== 'false';
     const limit = parseInt(req.query.limit) || 50;
     let query = `
-      SELECT id, title, description, start_date, end_date, event_type, location_details, source_url, created_at
-      FROM poi_events
-      WHERE poi_id = $1
-        AND moderation_status IN ('published', 'auto_approved')
+      SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type, e.location_details, e.source_url, e.created_at,
+             COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
+                       FROM poi_event_urls u WHERE u.event_id = e.id), '[]'::json) AS additional_urls
+      FROM poi_events e
+      WHERE e.poi_id = $1
+        AND e.moderation_status IN ('published', 'auto_approved')
     `;
     if (upcomingOnly) {
-      query += ` AND start_date >= CURRENT_DATE`;
+      query += ` AND e.start_date >= CURRENT_DATE`;
     }
-    query += ` ORDER BY start_date ASC LIMIT $2`;
+    query += ` ORDER BY e.start_date ASC LIMIT $2`;
 
     const eventsQuery = await pool.query(query, [id, limit]);
     res.json(eventsQuery.rows);
@@ -1432,7 +1460,9 @@ app.get('/api/news/recent', async (req, res) => {
     const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.published_at, n.publication_date, n.date_confidence, n.created_at,
-             p.id as poi_id, p.name as poi_name, p.poi_type
+             p.id as poi_id, p.name as poi_name, p.poi_type,
+             COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
+                       FROM poi_news_urls u WHERE u.news_id = n.id), '[]'::json) AS additional_urls
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
       WHERE n.moderation_status IN ('published', 'auto_approved')
@@ -1452,7 +1482,9 @@ app.get('/api/events/upcoming', async (req, res) => {
   try {
     const upcomingEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type,
+             COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
+                       FROM poi_event_urls u WHERE u.event_id = e.id), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
@@ -1473,7 +1505,9 @@ app.get('/api/events/past', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const pastEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type,
+             COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
+                       FROM poi_event_urls u WHERE u.event_id = e.id), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
       WHERE e.moderation_status IN ('published', 'auto_approved')

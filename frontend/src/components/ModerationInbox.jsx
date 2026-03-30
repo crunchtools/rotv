@@ -4,11 +4,11 @@ const FIELD_CONFIGS = {
   news: [
     { key: 'title', label: 'Title', type: 'text', required: true },
     { key: 'summary', label: 'Summary', type: 'textarea' },
-    { key: 'source_url', label: 'Source URL', type: 'text' },
     { key: 'source_name', label: 'Source Name', type: 'text' },
     { key: 'news_type', label: 'Type', type: 'select', options: ['general', 'closure', 'seasonal', 'maintenance', 'wildlife'] },
     { key: 'publication_date', label: 'Publication Date', type: 'date' },
     { key: 'poi_id', label: 'POI', type: 'poi' },
+    { key: 'source_url', label: 'Primary URL', type: 'text' },
   ],
   event: [
     { key: 'title', label: 'Title', type: 'text', required: true },
@@ -17,9 +17,9 @@ const FIELD_CONFIGS = {
     { key: 'end_date', label: 'End Date/Time', type: 'datetime-local' },
     { key: 'event_type', label: 'Event Type', type: 'text' },
     { key: 'location_details', label: 'Location Details', type: 'text' },
-    { key: 'source_url', label: 'Source URL', type: 'text' },
     { key: 'publication_date', label: 'Publication Date', type: 'date' },
     { key: 'poi_id', label: 'POI', type: 'poi' },
+    { key: 'source_url', label: 'Primary URL', type: 'text' },
   ],
   photo: [
     { key: 'caption', label: 'Caption', type: 'textarea' },
@@ -45,6 +45,12 @@ function ModerationInbox() {
   const [sourceFilter, setSourceFilter] = useState(null);
   const [researchingItem, setResearchingItem] = useState(null);
   const [fixingDateItem, setFixingDateItem] = useState(null);
+  const [mergingItem, setMergingItem] = useState(null); // { type, id, poiId }
+  const [mergeCandidates, setMergeCandidates] = useState([]);
+  const [merging, setMerging] = useState(false);
+  const [itemUrls, setItemUrls] = useState({}); // { "news:123": [{id, url, source_name}] }
+  const [newUrlInput, setNewUrlInput] = useState('');
+  const [addingUrl, setAddingUrl] = useState(false);
   const LIMIT = 20;
 
   const fetchQueue = useCallback(async () => {
@@ -183,8 +189,112 @@ function ModerationInbox() {
     finally { setFixingDateItem(null); }
   };
 
+  const startMerge = async (item) => {
+    setMergingItem({ type: item.content_type, id: item.id, poiId: item.poi_id });
+    setMergeCandidates([]);
+    try {
+      const response = await fetch(`/api/admin/moderation/merge-candidates/${item.content_type}/${item.id}`, {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const candidates = await response.json();
+        setMergeCandidates(candidates);
+      } else {
+        notify('error', 'Failed to load merge candidates');
+        setMergingItem(null);
+      }
+    } catch (err) {
+      notify('error', err.message);
+      setMergingItem(null);
+    }
+  };
+
+  const handleMerge = async (targetId) => {
+    if (!mergingItem) return;
+    setMerging(true);
+    try {
+      const response = await fetch('/api/admin/moderation/merge', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type: mergingItem.type, sourceId: mergingItem.id, targetId })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        notify('success', `Merged ${mergingItem.type} #${mergingItem.id} into #${targetId} (${data.movedUrls} URLs moved)`);
+        setMergingItem(null);
+        setMergeCandidates([]);
+        fetchQueue();
+      } else {
+        const err = await response.json();
+        notify('error', err.error || 'Merge failed');
+      }
+    } catch (err) { notify('error', err.message); }
+    finally { setMerging(false); }
+  };
+
+  const fetchItemUrls = async (type, id) => {
+    const itemKey = `${type}:${id}`;
+    try {
+      const response = await fetch(`/api/admin/moderation/item/${type}/${id}`, { credentials: 'include' });
+      if (response.ok) {
+        const detail = await response.json();
+        setItemUrls(prev => ({ ...prev, [itemKey]: detail.additional_urls || [] }));
+      }
+    } catch (err) { console.error('Error fetching item URLs:', err); }
+  };
+
+  const handleAddUrl = async (type, id) => {
+    if (!newUrlInput.trim()) return;
+    setAddingUrl(true);
+    try {
+      const response = await fetch('/api/admin/moderation/add-url', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type, id, url: newUrlInput.trim() })
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.added) {
+          notify('success', 'URL added');
+          setNewUrlInput('');
+          fetchItemUrls(type, id);
+          fetchQueue();
+        } else {
+          notify('error', data.reason || 'URL not added');
+        }
+      } else {
+        const err = await response.json();
+        notify('error', err.error || 'Failed to add URL');
+      }
+    } catch (err) { notify('error', err.message); }
+    finally { setAddingUrl(false); }
+  };
+
+  const handleRemoveUrl = async (type, contentId, urlId) => {
+    try {
+      const response = await fetch('/api/admin/moderation/remove-url', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ type, id: contentId, urlId })
+      });
+      if (response.ok) {
+        notify('success', 'URL removed');
+        fetchItemUrls(type, contentId);
+        fetchQueue();
+      } else {
+        const err = await response.json();
+        notify('error', err.error || 'Failed to remove URL');
+      }
+    } catch (err) { notify('error', err.message); }
+  };
+
   const startEditing = async (item) => {
     const itemKey = `${item.content_type}:${item.id}`;
+    if (editingItem === itemKey) {
+      setEditingItem(null);
+      setEditFields({});
+      return;
+    }
     try {
       const response = await fetch(`/api/admin/moderation/item/${item.content_type}/${item.id}`, {
         credentials: 'include'
@@ -204,20 +314,24 @@ function ModerationInbox() {
         }
         setEditFields(fields);
         setEditingItem(itemKey);
+        // Load additional URLs for the edit form
+        if (item.content_type !== 'photo') {
+          setItemUrls(prev => ({ ...prev, [itemKey]: detail.additional_urls || [] }));
+        }
       }
     } catch (err) {
       notify('error', 'Failed to load item details');
     }
   };
 
-  const handleEditPublish = async (type, id) => {
+  const handleSave = async (type, id) => {
     try {
-      const response = await fetch('/api/admin/moderation/edit-publish', {
+      const response = await fetch('/api/admin/moderation/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ type, id, edits: editFields })
       });
       if (response.ok) {
-        notify('success', `${type} #${id} edited and published`);
+        notify('success', `${type} #${id} saved`);
         setEditingItem(null);
         setEditFields({});
         fetchQueue();
@@ -593,6 +707,16 @@ function ModerationInbox() {
                         </span>
                       )}
 
+                      {item.additional_url_count > 0 && (
+                        <span style={{
+                          backgroundColor: '#1565c0', color: 'white',
+                          padding: '1px 8px', borderRadius: '10px',
+                          fontSize: '0.72rem', fontWeight: 'bold'
+                        }}>
+                          +{item.additional_url_count} URL{item.additional_url_count > 1 ? 's' : ''}
+                        </span>
+                      )}
+
                       <span style={{ fontWeight: 'bold', fontSize: '0.92rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isExpanded ? 'normal' : 'nowrap' }}>
                         {item.title || '(untitled)'}
                       </span>
@@ -618,13 +742,22 @@ function ModerationInbox() {
                         {item.description}
                       </p>
                     )}
+                    <a onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
+                      style={{ color: '#4a7c23', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'none', fontWeight: 500 }}>
+                      {isExpanded ? 'Show less' : 'Show more'}
+                    </a>
 
-                    {/* Source URL (expanded) */}
+                    {/* Source URL (expanded, read-only) */}
                     {isExpanded && item.source_url && (
                       <div style={{ margin: '4px 0', fontSize: '0.78rem' }}>
                         <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
                           {item.source_url}
                         </a>
+                        {item.additional_url_count > 0 && (
+                          <span style={{ color: '#888', fontSize: '0.72rem', marginLeft: '6px' }}>
+                            (+{item.additional_url_count} more — click Edit to manage)
+                          </span>
+                        )}
                       </div>
                     )}
 
@@ -681,9 +814,41 @@ function ModerationInbox() {
                             {renderFieldInput(fc, editFields, setEditFields)}
                           </div>
                         ))}
+                        {/* Additional URLs management */}
+                        {item.content_type !== 'photo' && (
+                          <div>
+                            <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
+                              Additional URLs
+                            </label>
+                            {(itemUrls[itemKey] || []).map(u => (
+                              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px',
+                                padding: '4px 8px', backgroundColor: 'white', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
+                                <a href={u.url} target="_blank" rel="noopener noreferrer"
+                                  style={{ color: '#1976d2', flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {u.url}
+                                </a>
+                                {u.source_name && <span style={{ color: '#888', fontSize: '0.7rem', flexShrink: 0 }}>({u.source_name})</span>}
+                                <button onClick={() => handleRemoveUrl(item.content_type, item.id, u.id)}
+                                  style={{ background: 'none', border: 'none', color: '#f44336', cursor: 'pointer',
+                                    padding: '0 4px', fontSize: '0.85rem', flexShrink: 0, lineHeight: 1 }}
+                                  title="Remove URL">x</button>
+                              </div>
+                            ))}
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <input type="text" value={newUrlInput} onChange={e => setNewUrlInput(e.target.value)}
+                                placeholder="Add another source URL..."
+                                onKeyDown={e => e.key === 'Enter' && handleAddUrl(item.content_type, item.id)}
+                                style={{ flex: 1, padding: '5px 8px', fontSize: '0.78rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+                              <button onClick={() => handleAddUrl(item.content_type, item.id)} disabled={addingUrl || !newUrlInput.trim()}
+                                style={btnStyle(addingUrl || !newUrlInput.trim() ? '#ccc' : '#1976d2')}>
+                                {addingUrl ? 'Adding...' : 'Add URL'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                          <button onClick={() => handleEditPublish(item.content_type, item.id)}
-                            style={btnStyle('#4caf50')}>Save & Publish</button>
+                          <button onClick={() => handleSave(item.content_type, item.id)}
+                            style={btnStyle('#4caf50')}>Save</button>
                           <button onClick={() => { setEditingItem(null); setEditFields({}); }}
                             style={btnStyle('transparent', '#666', '1px solid #ccc')}>Cancel</button>
                         </div>
@@ -694,10 +859,12 @@ function ModerationInbox() {
                   {/* Action buttons */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0, alignItems: 'flex-end' }}>
                     <div style={{ display: 'flex', gap: '3px' }}>
-                      <button onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
-                        style={actionBtn()}>{isExpanded ? 'Less' : 'More'}</button>
                       <button onClick={() => startEditing(item)}
                         style={actionBtn()}>Edit</button>
+                      {item.content_type !== 'photo' && (
+                        <button onClick={() => startMerge(item)}
+                          style={actionBtn()}>Merge</button>
+                      )}
                     </div>
                     <div style={{ display: 'flex', gap: '3px' }}>
                       {isPending && (
@@ -729,6 +896,53 @@ function ModerationInbox() {
                     )}
                   </div>
                 </div>
+
+                {/* Merge candidate selection */}
+                {mergingItem && mergingItem.type === item.content_type && mergingItem.id === item.id && (
+                  <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#e3f2fd',
+                    borderRadius: '6px', border: '1px solid #90caf9' }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 'bold', marginBottom: '6px', color: '#1565c0' }}>
+                      Merge this item into (target keeps its title/summary):
+                    </div>
+                    {mergeCandidates.length === 0 ? (
+                      <div style={{ fontSize: '0.78rem', color: '#666' }}>
+                        {mergingItem ? 'Loading candidates...' : 'No other items found for this POI.'}
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
+                        {mergeCandidates.map(c => (
+                          <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '6px',
+                            padding: '6px 8px', backgroundColor: 'white', borderRadius: '4px',
+                            border: '1px solid #e0e0e0' }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: '500' }}>
+                                {c.title}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#888', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                                <span>#{c.id}</span>
+                                <span>{c.moderation_status}</span>
+                                {c.publication_date && <span>{new Date(c.publication_date).toLocaleDateString()}</span>}
+                                {c.additional_url_count > 0 && <span>+{c.additional_url_count} URLs</span>}
+                              </div>
+                              {c.source_url && (
+                                <div style={{ fontSize: '0.68rem', color: '#1976d2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                  {c.source_url}
+                                </div>
+                              )}
+                            </div>
+                            <button onClick={() => handleMerge(c.id)} disabled={merging}
+                              style={{ ...actionBtn(merging), backgroundColor: merging ? '#ccc' : '#1565c0',
+                                color: 'white', flexShrink: 0 }}>
+                              {merging ? 'Merging...' : 'Merge Into'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <button onClick={() => { setMergingItem(null); setMergeCandidates([]); }}
+                      style={{ ...actionBtn(), marginTop: '6px', fontSize: '0.72rem' }}>Cancel</button>
+                  </div>
+                )}
               </div>
             );
           })}
