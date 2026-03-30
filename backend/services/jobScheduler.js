@@ -222,9 +222,9 @@ export async function getBatchJobStatus(jobId) {
 
 /**
  * Schedule the trail status collection job
- * @param {string} cronExpression - Cron expression (default: every 2 hours)
+ * @param {string} cronExpression - Cron expression (default: every 30 minutes)
  */
-export async function scheduleTrailStatusCollection(cronExpression = '0 */2 * * *') {
+export async function scheduleTrailStatusCollection(cronExpression = '*/30 * * * *') {
   const scheduler = getJobScheduler();
 
   // Create a schedule for the trail status collection job
