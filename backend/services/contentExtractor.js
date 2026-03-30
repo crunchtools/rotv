@@ -75,6 +75,13 @@ export async function extractPageContent(url, options = {}) {
       });
 
       if (cookies && Array.isArray(cookies) && cookies.length > 0) {
+        const normalizeSameSite = (val) => {
+          if (!val || val === 'no_restriction' || val === 'unspecified') return 'None';
+          const lower = String(val).toLowerCase();
+          if (lower === 'strict') return 'Strict';
+          if (lower === 'lax') return 'Lax';
+          return 'None';
+        };
         const playwrightCookies = cookies.map(c => ({
           name: c.name,
           value: c.value,
@@ -82,7 +89,7 @@ export async function extractPageContent(url, options = {}) {
           path: c.path || '/',
           secure: c.secure !== false,
           httpOnly: c.httpOnly || false,
-          sameSite: c.sameSite || 'None'
+          sameSite: normalizeSameSite(c.sameSite)
         }));
         await context.addCookies(playwrightCookies);
       }
