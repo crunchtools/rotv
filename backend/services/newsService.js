@@ -1715,13 +1715,26 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       );
 
       if (existing.rows.length > 0) {
-        duplicateCount++;
         const matchedUrl = normalizeUrl(existing.rows[0].source_url);
-        const reason = matchedUrl === normalizedUrl
-          ? (existing.rows[0].poi_id === poiId ? 'same URL' : 'same URL (different POI)')
-          : 'similar title';
-        console.log(`Skipping duplicate (${reason}): "${item.title}"`);
-        continue; // Skip duplicate
+        if (matchedUrl === normalizedUrl) {
+          // Exact same URL — truly skip
+          duplicateCount++;
+          console.log(`Skipping duplicate (same URL): "${item.title}"`);
+          continue;
+        }
+        // Different URL, similar title — merge URL into existing item
+        const existingId = existing.rows[0].id;
+        await pool.query(
+          `INSERT INTO poi_news_urls (news_id, url, source_name)
+           SELECT $1, $2, $3
+           WHERE NOT EXISTS (
+             SELECT 1 FROM poi_news_urls WHERE news_id = $1 AND url = $2
+           )`,
+          [existingId, resolvedUrl, item.source_name || null]
+        );
+        duplicateCount++;
+        console.log(`Merged URL into news #${existingId}: "${item.title}"`);
+        continue;
       }
 
       // Save the news item with the RESOLVED URL (not the redirect)
@@ -1801,13 +1814,26 @@ export async function saveEventItems(pool, poiId, eventItems) {
       );
 
       if (existing.rows.length > 0) {
-        duplicateCount++;
         const matchedEventUrl = normalizeUrl(existing.rows[0].source_url);
-        const reason = matchedEventUrl === normalizedEventUrl
-          ? (existing.rows[0].poi_id === poiId ? 'same URL' : 'same URL (different POI)')
-          : 'same title+date';
-        console.log(`Skipping duplicate event (${reason}): "${item.title}"`);
-        continue; // Skip duplicate
+        if (matchedEventUrl === normalizedEventUrl) {
+          // Exact same URL — truly skip
+          duplicateCount++;
+          console.log(`Skipping duplicate event (same URL): "${item.title}"`);
+          continue;
+        }
+        // Different URL, similar title+date — merge URL into existing item
+        const existingId = existing.rows[0].id;
+        await pool.query(
+          `INSERT INTO poi_event_urls (event_id, url, source_name)
+           SELECT $1, $2, $3
+           WHERE NOT EXISTS (
+             SELECT 1 FROM poi_event_urls WHERE event_id = $1 AND url = $2
+           )`,
+          [existingId, resolvedUrl, item.source_name || null]
+        );
+        duplicateCount++;
+        console.log(`Merged URL into event #${existingId}: "${item.title}"`);
+        continue;
       }
 
       // Save the event with the RESOLVED URL (not the redirect)

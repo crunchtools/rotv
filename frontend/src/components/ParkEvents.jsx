@@ -340,7 +340,16 @@ END:VCALENDAR`;
                   + Download .ics
                 </button>
               </div>
-              {item.source_url && (
+              {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
+                <span className="event-sources-group">
+                  <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="event-link">Source</a>
+                  {item.additional_urls.map((u, i) => (
+                    <a key={i} href={u.url} target="_blank" rel="noopener noreferrer" className="event-link">
+                      {u.source_name || `Source ${i + 2}`}
+                    </a>
+                  ))}
+                </span>
+              ) : item.source_url ? (
                 <a
                   href={item.source_url}
                   target="_blank"
@@ -349,7 +358,7 @@ END:VCALENDAR`;
                 >
                   More info
                 </a>
-              )}
+              ) : null}
             </div>
           </div>
             ))}
