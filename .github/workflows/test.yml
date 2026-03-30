@@ -56,6 +56,7 @@ jobs:
             --name rotv \
             --privileged \
             -p 8080:8080 \
+            --tmpfs /run \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
             -v ~/.rotv/seed-data.sql:/tmp/seed-data.sql:ro \
             -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
