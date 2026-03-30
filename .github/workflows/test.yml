@@ -24,16 +24,16 @@ jobs:
 
       - name: Pull base image from Quay.io
         run: |
-          docker pull quay.io/fatherlinux/rotv-base:latest
-          echo "✓ Base image pulled: quay.io/fatherlinux/rotv-base:latest"
+          docker pull quay.io/crunchtools/rotv-base:latest
+          echo "✓ Base image pulled: quay.io/crunchtools/rotv-base:latest"
 
       - name: Build application image
         run: |
           docker build \
-            --build-arg BASE_IMAGE=quay.io/fatherlinux/rotv-base:latest \
+            --build-arg BASE_IMAGE=quay.io/crunchtools/rotv-base:latest \
             --build-arg BUILD_ENV=test \
-            -t quay.io/fatherlinux/rotv:test .
-          echo "✓ Application image built: quay.io/fatherlinux/rotv:test"
+            -t quay.io/crunchtools/rotv:test .
+          echo "✓ Application image built: quay.io/crunchtools/rotv:test"
 
       - name: Prepare test seed data
         run: |
@@ -60,7 +60,7 @@ jobs:
             -v ~/.rotv/seed-data.sql:/tmp/seed-data.sql:ro \
             -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
             -e PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" \
-            quay.io/fatherlinux/rotv:test
+            quay.io/crunchtools/rotv:test
 
           # Wait for server to start and initialize database
           echo "Waiting for server to start and initialize database..."
