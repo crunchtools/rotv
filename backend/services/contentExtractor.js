@@ -26,6 +26,7 @@ turndown.remove(['img', 'iframe', 'video', 'audio', 'svg', 'canvas', 'figure']);
  * @param {number} options.maxLength - Max markdown length to return (default: 8000)
  * @param {boolean} options.extractLinks - Also extract <a> links with context for deep-link matching (default: false)
  * @param {number} options.dynamicContentWait - Wait time in ms for dynamic content after navigation (default: 2000)
+ * @param {Array} options.cookies - Playwright cookies to inject before navigation (e.g., for Twitter auth)
  * @returns {Promise<{markdown: string, title: string, excerpt: string, reachable: boolean, links?: Array, reason?: string}>}
  */
 export async function extractPageContent(url, options = {}) {
@@ -34,7 +35,8 @@ export async function extractPageContent(url, options = {}) {
     hardTimeout = 45000,
     maxLength = 100000,
     extractLinks = false,
-    dynamicContentWait = 2000
+    dynamicContentWait = 2000,
+    cookies = null
   } = options;
 
   if (!url || !url.trim()) {
@@ -71,6 +73,19 @@ export async function extractPageContent(url, options = {}) {
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         ignoreHTTPSErrors: true
       });
+
+      if (cookies && Array.isArray(cookies) && cookies.length > 0) {
+        const playwrightCookies = cookies.map(c => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain,
+          path: c.path || '/',
+          secure: c.secure !== false,
+          httpOnly: c.httpOnly || false,
+          sameSite: c.sameSite || 'None'
+        }));
+        await context.addCookies(playwrightCookies);
+      }
 
       const page = await context.newPage();
 

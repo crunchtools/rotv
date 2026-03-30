@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
 
-BASE_IMAGE_NAME="quay.io/fatherlinux/rotv-base"
-IMAGE_NAME="quay.io/fatherlinux/rotv"
+BASE_IMAGE_NAME="quay.io/crunchtools/rotv-base"
+IMAGE_NAME="quay.io/crunchtools/rotv"
 CONTAINER_NAME="rotv"
 
 # Development uses ephemeral storage (tmpfs) - data is thrown away on restart
@@ -553,8 +553,8 @@ ENVFILE
         echo "  restart-db       Restart PostgreSQL service only"
         echo ""
         echo "DEPLOYMENT COMMANDS"
-        echo "  push           Push app image to quay.io/fatherlinux/rotv"
-        echo "  push-base      Push base image to quay.io/fatherlinux/rotv-base"
+        echo "  push           Push app image to quay.io/crunchtools/rotv"
+        echo "  push-base      Push base image to quay.io/crunchtools/rotv-base"
         echo "  push-all       Push both images to quay.io"
         echo ""
         echo "QUICK START"

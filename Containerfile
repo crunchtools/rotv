@@ -1,13 +1,16 @@
-# Roots of The Valley — single-stage build on ubi10-core
-# Services: PostgreSQL 17 (pgdg), Node.js, Playwright/Chromium
+# Roots of The Valley — single-stage build
+# When BASE_IMAGE=rotv-base, infrastructure layers are pre-baked (fast CI builds)
+# When BASE_IMAGE=ubi10-core, everything builds from scratch (local dev)
 
-FROM quay.io/crunchtools/ubi10-core:latest
+ARG BASE_IMAGE=quay.io/crunchtools/ubi10-core:latest
+FROM ${BASE_IMAGE}
 
 LABEL maintainer="fatherlinux <scott.mccarty@crunchtools.com>"
 LABEL description="Roots of The Valley - Cuyahoga Valley National Park destination explorer"
 
 # Install Node.js and Playwright/Chromium system dependencies
 # No RHSM needed — all packages in UBI + pgdg repos
+# When using rotv-base, these are already installed (cache hit / no-op)
 RUN dnf install -y nodejs npm \
     nspr nss alsa-lib atk cups-libs gtk3 \
     libXcomposite libXdamage libXrandr libxkbcommon \
@@ -24,11 +27,11 @@ RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-
     dnf clean all
 
 # Create symlinks for PostgreSQL commands
-RUN ln -s /usr/pgsql-17/bin/initdb /usr/local/bin/initdb && \
-    ln -s /usr/pgsql-17/bin/pg_ctl /usr/local/bin/pg_ctl && \
-    ln -s /usr/pgsql-17/bin/postgres /usr/local/bin/postgres && \
-    ln -s /usr/pgsql-17/bin/psql /usr/local/bin/psql && \
-    ln -s /usr/pgsql-17/bin/pg_isready /usr/local/bin/pg_isready
+RUN ln -sf /usr/pgsql-17/bin/initdb /usr/local/bin/initdb && \
+    ln -sf /usr/pgsql-17/bin/pg_ctl /usr/local/bin/pg_ctl && \
+    ln -sf /usr/pgsql-17/bin/postgres /usr/local/bin/postgres && \
+    ln -sf /usr/pgsql-17/bin/psql /usr/local/bin/psql && \
+    ln -sf /usr/pgsql-17/bin/pg_isready /usr/local/bin/pg_isready
 
 # PostgreSQL user (runs as uid 70 for pgdg compatibility)
 RUN useradd -u 70 -m -s /bin/bash postgres || true
@@ -50,8 +53,10 @@ COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
 
 # Install backend dependencies
+# BUILD_ENV=test includes devDependencies (vitest) for CI
+ARG BUILD_ENV=production
 COPY backend/package*.json ./
-RUN npm install --only=production
+RUN if [ "$BUILD_ENV" = "test" ]; then npm install; else npm install --omit=dev; fi
 
 # Copy backend code
 COPY backend/ ./
@@ -72,3 +77,6 @@ RUN mkdir -p /etc/rotv
 EXPOSE 8080
 EXPOSE 25
 EXPOSE 3001
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]

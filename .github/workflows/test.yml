@@ -24,16 +24,16 @@ jobs:
 
       - name: Pull base image from Quay.io
         run: |
-          docker pull quay.io/fatherlinux/rotv-base:latest
-          echo "✓ Base image pulled: quay.io/fatherlinux/rotv-base:latest"
+          docker pull quay.io/crunchtools/rotv-base:latest
+          echo "✓ Base image pulled: quay.io/crunchtools/rotv-base:latest"
 
       - name: Build application image
         run: |
           docker build \
-            --build-arg BASE_IMAGE=quay.io/fatherlinux/rotv-base:latest \
+            --build-arg BASE_IMAGE=quay.io/crunchtools/rotv-base:latest \
             --build-arg BUILD_ENV=test \
-            -t quay.io/fatherlinux/rotv:test .
-          echo "✓ Application image built: quay.io/fatherlinux/rotv:test"
+            -t quay.io/crunchtools/rotv:test .
+          echo "✓ Application image built: quay.io/crunchtools/rotv:test"
 
       - name: Prepare test seed data
         run: |
@@ -52,19 +52,30 @@ jobs:
           docker rm rotv 2>/dev/null || true
 
           # Start test container with ephemeral storage
+          # systemd needs --tmpfs /run and --tmpfs /tmp; --cgroupns=host for cgroup v2
           docker run -d \
             --name rotv \
             --privileged \
+            --cgroupns=host \
             -p 8080:8080 \
+            --tmpfs /run \
+            --tmpfs /run/lock \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
-            -v ~/.rotv/seed-data.sql:/tmp/seed-data.sql:ro \
+            -v ~/.rotv/seed-data.sql:/data/test-seed.sql:ro \
             -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
             -e PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" \
-            quay.io/fatherlinux/rotv:test
+            quay.io/crunchtools/rotv:test
 
           # Wait for server to start and initialize database
           echo "Waiting for server to start and initialize database..."
           sleep 20
+
+          # Debug: check systemd service status
+          echo "=== systemd service status ==="
+          docker exec rotv systemctl status postgresql rotv-init rotv-backend --no-pager || true
+          echo "=== journalctl for rotv-backend ==="
+          docker exec rotv journalctl -u rotv-backend --no-pager -n 30 || true
+          echo "=== end debug ==="
 
           # Check if server is ready
           for i in {1..30}; do
@@ -76,9 +87,28 @@ jobs:
             sleep 2
           done
 
-          # Import seed data into initialized database
+          # Import seed data (INSERT-only — schema was created by server.js initDatabase)
           echo "Importing seed data..."
-          docker exec rotv psql -U postgres -d rotv -f /tmp/seed-data.sql
+          docker exec rotv psql -U postgres -d rotv -f /data/test-seed.sql
+
+          # Re-run migrations after seed import (adds columns server.js doesn't create)
+          echo "Re-running migrations..."
+          docker exec rotv sh -c 'for m in /app/migrations/*.sql; do [ -f "$m" ] && psql -U postgres -d rotv -f "$m"; done' 2>&1 | grep -i "error" | grep -v "already exists" || true
+
+          # Restart backend so it picks up the complete schema
+          echo "Restarting backend..."
+          docker exec rotv systemctl restart rotv-backend
+          sleep 5
+
+          # Verify server is ready with complete schema
+          for i in {1..15}; do
+            if docker exec rotv curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
+              echo "✓ Server is ready"
+              break
+            fi
+            echo "Waiting for server after restart... ($i/15)"
+            sleep 2
+          done
 
           # Verify data was imported
           echo "Verifying data import..."

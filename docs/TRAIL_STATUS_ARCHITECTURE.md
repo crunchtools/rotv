@@ -29,7 +29,7 @@ Each trail's `status_url` points to its authoritative status source (e.g., `http
 
 **2. AI-Powered Status Extraction**
 
-Google Gemini AI extracts status from the rendered page content:
+Google Gemini Flash extracts status from the rendered page content (no search grounding — content is already rendered):
 - Identifies trail status (open, closed, limited, maintenance)
 - Extracts conditions, weather impacts, dates
 - Returns results in a standardized format
@@ -53,10 +53,11 @@ This window was chosen because:
 - **Six months** provides enough history without including truly outdated information
 - **Prevents confusion** from mixing current season with previous season status
 
-**3. JavaScript Rendering for Dynamic Pages**
+**3. Page Rendering with contentExtractor**
 
-Many trail status pages use JavaScript frameworks or are Twitter/X pages that require browser rendering. The system automatically detects and renders these pages using Playwright:
+All status URLs are rendered via `contentExtractor.js` (Playwright + Readability + Turndown), which produces clean markdown for Gemini to analyze:
 - Twitter/X status accounts (with authenticated cookie support)
+- Bluesky profiles
 - Squarespace trail organization websites
 - Dynamic trail reporting platforms
 
@@ -74,7 +75,8 @@ This layered approach means browser downloads only happen when the base image is
 
 Twitter pages require authenticated access to load tweet content. The system supports cookie-based authentication:
 - Cookies are stored in `admin_settings` table with key `twitter_cookies`
-- The `jsRenderer.js` service automatically loads and injects these cookies
+- `trailStatusService.js` loads cookies from the database and passes them to `contentExtractor`
+- `contentExtractor.js` injects cookies into the Playwright browser context before navigation
 - Cookie `sameSite` values must be normalized to Playwright-compatible values (`Strict`, `Lax`, or `None`)
 - Cookies typically remain valid for ~1 year
 
@@ -88,8 +90,8 @@ This is a critical feature: when a trail has a configured `status_url`, the syst
 **5. Scheduled Collection**
 
 The system uses pg-boss for reliable background job processing:
-- Default interval: Every 2 hours
-- Admin-configurable: Can be set as low as 30 minutes
+- Default interval: Every 30 minutes (Gemini Flash is essentially free at this volume)
+- Admin-configurable via `scheduleTrailStatusCollection()` cron parameter
 - Automatic updates without manual intervention
 
 ### Key Benefits
@@ -113,9 +115,8 @@ The system uses pg-boss for reliable background job processing:
 
 ### Technology Stack
 
-- **Google Gemini 2.0 Flash**: AI-powered status extraction with search grounding
-- **Perplexity Sonar Pro**: Fallback AI provider
-- **Playwright**: Headless browser for JavaScript-rendered pages
+- **Google Gemini Flash**: AI-powered status extraction (no search grounding — content is pre-rendered)
+- **Playwright + Readability + Turndown**: Renders pages and converts to clean markdown (`contentExtractor.js`)
 - **PostgreSQL**: Status storage and trail configuration
 - **pg-boss**: Reliable job scheduling and background processing
 - **Node.js/Express**: Backend API
@@ -150,11 +151,11 @@ The system uses pg-boss for reliable background job processing:
 │                 Trail Status Service Layer                      │
 │  (backend/services/trailStatusService.js)                       │
 │                                                                 │
-│  1. collectTrailStatusForPoi(pool, poi)                         │
-│     ├─ Check if status_url requires JS rendering               │
-│     ├─ Render with Playwright if needed                        │
-│     ├─ Build AI prompt with trail context                      │
-│     ├─ Extract status via Gemini/Perplexity                    │
+│  1. collectTrailStatus(pool, poi)                               │
+│     ├─ Skip if no status_url configured                        │
+│     ├─ Load cookies for Twitter/X URLs                         │
+│     ├─ Render with contentExtractor (Playwright + Readability) │
+│     ├─ Extract status via Gemini Flash (no search grounding)   │
 │     ├─ Override source_url with configured status_url          │
 │     └─ Return {status, conditions, source_url, ...}            │
 │                                                                 │
@@ -171,23 +172,16 @@ The system uses pg-boss for reliable background job processing:
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                 JavaScript Renderer Service                     │
-│  (backend/services/jsRenderer.js)                               │
+│              Content Extractor + Gemini Pipeline                │
 │                                                                 │
-│  - Detects JS-heavy sites (x.com, twitter.com, etc.)            │
-│  - Renders with Playwright headless browser                     │
-│  - Extracts text content for AI analysis                        │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    AI Provider System                           │
-│  (backend/services/aiSearchFactory.js)                          │
+│  contentExtractor.js:                                           │
+│  - Playwright renders any URL (with cookie auth for Twitter)    │
+│  - Readability extracts article content                         │
+│  - Turndown converts to clean markdown                          │
 │                                                                 │
-│  - Primary: Google Gemini 2.0 Flash                             │
-│  - Fallback: Perplexity Sonar Pro                               │
-│  - Auto-switch on rate limits                                   │
-│  - Usage tracking per job                                       │
+│  geminiService.js:                                              │
+│  - Gemini Flash with useSearchGrounding: false                  │
+│  - Extracts structured status from rendered markdown            │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -281,8 +275,7 @@ CREATE INDEX idx_trail_status_job_status_status ON trail_status_job_status(statu
 ```sql
 INSERT INTO admin_settings (setting_key, setting_value, description) VALUES
 ('trail_status_collection_enabled', 'true', 'Enable/disable trail status collection'),
-('trail_status_collection_interval_hours', '2', 'Hours between status collection runs'),
-('trail_status_ai_provider', 'gemini', 'AI provider for status extraction (gemini or perplexity)');
+('trail_status_collection_interval_minutes', '30', 'Minutes between status collection runs');
 ```
 
 ---
@@ -739,6 +732,14 @@ psql -U postgres -d rotv -f backend/migrations/001_add_trail_status_support.sql
 ---
 
 ## Changelog
+
+**Version 2.0.0 (2026-03-30)**
+- Replaced search-grounded AI (Perplexity/Gemini search) with Playwright rendering + Gemini Flash extraction
+- Pipeline: contentExtractor.js (Readability + Turndown) → geminiService.js (useSearchGrounding: false)
+- Removed aiSearchFactory.js and jsRenderer.js dependencies
+- Added cookie support to contentExtractor.js for Twitter/X authentication
+- Increased default collection frequency from every 2 hours to every 30 minutes
+- Simplified AI usage tracking (Gemini-only, no provider selection logic)
 
 **Version 1.3.0 (2026-02-06)**
 - Added "MTB Trail Status Date Logic" section documenting date priority cascade
