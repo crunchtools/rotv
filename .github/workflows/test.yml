@@ -52,11 +52,15 @@ jobs:
           docker rm rotv 2>/dev/null || true
 
           # Start test container with ephemeral storage
+          # systemd needs --tmpfs /run and --tmpfs /tmp; --cgroupns=host for cgroup v2
           docker run -d \
             --name rotv \
             --privileged \
+            --cgroupns=host \
             -p 8080:8080 \
             --tmpfs /run \
+            --tmpfs /run/lock \
+            --tmpfs /tmp \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
             -v ~/.rotv/seed-data.sql:/tmp/seed-data.sql:ro \
             -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
@@ -66,6 +70,13 @@ jobs:
           # Wait for server to start and initialize database
           echo "Waiting for server to start and initialize database..."
           sleep 20
+
+          # Debug: check systemd service status
+          echo "=== systemd service status ==="
+          docker exec rotv systemctl status postgresql rotv-init rotv-backend --no-pager || true
+          echo "=== journalctl for rotv-backend ==="
+          docker exec rotv journalctl -u rotv-backend --no-pager -n 30 || true
+          echo "=== end debug ==="
 
           # Check if server is ready
           for i in {1..30}; do

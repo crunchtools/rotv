@@ -77,3 +77,6 @@ RUN mkdir -p /etc/rotv
 EXPOSE 8080
 EXPOSE 25
 EXPOSE 3001
+
+STOPSIGNAL SIGRTMIN+3
+CMD ["/sbin/init"]
