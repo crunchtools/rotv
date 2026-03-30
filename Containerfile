@@ -1,13 +1,16 @@
-# Roots of The Valley — single-stage build on ubi10-core
-# Services: PostgreSQL 17 (pgdg), Node.js, Playwright/Chromium
+# Roots of The Valley — single-stage build
+# When BASE_IMAGE=rotv-base, infrastructure layers are pre-baked (fast CI builds)
+# When BASE_IMAGE=ubi10-core, everything builds from scratch (local dev)
 
-FROM quay.io/crunchtools/ubi10-core:latest
+ARG BASE_IMAGE=quay.io/crunchtools/ubi10-core:latest
+FROM ${BASE_IMAGE}
 
 LABEL maintainer="fatherlinux <scott.mccarty@crunchtools.com>"
 LABEL description="Roots of The Valley - Cuyahoga Valley National Park destination explorer"
 
 # Install Node.js and Playwright/Chromium system dependencies
 # No RHSM needed — all packages in UBI + pgdg repos
+# When using rotv-base, these are already installed (cache hit / no-op)
 RUN dnf install -y nodejs npm \
     nspr nss alsa-lib atk cups-libs gtk3 \
     libXcomposite libXdamage libXrandr libxkbcommon \
@@ -50,8 +53,10 @@ COPY frontend/ ./frontend/
 RUN cd frontend && npm run build
 
 # Install backend dependencies
+# BUILD_ENV=test includes devDependencies (vitest) for CI
+ARG BUILD_ENV=production
 COPY backend/package*.json ./
-RUN npm install --only=production
+RUN if [ "$BUILD_ENV" = "test" ]; then npm install; else npm install --omit=dev; fi
 
 # Copy backend code
 COPY backend/ ./
