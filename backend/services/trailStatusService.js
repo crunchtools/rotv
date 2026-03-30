@@ -400,18 +400,10 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       .replace(/\{\{timezone\}\}/g, timezone)
       .replace(/\{\{renderedContent\}\}/g, rendered.markdown);
 
-    console.log(`[Trail Status] Searching with AI for trail status...`);
-    const aiResult = await generateTextWithCustomPrompt(pool, prompt);
-    const response = aiResult.response;
-    const usedProvider = aiResult.provider;
+    console.log(`[Trail Status] Extracting status with Gemini (${prompt.length} char prompt)...`);
+    const response = await generateTextWithCustomPrompt(pool, prompt, null, { useSearchGrounding: false });
 
-    // Update provider if it changed (e.g., fallback was used)
-    if (usedProvider !== initialProvider) {
-      console.log(`[Trail Status] Provider changed from ${initialProvider} to ${usedProvider} (fallback used)`);
-      updateProgress(poi.id, { provider: usedProvider });
-    }
-
-    console.log(`[Trail Status] Received response (${response.length} chars) from ${usedProvider}`);
+    console.log(`[Trail Status] Received response (${response.length} chars)`);
 
     // Check for cancellation after AI search
     if (isCancellationRequested(poi.id)) {
