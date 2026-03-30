@@ -87,9 +87,28 @@ jobs:
             sleep 2
           done
 
-          # Import seed data into initialized database
+          # Import seed data (INSERT-only — schema was created by server.js initDatabase)
           echo "Importing seed data..."
           docker exec rotv psql -U postgres -d rotv -f /data/test-seed.sql
+
+          # Re-run migrations after seed import (adds columns server.js doesn't create)
+          echo "Re-running migrations..."
+          docker exec rotv sh -c 'for m in /app/migrations/*.sql; do [ -f "$m" ] && psql -U postgres -d rotv -f "$m"; done' 2>&1 | grep -i "error" | grep -v "already exists" || true
+
+          # Restart backend so it picks up the complete schema
+          echo "Restarting backend..."
+          docker exec rotv systemctl restart rotv-backend
+          sleep 5
+
+          # Verify server is ready with complete schema
+          for i in {1..15}; do
+            if docker exec rotv curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
+              echo "✓ Server is ready"
+              break
+            fi
+            echo "Waiting for server after restart... ($i/15)"
+            sleep 2
+          done
 
           # Verify data was imported
           echo "Verifying data import..."
