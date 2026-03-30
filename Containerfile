@@ -27,11 +27,11 @@ RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-
     dnf clean all
 
 # Create symlinks for PostgreSQL commands
-RUN ln -s /usr/pgsql-17/bin/initdb /usr/local/bin/initdb && \
-    ln -s /usr/pgsql-17/bin/pg_ctl /usr/local/bin/pg_ctl && \
-    ln -s /usr/pgsql-17/bin/postgres /usr/local/bin/postgres && \
-    ln -s /usr/pgsql-17/bin/psql /usr/local/bin/psql && \
-    ln -s /usr/pgsql-17/bin/pg_isready /usr/local/bin/pg_isready
+RUN ln -sf /usr/pgsql-17/bin/initdb /usr/local/bin/initdb && \
+    ln -sf /usr/pgsql-17/bin/pg_ctl /usr/local/bin/pg_ctl && \
+    ln -sf /usr/pgsql-17/bin/postgres /usr/local/bin/postgres && \
+    ln -sf /usr/pgsql-17/bin/psql /usr/local/bin/psql && \
+    ln -sf /usr/pgsql-17/bin/pg_isready /usr/local/bin/pg_isready
 
 # PostgreSQL user (runs as uid 70 for pgdg compatibility)
 RUN useradd -u 70 -m -s /bin/bash postgres || true
