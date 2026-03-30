@@ -28,10 +28,9 @@ export function createPerplexityClient() {
  *
  * @param {object} pool - Database connection pool (not used, kept for compatibility)
  * @param {string} customPrompt - The prompt to send to Perplexity
- * @param {object} sheets - Optional Google Sheets API client (not used, kept for compatibility)
  * @returns {Promise<string>} - Generated text response
  */
-export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = null) {
+export async function generateTextWithCustomPrompt(pool, customPrompt) {
   const client = createPerplexityClient();
 
   console.log(`Generating with Perplexity Sonar (${customPrompt.length} chars, with web search)`);

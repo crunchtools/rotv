@@ -107,10 +107,9 @@ async function getConfig(pool) {
  *
  * @param {Pool} pool - Database connection pool
  * @param {string} customPrompt - The prompt to send to the AI
- * @param {Object} sheets - Optional Google Sheets API client (for Gemini API key restore)
  * @returns {Promise<{response: string, provider: string}>} - Generated text response and provider used
  */
-export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = null, options = {}) {
+export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {
   const config = await getConfig(pool);
   debugLog(`[AI Search Factory] Config: primary=${config.primary}, fallback=${config.fallback}, limit=${config.primaryLimit}`);
 
@@ -147,11 +146,11 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
     if (provider === 'gemini') {
       currentJobUsage.gemini++;
       console.log(`[AI Search] Calling Gemini (request #${currentJobUsage.gemini})`);
-      result = await geminiSearch(pool, customPrompt, sheets, options);
+      result = await geminiSearch(pool, customPrompt, options);
     } else {
       currentJobUsage.perplexity++;
       console.log(`[AI Search] Calling Perplexity (request #${currentJobUsage.perplexity})`);
-      result = await perplexitySearch(pool, customPrompt, sheets);
+      result = await perplexitySearch(pool, customPrompt);
     }
   } catch (error) {
     // Track 429 errors
@@ -171,10 +170,10 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, sheets = 
       try {
         if (fallbackProvider === 'gemini') {
           currentJobUsage.gemini++;
-          result = await geminiSearch(pool, customPrompt, sheets, options);
+          result = await geminiSearch(pool, customPrompt, options);
         } else {
           currentJobUsage.perplexity++;
-          result = await perplexitySearch(pool, customPrompt, sheets);
+          result = await perplexitySearch(pool, customPrompt);
         }
       } catch (fallbackError) {
         // Track 429 errors on fallback too

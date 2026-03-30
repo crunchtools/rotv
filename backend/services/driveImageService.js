@@ -1,4 +1,5 @@
 import { Readable } from 'stream';
+import { google } from 'googleapis';
 
 const ROOT_FOLDER_NAME = 'Roots of The Valley';
 const ICONS_FOLDER_NAME = 'Icons';
@@ -446,4 +447,79 @@ export async function countDriveFiles(drive, pool) {
   }
 
   return { iconsCount, imagesCount, geospatialCount };
+}
+
+/**
+ * Create an OAuth2 client with proper credentials
+ * If refresh_token is present, tries to refresh the access token
+ */
+async function createOAuth2Client(credentials, pool, userId) {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+  oauth2Client.setCredentials(credentials);
+
+  // If we have a refresh token, try to refresh the access token
+  if (credentials.refresh_token) {
+    try {
+      const { credentials: newCredentials } = await oauth2Client.refreshAccessToken();
+      oauth2Client.setCredentials(newCredentials);
+
+      // Save the new credentials to the database if pool and userId provided
+      if (pool && userId) {
+        const updatedCreds = {
+          access_token: newCredentials.access_token,
+          refresh_token: newCredentials.refresh_token || credentials.refresh_token,
+          expiry_date: newCredentials.expiry_date
+        };
+        await pool.query(
+          'UPDATE users SET oauth_credentials = $1 WHERE id = $2',
+          [JSON.stringify(updatedCreds), userId]
+        );
+      }
+    } catch (refreshError) {
+      console.warn('Token refresh failed:', refreshError.message);
+    }
+  }
+
+  return oauth2Client;
+}
+
+/**
+ * Create Google Drive service using OAuth credentials
+ */
+export function createDriveService(credentials) {
+  const oauth2Client = new google.auth.OAuth2(
+    process.env.GOOGLE_CLIENT_ID,
+    process.env.GOOGLE_CLIENT_SECRET
+  );
+  oauth2Client.setCredentials(credentials);
+  return google.drive({ version: 'v3', auth: oauth2Client });
+}
+
+/**
+ * Create Google Drive service with token refresh
+ */
+export async function createDriveServiceWithRefresh(credentials, pool, userId) {
+  const oauth2Client = await createOAuth2Client(credentials, pool, userId);
+  return google.drive({ version: 'v3', auth: oauth2Client });
+}
+
+/**
+ * Check if a file is in the trash
+ */
+export async function isFileTrashed(drive, fileId) {
+  try {
+    const response = await drive.files.get({
+      fileId,
+      fields: 'trashed'
+    });
+    return response.data.trashed === true;
+  } catch (error) {
+    if (error.code === 404) {
+      return null;
+    }
+    throw error;
+  }
 }

@@ -101,8 +101,7 @@ function registerTools(server, pool, boss) {
         return { content: [{ type: 'text', text: 'POI not found' }], isError: true };
       }
       const row = result.rows[0];
-      // Strip binary image data from response
-      delete row.image_data;
+      // Strip large binary data from response
       delete row.geometry;
       return { content: [{ type: 'text', text: JSON.stringify(row, null, 2) }] };
     }

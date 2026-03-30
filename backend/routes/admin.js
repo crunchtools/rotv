@@ -8,38 +8,8 @@ import { isAdmin, isAuthenticated } from '../middleware/auth.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import {
-  createSheetsService,
   createDriveService,
-  createSheetsServiceWithRefresh,
   createDriveServiceWithRefresh,
-  isFileTrashed,
-  getSyncStatus,
-  pushAllToSheets,
-  pullAllFromSheets,
-  processSyncQueue,
-  queueSyncOperation,
-  createAppSpreadsheet,
-  getSpreadsheetId,
-  getSpreadsheetInfo,
-  pushActivitiesToSheets,
-  pullActivitiesFromSheets,
-  pushErasToSheets,
-  pullErasFromSheets,
-  pushSurfacesToSheets,
-  pullSurfacesFromSheets,
-  pushIconsToSheets,
-  pullIconsFromSheets,
-  pushIntegrationToSheets,
-  pullIntegrationFromSheets,
-  pushNewsToSheets,
-  pullNewsFromSheets,
-  pushEventsToSheets,
-  pullEventsFromSheets,
-  pushAssociationsToSheets,
-  pullAssociationsFromSheets,
-  SHEET_NAME
-} from '../services/sheetsSync.js';
-import {
   ensureDriveFolders,
   uploadIconToDrive,
   uploadImageToDrive,
@@ -109,64 +79,6 @@ import imageServerClient from '../services/imageServerClient.js';
 const router = express.Router();
 
 export function createAdminRouter(pool) {
-  // Helper to queue sync operation after a change
-  async function queuePOISync(operation, recordId, data) {
-    try {
-      // Exclude large binary fields from sync queue data
-      // These are not needed for Google Sheets sync (only Drive file IDs are synced)
-      // GeoJSON/image uploads fetch fresh data from database using record_id
-      const { image_data, geometry, ...syncData } = data;
-      await queueSyncOperation(pool, operation, 'pois', recordId, syncData);
-    } catch (error) {
-      console.error('Failed to queue POI sync operation:', error.message);
-    }
-  }
-
-  // Helper to queue activity sync
-  async function queueActivitySync(operation, recordId, data) {
-    try {
-      await queueSyncOperation(pool, operation, 'activities', recordId, data);
-    } catch (error) {
-      console.error('Failed to queue activity sync operation:', error.message);
-    }
-  }
-
-  // Helper to queue era sync
-  async function queueEraSync(operation, recordId, data) {
-    try {
-      await queueSyncOperation(pool, operation, 'eras', recordId, data);
-    } catch (error) {
-      console.error('Failed to queue era sync operation:', error.message);
-    }
-  }
-
-  // Helper to queue surface sync
-  async function queueSurfaceSync(operation, recordId, data) {
-    try {
-      await queueSyncOperation(pool, operation, 'surfaces', recordId, data);
-    } catch (error) {
-      console.error('Failed to queue surface sync operation:', error.message);
-    }
-  }
-
-  // Helper to queue icon sync
-  async function queueIconSync(operation, recordId, data) {
-    try {
-      await queueSyncOperation(pool, operation, 'icons', recordId, data);
-    } catch (error) {
-      console.error('Failed to queue icon sync operation:', error.message);
-    }
-  }
-
-  // Helper to queue settings sync
-  async function queueSettingsSync(operation, recordId, data) {
-    try {
-      await queueSyncOperation(pool, operation, 'settings', recordId, data);
-    } catch (error) {
-      console.error('Failed to queue settings sync operation:', error.message);
-    }
-  }
-
   // Update POI coordinates (for point type POIs)
   router.put('/pois/:id/coordinates', isAdmin, async (req, res) => {
     const { id } = req.params;
@@ -190,7 +102,7 @@ export function createAdminRouter(pool) {
     try {
       const result = await pool.query(
         `UPDATE pois
-         SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+         SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3
          RETURNING *`,
         [lat, lng, id]
@@ -200,7 +112,6 @@ export function createAdminRouter(pool) {
         return res.status(404).json({ error: 'POI not found' });
       }
 
-      await queuePOISync('UPDATE', id, result.rows[0]);
       console.log(`Admin ${req.user.email} updated coordinates for POI ${id}: ${lat}, ${lng}`);
       res.json(result.rows[0]);
     } catch (error) {
@@ -232,7 +143,7 @@ export function createAdminRouter(pool) {
     try {
       const result = await pool.query(
         `UPDATE pois
-         SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+         SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3
          RETURNING *`,
         [lat, lng, id]
@@ -242,7 +153,6 @@ export function createAdminRouter(pool) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
-      await queuePOISync('UPDATE', id, result.rows[0]);
       console.log(`Admin ${req.user.email} updated coordinates for destination ${id}: ${lat}, ${lng}`);
       res.json(result.rows[0]);
     } catch (error) {
@@ -291,7 +201,7 @@ export function createAdminRouter(pool) {
     try {
       const result = await pool.query(
         `UPDATE pois
-         SET ${setClause}, updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+         SET ${setClause}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramIndex}
          RETURNING *`,
         values
@@ -301,7 +211,6 @@ export function createAdminRouter(pool) {
         return res.status(404).json({ error: 'POI not found' });
       }
 
-      await queuePOISync('UPDATE', id, result.rows[0]);
       console.log(`Admin ${req.user.email} updated POI ${id}:`, Object.keys(updates).join(', '));
       res.json(result.rows[0]);
     } catch (error) {
@@ -343,7 +252,7 @@ export function createAdminRouter(pool) {
     try {
       const result = await pool.query(
         `UPDATE pois
-         SET ${setClause}, updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+         SET ${setClause}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramIndex}
          RETURNING *`,
         values
@@ -353,7 +262,6 @@ export function createAdminRouter(pool) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
-      await queuePOISync('UPDATE', id, result.rows[0]);
       console.log(`Admin ${req.user.email} updated destination ${id}:`, Object.keys(updates).join(', '));
       res.json(result.rows[0]);
     } catch (error) {
@@ -408,14 +316,11 @@ export function createAdminRouter(pool) {
 
     try {
       const result = await pool.query(
-        `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at, locally_modified, synced)
-         VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, FALSE)
+        `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at)
+         VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
         values
       );
-
-      // Queue sync operation
-      await queuePOISync('INSERT', result.rows[0].id, result.rows[0]);
 
       console.log(`Admin ${req.user.email} created new destination: ${name}`);
       res.status(201).json(result.rows[0]);
@@ -485,14 +390,11 @@ export function createAdminRouter(pool) {
 
     try {
       const result = await pool.query(
-        `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at, locally_modified, synced)
-         VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, TRUE, FALSE)
+        `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at)
+         VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
         values
       );
-
-      // Queue sync operation
-      await queuePOISync('INSERT', result.rows[0].id, result.rows[0]);
 
       console.log(`Admin ${req.user.email} created new POI (${poi_type}): ${name}`);
       res.status(201).json(result.rows[0]);
@@ -502,14 +404,14 @@ export function createAdminRouter(pool) {
     }
   });
 
-  // Delete destination (soft delete - marks as deleted so it won't come back from Google Sheets sync)
+  // Delete destination (soft delete)
   router.delete('/destinations/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
       const result = await pool.query(
         `UPDATE pois
-         SET deleted = TRUE, locally_modified = TRUE, synced = FALSE, updated_at = CURRENT_TIMESTAMP
+         SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1
          RETURNING id, name`,
         [id]
@@ -518,9 +420,6 @@ export function createAdminRouter(pool) {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Destination not found' });
       }
-
-      // Queue sync operation (delete from sheet)
-      await queuePOISync('DELETE', id, { name: result.rows[0].name });
 
       console.log(`Admin ${req.user.email} deleted destination ${id}: ${result.rows[0].name}`);
       res.json({ success: true, deleted: result.rows[0] });
@@ -593,10 +492,6 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} updated setting: ${key}`);
-
-      // Queue sync operation for settings
-      await queueSettingsSync('UPDATE', 0, { key, value });
-
       res.json({ success: true });
     } catch (error) {
       console.error('Error updating setting:', error);
@@ -637,10 +532,8 @@ export function createAdminRouter(pool) {
     }
 
     try {
-      // Create sheets client for auto-restore of API key from Integration sheet if needed
-      const sheets = req.user.oauth_credentials ? createSheetsService(req.user.oauth_credentials) : null;
       const { generateTextWithCustomPrompt } = await import('../services/geminiService.js');
-      const text = await generateTextWithCustomPrompt(pool, customPrompt, sheets);
+      const text = await generateTextWithCustomPrompt(pool, customPrompt);
 
       console.log(`Admin ${req.user.email} generated content for: ${destination?.name || 'unknown'}`);
       res.json({ generated_text: text });
@@ -656,10 +549,8 @@ export function createAdminRouter(pool) {
   // Test API key validity
   router.post('/ai/test-key', isAdmin, async (req, res) => {
     try {
-      // Create sheets client for auto-restore of API key from Integration sheet if needed
-      const sheets = req.user.oauth_credentials ? createSheetsService(req.user.oauth_credentials) : null;
       const { testApiKey } = await import('../services/geminiService.js');
-      const response = await testApiKey(pool, sheets);
+      const response = await testApiKey(pool);
 
       console.log(`Admin ${req.user.email} tested Gemini API key - success`);
       res.json({ success: true, message: 'API key is valid', response });
@@ -701,10 +592,8 @@ export function createAdminRouter(pool) {
       );
       const availableSurfaces = surfacesResult.rows.map(row => row.name);
 
-      // Create sheets client for auto-restore of API key from Integration sheet if needed
-      const sheets = req.user.oauth_credentials ? createSheetsService(req.user.oauth_credentials) : null;
       const { researchLocation } = await import('../services/geminiService.js');
-      const data = await researchLocation(pool, destination, availableActivities, availableEras, availableSurfaces, sheets);
+      const data = await researchLocation(pool, destination, availableActivities, availableEras, availableSurfaces);
 
       console.log(`Admin ${req.user.email} researched location: ${destination.name}`);
       res.json(data);
@@ -755,7 +644,6 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} created activity: ${name}`);
-      await queueActivitySync('INSERT', result.rows[0].id, result.rows[0]);
       res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
@@ -806,9 +694,7 @@ export function createAdminRouter(pool) {
              WHEN primary_activities LIKE '%, ' || $1 || ', %' THEN REPLACE(primary_activities, ', ' || $1 || ', ', ', ' || $2 || ', ')
              ELSE primary_activities
            END,
-           updated_at = CURRENT_TIMESTAMP,
-           locally_modified = TRUE,
-           synced = FALSE
+           updated_at = CURRENT_TIMESTAMP
            WHERE primary_activities LIKE '%' || $1 || '%'`,
           [oldName, newName]
         );
@@ -818,7 +704,6 @@ export function createAdminRouter(pool) {
       }
 
       console.log(`Admin ${req.user.email} updated activity: ${name}`);
-      await queueActivitySync('UPDATE', id, result.rows[0]);
       res.json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
@@ -847,7 +732,6 @@ export function createAdminRouter(pool) {
       }
 
       console.log(`Admin ${req.user.email} deleted activity: ${result.rows[0].name}`);
-      await queueActivitySync('DELETE', id, activityData.rows[0] || { name: result.rows[0].name });
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting activity:', error);
@@ -877,66 +761,6 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error reordering activities:', error);
       res.status(500).json({ error: 'Failed to reorder activities' });
-    }
-  });
-
-  // Push activities to Google Sheets
-  router.post('/activities/sync/push', isAdmin, async (req, res) => {
-    console.log(`Activities push requested by ${req.user.email}`);
-    try {
-      if (!req.user.oauth_credentials) {
-        console.log('No OAuth credentials for activities push');
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to sync activities'
-        });
-      }
-
-      console.log('Creating sheets service for activities push...');
-      const sheets = createSheetsService(req.user.oauth_credentials);
-      console.log('Calling pushActivitiesToSheets...');
-      const count = await pushActivitiesToSheets(sheets, pool);
-
-      console.log(`Admin ${req.user.email} pushed ${count} activities to Google Sheets`);
-      res.json({
-        success: true,
-        message: `Pushed ${count} activities to Google Sheets`,
-        count
-      });
-    } catch (error) {
-      console.error('Error pushing activities to sheets:', error);
-      res.status(500).json({
-        error: 'Failed to push activities to Google Sheets',
-        message: error.message
-      });
-    }
-  });
-
-  // Pull activities from Google Sheets
-  router.post('/activities/sync/pull', isAdmin, async (req, res) => {
-    try {
-      if (!req.user.oauth_credentials) {
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to sync activities'
-        });
-      }
-
-      const sheets = createSheetsService(req.user.oauth_credentials);
-      const count = await pullActivitiesFromSheets(sheets, pool);
-
-      console.log(`Admin ${req.user.email} pulled ${count} activities from Google Sheets`);
-      res.json({
-        success: true,
-        message: `Pulled ${count} activities from Google Sheets`,
-        count
-      });
-    } catch (error) {
-      console.error('Error pulling activities from sheets:', error);
-      res.status(500).json({
-        error: 'Failed to pull activities from Google Sheets',
-        message: error.message
-      });
     }
   });
 
@@ -978,7 +802,6 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} created era: ${name}`);
-      await queueEraSync('INSERT', result.rows[0].id, result.rows[0]);
       res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
@@ -1016,7 +839,6 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} updated era: ${name}`);
-      await queueEraSync('UPDATE', id, result.rows[0]);
       res.json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
@@ -1045,7 +867,6 @@ export function createAdminRouter(pool) {
       }
 
       console.log(`Admin ${req.user.email} deleted era: ${result.rows[0].name}`);
-      await queueEraSync('DELETE', id, eraData.rows[0] || { name: result.rows[0].name });
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting era:', error);
@@ -1116,12 +937,7 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} created surface: ${name}`);
-
-      // Queue sync to Google Sheets
-      const newSurface = result.rows[0];
-      await queueSurfaceSync('create', newSurface.id, { name: newSurface.name, description: newSurface.description, sort_order: newSurface.sort_order });
-
-      res.status(201).json(newSurface);
+      res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Surface with this name already exists' });
@@ -1149,10 +965,6 @@ export function createAdminRouter(pool) {
       }
 
       console.log(`Admin ${req.user.email} reordered surfaces`);
-
-      // Queue sync for reorder - use 'update' operation with a special marker
-      await queueSurfaceSync('update', 0, { reorder: true, orderedIds });
-
       res.json({ success: true });
     } catch (error) {
       console.error('Error reordering surfaces:', error);
@@ -1192,9 +1004,7 @@ export function createAdminRouter(pool) {
         const updateResult = await pool.query(
           `UPDATE pois
            SET surface = $2,
-               updated_at = CURRENT_TIMESTAMP,
-               locally_modified = TRUE,
-               synced = FALSE
+               updated_at = CURRENT_TIMESTAMP
            WHERE surface = $1`,
           [oldName, newName]
         );
@@ -1204,12 +1014,7 @@ export function createAdminRouter(pool) {
       }
 
       console.log(`Admin ${req.user.email} updated surface: ${name}`);
-
-      // Queue sync to Google Sheets
-      const updatedSurface = result.rows[0];
-      await queueSurfaceSync('update', updatedSurface.id, { name: updatedSurface.name, description: updatedSurface.description, sort_order: updatedSurface.sort_order });
-
-      res.json(updatedSurface);
+      res.json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Surface with this name already exists' });
@@ -1234,10 +1039,6 @@ export function createAdminRouter(pool) {
       }
 
       console.log(`Admin ${req.user.email} deleted surface: ${result.rows[0].name}`);
-
-      // Queue sync to Google Sheets
-      await queueSurfaceSync('delete', parseInt(id), { name: result.rows[0].name });
-
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting surface:', error);
@@ -1300,12 +1101,7 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} created icon: ${name}${driveFileId ? ' (uploaded to Drive)' : ''}`);
-
-      // Queue sync to Google Sheets
-      const newIcon = result.rows[0];
-      await queueIconSync('create', newIcon.id, { name: newIcon.name, label: newIcon.label });
-
-      res.status(201).json(newIcon);
+      res.status(201).json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Icon with this name already exists' });
@@ -1332,10 +1128,8 @@ export function createAdminRouter(pool) {
     }
 
     try {
-      // Create sheets client for auto-restore of API key from Integration sheet if needed
-      const sheets = req.user.oauth_credentials ? createSheetsService(req.user.oauth_credentials) : null;
       const { generateIconSvg } = await import('../services/geminiService.js');
-      const svgContent = await generateIconSvg(pool, description.trim(), color.trim(), sheets);
+      const svgContent = await generateIconSvg(pool, description.trim(), color.trim());
 
       console.log(`Admin ${req.user.email} generated icon SVG for: ${description}`);
       res.json({ svg_content: svgContent });
@@ -1366,10 +1160,6 @@ export function createAdminRouter(pool) {
       }
 
       console.log(`Admin ${req.user.email} reordered icons`);
-
-      // Queue sync for reorder
-      await queueIconSync('update', 0, { reorder: true, orderedIds });
-
       res.json({ success: true });
     } catch (error) {
       console.error('Error reordering icons:', error);
@@ -1422,12 +1212,7 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} updated icon: ${name}`);
-
-      // Queue sync to Google Sheets
-      const updatedIcon = result.rows[0];
-      await queueIconSync('update', updatedIcon.id, { name: updatedIcon.name, label: updatedIcon.label });
-
-      res.json(updatedIcon);
+      res.json(result.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Icon with this name already exists' });
@@ -1472,75 +1257,10 @@ export function createAdminRouter(pool) {
       );
 
       console.log(`Admin ${req.user.email} deleted icon: ${result.rows[0].name}`);
-
-      // Queue sync to Google Sheets
-      await queueIconSync('delete', parseInt(id), { name: result.rows[0].name });
-
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting icon:', error);
       res.status(500).json({ error: 'Failed to delete icon' });
-    }
-  });
-
-  // Push icons to Google Sheets
-  router.post('/icons/sync/push', isAdmin, async (req, res) => {
-    console.log(`Icons push requested by ${req.user.email}`);
-    try {
-      if (!req.user.oauth_credentials) {
-        console.log('No OAuth credentials for icons push');
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to sync icons'
-        });
-      }
-
-      console.log('Creating sheets service for icons push...');
-      const sheets = createSheetsService(req.user.oauth_credentials);
-      console.log('Calling pushIconsToSheets...');
-      const count = await pushIconsToSheets(sheets, pool);
-
-      console.log(`Admin ${req.user.email} pushed ${count} icons to Google Sheets`);
-      res.json({
-        success: true,
-        message: `Pushed ${count} icons to Google Sheets`,
-        count
-      });
-    } catch (error) {
-      console.error('Error pushing icons to sheets:', error);
-      res.status(500).json({
-        error: 'Failed to push icons to Google Sheets',
-        message: error.message
-      });
-    }
-  });
-
-  // Pull icons from Google Sheets (includes downloading SVGs from Drive)
-  router.post('/icons/sync/pull', isAdmin, async (req, res) => {
-    try {
-      if (!req.user.oauth_credentials) {
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to sync icons'
-        });
-      }
-
-      const sheets = createSheetsService(req.user.oauth_credentials);
-      const drive = createDriveService(req.user.oauth_credentials);
-      const count = await pullIconsFromSheets(sheets, pool, drive);
-
-      console.log(`Admin ${req.user.email} pulled ${count} icons from Google Sheets (including Drive SVGs)`);
-      res.json({
-        success: true,
-        message: `Pulled ${count} icons from Google Sheets`,
-        count
-      });
-    } catch (error) {
-      console.error('Error pulling icons from sheets:', error);
-      res.status(500).json({
-        error: 'Failed to pull icons from Google Sheets',
-        message: error.message
-      });
     }
   });
 
@@ -1599,7 +1319,7 @@ export function createAdminRouter(pool) {
     try {
       const result = await pool.query(`
         UPDATE pois
-        SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+        SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
         WHERE id = $${paramIndex} AND poi_type = 'boundary'
         RETURNING id, name, boundary_type, boundary_color
       `, values);
@@ -1607,9 +1327,6 @@ export function createAdminRouter(pool) {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Boundary not found' });
       }
-
-      // Queue sync operation
-      await queuePOISync('UPDATE', id, { boundary_type, boundary_color });
 
       console.log(`Admin ${req.user.email} updated boundary ${id}: type=${boundary_type}, color=${boundary_color}`);
       res.json(result.rows[0]);
@@ -1620,19 +1337,13 @@ export function createAdminRouter(pool) {
   });
 
   // ============================================
-  // Google Sheets Sync Routes
+  // Drive Sync Status Routes
   // ============================================
 
   // Get sync status
   router.get('/sync/status', isAdmin, async (req, res) => {
     try {
-      const status = await getSyncStatus(pool);
-
-      // Add spreadsheet configuration
-      const spreadsheetInfo = await getSpreadsheetInfo(pool);
-      status.spreadsheet = spreadsheetInfo;
-
-      // Parse credentials if stored as string (handle both formats)
+      // Parse credentials if stored as string
       let credentials = req.user.oauth_credentials;
       if (typeof credentials === 'string') {
         try {
@@ -1642,60 +1353,18 @@ export function createAdminRouter(pool) {
         }
       }
 
-      // Check if user has OAuth credentials for sync
       const hasCredentials = !!(credentials && credentials.access_token);
-      status.has_oauth_credentials = hasCredentials;
-      status.drive_access_verified = false;
+      const status = {
+        has_oauth_credentials: hasCredentials,
+        drive_access_verified: false
+      };
 
       if (!hasCredentials) {
         status.drive_access_error = 'No Drive credentials found. Please log out and log back in.';
         return res.json(status);
       }
 
-      // Verify credentials by trying to use them (with auto-refresh)
       const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
-
-      if (spreadsheetInfo.configured) {
-        // Try to access the configured spreadsheet
-        try {
-          const sheets = await createSheetsServiceWithRefresh(credentials, pool, req.user.id);
-          await sheets.spreadsheets.get({
-            spreadsheetId: spreadsheetInfo.id,
-            fields: 'spreadsheetId'
-          });
-
-          // Check if the spreadsheet is in the trash
-          try {
-            const trashed = await isFileTrashed(drive, spreadsheetInfo.id);
-            if (trashed === true) {
-              status.spreadsheet_trashed = true;
-              status.drive_access_error = 'Spreadsheet is in Google Drive trash. Please disconnect or restore it.';
-            } else if (trashed === null) {
-              status.spreadsheet_deleted = true;
-              status.drive_access_error = 'Spreadsheet has been permanently deleted. Please disconnect.';
-            } else {
-              status.drive_access_verified = true;
-            }
-          } catch (driveError) {
-            console.log('Could not check trash status:', driveError.message);
-            // If we can't check, assume it's fine since Sheets API worked
-            status.drive_access_verified = true;
-          }
-        } catch (verifyError) {
-          console.log('Drive access verification failed:', verifyError.message);
-          if (verifyError.message?.includes('invalid_grant') || verifyError.message?.includes('Token has been expired')) {
-            status.drive_access_error = 'Access token expired. Please log out and log back in.';
-          } else if (verifyError.message?.includes('not found') || verifyError.code === 404) {
-            status.spreadsheet_deleted = true;
-            status.drive_access_error = 'Spreadsheet not found. It may have been permanently deleted. Please disconnect.';
-          } else {
-            status.drive_access_error = 'Cannot access spreadsheet. Please log out and log back in.';
-          }
-        }
-      } else {
-        // No spreadsheet configured - assume it's ready if we have credentials
-        status.drive_access_verified = true;
-      }
 
       // Get Drive folder information
       try {
@@ -1703,10 +1372,12 @@ export function createAdminRouter(pool) {
         const iconsFolderId = await getDriveSetting(pool, 'icons_folder_id');
         const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
         const geospatialFolderId = await getDriveSetting(pool, 'geospatial_folder_id');
+        const backupsFolderId = await getDriveSetting(pool, 'backups_folder_id');
 
         const folderLink = await getDriveFolderLink(pool);
         const fileCounts = await countDriveFiles(drive, pool);
 
+        status.drive_access_verified = true;
         status.drive = {
           configured: !!rootFolderId,
           folder_url: folderLink,
@@ -1733,6 +1404,11 @@ export function createAdminRouter(pool) {
               name: 'Geospatial',
               file_count: fileCounts.geospatialCount,
               url: `https://drive.google.com/drive/folders/${geospatialFolderId}`
+            } : null,
+            backups: backupsFolderId ? {
+              id: backupsFolderId,
+              name: 'Backups',
+              url: `https://drive.google.com/drive/folders/${backupsFolderId}`
             } : null
           }
         };
@@ -1741,21 +1417,14 @@ export function createAdminRouter(pool) {
         status.drive = { configured: false };
       }
 
-      // Get sync queue details
+      // Get last backup info
       try {
-        const queueResult = await pool.query(`
-          SELECT id, operation, table_name, record_id,
-                 COALESCE(data->>'name', data->>'key') as item_name,
-                 data as item_data,
-                 created_at
-          FROM sync_queue
-          ORDER BY created_at ASC
-          LIMIT 50
-        `);
-        status.sync_queue = queueResult.rows;
-      } catch (queueError) {
-        console.warn('Could not get sync queue:', queueError.message);
-        status.sync_queue = [];
+        const backupResult = await pool.query(
+          "SELECT value FROM admin_settings WHERE key = 'last_backup'"
+        );
+        status.last_backup = backupResult.rows[0]?.value || null;
+      } catch (e) {
+        status.last_backup = null;
       }
 
       res.json(status);
@@ -1765,380 +1434,60 @@ export function createAdminRouter(pool) {
     }
   });
 
-  // Disconnect from spreadsheet
-  router.delete('/sync/disconnect-spreadsheet', isAdmin, async (req, res) => {
-    try {
-      await pool.query("DELETE FROM admin_settings WHERE key = 'sync_spreadsheet_id'");
+  // ============================================
+  // Backup Routes
+  // ============================================
 
-      console.log(`Admin ${req.user.email} disconnected from spreadsheet`);
-      res.json({ success: true });
+  // Trigger a database backup to Google Drive
+  router.post('/backup/trigger', isAdmin, async (req, res) => {
+    try {
+      let credentials = req.user.oauth_credentials;
+      if (typeof credentials === 'string') {
+        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
+      }
+      if (!credentials || !credentials.access_token) {
+        return res.status(401).json({ error: 'Google authentication required' });
+      }
+
+      const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
+      const { triggerBackup } = await import('../services/backupService.js');
+      const result = await triggerBackup(pool, drive);
+
+      console.log(`Admin ${req.user.email} triggered backup: ${result.filename}`);
+      res.json(result);
     } catch (error) {
-      console.error('Error disconnecting spreadsheet:', error);
-      res.status(500).json({ error: 'Failed to disconnect spreadsheet' });
+      console.error('Error triggering backup:', error);
+      res.status(500).json({ error: 'Failed to create backup', message: error.message });
     }
   });
 
-  // Connect to an existing spreadsheet by ID
-  router.post('/sync/connect-spreadsheet', isAdmin, async (req, res) => {
+  // Get backup status
+  router.get('/backup/status', isAdmin, async (req, res) => {
     try {
-      const { spreadsheetId } = req.body;
-
-      if (!spreadsheetId || !spreadsheetId.trim()) {
-        return res.status(400).json({
-          error: 'Spreadsheet ID is required'
-        });
-      }
-
-      // Check if user has Google OAuth credentials
-      if (!req.user.oauth_credentials) {
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please authorize Google Drive access first'
-        });
-      }
-
-      // Verify we can access the spreadsheet
-      const sheets = createSheetsService(req.user.oauth_credentials);
-      try {
-        const response = await sheets.spreadsheets.get({
-          spreadsheetId: spreadsheetId.trim()
-        });
-
-        // Save the spreadsheet ID
-        const { setSpreadsheetId } = await import('../services/sheetsSync.js');
-        await setSpreadsheetId(pool, spreadsheetId.trim(), req.user.id);
-
-        console.log(`Admin ${req.user.email} connected to spreadsheet: ${spreadsheetId}`);
-        res.json({
-          success: true,
-          message: `Connected to spreadsheet: ${response.data.properties.title}`,
-          spreadsheet: {
-            id: spreadsheetId.trim(),
-            name: response.data.properties.title,
-            url: response.data.spreadsheetUrl
-          }
-        });
-      } catch (sheetsError) {
-        console.error('Failed to access spreadsheet:', sheetsError.message);
-        res.status(400).json({
-          error: 'Cannot access spreadsheet',
-          message: 'Make sure the spreadsheet was created by this app or you have access to it.'
-        });
-      }
+      const { getBackupStatus } = await import('../services/backupService.js');
+      const status = await getBackupStatus(pool);
+      res.json(status);
     } catch (error) {
-      console.error('Error connecting spreadsheet:', error);
-      res.status(500).json({
-        error: 'Failed to connect spreadsheet',
-        message: error.message
-      });
+      console.error('Error getting backup status:', error);
+      res.status(500).json({ error: 'Failed to get backup status' });
     }
   });
 
-  // Create a new app-owned spreadsheet
-  router.post('/sync/create-spreadsheet', isAdmin, async (req, res) => {
-    try {
-      // Check if user has Google OAuth credentials
-      if (!req.user.oauth_credentials) {
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to create a spreadsheet'
-        });
-      }
-
-      // Check if a spreadsheet already exists
-      const existingId = await getSpreadsheetId(pool);
-      if (existingId) {
-        return res.status(400).json({
-          error: 'Spreadsheet already exists',
-          message: 'A spreadsheet is already configured. Use Push to update it.'
-        });
-      }
-
-      const sheets = createSheetsService(req.user.oauth_credentials);
-      const drive = createDriveService(req.user.oauth_credentials);
-      const result = await createAppSpreadsheet(sheets, pool, req.user.id, drive);
-
-      // Automatically push all data to the new spreadsheet (including GeoJSON upload)
-      const destCount = await pushAllToSheets(sheets, pool, drive);
-      const actCount = await pushActivitiesToSheets(sheets, pool);
-      const erasCount = await pushErasToSheets(sheets, pool);
-      const surfacesCount = await pushSurfacesToSheets(sheets, pool);
-      const iconsCount = await pushIconsToSheets(sheets, pool);
-      const integrationCount = await pushIntegrationToSheets(sheets, pool);
-      const newsCount = await pushNewsToSheets(sheets, pool);
-      const eventsCount = await pushEventsToSheets(sheets, pool);
-
-      console.log(`Admin ${req.user.email} created spreadsheet: ${result.id} and pushed ${destCount} destinations, ${actCount} activities, ${erasCount} eras, ${surfacesCount} surfaces, ${iconsCount} icons, ${integrationCount} settings, ${newsCount} news, ${eventsCount} events`);
-      res.json({
-        success: true,
-        message: `Spreadsheet created and populated with ${destCount} destinations, ${actCount} activities, ${erasCount} eras, ${surfacesCount} surfaces, ${iconsCount} icons, ${integrationCount} settings, ${newsCount} news, ${eventsCount} events`,
-        spreadsheet: result,
-        pushed: {
-          destinations: destCount,
-          activities: actCount,
-          eras: erasCount,
-          surfaces: surfacesCount,
-          icons: iconsCount,
-          integration: integrationCount,
-          news: newsCount,
-          events: eventsCount
-        }
-      });
-    } catch (error) {
-      console.error('Error creating spreadsheet:', error);
-      res.status(500).json({
-        error: 'Failed to create spreadsheet',
-        message: error.message
-      });
-    }
-  });
-
-  // Push all data from database to Google Sheets (Destinations + Activities + Eras + Surfaces + Icons + Integration)
-  // Also uploads GeoJSON geometry to Drive for linear features
-  router.post('/sync/push', isAdmin, async (req, res) => {
-    try {
-      // Check if user has Google OAuth credentials
-      if (!req.user.oauth_credentials) {
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to sync data'
-        });
-      }
-
-      // Use refresh-enabled services to auto-refresh expired tokens
-      const sheets = await createSheetsServiceWithRefresh(req.user.oauth_credentials, pool, req.user.id);
-      const drive = await createDriveServiceWithRefresh(req.user.oauth_credentials, pool, req.user.id);
-
-      // Push Destinations (including GeoJSON upload for linear features)
-      const destCount = await pushAllToSheets(sheets, pool, drive);
-
-      // Push Activities
-      const actCount = await pushActivitiesToSheets(sheets, pool);
-
-      // Push Eras
-      const erasCount = await pushErasToSheets(sheets, pool);
-
-      // Push Surfaces
-      const surfacesCount = await pushSurfacesToSheets(sheets, pool);
-
-      // Push Icons
-      const iconsCount = await pushIconsToSheets(sheets, pool);
-
-      // Push Integration settings
-      const integrationCount = await pushIntegrationToSheets(sheets, pool);
-
-      // Push News
-      const newsCount = await pushNewsToSheets(sheets, pool);
-
-      // Push Events
-      const eventsCount = await pushEventsToSheets(sheets, pool);
-
-      console.log(`Admin ${req.user.email} pushed ${destCount} destinations, ${actCount} activities, ${erasCount} eras, ${surfacesCount} surfaces, ${iconsCount} icons, ${integrationCount} integration settings, ${newsCount} news, and ${eventsCount} events to Google Sheets`);
-      res.json({
-        success: true,
-        message: `Pushed ${destCount} destinations, ${actCount} activities, ${erasCount} eras, ${surfacesCount} surfaces, ${iconsCount} icons, ${newsCount} news, ${eventsCount} events to Google Sheets`,
-        destinations: destCount,
-        activities: actCount,
-        eras: erasCount,
-        surfaces: surfacesCount,
-        icons: iconsCount,
-        integration: integrationCount,
-        news: newsCount,
-        events: eventsCount
-      });
-    } catch (error) {
-      console.error('Error pushing to sheets:', error);
-      res.status(500).json({
-        error: 'Failed to push to Google Sheets',
-        message: error.message
-      });
-    }
-  });
-
-  // Pull all data from Google Sheets to database (Destinations + Activities + Eras + Surfaces + Icons)
-  // Also downloads icon SVGs from Google Drive if they have drive_file_id
-  router.post('/sync/pull', isAdmin, async (req, res) => {
-    try {
-      // Check if user has Google OAuth credentials
-      if (!req.user.oauth_credentials) {
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to sync data'
-        });
-      }
-
-      // Use refresh-enabled services to auto-refresh expired tokens
-      const sheets = await createSheetsServiceWithRefresh(req.user.oauth_credentials, pool, req.user.id);
-      const drive = await createDriveServiceWithRefresh(req.user.oauth_credentials, pool, req.user.id);
-
-      // Pull Integration settings first (includes Drive folder IDs needed for icon downloads)
-      const integrationCount = await pullIntegrationFromSheets(sheets, pool);
-
-      // Pull Destinations (includes downloading images from Drive to database)
-      const destCount = await pullAllFromSheets(sheets, pool, drive);
-
-      // Pull Activities
-      const actCount = await pullActivitiesFromSheets(sheets, pool);
-
-      // Pull Eras
-      const erasCount = await pullErasFromSheets(sheets, pool);
-
-      // Pull Surfaces
-      const surfacesCount = await pullSurfacesFromSheets(sheets, pool);
-
-      // Pull Icons (includes downloading SVG content from Drive)
-      const iconsCount = await pullIconsFromSheets(sheets, pool, drive);
-
-      // Pull News
-      const newsCount = await pullNewsFromSheets(sheets, pool);
-
-      // Pull Events
-      const eventsCount = await pullEventsFromSheets(sheets, pool);
-
-      // Clear any pending sync queue items since we just pulled fresh data from sheets
-      // These queued writes are now stale and would overwrite the fresh data
-      const queueResult = await pool.query('DELETE FROM sync_queue RETURNING id');
-      const clearedQueueCount = queueResult.rowCount;
-      if (clearedQueueCount > 0) {
-        console.log(`Cleared ${clearedQueueCount} stale items from sync queue after pull`);
-      }
-
-      console.log(`Admin ${req.user.email} pulled ${destCount} destinations, ${actCount} activities, ${erasCount} eras, ${surfacesCount} surfaces, ${iconsCount} icons, ${integrationCount} settings, ${newsCount} news, and ${eventsCount} events from Google Sheets`);
-      res.json({
-        success: true,
-        message: `Pulled ${destCount} destinations, ${actCount} activities, ${erasCount} eras, ${surfacesCount} surfaces, ${iconsCount} icons, ${integrationCount} settings, ${newsCount} news, ${eventsCount} events from Google Sheets`,
-        destinations: destCount,
-        activities: actCount,
-        eras: erasCount,
-        surfaces: surfacesCount,
-        icons: iconsCount,
-        integration: integrationCount,
-        news: newsCount,
-        events: eventsCount
-      });
-    } catch (error) {
-      console.error('Error pulling from sheets:', error);
-      res.status(500).json({
-        error: 'Failed to pull from Google Sheets',
-        message: error.message
-      });
-    }
-  });
-
-  // Process pending sync queue (push changes to sheets)
-  // Also adds any unsynced POIs to the queue before processing
-  router.post('/sync/process', isAdmin, async (req, res) => {
-    try {
-      // Check if user has Google OAuth credentials
-      if (!req.user.oauth_credentials) {
-        return res.status(401).json({
-          error: 'Google authentication required',
-          message: 'Please sign in with Google to sync data'
-        });
-      }
-
-      // First, add any unsynced or locally modified POIs to the queue that aren't already queued
-      const unsyncedPOIs = await pool.query(`
-        SELECT p.* FROM pois p
-        WHERE (p.synced = FALSE OR p.locally_modified = TRUE) AND (p.deleted IS NULL OR p.deleted = FALSE)
-        AND NOT EXISTS (
-          SELECT 1 FROM sync_queue sq
-          WHERE sq.table_name IN ('pois', 'destinations')
-          AND sq.record_id = p.id
-        )
-      `);
-
-      let queuedCount = 0;
-      for (const poi of unsyncedPOIs.rows) {
-        await queueSyncOperation(pool, 'UPDATE', 'pois', poi.id, {
-          name: poi.name,
-          latitude: poi.latitude,
-          longitude: poi.longitude,
-          poi_type: poi.poi_type,
-          brief_description: poi.brief_description,
-          historical_description: poi.historical_description,
-          era: poi.era,
-          property_owner: poi.property_owner,
-          primary_activities: poi.primary_activities,
-          surface: poi.surface,
-          pets: poi.pets,
-          difficulty: poi.difficulty,
-          length_miles: poi.length_miles,
-          image_url: poi.image_url,
-          image_drive_file_id: poi.image_drive_file_id,
-          geometry_drive_file_id: poi.geometry_drive_file_id
-        });
-        queuedCount++;
-      }
-
-      if (queuedCount > 0) {
-        console.log(`Added ${queuedCount} unsynced POIs to sync queue`);
-      }
-
-      const sheets = await createSheetsServiceWithRefresh(req.user.oauth_credentials, pool, req.user.id);
-      const drive = await createDriveServiceWithRefresh(req.user.oauth_credentials, pool, req.user.id);
-      const result = await processSyncQueue(sheets, pool, drive);
-
-      console.log(`Admin ${req.user.email} processed sync queue: ${result.processed} operations`);
-      res.json({
-        success: true,
-        message: `Processed ${result.processed} sync operations${queuedCount > 0 ? ` (including ${queuedCount} unsynced POIs)` : ''}`,
-        processed: result.processed,
-        errors: result.errors
-      });
-    } catch (error) {
-      console.error('Error processing sync queue:', error);
-      res.status(500).json({
-        error: 'Failed to process sync queue',
-        message: error.message
-      });
-    }
-  });
-
-  // Wipe the local database (delete all POIs)
+  // Wipe the local database (kept from old sync routes)
   router.delete('/sync/wipe-database', isAdmin, async (req, res) => {
     try {
-      // Delete all POIs
       const destResult = await pool.query('DELETE FROM pois RETURNING id');
       const destCount = destResult.rowCount;
 
-      // Clear sync queue
-      const queueResult = await pool.query('DELETE FROM sync_queue RETURNING id');
-      const queueCount = queueResult.rowCount;
-
-      // Clear sync status (except spreadsheet ID)
-      await pool.query("DELETE FROM sync_status WHERE key != 'sync_spreadsheet_id'");
-
-      console.log(`Admin ${req.user.email} wiped database: ${destCount} destinations, ${queueCount} queue items`);
+      console.log(`Admin ${req.user.email} wiped database: ${destCount} POIs`);
       res.json({
         success: true,
-        message: `Deleted ${destCount} destinations and ${queueCount} pending sync operations`,
-        deleted: {
-          destinations: destCount,
-          queueItems: queueCount
-        }
+        message: `Deleted ${destCount} POIs`,
+        deleted: { destinations: destCount }
       });
     } catch (error) {
       console.error('Error wiping database:', error);
       res.status(500).json({ error: 'Failed to wipe database' });
-    }
-  });
-
-  // Clear sync queue (discard pending changes)
-  router.delete('/sync/queue', isAdmin, async (req, res) => {
-    try {
-      const result = await pool.query('DELETE FROM sync_queue RETURNING id');
-      const count = result.rowCount;
-
-      console.log(`Admin ${req.user.email} cleared sync queue: ${count} operations discarded`);
-      res.json({
-        success: true,
-        message: `Cleared ${count} pending sync operations`,
-        count
-      });
-    } catch (error) {
-      console.error('Error clearing sync queue:', error);
-      res.status(500).json({ error: 'Failed to clear sync queue' });
     }
   });
 
@@ -2214,7 +1563,7 @@ export function createAdminRouter(pool) {
       await pool.query(
         `UPDATE pois
          SET image_mime_type = $1,
-             updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+             updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [req.file.mimetype, id]
       );
@@ -2330,7 +1679,7 @@ export function createAdminRouter(pool) {
       await pool.query(
         `UPDATE pois
          SET image_mime_type = $1,
-             updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+             updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [mimeType, id]
       );
@@ -2424,7 +1773,7 @@ export function createAdminRouter(pool) {
       await pool.query(
         `UPDATE pois
          SET image_data = NULL, image_mime_type = NULL, image_drive_file_id = NULL, immich_primary_asset_id = NULL,
-             updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+             updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [id]
       );
@@ -2539,36 +1888,6 @@ export function createAdminRouter(pool) {
     }
   });
 
-  // Update spreadsheet ID
-  router.put('/sync/spreadsheet-id', isAdmin, async (req, res) => {
-    try {
-      const { value } = req.body;
-
-      if (!value || !value.trim()) {
-        return res.status(400).json({ error: 'Spreadsheet ID is required' });
-      }
-
-      await pool.query(`
-        INSERT INTO admin_settings (key, value, updated_at)
-        VALUES ('sync_spreadsheet_id', $1, CURRENT_TIMESTAMP)
-        ON CONFLICT (key) DO UPDATE SET
-          value = EXCLUDED.value,
-          updated_at = CURRENT_TIMESTAMP
-      `, [value.trim()]);
-
-      console.log(`Admin ${req.user.email} updated spreadsheet ID`);
-
-      res.json({
-        success: true,
-        message: 'Updated spreadsheet ID',
-        value: value.trim()
-      });
-    } catch (error) {
-      console.error('Error updating spreadsheet ID:', error);
-      res.status(500).json({ error: 'Failed to update spreadsheet ID' });
-    }
-  });
-
   // ============================================
   // LINEAR FEATURES (Trails & Rivers) ENDPOINTS
   // ============================================
@@ -2609,8 +1928,8 @@ export function createAdminRouter(pool) {
         INSERT INTO pois (
           name, poi_type, geometry, property_owner, owner_id, brief_description,
           era_id, historical_description, primary_activities, surface, pets,
-          cell_signal, more_info_link, length_miles, difficulty, locally_modified
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, TRUE)
+          cell_signal, more_info_link, length_miles, difficulty
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
       `, [
         name, feature_type, JSON.stringify(geometry), property_owner, owner_id, brief_description,
@@ -2663,8 +1982,6 @@ export function createAdminRouter(pool) {
       }
 
       updates.push(`updated_at = CURRENT_TIMESTAMP`);
-      updates.push(`locally_modified = TRUE`);
-      updates.push(`synced = FALSE`);
       values.push(id);
 
       // Return all columns except geometry (which can be very large)
@@ -2676,15 +1993,12 @@ export function createAdminRouter(pool) {
                   surface, pets, cell_signal, more_info_link, length_miles, difficulty,
                   image_mime_type, image_drive_file_id, geometry_drive_file_id,
                   boundary_type, boundary_color, status_url, news_url, events_url,
-                  locally_modified, deleted, synced, created_at, updated_at
+                  deleted, created_at, updated_at
       `, values);
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Linear feature not found' });
       }
-
-      // Queue sync operation (only store essential data, not full geometry)
-      await queuePOISync('UPDATE', id, { id, name: result.rows[0].name, poi_type: result.rows[0].poi_type });
 
       console.log(`Admin ${req.user.email} updated linear feature ${id}`);
       res.json(result.rows[0]);
@@ -2700,7 +2014,7 @@ export function createAdminRouter(pool) {
       const { id } = req.params;
       const result = await pool.query(`
         UPDATE pois
-        SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+        SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING id, name
       `, [id]);
@@ -2708,9 +2022,6 @@ export function createAdminRouter(pool) {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Linear feature not found' });
       }
-
-      // Queue sync operation
-      await queuePOISync('DELETE', id, result.rows[0]);
 
       console.log(`Admin ${req.user.email} deleted linear feature ${id}`);
       res.json({ success: true, deleted: result.rows[0] });
@@ -2731,7 +2042,7 @@ export function createAdminRouter(pool) {
 
       const result = await pool.query(`
         UPDATE pois
-        SET image_data = $1, image_mime_type = $2, updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE
+        SET image_data = $1, image_mime_type = $2, updated_at = CURRENT_TIMESTAMP
         WHERE id = $3
         RETURNING id, name, image_mime_type
       `, [req.file.buffer, req.file.mimetype, id]);
@@ -2787,7 +2098,7 @@ export function createAdminRouter(pool) {
       await pool.query(
         `UPDATE pois
          SET image_data = $1, image_mime_type = $2,
-             updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE, synced = FALSE
+             updated_at = CURRENT_TIMESTAMP
          WHERE id = $3`,
         [buffer, mimeType, id]
       );
@@ -2843,7 +2154,7 @@ export function createAdminRouter(pool) {
       const result = await pool.query(`
         UPDATE pois
         SET image_data = NULL, image_mime_type = NULL, image_drive_file_id = NULL,
-            updated_at = CURRENT_TIMESTAMP, locally_modified = TRUE
+            updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING id, name
       `, [id]);
