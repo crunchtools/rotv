@@ -315,6 +315,22 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
+    // Load cookies for authenticated sites (Twitter/X)
+    let cookies = null;
+    if (statusUrl.includes('x.com') || statusUrl.includes('twitter.com')) {
+      try {
+        const cookieResult = await pool.query(
+          `SELECT value FROM admin_settings WHERE key = 'twitter_cookies'`
+        );
+        if (cookieResult.rows.length > 0 && cookieResult.rows[0].value) {
+          cookies = JSON.parse(cookieResult.rows[0].value);
+          console.log(`[Trail Status] Loaded ${cookies.length} Twitter cookies`);
+        }
+      } catch (cookieErr) {
+        console.log(`[Trail Status] No Twitter cookies available: ${cookieErr.message}`);
+      }
+    }
+
     // Render status page with Playwright + Readability
     console.log(`[Trail Status] Rendering status page: ${statusUrl}`);
     updateProgress(poi.id, {
@@ -325,7 +341,8 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     const rendered = await extractPageContent(statusUrl, {
       maxLength: 15000,
-      dynamicContentWait: 3000
+      dynamicContentWait: 3000,
+      cookies
     });
 
     if (!rendered.reachable || !rendered.markdown) {
