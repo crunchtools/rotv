@@ -7,7 +7,6 @@
  */
 
 import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats } from './aiSearchFactory.js';
-import { pushNewsToSheets, pushEventsToSheets } from './sheetsSync.js';
 import { extractPageContent } from './contentExtractor.js';
 import { calculateSimilarity } from './textUtils.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
@@ -650,7 +649,7 @@ Return ONLY valid JSON:
 For LISTING/HYBRID: populate detail_links with URLs to individual ${contentType} pages (max 15).
 For DETAIL: detail_links should be empty.`;
 
-  const result = await generateTextWithCustomPrompt(pool, prompt, sheets, {
+  const result = await generateTextWithCustomPrompt(pool, prompt, {
     useSearchGrounding: false,
     forceProvider: 'gemini'
   });
@@ -1142,7 +1141,7 @@ Extract ALL news from this content using these relaxed criteria.`;
     });
 
     debugLog(`[AI Research POI ${poi.id}] ====== BEFORE AI CALL (provider=${initialProvider}, searchGrounding=${useSearchGrounding}) ======`);
-    const aiResult = await generateTextWithCustomPrompt(pool, prompt, sheets, aiOptions);
+    const aiResult = await generateTextWithCustomPrompt(pool, prompt, aiOptions);
     debugLog(`[AI Research POI ${poi.id}] ====== AFTER AI CALL ======`);
     debugLog(`[AI Research POI ${poi.id}] aiResult: ${JSON.stringify({
       type: typeof aiResult,
@@ -1480,7 +1479,7 @@ IMPORTANT:
 - Return {"news": []} if no relevant external news found
 - All dates must be in ISO 8601 format (YYYY-MM-DD)`;
 
-        const googleNewsResult = await generateTextWithCustomPrompt(pool, googleNewsPrompt, sheets);
+        const googleNewsResult = await generateTextWithCustomPrompt(pool, googleNewsPrompt);
         const googleNewsResponse = googleNewsResult.response;
         console.log(`[AI Research] Received Google News response (${googleNewsResponse.length} chars) from ${googleNewsResult.provider}`);
 
@@ -2236,17 +2235,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       });
     }
 
-    // Sync to Google Sheets if available
-    if (sheets && (newsFound > 0 || eventsFound > 0)) {
-      try {
-        console.log(`[Job ${jobId}] Syncing news and events to Google Sheets...`);
-        await pushNewsToSheets(sheets, pool);
-        await pushEventsToSheets(sheets, pool);
-        console.log(`[Job ${jobId}] Google Sheets sync completed`);
-      } catch (syncError) {
-        console.error(`[Job ${jobId}] Google Sheets sync failed:`, syncError.message);
-      }
-    }
   } catch (error) {
     console.error(`[Job ${jobId}] Failed:`, error);
     await pool.query(`

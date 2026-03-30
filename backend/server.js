@@ -37,7 +37,6 @@ import {
   getLatestTrailStatus,
   processTrailStatusCollectionJob
 } from './services/trailStatusService.js';
-import { createSheetsService } from './services/sheetsSync.js';
 import imageServerClient from './services/imageServerClient.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { startMcpServer } from './services/mcpServer.js';
@@ -255,14 +254,9 @@ async function initDatabase() {
         difficulty VARCHAR(50),
 
         -- Image storage
-        image_data BYTEA,
-        image_mime_type VARCHAR(50),
         image_drive_file_id VARCHAR(255),
 
-        -- Sync fields
-        locally_modified BOOLEAN DEFAULT FALSE,
         deleted BOOLEAN DEFAULT FALSE,
-        synced BOOLEAN DEFAULT FALSE,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -309,12 +303,12 @@ async function initDatabase() {
       const migrated = await client.query(`
         INSERT INTO pois (name, poi_type, latitude, longitude, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
-                          cell_signal, more_info_link, image_data, image_mime_type, image_drive_file_id,
-                          locally_modified, deleted, synced, created_at, updated_at)
+                          cell_signal, more_info_link, image_drive_file_id,
+                          deleted, created_at, updated_at)
         SELECT name, 'point', latitude, longitude, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
-               cell_signal, more_info_link, image_data, image_mime_type, image_drive_file_id,
-               COALESCE(locally_modified, FALSE), COALESCE(deleted, FALSE), COALESCE(synced, FALSE),
+               cell_signal, more_info_link, image_drive_file_id,
+               COALESCE(deleted, FALSE),
                created_at, updated_at
         FROM destinations
         WHERE latitude IS NOT NULL AND longitude IS NOT NULL
@@ -338,13 +332,13 @@ async function initDatabase() {
         INSERT INTO pois (name, poi_type, geometry, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
                           cell_signal, more_info_link, length_miles, difficulty,
-                          image_data, image_mime_type, image_drive_file_id,
-                          locally_modified, deleted, synced, created_at, updated_at)
+                          image_drive_file_id,
+                          deleted, created_at, updated_at)
         SELECT name, feature_type, geometry, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
                cell_signal, more_info_link, length_miles, difficulty,
-               image_data, image_mime_type, image_drive_file_id,
-               COALESCE(locally_modified, FALSE), COALESCE(deleted, FALSE), COALESCE(synced, FALSE),
+               image_drive_file_id,
+               COALESCE(deleted, FALSE),
                created_at, updated_at
         FROM linear_features
         ON CONFLICT (name) DO UPDATE SET
@@ -357,27 +351,6 @@ async function initDatabase() {
         console.log(`Migrated ${migrated.rowCount} linear features to pois table`);
       }
     }
-
-    // Sync queue table for async operations
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sync_queue (
-        id SERIAL PRIMARY KEY,
-        operation VARCHAR(20) NOT NULL,
-        table_name VARCHAR(50) NOT NULL,
-        record_id INTEGER NOT NULL,
-        data JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Sync status table for tracking sync state
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS sync_status (
-        key VARCHAR(255) PRIMARY KEY,
-        value TEXT NOT NULL,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
 
     // Users table
     await client.query(`
@@ -732,11 +705,6 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_poi_assoc_physical ON poi_associations(physical_poi_id)
     `);
 
-    // Legacy: Immich asset ID column — kept for migration, will be dropped after image server migration (#97)
-    await client.query(`
-      ALTER TABLE pois ADD COLUMN IF NOT EXISTS immich_primary_asset_id VARCHAR(255)
-    `);
-
     // ============================================================
     // Moderation Queue (#106) — columns, table, views, indexes
     // ============================================================
@@ -862,9 +830,9 @@ app.get('/api/pois', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
-             p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
+             p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
       LEFT JOIN eras e ON p.era_id = e.id
@@ -894,9 +862,9 @@ app.get('/api/pois/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
-             p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
+             p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1083,8 +1051,8 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
       SELECT DISTINCT vp.id, vp.name, vp.poi_type, vp.property_owner,
              vp.brief_description, vp.era_id, e.name as era_name, vp.era, vp.historical_description,
              vp.primary_activities, vp.surface, vp.pets, vp.cell_signal,
-             vp.more_info_link, vp.image_mime_type, vp.immich_primary_asset_id, vp.image_drive_file_id,
-             vp.locally_modified, vp.deleted, vp.synced,
+             vp.more_info_link, vp.image_drive_file_id,
+             vp.deleted,
              vp.created_at, vp.updated_at
       FROM pois vp
       JOIN poi_associations a ON vp.id = a.virtual_poi_id
@@ -1115,8 +1083,8 @@ app.get('/api/destinations', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
-             p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
+             p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
+             p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1139,8 +1107,8 @@ app.get('/api/destinations/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
-             p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
+             p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
+             p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1165,9 +1133,9 @@ app.get('/api/linear-features', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
+             p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1189,9 +1157,9 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_mime_type, p.immich_primary_asset_id, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.image_drive_file_id,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.locally_modified, p.deleted, p.synced, p.created_at, p.updated_at
+             p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1551,7 +1519,7 @@ app.get('/share/destination/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const poiQuery = await pool.query(
-      `SELECT id, name, brief_description, image_mime_type FROM pois WHERE id = $1`,
+      `SELECT id, name, brief_description FROM pois WHERE id = $1`,
       [id]
     );
 
@@ -1562,7 +1530,7 @@ app.get('/share/destination/:id', async (req, res) => {
     const poi = poiQuery.rows[0];
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
     const appUrl = `${baseUrl}/?poi=${encodeURIComponent(poi.name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'))}`;
-    const imageUrl = poi.image_mime_type ? `${baseUrl}/api/pois/${poi.id}/thumbnail` : `${baseUrl}/icons/default.svg`;
+    const imageUrl = `${baseUrl}/api/pois/${poi.id}/thumbnail`;
     const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
 
     // Generate HTML with OpenGraph meta tags
@@ -1617,7 +1585,7 @@ app.get('/share/linear-feature/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const featureQuery = await pool.query(
-      `SELECT id, name, poi_type, brief_description, image_mime_type FROM pois WHERE id = $1`,
+      `SELECT id, name, poi_type, brief_description FROM pois WHERE id = $1`,
       [id]
     );
 
@@ -1628,7 +1596,7 @@ app.get('/share/linear-feature/:id', async (req, res) => {
     const feature = featureQuery.rows[0];
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
     const appUrl = `${baseUrl}/?feature=${encodeURIComponent(feature.name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'))}`;
-    const imageUrl = feature.image_mime_type ? `${baseUrl}/api/pois/${feature.id}/thumbnail` : `${baseUrl}/icons/layers/${feature.poi_type === 'trail' ? 'trails' : 'rivers'}.svg`;
+    const imageUrl = `${baseUrl}/api/pois/${feature.id}/thumbnail`;
     const description = feature.brief_description || `Explore the ${feature.name} at Cuyahoga Valley National Park`;
 
     // Generate HTML with OpenGraph meta tags
@@ -1702,7 +1670,7 @@ app.use(async (req, res, next) => {
     try {
       // Look up POI by matching slug against name
       const poisQuery = await pool.query(`
-        SELECT id, name, poi_type, brief_description, image_mime_type
+        SELECT id, name, poi_type, brief_description
         FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
       `);
@@ -1713,9 +1681,7 @@ app.use(async (req, res, next) => {
       if (poi) {
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
         const appUrl = `${baseUrl}/?poi=${poiSlug}`;
-        const imageUrl = poi.image_mime_type
-          ? `${baseUrl}/api/pois/${poi.id}/thumbnail`
-          : `${baseUrl}/icons/default.svg`;
+        const imageUrl = `${baseUrl}/api/pois/${poi.id}/thumbnail`;
         const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
 
         // Read index.html and inject POI-specific OG tags
