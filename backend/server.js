@@ -1891,8 +1891,8 @@ async function start() {
       await processTrailStatusCollectionJob(pool, jobId, poiIds);
     });
 
-    // Schedule trail status collection once daily at 6 AM Eastern (same as news collection)
-    const trailStatusInterval = '0 6 * * *';  // Daily at 6 AM
+    // Schedule trail status collection every 30 minutes (Gemini Flash is essentially free)
+    const trailStatusInterval = '*/30 * * * *';
     await scheduleTrailStatusCollection(trailStatusInterval);
 
     // Register content moderation handler (processes individual items)
