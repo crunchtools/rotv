@@ -7,13 +7,17 @@ function SyncSettings({ onDataRefresh }) {
   const [message, setMessage] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [wiping, setWiping] = useState(false);
+  const [backupsList, setBackupsList] = useState(null);
+  const [showRestoreList, setShowRestoreList] = useState(false);
 
   // Editable Drive ID states
   const [driveIdEdits, setDriveIdEdits] = useState({
     icons: '',
     images: '',
-    geospatial: ''
+    geospatial: '',
+    database: ''
   });
   const [savingDriveId, setSavingDriveId] = useState(null);
 
@@ -57,7 +61,8 @@ function SyncSettings({ onDataRefresh }) {
       setDriveIdEdits({
         icons: syncStatus.drive?.folders?.icons?.id || '',
         images: syncStatus.drive?.folders?.images?.id || '',
-        geospatial: syncStatus.drive?.folders?.geospatial?.id || ''
+        geospatial: syncStatus.drive?.folders?.geospatial?.id || '',
+        database: syncStatus.drive?.folders?.database?.id || ''
       });
     }
   }, [syncStatus]);
@@ -76,7 +81,8 @@ function SyncSettings({ onDataRefresh }) {
       const keyMap = {
         icons: 'icons_folder_id',
         images: 'images_folder_id',
-        geospatial: 'geospatial_folder_id'
+        geospatial: 'geospatial_folder_id',
+        database: 'backups_folder_id'
       };
       const response = await fetch(`/api/admin/drive/settings/${keyMap[key]}`, {
         method: 'PUT',
@@ -130,19 +136,66 @@ function SyncSettings({ onDataRefresh }) {
     }
   };
 
-  const handleWipeDatabase = async () => {
-    const firstConfirm = confirm(
-      'WARNING: This will permanently delete ALL destinations from the local database.\n\n' +
-      'This action cannot be undone!\n\n' +
-      'Are you sure you want to continue?'
-    );
-    if (!firstConfirm) return;
+  const handleShowRestore = async () => {
+    if (showRestoreList) {
+      setShowRestoreList(false);
+      return;
+    }
 
-    const secondConfirm = confirm(
-      'FINAL WARNING: You are about to delete all local data.\n\n' +
-      'Click OK to confirm you want to wipe the database.'
-    );
-    if (!secondConfirm) return;
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/admin/backup/list', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const backups = await response.json();
+        setBackupsList(backups);
+        setShowRestoreList(true);
+      } else {
+        setError('Failed to list backups');
+      }
+    } catch {
+      setError('Failed to list backups');
+    }
+  };
+
+  const handleRestore = async (fileId, filename) => {
+    if (!confirm(`Restore database from "${filename}"?\n\nThis will overwrite current data.`)) {
+      return;
+    }
+
+    setRestoring(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/admin/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ fileId })
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        setMessage('Database restored successfully');
+        setShowRestoreList(false);
+        if (onDataRefresh) await onDataRefresh();
+      } else {
+        setError(result.error || 'Restore failed');
+      }
+    } catch {
+      setError('Failed to restore database');
+    } finally {
+      setRestoring(false);
+    }
+  };
+
+  const handleWipeDatabase = async () => {
+    if (!confirm('WARNING: This will permanently delete ALL POIs from the local database.\n\nThis action cannot be undone!')) return;
+    if (!confirm('FINAL WARNING: Click OK to confirm you want to wipe the database.')) return;
 
     setWiping(true);
     setMessage(null);
@@ -158,9 +211,7 @@ function SyncSettings({ onDataRefresh }) {
       if (response.ok) {
         setMessage(result.message);
         fetchStatus();
-        if (onDataRefresh) {
-          await onDataRefresh();
-        }
+        if (onDataRefresh) await onDataRefresh();
       } else {
         setError(result.error || 'Failed to wipe database');
       }
@@ -173,34 +224,65 @@ function SyncSettings({ onDataRefresh }) {
 
   const formatDate = (isoString) => {
     if (!isoString) return 'Never';
-    const date = new Date(isoString);
-    return date.toLocaleString();
+    return new Date(isoString).toLocaleString();
+  };
+
+  const formatSize = (bytes) => {
+    if (!bytes) return '';
+    const mb = parseInt(bytes) / (1024 * 1024);
+    return mb >= 1 ? `${mb.toFixed(1)} MB` : `${(parseInt(bytes) / 1024).toFixed(0)} KB`;
   };
 
   if (loading) {
     return (
       <div className="sync-settings">
-        <h3>Google Drive Integration</h3>
+        <h3>Google Drive</h3>
         <p>Loading status...</p>
       </div>
     );
   }
 
+  const driveIdRow = (key, label, icon, folderData) => (
+    <div className="drive-id-row">
+      <div className="drive-id-label">
+        <span className="folder-icon">{icon}</span>
+        <span>{label}</span>
+        {folderData?.file_count !== undefined && (
+          <span className="file-count">({folderData.file_count})</span>
+        )}
+      </div>
+      <input
+        type="text"
+        className="drive-id-input"
+        value={driveIdEdits[key]}
+        onChange={(e) => handleDriveIdChange(key, e.target.value)}
+        placeholder="Enter folder ID"
+      />
+      <button
+        className="drive-id-save-btn"
+        onClick={() => handleSaveDriveId(key)}
+        disabled={savingDriveId === key || driveIdEdits[key] === (folderData?.id || '')}
+      >
+        {savingDriveId === key ? '...' : 'Save'}
+      </button>
+      {folderData?.url ? (
+        <a href={folderData.url} target="_blank" rel="noopener noreferrer" className="drive-id-link" title="Open folder in Drive">&#8599;</a>
+      ) : <span className="drive-id-link-placeholder" />}
+    </div>
+  );
+
   return (
     <div className="sync-settings">
-      <h3>Google Drive Integration</h3>
-      <p className="sync-description">
-        Drive folders store icons, images, geospatial data, and database backups.
-      </p>
+      <h3>Google Drive</h3>
 
       {error && <div className="sync-error">{error}</div>}
       {message && <div className="sync-success">{message}</div>}
 
-      {/* Backup Tile */}
-      {syncStatus?.drive_access_verified && (
-        <div className="sync-unified-tile">
+      {/* Google Drive — folders + backup/restore */}
+      {syncStatus?.drive?.configured && (
+        <div className="sync-drive-info">
           <div className="sync-tile-header">
-            <h4>Database Backup</h4>
+            <h4>Folders</h4>
             <button
               className={`refresh-btn${refreshing ? ' spinning' : ''}`}
               onClick={handleManualRefresh}
@@ -210,35 +292,8 @@ function SyncSettings({ onDataRefresh }) {
               &#8635;
             </button>
           </div>
-
-          <div className="sync-status-row">
-            <div className="sync-status-item">
-              <label>Last Backup</label>
-              <span>{formatDate(syncStatus.last_backup)}</span>
-            </div>
-          </div>
-
-          <div className="sync-buttons-grid">
-            <div className="sync-button-card">
-              <button
-                className="sync-btn sync-now-btn"
-                onClick={handleBackup}
-                disabled={backingUp}
-              >
-                {backingUp ? 'Backing up...' : 'Backup Now'}
-              </button>
-              <p className="button-description">Run pg_dump and upload to Drive Backups folder</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Google Drive Storage */}
-      {syncStatus?.drive?.configured && (
-        <div className="sync-drive-info">
-          <h4>Google Drive Storage</h4>
           <p className="drive-info-description">
-            Edit Drive IDs to connect to existing folders.
+            Edit folder IDs to connect to existing Drive folders.
           </p>
 
           {syncStatus.drive.folders.root && (
@@ -256,108 +311,69 @@ function SyncSettings({ onDataRefresh }) {
           )}
 
           <div className="drive-id-list">
-            {/* Icons folder */}
-            <div className="drive-id-row">
-              <div className="drive-id-label">
-                <span className="folder-icon">&#127912;</span>
-                <span>Icons</span>
-                {syncStatus.drive.folders.icons?.file_count !== undefined && (
-                  <span className="file-count">({syncStatus.drive.folders.icons.file_count})</span>
-                )}
-              </div>
-              <input
-                type="text"
-                className="drive-id-input"
-                value={driveIdEdits.icons}
-                onChange={(e) => handleDriveIdChange('icons', e.target.value)}
-                placeholder="Enter folder ID"
-              />
-              <button
-                className="drive-id-save-btn"
-                onClick={() => handleSaveDriveId('icons')}
-                disabled={savingDriveId === 'icons' || driveIdEdits.icons === (syncStatus.drive.folders.icons?.id || '')}
-              >
-                {savingDriveId === 'icons' ? '...' : 'Save'}
-              </button>
-              {syncStatus.drive.folders.icons?.url ? (
-                <a href={syncStatus.drive.folders.icons.url} target="_blank" rel="noopener noreferrer" className="drive-id-link" title="Open folder in Drive">&#8599;</a>
-              ) : <span className="drive-id-link-placeholder" />}
-            </div>
-
-            {/* Images folder */}
-            <div className="drive-id-row">
-              <div className="drive-id-label">
-                <span className="folder-icon">&#128444;&#65039;</span>
-                <span>Images</span>
-                {syncStatus.drive.folders.images?.file_count !== undefined && (
-                  <span className="file-count">({syncStatus.drive.folders.images.file_count})</span>
-                )}
-              </div>
-              <input
-                type="text"
-                className="drive-id-input"
-                value={driveIdEdits.images}
-                onChange={(e) => handleDriveIdChange('images', e.target.value)}
-                placeholder="Enter folder ID"
-              />
-              <button
-                className="drive-id-save-btn"
-                onClick={() => handleSaveDriveId('images')}
-                disabled={savingDriveId === 'images' || driveIdEdits.images === (syncStatus.drive.folders.images?.id || '')}
-              >
-                {savingDriveId === 'images' ? '...' : 'Save'}
-              </button>
-              {syncStatus.drive.folders.images?.url ? (
-                <a href={syncStatus.drive.folders.images.url} target="_blank" rel="noopener noreferrer" className="drive-id-link" title="Open folder in Drive">&#8599;</a>
-              ) : <span className="drive-id-link-placeholder" />}
-            </div>
-
-            {/* Geospatial folder */}
-            <div className="drive-id-row">
-              <div className="drive-id-label">
-                <span className="folder-icon">&#128506;&#65039;</span>
-                <span>Geospatial</span>
-                {syncStatus.drive.folders.geospatial?.file_count !== undefined && (
-                  <span className="file-count">({syncStatus.drive.folders.geospatial.file_count})</span>
-                )}
-              </div>
-              <input
-                type="text"
-                className="drive-id-input"
-                value={driveIdEdits.geospatial}
-                onChange={(e) => handleDriveIdChange('geospatial', e.target.value)}
-                placeholder="Enter folder ID"
-              />
-              <button
-                className="drive-id-save-btn"
-                onClick={() => handleSaveDriveId('geospatial')}
-                disabled={savingDriveId === 'geospatial' || driveIdEdits.geospatial === (syncStatus.drive.folders.geospatial?.id || '')}
-              >
-                {savingDriveId === 'geospatial' ? '...' : 'Save'}
-              </button>
-              {syncStatus.drive.folders.geospatial?.url ? (
-                <a href={syncStatus.drive.folders.geospatial.url} target="_blank" rel="noopener noreferrer" className="drive-id-link" title="Open folder in Drive">&#8599;</a>
-              ) : <span className="drive-id-link-placeholder" />}
-            </div>
-
-            {/* Backups folder (read-only display) */}
-            {syncStatus.drive.folders.backups && (
-              <div className="drive-id-row">
-                <div className="drive-id-label">
-                  <span className="folder-icon">&#128190;</span>
-                  <span>Backups</span>
-                </div>
-                <input
-                  type="text"
-                  className="drive-id-input"
-                  value={syncStatus.drive.folders.backups.id}
-                  disabled
-                />
-                <button className="drive-id-save-btn" disabled>-</button>
-                <a href={syncStatus.drive.folders.backups.url} target="_blank" rel="noopener noreferrer" className="drive-id-link" title="Open folder in Drive">&#8599;</a>
-              </div>
-            )}
+            {driveIdRow('icons', 'Icons', '\u{1F3A8}', syncStatus.drive.folders.icons)}
+            {driveIdRow('images', 'Images', '\u{1F5BC}\uFE0F', syncStatus.drive.folders.images)}
+            {driveIdRow('geospatial', 'Geospatial', '\u{1F5FA}\uFE0F', syncStatus.drive.folders.geospatial)}
+            {driveIdRow('database', 'Database', '\u{1F4BE}', syncStatus.drive.folders.database)}
           </div>
+
+          {/* Backup & Restore controls */}
+          {syncStatus.drive_access_verified && (
+            <div className="backup-controls">
+              <div className="sync-status-row">
+                <div className="sync-status-item">
+                  <label>Last Backup</label>
+                  <span>{formatDate(syncStatus.last_backup)}</span>
+                </div>
+              </div>
+
+              <div className="sync-buttons-grid">
+                <div className="sync-button-card">
+                  <button
+                    className="sync-btn push-btn"
+                    onClick={handleBackup}
+                    disabled={backingUp || restoring}
+                  >
+                    {backingUp ? 'Backing up...' : 'Backup'}
+                  </button>
+                  <p className="button-description">pg_dump to Database folder</p>
+                </div>
+                <div className="sync-button-card">
+                  <button
+                    className="sync-btn pull-btn"
+                    onClick={handleShowRestore}
+                    disabled={restoring || backingUp}
+                  >
+                    {restoring ? 'Restoring...' : 'Restore'}
+                  </button>
+                  <p className="button-description">Restore from a backup file</p>
+                </div>
+              </div>
+
+              {showRestoreList && backupsList && (
+                <div className="restore-list">
+                  {backupsList.length === 0 ? (
+                    <p className="restore-empty">No backups found in Database folder.</p>
+                  ) : (
+                    backupsList.map(backup => (
+                      <div key={backup.id} className="restore-item">
+                        <span className="restore-name">{backup.name}</span>
+                        <span className="restore-size">{formatSize(backup.size)}</span>
+                        <span className="restore-date">{formatDate(backup.createdTime)}</span>
+                        <button
+                          className="sync-btn-small"
+                          onClick={() => handleRestore(backup.id, backup.name)}
+                          disabled={restoring}
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -374,9 +390,6 @@ function SyncSettings({ onDataRefresh }) {
         >
           {wiping ? 'Wiping...' : 'Wipe Local Database'}
         </button>
-        <p className="danger-hint">
-          Creates a backup before wiping if Drive is connected.
-        </p>
       </div>
     </div>
   );
