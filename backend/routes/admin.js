@@ -1405,9 +1405,9 @@ export function createAdminRouter(pool) {
               file_count: fileCounts.geospatialCount,
               url: `https://drive.google.com/drive/folders/${geospatialFolderId}`
             } : null,
-            backups: backupsFolderId ? {
+            database: backupsFolderId ? {
               id: backupsFolderId,
-              name: 'Backups',
+              name: 'Database',
               url: `https://drive.google.com/drive/folders/${backupsFolderId}`
             } : null
           }
@@ -1473,7 +1473,56 @@ export function createAdminRouter(pool) {
     }
   });
 
-  // Wipe the local database (kept from old sync routes)
+  // List available backups
+  router.get('/backup/list', isAdmin, async (req, res) => {
+    try {
+      let credentials = req.user.oauth_credentials;
+      if (typeof credentials === 'string') {
+        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
+      }
+      if (!credentials || !credentials.access_token) {
+        return res.status(401).json({ error: 'Google authentication required' });
+      }
+
+      const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
+      const { listBackups } = await import('../services/backupService.js');
+      const backups = await listBackups(drive, pool);
+      res.json(backups);
+    } catch (error) {
+      console.error('Error listing backups:', error);
+      res.status(500).json({ error: 'Failed to list backups' });
+    }
+  });
+
+  // Restore database from a backup
+  router.post('/backup/restore', isAdmin, async (req, res) => {
+    try {
+      const { fileId } = req.body;
+      if (!fileId) {
+        return res.status(400).json({ error: 'fileId is required' });
+      }
+
+      let credentials = req.user.oauth_credentials;
+      if (typeof credentials === 'string') {
+        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
+      }
+      if (!credentials || !credentials.access_token) {
+        return res.status(401).json({ error: 'Google authentication required' });
+      }
+
+      const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
+      const { restoreBackup } = await import('../services/backupService.js');
+      await restoreBackup(pool, drive, fileId);
+
+      console.log(`Admin ${req.user.email} restored database from backup ${fileId}`);
+      res.json({ success: true, message: 'Database restored successfully' });
+    } catch (error) {
+      console.error('Error restoring backup:', error);
+      res.status(500).json({ error: 'Failed to restore backup', message: error.message });
+    }
+  });
+
+  // Wipe the local database
   router.delete('/sync/wipe-database', isAdmin, async (req, res) => {
     try {
       const destResult = await pool.query('DELETE FROM pois RETURNING id');

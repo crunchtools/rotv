@@ -2,7 +2,7 @@ import { spawn } from 'child_process';
 import { Readable } from 'stream';
 import { getDriveSetting, setDriveSetting } from './driveImageService.js';
 
-const BACKUPS_FOLDER_NAME = 'Backups';
+const BACKUPS_FOLDER_NAME = 'Database';
 
 /**
  * Ensure the Backups folder exists in Drive under the root ROTV folder
@@ -31,7 +31,7 @@ async function ensureBackupsFolder(drive, pool) {
     throw new Error('Root Drive folder not configured. Set up Drive folders first.');
   }
 
-  console.log('Creating Backups folder...');
+  console.log('Creating Database folder...');
   const response = await drive.files.create({
     requestBody: {
       name: BACKUPS_FOLDER_NAME,
@@ -111,6 +111,71 @@ export async function triggerBackup(pool, drive) {
     driveFileId,
     timestamp: now
   };
+}
+
+/**
+ * List available backups in the Database folder
+ */
+export async function listBackups(drive, pool) {
+  const backupsFolderId = await getDriveSetting(pool, 'backups_folder_id');
+  if (!backupsFolderId) return [];
+
+  try {
+    const response = await drive.files.list({
+      q: `'${backupsFolderId}' in parents and trashed = false`,
+      fields: 'files(id,name,size,createdTime)',
+      orderBy: 'createdTime desc',
+      pageSize: 20
+    });
+    return response.data.files || [];
+  } catch (error) {
+    console.error('Error listing backups:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Restore a database from a Drive backup file
+ */
+export async function restoreBackup(pool, drive, fileId) {
+  // Download the SQL dump from Drive
+  const response = await drive.files.get(
+    { fileId, alt: 'media' },
+    { responseType: 'text' }
+  );
+
+  const sqlDump = response.data;
+  if (!sqlDump || typeof sqlDump !== 'string') {
+    throw new Error('Downloaded file is empty or not valid SQL');
+  }
+
+  const pgHost = process.env.PGHOST || 'localhost';
+  const pgPort = process.env.PGPORT || '5432';
+  const pgDatabase = process.env.PGDATABASE || 'rotv';
+  const pgUser = process.env.PGUSER || 'rotv';
+
+  // Run psql to restore — drop and recreate via pg_dump's output
+  return new Promise((resolve, reject) => {
+    const proc = spawn('psql', ['-h', pgHost, '-p', pgPort, '-U', pgUser, pgDatabase], {
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    let stderr = '';
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.stdin.write(sqlDump);
+    proc.stdin.end();
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        console.error('[Restore] psql stderr:', stderr);
+        return reject(new Error(`psql exited with code ${code}: ${stderr.slice(0, 500)}`));
+      }
+      console.log('[Restore] Database restored successfully');
+      resolve({ success: true });
+    });
+    proc.on('error', reject);
+  });
 }
 
 /**
