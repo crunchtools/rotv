@@ -119,10 +119,11 @@ function registerTools(server, pool, boss) {
         SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
                n.published_at, n.moderation_status, n.confidence_score, n.content_source,
                n.publication_date, n.date_confidence, n.created_at,
-               COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
-                         FROM poi_news_urls u WHERE u.news_id = n.id), '[]'::json) AS additional_urls
+               COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
         FROM poi_news n
+        LEFT JOIN poi_news_urls u ON u.news_id = n.id
         WHERE n.poi_id = $1
+        GROUP BY n.id
         ORDER BY n.created_at DESC
         LIMIT $2
       `, [poi_id, limit]);
@@ -142,10 +143,11 @@ function registerTools(server, pool, boss) {
         SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
                e.location_details, e.source_url, e.moderation_status, e.confidence_score, e.content_source,
                e.publication_date, e.date_confidence, e.created_at,
-               COALESCE((SELECT json_agg(json_build_object('url', u.url, 'source_name', u.source_name))
-                         FROM poi_event_urls u WHERE u.event_id = e.id), '[]'::json) AS additional_urls
+               COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
         FROM poi_events e
+        LEFT JOIN poi_event_urls u ON u.event_id = e.id
         WHERE e.poi_id = $1
+        GROUP BY e.id
         ORDER BY e.start_date DESC
         LIMIT $2
       `, [poi_id, limit]);

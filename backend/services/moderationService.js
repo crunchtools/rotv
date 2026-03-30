@@ -745,19 +745,25 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
       : [status];
 
   const baseQuery = `
-    SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
-           moderation_status, confidence_score, ai_reasoning, ai_issues,
-           submitted_by, moderated_by, moderated_at, created_at, source_url,
-           content_source, publication_date, date_confidence,
-           (SELECT COUNT(*) FROM poi_news_urls WHERE news_id = poi_news.id)::int AS additional_url_count
-    FROM poi_news WHERE moderation_status = ANY($1)
+    SELECT n.id, 'news' AS content_type, n.poi_id, n.title, n.summary AS description,
+           n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues,
+           n.submitted_by, n.moderated_by, n.moderated_at, n.created_at, n.source_url,
+           n.content_source, n.publication_date, n.date_confidence,
+           COUNT(u.id)::int AS additional_url_count
+    FROM poi_news n
+    LEFT JOIN poi_news_urls u ON u.news_id = n.id
+    WHERE n.moderation_status = ANY($1)
+    GROUP BY n.id
     UNION ALL
-    SELECT id, 'event' AS content_type, poi_id, title, description,
-           moderation_status, confidence_score, ai_reasoning, ai_issues,
-           submitted_by, moderated_by, moderated_at, created_at, source_url,
-           content_source, publication_date, date_confidence,
-           (SELECT COUNT(*) FROM poi_event_urls WHERE event_id = poi_events.id)::int AS additional_url_count
-    FROM poi_events WHERE moderation_status = ANY($1)
+    SELECT e.id, 'event' AS content_type, e.poi_id, e.title, e.description,
+           e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
+           e.submitted_by, e.moderated_by, e.moderated_at, e.created_at, e.source_url,
+           e.content_source, e.publication_date, e.date_confidence,
+           COUNT(u.id)::int AS additional_url_count
+    FROM poi_events e
+    LEFT JOIN poi_event_urls u ON u.event_id = e.id
+    WHERE e.moderation_status = ANY($1)
+    GROUP BY e.id
     UNION ALL
     SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
            moderation_status, confidence_score, ai_reasoning, NULL AS ai_issues,
@@ -804,13 +810,11 @@ export async function getPendingCount(pool) {
 export async function getItemDetail(pool, contentType, contentId) {
   const queryMap = {
     news: `SELECT n.*, p.name as poi_name,
-             COALESCE((SELECT json_agg(json_build_object('id', u.id, 'url', u.url, 'source_name', u.source_name))
-                       FROM poi_news_urls u WHERE u.news_id = n.id), '[]'::json) AS additional_urls
-           FROM poi_news n LEFT JOIN pois p ON n.poi_id = p.id WHERE n.id = $1 GROUP BY n.id, p.name`,
+             COALESCE(json_agg(json_build_object('id', u.id, 'url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
+           FROM poi_news n LEFT JOIN pois p ON n.poi_id = p.id LEFT JOIN poi_news_urls u ON u.news_id = n.id WHERE n.id = $1 GROUP BY n.id, p.name`,
     event: `SELECT e.*, p.name as poi_name,
-              COALESCE((SELECT json_agg(json_build_object('id', u.id, 'url', u.url, 'source_name', u.source_name))
-                        FROM poi_event_urls u WHERE u.event_id = e.id), '[]'::json) AS additional_urls
-            FROM poi_events e LEFT JOIN pois p ON e.poi_id = p.id WHERE e.id = $1 GROUP BY e.id, p.name`,
+              COALESCE(json_agg(json_build_object('id', u.id, 'url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
+            FROM poi_events e LEFT JOIN pois p ON e.poi_id = p.id LEFT JOIN poi_event_urls u ON u.event_id = e.id WHERE e.id = $1 GROUP BY e.id, p.name`,
     photo: `SELECT ps.*, p.name as poi_name FROM photo_submissions ps LEFT JOIN pois p ON ps.poi_id = p.id WHERE ps.id = $1`
   };
 
@@ -902,12 +906,14 @@ export async function getMergeCandidates(pool, contentType, contentId) {
 
   // Get all other items from the same POI
   const result = await pool.query(`
-    SELECT id, title, source_url, moderation_status, created_at,
-           publication_date,
-           (SELECT COUNT(*) FROM ${urlTable} WHERE ${fkColumn} = ${table}.id)::int AS additional_url_count
-    FROM ${table}
-    WHERE poi_id = $1 AND id != $2
-    ORDER BY created_at DESC
+    SELECT t.id, t.title, t.source_url, t.moderation_status, t.created_at,
+           t.publication_date,
+           COUNT(u.id)::int AS additional_url_count
+    FROM ${table} t
+    LEFT JOIN ${urlTable} u ON u.${fkColumn} = t.id
+    WHERE t.poi_id = $1 AND t.id != $2
+    GROUP BY t.id
+    ORDER BY t.created_at DESC
     LIMIT 50
   `, [poiId, contentId]);
 
