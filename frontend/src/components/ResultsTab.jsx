@@ -381,19 +381,22 @@ const ResultsTab = memo(function ResultsTab({
             className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
             onClick={() => handleSubTabChange('all')}
           >
-            Points of Interest
+            <span className="subtab-label-full">Points of Interest</span>
+            <span className="subtab-label-short">POIs</span>
           </button>
           <button
             className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
             onClick={() => handleSubTabChange('mtb')}
           >
-            MTB Trail Status
+            <span className="subtab-label-full">MTB Trail Status</span>
+            <span className="subtab-label-short">MTB Status</span>
           </button>
           <button
             className={`results-subtab ${activeSubTab === 'organizations' ? 'active' : ''}`}
             onClick={() => handleSubTabChange('organizations')}
           >
-            Organizations
+            <span className="subtab-label-full">Organizations</span>
+            <span className="subtab-label-short">Orgs</span>
           </button>
         </div>
 
@@ -482,19 +485,22 @@ const ResultsTab = memo(function ResultsTab({
           className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('all')}
         >
-          Points of Interest
+          <span className="subtab-label-full">Points of Interest</span>
+          <span className="subtab-label-short">POIs</span>
         </button>
         <button
           className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('mtb')}
         >
-          MTB Trail Status
+          <span className="subtab-label-full">MTB Trail Status</span>
+          <span className="subtab-label-short">MTB Status</span>
         </button>
         <button
           className={`results-subtab ${activeSubTab === 'organizations' ? 'active' : ''}`}
           onClick={() => handleSubTabChange('organizations')}
         >
-          Organizations
+          <span className="subtab-label-full">Organizations</span>
+          <span className="subtab-label-short">Orgs</span>
         </button>
       </div>
 
