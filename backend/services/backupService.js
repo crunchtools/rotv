@@ -204,7 +204,7 @@ async function listDriveImages(drive, imagesFolderId) {
   do {
     const params = {
       q: `'${imagesFolderId}' in parents and trashed = false`,
-      fields: 'nextPageToken,files(id,name)',
+      fields: 'nextPageToken,files(id,name,mimeType)',
       pageSize: 100
     };
     if (pageToken) params.pageToken = pageToken;
@@ -240,7 +240,7 @@ export async function triggerImageBackup(pool, drive) {
   let failed = 0;
 
   for (const asset of allAssets) {
-    const assetName = `asset-${asset.id}-${asset.original_filename || 'image.jpg'}`;
+    const assetName = `poi-${asset.poi_id}-asset-${asset.id}-${asset.original_filename || 'image.jpg'}`;
 
     if (driveFileNames.has(assetName)) {
       skipped++;
@@ -335,7 +335,7 @@ export async function restoreImagesFromDrive(pool, drive) {
 
   const driveFiles = await listDriveImages(drive, imagesFolderId);
   const existingAssets = await imageServerClient.listAllAssets();
-  const existingNames = new Set(existingAssets.map(a => `asset-${a.id}-${a.original_filename || 'image.jpg'}`));
+  const existingNames = new Set(existingAssets.map(a => `poi-${a.poi_id}-asset-${a.id}-${a.original_filename || 'image.jpg'}`));
 
   let restored = 0;
   let skipped = 0;
@@ -348,15 +348,23 @@ export async function restoreImagesFromDrive(pool, drive) {
       continue;
     }
 
-    // Parse asset info from filename: asset-{id}-{original_filename}
-    const match = file.name.match(/^asset-(\d+)-(.+)$/);
-    if (!match) {
+    // Parse asset info from filename: poi-{poi_id}-asset-{id}-{original_filename}
+    // Also supports legacy format: asset-{id}-{original_filename}
+    let poiId = 0;
+    let originalFilename;
+    const newMatch = file.name.match(/^poi-(\d+)-asset-(\d+)-(.+)$/);
+    const legacyMatch = file.name.match(/^asset-(\d+)-(.+)$/);
+
+    if (newMatch) {
+      poiId = parseInt(newMatch[1]);
+      originalFilename = newMatch[3];
+    } else if (legacyMatch) {
+      originalFilename = legacyMatch[2];
+    } else {
       console.warn(`[ImageRestore] Skipping unrecognized file: ${file.name}`);
       skipped++;
       continue;
     }
-
-    const originalFilename = match[2];
 
     try {
       const response = await drive.files.get(
@@ -365,13 +373,9 @@ export async function restoreImagesFromDrive(pool, drive) {
       );
 
       const buffer = Buffer.from(response.data);
-      const ext = originalFilename.split('.').pop()?.toLowerCase() || 'jpg';
-      const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
-      const mimeType = mimeMap[ext] || 'image/jpeg';
+      const mimeType = file.mimeType || 'image/jpeg';
 
-      // Upload to image server — poi_id 0 since we can't determine it from filename alone
-      // The asset will need to be reassociated if the DB was also restored
-      const result = await imageServerClient.uploadImage(buffer, 0, 'primary', originalFilename, mimeType);
+      const result = await imageServerClient.uploadImage(buffer, poiId, 'primary', originalFilename, mimeType);
 
       if (result.success) {
         restored++;
