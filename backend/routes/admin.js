@@ -3597,13 +3597,26 @@ export function createAdminRouter(pool) {
       // If no valid date, assume it's valid (session cookie or long-lived)
       const isExpired = expiresDate && !isNaN(expiresDate.getTime()) ? expiresDate < new Date() : false;
 
+      // Check consecutive failure count
+      let consecutiveFailures = 0;
+      try {
+        const failResult = await pool.query(
+          "SELECT value FROM admin_settings WHERE key = 'twitter_consecutive_failures'"
+        );
+        if (failResult.rows.length > 0) {
+          consecutiveFailures = parseInt(failResult.rows[0].value) || 0;
+        }
+      } catch (_) { /* ignore */ }
+
       res.json({
         authenticated: !isExpired,
         auth_token_preview: authToken.value.substring(0, 20) + '...',
         expires: expiresDate && !isNaN(expiresDate.getTime()) ? expiresDate.toISOString() : 'Session',
         saved_at: result.rows[0].updated_at,
         is_expired: isExpired,
-        cookies_count: cookies.length
+        cookies_count: cookies.length,
+        consecutive_failures: consecutiveFailures,
+        cookies_possibly_stale: consecutiveFailures >= 3
       });
 
     } catch (error) {

@@ -227,6 +227,36 @@ export function isCancellationRequested(poiId) {
   return progress?.cancellationRequested === true;
 }
 
+/**
+ * Track consecutive Twitter collection failures to detect stale cookies.
+ * Increments on failure, resets on success. Logs a warning at 3+ failures.
+ */
+async function trackTwitterResult(pool, statusUrl, success) {
+  if (!statusUrl.includes('x.com') && !statusUrl.includes('twitter.com')) return;
+
+  try {
+    if (success) {
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, updated_at) VALUES ('twitter_consecutive_failures', '0', NOW())
+         ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = NOW()`
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, updated_at) VALUES ('twitter_consecutive_failures', '1', NOW())
+         ON CONFLICT (key) DO UPDATE SET value = (COALESCE(admin_settings.value, '0')::int + 1)::text, updated_at = NOW()`
+      );
+      const result = await pool.query(`SELECT value FROM admin_settings WHERE key = 'twitter_consecutive_failures'`);
+      const failures = parseInt(result.rows[0]?.value) || 0;
+      if (failures >= 3) {
+        console.warn(`[Trail Status] WARNING: ${failures} consecutive Twitter failures — cookies may be stale. Refresh at Settings > Data Collection.`);
+      }
+    }
+  } catch (err) {
+    // Non-critical — don't fail the collection over tracking
+    console.error('[Trail Status] Error tracking Twitter result:', err.message);
+  }
+}
+
 // Prompt template for trail status extraction from rendered page content
 const TRAIL_STATUS_PROMPT = `You are a trail status extractor. Extract the current mountain bike trail status from the following page content.
 
@@ -359,6 +389,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     if (!rendered.reachable || !rendered.markdown) {
       console.log(`[Trail Status] Page not reachable or no content extracted (reason: ${rendered.reason || 'unknown'})`);
+      await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: `Page not reachable: ${rendered.reason || 'no content'}`,
@@ -372,6 +403,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     const MIN_CONTENT_LENGTH = 200;
     if (rendered.markdown.length < MIN_CONTENT_LENGTH) {
       console.log(`[Trail Status] Insufficient content (${rendered.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
+      await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: 'Insufficient page content',
@@ -433,6 +465,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error('[Trail Status] No JSON found in response');
+      await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: 'No status found',
@@ -447,6 +480,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     if (!status || status.status === 'unknown') {
       console.log(`[Trail Status] No current status found for ${poi.name}`);
+      await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: 'No status found',
@@ -461,6 +495,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     console.log(`[Trail Status]   Conditions: ${status.conditions || 'N/A'}`);
     console.log(`[Trail Status]   Source: ${status.source_name || 'N/A'}`);
     console.log(`[Trail Status]   Last Updated: ${status.last_updated || 'N/A'}`);
+    await trackTwitterResult(pool, statusUrl, true);
 
     // Override source_url with the POI's configured status_url
     status.source_url = poi.status_url;

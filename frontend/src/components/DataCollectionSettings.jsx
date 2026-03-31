@@ -1337,6 +1337,13 @@ function DataCollectionSettings() {
                 </div>
               )}
 
+              {twitterAuthStatus && twitterAuthStatus.cookies_possibly_stale && (
+                <div style={{ padding: '0.75rem', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  <strong>Cookies may be stale.</strong> Twitter trail status collection has failed {twitterAuthStatus.consecutive_failures} times in a row.
+                  Re-export cookies from x.com using Cookie-Editor and save them below.
+                </div>
+              )}
+
               {twitterAuthStatus && twitterAuthStatus.auth_token_preview && (
                 <div className="config-row">
                   <label>Auth Token:</label>
