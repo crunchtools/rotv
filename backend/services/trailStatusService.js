@@ -10,6 +10,11 @@ import { generateTextWithCustomPrompt } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
 
+// Helper to detect Twitter/X URLs (used in multiple places)
+function isTwitterUrl(url) {
+  return url.includes('x.com') || url.includes('twitter.com');
+}
+
 // Dispatch interval: start one new trail job every N milliseconds
 const DISPATCH_INTERVAL_MS = 1500;
 // Maximum number of concurrent jobs in flight
@@ -232,7 +237,7 @@ export function isCancellationRequested(poiId) {
  * Increments on failure, resets on success. Logs a warning at 3+ failures.
  */
 async function trackTwitterResult(pool, statusUrl, success) {
-  if (!statusUrl.includes('x.com') && !statusUrl.includes('twitter.com')) return;
+  if (!isTwitterUrl(statusUrl)) return;
 
   try {
     if (success) {
@@ -241,11 +246,11 @@ async function trackTwitterResult(pool, statusUrl, success) {
          ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = NOW()`
       );
     } else {
-      await pool.query(
+      const result = await pool.query(
         `INSERT INTO admin_settings (key, value, updated_at) VALUES ('twitter_consecutive_failures', '1', NOW())
-         ON CONFLICT (key) DO UPDATE SET value = (COALESCE(admin_settings.value, '0')::int + 1)::text, updated_at = NOW()`
+         ON CONFLICT (key) DO UPDATE SET value = (COALESCE(admin_settings.value, '0')::int + 1)::text, updated_at = NOW()
+         RETURNING value`
       );
-      const result = await pool.query(`SELECT value FROM admin_settings WHERE key = 'twitter_consecutive_failures'`);
       const failures = parseInt(result.rows[0]?.value) || 0;
       if (failures >= 3) {
         console.warn(`[Trail Status] WARNING: ${failures} consecutive Twitter failures — cookies may be stale. Refresh at Settings > Data Collection.`);
@@ -272,7 +277,7 @@ INSTRUCTIONS:
 - Find ALL posts or status indicators that mention trail status, conditions, or closures
 - This is the official trail status source - ANY post about trail conditions IS about "{{name}}"
 - Check the DATE of each post - look for timestamps, dates, or relative times (e.g., "2h ago", "Jan 14")
-- IGNORE posts older than 180 days
+- IGNORE posts older than 90 days
 - Select the MOST RECENT post within the allowed date range
 - Common trail status phrases: "trail is open", "trail is closed", "open for riding", "closed due to", "muddy", "dry"
 - Return ALL dates/times in ISO 8601 format: YYYY-MM-DD HH:MM:SS (in {{timezone}})
@@ -360,7 +365,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     } else {
       // Playwright + Readability extraction (with cookies for Twitter/X)
       let cookies = null;
-      if (statusUrl.includes('x.com') || statusUrl.includes('twitter.com')) {
+      if (isTwitterUrl(statusUrl)) {
         try {
           const cookieResult = await pool.query(
             `SELECT value FROM admin_settings WHERE key = 'twitter_cookies'`
@@ -382,7 +387,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       });
       rendered = await extractPageContent(statusUrl, {
         maxLength: 15000,
-        dynamicContentWait: statusUrl.includes('x.com') || statusUrl.includes('twitter.com') ? 8000 : 3000,
+        dynamicContentWait: isTwitterUrl(statusUrl) ? 8000 : 3000,
         cookies
       });
     }
@@ -500,7 +505,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     // Override source_url with the POI's configured status_url
     status.source_url = poi.status_url;
     // Extract source name from the URL if not already set
-    if (poi.status_url.includes('x.com') || poi.status_url.includes('twitter.com')) {
+    if (isTwitterUrl(poi.status_url)) {
       status.source_name = 'Twitter/X';
     } else if (isFacebookUrl(poi.status_url)) {
       status.source_name = 'Facebook';

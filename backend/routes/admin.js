@@ -1791,7 +1791,7 @@ export function createAdminRouter(pool) {
             }
           }
 
-          driveFileId = await uploadImageToDrive(drive, pool, buffer, mimeType, poi.name);
+          driveFileId = await uploadImageToDrive(drive, pool, poi.name, buffer, mimeType);
 
           await pool.query(
             'UPDATE pois SET image_drive_file_id = $1 WHERE id = $2',

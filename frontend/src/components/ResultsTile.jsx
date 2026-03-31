@@ -5,7 +5,7 @@ import { getIconUrlForPOI } from '../utils/iconUtils';
 const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status, showStatusInfo, statusData, iconConfig }) {
   // Use thumbnail endpoint for fast, cached small images
   // Include updated_at for cache busting when image changes
-  const imageUrl = poi.image_mime_type
+  const imageUrl = poi.image_drive_file_id
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
 
