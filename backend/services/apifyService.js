@@ -7,7 +7,7 @@
 const APIFY_BASE_URL = 'https://api.apify.com/v2';
 
 // Actor IDs for Twitter and Facebook scrapers
-const TWITTER_ACTOR_ID = 'apify~twitter-scraper';
+const TWITTER_ACTOR_ID = 'apidojo~tweet-scraper';
 const FACEBOOK_ACTOR_ID = 'apify~facebook-posts-scraper';
 
 /**
@@ -99,9 +99,9 @@ export async function fetchTwitterPosts(pool, statusUrl, maxItems = 10) {
 
   try {
     const items = await runActorSync(TWITTER_ACTOR_ID, {
-      handles: [handle],
+      twitterHandles: [handle],
       maxItems,
-      addUserInfo: false
+      sort: 'Latest'
     }, token);
 
     if (!items || items.length === 0) {
