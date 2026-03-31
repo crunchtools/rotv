@@ -2799,13 +2799,13 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         if (pendingImage) {
           if (pendingImage.deleted) {
             // Delete the image
-            await fetch(`/api/admin/destinations/${destination.id}/image`, {
+            await fetch(`/api/admin/pois/${destination.id}/image`, {
               method: 'DELETE',
               credentials: 'include'
             });
           } else if (pendingImage.data) {
             // Upload new image
-            await fetch(`/api/admin/destinations/${destination.id}/image-base64`, {
+            await fetch(`/api/admin/pois/${destination.id}/image-base64`, {
               method: 'POST',
               credentials: 'include',
               headers: { 'Content-Type': 'application/json' },
@@ -2857,13 +2857,13 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       if (pendingImage) {
         if (pendingImage.deleted) {
           // Delete the image
-          await fetch(`/api/admin/linear-features/${linearFeature.id}/image`, {
+          await fetch(`/api/admin/pois/${linearFeature.id}/image`, {
             method: 'DELETE',
             credentials: 'include'
           });
         } else if (pendingImage.data) {
           // Upload new image
-          await fetch(`/api/admin/linear-features/${linearFeature.id}/image-base64`, {
+          await fetch(`/api/admin/pois/${linearFeature.id}/image-base64`, {
             method: 'POST',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },

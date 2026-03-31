@@ -6767,10 +6767,20 @@ body {
   color: #c62828;
 }
 
-/* Sync buttons grid - 3 equal buttons */
+/* Backup section divider */
+.backup-section {
+  padding: 1rem 0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.backup-section:last-of-type {
+  border-bottom: none;
+}
+
+/* Sync buttons grid - 2 equal buttons */
 .sync-buttons-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
   margin-bottom: 1rem;
 }

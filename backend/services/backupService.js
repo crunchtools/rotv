@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import { Readable } from 'stream';
-import { getDriveSetting, setDriveSetting } from './driveImageService.js';
+import { getDriveSetting, setDriveSetting, uploadImageToDrive } from './driveImageService.js';
+import imageServerClient from './imageServerClient.js';
 
 const BACKUPS_FOLDER_NAME = 'Database';
 
@@ -191,4 +192,199 @@ export async function getBackupStatus(pool) {
     lastBackup: result.rows[0]?.value || null,
     backupsFolderId: backupsFolderId || null
   };
+}
+
+/**
+ * List files in the Drive Images folder
+ */
+async function listDriveImages(drive, imagesFolderId) {
+  const files = [];
+  let pageToken = null;
+
+  do {
+    const params = {
+      q: `'${imagesFolderId}' in parents and trashed = false`,
+      fields: 'nextPageToken,files(id,name)',
+      pageSize: 100
+    };
+    if (pageToken) params.pageToken = pageToken;
+
+    const response = await drive.files.list(params);
+    files.push(...(response.data.files || []));
+    pageToken = response.data.nextPageToken;
+  } while (pageToken);
+
+  return files;
+}
+
+/**
+ * Sync image server assets to Drive Images folder.
+ * Uploads any assets missing from Drive.
+ */
+export async function triggerImageBackup(pool, drive) {
+  const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
+  if (!imagesFolderId) {
+    throw new Error('Images folder not configured in Drive');
+  }
+
+  if (!imageServerClient.initialized) {
+    throw new Error('Image server not configured');
+  }
+
+  const allAssets = await imageServerClient.listAllAssets();
+  const driveFiles = await listDriveImages(drive, imagesFolderId);
+  const driveFileNames = new Set(driveFiles.map(f => f.name));
+
+  let uploaded = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const asset of allAssets) {
+    const assetName = `asset-${asset.id}-${asset.original_filename || 'image.jpg'}`;
+
+    if (driveFileNames.has(assetName)) {
+      skipped++;
+      continue;
+    }
+
+    try {
+      const assetData = await imageServerClient.fetchAssetData(asset.id);
+      if (!assetData.success) {
+        failed++;
+        continue;
+      }
+
+      await drive.files.create({
+        requestBody: {
+          name: assetName,
+          mimeType: assetData.contentType,
+          parents: [imagesFolderId]
+        },
+        media: {
+          mimeType: assetData.contentType,
+          body: Readable.from([assetData.data])
+        },
+        fields: 'id'
+      });
+
+      uploaded++;
+    } catch (error) {
+      console.warn(`[ImageBackup] Failed to backup asset ${asset.id}:`, error.message);
+      failed++;
+    }
+  }
+
+  const now = new Date().toISOString();
+  await pool.query(`
+    INSERT INTO admin_settings (key, value, updated_at)
+    VALUES ('last_image_backup', $1, CURRENT_TIMESTAMP)
+    ON CONFLICT (key) DO UPDATE SET
+      value = EXCLUDED.value,
+      updated_at = CURRENT_TIMESTAMP
+  `, [now]);
+
+  console.log(`[ImageBackup] Done: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+
+  return { success: true, uploaded, skipped, failed, timestamp: now };
+}
+
+/**
+ * Get image backup status — compare image server assets vs Drive Images files
+ */
+export async function getImageBackupStatus(pool, drive) {
+  const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
+
+  let imageServerCount = 0;
+  let driveCount = 0;
+
+  if (imageServerClient.initialized) {
+    const allAssets = await imageServerClient.listAllAssets();
+    imageServerCount = allAssets.length;
+  }
+
+  if (imagesFolderId && drive) {
+    const driveFiles = await listDriveImages(drive, imagesFolderId);
+    driveCount = driveFiles.length;
+  }
+
+  const lastBackupResult = await pool.query(
+    "SELECT value FROM admin_settings WHERE key = 'last_image_backup'"
+  );
+
+  return {
+    imageServerCount,
+    driveCount,
+    lastBackup: lastBackupResult.rows[0]?.value || null,
+    imagesFolderId: imagesFolderId || null
+  };
+}
+
+/**
+ * Restore images from Drive Images folder back into image server.
+ * Downloads each file from Drive and uploads to image server.
+ */
+export async function restoreImagesFromDrive(pool, drive) {
+  const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
+  if (!imagesFolderId) {
+    throw new Error('Images folder not configured in Drive');
+  }
+
+  if (!imageServerClient.initialized) {
+    throw new Error('Image server not configured');
+  }
+
+  const driveFiles = await listDriveImages(drive, imagesFolderId);
+  const existingAssets = await imageServerClient.listAllAssets();
+  const existingNames = new Set(existingAssets.map(a => `asset-${a.id}-${a.original_filename || 'image.jpg'}`));
+
+  let restored = 0;
+  let skipped = 0;
+  let failed = 0;
+
+  for (const file of driveFiles) {
+    // Skip files already on image server
+    if (existingNames.has(file.name)) {
+      skipped++;
+      continue;
+    }
+
+    // Parse asset info from filename: asset-{id}-{original_filename}
+    const match = file.name.match(/^asset-(\d+)-(.+)$/);
+    if (!match) {
+      console.warn(`[ImageRestore] Skipping unrecognized file: ${file.name}`);
+      skipped++;
+      continue;
+    }
+
+    const originalFilename = match[2];
+
+    try {
+      const response = await drive.files.get(
+        { fileId: file.id, alt: 'media' },
+        { responseType: 'arraybuffer' }
+      );
+
+      const buffer = Buffer.from(response.data);
+      const ext = originalFilename.split('.').pop()?.toLowerCase() || 'jpg';
+      const mimeMap = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif' };
+      const mimeType = mimeMap[ext] || 'image/jpeg';
+
+      // Upload to image server — poi_id 0 since we can't determine it from filename alone
+      // The asset will need to be reassociated if the DB was also restored
+      const result = await imageServerClient.uploadImage(buffer, 0, 'primary', originalFilename, mimeType);
+
+      if (result.success) {
+        restored++;
+      } else {
+        failed++;
+      }
+    } catch (error) {
+      console.warn(`[ImageRestore] Failed to restore ${file.name}:`, error.message);
+      failed++;
+    }
+  }
+
+  console.log(`[ImageRestore] Done: ${restored} restored, ${skipped} skipped, ${failed} failed`);
+
+  return { success: true, restored, skipped, failed };
 }

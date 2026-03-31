@@ -1,8 +1,8 @@
 /**
- * Image Server Client - replacement for immichService.js
+ * Image Server Client
  *
- * Talks to the purpose-built image server at image-server.rootsofthevalley.org
- * instead of Immich. No API key needed — image server is internal.
+ * Talks to the purpose-built image server at images.rootsofthevalley.org.
+ * No API key needed — image server is internal.
  */
 
 class ImageServerClient {
@@ -385,7 +385,6 @@ class ImageServerClient {
 
   /**
    * Get structured media data for a POI (photos + videos with roles)
-   * Replaces the combined Immich tags + DB columns approach
    */
   async getPoiMediaWithThemes(poiId) {
     if (!this.initialized) {
@@ -431,6 +430,28 @@ class ImageServerClient {
     });
 
     return { photos, videos, themePrimaries };
+  }
+
+  /**
+   * List all assets on the image server
+   */
+  async listAllAssets() {
+    if (!this.initialized) {
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${this.serverUrl}/api/assets`);
+
+      if (!response.ok) {
+        throw new Error(`Fetch failed: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error(`[ImageServer] Failed to list all assets:`, error);
+      return [];
+    }
   }
 
   /**

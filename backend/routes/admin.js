@@ -1370,13 +1370,10 @@ export function createAdminRouter(pool) {
       // Get Drive folder information
       try {
         const rootFolderId = await getDriveSetting(pool, 'root_folder_id');
-        const iconsFolderId = await getDriveSetting(pool, 'icons_folder_id');
         const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
-        const geospatialFolderId = await getDriveSetting(pool, 'geospatial_folder_id');
         const backupsFolderId = await getDriveSetting(pool, 'backups_folder_id');
 
         const folderLink = await getDriveFolderLink(pool);
-        const fileCounts = await countDriveFiles(drive, pool);
 
         status.drive_access_verified = true;
         status.drive = {
@@ -1388,23 +1385,10 @@ export function createAdminRouter(pool) {
               name: 'Roots of The Valley',
               url: `https://drive.google.com/drive/folders/${rootFolderId}`
             } : null,
-            icons: iconsFolderId ? {
-              id: iconsFolderId,
-              name: 'Icons',
-              file_count: fileCounts.iconsCount,
-              url: `https://drive.google.com/drive/folders/${iconsFolderId}`
-            } : null,
             images: imagesFolderId ? {
               id: imagesFolderId,
               name: 'Images',
-              file_count: fileCounts.imagesCount,
               url: `https://drive.google.com/drive/folders/${imagesFolderId}`
-            } : null,
-            geospatial: geospatialFolderId ? {
-              id: geospatialFolderId,
-              name: 'Geospatial',
-              file_count: fileCounts.geospatialCount,
-              url: `https://drive.google.com/drive/folders/${geospatialFolderId}`
             } : null,
             database: backupsFolderId ? {
               id: backupsFolderId,
@@ -1413,12 +1397,20 @@ export function createAdminRouter(pool) {
             } : null
           }
         };
+
+        // Get image backup status
+        try {
+          const { getImageBackupStatus } = await import('../services/backupService.js');
+          status.image_backup = await getImageBackupStatus(pool, drive);
+        } catch (e) {
+          status.image_backup = null;
+        }
       } catch (driveInfoError) {
         console.warn('Could not get Drive folder info:', driveInfoError.message);
         status.drive = { configured: false };
       }
 
-      // Get last backup info
+      // Get last database backup info
       try {
         const backupResult = await pool.query(
           "SELECT value FROM admin_settings WHERE key = 'last_backup'"
@@ -1523,6 +1515,73 @@ export function createAdminRouter(pool) {
     }
   });
 
+  // Trigger image backup to Drive
+  router.post('/backup/images/trigger', isAdmin, async (req, res) => {
+    try {
+      let credentials = req.user.oauth_credentials;
+      if (typeof credentials === 'string') {
+        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
+      }
+      if (!credentials || !credentials.access_token) {
+        return res.status(401).json({ error: 'Google authentication required' });
+      }
+
+      const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
+      const { triggerImageBackup } = await import('../services/backupService.js');
+      const result = await triggerImageBackup(pool, drive);
+
+      console.log(`Admin ${req.user.email} triggered image backup: ${result.uploaded} uploaded`);
+      res.json(result);
+    } catch (error) {
+      console.error('Error triggering image backup:', error);
+      res.status(500).json({ error: 'Failed to backup images', message: error.message });
+    }
+  });
+
+  // Get image backup status
+  router.get('/backup/images/status', isAdmin, async (req, res) => {
+    try {
+      let drive = null;
+      let credentials = req.user.oauth_credentials;
+      if (typeof credentials === 'string') {
+        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
+      }
+      if (credentials?.access_token) {
+        drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
+      }
+
+      const { getImageBackupStatus } = await import('../services/backupService.js');
+      const status = await getImageBackupStatus(pool, drive);
+      res.json(status);
+    } catch (error) {
+      console.error('Error getting image backup status:', error);
+      res.status(500).json({ error: 'Failed to get image backup status' });
+    }
+  });
+
+  // Restore images from Drive
+  router.post('/backup/images/restore', isAdmin, async (req, res) => {
+    try {
+      let credentials = req.user.oauth_credentials;
+      if (typeof credentials === 'string') {
+        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
+      }
+      if (!credentials || !credentials.access_token) {
+        return res.status(401).json({ error: 'Google authentication required' });
+      }
+
+      const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
+      const { restoreImagesFromDrive } = await import('../services/backupService.js');
+      const result = await restoreImagesFromDrive(pool, drive);
+
+      console.log(`Admin ${req.user.email} restored images: ${result.restored} restored`);
+      res.json(result);
+    } catch (error) {
+      console.error('Error restoring images:', error);
+      res.status(500).json({ error: 'Failed to restore images', message: error.message });
+    }
+  });
+
   // Wipe the local database
   router.delete('/sync/wipe-database', isAdmin, async (req, res) => {
     try {
@@ -1542,10 +1601,10 @@ export function createAdminRouter(pool) {
   });
 
   // ============================================
-  // Destination Image Management Routes
+  // POI Image Management Routes (unified for all POI types)
   // ============================================
 
-  // Configure multer for memory storage (images stored in Drive, not filesystem)
+  // Configure multer for memory storage (images stored on image server + Drive backup)
   const imageUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
@@ -1561,9 +1620,8 @@ export function createAdminRouter(pool) {
     }
   });
 
-  // Upload image for a destination
-  // Uploads to image server (primary) AND Drive (backup)
-  router.post('/destinations/:id/image', isAdmin, imageUpload.single('image'), async (req, res) => {
+  // Upload image for any POI (multipart form)
+  router.post('/pois/:id/image', isAdmin, imageUpload.single('image'), async (req, res) => {
     const { id } = req.params;
 
     if (!req.file) {
@@ -1571,19 +1629,17 @@ export function createAdminRouter(pool) {
     }
 
     try {
-      // Check if destination exists
-      const destCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
-      if (destCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Destination not found' });
+      const poiCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      if (poiCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'POI not found' });
       }
 
-      const destination = destCheck.rows[0];
+      const poi = poiCheck.rows[0];
 
       // Upload to image server (primary storage)
       let imageServerAssetId = null;
       if (imageServerClient.initialized) {
         try {
-          // Delete existing primary asset from image server
           const existingAsset = await imageServerClient.getPrimaryAsset(id);
           if (existingAsset) {
             await imageServerClient.deleteAsset(existingAsset.id);
@@ -1591,7 +1647,7 @@ export function createAdminRouter(pool) {
           }
 
           const ext = req.file.mimetype.split('/')[1];
-          const sanitizedName = destination.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const sanitizedName = poi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           const filename = `${sanitizedName}-${Date.now()}.${ext}`;
 
           const result = await imageServerClient.uploadImage(
@@ -1609,27 +1665,23 @@ export function createAdminRouter(pool) {
         }
       }
 
-      // Track mime type in ROTV DB so frontend knows this POI has an image
       await pool.query(
-        `UPDATE pois
-         SET image_mime_type = $1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-        [req.file.mimetype, id]
+        'UPDATE pois SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [id]
       );
 
       // Also upload to Drive for backup (if user has OAuth credentials)
       let driveFileId = null;
       if (req.user.oauth_credentials) {
         try {
-          if (destination.image_drive_file_id) {
+          if (poi.image_drive_file_id) {
             const drive = createDriveService(req.user.oauth_credentials);
-            await deleteFileFromDrive(drive, destination.image_drive_file_id);
-            console.log(`Deleted old image from Drive: ${destination.image_drive_file_id}`);
+            await deleteFileFromDrive(drive, poi.image_drive_file_id);
+            console.log(`Deleted old image from Drive: ${poi.image_drive_file_id}`);
           }
 
           const ext = req.file.mimetype.split('/')[1];
-          const sanitizedName = destination.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const sanitizedName = poi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           const filename = `${sanitizedName}-${Date.now()}.${ext}`;
 
           const drive = createDriveService(req.user.oauth_credentials);
@@ -1646,16 +1698,15 @@ export function createAdminRouter(pool) {
         }
       }
 
-      console.log(`Admin ${req.user.email} uploaded image for destination ${id}`);
+      console.log(`Admin ${req.user.email} uploaded image for POI ${id}`);
       res.json({
         success: true,
         message: 'Image uploaded successfully',
-        image_url: `/api/destinations/${id}/image`,
         image_server_asset_id: imageServerAssetId,
         drive_file_id: driveFileId
       });
     } catch (error) {
-      console.error('Error uploading destination image:', error);
+      console.error('Error uploading POI image:', error);
       if (error.message?.includes('Invalid file type')) {
         return res.status(400).json({ error: error.message });
       }
@@ -1663,8 +1714,8 @@ export function createAdminRouter(pool) {
     }
   });
 
-  // Upload image for a destination (base64 JSON variant - for dev server issues)
-  router.post('/destinations/:id/image-base64', isAdmin, async (req, res) => {
+  // Upload image for any POI (base64 JSON variant)
+  router.post('/pois/:id/image-base64', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { imageData, mimeType } = req.body;
 
@@ -1672,34 +1723,29 @@ export function createAdminRouter(pool) {
       return res.status(400).json({ error: 'No image data provided' });
     }
 
-    // Validate mime type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowedTypes.includes(mimeType)) {
       return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.' });
     }
 
     try {
-      // Decode base64
       const buffer = Buffer.from(imageData, 'base64');
 
-      // Validate size (10MB max)
       if (buffer.length > 10 * 1024 * 1024) {
         return res.status(400).json({ error: 'Image must be less than 10MB' });
       }
 
-      // Check if destination exists
-      const destCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
-      if (destCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Destination not found' });
+      const poiCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      if (poiCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'POI not found' });
       }
 
-      const destination = destCheck.rows[0];
+      const poi = poiCheck.rows[0];
 
       // Upload to image server (primary storage)
       let imageServerAssetId = null;
       if (imageServerClient.initialized) {
         try {
-          // Delete existing primary asset from image server
           const existingAsset = await imageServerClient.getPrimaryAsset(id);
           if (existingAsset) {
             await imageServerClient.deleteAsset(existingAsset.id);
@@ -1707,7 +1753,7 @@ export function createAdminRouter(pool) {
           }
 
           const ext = mimeType.split('/')[1];
-          const sanitizedName = destination.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+          const sanitizedName = poi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           const filename = `${sanitizedName}-${Date.now()}.${ext}`;
 
           const result = await imageServerClient.uploadImage(
@@ -1725,13 +1771,9 @@ export function createAdminRouter(pool) {
         }
       }
 
-      // Track mime type in ROTV DB so frontend knows this POI has an image
       await pool.query(
-        `UPDATE pois
-         SET image_mime_type = $1,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-        [mimeType, id]
+        'UPDATE pois SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [id]
       );
 
       // Also upload to Drive as backup if user has OAuth
@@ -1740,16 +1782,16 @@ export function createAdminRouter(pool) {
         try {
           const drive = createDriveService(req.user.oauth_credentials);
 
-          if (destination.image_drive_file_id) {
+          if (poi.image_drive_file_id) {
             try {
-              await deleteFileFromDrive(drive, destination.image_drive_file_id);
-              console.log(`Deleted old image from Drive: ${destination.image_drive_file_id}`);
+              await deleteFileFromDrive(drive, poi.image_drive_file_id);
+              console.log(`Deleted old image from Drive: ${poi.image_drive_file_id}`);
             } catch (deleteError) {
               console.warn('Failed to delete old image from Drive (non-fatal):', deleteError.message);
             }
           }
 
-          driveFileId = await uploadImageToDrive(drive, pool, buffer, mimeType, destination.name);
+          driveFileId = await uploadImageToDrive(drive, pool, buffer, mimeType, poi.name);
 
           await pool.query(
             'UPDATE pois SET image_drive_file_id = $1 WHERE id = $2',
@@ -1762,7 +1804,7 @@ export function createAdminRouter(pool) {
         }
       }
 
-      console.log(`Admin ${req.user.email} uploaded image for destination ${id}`);
+      console.log(`Admin ${req.user.email} uploaded image for POI ${id}`);
       res.json({
         success: true,
         message: 'Image uploaded successfully',
@@ -1770,24 +1812,22 @@ export function createAdminRouter(pool) {
         drive_file_id: driveFileId
       });
     } catch (error) {
-      console.error('Error uploading destination image:', error);
+      console.error('Error uploading POI image:', error);
       res.status(500).json({ error: 'Failed to upload image' });
     }
   });
 
-  // Delete image from a destination
-  // Deletes from image server AND Drive backup
-  router.delete('/destinations/:id/image', isAdmin, async (req, res) => {
+  // Delete image from any POI
+  router.delete('/pois/:id/image', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
-      // Check if destination exists and has an image
-      const destCheck = await pool.query('SELECT id, name, image_drive_file_id, image_mime_type FROM pois WHERE id = $1', [id]);
-      if (destCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Destination not found' });
+      const poiCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      if (poiCheck.rows.length === 0) {
+        return res.status(404).json({ error: 'POI not found' });
       }
 
-      const destination = destCheck.rows[0];
+      const poi = poiCheck.rows[0];
 
       // Check image server for assets
       let hasImageServerAsset = false;
@@ -1804,37 +1844,36 @@ export function createAdminRouter(pool) {
         }
       }
 
-      if (!hasImageServerAsset && !destination.image_drive_file_id && !destination.image_mime_type) {
-        return res.status(400).json({ error: 'Destination has no image' });
+      if (!hasImageServerAsset && !poi.image_drive_file_id) {
+        return res.status(400).json({ error: 'POI has no image' });
       }
 
       // Delete from Drive if present and user has OAuth
-      if (destination.image_drive_file_id && req.user.oauth_credentials) {
+      if (poi.image_drive_file_id && req.user.oauth_credentials) {
         try {
           const drive = createDriveService(req.user.oauth_credentials);
-          await deleteFileFromDrive(drive, destination.image_drive_file_id);
-          console.log(`Deleted image from Drive: ${destination.image_drive_file_id}`);
+          await deleteFileFromDrive(drive, poi.image_drive_file_id);
+          console.log(`Deleted image from Drive: ${poi.image_drive_file_id}`);
         } catch (driveError) {
           console.warn(`Failed to delete from Drive (non-fatal):`, driveError.message);
         }
       }
 
-      // Clear image references from database
       await pool.query(
         `UPDATE pois
-         SET image_data = NULL, image_mime_type = NULL, image_drive_file_id = NULL, immich_primary_asset_id = NULL,
+         SET image_drive_file_id = NULL,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [id]
       );
 
-      console.log(`Admin ${req.user.email} deleted image for destination ${id}`);
+      console.log(`Admin ${req.user.email} deleted image for POI ${id}`);
       res.json({
         success: true,
         message: 'Image deleted successfully'
       });
     } catch (error) {
-      console.error('Error deleting destination image:', error);
+      console.error('Error deleting POI image:', error);
       res.status(500).json({ error: 'Failed to delete image' });
     }
   });
@@ -1912,7 +1951,8 @@ export function createAdminRouter(pool) {
         'root_folder_id',
         'icons_folder_id',
         'images_folder_id',
-        'geospatial_folder_id'
+        'geospatial_folder_id',
+        'backups_folder_id'
       ];
 
       if (!allowedKeys.includes(key)) {
@@ -2041,7 +2081,7 @@ export function createAdminRouter(pool) {
         RETURNING id, name, poi_type, latitude, longitude, property_owner,
                   brief_description, era, historical_description, primary_activities,
                   surface, pets, cell_signal, more_info_link, length_miles, difficulty,
-                  image_mime_type, image_drive_file_id, geometry_drive_file_id,
+                  image_drive_file_id, geometry_drive_file_id,
                   boundary_type, boundary_color, status_url, news_url, events_url,
                   deleted, created_at, updated_at
       `, values);
@@ -2078,146 +2118,6 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error deleting linear feature:', error);
       res.status(500).json({ error: 'Failed to delete linear feature' });
-    }
-  });
-
-  // Upload image for linear feature
-  router.post('/linear-features/:id/image', isAdmin, imageUpload.single('image'), async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      if (!req.file) {
-        return res.status(400).json({ error: 'No image file provided' });
-      }
-
-      const result = await pool.query(`
-        UPDATE pois
-        SET image_data = $1, image_mime_type = $2, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $3
-        RETURNING id, name, image_mime_type
-      `, [req.file.buffer, req.file.mimetype, id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Linear feature not found' });
-      }
-
-      console.log(`Admin ${req.user.email} uploaded image for linear feature ${id}`);
-      res.json({
-        success: true,
-        feature: result.rows[0]
-      });
-    } catch (error) {
-      console.error('Error uploading linear feature image:', error);
-      res.status(500).json({ error: 'Failed to upload image' });
-    }
-  });
-
-  // Upload image for linear feature (base64 JSON variant - for dev server issues)
-  router.post('/linear-features/:id/image-base64', isAdmin, async (req, res) => {
-    const { id } = req.params;
-    const { imageData, mimeType } = req.body;
-
-    if (!imageData || !mimeType) {
-      return res.status(400).json({ error: 'No image data provided' });
-    }
-
-    // Validate mime type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(mimeType)) {
-      return res.status(400).json({ error: 'Invalid file type. Only JPEG, PNG, WebP, and GIF are allowed.' });
-    }
-
-    try {
-      // Decode base64
-      const buffer = Buffer.from(imageData, 'base64');
-
-      // Validate size (10MB max)
-      if (buffer.length > 10 * 1024 * 1024) {
-        return res.status(400).json({ error: 'Image must be less than 10MB' });
-      }
-
-      // Check if linear feature exists
-      const featureCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
-      if (featureCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Linear feature not found' });
-      }
-
-      const feature = featureCheck.rows[0];
-
-      // Store image in database
-      await pool.query(
-        `UPDATE pois
-         SET image_data = $1, image_mime_type = $2,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $3`,
-        [buffer, mimeType, id]
-      );
-
-      // Also upload to Drive as backup if user has OAuth
-      let driveFileId = null;
-      if (req.user.oauth_credentials) {
-        try {
-          const drive = createDriveService(req.user.oauth_credentials);
-
-          // Delete old image from Drive if it exists
-          if (feature.image_drive_file_id) {
-            try {
-              await deleteFileFromDrive(drive, feature.image_drive_file_id);
-              console.log(`Deleted old image from Drive: ${feature.image_drive_file_id}`);
-            } catch (deleteError) {
-              console.warn('Failed to delete old image from Drive (non-fatal):', deleteError.message);
-            }
-          }
-
-          // Upload new image to Drive
-          driveFileId = await uploadImageToDrive(drive, pool, buffer, mimeType, feature.name);
-
-          // Update database with Drive file ID
-          await pool.query(
-            'UPDATE pois SET image_drive_file_id = $1 WHERE id = $2',
-            [driveFileId, id]
-          );
-
-          console.log(`Backed up image to Drive: ${driveFileId}`);
-        } catch (driveError) {
-          console.warn('Failed to backup to Drive (non-fatal):', driveError.message);
-        }
-      }
-
-      console.log(`Admin ${req.user.email} uploaded image for linear feature ${id}`);
-      res.json({
-        success: true,
-        message: 'Image uploaded successfully',
-        drive_file_id: driveFileId
-      });
-    } catch (error) {
-      console.error('Error uploading linear feature image:', error);
-      res.status(500).json({ error: 'Failed to upload image' });
-    }
-  });
-
-  // Delete image for linear feature
-  router.delete('/linear-features/:id/image', isAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      const result = await pool.query(`
-        UPDATE pois
-        SET image_data = NULL, image_mime_type = NULL, image_drive_file_id = NULL,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-        RETURNING id, name
-      `, [id]);
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: 'Linear feature not found' });
-      }
-
-      console.log(`Admin ${req.user.email} deleted image for linear feature ${id}`);
-      res.json({ success: true });
-    } catch (error) {
-      console.error('Error deleting linear feature image:', error);
-      res.status(500).json({ error: 'Failed to delete image' });
     }
   });
 

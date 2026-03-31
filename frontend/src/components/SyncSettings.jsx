@@ -8,15 +8,15 @@ function SyncSettings({ onDataRefresh }) {
   const [refreshing, setRefreshing] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [backingUpImages, setBackingUpImages] = useState(false);
+  const [restoringImages, setRestoringImages] = useState(false);
   const [wiping, setWiping] = useState(false);
   const [backupsList, setBackupsList] = useState(null);
   const [showRestoreList, setShowRestoreList] = useState(false);
 
   // Editable Drive ID states
   const [driveIdEdits, setDriveIdEdits] = useState({
-    icons: '',
     images: '',
-    geospatial: '',
     database: ''
   });
   const [savingDriveId, setSavingDriveId] = useState(null);
@@ -59,9 +59,7 @@ function SyncSettings({ onDataRefresh }) {
   useEffect(() => {
     if (syncStatus) {
       setDriveIdEdits({
-        icons: syncStatus.drive?.folders?.icons?.id || '',
         images: syncStatus.drive?.folders?.images?.id || '',
-        geospatial: syncStatus.drive?.folders?.geospatial?.id || '',
         database: syncStatus.drive?.folders?.database?.id || ''
       });
     }
@@ -79,9 +77,7 @@ function SyncSettings({ onDataRefresh }) {
 
     try {
       const keyMap = {
-        icons: 'icons_folder_id',
         images: 'images_folder_id',
-        geospatial: 'geospatial_folder_id',
         database: 'backups_folder_id'
       };
       const response = await fetch(`/api/admin/drive/settings/${keyMap[key]}`, {
@@ -93,7 +89,7 @@ function SyncSettings({ onDataRefresh }) {
 
       const result = await response.json();
       if (response.ok) {
-        setMessage(`Updated ${key} ID`);
+        setMessage(`Updated ${key} folder ID`);
         fetchStatus();
       } else {
         setError(result.error || `Failed to update ${key} ID`);
@@ -124,13 +120,13 @@ function SyncSettings({ onDataRefresh }) {
 
       const result = await response.json();
       if (response.ok) {
-        setMessage(`Backup created: ${result.filename}`);
+        setMessage(`Database backup created: ${result.filename}`);
         fetchStatus();
       } else {
-        setError(result.error || 'Backup failed');
+        setError(result.error || 'Database backup failed');
       }
     } catch {
-      setError('Failed to create backup');
+      setError('Failed to create database backup');
     } finally {
       setBackingUp(false);
     }
@@ -193,6 +189,60 @@ function SyncSettings({ onDataRefresh }) {
     }
   };
 
+  const handleImageBackup = async () => {
+    setBackingUpImages(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/admin/backup/images/trigger', {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        setMessage(`Image backup: ${result.uploaded} uploaded, ${result.skipped} already backed up`);
+        fetchStatus();
+      } else {
+        setError(result.error || 'Image backup failed');
+      }
+    } catch {
+      setError('Failed to backup images');
+    } finally {
+      setBackingUpImages(false);
+    }
+  };
+
+  const handleImageRestore = async () => {
+    if (!confirm('Restore images from Drive?\n\nThis will download images from Drive and upload them to the image server.')) {
+      return;
+    }
+
+    setRestoringImages(true);
+    setMessage(null);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/admin/backup/images/restore', {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      const result = await response.json();
+      if (response.ok) {
+        setMessage(`Image restore: ${result.restored} restored, ${result.skipped} skipped`);
+        fetchStatus();
+      } else {
+        setError(result.error || 'Image restore failed');
+      }
+    } catch {
+      setError('Failed to restore images');
+    } finally {
+      setRestoringImages(false);
+    }
+  };
+
   const handleWipeDatabase = async () => {
     if (!confirm('WARNING: This will permanently delete ALL POIs from the local database.\n\nThis action cannot be undone!')) return;
     if (!confirm('FINAL WARNING: Click OK to confirm you want to wipe the database.')) return;
@@ -247,9 +297,6 @@ function SyncSettings({ onDataRefresh }) {
       <div className="drive-id-label">
         <span className="folder-icon">{icon}</span>
         <span>{label}</span>
-        {folderData?.file_count !== undefined && (
-          <span className="file-count">({folderData.file_count})</span>
-        )}
       </div>
       <input
         type="text"
@@ -271,6 +318,9 @@ function SyncSettings({ onDataRefresh }) {
     </div>
   );
 
+  const imageBackup = syncStatus?.image_backup;
+  const anyBusy = backingUp || restoring || backingUpImages || restoringImages;
+
   return (
     <div className="sync-settings">
       <h3>Google Drive</h3>
@@ -278,11 +328,10 @@ function SyncSettings({ onDataRefresh }) {
       {error && <div className="sync-error">{error}</div>}
       {message && <div className="sync-success">{message}</div>}
 
-      {/* Google Drive — folders + backup/restore */}
       {syncStatus?.drive?.configured && (
         <div className="sync-drive-info">
           <div className="sync-tile-header">
-            <h4>Folders</h4>
+            <h4>Backup & Restore</h4>
             <button
               className={`refresh-btn${refreshing ? ' spinning' : ''}`}
               onClick={handleManualRefresh}
@@ -292,9 +341,6 @@ function SyncSettings({ onDataRefresh }) {
               &#8635;
             </button>
           </div>
-          <p className="drive-info-description">
-            Edit folder IDs to connect to existing Drive folders.
-          </p>
 
           {syncStatus.drive.folders.root && (
             <div className="drive-root-header">
@@ -310,16 +356,13 @@ function SyncSettings({ onDataRefresh }) {
             </div>
           )}
 
-          <div className="drive-id-list">
-            {driveIdRow('icons', 'Icons', '\u{1F3A8}', syncStatus.drive.folders.icons)}
-            {driveIdRow('images', 'Images', '\u{1F5BC}\uFE0F', syncStatus.drive.folders.images)}
-            {driveIdRow('geospatial', 'Geospatial', '\u{1F5FA}\uFE0F', syncStatus.drive.folders.geospatial)}
-            {driveIdRow('database', 'Database', '\u{1F4BE}', syncStatus.drive.folders.database)}
-          </div>
-
-          {/* Backup & Restore controls */}
+          {/* Database Section */}
           {syncStatus.drive_access_verified && (
-            <div className="backup-controls">
+            <div className="backup-section">
+              <div className="backup-section-header">
+                {driveIdRow('database', 'Database', '\u{1F4BE}', syncStatus.drive.folders.database)}
+              </div>
+
               <div className="sync-status-row">
                 <div className="sync-status-item">
                   <label>Last Backup</label>
@@ -332,7 +375,7 @@ function SyncSettings({ onDataRefresh }) {
                   <button
                     className="sync-btn push-btn"
                     onClick={handleBackup}
-                    disabled={backingUp || restoring}
+                    disabled={anyBusy}
                   >
                     {backingUp ? 'Backing up...' : 'Backup'}
                   </button>
@@ -342,7 +385,7 @@ function SyncSettings({ onDataRefresh }) {
                   <button
                     className="sync-btn pull-btn"
                     onClick={handleShowRestore}
-                    disabled={restoring || backingUp}
+                    disabled={anyBusy}
                   >
                     {restoring ? 'Restoring...' : 'Restore'}
                   </button>
@@ -372,6 +415,53 @@ function SyncSettings({ onDataRefresh }) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Images Section */}
+          {syncStatus.drive_access_verified && (
+            <div className="backup-section">
+              <div className="backup-section-header">
+                {driveIdRow('images', 'Images', '\u{1F5BC}\uFE0F', syncStatus.drive.folders.images)}
+              </div>
+
+              <div className="sync-status-row">
+                <div className="sync-status-item">
+                  <label>Image Server</label>
+                  <span>{imageBackup?.imageServerCount ?? '...'} assets</span>
+                </div>
+                <div className="sync-status-item">
+                  <label>Drive Backup</label>
+                  <span>{imageBackup?.driveCount ?? '...'} files</span>
+                </div>
+                <div className="sync-status-item">
+                  <label>Last Backup</label>
+                  <span>{formatDate(imageBackup?.lastBackup)}</span>
+                </div>
+              </div>
+
+              <div className="sync-buttons-grid">
+                <div className="sync-button-card">
+                  <button
+                    className="sync-btn push-btn"
+                    onClick={handleImageBackup}
+                    disabled={anyBusy}
+                  >
+                    {backingUpImages ? 'Backing up...' : 'Backup'}
+                  </button>
+                  <p className="button-description">Sync missing images to Drive</p>
+                </div>
+                <div className="sync-button-card">
+                  <button
+                    className="sync-btn pull-btn"
+                    onClick={handleImageRestore}
+                    disabled={anyBusy}
+                  >
+                    {restoringImages ? 'Restoring...' : 'Restore'}
+                  </button>
+                  <p className="button-description">Pull images from Drive to image server</p>
+                </div>
+              </div>
             </div>
           )}
         </div>

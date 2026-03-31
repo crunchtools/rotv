@@ -70,11 +70,6 @@ justification = "News service has JSDoc function documentation"
 
 [[exceptions]]
 check = "verbose_comments"
-path = "backend/services/sheetsSync.js"
-justification = "Sheets sync service has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "backend/services/trailStatusService.js"
 justification = "Trail status service has JSDoc function documentation"
 
@@ -509,11 +504,6 @@ check = "deferred_work"
 path = "frontend/src/components/UserMenu.jsx"
 justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
 
-[[exceptions]]
-check = "deferred_work"
-path = "frontend/src/components/ImmichSettings.jsx"
-justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
-
 # Random scripts - container entrypoint and OAuth utility
 
 [[exceptions]]
@@ -558,11 +548,6 @@ path = ".pre-commit-config.yaml"
 justification = "Node.js project uses standard pre-commit hooks without cognitive complexity thresholds (JavaScript ecosystem uses ESLint)"
 
 # Single-use helpers - Google Sheets sync operations (legitimate separation of concerns)
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/sheetsSync.js"
-justification = "Google Sheets sync operations are separated into atomic helper functions (ensure*, read*, push*) for maintainability and testing. Each sheet type (Activities, Eras, Surfaces, Icons, etc.) requires its own schema validation, column mapping, and error handling. Inlining would create massive, unmaintainable functions."
 
 # Single-use helpers - Trail status service (slot architecture requires discrete phases)
 
@@ -664,11 +649,6 @@ justification = "Technical debt: Database query results and API responses use ge
 
 [[exceptions]]
 check = "generic_names"
-path = "backend/services/sheetsSync.js"
-justification = "Technical debt: Google Sheets API responses use generic 'result' and 'data' variable names. Should be refactored in future code quality PR."
-
-[[exceptions]]
-check = "generic_names"
 path = "backend/services/aiSearchFactory.js"
 justification = "Technical debt: AI API responses use generic 'result' variable name. Should be refactored in future code quality PR."
 
@@ -690,11 +670,6 @@ path = "frontend/src/utils/iconUtils.js"
 justification = "getDestinationIconTypeFromConfig is shared between Map.jsx (for map marker icons) and getIconUrlForPOI (for ResultsTile icons). Extracted from Map.jsx to avoid duplication when implementing Issue #73 (replacing letter badges with icons in Results lists). This is legitimate code reuse, not single-use extraction."
 
 # Migration script - one-time use, functions provide logical separation
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/scripts/migrate-poi-images.js"
-justification = "One-time migration script for Issue #1 Part 3. Functions (loadImmichSettings, uploadToImmich, addToAlbum, tagAsset, migrate) provide logical separation for a complex sequential workflow. Script runs once and will be removed after migration is stable."
 
 # Theme hook - date calculation helpers improve readability
 
