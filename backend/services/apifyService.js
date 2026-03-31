@@ -109,17 +109,24 @@ export async function fetchTwitterPosts(pool, statusUrl, maxItems = 10) {
       return { markdown: null, reachable: true, reason: 'no posts found' };
     }
 
+    // Log first item keys for debugging field names
+    if (items.length > 0) {
+      console.log(`[Apify] Twitter response fields: ${Object.keys(items[0]).join(', ')}`);
+      const sample = items[0];
+      console.log(`[Apify] Sample item: text=${sample.text?.substring(0, 80)}, full_text=${sample.full_text?.substring(0, 80)}, tweetText=${sample.tweetText?.substring(0, 80)}, content=${sample.content?.substring(0, 80)}`);
+    }
+
     // Concatenate post text with timestamps
     const posts = items
       .map(item => {
-        const text = item.text || item.full_text || '';
-        const date = item.createdAt || item.created_at || '';
+        const text = item.text || item.full_text || item.tweetText || item.content || '';
+        const date = item.createdAt || item.created_at || item.timestamp || '';
         return date ? `[${date}] ${text}` : text;
       })
       .filter(text => text.trim().length > 0);
 
     if (posts.length === 0) {
-      console.log(`[Apify] Twitter posts returned but no text content for @${handle}`);
+      console.log(`[Apify] Twitter posts returned but no text content for @${handle} (${items.length} items)`);
       return { markdown: null, reachable: true, reason: 'posts found but no text content' };
     }
 
