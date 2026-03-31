@@ -401,7 +401,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       .replace(/\{\{renderedContent\}\}/g, rendered.markdown);
 
     console.log(`[Trail Status] Extracting status with Gemini (${prompt.length} char prompt)...`);
-    const response = await generateTextWithCustomPrompt(pool, prompt, null, { useSearchGrounding: false });
+    const response = await generateTextWithCustomPrompt(pool, prompt, { useSearchGrounding: false });
 
     console.log(`[Trail Status] Received response (${response.length} chars)`);
 
