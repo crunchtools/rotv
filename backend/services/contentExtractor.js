@@ -182,7 +182,7 @@ export async function extractPageContent(url, options = {}) {
       });
       const article = reader.parse();
 
-      if (!article || !article.content || article.content.trim().length < 50) {
+      if (!article || !article.content || article.content.trim().length < 200) {
         const fallbackDom = new JSDOM(html, { url });
         const body = fallbackDom.window.document.body;
         for (const tag of ['script', 'style', 'nav', 'header', 'footer', 'aside']) {
