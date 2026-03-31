@@ -70,7 +70,7 @@ export async function isJavaScriptHeavySite(url, options = {}) {
         const response = await fetch(url, {
           method: 'GET',
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
           },
           signal: AbortSignal.timeout(5000)
         });
@@ -295,7 +295,7 @@ async function renderJavaScriptPageInternal(url, options) {
     }
 
     const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
       ignoreHTTPSErrors: true // Ignore SSL certificate errors for sites with invalid certs
     });
 
