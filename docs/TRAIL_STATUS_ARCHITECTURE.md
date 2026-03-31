@@ -53,32 +53,53 @@ This window was chosen because:
 - **Six months** provides enough history without including truly outdated information
 - **Prevents confusion** from mixing current season with previous season status
 
-**3. Page Rendering with contentExtractor**
+**3. Data Acquisition by Source Type**
 
-All status URLs are rendered via `contentExtractor.js` (Playwright + Readability + Turndown), which produces clean markdown for Gemini to analyze:
-- Twitter/X status accounts (with authenticated cookie support)
-- Bluesky profiles
-- Squarespace trail organization websites
-- Dynamic trail reporting platforms
+Different trail status sources require different extraction methods:
 
-**Playwright Infrastructure:**
+| Source Type | Method | Service | Example |
+|-------------|--------|---------|---------|
+| Twitter/X | Playwright + cookies | contentExtractor.js | @CVNPmtb (East Rim) |
+| Facebook | Apify cloud scraper | apifyService.js | medinaTRAILS (Reagan-Huffman) |
+| Bluesky | Playwright | contentExtractor.js | Summit Metro Parks |
+| Park websites | Playwright | contentExtractor.js | Cleveland Metroparks |
 
-Playwright and Chromium browsers are installed in the **base container image** (`Containerfile.base`) to optimize build times:
+**URL Routing in trailStatusService.js:**
+
+```
+if Facebook URL → apifyService.fetchFacebookPosts → text
+else → contentExtractor.extractPageContent (with cookies for Twitter) → markdown
+```
+
+Both paths produce text that feeds into the same Gemini prompt. The rest of the pipeline (prompt building, Gemini call, JSON parsing, saveTrailStatus) is identical regardless of source.
+
+**Playwright + Readability (Twitter/X, Bluesky, Park Websites)**
+
+Most status URLs are rendered via `contentExtractor.js` (Playwright + Readability + Turndown), which produces clean markdown for Gemini to analyze. Playwright and Chromium browsers are installed in the **base container image** (`Containerfile.base`) to optimize build times:
 - Base image installs Playwright globally and downloads Chromium browsers (~400MB)
 - Base image records the installed version in `/etc/playwright-version`
 - App image installs the matching Playwright npm package version
-- This ensures browser binaries match the npm package API
 
-This layered approach means browser downloads only happen when the base image is rebuilt, not on every app deployment.
-
-**Twitter/X Authentication:**
-
-Twitter pages require authenticated access to load tweet content. The system supports cookie-based authentication:
+Twitter/X pages require authenticated access to load tweet content:
 - Cookies are stored in `admin_settings` table with key `twitter_cookies`
-- `trailStatusService.js` loads cookies from the database and passes them to `contentExtractor`
+- `trailStatusService.js` loads cookies and passes them to `contentExtractor`
 - `contentExtractor.js` injects cookies into the Playwright browser context before navigation
-- Cookie `sameSite` values must be normalized to Playwright-compatible values (`Strict`, `Lax`, or `None`)
-- Cookies typically remain valid for ~1 year
+- Cookie `sameSite` values are normalized to Playwright-compatible values (`Strict`, `Lax`, `None`)
+- **Cookies expire after 30-90 days and must be refreshed periodically** via Settings > Data Collection
+- Twitter gets an extended `dynamicContentWait` (8s vs 3s) for SPA rendering
+
+**Apify Cloud Scraper (Facebook)**
+
+Facebook pages cannot be scraped with Playwright because the SPA doesn't yield extractable content. The system uses Apify's first-party Facebook scraper (`apify/facebook-posts-scraper`) via `apifyService.js`:
+- API token stored in `admin_settings` table with key `apify_api_token`
+- Calls the Apify sync API: `POST /v2/acts/{actorId}/run-sync-get-dataset-items`
+- Returns post text concatenated with timestamps, same format as contentExtractor output
+- Configurable via Settings > Data Collection in the admin UI
+- Estimated usage: ~1,440 requests/month (1 trail × 48/day × 30 days), within Apify's free tier
+
+**Why Not Apify for Twitter?**
+
+Apify's community Twitter/X scrapers were evaluated (apidojo/tweet-scraper, apidojo/twitter-scraper-lite, apidojo/twitter-profile-scraper, quacker/twitter-url-scraper) and all failed to return current tweet data — returning `noResults`, `demo` placeholders, or stale cached data. Twitter's anti-bot measures make third-party scrapers unreliable. Playwright with authenticated cookies remains the most reliable approach for Twitter.
 
 **4. Source URL Override Pattern**
 
@@ -129,10 +150,10 @@ The system uses pg-boss for reliable background job processing:
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Frontend UI                             │
-│  - Status tab in Sidebar (MTB trails only)                      │
-│  - Status badge (Open/Closed/Limited/Maintenance)               │
-│  - Collect Status button (admin edit mode)                      │
-│  - Deep link to source page                                     │
+│  - Status badge + Source link in Info tab badges row            │
+│  - Trail Status section (conditions, weather, updated)          │
+│  - Refresh button (admin edit mode)                             │
+│  - Apify API token config in Settings > Data Collection         │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -153,14 +174,16 @@ The system uses pg-boss for reliable background job processing:
 │                                                                 │
 │  1. collectTrailStatus(pool, poi)                               │
 │     ├─ Skip if no status_url configured                        │
-│     ├─ Load cookies for Twitter/X URLs                         │
-│     ├─ Render with contentExtractor (Playwright + Readability) │
+│     ├─ Route by URL type:                                      │
+│     │   ├─ Facebook → apifyService.fetchFacebookPosts          │
+│     │   └─ All others → contentExtractor (+ cookies for X)     │
 │     ├─ Extract status via Gemini Flash (no search grounding)   │
 │     ├─ Override source_url with configured status_url          │
 │     └─ Return {status, conditions, source_url, ...}            │
 │                                                                 │
 │  2. saveTrailStatus(pool, poiId, status)                        │
-│     ├─ Check for existing recent status                        │
+│     ├─ Reject status older than 90 days                        │
+│     ├─ Check for existing recent status (dedup)                │
 │     └─ Insert new status record                                │
 │                                                                 │
 │  3. runTrailStatusBatchCollection(pool, poiIds, jobId)          │
@@ -170,19 +193,30 @@ The system uses pg-boss for reliable background job processing:
 │     └─ Handle cancellation gracefully                          │
 └─────────────────────────────────────────────────────────────────┘
                               │
+                    ┌─────────┴─────────┐
+                    ▼                   ▼
+┌────────────────────────────┐ ┌────────────────────────────────┐
+│   contentExtractor.js      │ │   apifyService.js              │
+│                            │ │                                │
+│  Playwright + Readability  │ │  Apify Cloud Scraper           │
+│  + Turndown → markdown     │ │  (Facebook only)               │
+│                            │ │                                │
+│  Used for:                 │ │  Used for:                     │
+│  - Twitter/X (+ cookies)   │ │  - Facebook pages              │
+│  - Bluesky                 │ │                                │
+│  - Park websites           │ │  Actor: apify/facebook-posts-  │
+│  - Any other URL           │ │         scraper                │
+└────────────────────────────┘ └────────────────────────────────┘
+                    │                   │
+                    └─────────┬─────────┘
                               ▼
-┌─────────────────────────────────────────────────────────────────┐
-│              Content Extractor + Gemini Pipeline                │
-│                                                                 │
-│  contentExtractor.js:                                           │
-│  - Playwright renders any URL (with cookie auth for Twitter)    │
-│  - Readability extracts article content                         │
-│  - Turndown converts to clean markdown                          │
-│                                                                 │
-│  geminiService.js:                                              │
-│  - Gemini Flash with useSearchGrounding: false                  │
-│  - Extracts structured status from rendered markdown            │
-└─────────────────────────────────────────────────────────────────┘
+              ┌───────────────────────────────┐
+              │       geminiService.js        │
+              │                               │
+              │  Gemini Flash                  │
+              │  useSearchGrounding: false     │
+              │  Extracts structured status    │
+              └───────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────────┐
@@ -501,50 +535,14 @@ Cancels a running batch job gracefully.
 
 ## Frontend UI
 
-### Status Tab in Sidebar
+### Trail Status in Info Tab
 
-The Status tab only appears for POIs with a configured `status_url` (MTB trails).
+Trail status is displayed inline on the Info tab (no separate Status tab). For POIs with a configured `status_url`:
 
-**File:** `frontend/src/components/Sidebar.jsx`
+**Badges row** (top of Info): Status badge (Open/Closed/Limited/Maintenance) + Source link badge
+**Trail Status section** (below badges, above Overview): Conditions, weather impact, updated timestamp, seasonal closure warning, admin Refresh button
 
-```jsx
-// StatusTab component (around line 2900)
-function StatusTab({ destination, isAdmin, editMode }) {
-  const [status, setStatus] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [collecting, setCollecting] = useState(false);
-
-  useEffect(() => {
-    fetchStatus();
-  }, [destination?.id]);
-
-  const fetchStatus = async () => {
-    if (!destination?.id) return;
-    setLoading(true);
-    const response = await fetch(`/api/pois/${destination.id}/status`);
-    if (response.ok) {
-      const data = await response.json();
-      setStatus(data);
-    }
-    setLoading(false);
-  };
-
-  // Render status badge, conditions, source link
-  return (
-    <div className="status-tab">
-      <div className={`status-badge status-${status?.status}`}>
-        {status?.status?.toUpperCase() || 'UNKNOWN'}
-      </div>
-      {status?.conditions && <p>{status.conditions}</p>}
-      {status?.source_url && (
-        <a href={status.source_url} target="_blank" rel="noopener noreferrer">
-          View on {status.source_name}
-        </a>
-      )}
-    </div>
-  );
-}
-```
+**File:** `frontend/src/components/Sidebar.jsx` (ReadOnlyView component)
 
 ### Status Badge Styling
 
@@ -732,6 +730,17 @@ psql -U postgres -d rotv -f backend/migrations/001_add_trail_status_support.sql
 ---
 
 ## Changelog
+
+**Version 3.0.0 (2026-03-31)**
+- Added Apify integration for Facebook trail status (Reagan-Huffman via medinaTRAILS page)
+- New `apifyService.js` — Apify cloud scraper client (Facebook only)
+- URL routing in `trailStatusService.js`: Facebook → Apify, everything else → Playwright
+- Twitter/X remains on Playwright + cookies (Apify Twitter actors evaluated and rejected as unreliable)
+- Extended Twitter dynamic content wait from 3s to 8s for SPA rendering
+- Bumped status age threshold from 30 to 90 days (trail accounts post infrequently)
+- Collapsed Status tab into Info section — badges in top row, details below
+- Added Apify API token configuration in Settings > Data Collection
+- Added Facebook to source_name mapping
 
 **Version 2.0.0 (2026-03-30)**
 - Replaced search-grounded AI (Perplexity/Gemini search) with Playwright rendering + Gemini Flash extraction

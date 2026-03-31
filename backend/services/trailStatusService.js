@@ -8,7 +8,7 @@
 
 import { generateTextWithCustomPrompt } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
-import { fetchTwitterPosts, fetchFacebookPosts, isTwitterUrl, isFacebookUrl } from './apifyService.js';
+import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
 
 // Dispatch interval: start one new trail job every N milliseconds
 const DISPATCH_INTERVAL_MS = 1500;
@@ -316,18 +316,10 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    // Route by URL type: Twitter/Facebook use Apify, everything else uses Playwright
+    // Route by URL type: Facebook uses Apify, everything else uses Playwright
     let rendered;
 
-    if (isTwitterUrl(statusUrl)) {
-      console.log(`[Trail Status] Fetching Twitter posts via Apify for: ${statusUrl}`);
-      updateProgress(poi.id, {
-        phase: 'rendering',
-        message: 'Fetching Twitter posts via Apify...',
-        steps: ['Initialized', 'Fetching Twitter posts']
-      });
-      rendered = await fetchTwitterPosts(pool, statusUrl);
-    } else if (isFacebookUrl(statusUrl)) {
+    if (isFacebookUrl(statusUrl)) {
       console.log(`[Trail Status] Fetching Facebook posts via Apify for: ${statusUrl}`);
       updateProgress(poi.id, {
         phase: 'rendering',
@@ -336,7 +328,22 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       });
       rendered = await fetchFacebookPosts(pool, statusUrl);
     } else {
-      // Standard Playwright + Readability extraction
+      // Playwright + Readability extraction (with cookies for Twitter/X)
+      let cookies = null;
+      if (statusUrl.includes('x.com') || statusUrl.includes('twitter.com')) {
+        try {
+          const cookieResult = await pool.query(
+            `SELECT value FROM admin_settings WHERE key = 'twitter_cookies'`
+          );
+          if (cookieResult.rows.length > 0 && cookieResult.rows[0].value) {
+            cookies = JSON.parse(cookieResult.rows[0].value);
+            console.log(`[Trail Status] Loaded ${cookies.length} Twitter cookies`);
+          }
+        } catch (cookieErr) {
+          console.log(`[Trail Status] No Twitter cookies available: ${cookieErr.message}`);
+        }
+      }
+
       console.log(`[Trail Status] Rendering status page: ${statusUrl}`);
       updateProgress(poi.id, {
         phase: 'rendering',
@@ -345,7 +352,8 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       });
       rendered = await extractPageContent(statusUrl, {
         maxLength: 15000,
-        dynamicContentWait: 3000
+        dynamicContentWait: statusUrl.includes('x.com') || statusUrl.includes('twitter.com') ? 8000 : 3000,
+        cookies
       });
     }
 
@@ -457,7 +465,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     // Override source_url with the POI's configured status_url
     status.source_url = poi.status_url;
     // Extract source name from the URL if not already set
-    if (isTwitterUrl(poi.status_url)) {
+    if (poi.status_url.includes('x.com') || poi.status_url.includes('twitter.com')) {
       status.source_name = 'Twitter/X';
     } else if (isFacebookUrl(poi.status_url)) {
       status.source_name = 'Facebook';
