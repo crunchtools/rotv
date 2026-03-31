@@ -1,13 +1,12 @@
 /**
  * Apify Service
- * Fetches Twitter/X and Facebook posts via Apify cloud scrapers.
- * Used by trailStatusService for URLs that can't be extracted with Playwright + Readability.
+ * Fetches Facebook posts via Apify cloud scrapers.
+ * Used by trailStatusService for Facebook URLs that can't be extracted with Playwright.
+ *
+ * Twitter/X uses Playwright + cookies directly (Apify Twitter actors are unreliable).
  */
 
 const APIFY_BASE_URL = 'https://api.apify.com/v2';
-
-// Actor IDs for Twitter and Facebook scrapers
-const TWITTER_ACTOR_ID = 'apidojo~tweet-scraper';
 const FACEBOOK_ACTOR_ID = 'apify~facebook-posts-scraper';
 
 /**
@@ -31,7 +30,7 @@ async function getApifyToken(pool) {
 
 /**
  * Call Apify actor sync API and return dataset items
- * @param {string} actorId - Apify actor ID (e.g., 'apify~twitter-scraper')
+ * @param {string} actorId - Apify actor ID
  * @param {Object} input - Actor input payload
  * @param {string} token - Apify API token
  * @returns {Array} - Array of result items
@@ -55,16 +54,6 @@ async function runActorSync(actorId, input, token) {
 }
 
 /**
- * Extract Twitter/X handle from a URL
- * @param {string} url - Twitter/X URL (e.g., 'https://x.com/CVNPmtb')
- * @returns {string|null} - Handle without @ prefix, or null
- */
-function extractTwitterHandle(url) {
-  const match = url.match(/(?:x\.com|twitter\.com)\/([A-Za-z0-9_]+)/);
-  return match ? match[1] : null;
-}
-
-/**
  * Extract Facebook page URL from a status URL
  * Normalizes to https://www.facebook.com/pagename/ format
  * @param {string} url - Facebook URL
@@ -73,71 +62,6 @@ function extractTwitterHandle(url) {
 function extractFacebookPageUrl(url) {
   const match = url.match(/(?:www\.)?facebook\.com\/([A-Za-z0-9._-]+)/);
   return match ? `https://www.facebook.com/${match[1]}/` : null;
-}
-
-/**
- * Fetch recent Twitter/X posts for a user handle via Apify
- * @param {Pool} pool - Database connection pool
- * @param {string} statusUrl - Twitter/X URL (e.g., 'https://x.com/CVNPmtb')
- * @param {number} maxItems - Maximum number of posts to fetch (default: 10)
- * @returns {Object} - { markdown: string|null, reachable: boolean, reason?: string }
- */
-export async function fetchTwitterPosts(pool, statusUrl, maxItems = 10) {
-  const handle = extractTwitterHandle(statusUrl);
-  if (!handle) {
-    console.log(`[Apify] Could not extract Twitter handle from: ${statusUrl}`);
-    return { markdown: null, reachable: false, reason: 'invalid Twitter URL' };
-  }
-
-  const token = await getApifyToken(pool);
-  if (!token) {
-    console.log('[Apify] No API token configured');
-    return { markdown: null, reachable: false, reason: 'Apify API token not configured' };
-  }
-
-  console.log(`[Apify] Fetching Twitter posts for @${handle} (max ${maxItems})...`);
-
-  try {
-    const items = await runActorSync(TWITTER_ACTOR_ID, {
-      startUrls: [`https://x.com/${handle}`],
-      maxItems,
-      sort: 'Latest'
-    }, token);
-
-    if (!items || items.length === 0) {
-      console.log(`[Apify] No Twitter posts found for @${handle}`);
-      return { markdown: null, reachable: true, reason: 'no posts found' };
-    }
-
-    // Log first item keys for debugging field names
-    if (items.length > 0) {
-      console.log(`[Apify] Twitter response fields: ${Object.keys(items[0]).join(', ')}`);
-      const sample = items[0];
-      console.log(`[Apify] Sample item: text=${sample.text?.substring(0, 80)}, full_text=${sample.full_text?.substring(0, 80)}, tweetText=${sample.tweetText?.substring(0, 80)}, content=${sample.content?.substring(0, 80)}`);
-    }
-
-    // Concatenate post text with timestamps
-    const posts = items
-      .map(item => {
-        const text = item.text || item.full_text || item.tweetText || item.content || '';
-        const date = item.createdAt || item.created_at || item.timestamp || '';
-        return date ? `[${date}] ${text}` : text;
-      })
-      .filter(text => text.trim().length > 0);
-
-    if (posts.length === 0) {
-      console.log(`[Apify] Twitter posts returned but no text content for @${handle} (${items.length} items)`);
-      return { markdown: null, reachable: true, reason: 'posts found but no text content' };
-    }
-
-    const markdown = posts.join('\n\n---\n\n');
-    console.log(`[Apify] Got ${posts.length} Twitter posts for @${handle} (${markdown.length} chars)`);
-
-    return { markdown, reachable: true };
-  } catch (err) {
-    console.error(`[Apify] Twitter fetch error for @${handle}:`, err.message);
-    return { markdown: null, reachable: false, reason: `Apify error: ${err.message}` };
-  }
 }
 
 /**
@@ -195,15 +119,6 @@ export async function fetchFacebookPosts(pool, statusUrl, maxItems = 10) {
     console.error(`[Apify] Facebook fetch error for ${pageUrl}:`, err.message);
     return { markdown: null, reachable: false, reason: `Apify error: ${err.message}` };
   }
-}
-
-/**
- * Check if a URL is a Twitter/X URL
- * @param {string} url - URL to check
- * @returns {boolean}
- */
-export function isTwitterUrl(url) {
-  return url.includes('x.com') || url.includes('twitter.com');
 }
 
 /**
