@@ -188,7 +188,7 @@ END:VCALENDAR`;
   };
 
   const isLoading = activeSubTab === 'future' ? loading : pastLoading;
-  const tabLabel = activeSubTab === 'future' ? 'Future Events' : 'Past Events';
+  const tabLabel = 'Events';
 
   if (isLoading) {
     return (

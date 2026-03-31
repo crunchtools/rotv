@@ -2715,6 +2715,13 @@ body {
     text-align: center;
   }
 
+  .results-subtab {
+    flex: 1;
+    padding: 0.5rem 0.25rem;
+    font-size: 0.8rem;
+    text-align: center;
+  }
+
   .sidebar-header {
     flex-shrink: 0;
     padding: 0.75rem 1rem;
@@ -4512,7 +4519,11 @@ body {
 
 /* Full-width content panels (News, Events, Results) */
 .main-content-full {
-  flex: 1;
+  position: fixed;
+  top: var(--header-height);
+  left: 0;
+  right: 0;
+  bottom: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   background: #f5f5f5;
@@ -10472,6 +10483,21 @@ body {
   right: 0;
   height: 2px;
   background: #4CAF50;
+}
+
+/* Responsive sub-tab labels: full text on desktop, abbreviated on mobile */
+.subtab-label-short {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .subtab-label-full {
+    display: none;
+  }
+
+  .subtab-label-short {
+    display: inline;
+  }
 }
 
 /* Results filters */
