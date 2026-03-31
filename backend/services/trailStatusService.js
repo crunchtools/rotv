@@ -511,13 +511,13 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
  */
 async function saveTrailStatus(pool, poiId, status) {
   try {
-    // Validate that last_updated is not too old (reject status older than 30 days)
+    // Validate that last_updated is not too old (reject status older than 90 days)
     if (status.last_updated) {
       const lastUpdated = new Date(status.last_updated);
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-      if (lastUpdated < thirtyDaysAgo) {
+      if (lastUpdated < ninetyDaysAgo) {
         console.log(`[Trail Status] Skipping outdated status (last updated: ${status.last_updated})`);
         return false;
       }
