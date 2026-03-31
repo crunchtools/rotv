@@ -12010,6 +12010,62 @@ svg.leaflet-zoom-animated {
   margin-top: 1rem;
 }
 
+/* Trail Status inline on Info tab */
+.trail-status-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 0.5rem;
+}
+
+.trail-status-badge.source {
+  background: #6c757d;
+  color: white;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.trail-status-badge.source:hover {
+  background: #5a6268;
+}
+
+.trail-status-detail {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.trail-status-detail.trail-status-seasonal {
+  background: #fff3cd;
+  border: 1px solid #ffc107;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+}
+
+.trail-status-updated {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: #999;
+}
+
+.collect-status-inline-btn {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: 500;
+  background-color: #e9ecef;
+  color: #495057;
+  border: 1px solid #ced4da;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.collect-status-inline-btn:hover {
+  background-color: #dee2e6;
+}
+
 /* Status Tab - Main Tab View */
 .status-tab-content {
   width: 100%;

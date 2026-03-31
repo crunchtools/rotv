@@ -207,7 +207,7 @@ function EditableCellSignal({ level, onChange }) {
 }
 
 // Read-only view component - works for both destinations and linear features
-function ReadOnlyView({ destination, isLinearFeature, _isAdmin, showImage = true, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap }) {
+function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, showImage = true, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap, onCollectStatus }) {
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
   const imageUrl = destination.image_mime_type
@@ -276,13 +276,18 @@ function ReadOnlyView({ destination, isLinearFeature, _isAdmin, showImage = true
               {destination.owner_name || destination.property_owner}
             </span>
           )}
-          {destination.status_url && trailStatus && (
-            <span className={`trail-status-badge status-${trailStatus.status || 'unknown'}`}>
+          {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (
+            <span className={`trail-status-badge status-${trailStatus.status}`}>
               {trailStatus.status === 'open' ? 'Open' :
                trailStatus.status === 'closed' ? 'Closed' :
                trailStatus.status === 'limited' ? 'Limited' :
                trailStatus.status === 'maintenance' ? 'Maintenance' : 'Unknown'}
             </span>
+          )}
+          {destination.status_url && trailStatus && trailStatus.source_url && (
+            <a href={trailStatus.source_url} target="_blank" rel="noopener noreferrer" className="trail-status-badge source">
+              Source
+            </a>
           )}
           {/* Share button */}
           {onShare && (
@@ -294,6 +299,29 @@ function ReadOnlyView({ destination, isLinearFeature, _isAdmin, showImage = true
             </button>
           )}
         </div>
+
+        {/* Trail Status section - matches Overview section styling */}
+        {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated) && (
+          <div className="section">
+            <h3>Trail Status {isAdmin && editMode && onCollectStatus && (
+              <button className="collect-status-inline-btn" onClick={onCollectStatus} title="Refresh trail status">
+                Refresh
+              </button>
+            )}</h3>
+            {trailStatus.conditions && (
+              <p className="trail-status-detail">{trailStatus.conditions}</p>
+            )}
+            {trailStatus.weather_impact && (
+              <p className="trail-status-detail">{trailStatus.weather_impact}</p>
+            )}
+            {trailStatus.seasonal_closure && (
+              <p className="trail-status-detail trail-status-seasonal">Seasonal Closure in Effect</p>
+            )}
+            {trailStatus.last_updated && (
+              <p className="trail-status-updated">Updated: {formatDateTime(trailStatus.last_updated)}</p>
+            )}
+          </div>
+        )}
 
         {destination.brief_description && (
           <div className="section">
@@ -2597,9 +2625,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       // Auto-enter edit mode if admin and editMode is on, or if creating new POI
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
-      // Stay on view tab if entering edit mode (EditView only renders on view tab)
-      // Otherwise: Status tab if selected from MTB list, Info tab otherwise
-      setSidebarTab(shouldEnterEditMode ? 'view' : (selectedFromMtbList ? 'status' : 'view'));
+      // Stay on view tab — trail status is now shown inline on the Info tab
+      setSidebarTab('view');
     } else {
       setIsEditing(false);
     }
@@ -2680,6 +2707,31 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayItem?.id, displayItem?.status_url]); // Only depend on specific properties, not whole displayItem object
+
+  // Handler for collecting trail status from the Info tab
+  const handleCollectStatusInline = async () => {
+    if (!displayItem?.id) return;
+    try {
+      const response = await fetch(`/api/admin/pois/${displayItem.id}/status/collect`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (response.ok) {
+        // Refresh status after collection
+        const statusResponse = await fetch(`/api/pois/${displayItem.id}/status`);
+        if (statusResponse.ok) {
+          const data = await statusResponse.json();
+          setTrailStatus(data);
+        }
+      } else {
+        const error = await response.json();
+        alert('Collection failed: ' + (error.error || 'Unknown error'));
+      }
+    } catch (err) {
+      console.error('[handleCollectStatusInline] Error:', err);
+      alert('Collection error: ' + err.message);
+    }
+  };
 
   // Handler for saving new organization
   const handleSaveNewOrganization = async () => {
@@ -3090,14 +3142,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           >
             Info
           </button>
-          {linearFeature?.status_url && (
-            <button
-              className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
-              onClick={() => setSidebarTab('status')}
-            >
-              Status
-            </button>
-          )}
           <button
             className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
             onClick={() => setSidebarTab('news')}
@@ -3155,12 +3199,14 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 destination={linearFeature}
                 isLinearFeature={true}
                 isAdmin={isAdmin}
+                editMode={editMode}
                 showImage={false}
                 onShare={() => setShowShareModal(true)}
                 moreInfoLink={linearFeature.more_info_link}
                 trailStatus={trailStatus}
                 showNpsMap={showNpsMap}
                 onToggleNpsMap={onToggleNpsMap}
+                onCollectStatus={handleCollectStatusInline}
               />
             )
           )}
@@ -3171,10 +3217,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
           {sidebarTab === 'events' && linearFeature && (
             <PoiEvents poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount} />
-          )}
-
-          {sidebarTab === 'status' && linearFeature && linearFeature.status_url && (
-            <TrailStatus poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} selectedFromMtbList={selectedFromMtbList} onBackToMtbList={onBackToMtbList} />
           )}
 
           {sidebarTab === 'history' && linearFeature && (
@@ -3401,14 +3443,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         >
           Info
         </button>
-        {destination?.status_url && (
-          <button
-            className={`sidebar-tab ${sidebarTab === 'status' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('status')}
-          >
-            Status
-          </button>
-        )}
         <button
           className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
           onClick={() => setSidebarTab('news')}
@@ -3466,12 +3500,14 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             <ReadOnlyView
               destination={destination}
               isAdmin={isAdmin}
+              editMode={editMode}
               showImage={false}
               onShare={() => setShowShareModal(true)}
               moreInfoLink={destination.more_info_link}
               trailStatus={trailStatus}
               showNpsMap={showNpsMap}
               onToggleNpsMap={onToggleNpsMap}
+              onCollectStatus={handleCollectStatusInline}
             />
           )
         )}
@@ -3482,10 +3518,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
         {sidebarTab === 'events' && destination && (
           <PoiEvents poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount} />
-        )}
-
-        {sidebarTab === 'status' && destination && destination.status_url && (
-          <TrailStatus poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} selectedFromMtbList={selectedFromMtbList} onBackToMtbList={onBackToMtbList} />
         )}
 
         {sidebarTab === 'history' && destination && (

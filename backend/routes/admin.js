@@ -436,7 +436,7 @@ export function createAdminRouter(pool) {
       const settings = {};
       for (const row of result.rows) {
         // For API keys, only indicate if set (don't expose value)
-        if (row.key.includes('api_key')) {
+        if (row.key.includes('api_key') || row.key.includes('api_token')) {
           settings[row.key] = {
             isSet: !!row.value,
             updatedAt: row.updated_at
@@ -474,7 +474,8 @@ export function createAdminRouter(pool) {
       'moderation_enabled',
       'moderation_auto_approve_threshold',
       'moderation_auto_approve_enabled',
-      'photo_submissions_enabled'
+      'photo_submissions_enabled',
+      'apify_api_token'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
