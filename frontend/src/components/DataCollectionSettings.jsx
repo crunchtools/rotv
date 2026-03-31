@@ -48,6 +48,11 @@ function DataCollectionSettings() {
   const [twitterCookiesJson, setTwitterCookiesJson] = useState('');
   const [showCookieInput, setShowCookieInput] = useState(false);
 
+  // Apify API token state
+  const [apifyToken, setApifyToken] = useState('');
+  const [apifyTokenSet, setApifyTokenSet] = useState(false);
+  const [apifySaving, setApifySaving] = useState(false);
+
   // Playwright status state
   const [playwrightStatus, setPlaywrightStatus] = useState(null);
   const [playwrightLoading, setPlaywrightLoading] = useState(true);
@@ -69,6 +74,7 @@ function DataCollectionSettings() {
     fetchAiConfig();
     fetchTwitterCredentials();
     fetchTwitterAuthStatus();
+    fetchApifyStatus();
     fetchPlaywrightStatus();
     fetchModerationConfig();
   }, []);
@@ -459,6 +465,49 @@ function DataCollectionSettings() {
     }
   };
 
+  const fetchApifyStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', {
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const settings = await response.json();
+        setApifyTokenSet(settings.apify_api_token?.isSet || false);
+      }
+    } catch (err) {
+      console.error('Error fetching Apify status:', err);
+    }
+  };
+
+  const handleSaveApifyToken = async () => {
+    if (!apifyToken.trim()) {
+      setResult({ type: 'error', message: 'API token cannot be empty' });
+      return;
+    }
+    setApifySaving(true);
+    setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/apify_api_token', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ value: apifyToken })
+      });
+      if (response.ok) {
+        setResult({ type: 'success', message: 'Apify API token saved successfully' });
+        setApifyToken('');
+        setApifyTokenSet(true);
+      } else {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to save token');
+      }
+    } catch (err) {
+      setResult({ type: 'error', message: `Failed to save Apify token: ${err.message}` });
+    } finally {
+      setApifySaving(false);
+    }
+  };
+
   const handleSaveAiConfig = async () => {
     setAiConfigSaving(true);
     setResult(null);
@@ -760,7 +809,7 @@ function DataCollectionSettings() {
     const phaseMap = {
       'starting': 'Starting...',
       'initializing': 'Initializing...',
-      'rendering': 'Rendering JavaScript page...',
+      'rendering': 'Fetching content...',
       'rendering_events': 'Rendering event links...',
       'rendering_news': 'Rendering news links...',
       'ai_search': 'Searching with AI...',
@@ -1377,6 +1426,51 @@ function DataCollectionSettings() {
             )}
           </>
         )}
+      </div>
+
+      {/* Apify API Token */}
+      <div className="ai-config-section">
+        <h4>Apify API Token</h4>
+        <p className="settings-description">
+          Required for scraping Twitter/X and Facebook trail status pages.
+          Used for East Rim (Twitter) and Reagan-Huffman (Facebook) trails.
+        </p>
+
+        <div className="config-row">
+          <label>Status:</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span className={`status-indicator ${apifyTokenSet ? 'configured' : 'not-configured'}`}></span>
+            <span>{apifyTokenSet ? 'API token configured' : 'API token not configured'}</span>
+          </div>
+        </div>
+
+        <div className="config-row">
+          <label>API Token:</label>
+          <input
+            type="password"
+            value={apifyToken}
+            onChange={e => setApifyToken(e.target.value)}
+            placeholder="Enter Apify API token..."
+            disabled={apifySaving || newsCollecting || trailCollecting}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '10px', marginTop: '0.5rem' }}>
+          <button
+            className="action-btn primary"
+            onClick={handleSaveApifyToken}
+            disabled={apifySaving || !apifyToken.trim() || newsCollecting || trailCollecting}
+          >
+            {apifySaving ? 'Saving...' : 'Save Token'}
+          </button>
+        </div>
+
+        <p className="settings-description" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
+          Get your token from{' '}
+          <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">
+            Apify Console &gt; Settings &gt; Integrations
+          </a>
+        </p>
       </div>
 
       {/* Moderation Configuration */}
