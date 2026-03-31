@@ -441,7 +441,7 @@ class ImageServerClient {
     }
 
     try {
-      const response = await fetch(`${this.serverUrl}/api/assets`);
+      const response = await fetch(`${this.serverUrl}/api/assets/all`);
 
       if (!response.ok) {
         throw new Error(`Fetch failed: ${response.status}`);
