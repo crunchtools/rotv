@@ -99,7 +99,7 @@ export async function fetchTwitterPosts(pool, statusUrl, maxItems = 10) {
 
   try {
     const items = await runActorSync(TWITTER_ACTOR_ID, {
-      twitterHandles: [handle],
+      startUrls: [`https://x.com/${handle}`],
       maxItems,
       sort: 'Latest'
     }, token);
