@@ -10,6 +10,7 @@ import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats }
 import { extractPageContent } from './contentExtractor.js';
 import { calculateSimilarity } from './textUtils.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
+import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -2034,6 +2035,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   initializeSlots(jobId);
 
   console.log(`[Job ${jobId}] Starting/resuming news collection: ${remainingPoiIds.length} POIs remaining (${processedPoiIds.length} already done)`);
+  logInfo(jobId, 'news', null, null, `Job started: ${remainingPoiIds.length} POIs remaining`, { total: allPoiIds.length, already_done: processedPoiIds.length });
 
   // Get POI details for remaining POIs
   const poisResult = await pool.query(
@@ -2133,6 +2135,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
         const savedEvents = await saveEventItems(pool, poi.id, events);
         console.log(`[Job ${jobId}] [${index + 1}/${pois.length}] ✓ ${poi.name}: ${savedNews} news, ${savedEvents} events`);
+        logInfo(jobId, 'news', poi.id, poi.name, `${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents, provider: metadata?.provider });
 
         // Update progress incrementally
         processed++;
@@ -2158,6 +2161,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         allResults.push({ poiId: poi.id, poiName: poi.name, newsFound: savedNews, eventsFound: savedEvents, success: true });
       } catch (error) {
         console.error(`[Job ${jobId}] [${index + 1}/${pois.length}] ✗ ${poi.name}: ${error.message}`);
+        logError(jobId, 'news', poi.id, poi.name, error.message, { error_stack: error.stack?.split('\n').slice(0, 3).join('\n') });
         processed++;
         newlyProcessedIds.push(poi.id);
 
@@ -2210,9 +2214,12 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
 
     if (jobCancelled) {
       console.log(`[Job ${jobId}] Cancelled after processing ${processed} POIs, ${newsFound} news, ${eventsFound} events`);
+      logInfo(jobId, 'news', null, null, `Job cancelled: ${processed} POIs, ${newsFound} news, ${eventsFound} events`, { pois_processed: processed, news_found: newsFound, events_found: eventsFound });
     } else {
       console.log(`[Job ${jobId}] Completed: ${processed} POIs, ${newsFound} news, ${eventsFound} events`);
+      logInfo(jobId, 'news', null, null, `Job completed: ${processed} POIs, ${newsFound} news, ${eventsFound} events`, { pois_processed: processed, news_found: newsFound, events_found: eventsFound, ai_usage: usage });
     }
+    await flushJobLogs();
 
     // Don't clear display slots - keep them frozen for frontend to display
     // Frontend will clear them when user clicks X or starts a new job
@@ -2237,6 +2244,8 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
 
   } catch (error) {
     console.error(`[Job ${jobId}] Failed:`, error);
+    logError(jobId, 'news', null, null, `Job failed: ${error.message}`, { error_stack: error.stack?.split('\n').slice(0, 5).join('\n') });
+    await flushJobLogs();
     await pool.query(`
       UPDATE news_job_status
       SET status = 'failed', completed_at = $1, error_message = $2

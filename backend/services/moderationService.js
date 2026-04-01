@@ -7,6 +7,7 @@
 import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle } from './deepCrawler.js';
+import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -377,6 +378,8 @@ export async function processPendingItems(pool) {
   }
 
   let processed = 0;
+  let approved = 0;
+  let rejected = 0;
 
   const pendingNews = await pool.query(
     `SELECT id FROM poi_news WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
@@ -414,6 +417,11 @@ export async function processPendingItems(pool) {
     }
   }
 
+  const totalPending = pendingNews.rows.length + pendingEvents.rows.length + pendingPhotos.rows.length;
+  if (totalPending > 0) {
+    logInfo(null, 'moderation', null, null, `Sweep complete: ${processed} processed`, { pending: totalPending, processed });
+    await flushJobLogs();
+  }
   console.log(`[Moderation] Sweep complete: ${processed} items processed`);
   return { processed };
 }

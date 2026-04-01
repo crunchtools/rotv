@@ -11,6 +11,7 @@ import TurndownService from 'turndown';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL } from './geminiService.js';
 import { queueModerationJob, queueNewsletterJob } from './jobScheduler.js';
+import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -368,6 +369,8 @@ IMPORTANT:
     `, [newsInserted, eventsInserted, emailId]);
 
     console.log(`[Newsletter] Complete: ${newsInserted} news, ${eventsInserted} events inserted from "${subject}"`);
+    logInfo(emailId, 'newsletter', null, null, `${newsInserted} news, ${eventsInserted} events extracted from "${subject}"`, { from, news_inserted: newsInserted, events_inserted: eventsInserted });
+    await flushJobLogs();
 
     return {
       success: true,
@@ -386,6 +389,8 @@ IMPORTANT:
       WHERE id = $2
     `, [error.message, emailId]);
 
+    logError(emailId, 'newsletter', null, null, `Processing failed: ${error.message}`, { from, subject });
+    await flushJobLogs();
     return { success: false, emailId, error: error.message, newsExtracted: 0, eventsExtracted: 0 };
   }
 }

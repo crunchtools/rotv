@@ -9,6 +9,7 @@
 import { generateTextWithCustomPrompt } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
+import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 // Helper to detect Twitter/X URLs (used in multiple places)
 function isTwitterUrl(url) {
@@ -730,6 +731,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
  */
 export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheets = null) {
   console.log(`\n[Trail Status Job ${jobId}] Starting batch processing for ${poiIds.length} trails`);
+  logInfo(jobId, 'trail_status', null, null, `Job started: ${poiIds.length} trails`, { total: poiIds.length });
 
   // Track Gemini calls for this job
   let geminiCalls = 0;
@@ -816,6 +818,9 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
           geminiCalls++;
 
           console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] ${poi.name}: ${statusCollection.statusFound} status found`);
+          if (statusCollection.statusFound > 0) {
+            logInfo(jobId, 'trail_status', poi.id, poi.name, `Status found: ${statusCollection.statusSaved ? 'saved' : 'unchanged'}`, { status_found: statusCollection.statusFound, status_saved: statusCollection.statusSaved });
+          }
 
           totalStatusFound += statusCollection.statusFound;
           totalStatusSaved += statusCollection.statusSaved;
@@ -843,6 +848,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
 
       } catch (error) {
         console.error(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] Trail ${poiId}: ${error.message}`);
+        logError(jobId, 'trail_status', poiId, null, error.message);
 
         // Mark as processed even if failed
         processedPois.add(poiId);
@@ -899,12 +905,16 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     console.log(`[Trail Status Job ${jobId}] Status found: ${totalStatusFound}`);
     console.log(`[Trail Status Job ${jobId}] Status saved: ${totalStatusSaved}`);
     console.log(`[Trail Status Job ${jobId}] Gemini calls: ${geminiCalls}`);
+    logInfo(jobId, 'trail_status', null, null, `Job completed: ${processedPois.size} trails, ${totalStatusFound} status found`, { trails_processed: processedPois.size, status_found: totalStatusFound, status_saved: totalStatusSaved, gemini_calls: geminiCalls });
+    await flushJobLogs();
 
     // Don't clear display slots - keep them frozen for frontend to display
     // Frontend will clear them when user clicks X or starts a new job
 
   } catch (error) {
     console.error(`[Trail Status Job ${jobId}] Failed:`, error.message);
+    logError(jobId, 'trail_status', null, null, `Job failed: ${error.message}`);
+    await flushJobLogs();
 
     // Mark job failed
     const failureAiUsage = JSON.stringify({ gemini: geminiCalls });

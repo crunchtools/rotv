@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { Readable } from 'stream';
 import { getDriveSetting, setDriveSetting, uploadImageToDrive } from './driveImageService.js';
 import imageServerClient from './imageServerClient.js';
+import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 const BACKUPS_FOLDER_NAME = 'Database';
 
@@ -311,6 +312,8 @@ export async function triggerImageBackup(pool, drive) {
   `, [now]);
 
   console.log(`[ImageBackup] Done: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+  logInfo(null, 'backup', null, null, `Complete: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`, { uploaded, skipped, failed });
+  await flushJobLogs();
 
   return { success: true, uploaded, skipped, failed, timestamp: now };
 }
