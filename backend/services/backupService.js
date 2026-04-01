@@ -326,8 +326,12 @@ export async function getImageBackupStatus(pool, drive) {
   let driveDbDumpCount = 0;
 
   if (imageServerClient.initialized) {
-    const mediaFiles = await imageServerClient.listMediaFiles();
-    mediaFileCount = mediaFiles.length;
+    try {
+      const mediaFiles = await imageServerClient.listMediaFiles();
+      mediaFileCount = mediaFiles.length;
+    } catch (error) {
+      console.warn('[ImageBackup] Could not list media files:', error.message);
+    }
   }
 
   if (imagesFolderId && drive) {
@@ -395,7 +399,7 @@ export async function restoreImagesFromDrive(pool, drive) {
       console.log('[ImageRestore] DB restored successfully');
     } else {
       console.error('[ImageRestore] DB restore failed:', restoreResult.error);
-      return { success: false, dbRestored: false, error: `Database restore failed: ${restoreResult.error}` };
+      throw new Error(`Database restore failed: ${restoreResult.error}`);
     }
   }
 
