@@ -4194,28 +4194,30 @@ export function createAdminRouter(pool) {
     try {
       const boss = getJobScheduler();
 
-      const QUEUE_LABELS = {
-        [JOB_NAMES.NEWS_COLLECTION]: 'News Collection (Scheduled)',
-        [JOB_NAMES.NEWS_BATCH]: 'News Collection (Batch)',
-        [JOB_NAMES.TRAIL_STATUS_COLLECTION]: 'Trail Status (Scheduled)',
-        [JOB_NAMES.TRAIL_STATUS_BATCH]: 'Trail Status (Batch)',
-        [JOB_NAMES.CONTENT_MODERATION]: 'Content Moderation',
-        [JOB_NAMES.CONTENT_MODERATION_SWEEP]: 'Moderation Sweep',
-        [JOB_NAMES.NEWSLETTER_PROCESS]: 'Newsletter Processing',
-        [JOB_NAMES.IMAGE_BACKUP]: 'Image Backup'
+      const QUEUE_INFO = {
+        [JOB_NAMES.NEWS_COLLECTION]: { label: 'Daily News & Events', description: 'Collects news and events for all POIs (6 AM daily)' },
+        [JOB_NAMES.NEWS_BATCH]: { label: 'News & Events (Manual)', description: 'Admin-triggered batch collection from Data Collection tab' },
+        [JOB_NAMES.TRAIL_STATUS_COLLECTION]: { label: 'Trail Status Check', description: 'Checks MTB trail conditions via status URLs (every 30 min)' },
+        [JOB_NAMES.TRAIL_STATUS_BATCH]: { label: 'Trail Status (Manual)', description: 'Admin-triggered trail status collection' },
+        [JOB_NAMES.CONTENT_MODERATION]: { label: 'AI Moderation', description: 'Scores new content with Gemini when inserted' },
+        [JOB_NAMES.CONTENT_MODERATION_SWEEP]: { label: 'Moderation Sweep', description: 'Re-checks unscored items missed by per-item queue (every 15 min)' },
+        [JOB_NAMES.NEWSLETTER_PROCESS]: { label: 'Email Ingestion', description: 'Extracts news and events from inbound newsletters' },
+        [JOB_NAMES.IMAGE_BACKUP]: { label: 'Image Server Backup', description: 'Syncs image server media files to Google Drive (2 AM daily)' },
+        [JOB_NAMES.DATABASE_BACKUP]: { label: 'Database Backup', description: 'Uploads PostgreSQL dump to Google Drive (3 AM daily)' }
       };
 
       const queues = [];
-      for (const [name, label] of Object.entries(QUEUE_LABELS)) {
+      for (const [name, info] of Object.entries(QUEUE_INFO)) {
         try {
           const size = await boss.getQueueSize(name);
           queues.push({
             name,
-            label,
+            label: info.label,
+            description: info.description,
             size: size || 0
           });
         } catch {
-          queues.push({ name, label, size: 0 });
+          queues.push({ name, label: info.label, description: info.description, size: 0 });
         }
       }
 
