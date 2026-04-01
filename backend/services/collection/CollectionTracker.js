@@ -111,7 +111,9 @@ export class CollectionTracker {
       !slot.poiId || slot.status === 'completed'
     );
 
-    return availableIndex >= 0 ? availableIndex : 0;
+    // Return null if all slots are occupied (maxConcurrency should prevent this,
+    // but returning null lets callers handle the edge case explicitly)
+    return availableIndex >= 0 ? availableIndex : null;
   }
 
   /**

@@ -85,8 +85,8 @@ export async function runBatch({
     const item = items[index];
     inFlight++;
 
-    // Find available slot and notify caller
-    const slotId = tracker.findFirstAvailableSlot(jobId);
+    // Find available slot (null if all occupied, fallback to 0)
+    const slotId = tracker.findFirstAvailableSlot(jobId) ?? 0;
     const context = { slotId, jobId, index, total: items.length };
 
     if (onItemStart) {

@@ -1947,19 +1947,15 @@ async function start() {
     });
 
     // Register image backup handler (nightly backup of image server to Drive)
-    await registerImageBackupHandler(async () => {
-      console.log('Running scheduled image backup...');
+    // Shared helper: get authenticated Drive service from admin OAuth credentials
+    const getAdminDriveService = async () => {
       const { createDriveServiceWithRefresh } = await import('./services/driveImageService.js');
-      const { triggerImageBackup } = await import('./services/backupService.js');
-
-      // Get admin user's OAuth credentials (refresh_token persists across sessions)
       const adminResult = await pool.query(
         'SELECT id, oauth_credentials FROM users WHERE is_admin = TRUE LIMIT 1'
       );
       if (!adminResult.rows[0]?.oauth_credentials) {
         throw new Error('No admin with OAuth credentials found — cannot access Drive');
       }
-
       let credentials = adminResult.rows[0].oauth_credentials;
       if (typeof credentials === 'string') {
         credentials = JSON.parse(credentials);
@@ -1967,8 +1963,13 @@ async function start() {
       if (!credentials.refresh_token) {
         throw new Error('Admin OAuth credentials missing refresh_token');
       }
+      return createDriveServiceWithRefresh(credentials, pool, adminResult.rows[0].id);
+    };
 
-      const drive = await createDriveServiceWithRefresh(credentials, pool, adminResult.rows[0].id);
+    await registerImageBackupHandler(async () => {
+      console.log('Running scheduled image backup...');
+      const { triggerImageBackup } = await import('./services/backupService.js');
+      const drive = await getAdminDriveService();
       const result = await triggerImageBackup(pool, drive);
       console.log(`Image backup completed: ${result.uploaded} uploaded, ${result.skipped} skipped, ${result.failed} failed`);
     });
@@ -1979,25 +1980,8 @@ async function start() {
     // Register database backup handler (nightly pg_dump to Drive)
     await registerDatabaseBackupHandler(async () => {
       console.log('Running scheduled database backup...');
-      const { createDriveServiceWithRefresh } = await import('./services/driveImageService.js');
       const { triggerBackup } = await import('./services/backupService.js');
-
-      const adminResult = await pool.query(
-        'SELECT id, oauth_credentials FROM users WHERE is_admin = TRUE LIMIT 1'
-      );
-      if (!adminResult.rows[0]?.oauth_credentials) {
-        throw new Error('No admin with OAuth credentials found — cannot access Drive');
-      }
-
-      let credentials = adminResult.rows[0].oauth_credentials;
-      if (typeof credentials === 'string') {
-        credentials = JSON.parse(credentials);
-      }
-      if (!credentials.refresh_token) {
-        throw new Error('Admin OAuth credentials missing refresh_token');
-      }
-
-      const drive = await createDriveServiceWithRefresh(credentials, pool, adminResult.rows[0].id);
+      const drive = await getAdminDriveService();
       const result = await triggerBackup(pool, drive);
       console.log(`Database backup completed: ${result.filename} (${result.driveFileId})`);
     });

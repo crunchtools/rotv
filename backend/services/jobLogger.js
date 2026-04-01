@@ -18,6 +18,7 @@ const BATCH_SIZE = 50;
  */
 export function initJobLogger(dbPool) {
   pool = dbPool;
+  if (flushTimer) clearInterval(flushTimer);
   flushTimer = setInterval(() => {
     if (buffer.length > 0) flush();
   }, FLUSH_INTERVAL_MS);
