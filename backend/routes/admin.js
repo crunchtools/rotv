@@ -4105,8 +4105,8 @@ export function createAdminRouter(pool) {
   router.get('/jobs/history', isAdmin, async (req, res) => {
     try {
       const type = req.query.type || null;
-      const limit = Math.min(parseInt(req.query.limit) || 20, 100);
-      const offset = parseInt(req.query.offset) || 0;
+      const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 20, 100));
+      const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
       let query = `
         SELECT * FROM (
@@ -4148,12 +4148,16 @@ export function createAdminRouter(pool) {
   router.get('/jobs/:jobType/:jobId/logs', isAdmin, async (req, res) => {
     try {
       const { jobType, jobId } = req.params;
+      const parsedJobId = parseInt(jobId);
+      if (isNaN(parsedJobId)) {
+        return res.status(400).json({ error: 'Invalid job ID' });
+      }
       const level = req.query.level || null;
-      const limit = Math.min(parseInt(req.query.limit) || 200, 500);
-      const offset = parseInt(req.query.offset) || 0;
+      const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 200, 500));
+      const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
       let query = 'SELECT * FROM job_logs WHERE job_type = $1 AND job_id = $2';
-      const params = [jobType, parseInt(jobId)];
+      const params = [jobType, parsedJobId];
       let paramIdx = 3;
 
       if (level) {
@@ -4213,7 +4217,7 @@ export function createAdminRouter(pool) {
   // Manual log retention cleanup
   router.delete('/jobs/logs/cleanup', isAdmin, async (req, res) => {
     try {
-      const days = parseInt(req.query.days) || 30;
+      const days = Math.max(1, parseInt(req.query.days) || 30);
       const result = await pool.query(
         `DELETE FROM job_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1`,
         [days]
