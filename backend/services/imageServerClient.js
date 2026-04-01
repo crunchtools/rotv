@@ -555,7 +555,11 @@ class ImageServerClient {
       throw new Error(`List media failed: ${response.status}`);
     }
 
-    return await response.json();
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error('Image server returned invalid media file list (expected array)');
+    }
+    return data;
   }
 
   /**
