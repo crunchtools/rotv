@@ -189,6 +189,9 @@ export default function JobsDashboard() {
           <option value="">All Types</option>
           <option value="news">News</option>
           <option value="trail_status">Trail Status</option>
+          <option value="moderation">Moderation</option>
+          <option value="newsletter">Newsletter</option>
+          <option value="backup">Backup</option>
         </select>
       </div>
 

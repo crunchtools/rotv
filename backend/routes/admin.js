@@ -4121,6 +4121,18 @@ export function createAdminRouter(pool) {
                  trails_processed AS items_processed, error_message,
                  created_at
           FROM trail_status_job_status
+          UNION ALL
+          SELECT job_id AS id, job_type, job_type AS sub_type,
+                 CASE WHEN bool_or(level = 'error') THEN 'failed' ELSE 'completed' END AS status,
+                 MIN(created_at) AS started_at,
+                 MAX(created_at) AS completed_at,
+                 COUNT(DISTINCT poi_id) FILTER (WHERE poi_id IS NOT NULL) AS items_total,
+                 COUNT(DISTINCT poi_id) FILTER (WHERE poi_id IS NOT NULL) AS items_processed,
+                 MAX(CASE WHEN level = 'error' THEN message END) AS error_message,
+                 MIN(created_at) AS created_at
+          FROM job_logs
+          WHERE job_type NOT IN ('news', 'trail_status')
+          GROUP BY job_type, job_id
         ) AS jobs
       `;
 
