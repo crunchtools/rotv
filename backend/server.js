@@ -24,6 +24,8 @@ import {
   registerModerationSweepHandler,
   scheduleModerationSweep,
   registerNewsletterHandler,
+  registerImageBackupHandler,
+  scheduleImageBackup,
   stopJobScheduler
 } from './services/jobScheduler.js';
 import { processItem, processPendingItems } from './services/moderationService.js';
@@ -1912,6 +1914,36 @@ async function start() {
     await registerNewsletterHandler(async (emailId) => {
       await processNewsletterById(pool, emailId);
     });
+
+    // Register image backup handler (nightly backup of image server to Drive)
+    await registerImageBackupHandler(async () => {
+      console.log('Running scheduled image backup...');
+      const { createDriveServiceWithRefresh } = await import('./services/driveImageService.js');
+      const { triggerImageBackup } = await import('./services/backupService.js');
+
+      // Get admin user's OAuth credentials (refresh_token persists across sessions)
+      const adminResult = await pool.query(
+        'SELECT id, oauth_credentials FROM users WHERE is_admin = TRUE LIMIT 1'
+      );
+      if (!adminResult.rows[0]?.oauth_credentials) {
+        throw new Error('No admin with OAuth credentials found — cannot access Drive');
+      }
+
+      let credentials = adminResult.rows[0].oauth_credentials;
+      if (typeof credentials === 'string') {
+        credentials = JSON.parse(credentials);
+      }
+      if (!credentials.refresh_token) {
+        throw new Error('Admin OAuth credentials missing refresh_token');
+      }
+
+      const drive = await createDriveServiceWithRefresh(credentials, pool, adminResult.rows[0].id);
+      const result = await triggerImageBackup(pool, drive);
+      console.log(`Image backup completed: ${result.uploaded} uploaded, ${result.skipped} skipped, ${result.failed} failed`);
+    });
+
+    // Schedule nightly image backup at 2 AM Eastern
+    await scheduleImageBackup('0 2 * * *');
 
     // Make boss available to routes
     app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));

@@ -427,12 +427,16 @@ function SyncSettings({ onDataRefresh }) {
 
               <div className="sync-status-row">
                 <div className="sync-status-item">
-                  <label>Image Server</label>
-                  <span>{imageBackup?.imageServerCount ?? '...'} assets</span>
+                  <label>Media Files</label>
+                  <span>{imageBackup?.mediaFileCount ?? '...'} files</span>
                 </div>
                 <div className="sync-status-item">
-                  <label>Drive Backup</label>
-                  <span>{imageBackup?.driveCount ?? '...'} files</span>
+                  <label>Drive Media</label>
+                  <span>{imageBackup?.driveMediaCount ?? '...'} files</span>
+                </div>
+                <div className="sync-status-item">
+                  <label>DB Dumps</label>
+                  <span>{imageBackup?.driveDbDumpCount ?? '...'}</span>
                 </div>
                 <div className="sync-status-item">
                   <label>Last Backup</label>
@@ -449,7 +453,7 @@ function SyncSettings({ onDataRefresh }) {
                   >
                     {backingUpImages ? 'Backing up...' : 'Backup'}
                   </button>
-                  <p className="button-description">Sync missing images to Drive</p>
+                  <p className="button-description">Sync DB + media files to Drive</p>
                 </div>
                 <div className="sync-button-card">
                   <button

@@ -479,6 +479,149 @@ class ImageServerClient {
       return { success: false, error: error.message };
     }
   }
+
+  // -------------------------------------------------------------------
+  // Backup / Restore / Media endpoints
+  // -------------------------------------------------------------------
+
+  /**
+   * Fetch a pg_dump of the image server database
+   * @returns {{ success: boolean, data?: Buffer, error?: string }}
+   */
+  async fetchDbDump() {
+    if (!this.initialized) {
+      return { success: false, error: 'Image server not configured' };
+    }
+
+    try {
+      const response = await fetch(`${this.serverUrl}/api/backup/db`);
+      if (!response.ok) {
+        throw new Error(`DB dump failed: ${response.status}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+      return { success: true, data: Buffer.from(buffer) };
+    } catch (error) {
+      console.error('[ImageServer] Failed to fetch DB dump:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Restore the image server database from a SQL dump
+   * @param {Buffer} sqlBuffer - SQL dump data
+   * @returns {{ success: boolean, output?: string, error?: string }}
+   */
+  async restoreDb(sqlBuffer) {
+    if (!this.initialized) {
+      return { success: false, error: 'Image server not configured' };
+    }
+
+    try {
+      const formData = new FormData();
+      const blob = new Blob([sqlBuffer], { type: 'application/sql' });
+      formData.append('file', blob, 'restore.sql');
+
+      const response = await fetch(`${this.serverUrl}/api/restore/db`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`DB restore failed: ${response.status} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      return { success: true, output: result.output };
+    } catch (error) {
+      console.error('[ImageServer] Failed to restore DB:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * List all media files on the image server
+   * @returns {Array<{ subdir: string, filename: string, size: number, modified: number }>}
+   */
+  async listMediaFiles() {
+    if (!this.initialized) {
+      return [];
+    }
+
+    try {
+      const response = await fetch(`${this.serverUrl}/api/media/files`);
+      if (!response.ok) {
+        throw new Error(`List media failed: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('[ImageServer] Failed to list media files:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Fetch a specific media file from the image server
+   * @param {string} subdir - Subdirectory (originals, thumbnails, videos, theme-videos)
+   * @param {string} filename - Filename
+   * @returns {{ success: boolean, data?: Buffer, contentType?: string, error?: string }}
+   */
+  async fetchMediaFile(subdir, filename) {
+    if (!this.initialized) {
+      return { success: false, error: 'Image server not configured' };
+    }
+
+    try {
+      const response = await fetch(`${this.serverUrl}/api/media/${subdir}/${filename}`);
+      if (!response.ok) {
+        throw new Error(`Fetch media failed: ${response.status}`);
+      }
+
+      const buffer = await response.arrayBuffer();
+      const contentType = response.headers.get('content-type') || 'application/octet-stream';
+
+      return { success: true, data: Buffer.from(buffer), contentType };
+    } catch (error) {
+      console.error(`[ImageServer] Failed to fetch media ${subdir}/${filename}:`, error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Upload a media file to the image server (for restore)
+   * @param {string} subdir - Subdirectory
+   * @param {string} filename - Filename
+   * @param {Buffer} buffer - File data
+   * @returns {{ success: boolean, error?: string }}
+   */
+  async uploadMediaFile(subdir, filename, buffer) {
+    if (!this.initialized) {
+      return { success: false, error: 'Image server not configured' };
+    }
+
+    try {
+      const formData = new FormData();
+      const blob = new Blob([buffer], { type: 'application/octet-stream' });
+      formData.append('file', blob, filename);
+
+      const response = await fetch(`${this.serverUrl}/api/media/${subdir}/${filename}`, {
+        method: 'PUT',
+        body: formData
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload media failed: ${response.status} - ${errorText}`);
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error(`[ImageServer] Failed to upload media ${subdir}/${filename}:`, error);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 export default new ImageServerClient();
