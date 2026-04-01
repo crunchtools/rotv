@@ -15,7 +15,8 @@ const JOB_NAMES = {
   TRAIL_STATUS_BATCH: 'trail-status-batch-collect',    // Admin-triggered trail status batch
   CONTENT_MODERATION: 'content-moderation',            // LLM moderation for individual items
   CONTENT_MODERATION_SWEEP: 'content-moderation-sweep', // Scheduled sweep for unprocessed items
-  NEWSLETTER_PROCESS: 'newsletter-process'              // Process inbound newsletter email
+  NEWSLETTER_PROCESS: 'newsletter-process',              // Process inbound newsletter email
+  IMAGE_BACKUP: 'image-backup'                           // Scheduled image server backup to Drive
 };
 
 /**
@@ -435,6 +436,68 @@ export async function queueNewsletterJob(emailId) {
     retryDelay: 60,
     expireInMinutes: 30
   });
+}
+
+/**
+ * Schedule the nightly image backup job
+ * @param {string} cronExpression - Cron expression (default: 2 AM Eastern daily)
+ */
+export async function scheduleImageBackup(cronExpression = '0 2 * * *') {
+  const scheduler = getJobScheduler();
+
+  await scheduler.schedule(JOB_NAMES.IMAGE_BACKUP, cronExpression, {}, {
+    tz: 'America/New_York'
+  });
+
+  console.log(`Image backup scheduled with cron: ${cronExpression}`);
+}
+
+/**
+ * Register the image backup job handler
+ * @param {Function} handler - Async function to handle the job
+ */
+export async function registerImageBackupHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.IMAGE_BACKUP);
+    console.log(`Queue '${JOB_NAMES.IMAGE_BACKUP}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.IMAGE_BACKUP}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.IMAGE_BACKUP, async (job) => {
+    console.log('Starting image backup job:', job.id);
+    try {
+      await handler(job.data);
+      console.log('Image backup job completed:', job.id);
+    } catch (error) {
+      console.error('Image backup job failed:', error);
+      throw error;
+    }
+  });
+}
+
+/**
+ * Manually submit an image backup job
+ * @returns {string} - pg-boss job ID
+ */
+export async function submitImageBackupJob() {
+  const scheduler = getJobScheduler();
+
+  const jobId = await scheduler.send(JOB_NAMES.IMAGE_BACKUP, {
+    triggeredManually: true,
+    triggeredAt: new Date().toISOString()
+  }, {
+    retryLimit: 2,
+    retryDelay: 60,
+    expireInMinutes: 120
+  });
+
+  console.log(`[pg-boss] Image backup job submitted: ${jobId}`);
+  return jobId;
 }
 
 /**

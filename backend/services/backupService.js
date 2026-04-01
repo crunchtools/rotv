@@ -195,7 +195,7 @@ export async function getBackupStatus(pool) {
 }
 
 /**
- * List files in the Drive Images folder
+ * List files in the Drive Images folder (paginated)
  */
 async function listDriveImages(drive, imagesFolderId) {
   const files = [];
@@ -218,8 +218,11 @@ async function listDriveImages(drive, imagesFolderId) {
 }
 
 /**
- * Sync image server assets to Drive Images folder.
- * Uploads any assets missing from Drive.
+ * Sync image server DB + all media files to Drive Images folder.
+ *
+ * 1. Fetch pg_dump from image server, upload as imageserver-backup-{timestamp}.sql
+ * 2. List all media files via listMediaFiles()
+ * 3. For each file not already in Drive, download and upload with flat name {subdir}--{filename}
  */
 export async function triggerImageBackup(pool, drive) {
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
@@ -231,7 +234,31 @@ export async function triggerImageBackup(pool, drive) {
     throw new Error('Image server not configured');
   }
 
-  const allAssets = await imageServerClient.listAllAssets();
+  // Step 1: Backup image server database
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').slice(0, 19);
+  const dbFilename = `imageserver-backup-${timestamp}.sql`;
+
+  const dbDump = await imageServerClient.fetchDbDump();
+  if (!dbDump.success) {
+    throw new Error(`Failed to fetch image server DB dump: ${dbDump.error}`);
+  }
+
+  await drive.files.create({
+    requestBody: {
+      name: dbFilename,
+      mimeType: 'application/sql',
+      parents: [imagesFolderId]
+    },
+    media: {
+      mimeType: 'application/sql',
+      body: Readable.from([dbDump.data])
+    },
+    fields: 'id'
+  });
+  console.log(`[ImageBackup] Uploaded DB dump: ${dbFilename}`);
+
+  // Step 2: List all media files and compare with Drive
+  const mediaFiles = await imageServerClient.listMediaFiles();
   const driveFiles = await listDriveImages(drive, imagesFolderId);
   const driveFileNames = new Set(driveFiles.map(f => f.name));
 
@@ -239,37 +266,37 @@ export async function triggerImageBackup(pool, drive) {
   let skipped = 0;
   let failed = 0;
 
-  for (const asset of allAssets) {
-    const assetName = `poi-${asset.poi_id}-asset-${asset.id}-${asset.original_filename || 'image.jpg'}`;
+  for (const media of mediaFiles) {
+    const driveName = `${media.subdir}--${media.filename}`;
 
-    if (driveFileNames.has(assetName)) {
+    if (driveFileNames.has(driveName)) {
       skipped++;
       continue;
     }
 
     try {
-      const assetData = await imageServerClient.fetchAssetData(asset.id);
-      if (!assetData.success) {
+      const fileData = await imageServerClient.fetchMediaFile(media.subdir, media.filename);
+      if (!fileData.success) {
         failed++;
         continue;
       }
 
       await drive.files.create({
         requestBody: {
-          name: assetName,
-          mimeType: assetData.contentType,
+          name: driveName,
+          mimeType: fileData.contentType,
           parents: [imagesFolderId]
         },
         media: {
-          mimeType: assetData.contentType,
-          body: Readable.from([assetData.data])
+          mimeType: fileData.contentType,
+          body: Readable.from([fileData.data])
         },
         fields: 'id'
       });
 
       uploaded++;
     } catch (error) {
-      console.warn(`[ImageBackup] Failed to backup asset ${asset.id}:`, error.message);
+      console.warn(`[ImageBackup] Failed to backup ${media.subdir}/${media.filename}:`, error.message);
       failed++;
     }
   }
@@ -289,22 +316,29 @@ export async function triggerImageBackup(pool, drive) {
 }
 
 /**
- * Get image backup status — compare image server assets vs Drive Images files
+ * Get image backup status — media files vs Drive files
  */
 export async function getImageBackupStatus(pool, drive) {
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
 
-  let imageServerCount = 0;
-  let driveCount = 0;
+  let mediaFileCount = 0;
+  let driveMediaCount = 0;
+  let driveDbDumpCount = 0;
 
   if (imageServerClient.initialized) {
-    const allAssets = await imageServerClient.listAllAssets();
-    imageServerCount = allAssets.length;
+    const mediaFiles = await imageServerClient.listMediaFiles();
+    mediaFileCount = mediaFiles.length;
   }
 
   if (imagesFolderId && drive) {
     const driveFiles = await listDriveImages(drive, imagesFolderId);
-    driveCount = driveFiles.length;
+    for (const f of driveFiles) {
+      if (f.name.startsWith('imageserver-backup-') && f.name.endsWith('.sql')) {
+        driveDbDumpCount++;
+      } else {
+        driveMediaCount++;
+      }
+    }
   }
 
   const lastBackupResult = await pool.query(
@@ -312,16 +346,19 @@ export async function getImageBackupStatus(pool, drive) {
   );
 
   return {
-    imageServerCount,
-    driveCount,
+    mediaFileCount,
+    driveMediaCount,
+    driveDbDumpCount,
     lastBackup: lastBackupResult.rows[0]?.value || null,
     imagesFolderId: imagesFolderId || null
   };
 }
 
 /**
- * Restore images from Drive Images folder back into image server.
- * Downloads each file from Drive and uploads to image server.
+ * Restore image server from Drive Images folder.
+ *
+ * 1. Find most recent imageserver-backup-*.sql, download, POST to image server /api/restore/db
+ * 2. For each {subdir}--{filename} file in Drive, download and PUT to image server
  */
 export async function restoreImagesFromDrive(pool, drive) {
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
@@ -334,34 +371,60 @@ export async function restoreImagesFromDrive(pool, drive) {
   }
 
   const driveFiles = await listDriveImages(drive, imagesFolderId);
-  const existingAssets = await imageServerClient.listAllAssets();
-  const existingNames = new Set(existingAssets.map(a => `poi-${a.poi_id}-asset-${a.id}-${a.original_filename || 'image.jpg'}`));
+
+  // Step 1: Find and restore the most recent DB dump
+  const dbDumps = driveFiles
+    .filter(f => f.name.startsWith('imageserver-backup-') && f.name.endsWith('.sql'))
+    .sort((a, b) => b.name.localeCompare(a.name)); // Newest first (timestamp in name)
+
+  let dbRestored = false;
+  if (dbDumps.length > 0) {
+    const latestDump = dbDumps[0];
+    console.log(`[ImageRestore] Restoring DB from: ${latestDump.name}`);
+
+    const response = await drive.files.get(
+      { fileId: latestDump.id, alt: 'media' },
+      { responseType: 'arraybuffer' }
+    );
+
+    const sqlBuffer = Buffer.from(response.data);
+    const restoreResult = await imageServerClient.restoreDb(sqlBuffer);
+
+    if (restoreResult.success) {
+      dbRestored = true;
+      console.log('[ImageRestore] DB restored successfully');
+    } else {
+      console.error('[ImageRestore] DB restore failed:', restoreResult.error);
+    }
+  }
+
+  // Step 2: Restore media files
+  const existingMedia = await imageServerClient.listMediaFiles();
+  const existingSet = new Set(existingMedia.map(m => `${m.subdir}--${m.filename}`));
 
   let restored = 0;
   let skipped = 0;
   let failed = 0;
 
   for (const file of driveFiles) {
-    // Skip files already on image server
-    if (existingNames.has(file.name)) {
+    // Skip DB dumps
+    if (file.name.startsWith('imageserver-backup-') && file.name.endsWith('.sql')) {
+      continue;
+    }
+
+    // Parse {subdir}--{filename} format
+    const separatorIdx = file.name.indexOf('--');
+    if (separatorIdx === -1) {
+      console.warn(`[ImageRestore] Skipping unrecognized file: ${file.name}`);
       skipped++;
       continue;
     }
 
-    // Parse asset info from filename: poi-{poi_id}-asset-{id}-{original_filename}
-    // Also supports legacy format: asset-{id}-{original_filename}
-    let poiId = 0;
-    let originalFilename;
-    const newMatch = file.name.match(/^poi-(\d+)-asset-(\d+)-(.+)$/);
-    const legacyMatch = file.name.match(/^asset-(\d+)-(.+)$/);
+    const subdir = file.name.substring(0, separatorIdx);
+    const filename = file.name.substring(separatorIdx + 2);
 
-    if (newMatch) {
-      poiId = parseInt(newMatch[1]);
-      originalFilename = newMatch[3];
-    } else if (legacyMatch) {
-      originalFilename = legacyMatch[2];
-    } else {
-      console.warn(`[ImageRestore] Skipping unrecognized file: ${file.name}`);
+    // Skip if already exists on image server
+    if (existingSet.has(file.name)) {
       skipped++;
       continue;
     }
@@ -373,9 +436,7 @@ export async function restoreImagesFromDrive(pool, drive) {
       );
 
       const buffer = Buffer.from(response.data);
-      const mimeType = file.mimeType || 'image/jpeg';
-
-      const result = await imageServerClient.uploadImage(buffer, poiId, 'primary', originalFilename, mimeType);
+      const result = await imageServerClient.uploadMediaFile(subdir, filename, buffer);
 
       if (result.success) {
         restored++;
@@ -388,7 +449,7 @@ export async function restoreImagesFromDrive(pool, drive) {
     }
   }
 
-  console.log(`[ImageRestore] Done: ${restored} restored, ${skipped} skipped, ${failed} failed`);
+  console.log(`[ImageRestore] Done: DB=${dbRestored ? 'yes' : 'no'}, ${restored} media restored, ${skipped} skipped, ${failed} failed`);
 
-  return { success: true, restored, skipped, failed };
+  return { success: true, dbRestored, restored, skipped, failed };
 }
