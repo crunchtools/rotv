@@ -328,7 +328,7 @@ export async function getImageBackupStatus(pool, drive) {
   if (imageServerClient.initialized) {
     try {
       const mediaFiles = await imageServerClient.listMediaFiles();
-      mediaFileCount = Array.isArray(mediaFiles) ? mediaFiles.length : 0;
+      mediaFileCount = mediaFiles.length;
     } catch (error) {
       console.warn('[ImageBackup] Could not list media files:', error);
     }
