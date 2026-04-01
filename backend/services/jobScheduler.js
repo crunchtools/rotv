@@ -16,7 +16,8 @@ const JOB_NAMES = {
   CONTENT_MODERATION: 'content-moderation',            // LLM moderation for individual items
   CONTENT_MODERATION_SWEEP: 'content-moderation-sweep', // Scheduled sweep for unprocessed items
   NEWSLETTER_PROCESS: 'newsletter-process',              // Process inbound newsletter email
-  IMAGE_BACKUP: 'image-backup'                           // Scheduled image server backup to Drive
+  IMAGE_BACKUP: 'image-backup',                           // Scheduled image server backup to Drive
+  DATABASE_BACKUP: 'database-backup'                      // Scheduled database backup to Drive
 };
 
 /**
@@ -498,6 +499,48 @@ export async function submitImageBackupJob() {
 
   console.log(`[pg-boss] Image backup job submitted: ${jobId}`);
   return jobId;
+}
+
+/**
+ * Schedule the nightly database backup job
+ * @param {string} cronExpression - Cron expression (default: 3 AM Eastern daily)
+ */
+export async function scheduleDatabaseBackup(cronExpression = '0 3 * * *') {
+  const scheduler = getJobScheduler();
+
+  await scheduler.schedule(JOB_NAMES.DATABASE_BACKUP, cronExpression, {}, {
+    tz: 'America/New_York'
+  });
+
+  console.log(`Database backup scheduled with cron: ${cronExpression}`);
+}
+
+/**
+ * Register the database backup job handler
+ * @param {Function} handler - Async function to handle the job
+ */
+export async function registerDatabaseBackupHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.DATABASE_BACKUP);
+    console.log(`Queue '${JOB_NAMES.DATABASE_BACKUP}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.DATABASE_BACKUP}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.DATABASE_BACKUP, async (job) => {
+    console.log('Starting database backup job:', job.id);
+    try {
+      await handler(job.data);
+      console.log('Database backup job completed:', job.id);
+    } catch (error) {
+      console.error('Database backup job failed:', error);
+      throw error;
+    }
+  });
 }
 
 /**

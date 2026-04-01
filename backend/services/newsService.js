@@ -11,6 +11,7 @@ import { extractPageContent } from './contentExtractor.js';
 import { calculateSimilarity } from './textUtils.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
+import { CollectionTracker, runBatch } from './collection/index.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -29,232 +30,19 @@ const DISPATCH_INTERVAL_MS = 1500;
 // Maximum number of concurrent jobs in flight
 const MAX_CONCURRENCY = 10;
 
-// In-memory progress tracking for active collections
-const collectionProgress = new Map();
+// Shared progress + slot tracker for news collection
+const tracker = new CollectionTracker('News');
 
-// Job display slots: jobId → [10 slots]
-// Each slot represents a display position for POI progress
-const jobDisplaySlots = new Map();
-
-/**
- * Update collection progress for a POI
- */
-export function updateProgress(poiId, updates) {
-  const current = collectionProgress.get(poiId) || {
-    phase: 'starting',
-    message: 'Initializing...',
-    newsFound: 0,
-    eventsFound: 0,
-    startTime: Date.now(),
-    steps: [],
-    phaseHistory: [],
-    slotId: null,
-    jobId: null
-  };
-
-  // Track phase transitions - add previous phase to history when phase changes
-  if (updates.phase && updates.phase !== current.phase && current.phase !== 'starting') {
-    const phaseHistory = [...(current.phaseHistory || [])];
-    if (!phaseHistory.includes(current.phase)) {
-      phaseHistory.push(current.phase);
-    }
-    updates.phaseHistory = phaseHistory;
-  }
-
-  const updated = { ...current, ...updates, poiId, lastUpdate: Date.now() };
-  collectionProgress.set(poiId, updated);
-
-  // Update display slot if slotId and jobId are present
-  if (updated.slotId !== null && updated.slotId !== undefined && updated.jobId) {
-    updateSlotFromProgress(updated.jobId, updated.slotId, updated);
-  }
-
-  return updated;
-}
-
-/**
- * Get collection progress for a POI
- */
-export function getCollectionProgress(poiId) {
-  return collectionProgress.get(poiId) || null;
-}
-
-/**
- * Clear collection progress for a POI
- */
-export function clearProgress(poiId) {
-  collectionProgress.delete(poiId);
-}
-
-/**
- * Get all active progress entries (for job status display)
- * Returns the current phase(s) being processed
- */
-export function getAllActiveProgress() {
-  const active = [];
-  for (const [poiId, progress] of collectionProgress.entries()) {
-    if (!progress.completed) {
-      const job = {
-        poiId,
-        phase: progress.phase,
-        message: progress.message,
-        poiName: progress.poiName,
-        provider: progress.provider || null
-      };
-      console.log(`[getAllActiveProgress] POI ${poiId}: provider=${progress.provider}, phase=${progress.phase}`);
-      active.push(job);
-    }
-  }
-  return active;
-}
-
-/**
- * Initialize display slots for a job
- * Creates 10 empty slots that will be filled as POIs are dispatched
- * Exported for testing purposes
- */
-export function initializeSlots(jobId) {
-  const slots = Array(10).fill(null).map((_, i) => ({
-    slotId: i,
-    poiId: null,
-    poiName: null,
-    phase: null,
-    provider: null,
-    status: null
-  }));
-  jobDisplaySlots.set(jobId, slots);
-  console.log(`[Job ${jobId}] Initialized 10 display slots`);
-}
-
-/**
- * Find the first available slot (null or completed)
- * Returns slot index 0-9
- */
-function findFirstAvailableSlot(jobId) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots) return 0;
-
-  const availableIndex = slots.findIndex(slot =>
-    !slot.poiId || slot.status === 'completed'
-  );
-
-  return availableIndex >= 0 ? availableIndex : 0;
-}
-
-/**
- * Assign a POI to a display slot
- * IMPORTANT: This immediately replaces any old job data with new job data
- * to prevent the frontend from briefly displaying old "completed" status
- */
-function assignPoiToSlot(jobId, slotId, poiId, poiName, provider) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots) return;
-
-  // Immediately replace slot data (don't let old completed status linger)
-  slots[slotId] = {
-    slotId,
-    poiId,
-    poiName,
-    phase: 'initializing',
-    provider,
-    status: 'active'  // Force active status immediately
-  };
-
-  console.log(`[Job ${jobId}] Assigned POI ${poiId} (${poiName}) to Slot ${slotId}`);
-}
-
-/**
- * Update slot with current progress data
- */
-function updateSlotFromProgress(jobId, slotId, progress) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots || slotId === undefined || slotId === null) return;
-
-  slots[slotId] = {
-    slotId,
-    poiId: progress.poiId || slots[slotId].poiId,
-    poiName: progress.poiName || slots[slotId].poiName,
-    phase: progress.phase,
-    provider: progress.provider,
-    status: progress.completed ? 'completed' : 'active'
-  };
-}
-
-/**
- * Get current display slots for a job
- * Returns exactly 10 slots with latest progress data
- */
-export function getDisplaySlots(jobId) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots) {
-    // Return 10 empty slots if job not found
-    return Array(10).fill(null).map((_, i) => ({
-      slotId: i,
-      poiId: null,
-      poiName: null,
-      phase: null,
-      provider: null,
-      status: null
-    }));
-  }
-
-  // Enrich each slot with latest progress data
-  return slots.map(slot => {
-    if (!slot.poiId) return slot;
-
-    const progress = collectionProgress.get(slot.poiId);
-    if (!progress) {
-      // Progress not found - use slot data as-is
-      // This can happen briefly when a new POI is assigned but progress hasn't been created yet
-      return slot;
-    }
-
-    return {
-      slotId: slot.slotId,
-      poiId: slot.poiId,
-      poiName: progress.poiName || slot.poiName,
-      phase: progress.phase,
-      provider: progress.provider,
-      status: progress.completed ? 'completed' : 'active'
-    };
-  });
-}
-
-/**
- * Clear display slots when job completes
- */
-function clearDisplaySlots(jobId) {
-  jobDisplaySlots.delete(jobId);
-  console.log(`[Job ${jobId}] Cleared display slots`);
-}
-
-/**
- * Request cancellation of an ongoing collection job
- * @param {number} poiId - The POI ID to cancel
- * @returns {boolean} - true if cancellation was requested, false if no job found
- */
-export function requestCancellation(poiId) {
-  const progress = collectionProgress.get(poiId);
-  if (progress && !progress.completed) {
-    updateProgress(poiId, {
-      cancellationRequested: true,
-      message: 'Cancellation requested...'
-    });
-    console.log(`[News Collection] Cancellation requested for POI ${poiId}`);
-    return true;
-  }
-  return false;
-}
-
-/**
- * Check if cancellation has been requested for a POI
- * @param {number} poiId - The POI ID to check
- * @returns {boolean} - true if cancellation was requested
- */
-export function isCancellationRequested(poiId) {
-  const progress = collectionProgress.get(poiId);
-  return progress?.cancellationRequested === true;
-}
+// Re-export tracker methods under original names for backward compatibility
+// (used by mcpServer.js, admin.js, server.js)
+export const updateProgress = (poiId, updates) => tracker.updateProgress(poiId, updates);
+export const getCollectionProgress = (poiId) => tracker.getCollectionProgress(poiId);
+export const clearProgress = (poiId) => tracker.clearProgress(poiId);
+export const getAllActiveProgress = () => tracker.getAllActiveProgress();
+export const initializeSlots = (jobId) => tracker.initializeSlots(jobId);
+export const getDisplaySlots = (jobId) => tracker.getDisplaySlots(jobId);
+export const requestCancellation = (poiId) => tracker.requestCancellation(poiId);
+export const isCancellationRequested = (poiId) => tracker.isCancellationRequested(poiId);
 
 /**
  * Match an event or news item to extracted links from the page
@@ -799,12 +587,12 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   }
 
   // Preserve slotId and jobId if they exist (set by job processing loop)
-  const existingProgress = collectionProgress.get(poi.id);
+  const existingProgress = tracker.getCollectionProgress(poi.id);
   const slotId = existingProgress?.slotId;
   const jobId = existingProgress?.jobId;
 
   // Clear any old progress data for this POI before starting
-  collectionProgress.delete(poi.id);
+  tracker.clearProgress(poi.id);
 
   // Initialize progress tracking with fresh data (preserving slotId/jobId)
   const typeLabel = collectionType === 'news' ? 'news' : collectionType === 'events' ? 'events' : 'news & events';
@@ -2050,57 +1838,14 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   let processed = processedPoiIds.length;
   const newlyProcessedIds = [...processedPoiIds];
 
-  // Track all results for summary
-  const allResults = [];
-  let jobCancelled = false;
-
-  // Helper to check if job was cancelled in database
-  const checkJobCancelled = async () => {
-    const result = await pool.query(
-      'SELECT status FROM news_job_status WHERE id = $1',
-      [jobId]
-    );
-    return result.rows[0]?.status === 'cancelled';
-  };
-
   try {
-    // Process with staggered dispatch and limited concurrency (semaphore pattern)
-    let inFlight = 0;
-    let nextIndex = 0;
-    let resolveAll;
-    const allDone = new Promise(resolve => { resolveAll = resolve; });
-
-    const processNextPoi = async () => {
-      // Check if job was cancelled before starting new POI
-      if (jobCancelled || await checkJobCancelled()) {
-        jobCancelled = true;
-        console.log(`[Job ${jobId}] Cancellation detected, stopping new POI processing`);
-        if (inFlight === 0) resolveAll();
-        return;
-      }
-
-      if (nextIndex >= pois.length) {
-        if (inFlight === 0) resolveAll();
-        return;
-      }
-
-      const index = nextIndex++;
-      const poi = pois[index];
-      inFlight++;
-
-      // Find available slot and assign POI to it
-      const slotId = findFirstAvailableSlot(jobId);
-
-      // Determine provider before calling collectNewsForPoi (same logic as in collectNewsForPoi)
+    // Helper to determine AI provider for slot display
+    const resolveProvider = async () => {
       const configResult = await pool.query(`
         SELECT key, value FROM admin_settings
         WHERE key IN ('ai_search_primary', 'ai_search_fallback', 'ai_search_primary_limit')
       `);
-      const aiConfig = {
-        primary: 'perplexity',
-        fallback: 'none',
-        primaryLimit: 0
-      };
+      const aiConfig = { primary: 'perplexity', fallback: 'none', primaryLimit: 0 };
       for (const row of configResult.rows) {
         if (row.key === 'ai_search_primary') aiConfig.primary = row.value;
         if (row.key === 'ai_search_fallback') aiConfig.fallback = row.value;
@@ -2114,88 +1859,75 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
           providerToUse = aiConfig.fallback;
         }
       }
+      return providerToUse;
+    };
 
-      // Assign POI to slot with provider info
-      assignPoiToSlot(jobId, slotId, poi.id, poi.name, providerToUse);
+    const { results: batchResults, cancelled: jobCancelled } = await runBatch({
+      pool,
+      jobId,
+      items: pois,
+      tracker,
+      label: 'News',
+      maxConcurrency: MAX_CONCURRENCY,
+      dispatchInterval: DISPATCH_INTERVAL_MS,
 
-      // Initialize progress with slotId and jobId
-      updateProgress(poi.id, {
-        phase: 'initializing',
-        message: `Starting news & events search for ${poi.name}...`,
-        poiName: poi.name,
-        provider: providerToUse,
-        slotId,
-        jobId,
-        completed: false
-      });
+      checkCancelled: async () => {
+        const result = await pool.query(
+          'SELECT status FROM news_job_status WHERE id = $1',
+          [jobId]
+        );
+        return result.rows[0]?.status === 'cancelled';
+      },
 
-      try {
-        console.log(`[Job ${jobId}] [${index + 1}/${pois.length}] Starting: ${poi.name} (Slot ${slotId}, ${inFlight} in flight)`);
+      onItemStart: async (poi, { slotId, jobId: jid }) => {
+        const providerToUse = await resolveProvider();
+        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, providerToUse);
+        tracker.updateProgress(poi.id, {
+          phase: 'initializing',
+          message: `Starting news & events search for ${poi.name}...`,
+          poiName: poi.name,
+          provider: providerToUse,
+          slotId,
+          jobId: jid,
+          completed: false
+        });
+      },
+
+      collectFn: async (poi, { index, total }) => {
         const { news, events, metadata } = await collectNewsForPoi(pool, poi, sheets, 'America/New_York');
         const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
         const savedEvents = await saveEventItems(pool, poi.id, events);
-        console.log(`[Job ${jobId}] [${index + 1}/${pois.length}] ✓ ${poi.name}: ${savedNews} news, ${savedEvents} events`);
+        console.log(`[News Job ${jobId}] [${index + 1}/${total}] ${poi.name}: ${savedNews} news, ${savedEvents} events`);
         logInfo(jobId, 'news', poi.id, poi.name, `${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents, provider: metadata?.provider });
-
-        // Update progress incrementally
-        processed++;
-        newsFound += savedNews;
-        eventsFound += savedEvents;
-        newlyProcessedIds.push(poi.id);
-
-        // Checkpoint progress to database (including AI usage)
-        const currentAiUsage = getJobUsage();
-        await pool.query(`
-          UPDATE news_job_status
-          SET pois_processed = $1, news_found = $2, events_found = $3, processed_poi_ids = $4, ai_usage = $6
-          WHERE id = $5
-        `, [processed, newsFound, eventsFound, JSON.stringify(newlyProcessedIds), jobId, JSON.stringify(currentAiUsage)]);
 
         // Update last_news_collection timestamp
         await pool.query(`
-          UPDATE pois
-          SET last_news_collection = CURRENT_TIMESTAMP
-          WHERE id = $1
+          UPDATE pois SET last_news_collection = CURRENT_TIMESTAMP WHERE id = $1
         `, [poi.id]);
 
-        allResults.push({ poiId: poi.id, poiName: poi.name, newsFound: savedNews, eventsFound: savedEvents, success: true });
-      } catch (error) {
-        console.error(`[Job ${jobId}] [${index + 1}/${pois.length}] ✗ ${poi.name}: ${error.message}`);
-        logError(jobId, 'news', poi.id, poi.name, error.message, { error_stack: error.stack?.split('\n').slice(0, 3).join('\n') });
+        return { savedNews, savedEvents, news, events };
+      },
+
+      checkpointFn: async (poi, result, error) => {
         processed++;
         newlyProcessedIds.push(poi.id);
 
-        // Still checkpoint on error (including AI usage)
+        if (result) {
+          newsFound += result.savedNews;
+          eventsFound += result.savedEvents;
+        }
+        if (error) {
+          logError(jobId, 'news', poi.id, poi.name, error.message, { error_stack: error.stack?.split('\n').slice(0, 3).join('\n') });
+        }
+
         const currentAiUsage = getJobUsage();
         await pool.query(`
           UPDATE news_job_status
           SET pois_processed = $1, news_found = $2, events_found = $3, processed_poi_ids = $4, ai_usage = $6
           WHERE id = $5
         `, [processed, newsFound, eventsFound, JSON.stringify(newlyProcessedIds), jobId, JSON.stringify(currentAiUsage)]);
-
-        allResults.push({ poiId: poi.id, poiName: poi.name, newsFound: 0, eventsFound: 0, success: false });
       }
-
-      inFlight--;
-      // Start next job with delay when a slot opens (prevents API rate limiting)
-      // But don't start new jobs if cancelled
-      if (jobCancelled) {
-        if (inFlight === 0) resolveAll();
-      } else if (nextIndex < pois.length && inFlight < MAX_CONCURRENCY) {
-        setTimeout(() => processNextPoi(), DISPATCH_INTERVAL_MS);
-      } else if (nextIndex >= pois.length && inFlight === 0) {
-        resolveAll();
-      }
-    };
-
-    // Start initial batch with staggered dispatch
-    const initialBatch = Math.min(MAX_CONCURRENCY, pois.length);
-    for (let i = 0; i < initialBatch; i++) {
-      setTimeout(() => processNextPoi(), i * DISPATCH_INTERVAL_MS);
-    }
-
-    // Wait for all to complete
-    await allDone;
+    });
 
     // Log AI provider usage for this job
     const usage = getJobUsage();
@@ -2221,24 +1953,23 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     }
     await flushJobLogs();
 
-    // Don't clear display slots - keep them frozen for frontend to display
-    // Frontend will clear them when user clicks X or starts a new job
+    // Don't clear display slots — keep frozen for frontend
 
     // Log summary of results
-    const poisWithResults = allResults.filter(r => r.newsFound > 0 || r.eventsFound > 0);
-    const poisWithoutResults = allResults.filter(r => r.newsFound === 0 && r.eventsFound === 0);
+    const poisWithResults = batchResults.filter(r => r.success && r.result && (r.result.savedNews > 0 || r.result.savedEvents > 0));
+    const poisWithoutResults = batchResults.filter(r => !r.success || !r.result || (r.result.savedNews === 0 && r.result.savedEvents === 0));
 
     if (poisWithResults.length > 0) {
       console.log(`[Job ${jobId}] POIs with results (${poisWithResults.length}):`);
       poisWithResults.forEach(r => {
-        console.log(`[Job ${jobId}]   - ${r.poiName}: ${r.newsFound} news, ${r.eventsFound} events`);
+        console.log(`[Job ${jobId}]   - ${r.item.name}: ${r.result.savedNews} news, ${r.result.savedEvents} events`);
       });
     }
 
     if (poisWithoutResults.length > 0) {
       console.log(`[Job ${jobId}] POIs with no results (${poisWithoutResults.length}):`);
       poisWithoutResults.forEach(r => {
-        console.log(`[Job ${jobId}]   - ${r.poiName}`);
+        console.log(`[Job ${jobId}]   - ${r.item.name}`);
       });
     }
 

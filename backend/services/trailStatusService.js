@@ -10,6 +10,7 @@ import { generateTextWithCustomPrompt } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
+import { CollectionTracker, runBatch } from './collection/index.js';
 
 // Helper to detect Twitter/X URLs (used in multiple places)
 function isTwitterUrl(url) {
@@ -21,217 +22,19 @@ const DISPATCH_INTERVAL_MS = 1500;
 // Maximum number of concurrent jobs in flight
 const MAX_CONCURRENCY = 10;
 
-// In-memory progress tracking for active collections
-const collectionProgress = new Map();
+// Shared progress + slot tracker for trail status collection
+const tracker = new CollectionTracker('Trail');
 
-// Job display slots: jobId -> [10 slots]
-// Each slot represents a display position for trail progress
-const jobDisplaySlots = new Map();
-
-/**
- * Update collection progress for a trail
- */
-export function updateProgress(poiId, updates) {
-  const current = collectionProgress.get(poiId) || {
-    phase: 'starting',
-    message: 'Initializing...',
-    statusFound: 0,
-    startTime: Date.now(),
-    steps: [],
-    slotId: null,
-    jobId: null
-  };
-
-  const updated = { ...current, ...updates, poiId, lastUpdate: Date.now() };
-  collectionProgress.set(poiId, updated);
-
-  // Update display slot if slotId and jobId are present
-  if (updated.slotId !== null && updated.slotId !== undefined && updated.jobId) {
-    updateSlotFromProgress(updated.jobId, updated.slotId, updated);
-  }
-
-  return updated;
-}
-
-/**
- * Get collection progress for a trail
- */
-export function getCollectionProgress(poiId) {
-  return collectionProgress.get(poiId) || null;
-}
-
-/**
- * Clear collection progress for a trail
- */
-export function clearProgress(poiId) {
-  collectionProgress.delete(poiId);
-}
-
-/**
- * Get all active progress entries (for job status display)
- * Returns the current phase(s) being processed
- */
-export function getAllActiveProgress() {
-  const active = [];
-  for (const [poiId, progress] of collectionProgress.entries()) {
-    if (!progress.completed) {
-      const job = {
-        poiId,
-        phase: progress.phase,
-        message: progress.message,
-        poiName: progress.poiName,
-        provider: progress.provider || null
-      };
-      console.log(`[Trail getAllActiveProgress] POI ${poiId}: provider=${progress.provider}, phase=${progress.phase}`);
-      active.push(job);
-    }
-  }
-  return active;
-}
-
-/**
- * Initialize display slots for a job
- * Creates 10 empty slots that will be filled as trails are dispatched
- * Exported for testing purposes
- */
-export function initializeSlots(jobId) {
-  const slots = Array(10).fill(null).map((_, i) => ({
-    slotId: i,
-    poiId: null,
-    poiName: null,
-    phase: null,
-    provider: null,
-    status: null
-  }));
-  jobDisplaySlots.set(jobId, slots);
-  console.log(`[Trail Job ${jobId}] Initialized 10 display slots`);
-}
-
-/**
- * Find the first available slot (null or completed)
- * Returns slot index 0-9
- */
-function findFirstAvailableSlot(jobId) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots) return 0;
-
-  const availableIndex = slots.findIndex(slot =>
-    !slot.poiId || slot.status === 'completed'
-  );
-
-  return availableIndex >= 0 ? availableIndex : 0;
-}
-
-/**
- * Assign a trail to a display slot
- * IMPORTANT: This immediately replaces any old job data with new job data
- * to prevent the frontend from briefly displaying old "completed" status
- */
-function assignPoiToSlot(jobId, slotId, poiId, poiName, provider) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots) return;
-
-  // Immediately replace slot data (don't let old completed status linger)
-  slots[slotId] = {
-    slotId,
-    poiId,
-    poiName,
-    phase: 'initializing',
-    provider,
-    status: 'active'  // Force active status immediately
-  };
-
-  console.log(`[Trail Job ${jobId}] Assigned trail ${poiId} (${poiName}) to Slot ${slotId}`);
-}
-
-/**
- * Update slot with current progress data
- */
-function updateSlotFromProgress(jobId, slotId, progress) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots || slotId === undefined || slotId === null) return;
-
-  slots[slotId] = {
-    slotId,
-    poiId: progress.poiId || slots[slotId].poiId,
-    poiName: progress.poiName || slots[slotId].poiName,
-    phase: progress.phase,
-    provider: progress.provider,
-    status: progress.completed ? 'completed' : 'active'
-  };
-}
-
-/**
- * Get current display slots for a job
- * Returns exactly 10 slots with latest progress data
- */
-export function getDisplaySlots(jobId) {
-  const slots = jobDisplaySlots.get(jobId);
-  if (!slots) {
-    // Return 10 empty slots if job not found
-    return Array(10).fill(null).map((_, i) => ({
-      slotId: i,
-      poiId: null,
-      poiName: null,
-      phase: null,
-      provider: null,
-      status: null
-    }));
-  }
-
-  // Enrich each slot with latest progress data
-  return slots.map(slot => {
-    if (!slot.poiId) return slot;
-
-    const progress = collectionProgress.get(slot.poiId);
-    if (!progress) {
-      // Progress not found - use slot data as-is
-      // This can happen briefly when a new trail is assigned but progress hasn't been created yet
-      return slot;
-    }
-
-    return {
-      slotId: slot.slotId,
-      poiId: slot.poiId,
-      poiName: progress.poiName || slot.poiName,
-      phase: progress.phase,
-      provider: progress.provider,
-      status: progress.completed ? 'completed' : 'active'
-    };
-  });
-}
-
-/**
- * Clear display slots when job completes
- */
-function clearDisplaySlots(jobId) {
-  jobDisplaySlots.delete(jobId);
-  console.log(`[Trail Job ${jobId}] Cleared display slots`);
-}
-
-/**
- * Request cancellation of an ongoing collection job
- */
-export function requestCancellation(poiId) {
-  const progress = collectionProgress.get(poiId);
-  if (progress && !progress.completed) {
-    updateProgress(poiId, {
-      cancellationRequested: true,
-      message: 'Cancellation requested...'
-    });
-    console.log(`[Trail Status] Cancellation requested for trail ${poiId}`);
-    return true;
-  }
-  return false;
-}
-
-/**
- * Check if cancellation has been requested for a trail
- */
-export function isCancellationRequested(poiId) {
-  const progress = collectionProgress.get(poiId);
-  return progress?.cancellationRequested === true;
-}
+// Re-export tracker methods under original names for backward compatibility
+// (used by mcpServer.js, admin.js, server.js)
+export const updateProgress = (poiId, updates) => tracker.updateProgress(poiId, updates);
+export const getCollectionProgress = (poiId) => tracker.getCollectionProgress(poiId);
+export const clearProgress = (poiId) => tracker.clearProgress(poiId);
+export const getAllActiveProgress = () => tracker.getAllActiveProgress();
+export const initializeSlots = (jobId) => tracker.initializeSlots(jobId);
+export const getDisplaySlots = (jobId) => tracker.getDisplaySlots(jobId);
+export const requestCancellation = (poiId) => tracker.requestCancellation(poiId);
+export const isCancellationRequested = (poiId) => tracker.isCancellationRequested(poiId);
 
 /**
  * Track consecutive Twitter collection failures to detect stale cookies.
@@ -322,7 +125,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
   }
 
   // Preserve slotId and jobId if they exist (set by job processing loop)
-  const existingProgress = collectionProgress.get(poi.id);
+  const existingProgress = tracker.getCollectionProgress(poi.id);
   const slotId = existingProgress?.slotId;
   const jobId = existingProgress?.jobId;
 
@@ -759,77 +562,79 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     // Initialize display slots for this job
     initializeSlots(jobId);
 
-    // Process trails with continuous flow (semaphore pattern)
+    // Filter to remaining trails (for resumability)
     const trailsToProcess = poiIds.filter(id => !processedPois.has(id));
     let totalStatusFound = 0;
     let totalStatusSaved = 0;
 
-    // Continuous flow pattern (like newsService.js)
-    let inFlight = 0;
-    let nextIndex = 0;
-    let resolveAll;
-    const allDone = new Promise(resolve => { resolveAll = resolve; });
+    const { results: batchResults, cancelled } = await runBatch({
+      pool,
+      jobId,
+      items: trailsToProcess,
+      tracker,
+      label: 'Trail',
+      maxConcurrency: MAX_CONCURRENCY,
+      dispatchInterval: DISPATCH_INTERVAL_MS,
 
-    const processNextTrail = async () => {
-      if (nextIndex >= trailsToProcess.length) {
-        if (inFlight === 0) resolveAll();
-        return;
-      }
+      onItemStart: async (poiId, { slotId, jobId: jid }) => {
+        // Get trail data for slot assignment
+        const poiResult = await pool.query(`
+          SELECT id, name, poi_type, status_url, brief_description
+          FROM pois WHERE id = $1
+        `, [poiId]);
 
-      const index = nextIndex++;
-      const poiId = trailsToProcess[index];
-      inFlight++;
+        if (poiResult.rows.length === 0) {
+          throw new Error(`Trail ${poiId} not found`);
+        }
 
-      try {
+        const poi = poiResult.rows[0];
+        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, 'gemini');
+        tracker.updateProgress(poi.id, {
+          phase: 'initializing',
+          message: `Starting trail status extraction for ${poi.name}...`,
+          poiName: poi.name,
+          provider: 'gemini',
+          slotId,
+          jobId: jid,
+          completed: false
+        });
+      },
+
+      collectFn: async (poiId, { index, total }) => {
         // Get trail data
         const poiResult = await pool.query(`
           SELECT id, name, poi_type, status_url, brief_description
-          FROM pois
-          WHERE id = $1
+          FROM pois WHERE id = $1
         `, [poiId]);
 
         if (poiResult.rows.length === 0) {
           console.error(`[Trail Status Job ${jobId}] Trail ${poiId} not found`);
-          processedPois.add(poiId);
-        } else {
-          const poi = poiResult.rows[0];
-
-          // Find available slot and assign trail to it
-          const slotId = findFirstAvailableSlot(jobId);
-
-          // Assign trail to slot
-          assignPoiToSlot(jobId, slotId, poi.id, poi.name, 'gemini');
-
-          // Initialize progress with slotId and jobId
-          updateProgress(poi.id, {
-            phase: 'initializing',
-            message: `Starting trail status extraction for ${poi.name}...`,
-            poiName: poi.name,
-            provider: 'gemini',
-            slotId,
-            jobId,
-            completed: false
-          });
-
-          console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] Starting trail ${poiId} (Slot ${slotId}, ${inFlight} in flight)`);
-
-          // Collect status
-          const statusCollection = await collectTrailStatus(pool, poi, sheets, 'America/New_York');
-          geminiCalls++;
-
-          console.log(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] ${poi.name}: ${statusCollection.statusFound} status found`);
-          if (statusCollection.statusFound > 0) {
-            logInfo(jobId, 'trail_status', poi.id, poi.name, `Status found: ${statusCollection.statusSaved ? 'saved' : 'unchanged'}`, { status_found: statusCollection.statusFound, status_saved: statusCollection.statusSaved });
-          }
-
-          totalStatusFound += statusCollection.statusFound;
-          totalStatusSaved += statusCollection.statusSaved;
-
-          // Mark as processed
-          processedPois.add(poiId);
+          return { statusFound: 0, statusSaved: 0, notFound: true };
         }
 
-        // Checkpoint progress
+        const poi = poiResult.rows[0];
+        const statusCollection = await collectTrailStatus(pool, poi, sheets, 'America/New_York');
+        geminiCalls++;
+
+        console.log(`[Trail Status Job ${jobId}] [${index + 1}/${total}] ${poi.name}: ${statusCollection.statusFound} status found`);
+        if (statusCollection.statusFound > 0) {
+          logInfo(jobId, 'trail_status', poi.id, poi.name, `Status found: ${statusCollection.statusSaved ? 'saved' : 'unchanged'}`, { status_found: statusCollection.statusFound, status_saved: statusCollection.statusSaved });
+        }
+
+        return { statusFound: statusCollection.statusFound, statusSaved: statusCollection.statusSaved, poiName: poi.name };
+      },
+
+      checkpointFn: async (poiId, result, error) => {
+        processedPois.add(poiId);
+
+        if (result && !result.notFound) {
+          totalStatusFound += result.statusFound;
+          totalStatusSaved += result.statusSaved;
+        }
+        if (error) {
+          logError(jobId, 'trail_status', poiId, null, error.message);
+        }
+
         const aiUsage = JSON.stringify({ gemini: geminiCalls });
         await pool.query(`
           UPDATE trail_status_job_status
@@ -845,48 +650,8 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
           jobId,
           aiUsage
         ]);
-
-      } catch (error) {
-        console.error(`[Trail Status Job ${jobId}] [${index + 1}/${trailsToProcess.length}] Trail ${poiId}: ${error.message}`);
-        logError(jobId, 'trail_status', poiId, null, error.message);
-
-        // Mark as processed even if failed
-        processedPois.add(poiId);
-
-        // Checkpoint on error
-        const aiUsage = JSON.stringify({ gemini: geminiCalls });
-        await pool.query(`
-          UPDATE trail_status_job_status
-          SET trails_processed = $1,
-              processed_poi_ids = $2,
-              ai_usage = $4
-          WHERE id = $3
-        `, [
-          processedPois.size,
-          JSON.stringify([...processedPois]),
-          jobId,
-          aiUsage
-        ]);
       }
-
-      inFlight--;
-
-      // Start next trail with delay when a slot opens
-      if (nextIndex < trailsToProcess.length && inFlight < MAX_CONCURRENCY) {
-        setTimeout(() => processNextTrail(), DISPATCH_INTERVAL_MS);
-      } else if (nextIndex >= trailsToProcess.length && inFlight === 0) {
-        resolveAll();
-      }
-    };
-
-    // Start initial batch with staggered dispatch
-    const initialBatch = Math.min(MAX_CONCURRENCY, trailsToProcess.length);
-    for (let i = 0; i < initialBatch; i++) {
-      setTimeout(() => processNextTrail(), i * DISPATCH_INTERVAL_MS);
-    }
-
-    // Wait for all to complete
-    await allDone;
+    });
 
     // Mark job completed
     const finalAiUsage = JSON.stringify({ gemini: geminiCalls });
@@ -908,8 +673,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     logInfo(jobId, 'trail_status', null, null, `Job completed: ${processedPois.size} trails, ${totalStatusFound} status found`, { trails_processed: processedPois.size, status_found: totalStatusFound, status_saved: totalStatusSaved, gemini_calls: geminiCalls });
     await flushJobLogs();
 
-    // Don't clear display slots - keep them frozen for frontend to display
-    // Frontend will clear them when user clicks X or starts a new job
+    // Don't clear display slots — keep frozen for frontend
 
   } catch (error) {
     console.error(`[Trail Status Job ${jobId}] Failed:`, error.message);

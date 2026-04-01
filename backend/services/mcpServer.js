@@ -547,7 +547,7 @@ function registerTools(server, pool, boss) {
     'job_logs',
     'Structured log entries from collection jobs',
     {
-      job_type: z.enum(['news', 'trail_status', 'moderation', 'newsletter', 'backup', 'news_single', 'events_single']).optional().describe('Filter by job type'),
+      job_type: z.enum(['news', 'trail_status', 'moderation', 'newsletter', 'backup', 'database_backup', 'news_single', 'events_single']).optional().describe('Filter by job type'),
       job_id: z.number().optional().describe('Filter by job ID'),
       poi_id: z.number().optional().describe('Filter by POI ID'),
       level: z.enum(['info', 'warn', 'error']).optional().describe('Filter by log level'),

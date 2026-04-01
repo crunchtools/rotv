@@ -106,6 +106,8 @@ export async function triggerBackup(pool, drive) {
   `, [now]);
 
   console.log(`Backup uploaded to Drive: ${filename} (${driveFileId})`);
+  logInfo(null, 'database_backup', null, null, `Complete: ${filename} uploaded to Drive`, { filename, driveFileId });
+  await flushJobLogs();
 
   return {
     success: true,

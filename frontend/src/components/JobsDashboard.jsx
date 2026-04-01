@@ -8,6 +8,7 @@ const JOB_TYPE_LABELS = {
   moderation: 'Moderation',
   newsletter: 'Newsletter',
   backup: 'Backup',
+  database_backup: 'DB Backup',
   news_single: 'News (Single)',
   events_single: 'Events (Single)'
 };
@@ -18,6 +19,7 @@ const JOB_TYPE_ICONS = {
   moderation: '\u{1F50D}',
   newsletter: '\u{1F4E7}',
   backup: '\u{1F4BE}',
+  database_backup: '\u{1F5C4}',
   news_single: '\u{1F4F0}',
   events_single: '\u{1F4C5}'
 };
@@ -165,7 +167,7 @@ export default function JobsDashboard() {
       <h3>Queue Status</h3>
       <div className="queue-status-grid">
         {queues.map(q => (
-          <div key={q.name} className="queue-card">
+          <div key={q.name} className="queue-card" title={q.description}>
             <div className="queue-card-label">{q.label}</div>
             <div className="queue-card-count">
               {q.size > 0 ? (
@@ -192,6 +194,7 @@ export default function JobsDashboard() {
           <option value="moderation">Moderation</option>
           <option value="newsletter">Newsletter</option>
           <option value="backup">Backup</option>
+          <option value="database_backup">DB Backup</option>
         </select>
       </div>
 
