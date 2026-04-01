@@ -12400,3 +12400,245 @@ svg.leaflet-zoom-animated {
   color: #4a5568;
   font-size: 0.9rem;
 }
+
+/* ============================================================
+   Jobs Dashboard (#103)
+   ============================================================ */
+
+.jobs-dashboard {
+  padding: 0;
+}
+
+.jobs-dashboard h3 {
+  margin: 0 0 12px 0;
+  font-size: 1rem;
+  color: #2d3748;
+}
+
+/* Queue Status Grid */
+.queue-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.queue-card {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.queue-card-label {
+  font-size: 0.8rem;
+  color: #4a5568;
+  margin-bottom: 4px;
+}
+
+.queue-card-count {
+  font-size: 0.85rem;
+}
+
+.queue-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.queue-badge-active {
+  background: #ebf8ff;
+  color: #2b6cb0;
+}
+
+.queue-badge-idle {
+  background: #edf2f7;
+  color: #a0aec0;
+}
+
+/* Job Filter */
+.job-filter-select {
+  padding: 4px 8px;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  background: white;
+}
+
+/* Job History Table */
+.job-history-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 0.85rem;
+}
+
+.job-history-table th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid #e2e8f0;
+  color: #4a5568;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+
+.job-history-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.job-row.expandable {
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.job-row.expandable:hover {
+  background: #f7fafc;
+}
+
+.job-row.expanded {
+  background: #ebf8ff;
+}
+
+.job-type-icon {
+  margin-right: 6px;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+/* Job Logs Panel */
+.job-logs-row td {
+  padding: 0 !important;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.job-logs-panel {
+  padding: 12px 16px;
+  background: #fafafa;
+}
+
+.log-level-filters {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.log-filter-btn {
+  padding: 4px 12px;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.log-filter-btn.active {
+  background: #4a7c23;
+  color: white;
+  border-color: #4a7c23;
+}
+
+.job-error-banner {
+  background: #fed7d7;
+  color: #742a2a;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.job-logs-scroll {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.job-log-entry {
+  display: grid;
+  grid-template-columns: 12px minmax(80px, 150px) 1fr auto;
+  gap: 8px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid #edf2f7;
+  font-size: 0.82rem;
+}
+
+.job-log-entry.error {
+  background: #fff5f5;
+}
+
+.job-log-entry.warn {
+  background: #fffaf0;
+}
+
+.log-level-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 4px;
+}
+
+.log-level-dot.info {
+  background: #cbd5e0;
+}
+
+.log-level-dot.warn {
+  background: #ed8936;
+}
+
+.log-level-dot.error {
+  background: #e53e3e;
+}
+
+.log-poi {
+  color: #4a5568;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-message {
+  color: #2d3748;
+}
+
+.log-time {
+  color: #a0aec0;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.log-details {
+  grid-column: 1 / -1;
+  background: #edf2f7;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  overflow-x: auto;
+  margin: 4px 0;
+}
+
+.load-more-btn {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  margin-top: 8px;
+  background: #edf2f7;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: #4a5568;
+}
+
+.load-more-btn:hover {
+  background: #e2e8f0;
+}

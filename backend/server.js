@@ -42,6 +42,7 @@ import {
 import imageServerClient from './services/imageServerClient.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { startMcpServer } from './services/mcpServer.js';
+import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -794,6 +795,24 @@ async function initDatabase() {
         ('photo_submissions_enabled', 'false', CURRENT_TIMESTAMP)
       ON CONFLICT (key) DO NOTHING
     `);
+
+    // Job logs table for structured per-job logging
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS job_logs (
+        id SERIAL PRIMARY KEY,
+        job_id INTEGER NOT NULL,
+        job_type VARCHAR(50) NOT NULL,
+        poi_id INTEGER,
+        poi_name VARCHAR(255),
+        level VARCHAR(10) NOT NULL DEFAULT 'info',
+        message TEXT NOT NULL,
+        details JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_job_logs_job ON job_logs(job_type, job_id)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_job_logs_created ON job_logs(created_at DESC)`);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_job_logs_level ON job_logs(level) WHERE level IN ('warn', 'error')`);
 
     console.log('Database initialized');
   } finally {
@@ -1804,6 +1823,7 @@ async function setupAiSearchDefaults() {
 
 async function start() {
   await initDatabase();
+  initJobLogger(pool);
 
   // Normalize any non-canonical content types (e.g., from seed data or legacy AI output).
   // Checks first so it's a no-op on clean databases — no UPDATE queries run unless needed.
@@ -1905,6 +1925,15 @@ async function start() {
     // Register moderation sweep handler (catches unprocessed items)
     await registerModerationSweepHandler(async () => {
       await processPendingItems(pool);
+      // Retention: purge job logs older than 30 days
+      try {
+        const deleted = await pool.query(`DELETE FROM job_logs WHERE created_at < NOW() - INTERVAL '30 days'`);
+        if (deleted.rowCount > 0) {
+          console.log(`[JobLogger] Purged ${deleted.rowCount} log entries older than 30 days`);
+        }
+      } catch (err) {
+        console.error('[JobLogger] Retention cleanup failed:', err.message);
+      }
     });
 
     // Schedule moderation sweep every 15 minutes
@@ -1986,6 +2015,7 @@ async function start() {
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
   if (activeSmtpServer) activeSmtpServer.close();
+  await stopJobLogger();
   await stopJobScheduler();
   process.exit(0);
 });
@@ -1993,6 +2023,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...');
   if (activeSmtpServer) activeSmtpServer.close();
+  await stopJobLogger();
   await stopJobScheduler();
   process.exit(0);
 });

@@ -545,21 +545,32 @@ function registerTools(server, pool, boss) {
 
   server.tool(
     'job_logs',
-    'Recent error messages from job status tables',
-    { limit: z.number().optional().default(20).describe('Max log entries') },
-    async ({ limit }) => {
-      const errors = await pool.query(`
-        SELECT 'news' AS job_type, id, status, error_message, created_at
-        FROM news_job_status
-        WHERE error_message IS NOT NULL AND error_message != ''
-        UNION ALL
-        SELECT 'trail_status' AS job_type, id, status, error_message, created_at
-        FROM trail_status_job_status
-        WHERE error_message IS NOT NULL AND error_message != ''
+    'Structured log entries from collection jobs',
+    {
+      job_type: z.enum(['news', 'trail_status', 'moderation', 'newsletter', 'backup', 'news_single', 'events_single']).optional().describe('Filter by job type'),
+      job_id: z.number().optional().describe('Filter by job ID'),
+      poi_id: z.number().optional().describe('Filter by POI ID'),
+      level: z.enum(['info', 'warn', 'error']).optional().describe('Filter by log level'),
+      limit: z.number().optional().default(50).describe('Max log entries')
+    },
+    async ({ job_type, job_id, poi_id, level, limit }) => {
+      const conditions = [];
+      const params = [];
+      let idx = 1;
+
+      if (job_type) { conditions.push(`job_type = $${idx++}`); params.push(job_type); }
+      if (job_id) { conditions.push(`job_id = $${idx++}`); params.push(job_id); }
+      if (poi_id) { conditions.push(`poi_id = $${idx++}`); params.push(poi_id); }
+      if (level) { conditions.push(`level = $${idx++}`); params.push(level); }
+
+      const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const result = await pool.query(`
+        SELECT id, job_id, job_type, poi_id, poi_name, level, message, details, created_at
+        FROM job_logs ${where}
         ORDER BY created_at DESC
-        LIMIT $1
-      `, [limit]);
-      return { content: [{ type: 'text', text: JSON.stringify(errors.rows, null, 2) }] };
+        LIMIT $${idx}
+      `, [...params, limit]);
+      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
     }
   );
 

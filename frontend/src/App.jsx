@@ -17,6 +17,7 @@ import ParkNews from './components/ParkNews';
 import ParkEvents from './components/ParkEvents';
 import DataCollectionSettings from './components/DataCollectionSettings';
 import ModerationInbox from './components/ModerationInbox';
+import JobsDashboard from './components/JobsDashboard';
 import ResultsTab from './components/ResultsTab';
 
 // Default icon type IDs for initializing the filter
@@ -1702,6 +1703,12 @@ function AppContent() {
                 )}
               </button>
               <button
+                className={`settings-tab-btn ${settingsTab === 'jobs' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('jobs')}
+              >
+                Jobs
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('google')}
               >
@@ -1718,6 +1725,7 @@ function AppContent() {
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
               {settingsTab === 'moderation' && <ModerationInbox />}
+              {settingsTab === 'jobs' && <JobsDashboard />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
                   <SyncSettings onDataRefresh={refreshAllData} />

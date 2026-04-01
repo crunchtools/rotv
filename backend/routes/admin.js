@@ -43,7 +43,7 @@ import {
   requestCancellation,
   getDisplaySlots as getNewsDisplaySlots
 } from '../services/newsService.js';
-import { submitBatchNewsJob, queueModerationJob } from '../services/jobScheduler.js';
+import { submitBatchNewsJob, queueModerationJob, getJobScheduler, JOB_NAMES } from '../services/jobScheduler.js';
 import {
   getQueue as getModerationQueue,
   getPendingCount as getModerationPendingCount,
@@ -75,6 +75,7 @@ import {
   getDisplaySlots as getTrailDisplaySlots
 } from '../services/trailStatusService.js';
 import imageServerClient from '../services/imageServerClient.js';
+import { logInfo, logError } from '../services/jobLogger.js';
 
 const router = express.Router();
 
@@ -2711,6 +2712,8 @@ export function createAdminRouter(pool) {
         completed: true
       });
 
+      logInfo(null, 'news_single', poi.id, poi.name, `${savedNews} news saved`, { news_found: news.length, news_saved: savedNews });
+
       res.json({
         success: true,
         message: `News collection completed for ${poi.name}`,
@@ -2780,6 +2783,8 @@ export function createAdminRouter(pool) {
         eventsDuplicate: events.length - savedEvents,
         completed: true
       });
+
+      logInfo(null, 'events_single', poi.id, poi.name, `${savedEvents} events saved`, { events_found: events.length, events_saved: savedEvents });
 
       res.json({
         success: true,
@@ -4089,6 +4094,138 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error submitting photo:', error);
       res.status(500).json({ error: 'Failed to submit photo' });
+    }
+  });
+
+  // ============================================================
+  // Jobs Dashboard Routes (#103)
+  // ============================================================
+
+  // Unified job history across all types
+  router.get('/jobs/history', isAdmin, async (req, res) => {
+    try {
+      const type = req.query.type || null;
+      const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 20, 100));
+      const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+      let query = `
+        SELECT * FROM (
+          SELECT id, 'news' AS job_type, job_type AS sub_type, status,
+                 started_at, completed_at, total_pois AS items_total,
+                 pois_processed AS items_processed, error_message,
+                 created_at
+          FROM news_job_status
+          UNION ALL
+          SELECT id, 'trail_status' AS job_type, job_type AS sub_type, status,
+                 started_at, completed_at, total_trails AS items_total,
+                 trails_processed AS items_processed, error_message,
+                 created_at
+          FROM trail_status_job_status
+        ) AS jobs
+      `;
+
+      const params = [];
+      let paramIdx = 1;
+
+      if (type) {
+        query += ` WHERE job_type = $${paramIdx}`;
+        params.push(type);
+        paramIdx++;
+      }
+
+      query += ` ORDER BY created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+      params.push(limit, offset);
+
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching job history:', error);
+      res.status(500).json({ error: 'Failed to fetch job history' });
+    }
+  });
+
+  // Per-job log entries from job_logs table
+  router.get('/jobs/:jobType/:jobId/logs', isAdmin, async (req, res) => {
+    try {
+      const { jobType, jobId } = req.params;
+      const parsedJobId = parseInt(jobId);
+      if (isNaN(parsedJobId)) {
+        return res.status(400).json({ error: 'Invalid job ID' });
+      }
+      const level = req.query.level || null;
+      const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 200, 500));
+      const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+      let query = 'SELECT * FROM job_logs WHERE job_type = $1 AND job_id = $2';
+      const params = [jobType, parsedJobId];
+      let paramIdx = 3;
+
+      if (level) {
+        query += ` AND level = $${paramIdx}`;
+        params.push(level);
+        paramIdx++;
+      }
+
+      query += ` ORDER BY created_at ASC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
+      params.push(limit, offset);
+
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching job logs:', error);
+      res.status(500).json({ error: 'Failed to fetch job logs' });
+    }
+  });
+
+  // Live queue status from pg-boss
+  router.get('/jobs/queues', isAdmin, async (req, res) => {
+    try {
+      const boss = getJobScheduler();
+
+      const QUEUE_LABELS = {
+        [JOB_NAMES.NEWS_COLLECTION]: 'News Collection (Scheduled)',
+        [JOB_NAMES.NEWS_BATCH]: 'News Collection (Batch)',
+        [JOB_NAMES.TRAIL_STATUS_COLLECTION]: 'Trail Status (Scheduled)',
+        [JOB_NAMES.TRAIL_STATUS_BATCH]: 'Trail Status (Batch)',
+        [JOB_NAMES.CONTENT_MODERATION]: 'Content Moderation',
+        [JOB_NAMES.CONTENT_MODERATION_SWEEP]: 'Moderation Sweep',
+        [JOB_NAMES.NEWSLETTER_PROCESS]: 'Newsletter Processing',
+        [JOB_NAMES.IMAGE_BACKUP]: 'Image Backup'
+      };
+
+      const queues = [];
+      for (const [name, label] of Object.entries(QUEUE_LABELS)) {
+        try {
+          const size = await boss.getQueueSize(name);
+          queues.push({
+            name,
+            label,
+            size: size || 0
+          });
+        } catch {
+          queues.push({ name, label, size: 0 });
+        }
+      }
+
+      res.json(queues);
+    } catch (error) {
+      console.error('Error fetching queue status:', error);
+      res.status(500).json({ error: 'Failed to fetch queue status' });
+    }
+  });
+
+  // Manual log retention cleanup
+  router.delete('/jobs/logs/cleanup', isAdmin, async (req, res) => {
+    try {
+      const days = Math.max(1, parseInt(req.query.days) || 30);
+      const result = await pool.query(
+        `DELETE FROM job_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1`,
+        [days]
+      );
+      res.json({ deleted: result.rowCount, days });
+    } catch (error) {
+      console.error('Error cleaning up job logs:', error);
+      res.status(500).json({ error: 'Failed to cleanup job logs' });
     }
   });
 
