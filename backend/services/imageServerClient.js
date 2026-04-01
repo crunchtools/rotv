@@ -541,25 +541,21 @@ class ImageServerClient {
   }
 
   /**
-   * List all media files on the image server
+   * List all media files on the image server.
+   * Throws on error so callers (backup job) can detect failures.
    * @returns {Array<{ subdir: string, filename: string, size: number, modified: number }>}
    */
   async listMediaFiles() {
     if (!this.initialized) {
-      return [];
+      throw new Error('Image server not configured');
     }
 
-    try {
-      const response = await fetch(`${this.serverUrl}/api/media/files`);
-      if (!response.ok) {
-        throw new Error(`List media failed: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('[ImageServer] Failed to list media files:', error);
-      return [];
+    const response = await fetch(`${this.serverUrl}/api/media/files`);
+    if (!response.ok) {
+      throw new Error(`List media failed: ${response.status}`);
     }
+
+    return await response.json();
   }
 
   /**

@@ -395,6 +395,7 @@ export async function restoreImagesFromDrive(pool, drive) {
       console.log('[ImageRestore] DB restored successfully');
     } else {
       console.error('[ImageRestore] DB restore failed:', restoreResult.error);
+      return { success: false, dbRestored: false, error: `Database restore failed: ${restoreResult.error}` };
     }
   }
 
