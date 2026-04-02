@@ -648,10 +648,13 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                                     ) : (
                                       <div className="job-logs-scroll">
                                         {runLogs.map(entry => (
-                                          <div key={entry.id} className={`job-log-entry ${entry.level}`}
+                                          <div key={entry.id} className={`job-log-entry ${entry.level}${entry.details ? ' has-details' : ''}${logDetailsExpanded.has(entry.id) ? ' expanded' : ''}`}
                                             onClick={(e) => { e.stopPropagation(); if (entry.details) toggleLogDetails(entry.id); }}
                                             style={{ cursor: entry.details ? 'pointer' : 'default' }}>
-                                            <span className={`log-level-dot ${entry.level}`}></span>
+                                            {entry.details
+                                              ? <span className="log-expand-icon">{logDetailsExpanded.has(entry.id) ? '▾' : '▸'}</span>
+                                              : <span className={`log-level-dot ${entry.level}`}></span>
+                                            }
                                             <span className="log-poi">{entry.poi_name || '--'}</span>
                                             <span className="log-message">{entry.message}</span>
                                             <span className="log-time">{formatTime(entry.created_at)}</span>
