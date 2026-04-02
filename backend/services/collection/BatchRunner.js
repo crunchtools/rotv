@@ -85,8 +85,12 @@ export async function runBatch({
     const item = items[index];
     inFlight++;
 
-    // Find available slot (null if all occupied, fallback to 0)
-    const slotId = tracker.findFirstAvailableSlot(jobId) ?? 0;
+    // Find available slot. Returns null if all slots occupied (maxConcurrency
+    // should prevent this, but handle gracefully to avoid overwriting slot 0).
+    const slotId = tracker.findFirstAvailableSlot(jobId);
+    if (slotId === null) {
+      console.warn(`[${label} Job ${jobId}] No available display slot for item ${index} — all ${maxConcurrency} slots occupied`);
+    }
     const context = { slotId, jobId, index, total: items.length };
 
     if (onItemStart) {

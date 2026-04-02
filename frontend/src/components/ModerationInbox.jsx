@@ -51,6 +51,8 @@ function ModerationInbox() {
   const [itemUrls, setItemUrls] = useState({}); // { "news:123": [{id, url, source_name}] }
   const [newUrlInput, setNewUrlInput] = useState('');
   const [addingUrl, setAddingUrl] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const LIMIT = 20;
 
   const fetchQueue = useCallback(async () => {
@@ -59,6 +61,7 @@ function ModerationInbox() {
       const params = new URLSearchParams({ page, limit: LIMIT, status: statusFilter });
       if (filter) params.set('type', filter);
       if (sourceFilter) params.set('source', sourceFilter);
+      if (searchQuery) params.set('search', searchQuery);
       const response = await fetch(`/api/admin/moderation/queue?${params}`, {
         credentials: 'include'
       });
@@ -72,7 +75,7 @@ function ModerationInbox() {
     } finally {
       setLoading(false);
     }
-  }, [page, filter, statusFilter, sourceFilter]);
+  }, [page, filter, statusFilter, sourceFilter, searchQuery]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -335,6 +338,9 @@ function ModerationInbox() {
         setEditingItem(null);
         setEditFields({});
         fetchQueue();
+      } else {
+        const err = await response.json();
+        notify('error', err.error || 'Save failed');
       }
     } catch (err) { notify('error', err.message); }
   };
@@ -543,6 +549,21 @@ function ModerationInbox() {
         </div>
       </div>
 
+      {/* Search bar */}
+      <div style={{ marginBottom: '8px' }}>
+        <input
+          type="text"
+          value={searchInput}
+          onChange={e => setSearchInput(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') { setSearchQuery(searchInput); setPage(1); } }}
+          placeholder="Search by title or description..."
+          style={{
+            width: '100%', padding: '8px 12px', fontSize: '0.88rem',
+            border: '1px solid #d0d0d0', borderRadius: '6px', boxSizing: 'border-box'
+          }}
+        />
+      </div>
+
       {/* Filter rows — stacked: Types, Sources, Status */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
         {/* Row 1: Type filters */}
@@ -605,7 +626,7 @@ function ModerationInbox() {
           <div style={{ display: 'flex', gap: '6px', marginBottom: '12px' }}>
             {['news', 'event', 'photo'].map(t => (
               <button key={t} onClick={() => { setCreating(t); setCreateFields({}); }}
-                style={pillActive(creating === t)}>
+                style={filterBtn(creating === t)}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}

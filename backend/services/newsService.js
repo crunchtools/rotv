@@ -173,8 +173,8 @@ export async function findIncompleteJobs(pool) {
   return result.rows;
 }
 
-// Prompt template for news collection
-const NEWS_COLLECTION_PROMPT = `You are a precise news researcher for Cuyahoga Valley National Park and surrounding areas in Northeast Ohio.
+// Prompt template for news collection (exported for registry.js default prompt access)
+export const NEWS_COLLECTION_PROMPT = `You are a precise news researcher for Cuyahoga Valley National Park and surrounding areas in Northeast Ohio.
 
 TIMEZONE CONTEXT:
 - The current timezone is: {{timezone}}
@@ -817,7 +817,11 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   }
 
   // Build prompt with extracted content if available
-  let prompt = NEWS_COLLECTION_PROMPT
+  // Use custom prompt from admin_settings if configured, otherwise fall back to hardcoded default
+  const { getPromptTemplate } = await import('./geminiService.js');
+  const promptTemplate = await getPromptTemplate(pool, 'news_collection_prompt');
+  const basePrompt = promptTemplate || NEWS_COLLECTION_PROMPT;
+  let prompt = basePrompt
     .replace(/\{\{timezone\}\}/g, timezone)
     .replace('{{name}}', poi.name)
     .replace('{{poi_type}}', poi.poi_type)
@@ -1338,7 +1342,9 @@ IMPORTANT:
       news: allNews,
       events: result.events || [],
       metadata: {
-        usedDedicatedNewsUrl
+        usedDedicatedNewsUrl,
+        provider: usedProvider,
+        ai_response: response
       }
     };
   } catch (error) {
@@ -1898,7 +1904,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
         const savedEvents = await saveEventItems(pool, poi.id, events);
         console.log(`[News Job ${jobId}] [${index + 1}/${total}] ${poi.name}: ${savedNews} news, ${savedEvents} events`);
-        logInfo(jobId, 'news', poi.id, poi.name, `${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents, provider: metadata?.provider });
+        logInfo(jobId, 'news', poi.id, poi.name, `${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents, provider: metadata?.provider, ai_response: metadata?.ai_response });
 
         // Update last_news_collection timestamp
         await pool.query(`
@@ -2163,11 +2169,14 @@ export async function getLatestJobStatus(pool) {
  * @param {number} daysOld - Delete news older than this many days
  */
 export async function cleanupOldNews(pool, daysOld = 90) {
+  const runId = Math.floor(Date.now() / 1000);
   const result = await pool.query(`
     DELETE FROM poi_news
     WHERE created_at < CURRENT_DATE - INTERVAL '1 day' * $1
   `, [daysOld]);
 
+  logInfo(runId, 'cleanup', null, null, `Cleanup: deleted ${result.rowCount} news older than ${daysOld} days`, { completed: true, deleted: result.rowCount, type: 'news', days_old: daysOld });
+  await flushJobLogs();
   return result.rowCount;
 }
 
@@ -2177,11 +2186,14 @@ export async function cleanupOldNews(pool, daysOld = 90) {
  * @param {number} daysOld - Delete events older than this many days
  */
 export async function cleanupPastEvents(pool, daysOld = 30) {
+  const runId = Math.floor(Date.now() / 1000);
   const result = await pool.query(`
     DELETE FROM poi_events
     WHERE end_date < CURRENT_DATE - INTERVAL '1 day' * $1
        OR (end_date IS NULL AND start_date < CURRENT_DATE - INTERVAL '1 day' * $1)
   `, [daysOld]);
 
+  logInfo(runId, 'cleanup', null, null, `Cleanup: deleted ${result.rowCount} events older than ${daysOld} days`, { completed: true, deleted: result.rowCount, type: 'events', days_old: daysOld });
+  await flushJobLogs();
   return result.rowCount;
 }

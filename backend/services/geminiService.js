@@ -8,6 +8,7 @@ if (!globalThis.fetch) {
 }
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 // Gemini model — configurable via environment variable, defaults to gemini-2.5-flash
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -237,7 +238,9 @@ export async function researchLocation(pool, destination, availableActivities = 
 
   const prompt = interpolatePrompt(promptTemplate, destination);
 
+  const runId = Math.floor(Date.now() / 1000);
   console.log(`Researching location: ${destination.name} (with Google Search, ${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
+  logInfo(runId, 'research', null, destination.name, `Research: ${destination.name}`);
 
   const generation = await model.generateContent(prompt);
   const response = generation.response;
@@ -277,10 +280,14 @@ export async function researchLocation(pool, destination, availableActivities = 
     }
 
     const researchData = JSON.parse(jsonText);
+    logInfo(runId, 'research', null, destination.name, `Research complete: ${destination.name}`, { completed: true, fields: Object.keys(researchData) });
+    await flushJobLogs();
     return researchData;
   } catch (e) {
     console.error('Failed to parse research response as JSON:', e);
     console.error('Raw response:', text);
+    logError(runId, 'research', null, destination.name, `Research failed: invalid AI response for ${destination.name}`, { completed: true, error_stack: text.slice(0, 500) });
+    await flushJobLogs();
     throw new Error('AI returned invalid format. Please try again.');
   }
 }
@@ -356,7 +363,9 @@ ${EXAMPLE_SVGS}
 
 Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
 
+  const runId = Math.floor(Date.now() / 1000);
   console.log(`Generating icon SVG for: ${description} (color: ${color})`);
+  logInfo(runId, 'research', null, null, `Icon generation: ${description} (${color})`);
 
   const iconGeneration = await model.generateContent(prompt);
   const response = iconGeneration.response;
@@ -392,6 +401,8 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
     text = text.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
   }
 
+  logInfo(runId, 'research', null, null, `Icon generated: ${description}`, { completed: true });
+  await flushJobLogs();
   return text;
 }
 

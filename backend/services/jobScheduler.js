@@ -544,6 +544,17 @@ export async function registerDatabaseBackupHandler(handler) {
 }
 
 /**
+ * Update the cron schedule for any job type (live update via pg-boss)
+ * @param {string} jobName - pg-boss job name
+ * @param {string} cronExpression - New cron expression
+ */
+export async function updateSchedule(jobName, cronExpression) {
+  const scheduler = getJobScheduler();
+  await scheduler.schedule(jobName, cronExpression, {}, { tz: 'America/New_York' });
+  console.log(`Schedule updated: ${jobName} → ${cronExpression}`);
+}
+
+/**
  * Stop the job scheduler gracefully
  */
 export async function stopJobScheduler() {

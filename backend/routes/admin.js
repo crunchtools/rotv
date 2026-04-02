@@ -43,7 +43,7 @@ import {
   requestCancellation,
   getDisplaySlots as getNewsDisplaySlots
 } from '../services/newsService.js';
-import { submitBatchNewsJob, queueModerationJob, getJobScheduler, JOB_NAMES } from '../services/jobScheduler.js';
+import { submitBatchNewsJob, queueModerationJob, getJobScheduler, JOB_NAMES, updateSchedule } from '../services/jobScheduler.js';
 import {
   getQueue as getModerationQueue,
   getPendingCount as getModerationPendingCount,
@@ -476,7 +476,10 @@ export function createAdminRouter(pool) {
       'moderation_auto_approve_threshold',
       'moderation_auto_approve_enabled',
       'photo_submissions_enabled',
-      'apify_api_token'
+      'apify_api_token',
+      'news_collection_prompt',
+      'trail_status_prompt',
+      'results_subtabs_config'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
@@ -3773,13 +3776,14 @@ export function createAdminRouter(pool) {
   // Get paginated moderation queue
   router.get('/moderation/queue', isAdmin, async (req, res) => {
     try {
-      const { page = 1, limit = 20, type, status = 'pending', source } = req.query;
+      const { page = 1, limit = 20, type, status = 'pending', source, search } = req.query;
       const result = await getModerationQueue(pool, {
         page: parseInt(page),
         limit: parseInt(limit),
         contentType: type || null,
         status,
-        contentSource: source || null
+        contentSource: source || null,
+        search: search || null
       });
       res.json(result);
     } catch (error) {
@@ -4108,6 +4112,9 @@ export function createAdminRouter(pool) {
       const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 20, 100));
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
+      // Perf: date-bound each subquery to avoid full table scans.
+      // Fix: exclude job_id=0 from GROUP BY to prevent collapsing unrelated entries.
+      // Fix: infer 'running' status for jobs with recent activity (within 1 hour).
       let query = `
         SELECT * FROM (
           SELECT id, 'news' AS job_type, job_type AS sub_type, status,
@@ -4115,15 +4122,22 @@ export function createAdminRouter(pool) {
                  pois_processed AS items_processed, error_message,
                  created_at
           FROM news_job_status
+          WHERE created_at > NOW() - INTERVAL '90 days'
           UNION ALL
           SELECT id, 'trail_status' AS job_type, job_type AS sub_type, status,
                  started_at, completed_at, total_trails AS items_total,
                  trails_processed AS items_processed, error_message,
                  created_at
           FROM trail_status_job_status
+          WHERE created_at > NOW() - INTERVAL '90 days'
           UNION ALL
           SELECT job_id AS id, job_type, job_type AS sub_type,
-                 CASE WHEN bool_or(level = 'error') THEN 'failed' ELSE 'completed' END AS status,
+                 CASE
+                   WHEN bool_or(level = 'error') THEN 'failed'
+                   WHEN bool_or((details->>'completed')::boolean) THEN 'completed'
+                   WHEN MAX(created_at) > NOW() - INTERVAL '2 minutes' THEN 'running'
+                   ELSE 'stale'
+                 END AS status,
                  MIN(created_at) AS started_at,
                  MAX(created_at) AS completed_at,
                  COUNT(DISTINCT poi_id) FILTER (WHERE poi_id IS NOT NULL) AS items_total,
@@ -4132,6 +4146,8 @@ export function createAdminRouter(pool) {
                  MIN(created_at) AS created_at
           FROM job_logs
           WHERE job_type NOT IN ('news', 'trail_status')
+            AND job_id > 0
+            AND created_at > NOW() - INTERVAL '90 days'
           GROUP BY job_type, job_id
         ) AS jobs
       `;
@@ -4228,6 +4244,129 @@ export function createAdminRouter(pool) {
     }
   });
 
+  // GET /admin/jobs/scheduled - List all job types with schedule, queue size, last run, and prompt info
+  router.get('/jobs/scheduled', isAdmin, async (req, res) => {
+    try {
+      const { COLLECTION_TYPES, getDefaultPrompt } = await import('../services/collection/registry.js');
+      const boss = getJobScheduler();
+
+      const jobs = await Promise.all(COLLECTION_TYPES.map(async (type) => {
+        // Get current schedule from admin_settings (overrides default)
+        const schedResult = await pool.query(
+          'SELECT value FROM admin_settings WHERE key = $1',
+          [`schedule_${type.scheduleJobName}`]
+        );
+        const currentSchedule = schedResult.rows.length > 0
+          ? schedResult.rows[0].value
+          : type.schedule;
+
+        // Get queue size
+        let queueSize = 0;
+        try {
+          queueSize = await boss.getQueueSize(type.scheduleJobName) || 0;
+        } catch { /* queue may not exist yet */ }
+
+        // Get last job info from status table
+        let lastJob = null;
+        if (type.statusTable) {
+          try {
+            const jobResult = await pool.query(
+              `SELECT id, status, started_at, completed_at FROM ${type.statusTable} ORDER BY id DESC LIMIT 1`
+            );
+            if (jobResult.rows.length > 0) lastJob = jobResult.rows[0];
+          } catch { /* table may not exist */ }
+        }
+
+        // Get prompt info for AI-powered jobs
+        let prompts = [];
+        if (type.hasPrompt && type.promptKeys.length > 0) {
+          for (const pk of type.promptKeys) {
+            const currentResult = await pool.query(
+              'SELECT value FROM admin_settings WHERE key = $1',
+              [pk.key]
+            );
+            const currentValue = currentResult.rows.length > 0 ? currentResult.rows[0].value : null;
+            const defaultValue = await getDefaultPrompt(pk.key);
+            prompts.push({
+              key: pk.key,
+              label: pk.label,
+              placeholders: pk.placeholders,
+              currentValue: currentValue || defaultValue,
+              defaultValue,
+              isCustomized: currentValue !== null
+            });
+          }
+        }
+
+        return {
+          id: type.id,
+          label: type.label,
+          description: type.description,
+          icon: type.icon,
+          scheduleJobName: type.scheduleJobName,
+          currentSchedule,
+          defaultSchedule: type.schedule,
+          queueSize,
+          lastJob,
+          triggerEndpoint: type.triggerEndpoint,
+          manualTriggerMethod: type.manualTriggerMethod,
+          hasPrompt: type.hasPrompt,
+          historyTypes: type.historyTypes || [],
+          prompts
+        };
+      }));
+
+      res.json(jobs);
+    } catch (error) {
+      console.error('Error fetching scheduled jobs:', error);
+      res.status(500).json({ error: 'Failed to fetch scheduled jobs' });
+    }
+  });
+
+  // PUT /admin/jobs/:name/schedule - Update cron schedule for a job
+  router.put('/jobs/:name/schedule', isAdmin, async (req, res) => {
+    const { name } = req.params;
+    const { cronExpression } = req.body;
+
+    // Validate job name exists in registry
+    const { COLLECTION_TYPES } = await import('../services/collection/registry.js');
+    const jobType = COLLECTION_TYPES.find(t => t.scheduleJobName === name);
+    if (!jobType) {
+      return res.status(400).json({ error: `Unknown job name: ${name}` });
+    }
+
+    // Validate cron expression format (basic check: 5 space-separated fields)
+    if (!cronExpression || !cronExpression.trim()) {
+      return res.status(400).json({ error: 'cronExpression is required' });
+    }
+    const parts = cronExpression.trim().split(/\s+/);
+    if (parts.length !== 5) {
+      return res.status(400).json({ error: 'Invalid cron expression: must have exactly 5 fields (minute hour day month weekday)' });
+    }
+
+    try {
+      // Update pg-boss schedule immediately
+      await updateSchedule(name, cronExpression.trim());
+
+      // Persist to admin_settings so it survives container restarts
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, updated_at, updated_by)
+         VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
+         ON CONFLICT (key) DO UPDATE SET
+           value = EXCLUDED.value,
+           updated_at = CURRENT_TIMESTAMP,
+           updated_by = EXCLUDED.updated_by`,
+        [`schedule_${name}`, cronExpression.trim(), req.user.id]
+      );
+
+      console.log(`Admin ${req.user.email} updated schedule for ${name}: ${cronExpression.trim()}`);
+      res.json({ success: true, jobName: name, schedule: cronExpression.trim() });
+    } catch (error) {
+      console.error('Error updating job schedule:', error);
+      res.status(500).json({ error: 'Failed to update schedule' });
+    }
+  });
+
   // Manual log retention cleanup
   router.delete('/jobs/logs/cleanup', isAdmin, async (req, res) => {
     try {
@@ -4240,6 +4379,170 @@ export function createAdminRouter(pool) {
     } catch (error) {
       console.error('Error cleaning up job logs:', error);
       res.status(500).json({ error: 'Failed to cleanup job logs' });
+    }
+  });
+
+  // ============================================
+  // Collection Config Routes
+  // ============================================
+
+  // Default sub-tabs configuration (matches current hardcoded tabs in ResultsTab.jsx)
+  const DEFAULT_SUBTABS = [
+    { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
+    { id: 'mtb', label: 'MTB Trail Status', shortLabel: 'MTB Status', route: '/mtb-trail-status', filterTypes: ['mtb-trailhead'], protected: false },
+    { id: 'organizations', label: 'Organizations', shortLabel: 'Orgs', route: '/organizations', filterTypes: ['organization'], protected: false }
+  ];
+
+  // GET /admin/collection-types - List registered collection types with last job info
+  router.get('/collection-types', isAdmin, async (req, res) => {
+    try {
+      const { COLLECTION_TYPES } = await import('../services/collection/registry.js');
+
+      const enriched = await Promise.all(COLLECTION_TYPES.map(async (type) => {
+        let lastJob = null;
+        try {
+          const jobResult = await pool.query(
+            `SELECT id, status, started_at, completed_at FROM ${type.statusTable} ORDER BY id DESC LIMIT 1`
+          );
+          if (jobResult.rows.length > 0) {
+            lastJob = jobResult.rows[0];
+          }
+        } catch (err) {
+          // Table might not exist yet
+        }
+        return { ...type, lastJob };
+      }));
+
+      res.json(enriched);
+    } catch (error) {
+      console.error('Error fetching collection types:', error);
+      res.status(500).json({ error: 'Failed to fetch collection types' });
+    }
+  });
+
+  // GET /admin/prompts - Get all collection prompt templates with current/default values
+  router.get('/prompts', isAdmin, async (req, res) => {
+    try {
+      const { COLLECTION_TYPES, getDefaultPrompt } = await import('../services/collection/registry.js');
+
+      const prompts = [];
+      for (const type of COLLECTION_TYPES) {
+        for (const pk of type.promptKeys) {
+          const currentResult = await pool.query(
+            'SELECT value FROM admin_settings WHERE key = $1',
+            [pk.key]
+          );
+          const currentValue = currentResult.rows.length > 0 ? currentResult.rows[0].value : null;
+          const defaultValue = await getDefaultPrompt(pk.key);
+
+          prompts.push({
+            key: pk.key,
+            label: pk.label,
+            placeholders: pk.placeholders,
+            collectionTypeId: type.id,
+            collectionTypeLabel: type.label,
+            currentValue: currentValue || defaultValue,
+            defaultValue,
+            isCustomized: currentValue !== null
+          });
+        }
+      }
+
+      res.json(prompts);
+    } catch (error) {
+      console.error('Error fetching prompts:', error);
+      res.status(500).json({ error: 'Failed to fetch prompts' });
+    }
+  });
+
+  // PUT /admin/prompts/:key - Update or reset a prompt template
+  router.put('/prompts/:key', isAdmin, async (req, res) => {
+    const { key } = req.params;
+    const { value, reset } = req.body;
+
+    try {
+      const { COLLECTION_TYPES } = await import('../services/collection/registry.js');
+
+      // Validate key exists in registry
+      const validKeys = COLLECTION_TYPES.flatMap(t => t.promptKeys.map(pk => pk.key));
+      if (!validKeys.includes(key)) {
+        return res.status(400).json({ error: `Invalid prompt key: ${key}` });
+      }
+
+      if (reset) {
+        // Delete custom value to revert to default
+        await pool.query('DELETE FROM admin_settings WHERE key = $1', [key]);
+        console.log(`Admin ${req.user.email} reset prompt: ${key}`);
+      } else {
+        if (!value || !value.trim()) {
+          return res.status(400).json({ error: 'Prompt value cannot be empty' });
+        }
+        await pool.query(
+          `INSERT INTO admin_settings (key, value, updated_at, updated_by)
+           VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
+           ON CONFLICT (key) DO UPDATE SET
+             value = EXCLUDED.value,
+             updated_at = CURRENT_TIMESTAMP,
+             updated_by = EXCLUDED.updated_by`,
+          [key, value, req.user.id]
+        );
+        console.log(`Admin ${req.user.email} updated prompt: ${key}`);
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating prompt:', error);
+      res.status(500).json({ error: 'Failed to update prompt' });
+    }
+  });
+
+  // GET /admin/results-subtabs - Get sub-tab configuration
+  router.get('/results-subtabs', isAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(
+        "SELECT value FROM admin_settings WHERE key = 'results_subtabs_config'"
+      );
+      if (result.rows.length > 0 && result.rows[0].value) {
+        res.json(JSON.parse(result.rows[0].value));
+      } else {
+        res.json({ subtabs: DEFAULT_SUBTABS });
+      }
+    } catch (error) {
+      console.error('Error fetching results subtabs:', error);
+      res.status(500).json({ error: 'Failed to fetch results subtabs config' });
+    }
+  });
+
+  // PUT /admin/results-subtabs - Update sub-tab configuration
+  router.put('/results-subtabs', isAdmin, async (req, res) => {
+    const { subtabs } = req.body;
+
+    if (!Array.isArray(subtabs) || subtabs.length === 0) {
+      return res.status(400).json({ error: 'subtabs must be a non-empty array' });
+    }
+
+    // Validate first tab is 'all' and protected
+    if (subtabs[0].id !== 'all') {
+      return res.status(400).json({ error: 'First sub-tab must be "all" (Points of Interest)' });
+    }
+
+    try {
+      const config = JSON.stringify({ subtabs });
+      await pool.query(
+        `INSERT INTO admin_settings (key, value, updated_at, updated_by)
+         VALUES ('results_subtabs_config', $1, CURRENT_TIMESTAMP, $2)
+         ON CONFLICT (key) DO UPDATE SET
+           value = EXCLUDED.value,
+           updated_at = CURRENT_TIMESTAMP,
+           updated_by = EXCLUDED.updated_by`,
+        [config, req.user.id]
+      );
+
+      console.log(`Admin ${req.user.email} updated results subtabs config`);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating results subtabs:', error);
+      res.status(500).json({ error: 'Failed to update results subtabs config' });
     }
   });
 

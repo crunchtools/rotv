@@ -127,7 +127,8 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
  * @param {string} contentType - 'news', 'event', or 'photo'
  * @param {number} contentId - ID of the content to moderate
  */
-export async function processItem(pool, contentType, contentId, { forceStatus = null } = {}) {
+export async function processItem(pool, contentType, contentId, { forceStatus = null, runId = null } = {}) {
+  const itemRunId = runId || Math.floor(Date.now() / 1000);
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
@@ -161,6 +162,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         [`Rejected: duplicate of approved news #${dupCheck.rows[0].id}`, contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected news #${contentId}: duplicate of #${dupCheck.rows[0].id}`, { completed: true });
       return;
     }
 
@@ -171,6 +173,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         [scoring.confidence_score, scoring.reasoning, contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (no source URL)`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected news #${contentId}: no source URL`, { completed: true });
       return;
     }
 
@@ -181,6 +184,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected news #${contentId}: URL unreachable (${sourceCheck.reason})`, { completed: true });
       return;
     }
 
@@ -256,6 +260,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         [`Rejected: duplicate of approved event #${dupCheck.rows[0].id}`, contentId]
       );
       console.log(`[Moderation] event #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected event #${contentId}: duplicate of #${dupCheck.rows[0].id}`, { completed: true });
       return;
     }
 
@@ -265,6 +270,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         ['Rejected: non-human event without source URL', contentId]
       );
       console.log(`[Moderation] event #${contentId}: rejected (non-human, no source URL)`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected event #${contentId}: no source URL`, { completed: true });
       return;
     }
 
@@ -277,6 +283,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
           [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
         );
         console.log(`[Moderation] event #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
+        logInfo(itemRunId, 'moderation', null, row.title, `Rejected event #${contentId}: URL unreachable (${sourceCheck.reason})`, { completed: true });
         return;
       }
       eventSourceContent = sourceCheck.markdown;
@@ -362,13 +369,19 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
   }
 
+  const decision = scoring?.confidence_score >= threshold ? 'auto_approved'
+    : scoring?.confidence_score < rejectFloor ? 'rejected' : 'pending';
   console.log(`[Moderation] ${contentType} #${contentId}: score=${scoring?.confidence_score}`);
+  logInfo(itemRunId || 0, 'moderation', null, null,
+    `Score ${contentType} #${contentId}: ${scoring?.confidence_score?.toFixed(2)} → ${decision}`,
+    { content_type: contentType, content_id: contentId, score: scoring?.confidence_score, decision });
 }
 
 /**
  * Process all unscored pending items (sweep job, runs every 15 minutes)
  */
 export async function processPendingItems(pool) {
+  const runId = Math.floor(Date.now() / 1000);
   const enabledQuery = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'moderation_enabled'"
   );
@@ -377,51 +390,57 @@ export async function processPendingItems(pool) {
     return { processed: 0 };
   }
 
-  let processed = 0;
-  let approved = 0;
-  let rejected = 0;
-
   const pendingNews = await pool.query(
     `SELECT id FROM poi_news WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
   );
+  const pendingEvents = await pool.query(
+    `SELECT id FROM poi_events WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
+  );
+  const pendingPhotos = await pool.query(
+    `SELECT id FROM photo_submissions WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
+  );
+  const totalPending = pendingNews.rows.length + pendingEvents.rows.length + pendingPhotos.rows.length;
+
+  if (totalPending === 0) {
+    console.log('[Moderation] Sweep complete: 0 items processed');
+    return { processed: 0 };
+  }
+
+  logInfo(runId, 'moderation', null, null, `Sweep starting: ${totalPending} unscored items (${pendingNews.rows.length} news, ${pendingEvents.rows.length} events, ${pendingPhotos.rows.length} photos)`);
+
+  let processed = 0;
   for (const row of pendingNews.rows) {
     try {
-      await processItem(pool, 'news', row.id);
+      await processItem(pool, 'news', row.id, { runId });
       processed++;
     } catch (error) {
+      logError(runId, 'moderation', null, null, `Failed to process news #${row.id}: ${error.message}`);
       console.error(`[Moderation] Failed to process news #${row.id}:`, error.message);
     }
   }
 
-  const pendingEvents = await pool.query(
-    `SELECT id FROM poi_events WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
-  );
   for (const row of pendingEvents.rows) {
     try {
-      await processItem(pool, 'event', row.id);
+      await processItem(pool, 'event', row.id, { runId });
       processed++;
     } catch (error) {
+      logError(runId, 'moderation', null, null, `Failed to process event #${row.id}: ${error.message}`);
       console.error(`[Moderation] Failed to process event #${row.id}:`, error.message);
     }
   }
 
-  const pendingPhotos = await pool.query(
-    `SELECT id FROM photo_submissions WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
-  );
   for (const row of pendingPhotos.rows) {
     try {
-      await processItem(pool, 'photo', row.id);
+      await processItem(pool, 'photo', row.id, { runId });
       processed++;
     } catch (error) {
+      logError(runId, 'moderation', null, null, `Failed to process photo #${row.id}: ${error.message}`);
       console.error(`[Moderation] Failed to process photo #${row.id}:`, error.message);
     }
   }
 
-  const totalPending = pendingNews.rows.length + pendingEvents.rows.length + pendingPhotos.rows.length;
-  if (totalPending > 0) {
-    logInfo(null, 'moderation', null, null, `Sweep complete: ${processed} processed`, { pending: totalPending, processed });
-    await flushJobLogs();
-  }
+  logInfo(runId, 'moderation', null, null, `Sweep complete: ${processed}/${totalPending} processed`, { completed: true, pending: totalPending, processed });
+  await flushJobLogs();
   console.log(`[Moderation] Sweep complete: ${processed} items processed`);
   return { processed };
 }
@@ -471,13 +490,15 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   const table = TABLE_MAP[contentType];
 
   const setClauses = [];
-  const values = [adminUserId, contentId];
-  let idx = 3;
+  const values = [contentId];
+  let idx = 2;
 
+  const DATE_FIELDS = ['publication_date', 'start_date', 'end_date'];
   for (const field of allowedFields) {
     if (edits[field] !== undefined) {
       setClauses.push(`${field} = $${idx}`);
-      values.push(edits[field]);
+      // Coerce empty strings to null for date/timestamp columns
+      values.push(DATE_FIELDS.includes(field) && edits[field] === '' ? null : edits[field]);
       idx++;
     }
   }
@@ -488,11 +509,13 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   }
 
   if (publish) {
-    setClauses.push(`moderation_status = 'published'`, `moderated_by = $1`, `moderated_at = CURRENT_TIMESTAMP`);
+    setClauses.push(`moderation_status = 'published'`, `moderated_by = $${idx}`, `moderated_at = CURRENT_TIMESTAMP`);
+    values.push(adminUserId);
+    idx++;
   }
 
   if (setClauses.length === 0) return;
-  await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $2`, values);
+  await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
 }
 
 export async function createItem(pool, contentType, fields, adminUserId) {
@@ -524,12 +547,15 @@ export async function createItem(pool, contentType, fields, adminUserId) {
 }
 
 export async function purgeRejected(pool, contentType) {
+  const runId = Math.floor(Date.now() / 1000);
   if (contentType) {
     const table = TABLE_MAP[contentType];
     if (!table) throw new Error(`Unknown content type: ${contentType}`);
     const result = await pool.query(
       `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
     );
+    logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${result.rowCount} ${contentType} items`, { completed: true, deleted: result.rowCount, type: contentType });
+    await flushJobLogs();
     return { deleted: result.rowCount };
   }
   // Purge all three tables
@@ -540,6 +566,8 @@ export async function purgeRejected(pool, contentType) {
     );
     total += result.rowCount;
   }
+  logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${total} items (all types)`, { completed: true, deleted: total, type: 'all' });
+  await flushJobLogs();
   return { deleted: total };
 }
 
@@ -578,6 +606,7 @@ export async function researchItem(pool, contentType, contentId) {
   }
   const item = itemQuery.rows[0];
   const oldUrl = item.source_url || null;
+  const runId = Math.floor(Date.now() / 1000);
 
   const typeLabel = contentType === 'news' ? 'news article' : 'event';
   const prompt = `Search the web for this ${typeLabel} and tell me what you find:
@@ -590,6 +619,7 @@ Tell me: Did you find this specific ${typeLabel}? What website is it on? Is it s
 Summarize what you found in 1-2 sentences.`;
 
   console.log(`[Moderation] Fixing URL for ${contentType} #${contentId}: "${item.title}"`);
+  logInfo(runId, 'moderation', null, item.title, `Fix URL: searching for ${contentType} #${contentId}`);
 
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
@@ -643,9 +673,12 @@ Summarize what you found in 1-2 sentences.`;
     );
     sourceUrlUpdated = true;
     console.log(`[Moderation] Fix URL updated ${contentType} #${contentId}: ${oldUrl || '(none)'} -> ${newUrl}`);
+    logInfo(runId, 'moderation', null, item.title, `Fix URL: updated ${contentType} #${contentId}`, { completed: true, old_url: oldUrl, new_url: newUrl });
   } else {
     console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: no new URL found`);
+    logInfo(runId, 'moderation', null, item.title, `Fix URL: no new URL found for ${contentType} #${contentId}`, { completed: true });
   }
+  await flushJobLogs();
 
   return {
     researched: true,
@@ -679,6 +712,69 @@ export async function fixDate(pool, contentType, contentId) {
     throw new Error(`${contentType} #${contentId} not found`);
   }
   const item = itemQuery.rows[0];
+  const runId = Math.floor(Date.now() / 1000);
+
+  console.log(`[Moderation] Fixing date for ${contentType} #${contentId}: "${item.title}"`);
+  logInfo(runId, 'moderation', null, item.title, `Fix Date: ${contentType} #${contentId}`);
+
+  // Fetch actual page content if source URL exists
+  let pageContent = '';
+  let htmlDateHints = '';
+  if (item.source_url && isSafePublicUrl(item.source_url)) {
+    try {
+      // Simple fetch to get raw HTML for date metadata extraction
+      const res = await fetch(item.source_url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ROTV/1.0)' },
+        signal: AbortSignal.timeout(10000)
+      });
+      if (res.ok) {
+        const html = await res.text();
+        // Extract date hints from HTML metadata and structured elements
+        const datePatterns = [];
+        const metaMatch = html.match(/<meta[^>]+(?:property|name)=["'](?:article:published_time|og:article:published_time|datePublished|date|DC\.date)["'][^>]+content=["']([^"']+)["']/i);
+        if (metaMatch) datePatterns.push(metaMatch[1]);
+        const timeMatch = html.match(/<time[^>]+datetime=["']([^"']+)["']/i);
+        if (timeMatch) datePatterns.push(timeMatch[1]);
+        const ldMatch = html.match(/"datePublished"\s*:\s*"([^"]+)"/);
+        if (ldMatch) datePatterns.push(ldMatch[1]);
+
+        // If we found a machine-readable date, use it directly — skip Gemini
+        if (datePatterns.length > 0) {
+          for (const raw of datePatterns) {
+            const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+            if (isoMatch) {
+              const dateStr = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+              const [y, m, d] = [parseInt(isoMatch[1]), parseInt(isoMatch[2]), parseInt(isoMatch[3])];
+              if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
+                await pool.query(
+                  `UPDATE ${table} SET publication_date = $1, date_confidence = 'exact' WHERE id = $2`,
+                  [dateStr, contentId]
+                );
+                console.log(`[Moderation] Fix date from HTML metadata: ${contentType} #${contentId} → ${dateStr}`);
+                logInfo(runId, 'moderation', null, item.title, `Fix Date: ${dateStr} (from HTML metadata)`, { completed: true, publication_date: dateStr });
+                await flushJobLogs();
+                return { date_updated: true, publication_date: dateStr, date_confidence: 'exact', reasoning: 'Extracted from HTML metadata' };
+              }
+            }
+          }
+          // Have hints but couldn't parse — pass to Gemini
+          htmlDateHints = '\nDate metadata found in HTML:\n' + datePatterns.join('\n');
+        }
+      }
+    } catch (fetchErr) {
+      console.warn(`[Moderation] Could not fetch raw HTML for fix-date: ${fetchErr.message}`);
+    }
+
+    // Also get readable content via Playwright + Readability
+    try {
+      const extracted = await extractPageContent(item.source_url, { maxLength: 4000, timeout: 15000 });
+      if (extracted.markdown) {
+        pageContent = extracted.markdown;
+      }
+    } catch (err) {
+      console.warn(`[Moderation] Could not fetch page for fix-date: ${err.message}`);
+    }
+  }
 
   const typeLabel = contentType === 'news' ? 'news article' : 'event';
   const prompt = `Find the publication date for this ${typeLabel}:
@@ -687,9 +783,11 @@ Title: "${item.title}"
 ${item.description ? `Description: "${item.description}"` : ''}
 ${item.source_url ? `Source URL: ${item.source_url}` : ''}
 ${item.poi_name ? `Location/Organization: ${item.poi_name}` : ''}
+${htmlDateHints}
+${pageContent ? `\nPage Content:\n${pageContent}` : ''}
 
-Search the web and find when this was published. Look for:
-- Publication date, byline date, or article timestamp on the source page
+Look for:
+- Publication date, byline date, or article timestamp in the page content
 - Date in the URL pattern (e.g., /2025/03/article-name)
 - References to specific dated events that pin down the timeframe
 
@@ -700,24 +798,38 @@ If exact date found, use date_confidence "exact".
 If estimated from context, use "estimated".
 If truly impossible to determine, use "unknown" and set publication_date to null.`;
 
-  console.log(`[Moderation] Fixing date for ${contentType} #${contentId}: "${item.title}"`);
-
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
 
-  const generation = await model.generateContent(prompt);
-  const text = generation.response.text().trim();
+  let text;
+  try {
+    const generation = await model.generateContent(prompt);
+    text = generation.response.text().trim();
+  } catch (genErr) {
+    console.error('[Moderation] Fix-date generation failed:', genErr.message);
+    logError(runId, 'moderation', null, item.title, `Fix Date: AI generation failed`, { completed: true });
+    await flushJobLogs();
+    return { date_updated: false, reasoning: 'AI generation failed' };
+  }
+
+  if (!text) {
+    console.error('[Moderation] Fix-date: empty response from AI');
+    logError(runId, 'moderation', null, item.title, `Fix Date: AI returned empty response`, { completed: true });
+    await flushJobLogs();
+    return { date_updated: false, reasoning: 'AI returned empty response' };
+  }
 
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
   let result;
   try {
     result = JSON.parse(jsonMatch[1].trim());
   } catch {
-    console.error('[Moderation] Failed to parse fix-date response:', text);
+    console.error('[Moderation] Failed to parse fix-date response:', text.slice(0, 500));
+    logError(runId, 'moderation', null, item.title, `Fix Date: failed to parse AI response`, { completed: true });
+    await flushJobLogs();
     return { date_updated: false, reasoning: 'Failed to parse AI response' };
   }
 
@@ -729,6 +841,8 @@ If truly impossible to determine, use "unknown" and set publication_date to null
       [publicationDate, dateConfidence, contentId]
     );
     console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: ${publicationDate} (${dateConfidence})`);
+    logInfo(runId, 'moderation', null, item.title, `Fix Date: ${publicationDate} (${dateConfidence}, via AI)`, { completed: true, publication_date: publicationDate, date_confidence: dateConfidence });
+    await flushJobLogs();
     return {
       date_updated: true,
       publication_date: publicationDate,
@@ -738,13 +852,15 @@ If truly impossible to determine, use "unknown" and set publication_date to null
   }
 
   console.log(`[Moderation] Fix date for ${contentType} #${contentId}: no date found`);
+  logInfo(runId, 'moderation', null, item.title, `Fix Date: no date found for ${contentType} #${contentId}`, { completed: true });
+  await flushJobLogs();
   return {
     date_updated: false,
     reasoning: result.reasoning || 'Could not determine publication date'
   };
 }
 
-export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null } = {}) {
+export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null, search = null } = {}) {
   const offset = (page - 1) * limit;
   const statusList = status === 'all'
     ? ['pending', 'published', 'auto_approved', 'rejected']
@@ -792,6 +908,11 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
   if (contentSource) {
     filters.push(`content_source = $${paramIdx}`);
     params.push(contentSource);
+    paramIdx++;
+  }
+  if (search) {
+    filters.push(`(title ILIKE $${paramIdx} OR description ILIKE $${paramIdx})`);
+    params.push(`%${search}%`);
     paramIdx++;
   }
 

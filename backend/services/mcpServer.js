@@ -471,9 +471,9 @@ function registerTools(server, pool, boss) {
 
   server.tool(
     'job_list',
-    'Recent jobs with status, counts, and timing',
+    'Recent jobs with status, counts, and timing. Covers all job types: news, trail_status (from status tables), plus moderation, backup, database_backup, research, cleanup, newsletter (from job_logs).',
     {
-      type: z.enum(['news', 'trail_status']).optional().describe('Filter by job type'),
+      type: z.enum(['news', 'trail_status', 'moderation', 'backup', 'database_backup', 'research', 'cleanup', 'newsletter']).optional().describe('Filter by job type'),
       limit: z.number().optional().default(10).describe('Max jobs to return')
     },
     async ({ type, limit }) => {
@@ -499,6 +499,33 @@ function registerTools(server, pool, boss) {
           LIMIT $1
         `, [limit]);
         results.trail_status_jobs = trailJobs.rows;
+      }
+      // job_logs-based types: moderation, backup, database_backup, research, cleanup, newsletter
+      const logTypes = ['moderation', 'backup', 'database_backup', 'research', 'cleanup', 'newsletter'];
+      const matchingLogTypes = type ? logTypes.filter(t => t === type) : logTypes;
+      if (matchingLogTypes.length > 0) {
+        const logJobs = await pool.query(`
+          SELECT job_id AS id, job_type,
+                 CASE
+                   WHEN bool_or(level = 'error') THEN 'failed'
+                   WHEN bool_or((details->>'completed')::boolean) THEN 'completed'
+                   WHEN MAX(created_at) > NOW() - INTERVAL '2 minutes' THEN 'running'
+                   ELSE 'stale'
+                 END AS status,
+                 MIN(created_at) AS started_at,
+                 MAX(created_at) AS completed_at,
+                 COUNT(*) AS log_entries,
+                 MAX(CASE WHEN level = 'error' THEN message END) AS error_message,
+                 MAX(message) FILTER (WHERE (details->>'completed')::boolean) AS summary
+          FROM job_logs
+          WHERE job_type = ANY($1)
+            AND job_id > 0
+            AND created_at > NOW() - INTERVAL '90 days'
+          GROUP BY job_type, job_id
+          ORDER BY MIN(created_at) DESC
+          LIMIT $2
+        `, [matchingLogTypes, limit]);
+        results.other_jobs = logJobs.rows;
       }
       return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }] };
     }
@@ -547,7 +574,7 @@ function registerTools(server, pool, boss) {
     'job_logs',
     'Structured log entries from collection jobs',
     {
-      job_type: z.enum(['news', 'trail_status', 'moderation', 'newsletter', 'backup', 'database_backup', 'news_single', 'events_single']).optional().describe('Filter by job type'),
+      job_type: z.enum(['news', 'trail_status', 'moderation', 'newsletter', 'backup', 'database_backup', 'research', 'cleanup', 'news_single', 'events_single']).optional().describe('Filter by job type'),
       job_id: z.number().optional().describe('Filter by job ID'),
       poi_id: z.number().optional().describe('Filter by POI ID'),
       level: z.enum(['info', 'warn', 'error']).optional().describe('Filter by log level'),
