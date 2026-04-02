@@ -18,8 +18,8 @@ RUN dnf install -y nodejs npm \
     libxshmfence libX11 libXext libXfixes \
     && dnf clean all
 
-# Install Playwright globally with Chromium
-RUN npm install -g playwright && npx playwright install chromium
+# Install Playwright globally with Chromium (pinned to match backend/package.json)
+RUN npm install -g playwright@1.58.1 && npx playwright install chromium
 
 # Add PostgreSQL 17 from official pgdg repository (no RHSM needed)
 RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \

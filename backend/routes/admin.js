@@ -2049,7 +2049,7 @@ export function createAdminRouter(pool) {
       const { id } = req.params;
       const allowedFields = [
         'name', 'poi_type', 'geometry', 'property_owner', 'owner_id', 'brief_description',
-        'era', 'era_id', 'historical_description', 'primary_activities', 'surface', 'pets',
+        'era_id', 'historical_description', 'primary_activities', 'surface', 'pets',
         'cell_signal', 'more_info_link', 'length_miles', 'difficulty',
         'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url'
       ];
@@ -2083,7 +2083,7 @@ export function createAdminRouter(pool) {
         UPDATE pois SET ${updates.join(', ')}
         WHERE id = $${paramIndex}
         RETURNING id, name, poi_type, latitude, longitude, property_owner,
-                  brief_description, era, historical_description, primary_activities,
+                  brief_description, era_id, historical_description, primary_activities,
                   surface, pets, cell_signal, more_info_link, length_miles, difficulty,
                   image_drive_file_id, geometry_drive_file_id,
                   boundary_type, boundary_color, status_url, news_url, events_url,
