@@ -295,23 +295,24 @@ function AppContent() {
   }, [isAdmin, activeTab]);
 
   // Fetch moderation pending count for admin badge
+  const refreshModerationCount = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include' });
+      if (response.ok) {
+        const data = await response.json();
+        setModerationCount(data.count);
+      }
+    } catch (err) {
+      // Silently ignore — badge just won't show
+    }
+  }, []);
+
   useEffect(() => {
     if (!isAdmin) return;
-    const fetchCount = async () => {
-      try {
-        const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include' });
-        if (response.ok) {
-          const data = await response.json();
-          setModerationCount(data.count);
-        }
-      } catch (err) {
-        // Silently ignore — badge just won't show
-      }
-    };
-    fetchCount();
-    const interval = setInterval(fetchCount, 60000); // Refresh every minute
+    refreshModerationCount();
+    const interval = setInterval(refreshModerationCount, 60000);
     return () => clearInterval(interval);
-  }, [isAdmin]);
+  }, [isAdmin, refreshModerationCount]);
 
   // Preview coordinates for real-time editing sync between Map and Sidebar
   const [previewCoords, setPreviewCoords] = useState(null);
@@ -1727,7 +1728,7 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
-              {settingsTab === 'moderation' && <ModerationInbox />}
+              {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} />}
               {settingsTab === 'jobs' && <JobsDashboard expandTarget={jobsExpandTarget} onExpandTargetConsumed={() => setJobsExpandTarget(null)} />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">

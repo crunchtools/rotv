@@ -27,7 +27,7 @@ const FIELD_CONFIGS = {
   ]
 };
 
-function ModerationInbox() {
+function ModerationInbox({ onCountChange }) {
   const [queue, setQueue] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -100,7 +100,7 @@ function ModerationInbox() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ type, id })
       });
-      if (response.ok) { notify('success', `${type} #${id} approved`); fetchQueue(); }
+      if (response.ok) { notify('success', `${type} #${id} approved`); fetchQueue(); if (onCountChange) onCountChange(); }
     } catch (err) { notify('error', err.message); }
   };
 
@@ -110,7 +110,7 @@ function ModerationInbox() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ type, id, reason: '' })
       });
-      if (response.ok) { notify('success', `${type} #${id} rejected`); fetchQueue(); }
+      if (response.ok) { notify('success', `${type} #${id} rejected`); fetchQueue(); if (onCountChange) onCountChange(); }
     } catch (err) { notify('error', err.message); }
   };
 
@@ -130,6 +130,7 @@ function ModerationInbox() {
         notify('success', `${data.approved} items approved`);
         setSelectedItems(new Set());
         fetchQueue();
+        if (onCountChange) onCountChange();
       }
     } catch (err) { notify('error', err.message); }
   };
@@ -140,7 +141,7 @@ function ModerationInbox() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ type, id })
       });
-      if (response.ok) { notify('success', `${type} #${id} requeued`); fetchQueue(); }
+      if (response.ok) { notify('success', `${type} #${id} requeued`); fetchQueue(); if (onCountChange) onCountChange(); }
     } catch (err) { notify('error', err.message); }
   };
 
