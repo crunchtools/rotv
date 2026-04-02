@@ -12606,6 +12606,31 @@ svg.leaflet-zoom-animated {
   background: #fffaf0;
 }
 
+.job-log-entry.has-details:hover {
+  background: #edf2f7;
+}
+
+.job-log-entry.has-details.error:hover {
+  background: #fee2e2;
+}
+
+.job-log-entry.has-details.warn:hover {
+  background: #fef3c7;
+}
+
+.log-expand-icon {
+  display: inline-block;
+  width: 12px;
+  font-size: 0.7rem;
+  color: #718096;
+  margin-top: 2px;
+  text-align: center;
+}
+
+.job-log-entry.has-details:hover .log-expand-icon {
+  color: #2d3748;
+}
+
 .log-level-dot {
   display: inline-block;
   width: 8px;
