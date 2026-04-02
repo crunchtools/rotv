@@ -957,7 +957,7 @@ Extract ALL news from this content using these relaxed criteria.`;
     if (!jsonMatch) {
       console.log(`[AI Research] ❌ No JSON found in response for ${poi.name}`);
       console.log(`[AI Research] Raw response preview: ${response.substring(0, 500)}...`);
-      return { news: [], events: [] };
+      return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false } };
     }
 
     const result = JSON.parse(jsonMatch[0]);
