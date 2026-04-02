@@ -108,6 +108,7 @@ function AppContent() {
 
   // Settings sub-tab state: 'general', 'activities', 'news', 'google'
   const [settingsTab, setSettingsTab] = useState('general');
+  const [jobsExpandTarget, setJobsExpandTarget] = useState(null);
 
   // Moderation queue pending count for badge
   const [moderationCount, setModerationCount] = useState(0);
@@ -1678,12 +1679,8 @@ function AppContent() {
               >
                 Icons
               </button>
-              <button
-                className={`settings-tab-btn ${settingsTab === 'dataCollection' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('dataCollection')}
-              >
-                Data Collection
-              </button>
+            </nav>
+            <nav className="settings-tabs settings-tabs-row2">
               <button
                 className={`settings-tab-btn ${settingsTab === 'moderation' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('moderation')}
@@ -1709,6 +1706,12 @@ function AppContent() {
                 Jobs
               </button>
               <button
+                className={`settings-tab-btn ${settingsTab === 'dataCollection' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('dataCollection')}
+              >
+                Data Collection
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('google')}
               >
@@ -1725,10 +1728,10 @@ function AppContent() {
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
               {settingsTab === 'moderation' && <ModerationInbox />}
-              {settingsTab === 'jobs' && <JobsDashboard />}
+              {settingsTab === 'jobs' && <JobsDashboard expandTarget={jobsExpandTarget} onExpandTargetConsumed={() => setJobsExpandTarget(null)} />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
-                  <SyncSettings onDataRefresh={refreshAllData} />
+                  <SyncSettings onDataRefresh={refreshAllData} onNavigateToJobs={(jobId) => { setJobsExpandTarget(jobId); setSettingsTab('jobs'); }} />
                   <div className="settings-divider"></div>
                   <AISettings />
                 </div>

@@ -5,21 +5,21 @@ BASE_IMAGE_NAME="quay.io/crunchtools/rotv-base"
 IMAGE_NAME="quay.io/crunchtools/rotv"
 CONTAINER_NAME="rotv"
 
-# Development uses ephemeral storage (tmpfs) - data is thrown away on restart
-# Production should set PERSISTENT_DATA=true and DATA_DIR=/path/to/storage
-USE_PERSISTENT="${PERSISTENT_DATA:-false}"
-DATA_DIR="${DATA_DIR:-$HOME/.rotv/pgdata}"
-SEED_DATA_FILE="$HOME/.rotv/seed-data.sql"
-PRODUCTION_HOST="${PRODUCTION_HOST:-lotor.dc3.crunchtools.com}"
-PRODUCTION_PORT="${PRODUCTION_PORT:-22422}"
-PRODUCTION_CONTAINER="${PRODUCTION_CONTAINER:-rootsofthevalley.org}"
-
 # Load environment variables from .env file if it exists
 if [ -f ".env" ]; then
     export $(grep -v '^#' .env | xargs)
 elif [ -f "backend/.env" ]; then
     export $(grep -v '^#' backend/.env | xargs)
 fi
+
+# Development uses ephemeral storage (tmpfs) - data is thrown away on restart
+# Set PERSISTENT_DATA=true in .env or environment to persist across restarts
+USE_PERSISTENT="${PERSISTENT_DATA:-false}"
+DATA_DIR="${DATA_DIR:-$HOME/.rotv/pgdata}"
+SEED_DATA_FILE="$HOME/.rotv/seed-data.sql"
+PRODUCTION_HOST="${PRODUCTION_HOST:-lotor.dc3.crunchtools.com}"
+PRODUCTION_PORT="${PRODUCTION_PORT:-22422}"
+PRODUCTION_CONTAINER="${PRODUCTION_CONTAINER:-rootsofthevalley.org}"
 
 # Build environment variable arguments for podman
 ENV_ARGS=""
@@ -33,6 +33,9 @@ ENV_ARGS=""
 [ -n "$FACEBOOK_APP_SECRET" ] && ENV_ARGS="$ENV_ARGS -e FACEBOOK_APP_SECRET=$FACEBOOK_APP_SECRET"
 [ -n "$ADMIN_EMAIL" ] && ENV_ARGS="$ENV_ARGS -e ADMIN_EMAIL=$ADMIN_EMAIL"
 [ -n "$MCP_ADMIN_TOKEN" ] && ENV_ARGS="$ENV_ARGS -e MCP_ADMIN_TOKEN=$MCP_ADMIN_TOKEN"
+[ -n "$PGUSER" ] && ENV_ARGS="$ENV_ARGS -e PGUSER=$PGUSER"
+[ -n "$PGPASSWORD" ] && ENV_ARGS="$ENV_ARGS -e PGPASSWORD=$PGPASSWORD"
+[ -n "$PGDATABASE" ] && ENV_ARGS="$ENV_ARGS -e PGDATABASE=$PGDATABASE"
 
 case "${1:-help}" in
     build-base)
@@ -153,6 +156,9 @@ TWITTER_USERNAME=$TWITTER_USERNAME
 TWITTER_PASSWORD=$TWITTER_PASSWORD
 IMAGE_SERVER_URL=$IMAGE_SERVER_URL
 MCP_ADMIN_TOKEN=$MCP_ADMIN_TOKEN
+PGUSER=${PGUSER:-rotv}
+PGPASSWORD=${PGPASSWORD:-rotv}
+PGDATABASE=${PGDATABASE:-rotv}
 ENVFILE
 
         # Build MCP port mapping if token is configured

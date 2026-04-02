@@ -43,6 +43,28 @@ const ResultsTab = memo(function ResultsTab({
   );
   const [searchText, setSearchText] = useState('');
 
+  // Sub-tab configuration (fetched from server, with hardcoded fallback)
+  const DEFAULT_SUBTABS = [
+    { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
+    { id: 'mtb', label: 'MTB Trail Status', shortLabel: 'MTB Status', route: '/mtb-trail-status', filterTypes: ['mtb-trailhead'], protected: false },
+    { id: 'organizations', label: 'Organizations', shortLabel: 'Orgs', route: '/organizations', filterTypes: ['organization'], protected: false }
+  ];
+  const [subtabConfig, setSubtabConfig] = useState(null);
+
+  // Fetch sub-tab config on mount
+  useEffect(() => {
+    fetch('/api/results-subtabs')
+      .then(res => res.json())
+      .then(data => {
+        if (data.subtabs && data.subtabs.length > 0) {
+          setSubtabConfig(data.subtabs);
+        }
+      })
+      .catch(err => console.error('Failed to fetch subtab config:', err));
+  }, []);
+
+  const activeSubtabs = subtabConfig || DEFAULT_SUBTABS;
+
   // Generate initial filter types from iconConfig + layer types
   const allFilterTypes = useMemo(() => {
     const types = new Set(['trails', 'rivers', 'boundaries']); // Layer types
@@ -356,11 +378,10 @@ const ResultsTab = memo(function ResultsTab({
     // Don't clear bypass filter here - let App.jsx MTB Route Effect handle it
     // This prevents flickering when switching from MTB to All Results
 
-    // Navigate to appropriate URL
-    if (tab === 'mtb') {
-      navigate('/mtb-trail-status');
-    } else if (tab === 'organizations') {
-      navigate('/organizations');
+    // Navigate to config-driven route
+    const tabConfig = activeSubtabs.find(t => t.id === tab);
+    if (tabConfig) {
+      navigate(tabConfig.route);
     } else {
       navigate('/');
     }
@@ -375,29 +396,18 @@ const ResultsTab = memo(function ResultsTab({
           <p className="tab-subtitle">Points of interest visible in the current map area</p>
         </div>
 
-        {/* Sub-tabs */}
+        {/* Sub-tabs (data-driven from config) */}
         <div className="results-subtabs">
-          <button
-            className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
-            onClick={() => handleSubTabChange('all')}
-          >
-            <span className="subtab-label-full">Points of Interest</span>
-            <span className="subtab-label-short">POIs</span>
-          </button>
-          <button
-            className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
-            onClick={() => handleSubTabChange('mtb')}
-          >
-            <span className="subtab-label-full">MTB Trail Status</span>
-            <span className="subtab-label-short">MTB Status</span>
-          </button>
-          <button
-            className={`results-subtab ${activeSubTab === 'organizations' ? 'active' : ''}`}
-            onClick={() => handleSubTabChange('organizations')}
-          >
-            <span className="subtab-label-full">Organizations</span>
-            <span className="subtab-label-short">Orgs</span>
-          </button>
+          {activeSubtabs.map(tab => (
+            <button
+              key={tab.id}
+              className={`results-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
+              onClick={() => handleSubTabChange(tab.id)}
+            >
+              <span className="subtab-label-full">{tab.label}</span>
+              <span className="subtab-label-short">{tab.shortLabel || tab.label}</span>
+            </button>
+          ))}
         </div>
 
         {/* Filter badges - always visible even when no results */}
@@ -479,29 +489,18 @@ const ResultsTab = memo(function ResultsTab({
         <p className="tab-subtitle">Points of interest visible in the current map area</p>
       </div>
 
-      {/* Sub-tabs */}
+      {/* Sub-tabs (data-driven from config) */}
       <div className="results-subtabs">
-        <button
-          className={`results-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
-          onClick={() => handleSubTabChange('all')}
-        >
-          <span className="subtab-label-full">Points of Interest</span>
-          <span className="subtab-label-short">POIs</span>
-        </button>
-        <button
-          className={`results-subtab ${activeSubTab === 'mtb' ? 'active' : ''}`}
-          onClick={() => handleSubTabChange('mtb')}
-        >
-          <span className="subtab-label-full">MTB Trail Status</span>
-          <span className="subtab-label-short">MTB Status</span>
-        </button>
-        <button
-          className={`results-subtab ${activeSubTab === 'organizations' ? 'active' : ''}`}
-          onClick={() => handleSubTabChange('organizations')}
-        >
-          <span className="subtab-label-full">Organizations</span>
-          <span className="subtab-label-short">Orgs</span>
-        </button>
+        {activeSubtabs.map(tab => (
+          <button
+            key={tab.id}
+            className={`results-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
+            onClick={() => handleSubTabChange(tab.id)}
+          >
+            <span className="subtab-label-full">{tab.label}</span>
+            <span className="subtab-label-short">{tab.shortLabel || tab.label}</span>
+          </button>
+        ))}
       </div>
 
       <div className="results-filters">

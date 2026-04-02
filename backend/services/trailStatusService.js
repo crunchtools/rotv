@@ -66,8 +66,8 @@ async function trackTwitterResult(pool, statusUrl, success) {
   }
 }
 
-// Prompt template for trail status extraction from rendered page content
-const TRAIL_STATUS_PROMPT = `You are a trail status extractor. Extract the current mountain bike trail status from the following page content.
+// Prompt template for trail status extraction (exported for registry.js default prompt access)
+export const TRAIL_STATUS_PROMPT = `You are a trail status extractor. Extract the current mountain bike trail status from the following page content.
 
 Trail: "{{name}}"
 Trail System: {{trailSystem}}
@@ -245,7 +245,11 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     });
 
     const currentDate = new Date().toISOString().split('T')[0];
-    const prompt = TRAIL_STATUS_PROMPT
+    // Use custom prompt from admin_settings if configured, otherwise fall back to hardcoded default
+    const { getPromptTemplate } = await import('./geminiService.js');
+    const promptTemplate = await getPromptTemplate(pool, 'trail_status_prompt');
+    const basePrompt = promptTemplate || TRAIL_STATUS_PROMPT;
+    const prompt = basePrompt
       .replace(/\{\{currentDate\}\}/g, currentDate)
       .replace(/\{\{name\}\}/g, poi.name)
       .replace(/\{\{trailSystem\}\}/g, trailSystem)
@@ -340,7 +344,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       steps: ['Initialized', 'Rendered', 'Extracting', 'Saving', 'Complete']
     });
 
-    return { statusFound: 1, statusSaved: saved ? 1 : 0 };
+    return { statusFound: 1, statusSaved: saved ? 1 : 0, rendered_content: rendered.markdown, ai_response: response };
 
   } catch (error) {
     console.error(`[Trail Status] Error collecting status for ${poi.name}:`, error.message);
@@ -618,7 +622,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
 
         console.log(`[Trail Status Job ${jobId}] [${index + 1}/${total}] ${poi.name}: ${statusCollection.statusFound} status found`);
         if (statusCollection.statusFound > 0) {
-          logInfo(jobId, 'trail_status', poi.id, poi.name, `Status found: ${statusCollection.statusSaved ? 'saved' : 'unchanged'}`, { status_found: statusCollection.statusFound, status_saved: statusCollection.statusSaved });
+          logInfo(jobId, 'trail_status', poi.id, poi.name, `Status found: ${statusCollection.statusSaved ? 'saved' : 'unchanged'}`, { status_found: statusCollection.statusFound, status_saved: statusCollection.statusSaved, rendered_content: statusCollection.rendered_content, ai_response: statusCollection.ai_response });
         }
 
         return { statusFound: statusCollection.statusFound, statusSaved: statusCollection.statusSaved, poiName: poi.name };

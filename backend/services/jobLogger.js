@@ -18,6 +18,7 @@ const BATCH_SIZE = 50;
  */
 export function initJobLogger(dbPool) {
   pool = dbPool;
+  // Fix: clear existing timer before creating new one to prevent leaks (PR #166 review)
   if (flushTimer) clearInterval(flushTimer);
   flushTimer = setInterval(() => {
     if (buffer.length > 0) flush();
@@ -103,6 +104,8 @@ export async function flush() {
 
     for (const entry of entries) {
       placeholders.push(`($${idx}, $${idx + 1}, $${idx + 2}, $${idx + 3}, $${idx + 4}, $${idx + 5}, $${idx + 6})`);
+      // node-postgres handles JS objects natively for JSONB columns —
+      // no manual JSON.stringify needed (would cause double-encoding)
       values.push(
         entry.jobId,
         entry.jobType,
@@ -110,7 +113,7 @@ export async function flush() {
         entry.poiName,
         entry.level,
         entry.message,
-        entry.details ? JSON.stringify(entry.details) : null
+        entry.details || null
       );
       idx += 7;
     }

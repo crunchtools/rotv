@@ -52,8 +52,11 @@ async function ensureBackupsFolder(drive, pool) {
  * Run pg_dump and upload the SQL dump to Google Drive
  */
 export async function triggerBackup(pool, drive) {
+  const runId = Math.floor(Date.now() / 1000);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').slice(0, 19);
   const filename = `rotv-backup-${timestamp}.sql`;
+
+  logInfo(runId, 'database_backup', null, null, 'Starting database backup');
 
   // Stream pg_dump output to avoid buffering large dumps in memory
   const pgHost = process.env.PGHOST || 'localhost';
@@ -75,6 +78,8 @@ export async function triggerBackup(pool, drive) {
     });
     proc.on('error', reject);
   });
+
+  logInfo(runId, 'database_backup', null, null, `pg_dump complete, uploading ${filename} to Drive`);
 
   // Ensure backups folder exists
   const backupsFolderId = await ensureBackupsFolder(drive, pool);
@@ -106,7 +111,7 @@ export async function triggerBackup(pool, drive) {
   `, [now]);
 
   console.log(`Backup uploaded to Drive: ${filename} (${driveFileId})`);
-  logInfo(null, 'database_backup', null, null, `Complete: ${filename} uploaded to Drive`, { filename, driveFileId });
+  logInfo(runId, 'database_backup', null, null, `Complete: ${filename} uploaded to Drive`, { completed: true, filename, driveFileId });
   await flushJobLogs();
 
   return {
@@ -142,6 +147,9 @@ export async function listBackups(drive, pool) {
  * Restore a database from a Drive backup file
  */
 export async function restoreBackup(pool, drive, fileId) {
+  const runId = Math.floor(Date.now() / 1000);
+  logInfo(runId, 'database_backup', null, null, 'Starting database restore from Drive');
+
   // Download the SQL dump from Drive
   const response = await drive.files.get(
     { fileId, alt: 'media' },
@@ -152,6 +160,8 @@ export async function restoreBackup(pool, drive, fileId) {
   if (!sqlDump || typeof sqlDump !== 'string') {
     throw new Error('Downloaded file is empty or not valid SQL');
   }
+
+  logInfo(runId, 'database_backup', null, null, `Downloaded backup (${Math.round(sqlDump.length / 1024)} KB), restoring via psql`);
 
   const pgHost = process.env.PGHOST || 'localhost';
   const pgPort = process.env.PGPORT || '5432';
@@ -170,12 +180,16 @@ export async function restoreBackup(pool, drive, fileId) {
     proc.stdin.write(sqlDump);
     proc.stdin.end();
 
-    proc.on('close', (code) => {
+    proc.on('close', async (code) => {
       if (code !== 0) {
         console.error('[Restore] psql stderr:', stderr);
+        logError(runId, 'database_backup', null, null, `Restore failed: psql exit code ${code}`, { error_stack: stderr.slice(0, 2000) });
+        await flushJobLogs();
         return reject(new Error(`psql exited with code ${code}: ${stderr.slice(0, 500)}`));
       }
       console.log('[Restore] Database restored successfully');
+      logInfo(runId, 'database_backup', null, null, 'Database restore complete', { completed: true });
+      await flushJobLogs();
       resolve({ success: true });
     });
     proc.on('error', reject);
@@ -228,6 +242,7 @@ async function listDriveImages(drive, imagesFolderId) {
  * 3. For each file not already in Drive, download and upload with flat name {subdir}--{filename}
  */
 export async function triggerImageBackup(pool, drive) {
+  const runId = Math.floor(Date.now() / 1000);
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
   if (!imagesFolderId) {
     throw new Error('Images folder not configured in Drive');
@@ -236,6 +251,8 @@ export async function triggerImageBackup(pool, drive) {
   if (!imageServerClient.initialized) {
     throw new Error('Image server not configured');
   }
+
+  logInfo(runId, 'backup', null, null, 'Starting image server backup');
 
   // Step 1: Backup image server database
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').slice(0, 19);
@@ -258,6 +275,7 @@ export async function triggerImageBackup(pool, drive) {
     },
     fields: 'id'
   });
+  logInfo(runId, 'backup', null, null, `Uploaded DB dump: ${dbFilename}`);
   console.log(`[ImageBackup] Uploaded DB dump: ${dbFilename}`);
 
   // Step 2: List all media files and compare with Drive
@@ -314,7 +332,7 @@ export async function triggerImageBackup(pool, drive) {
   `, [now]);
 
   console.log(`[ImageBackup] Done: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
-  logInfo(null, 'backup', null, null, `Complete: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`, { uploaded, skipped, failed });
+  logInfo(runId, 'backup', null, null, `Complete: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`, { completed: true, uploaded, skipped, failed });
   await flushJobLogs();
 
   return { success: true, uploaded, skipped, failed, timestamp: now };
@@ -339,26 +357,34 @@ export async function getImageBackupStatus(pool, drive) {
     }
   }
 
+  let latestDriveBackupDate = null;
+
   if (imagesFolderId && drive) {
     const driveFiles = await listDriveImages(drive, imagesFolderId);
     for (const f of driveFiles) {
       if (f.name.startsWith('imageserver-backup-') && f.name.endsWith('.sql')) {
         driveDbDumpCount++;
+        // Track the most recent .sql file by createdTime
+        if (f.createdTime && (!latestDriveBackupDate || new Date(f.createdTime) > new Date(latestDriveBackupDate))) {
+          latestDriveBackupDate = f.createdTime;
+        }
       } else {
         driveMediaCount++;
       }
     }
   }
 
+  // Use admin_settings timestamp if available, otherwise fall back to latest Drive .sql file date
   const lastBackupResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'last_image_backup'"
   );
+  const lastBackup = lastBackupResult.rows[0]?.value || latestDriveBackupDate || null;
 
   return {
     mediaFileCount,
     driveMediaCount,
     driveDbDumpCount,
-    lastBackup: lastBackupResult.rows[0]?.value || null,
+    lastBackup,
     imagesFolderId: imagesFolderId || null
   };
 }
@@ -370,6 +396,7 @@ export async function getImageBackupStatus(pool, drive) {
  * 2. For each {subdir}--{filename} file in Drive, download and PUT to image server
  */
 export async function restoreImagesFromDrive(pool, drive) {
+  const runId = Math.floor(Date.now() / 1000);
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
   if (!imagesFolderId) {
     throw new Error('Images folder not configured in Drive');
@@ -379,6 +406,7 @@ export async function restoreImagesFromDrive(pool, drive) {
     throw new Error('Image server not configured');
   }
 
+  logInfo(runId, 'backup', null, null, 'Starting image restore from Drive');
   const driveFiles = await listDriveImages(drive, imagesFolderId);
 
   // Step 1: Find and restore the most recent DB dump
@@ -460,6 +488,8 @@ export async function restoreImagesFromDrive(pool, drive) {
   }
 
   console.log(`[ImageRestore] Done: DB=${dbRestored ? 'yes' : 'no'}, ${restored} media restored, ${skipped} skipped, ${failed} failed`);
+  logInfo(runId, 'backup', null, null, `Restore complete: DB=${dbRestored ? 'yes' : 'no'}, ${restored} media restored, ${skipped} skipped, ${failed} failed`, { completed: true, dbRestored, restored, skipped, failed });
+  await flushJobLogs();
 
   return { success: true, dbRestored, restored, skipped, failed };
 }

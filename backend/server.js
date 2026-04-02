@@ -798,23 +798,7 @@ async function initDatabase() {
       ON CONFLICT (key) DO NOTHING
     `);
 
-    // Job logs table for structured per-job logging
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS job_logs (
-        id SERIAL PRIMARY KEY,
-        job_id INTEGER NOT NULL,
-        job_type VARCHAR(50) NOT NULL,
-        poi_id INTEGER,
-        poi_name VARCHAR(255),
-        level VARCHAR(10) NOT NULL DEFAULT 'info',
-        message TEXT NOT NULL,
-        details JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_job_logs_job ON job_logs(job_type, job_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_job_logs_created ON job_logs(created_at DESC)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_job_logs_level ON job_logs(level) WHERE level IN ('warn', 'error')`);
+    // job_logs table is created by migration 010_add_job_logs.sql
 
     console.log('Database initialized');
   } finally {
@@ -1381,6 +1365,28 @@ app.get('/api/trails/mtb', async (req, res) => {
   } catch (error) {
     console.error('Error fetching MTB trails:', error);
     res.status(500).json({ error: 'Failed to fetch MTB trails' });
+  }
+});
+
+// Get results sub-tab configuration (public, for ResultsTab.jsx)
+app.get('/api/results-subtabs', async (req, res) => {
+  const DEFAULT_SUBTABS = [
+    { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
+    { id: 'mtb', label: 'MTB Trail Status', shortLabel: 'MTB Status', route: '/mtb-trail-status', filterTypes: ['mtb-trailhead'], protected: false },
+    { id: 'organizations', label: 'Organizations', shortLabel: 'Orgs', route: '/organizations', filterTypes: ['organization'], protected: false }
+  ];
+  try {
+    const result = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'results_subtabs_config'"
+    );
+    if (result.rows.length > 0 && result.rows[0].value) {
+      res.json(JSON.parse(result.rows[0].value));
+    } else {
+      res.json({ subtabs: DEFAULT_SUBTABS });
+    }
+  } catch (error) {
+    console.error('Error fetching results subtabs:', error);
+    res.json({ subtabs: DEFAULT_SUBTABS });
   }
 });
 

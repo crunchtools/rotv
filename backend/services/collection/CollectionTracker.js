@@ -105,7 +105,8 @@ export class CollectionTracker {
    */
   findFirstAvailableSlot(jobId) {
     const slots = this.jobDisplaySlots.get(jobId);
-    if (!slots) return 0;
+    // Fix: return null (not 0) when uninitialized to avoid overwriting slot 0 (PR #168 review)
+    if (!slots) return null;
 
     const availableIndex = slots.findIndex(slot =>
       !slot.poiId || slot.status === 'completed'

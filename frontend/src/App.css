@@ -4588,10 +4588,14 @@ body {
   display: flex;
   gap: 0;
   margin-bottom: 0;
-  border-bottom: 2px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
   background: transparent;
   padding: 0;
   flex-wrap: wrap;
+}
+
+.settings-tabs.settings-tabs-row2 {
+  border-bottom: 2px solid #e0e0e0;
 }
 
 .settings-tab-btn {
@@ -6803,6 +6807,30 @@ body {
   font-size: 0.75rem;
   color: #666;
   line-height: 1.3;
+}
+
+.job-link-inline {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1565c0;
+  text-decoration: none;
+}
+
+.job-link-inline:hover {
+  text-decoration: underline;
+}
+
+.job-link-active {
+  color: #1565c0;
+  font-weight: 600;
+  text-decoration: none;
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+.job-link-active:hover {
+  text-decoration: underline;
 }
 
 .sync-clear-row {
@@ -12641,4 +12669,342 @@ svg.leaflet-zoom-animated {
 
 .load-more-btn:hover {
   background: #e2e8f0;
+}
+
+/* Scheduled Jobs Grid */
+.scheduled-jobs-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scheduled-job-card {
+  background: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.scheduled-job-header {
+  padding: 12px 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.scheduled-job-header:hover {
+  background: #edf2f7;
+}
+
+.scheduled-job-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.scheduled-job-icon {
+  font-size: 1.3rem;
+  flex-shrink: 0;
+}
+
+.scheduled-job-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #2d3748;
+}
+
+.scheduled-job-desc {
+  font-size: 0.78rem;
+  color: #718096;
+  margin-top: 1px;
+}
+
+.scheduled-job-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.schedule-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  background: #e3f2fd;
+  color: #1565c0;
+  white-space: nowrap;
+}
+
+.scheduled-job-detail {
+  padding: 0 14px 14px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.scheduled-job-lastrun {
+  font-size: 0.85rem;
+  color: #4a5568;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.schedule-editor {
+  margin-top: 10px;
+}
+
+.schedule-edit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-input {
+  padding: 4px 8px;
+  border: 1px solid #cbd5e0;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  width: 180px;
+}
+
+.schedule-display-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.schedule-cron {
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  background: #f5f5f5;
+  border-radius: 3px;
+  color: #555;
+}
+
+.schedule-custom-badge {
+  font-size: 0.7rem;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.prompt-section {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 12px;
+}
+
+/* Structured log details */
+.log-details-structured {
+  grid-column: 1 / -1;
+  margin: 4px 0;
+}
+
+.log-detail-section {
+  margin-bottom: 6px;
+}
+
+.log-detail-section.collapsible {
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.log-detail-pairs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding: 6px 0;
+}
+
+.log-detail-pair {
+  font-size: 0.78rem;
+}
+
+.log-detail-key {
+  color: #718096;
+  text-transform: capitalize;
+  margin-right: 4px;
+}
+
+.log-detail-value {
+  color: #2d3748;
+  font-weight: 500;
+}
+
+.log-detail-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 4px;
+}
+
+.log-detail-label.clickable {
+  cursor: pointer;
+  padding: 6px 8px;
+  user-select: none;
+}
+
+.log-detail-label.clickable:hover {
+  background: #f7fafc;
+}
+
+.log-detail-pre {
+  background: #edf2f7;
+  padding: 8px;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-detail-pre.error {
+  background: #fff5f5;
+  color: #c53030;
+}
+
+/* Running job card highlight */
+.scheduled-job-card.running {
+  border-color: #2196f3;
+  border-width: 2px;
+}
+
+.queue-badge-running {
+  background: #e3f2fd;
+  color: #1565c0;
+  animation: pulse-badge 2s ease-in-out infinite;
+}
+
+@keyframes pulse-badge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Running job section inside card */
+.running-job-section {
+  margin-top: 10px;
+  padding: 10px;
+  background: #e3f2fd;
+  border-radius: 6px;
+  border: 1px solid #bbdefb;
+}
+
+.running-job-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1565c0;
+}
+
+.running-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2196f3;
+  display: inline-block;
+}
+
+/* Active slots table */
+.active-slots-table {
+  margin-top: 8px;
+  font-size: 0.78rem;
+}
+
+.slots-header {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px;
+  gap: 4px;
+  padding: 4px 6px;
+  font-weight: 600;
+  color: #1565c0;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.slots-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 100px;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 3px;
+}
+
+.slots-row.active {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.slots-row.empty-slot {
+  color: #90caf9;
+}
+
+.slot-poi {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Inline run history inside scheduled job card */
+.job-runs-section {
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  padding-top: 10px;
+}
+
+.job-runs-header {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 6px;
+}
+
+.job-runs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.job-run-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.82rem;
+}
+
+.job-run-row:hover {
+  background: #edf2f7;
+}
+
+.job-run-row.expanded {
+  background: #edf2f7;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.run-items {
+  color: #4a5568;
+  min-width: 50px;
+}
+
+.run-time {
+  color: #718096;
+  font-size: 0.78rem;
+}
+
+.run-duration {
+  color: #a0aec0;
+  font-size: 0.78rem;
+  margin-left: auto;
 }

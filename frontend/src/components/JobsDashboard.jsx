@@ -2,35 +2,34 @@ import React, { useState, useEffect, useCallback } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
-const JOB_TYPE_LABELS = {
-  news: 'News',
-  trail_status: 'Trail Status',
-  moderation: 'Moderation',
-  newsletter: 'Newsletter',
-  backup: 'Backup',
-  database_backup: 'DB Backup',
-  news_single: 'News (Single)',
-  events_single: 'Events (Single)'
-};
-
-const JOB_TYPE_ICONS = {
-  news: '\u{1F4F0}',
-  trail_status: '\u{1F6B5}',
-  moderation: '\u{1F50D}',
-  newsletter: '\u{1F4E7}',
-  backup: '\u{1F4BE}',
-  database_backup: '\u{1F5C4}',
-  news_single: '\u{1F4F0}',
-  events_single: '\u{1F4C5}'
-};
-
 const STATUS_COLORS = {
   completed: '#4caf50',
   running: '#2196f3',
   failed: '#f44336',
   cancelled: '#ff9800',
+  stale: '#795548',
   queued: '#9e9e9e',
   pending: '#9e9e9e'
+};
+
+const CANCEL_ENDPOINTS = {
+  news: { url: '/api/admin/news/job/:id/cancel', method: 'POST' },
+  trail_status: { url: '/api/admin/trail-status/batch-collect/:id/cancel', method: 'PUT' }
+};
+
+const STATUS_ENDPOINTS = {
+  news: '/api/admin/news/status',
+  trail_status: '/api/admin/trail-status/job-status/latest'
+};
+
+const SLOTS_ENDPOINTS = {
+  news: '/api/admin/news/job/:id',
+  trail_status: '/api/admin/trail-status/job-status/:id'
+};
+
+const AI_STATS_ENDPOINTS = {
+  news: '/api/admin/news/ai-stats',
+  trail_status: '/api/admin/trail-status/ai-stats'
 };
 
 function formatDuration(startedAt, completedAt) {
@@ -55,249 +54,640 @@ function formatTime(isoString) {
   });
 }
 
-export default function JobsDashboard() {
-  const [queues, setQueues] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [expandedJob, setExpandedJob] = useState(null);
-  const [jobLogs, setJobLogs] = useState([]);
+function formatCronHuman(cron) {
+  if (!cron) return 'Event-driven';
+  const parts = cron.split(/\s+/);
+  if (parts.length !== 5) return cron;
+  const [min, hour, dom] = parts;
+
+  if (cron === '0 6 * * *') return 'Daily at 6:00 AM';
+  if (cron === '0 2 * * *') return 'Daily at 2:00 AM';
+  if (cron === '0 3 * * *') return 'Daily at 3:00 AM';
+  if (cron.startsWith('*/')) return `Every ${min.slice(2)} minutes`;
+  if (hour !== '*' && min !== '*' && dom === '*') return `Daily at ${hour}:${min.padStart(2, '0')}`;
+  return cron;
+}
+
+export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) {
+  const [scheduledJobs, setScheduledJobs] = useState([]);
+  const [scheduledLoading, setScheduledLoading] = useState(true);
+  const [expandedScheduled, setExpandedScheduled] = useState(null);
+  const [editingSchedule, setEditingSchedule] = useState(null);
+  const [scheduleInput, setScheduleInput] = useState('');
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [triggeringJob, setTriggeringJob] = useState(null);
+
+  const [editingPrompt, setEditingPrompt] = useState(null);
+  const [promptInput, setPromptInput] = useState('');
+  const [promptSaving, setPromptSaving] = useState(false);
+
+  const [jobHistory, setJobHistory] = useState({});
+  const [jobHistoryLoading, setJobHistoryLoading] = useState({});
+
+  const [expandedRun, setExpandedRun] = useState(null);
+  const [runLogs, setRunLogs] = useState([]);
   const [logLevelFilter, setLogLevelFilter] = useState('all');
   const [logDetailsExpanded, setLogDetailsExpanded] = useState(new Set());
-  const [historyFilter, setHistoryFilter] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [historyOffset, setHistoryOffset] = useState(0);
-  const [hasMore, setHasMore] = useState(true);
 
-  const fetchQueues = useCallback(async () => {
+  const [runningJobs, setRunningJobs] = useState({});
+  const [activeSlots, setActiveSlots] = useState({});
+  const [aiStats, setAiStats] = useState({});
+  const [cancellingJob, setCancellingJob] = useState(null);
+
+  // Track recently-completed jobs for dismiss UX
+  const [completedJobs, setCompletedJobs] = useState({});
+
+  const [loading, setLoading] = useState(true);
+
+  const fetchScheduledJobs = useCallback(async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/admin/jobs/queues`, { credentials: 'include' });
-      if (res.ok) setQueues(await res.json());
+      const res = await fetch(`${API_BASE}/api/admin/jobs/scheduled`, { credentials: 'include' });
+      if (res.ok) setScheduledJobs(await res.json());
     } catch (err) {
-      console.error('Failed to fetch queues:', err);
+      console.error('Failed to fetch scheduled jobs:', err);
+    } finally {
+      setScheduledLoading(false);
     }
   }, []);
 
-  const fetchHistory = useCallback(async (offset = 0, append = false) => {
+  const fetchJobHistory = useCallback(async (jobId, historyTypes) => {
+    if (!historyTypes || historyTypes.length === 0) return;
+    setJobHistoryLoading(prev => ({ ...prev, [jobId]: true }));
     try {
-      const params = new URLSearchParams({ limit: '20', offset: String(offset) });
-      if (historyFilter) params.set('type', historyFilter);
-      const res = await fetch(`${API_BASE}/api/admin/jobs/history?${params}`, { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        if (append) {
-          setHistory(prev => [...prev, ...data]);
-        } else {
-          setHistory(data);
-        }
-        setHasMore(data.length === 20);
+      const allRuns = [];
+      for (const type of historyTypes) {
+        const params = new URLSearchParams({ limit: '10', offset: '0', type });
+        const res = await fetch(`${API_BASE}/api/admin/jobs/history?${params}`, { credentials: 'include' });
+        if (res.ok) allRuns.push(...(await res.json()));
       }
+      allRuns.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setJobHistory(prev => ({ ...prev, [jobId]: allRuns.slice(0, 10) }));
     } catch (err) {
-      console.error('Failed to fetch history:', err);
+      console.error('Failed to fetch job history:', err);
+    } finally {
+      setJobHistoryLoading(prev => ({ ...prev, [jobId]: false }));
     }
-  }, [historyFilter]);
+  }, []);
 
-  const fetchJobLogs = useCallback(async (jobType, jobId) => {
+  const fetchRunLogs = useCallback(async (jobType, runId) => {
     try {
       const params = new URLSearchParams({ limit: '200' });
       if (logLevelFilter !== 'all') params.set('level', logLevelFilter);
-      const res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${jobId}/logs?${params}`, { credentials: 'include' });
-      if (res.ok) setJobLogs(await res.json());
+      const res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${runId}/logs?${params}`, { credentials: 'include' });
+      if (res.ok) setRunLogs(await res.json());
     } catch (err) {
-      console.error('Failed to fetch job logs:', err);
+      console.error('Failed to fetch run logs:', err);
     }
   }, [logLevelFilter]);
 
-  // Initial load
-  useEffect(() => {
-    Promise.all([fetchQueues(), fetchHistory()]).then(() => setLoading(false));
-  }, [fetchQueues, fetchHistory]);
+  const checkRunningJobs = useCallback(async () => {
+    const running = {};
+    const slots = {};
+    const stats = {};
 
-  // Auto-refresh queues
+    for (const [registryId, endpoint] of Object.entries(STATUS_ENDPOINTS)) {
+      try {
+        const res = await fetch(`${API_BASE}${endpoint}`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          const isRunning = data && data.status === 'running';
+          if (isRunning) {
+            const runId = data.id || data.jobId;
+            running[registryId] = { ...data, runId };
+
+            // Fetch active slots
+            const slotsEndpoint = SLOTS_ENDPOINTS[registryId];
+            if (slotsEndpoint && runId) {
+              try {
+                const slotsUrl = slotsEndpoint.replace(':id', runId);
+                const slotsRes = await fetch(`${API_BASE}${slotsUrl}`, { credentials: 'include' });
+                if (slotsRes.ok) {
+                  const slotsData = await slotsRes.json();
+                  if (slotsData.displaySlots) slots[registryId] = slotsData.displaySlots;
+                }
+              } catch { /* ignore */ }
+            }
+
+            // Fetch AI stats
+            const statsEndpoint = AI_STATS_ENDPOINTS[registryId];
+            if (statsEndpoint) {
+              try {
+                const statsRes = await fetch(`${API_BASE}${statsEndpoint}`, { credentials: 'include' });
+                if (statsRes.ok) stats[registryId] = await statsRes.json();
+              } catch { /* ignore */ }
+            }
+          }
+        }
+      } catch { /* ignore */ }
+    }
+
+    // Detect jobs that just completed (were running, now aren't)
+    setRunningJobs(prev => {
+      for (const id of Object.keys(prev)) {
+        if (!running[id]) {
+          // Job just finished — mark as completed for dismiss UX
+          setCompletedJobs(c => ({ ...c, [id]: prev[id] }));
+          // Refresh history for this job
+          const job = scheduledJobs.find(j => j.id === id);
+          if (job) {
+            setJobHistory(h => ({ ...h, [id]: undefined }));
+            fetchJobHistory(id, job.historyTypes);
+          }
+        }
+      }
+      return running;
+    });
+
+    setActiveSlots(slots);
+    setAiStats(stats);
+  }, [scheduledJobs, fetchJobHistory]);
+
   useEffect(() => {
-    const interval = setInterval(fetchQueues, 10000);
+    Promise.all([fetchScheduledJobs(), checkRunningJobs()]).then(() => setLoading(false));
+  }, [fetchScheduledJobs, checkRunningJobs]);
+
+  // Auto-expand a specific job card when navigated from another tab
+  useEffect(() => {
+    if (expandTarget && !scheduledLoading) {
+      setExpandedScheduled(expandTarget);
+      setJobHistory(prev => { const next = { ...prev }; delete next[expandTarget]; return next; });
+      if (onExpandTargetConsumed) onExpandTargetConsumed();
+    }
+  }, [expandTarget, scheduledLoading, onExpandTargetConsumed]);
+
+  // Poll faster when jobs are running
+  useEffect(() => {
+    const hasRunning = Object.keys(runningJobs).length > 0;
+    const interval = setInterval(() => {
+      if (hasRunning) checkRunningJobs();
+      else fetchScheduledJobs();
+    }, hasRunning ? 2000 : 15000);
     return () => clearInterval(interval);
-  }, [fetchQueues]);
+  }, [fetchScheduledJobs, checkRunningJobs, runningJobs]);
 
-  // Reload history when filter changes
+  // Also refresh scheduled jobs periodically even when polling running jobs
   useEffect(() => {
-    setHistoryOffset(0);
-    fetchHistory(0);
-  }, [historyFilter, fetchHistory]);
+    if (Object.keys(runningJobs).length === 0) return;
+    const interval = setInterval(fetchScheduledJobs, 15000);
+    return () => clearInterval(interval);
+  }, [fetchScheduledJobs, runningJobs]);
 
-  // Reload logs when filter or expanded job changes
   useEffect(() => {
-    if (expandedJob) {
-      fetchJobLogs(expandedJob.job_type, expandedJob.id);
+    if (expandedScheduled) {
+      const job = scheduledJobs.find(j => j.id === expandedScheduled);
+      if (job && !jobHistory[job.id]) fetchJobHistory(job.id, job.historyTypes);
     }
-  }, [expandedJob, logLevelFilter, fetchJobLogs]);
+  }, [expandedScheduled, scheduledJobs, fetchJobHistory, jobHistory]);
 
-  const handleExpandJob = (job) => {
-    if (expandedJob?.id === job.id && expandedJob?.job_type === job.job_type) {
-      setExpandedJob(null);
-      setJobLogs([]);
-      setLogLevelFilter('all');
+  useEffect(() => {
+    if (expandedRun) fetchRunLogs(expandedRun.jobType, expandedRun.runId);
+  }, [expandedRun, logLevelFilter, fetchRunLogs]);
+
+  const handleExpandRun = (jobType, run) => {
+    const key = `${jobType}-${run.id}`;
+    if (expandedRun && `${expandedRun.jobType}-${expandedRun.runId}` === key) {
+      setExpandedRun(null); setRunLogs([]); setLogLevelFilter('all');
     } else {
-      setExpandedJob(job);
-      setLogLevelFilter('all');
-      setLogDetailsExpanded(new Set());
+      setExpandedRun({ jobType, runId: run.id }); setLogLevelFilter('all'); setLogDetailsExpanded(new Set());
     }
-  };
-
-  const handleLoadMore = () => {
-    const newOffset = historyOffset + 20;
-    setHistoryOffset(newOffset);
-    fetchHistory(newOffset, true);
   };
 
   const toggleLogDetails = (logId) => {
-    setLogDetailsExpanded(prev => {
-      const next = new Set(prev);
-      if (next.has(logId)) next.delete(logId);
-      else next.add(logId);
-      return next;
-    });
+    setLogDetailsExpanded(prev => { const next = new Set(prev); if (next.has(logId)) next.delete(logId); else next.add(logId); return next; });
   };
 
-  if (loading) {
-    return <div className="jobs-dashboard"><p>Loading job data...</p></div>;
-  }
+  const handleSaveSchedule = async (jobName) => {
+    setScheduleSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/jobs/${jobName}/schedule`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ cronExpression: scheduleInput })
+      });
+      if (res.ok) { setEditingSchedule(null); await fetchScheduledJobs(); }
+      else { const err = await res.json(); alert(err.error || 'Failed to save schedule'); }
+    } catch (err) { alert('Failed to save schedule: ' + err.message); }
+    finally { setScheduleSaving(false); }
+  };
+
+  const handleRunNow = async (job) => {
+    if (!job.triggerEndpoint) return;
+    setTriggeringJob(job.id);
+    try {
+      const res = await fetch(`${API_BASE}${job.triggerEndpoint}`, {
+        method: job.manualTriggerMethod || 'POST', headers: { 'Content-Type': 'application/json' },
+        credentials: 'include', body: JSON.stringify({})
+      });
+      if (res.ok) {
+        // Auto-expand the card so user sees progress
+        setExpandedScheduled(job.id);
+        await fetchScheduledJobs();
+        await checkRunningJobs();
+        setJobHistory(prev => ({ ...prev, [job.id]: undefined }));
+      } else { const err = await res.json(); alert(err.error || 'Failed to trigger job'); }
+    } catch (err) { alert('Failed to trigger job: ' + err.message); }
+    finally { setTriggeringJob(null); }
+  };
+
+  const handleCancelJob = async (registryId) => {
+    const cancelInfo = CANCEL_ENDPOINTS[registryId];
+    const runInfo = runningJobs[registryId];
+    if (!cancelInfo || !runInfo) return;
+    const runId = runInfo.runId || runInfo.id || runInfo.jobId;
+    if (!runId) return;
+
+    setCancellingJob(registryId);
+    try {
+      const url = cancelInfo.url.replace(':id', runId);
+      await fetch(`${API_BASE}${url}`, { method: cancelInfo.method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' });
+      await checkRunningJobs();
+    } catch (err) { console.error('Failed to cancel job:', err); }
+    finally { setCancellingJob(null); }
+  };
+
+  const handleSavePrompt = async (key) => {
+    setPromptSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/prompts/${key}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: promptInput })
+      });
+      if (res.ok) { setEditingPrompt(null); await fetchScheduledJobs(); }
+    } catch (err) { console.error('Failed to save prompt:', err); }
+    finally { setPromptSaving(false); }
+  };
+
+  const handleResetPrompt = async (key) => {
+    setPromptSaving(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/prompts/${key}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ reset: true })
+      });
+      if (res.ok) { setEditingPrompt(null); await fetchScheduledJobs(); }
+    } catch (err) { console.error('Failed to reset prompt:', err); }
+    finally { setPromptSaving(false); }
+  };
+
+  const renderLogDetails = (entry) => {
+    if (!entry.details) return null;
+    const details = entry.details;
+    const hasAiResponse = details.ai_response && details.ai_response.length > 0;
+    const hasRenderedContent = details.rendered_content && details.rendered_content.length > 0;
+    const summaryDetails = { ...details };
+    delete summaryDetails.ai_response; delete summaryDetails.rendered_content; delete summaryDetails.error_stack;
+
+    return (
+      <div className="log-details-structured">
+        {Object.keys(summaryDetails).length > 0 && (
+          <div className="log-detail-section"><div className="log-detail-pairs">
+            {Object.entries(summaryDetails).map(([key, value]) => (
+              <span key={key} className="log-detail-pair">
+                <span className="log-detail-key">{key.replace(/_/g, ' ')}:</span>
+                <span className="log-detail-value">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</span>
+              </span>
+            ))}
+          </div></div>
+        )}
+        {details.error_stack && (<div className="log-detail-section"><div className="log-detail-label">Error Stack</div><pre className="log-detail-pre error">{details.error_stack}</pre></div>)}
+        {hasAiResponse && (<CollapsibleSection title={`AI Response (${details.ai_response.length} chars)`}><pre className="log-detail-pre">{details.ai_response}</pre></CollapsibleSection>)}
+        {hasRenderedContent && (<CollapsibleSection title={`Rendered Content (${details.rendered_content.length} chars)`}><pre className="log-detail-pre">{details.rendered_content}</pre></CollapsibleSection>)}
+      </div>
+    );
+  };
+
+  // Render the running job progress section (progress bar, counts, AI stats, slots, cancel)
+  const renderRunningSection = (job) => {
+    const runInfo = runningJobs[job.id];
+    const completed = completedJobs[job.id];
+    const info = runInfo || completed;
+    if (!info) return null;
+
+    const isStillRunning = !!runInfo;
+    const canCancel = isStillRunning && !!CANCEL_ENDPOINTS[job.id];
+    const slots = activeSlots[job.id];
+    const stats = aiStats[job.id];
+
+    // Progress values
+    const isNews = job.id === 'news';
+    const processed = isNews ? (info.pois_processed || 0) : (info.trails_processed || 0);
+    const total = isNews ? (info.total_pois || 0) : (info.total_trails || 0);
+    const pct = total > 0 ? (processed / total) * 100 : 0;
+
+    const geminiUsage = stats?.usage?.gemini || 0;
+    const perplexityUsage = stats?.usage?.perplexity || 0;
+    const total429 = (stats?.errors?.gemini429 || 0) + (stats?.errors?.perplexity429 || 0);
+
+    return (
+      <div className="running-job-section">
+        <div className="running-job-header">
+          <span className={`running-indicator ${isStillRunning ? 'pulse' : ''}`}
+            style={{ background: isStillRunning ? '#2196f3' : (info.status === 'cancelled' ? '#ff9800' : '#4caf50') }}
+          ></span>
+          <span>{isStillRunning ? 'Job in progress' : info.status === 'cancelled' ? 'Job cancelled' : 'Job completed'}</span>
+          {canCancel && (
+            <button className="status-cancel-btn" onClick={(e) => { e.stopPropagation(); handleCancelJob(job.id); }} disabled={cancellingJob === job.id}>
+              {cancellingJob === job.id ? 'Cancelling...' : 'Cancel'}
+            </button>
+          )}
+          {!isStillRunning && (
+            <button className="status-close-btn" onClick={(e) => { e.stopPropagation(); setCompletedJobs(prev => { const next = { ...prev }; delete next[job.id]; return next; }); }} title="Dismiss">
+              &times;
+            </button>
+          )}
+        </div>
+
+        {/* Progress bar */}
+        {total > 0 && (
+          <div className="progress-bar-wrapper" style={{ marginTop: '8px' }}>
+            <div className="progress-bar-fill" style={{
+              width: `${pct}%`,
+              background: !isStillRunning
+                ? 'linear-gradient(90deg, #4caf50, #8bc34a)'
+                : 'linear-gradient(90deg, #2196f3, #64b5f6)'
+            }} />
+          </div>
+        )}
+
+        {/* Count badges */}
+        <div className="progress-counts" style={{ marginTop: '6px' }}>
+          <div className="count-badge">
+            <span className="count-icon">{isNews ? '\u{1F4CD}' : '\u{1F6B5}'}</span>
+            <div className="count-details">
+              <span className="count-value">{processed}</span>
+              <span className="count-label">{total > 0 ? ` / ${total}` : ''} {isNews ? 'POIs' : 'Trails'}</span>
+            </div>
+          </div>
+          {isNews && (
+            <>
+              <div className="count-badge">
+                <span className="count-icon">{'\u{1F4F0}'}</span>
+                <div className="count-details">
+                  <span className="count-value">{info.news_found || 0}</span>
+                  <span className="count-label">News</span>
+                </div>
+              </div>
+              <div className="count-badge">
+                <span className="count-icon">{'\u{1F4C5}'}</span>
+                <div className="count-details">
+                  <span className="count-value">{info.events_found || 0}</span>
+                  <span className="count-label">Events</span>
+                </div>
+              </div>
+            </>
+          )}
+          {!isNews && (
+            <div className="count-badge">
+              <span className="count-icon">{'\u{1F4CA}'}</span>
+              <div className="count-details">
+                <span className="count-value">{info.status_found || 0}</span>
+                <span className="count-label">Status Updates</span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* AI usage counters + Active Slots */}
+        {(slots || geminiUsage > 0 || perplexityUsage > 0 || total429 > 0) && (
+          <div className="active-slots-table" style={{ marginTop: '8px' }}>
+            {(geminiUsage > 0 || perplexityUsage > 0 || total429 > 0) && (
+              <div className="ai-usage-counters">
+                {geminiUsage > 0 && <span className="usage-badge gemini">{'\u{1F537}'} Gemini: {geminiUsage}</span>}
+                {perplexityUsage > 0 && <span className="usage-badge perplexity">{'\u{1F52E}'} Perplexity: {perplexityUsage}</span>}
+                {total429 > 0 && <span className="usage-badge error">{'\u26A0\uFE0F'} 429 Errors: {total429}</span>}
+              </div>
+            )}
+            {slots && slots.some(s => s !== null) && (
+              <>
+                <div className="slots-header">
+                  <div>{isNews ? 'POI' : 'Trail'}</div>
+                  <div>Status</div>
+                  <div>Provider</div>
+                </div>
+                {slots.map((slot, idx) => {
+                  if (!slot || !slot.poiName) return (
+                    <div key={idx} className="slots-row empty-slot"><div>Waiting</div><div>--</div><div>--</div></div>
+                  );
+                  return (
+                    <div key={idx} className={`slots-row ${slot.status === 'active' ? 'active' : ''}`}>
+                      <div className="slot-poi">{slot.poiName}</div>
+                      <div className="slot-status">
+                        {slot.status === 'completed' ? '\u2713 Done'
+                          : slot.phase === 'error' ? '\u274C Error'
+                          : slot.phase === 'rendering' || slot.phase === 'rendering_events' || slot.phase === 'rendering_news' ? '\u{1F4C4} Rendering'
+                          : slot.phase === 'ai_search' || slot.phase === 'ai_extraction' ? '\u{1F50D} AI'
+                          : slot.phase === 'matching_links' ? '\u{1F517} Matching'
+                          : slot.phase === 'google_news' ? '\u{1F4F0} Google'
+                          : slot.phase || '--'}
+                      </div>
+                      <div className="slot-provider">
+                        {slot.provider === 'gemini' ? '\u{1F537} Gemini'
+                          : slot.provider === 'perplexity' ? '\u{1F52E} Perplexity' : '--'}
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  if (loading) return <div className="jobs-dashboard"><p>Loading job data...</p></div>;
 
   return (
     <div className="jobs-dashboard">
-      {/* Queue Status */}
-      <h3>Queue Status</h3>
-      <div className="queue-status-grid">
-        {queues.map(q => (
-          <div key={q.name} className="queue-card" title={q.description}>
-            <div className="queue-card-label">{q.label}</div>
-            <div className="queue-card-count">
-              {q.size > 0 ? (
-                <span className="queue-badge queue-badge-active">{q.size} queued</span>
-              ) : (
-                <span className="queue-badge queue-badge-idle">idle</span>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Job History */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '24px' }}>
-        <h3 style={{ margin: 0 }}>Job History</h3>
-        <select
-          value={historyFilter}
-          onChange={(e) => setHistoryFilter(e.target.value)}
-          className="job-filter-select"
-        >
-          <option value="">All Types</option>
-          <option value="news">News</option>
-          <option value="trail_status">Trail Status</option>
-          <option value="moderation">Moderation</option>
-          <option value="newsletter">Newsletter</option>
-          <option value="backup">Backup</option>
-          <option value="database_backup">DB Backup</option>
-        </select>
-      </div>
-
-      {history.length === 0 ? (
-        <p style={{ color: '#999', padding: '16px 0' }}>No jobs found.</p>
+      <h3>Scheduled Jobs</h3>
+      {scheduledLoading ? (
+        <p style={{ color: '#999' }}>Loading scheduled jobs...</p>
       ) : (
-        <table className="job-history-table">
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Items</th>
-              <th>Started</th>
-              <th>Duration</th>
-            </tr>
-          </thead>
-          <tbody>
-            {history.map(job => (
-              <React.Fragment key={`${job.job_type}-${job.id}`}>
-                <tr
-                  className={`job-row expandable ${expandedJob?.id === job.id && expandedJob?.job_type === job.job_type ? 'expanded' : ''}`}
-                  onClick={() => handleExpandJob(job)}
+        <div className="scheduled-jobs-grid">
+          {scheduledJobs.map(job => {
+            const isRunning = !!runningJobs[job.id];
+            const isCompleted = !!completedJobs[job.id];
+            const showProgress = isRunning || isCompleted;
+            const runs = jobHistory[job.id] || [];
+            const historyLoading = jobHistoryLoading[job.id];
+
+            return (
+              <div key={job.id} className={`scheduled-job-card ${isRunning ? 'running' : ''}`}>
+                <div className="scheduled-job-header"
+                  onClick={() => {
+                    const newId = expandedScheduled === job.id ? null : job.id;
+                    setExpandedScheduled(newId);
+                    setExpandedRun(null);
+                    setRunLogs([]);
+                    if (newId) setJobHistory(prev => { const next = { ...prev }; delete next[newId]; return next; });
+                  }}
+                  style={{ cursor: 'pointer' }}
                 >
-                  <td>
-                    <span className="job-type-icon">{JOB_TYPE_ICONS[job.job_type] || '\u{2699}'}</span>
-                    {JOB_TYPE_LABELS[job.job_type] || job.job_type}
-                  </td>
-                  <td>
-                    <span
-                      className="status-badge"
-                      style={{ backgroundColor: STATUS_COLORS[job.status] || '#9e9e9e' }}
-                    >
-                      {job.status}
-                    </span>
-                  </td>
-                  <td>
-                    {job.items_processed != null ? `${job.items_processed}/${job.items_total}` : '--'}
-                  </td>
-                  <td>{formatTime(job.started_at || job.created_at)}</td>
-                  <td>{formatDuration(job.started_at, job.completed_at)}</td>
-                </tr>
+                  <div className="scheduled-job-info">
+                    <span className="scheduled-job-icon">{job.icon}</span>
+                    <div>
+                      <div className="scheduled-job-label">{job.label}</div>
+                      <div className="scheduled-job-desc">{job.description}</div>
+                    </div>
+                  </div>
+                  <div className="scheduled-job-badges">
+                    {isRunning && <span className="queue-badge queue-badge-running">running</span>}
+                    {job.currentSchedule && <span className="schedule-badge" title={job.currentSchedule}>{formatCronHuman(job.currentSchedule)}</span>}
+                    {!isRunning && job.queueSize > 0 ? <span className="queue-badge queue-badge-active">{job.queueSize} queued</span>
+                      : !isRunning ? <span className="queue-badge queue-badge-idle">idle</span> : null}
+                  </div>
+                </div>
 
-                {expandedJob?.id === job.id && expandedJob?.job_type === job.job_type && (
-                  <tr className="job-logs-row">
-                    <td colSpan={5}>
-                      <div className="job-logs-panel">
-                        <div className="log-level-filters">
-                          {['all', 'error', 'warn'].map(level => (
-                            <button
-                              key={level}
-                              className={`log-filter-btn ${logLevelFilter === level ? 'active' : ''}`}
-                              onClick={(e) => { e.stopPropagation(); setLogLevelFilter(level); }}
-                            >
-                              {level === 'all' ? 'All' : level === 'error' ? 'Errors' : 'Warnings'}
-                            </button>
-                          ))}
-                        </div>
+                {expandedScheduled === job.id && (
+                  <div className="scheduled-job-detail">
+                    {/* Running/Completed progress */}
+                    {showProgress && renderRunningSection(job)}
 
-                        {job.error_message && (
-                          <div className="job-error-banner">
-                            {job.error_message}
+                    {/* Schedule Editor */}
+                    {job.currentSchedule && (
+                      <div className="schedule-editor">
+                        {editingSchedule === job.scheduleJobName ? (
+                          <div className="schedule-edit-row">
+                            <input type="text" value={scheduleInput} onChange={(e) => setScheduleInput(e.target.value)} placeholder="e.g. */30 * * * *" className="schedule-input" />
+                            <button className="sync-btn-small" onClick={() => handleSaveSchedule(job.scheduleJobName)} disabled={scheduleSaving}>{scheduleSaving ? 'Saving...' : 'Save'}</button>
+                            <button className="sync-btn-small" onClick={() => setEditingSchedule(null)}>Cancel</button>
                           </div>
-                        )}
-
-                        {jobLogs.length === 0 ? (
-                          <p style={{ color: '#999', padding: '8px 0', margin: 0 }}>
-                            No log entries{logLevelFilter !== 'all' ? ` with level "${logLevelFilter}"` : ''}.
-                          </p>
                         ) : (
-                          <div className="job-logs-scroll">
-                            {jobLogs.map(entry => (
-                              <div
-                                key={entry.id}
-                                className={`job-log-entry ${entry.level}`}
-                                onClick={(e) => { e.stopPropagation(); if (entry.details) toggleLogDetails(entry.id); }}
-                                style={{ cursor: entry.details ? 'pointer' : 'default' }}
-                              >
-                                <span className={`log-level-dot ${entry.level}`}></span>
-                                <span className="log-poi">{entry.poi_name || '--'}</span>
-                                <span className="log-message">{entry.message}</span>
-                                <span className="log-time">{formatTime(entry.created_at)}</span>
-                                {logDetailsExpanded.has(entry.id) && entry.details && (
-                                  <pre className="log-details">{JSON.stringify(entry.details, null, 2)}</pre>
-                                )}
-                              </div>
-                            ))}
+                          <div className="schedule-display-row">
+                            <code className="schedule-cron">{job.currentSchedule}</code>
+                            {job.currentSchedule !== job.defaultSchedule && <span className="schedule-custom-badge">custom</span>}
+                            <button className="sync-btn-small" onClick={() => { setEditingSchedule(job.scheduleJobName); setScheduleInput(job.currentSchedule); }}>Edit</button>
                           </div>
                         )}
                       </div>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      )}
+                    )}
 
-      {hasMore && history.length > 0 && (
-        <button className="load-more-btn" onClick={handleLoadMore}>
-          Load More
-        </button>
+                    {/* Run Now */}
+                    {job.triggerEndpoint && !isRunning && (
+                      <button className="action-btn primary" onClick={() => handleRunNow(job)} disabled={triggeringJob === job.id}
+                        style={{ marginTop: '8px', padding: '4px 12px', fontSize: '0.85rem' }}>
+                        {triggeringJob === job.id ? 'Starting...' : 'Run Now'}
+                      </button>
+                    )}
+
+                    {/* Prompt Template Editor */}
+                    {job.hasPrompt && job.prompts && job.prompts.length > 0 && (
+                      <div className="prompt-section">
+                        {job.prompts.map(p => (
+                          <div key={p.key} className="prompt-editor">
+                            <div className="prompt-header">
+                              <label>
+                                {p.label}
+                                <span style={{ marginLeft: '8px', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px',
+                                  backgroundColor: p.isCustomized ? '#fff3e0' : '#e8f5e9', color: p.isCustomized ? '#e65100' : '#2e7d32' }}>
+                                  {p.isCustomized ? 'Customized' : 'Using default'}
+                                </span>
+                              </label>
+                              <div className="prompt-actions">
+                                {editingPrompt === p.key ? (
+                                  <>
+                                    <button className="sync-btn-small" onClick={() => handleSavePrompt(p.key)} disabled={promptSaving}>Save</button>
+                                    <button className="sync-btn-small" onClick={() => setEditingPrompt(null)}>Cancel</button>
+                                    {p.isCustomized && <button className="sync-btn-small" onClick={() => handleResetPrompt(p.key)} disabled={promptSaving}>Reset to Default</button>}
+                                  </>
+                                ) : (
+                                  <>
+                                    <button className="sync-btn-small" onClick={() => { setEditingPrompt(p.key); setPromptInput(p.currentValue); }}>Edit</button>
+                                    {p.isCustomized && <button className="sync-btn-small" onClick={() => handleResetPrompt(p.key)} disabled={promptSaving}>Reset to Default</button>}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <textarea value={editingPrompt === p.key ? promptInput : p.currentValue} onChange={(e) => setPromptInput(e.target.value)}
+                              disabled={editingPrompt !== p.key} rows={8} className="prompt-textarea" />
+                            {p.placeholders && p.placeholders.length > 0 && (
+                              <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                                {p.placeholders.map(ph => <code key={ph} style={{ fontSize: '0.75rem', padding: '2px 6px', backgroundColor: '#f5f5f5', borderRadius: '3px', color: '#555' }}>{ph}</code>)}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Recent Runs */}
+                    <div className="job-runs-section">
+                      <div className="job-runs-header">Recent Runs</div>
+                      {historyLoading ? (
+                        <p style={{ color: '#999', fontSize: '0.85rem', margin: '4px 0' }}>Loading...</p>
+                      ) : runs.length === 0 ? (
+                        <p style={{ color: '#999', fontSize: '0.85rem', margin: '4px 0' }}>No recent runs.</p>
+                      ) : (
+                        <div className="job-runs-list">
+                          {runs.map(run => {
+                            const isExpanded = expandedRun && expandedRun.jobType === run.job_type && expandedRun.runId === run.id;
+                            return (
+                              <div key={`${run.job_type}-${run.id}`} className="job-run-item">
+                                <div className={`job-run-row ${isExpanded ? 'expanded' : ''}`}
+                                  onClick={(e) => { e.stopPropagation(); handleExpandRun(run.job_type, run); }}>
+                                  <span className="status-badge" style={{ backgroundColor: STATUS_COLORS[run.status] || '#9e9e9e' }}>{run.status}</span>
+                                  <span className="run-items">{run.items_processed != null ? `${run.items_processed}/${run.items_total}` : '--'}</span>
+                                  <span className="run-time">{formatTime(run.started_at || run.created_at)}</span>
+                                  <span className="run-duration">{formatDuration(run.started_at, run.completed_at)}</span>
+                                </div>
+
+                                {isExpanded && (
+                                  <div className="job-logs-panel">
+                                    <div className="log-level-filters">
+                                      {['all', 'error', 'warn'].map(level => (
+                                        <button key={level} className={`log-filter-btn ${logLevelFilter === level ? 'active' : ''}`}
+                                          onClick={(e) => { e.stopPropagation(); setLogLevelFilter(level); }}>
+                                          {level === 'all' ? 'All' : level === 'error' ? 'Errors' : 'Warnings'}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    {run.error_message && <div className="job-error-banner">{run.error_message}</div>}
+                                    {runLogs.length === 0 ? (
+                                      <p style={{ color: '#999', padding: '8px 0', margin: 0, fontSize: '0.82rem' }}>
+                                        No log entries{logLevelFilter !== 'all' ? ` with level "${logLevelFilter}"` : ''}.
+                                      </p>
+                                    ) : (
+                                      <div className="job-logs-scroll">
+                                        {runLogs.map(entry => (
+                                          <div key={entry.id} className={`job-log-entry ${entry.level}`}
+                                            onClick={(e) => { e.stopPropagation(); if (entry.details) toggleLogDetails(entry.id); }}
+                                            style={{ cursor: entry.details ? 'pointer' : 'default' }}>
+                                            <span className={`log-level-dot ${entry.level}`}></span>
+                                            <span className="log-poi">{entry.poi_name || '--'}</span>
+                                            <span className="log-message">{entry.message}</span>
+                                            <span className="log-time">{formatTime(entry.created_at)}</span>
+                                            {logDetailsExpanded.has(entry.id) && entry.details && renderLogDetails(entry)}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
+    </div>
+  );
+}
+
+function CollapsibleSection({ title, children }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="log-detail-section collapsible">
+      <div className="log-detail-label clickable" onClick={(e) => { e.stopPropagation(); setOpen(!open); }}>
+        <span style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s', display: 'inline-block', marginRight: '6px' }}>&#9654;</span>
+        {title}
+      </div>
+      {open && children}
     </div>
   );
 }

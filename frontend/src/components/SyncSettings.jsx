@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 
-function SyncSettings({ onDataRefresh }) {
+function SyncSettings({ onDataRefresh, onNavigateToJobs }) {
   const [syncStatus, setSyncStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
+  const [actionJobLinks, setActionJobLinks] = useState({}); // keyed by action: 'db_backup', 'db_restore', 'img_backup', 'img_restore'
   const [refreshing, setRefreshing] = useState(false);
   const [backingUp, setBackingUp] = useState(false);
   const [restoring, setRestoring] = useState(false);
@@ -121,6 +122,7 @@ function SyncSettings({ onDataRefresh }) {
       const result = await response.json();
       if (response.ok) {
         setMessage(`Database backup created: ${result.filename}`);
+        setActionJobLinks(prev => ({ ...prev, db_backup: 'database_backup' }));
         fetchStatus();
       } else {
         setError(result.error || 'Database backup failed');
@@ -177,6 +179,7 @@ function SyncSettings({ onDataRefresh }) {
       const result = await response.json();
       if (response.ok) {
         setMessage('Database restored successfully');
+        setActionJobLinks(prev => ({ ...prev, db_restore: 'database_backup' }));
         setShowRestoreList(false);
         if (onDataRefresh) await onDataRefresh();
       } else {
@@ -203,6 +206,7 @@ function SyncSettings({ onDataRefresh }) {
       const result = await response.json();
       if (response.ok) {
         setMessage(`Image backup: ${result.uploaded} uploaded, ${result.skipped} already backed up`);
+        setActionJobLinks(prev => ({ ...prev, img_backup: 'image_backup' }));
         fetchStatus();
       } else {
         setError(result.error || 'Image backup failed');
@@ -283,15 +287,6 @@ function SyncSettings({ onDataRefresh }) {
     return mb >= 1 ? `${mb.toFixed(1)} MB` : `${(parseInt(bytes) / 1024).toFixed(0)} KB`;
   };
 
-  if (loading) {
-    return (
-      <div className="sync-settings">
-        <h3>Google Drive</h3>
-        <p>Loading status...</p>
-      </div>
-    );
-  }
-
   const driveIdRow = (key, label, icon, folderData) => (
     <div className="drive-id-row">
       <div className="drive-id-label">
@@ -328,148 +323,179 @@ function SyncSettings({ onDataRefresh }) {
       {error && <div className="sync-error">{error}</div>}
       {message && <div className="sync-success">{message}</div>}
 
-      {syncStatus?.drive?.configured && (
-        <div className="sync-drive-info">
-          <div className="sync-tile-header">
-            <h4>Backup & Restore</h4>
-            <button
-              className={`refresh-btn${refreshing ? ' spinning' : ''}`}
-              onClick={handleManualRefresh}
-              disabled={loading || refreshing}
-              title="Refresh status"
+      <div className="sync-drive-info">
+        <div className="sync-tile-header">
+          <h4>Backup & Restore</h4>
+          <button
+            className={`refresh-btn${(refreshing || (loading && !syncStatus)) ? ' spinning' : ''}`}
+            onClick={handleManualRefresh}
+            disabled={loading || refreshing}
+            title="Refresh status"
+          >
+            &#8635;
+          </button>
+        </div>
+
+        <div className="drive-root-header">
+          {syncStatus?.drive?.folders?.root ? (
+            <a
+              href={syncStatus.drive.folders.root.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="folder-link root-link"
             >
-              &#8635;
-            </button>
+              <span className="folder-icon">&#128193;</span>
+              <span className="folder-name">{syncStatus.drive.folders.root.name}</span>
+            </a>
+          ) : (
+            <span className="folder-link root-link">
+              <span className="folder-icon">&#128193;</span>
+              <span className="folder-name" style={{ color: '#999' }}>...</span>
+            </span>
+          )}
+        </div>
+
+        {/* Database Section */}
+        <div className="backup-section">
+          <div className="backup-section-header">
+            {driveIdRow('database', 'Database', '\u{1F4BE}', syncStatus?.drive?.folders?.database)}
           </div>
 
-          {syncStatus.drive.folders.root && (
-            <div className="drive-root-header">
-              <a
-                href={syncStatus.drive.folders.root.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="folder-link root-link"
-              >
-                <span className="folder-icon">&#128193;</span>
-                <span className="folder-name">{syncStatus.drive.folders.root.name}</span>
-              </a>
+          <div className="sync-status-row">
+            <div className="sync-status-item">
+              <label>Last Backup</label>
+              <span>
+                {backingUp || restoring ? (
+                  <a href="#" className="job-link-active" onClick={(e) => { e.preventDefault(); if (onNavigateToJobs) onNavigateToJobs('database_backup'); }}>Active</a>
+                ) : syncStatus?.last_backup ? (
+                  <a href="#" className="job-link-inline" onClick={(e) => { e.preventDefault(); if (onNavigateToJobs) onNavigateToJobs('database_backup'); }}>{formatDate(syncStatus.last_backup)}</a>
+                ) : syncStatus ? 'Never' : '...'}
+              </span>
             </div>
-          )}
+          </div>
 
-          {/* Database Section */}
-          {syncStatus.drive_access_verified && (
-            <div className="backup-section">
-              <div className="backup-section-header">
-                {driveIdRow('database', 'Database', '\u{1F4BE}', syncStatus.drive.folders.database)}
-              </div>
+          <div className="sync-buttons-grid">
+            <div className="sync-button-card">
+              <button
+                className="sync-btn push-btn"
+                onClick={handleBackup}
+                disabled={anyBusy || !syncStatus?.drive_access_verified}
+              >
+                {backingUp ? 'Backing up...' : 'Backup'}
+              </button>
+              <p className="button-description">pg_dump to Database folder</p>
+              {actionJobLinks.db_backup && onNavigateToJobs && (
+                <a href="#" className="job-link-inline" onClick={(e) => { e.preventDefault(); onNavigateToJobs(actionJobLinks.db_backup); }}>
+                  View in Jobs &rarr;
+                </a>
+              )}
+            </div>
+            <div className="sync-button-card">
+              <button
+                className="sync-btn pull-btn"
+                onClick={handleShowRestore}
+                disabled={anyBusy || !syncStatus?.drive_access_verified}
+              >
+                {restoring ? 'Restoring...' : 'Restore'}
+              </button>
+              <p className="button-description">Restore from a backup file</p>
+              {actionJobLinks.db_restore && onNavigateToJobs && (
+                <a href="#" className="job-link-inline" onClick={(e) => { e.preventDefault(); onNavigateToJobs(actionJobLinks.db_restore); }}>
+                  View in Jobs &rarr;
+                </a>
+              )}
+            </div>
+          </div>
 
-              <div className="sync-status-row">
-                <div className="sync-status-item">
-                  <label>Last Backup</label>
-                  <span>{formatDate(syncStatus.last_backup)}</span>
-                </div>
-              </div>
-
-              <div className="sync-buttons-grid">
-                <div className="sync-button-card">
-                  <button
-                    className="sync-btn push-btn"
-                    onClick={handleBackup}
-                    disabled={anyBusy}
-                  >
-                    {backingUp ? 'Backing up...' : 'Backup'}
-                  </button>
-                  <p className="button-description">pg_dump to Database folder</p>
-                </div>
-                <div className="sync-button-card">
-                  <button
-                    className="sync-btn pull-btn"
-                    onClick={handleShowRestore}
-                    disabled={anyBusy}
-                  >
-                    {restoring ? 'Restoring...' : 'Restore'}
-                  </button>
-                  <p className="button-description">Restore from a backup file</p>
-                </div>
-              </div>
-
-              {showRestoreList && backupsList && (
-                <div className="restore-list">
-                  {backupsList.length === 0 ? (
-                    <p className="restore-empty">No backups found in Database folder.</p>
-                  ) : (
-                    backupsList.map(backup => (
-                      <div key={backup.id} className="restore-item">
-                        <span className="restore-name">{backup.name}</span>
-                        <span className="restore-size">{formatSize(backup.size)}</span>
-                        <span className="restore-date">{formatDate(backup.createdTime)}</span>
-                        <button
-                          className="sync-btn-small"
-                          onClick={() => handleRestore(backup.id, backup.name)}
-                          disabled={restoring}
-                        >
-                          Restore
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
+          {showRestoreList && backupsList && (
+            <div className="restore-list">
+              {backupsList.length === 0 ? (
+                <p className="restore-empty">No backups found in Database folder.</p>
+              ) : (
+                backupsList.map(backup => (
+                  <div key={backup.id} className="restore-item">
+                    <span className="restore-name">{backup.name}</span>
+                    <span className="restore-size">{formatSize(backup.size)}</span>
+                    <span className="restore-date">{formatDate(backup.createdTime)}</span>
+                    <button
+                      className="sync-btn-small"
+                      onClick={() => handleRestore(backup.id, backup.name)}
+                      disabled={restoring}
+                    >
+                      Restore
+                    </button>
+                  </div>
+                ))
               )}
             </div>
           )}
-
-          {/* Images Section */}
-          {syncStatus.drive_access_verified && (
-            <div className="backup-section">
-              <div className="backup-section-header">
-                {driveIdRow('images', 'Images', '\u{1F5BC}\uFE0F', syncStatus.drive.folders.images)}
-              </div>
-
-              <div className="sync-status-row">
-                <div className="sync-status-item">
-                  <label>Media Files</label>
-                  <span>{imageBackup?.mediaFileCount ?? '...'} files</span>
-                </div>
-                <div className="sync-status-item">
-                  <label>Drive Media</label>
-                  <span>{imageBackup?.driveMediaCount ?? '...'} files</span>
-                </div>
-                <div className="sync-status-item">
-                  <label>DB Dumps</label>
-                  <span>{imageBackup?.driveDbDumpCount ?? '...'}</span>
-                </div>
-                <div className="sync-status-item">
-                  <label>Last Backup</label>
-                  <span>{formatDate(imageBackup?.lastBackup)}</span>
-                </div>
-              </div>
-
-              <div className="sync-buttons-grid">
-                <div className="sync-button-card">
-                  <button
-                    className="sync-btn push-btn"
-                    onClick={handleImageBackup}
-                    disabled={anyBusy}
-                  >
-                    {backingUpImages ? 'Backing up...' : 'Backup'}
-                  </button>
-                  <p className="button-description">Sync DB + media files to Drive</p>
-                </div>
-                <div className="sync-button-card">
-                  <button
-                    className="sync-btn pull-btn"
-                    onClick={handleImageRestore}
-                    disabled={anyBusy}
-                  >
-                    {restoringImages ? 'Restoring...' : 'Restore'}
-                  </button>
-                  <p className="button-description">Pull images from Drive to image server</p>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
-      )}
+
+        {/* Images Section */}
+        <div className="backup-section">
+          <div className="backup-section-header">
+            {driveIdRow('images', 'Images', '\u{1F5BC}\uFE0F', syncStatus?.drive?.folders?.images)}
+          </div>
+
+          <div className="sync-status-row">
+            <div className="sync-status-item">
+              <label>Media Files</label>
+              <span>{imageBackup?.mediaFileCount ?? '...'} files</span>
+            </div>
+            <div className="sync-status-item">
+              <label>Drive Media</label>
+              <span>{imageBackup?.driveMediaCount ?? '...'} files</span>
+            </div>
+            <div className="sync-status-item">
+              <label>DB Dumps</label>
+              <span>{imageBackup?.driveDbDumpCount ?? '...'}</span>
+            </div>
+            <div className="sync-status-item">
+              <label>Last Backup</label>
+              <span>
+                {backingUpImages || restoringImages ? (
+                  <a href="#" className="job-link-active" onClick={(e) => { e.preventDefault(); if (onNavigateToJobs) onNavigateToJobs('image_backup'); }}>Active</a>
+                ) : imageBackup?.lastBackup ? (
+                  <a href="#" className="job-link-inline" onClick={(e) => { e.preventDefault(); if (onNavigateToJobs) onNavigateToJobs('image_backup'); }}>{formatDate(imageBackup.lastBackup)}</a>
+                ) : 'Never'}
+              </span>
+            </div>
+          </div>
+
+          <div className="sync-buttons-grid">
+            <div className="sync-button-card">
+              <button
+                className="sync-btn push-btn"
+                onClick={handleImageBackup}
+                disabled={anyBusy || !syncStatus?.drive_access_verified}
+              >
+                {backingUpImages ? 'Backing up...' : 'Backup'}
+              </button>
+              <p className="button-description">Sync DB + media files to Drive</p>
+              {actionJobLinks.img_backup && onNavigateToJobs && (
+                <a href="#" className="job-link-inline" onClick={(e) => { e.preventDefault(); onNavigateToJobs(actionJobLinks.img_backup); }}>
+                  View in Jobs &rarr;
+                </a>
+              )}
+            </div>
+            <div className="sync-button-card">
+              <button
+                className="sync-btn pull-btn"
+                onClick={handleImageRestore}
+                disabled={anyBusy || !syncStatus?.drive_access_verified}
+              >
+                {restoringImages ? 'Restoring...' : 'Restore'}
+              </button>
+              <p className="button-description">Pull images from Drive to image server</p>
+              {actionJobLinks.img_restore && onNavigateToJobs && (
+                <a href="#" className="job-link-inline" onClick={(e) => { e.preventDefault(); onNavigateToJobs(actionJobLinks.img_restore); }}>
+                  View in Jobs &rarr;
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Danger Zone */}
       <div className="danger-zone">
