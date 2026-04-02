@@ -35,7 +35,7 @@ RUN npm list -g playwright --depth=0 | grep playwright | awk -F@ '{print $2}' > 
 
 # Add PostgreSQL official repository and install PostgreSQL 17
 RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
-    dnf install -y postgresql17-server postgresql17 && \
+    dnf install -y postgresql17-server postgresql17 postgresql17-contrib && \
     dnf clean all
 
 # Create symlinks for PostgreSQL commands
