@@ -169,7 +169,7 @@ export function createAdminRouter(pool) {
       'name', 'poi_type', 'latitude', 'longitude', 'geometry', 'geometry_drive_file_id',
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
-      'events_url', 'news_url',
+      'events_url', 'news_url', 'research_context',
       'length_miles', 'difficulty', 'boundary_type', 'boundary_color'
     ];
     const updates = {};
@@ -226,7 +226,7 @@ export function createAdminRouter(pool) {
     const allowedFields = [
       'name', 'latitude', 'longitude', 'property_owner', 'owner_id', 'brief_description',
       'era', 'era_id', 'historical_description', 'primary_activities', 'surface',
-      'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url', 'status_url'
+      'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url', 'research_context', 'status_url'
     ];
     const updates = {};
     const values = [];
@@ -608,6 +608,111 @@ export function createAdminRouter(pool) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: error.message || 'Failed to research location. Please try again.' });
+    }
+  });
+
+  // Multi-pass research (Issue #102) — returns draft for approval
+  router.post('/ai/research-v2', isAdmin, async (req, res) => {
+    const { destination, adminContext } = req.body;
+
+    if (!destination || !destination.name) {
+      return res.status(400).json({ error: 'Destination with name is required' });
+    }
+
+    try {
+      // Inject admin context into the destination object
+      const destWithContext = { ...destination, research_context: adminContext || destination.research_context || '' };
+
+      // Fetch constrained lists
+      const activitiesResult = await pool.query('SELECT name FROM activities ORDER BY sort_order, name');
+      const availableActivities = activitiesResult.rows.map(row => row.name);
+
+      const erasResult = await pool.query('SELECT id, name FROM eras ORDER BY sort_order, name');
+      const availableEras = erasResult.rows.map(row => row.name);
+
+      const surfacesResult = await pool.query('SELECT name FROM surfaces ORDER BY sort_order, name');
+      const availableSurfaces = surfacesResult.rows.map(row => row.name);
+
+      const { researchLocationMultiPass } = await import('../services/geminiService.js');
+      const data = await researchLocationMultiPass(pool, destWithContext, availableActivities, availableEras, availableSurfaces);
+
+      console.log(`Admin ${req.user.email} researched (v2) location: ${destination.name}`);
+      res.json({ draft: true, data, destination_id: destination.id });
+    } catch (error) {
+      console.error('Error in multi-pass research:', error);
+      if (error.message?.includes('API key')) {
+        return res.status(400).json({ error: error.message });
+      }
+      res.status(500).json({ error: error.message || 'Failed to research location. Please try again.' });
+    }
+  });
+
+  // Generate hero image for a POI (Issue #99)
+  router.post('/ai/generate-hero-image', isAdmin, async (req, res) => {
+    const { poiId, poiName, briefDescription, historicalDescription, era } = req.body;
+
+    if (!poiName) {
+      return res.status(400).json({ error: 'POI name is required' });
+    }
+
+    try {
+      const { generateHeroImage } = await import('../services/geminiService.js');
+      const result = await generateHeroImage(pool, {
+        name: poiName,
+        briefDescription,
+        historicalDescription,
+        era
+      });
+
+      console.log(`Admin ${req.user.email} generated hero image for: ${poiName}`);
+      res.json({
+        imageData: result.base64,
+        mimeType: result.mimeType,
+        promptUsed: result.promptUsed
+      });
+    } catch (error) {
+      console.error('Error generating hero image:', error);
+      res.status(500).json({ error: error.message || 'Failed to generate hero image.' });
+    }
+  });
+
+  // Accept and save a generated hero image
+  router.post('/ai/accept-hero-image', isAdmin, async (req, res) => {
+    const { poiId, imageData, mimeType } = req.body;
+
+    // Fix: sanitize poiId to numeric to prevent path traversal (PR #173 review)
+    const sanitizedPoiId = parseInt(poiId, 10);
+    if (!sanitizedPoiId || !imageData) {
+      return res.status(400).json({ error: 'Valid numeric POI ID and image data are required' });
+    }
+
+    try {
+      const imageBuffer = Buffer.from(imageData, 'base64');
+      const mimeMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const extension = mimeMap[mimeType] || 'png';
+      const filename = `hero-${sanitizedPoiId}-${Date.now()}.${extension}`;
+
+      // Fix: upload first, then delete old — avoids leaving POI imageless if upload fails (PR #173 review)
+      const uploadResult = await imageServerClient.uploadImage(
+        imageBuffer, sanitizedPoiId, 'primary', filename, mimeType
+      );
+
+      if (!uploadResult.success) {
+        throw new Error(uploadResult.error || 'Upload failed');
+      }
+
+      // Delete old primary asset after successful upload
+      const existingPrimary = await imageServerClient.getPrimaryAsset(sanitizedPoiId);
+      if (existingPrimary && existingPrimary.id !== uploadResult.assetId) {
+        await imageServerClient.deleteAsset(existingPrimary.id);
+        console.log(`[Hero Image] Deleted old primary asset ${existingPrimary.id} for POI ${sanitizedPoiId}`);
+      }
+
+      console.log(`Admin ${req.user.email} accepted hero image for POI ${sanitizedPoiId}: asset ${uploadResult.assetId}`);
+      res.json({ success: true, assetId: uploadResult.assetId });
+    } catch (error) {
+      console.error('Error accepting hero image:', error);
+      res.status(500).json({ error: error.message || 'Failed to save hero image.' });
     }
   });
 

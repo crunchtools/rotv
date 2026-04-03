@@ -20,6 +20,7 @@ Before making any changes, read these documents in order:
 | SemVer | MAJOR.MINOR.PATCH versioning strictly followed |
 | Documentation | Architecture docs for major features |
 | AI Quality | Gourmand checks for AI slop detection |
+| Review Fixes | Mark reviewed fixes with `// Fix: <desc> (PR #N review)` |
 
 ---
 

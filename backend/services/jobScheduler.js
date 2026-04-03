@@ -565,4 +565,22 @@ export async function stopJobScheduler() {
   }
 }
 
+/**
+ * Wrap a scheduled job handler with random jitter delay (anti-bot detection)
+ * Only for cron-scheduled jobs — manual/admin triggers should NOT use this.
+ * @param {Function} handler - Async handler to wrap
+ * @param {string} jobName - Job name for logging
+ * @param {number} minSeconds - Minimum delay in seconds (default: 1)
+ * @param {number} maxSeconds - Maximum delay in seconds (default: 60)
+ * @returns {Function} Wrapped handler with jitter delay
+ */
+export function withJitter(handler, jobName, minSeconds = 1, maxSeconds = 60) {
+  return async (...args) => {
+    const delay = Math.floor(Math.random() * (maxSeconds - minSeconds + 1)) + minSeconds;
+    console.log(`[Jitter] ${jobName} delayed by ${delay}s`);
+    await new Promise(resolve => setTimeout(resolve, delay * 1000));
+    return handler(...args);
+  };
+}
+
 export { JOB_NAMES };

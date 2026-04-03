@@ -1,0 +1,1 @@
+ALTER TABLE pois ADD COLUMN IF NOT EXISTS research_context TEXT;

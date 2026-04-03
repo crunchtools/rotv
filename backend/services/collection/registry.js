@@ -118,16 +118,24 @@ export const COLLECTION_TYPES = [
   {
     id: 'research',
     label: 'POI Research',
-    description: 'AI research for POI metadata and icon generation',
+    description: 'Multi-pass AI research for POI metadata, descriptions, and hero images',
     icon: '\u{1F50D}',
-    promptKeys: [],
+    promptKeys: [{
+      key: 'gemini_prompt_brief',
+      label: 'Brief Description Prompt',
+      placeholders: ['{{name}}', '{{era}}', '{{property_owner}}']
+    }, {
+      key: 'gemini_prompt_historical',
+      label: 'Historical Description Prompt',
+      placeholders: ['{{name}}', '{{era}}', '{{property_owner}}']
+    }],
     scheduleJobName: null,
     schedule: null,
     statusTable: null,
     historyTypes: ['research'],
-    triggerEndpoint: null,
-    manualTriggerMethod: null,
-    hasPrompt: false
+    triggerEndpoint: '/api/admin/ai/research-v2',
+    manualTriggerMethod: 'POST',
+    hasPrompt: true
   },
   {
     id: 'cleanup',

@@ -98,3 +98,11 @@ Zabbix monitoring:
 1. Build — Containerfile builds successfully
 2. Application health test — HTTP 200 from Node.js backend
 3. Push — Image pushed to Quay.io
+
+## Code Review Regression Prevention
+
+Gemini Code Assist reviews every PR. To prevent later PRs from undoing reviewed fixes:
+
+1. **Check before modifying**: When substantially modifying a file, check recent PRs for unresolved Gemini feedback on that file (`gh api repos/crunchtools/rotv/pulls/{N}/comments`). Address or preserve those fixes.
+2. **Mark reviewed fixes**: When fixing a bug caught by code review, add an inline comment: `// Fix: <description> (PR #NNN review)`. This makes the fix visible to anyone refactoring the area later.
+3. **Don't silently revert**: If a reviewed fix must be changed, explain why in the PR description.

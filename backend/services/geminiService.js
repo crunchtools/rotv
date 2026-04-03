@@ -13,6 +13,9 @@ import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 // Gemini model — configurable via environment variable, defaults to gemini-2.5-flash
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
+// Image generation model — separate because it requires image output modality support
+export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+
 // Default prompt templates - designed to avoid generic AI slop
 const DEFAULT_PROMPTS = {
   gemini_prompt_brief: `You are a local historian writing for the Cuyahoga Valley National Park visitor guide.
@@ -43,6 +46,71 @@ REQUIREMENTS:
 Location context: Era: {{era}}, Owner: {{property_owner}}`
 };
 
+/**
+ * Parse JSON from Gemini response text, handling markdown code blocks,
+ * duplicated JSON, and truncated responses (e.g. token limit hit mid-array).
+ */
+export function parseJsonResponse(text) {
+  let jsonText = text;
+
+  // Remove markdown code blocks if present
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    jsonText = jsonMatch[1].trim();
+  } else {
+    // No closing ``` found — response may be truncated. Extract from first {
+    const openBrace = text.indexOf('{');
+    if (openBrace >= 0) {
+      jsonText = text.substring(openBrace);
+    }
+  }
+
+  // If there are multiple JSON objects, take the first complete one
+  const firstBrace = jsonText.indexOf('{');
+  if (firstBrace > 0) {
+    jsonText = jsonText.substring(firstBrace);
+  }
+
+  // Find the matching closing brace for the first opening brace.
+  // Skip braces/brackets inside quoted strings to avoid miscounting.
+  let braceCount = 0;
+  let bracketCount = 0;
+  let endIndex = -1;
+  let inString = false;
+  for (let i = 0; i < jsonText.length; i++) {
+    const ch = jsonText[i];
+    if (ch === '"' && (i === 0 || jsonText[i - 1] !== '\\')) {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === '{') braceCount++;
+    if (ch === '}') braceCount--;
+    if (ch === '[') bracketCount++;
+    if (ch === ']') bracketCount--;
+    if (braceCount === 0 && ch === '}') {
+      endIndex = i + 1;
+      break;
+    }
+  }
+
+  if (endIndex > 0) {
+    jsonText = jsonText.substring(0, endIndex);
+  } else if (braceCount > 0) {
+    // Truncated JSON — try to salvage by closing open brackets/braces
+    // Trim trailing incomplete values (partial strings, trailing commas)
+    jsonText = jsonText.replace(/,\s*"[^"]*"?\s*$/, '');  // trailing partial key-value
+    jsonText = jsonText.replace(/,\s*"[^"]*$/, '');        // trailing partial string in array
+    jsonText = jsonText.replace(/,\s*$/, '');               // trailing comma
+    // Close open brackets and braces
+    for (let i = 0; i < bracketCount; i++) jsonText += ']';
+    for (let i = 0; i < braceCount; i++) jsonText += '}';
+    console.warn('[parseJsonResponse] Salvaged truncated JSON by closing', bracketCount, 'brackets and', braceCount, 'braces');
+  }
+
+  return JSON.parse(jsonText);
+}
+
 // Research prompt for filling all fields - {{activities_list}}, {{eras_list}}, and {{surfaces_list}} placeholders will be filled dynamically
 const RESEARCH_PROMPT_TEMPLATE = `You are a researcher for Cuyahoga Valley National Park. Search the web and find accurate information about this location.
 
@@ -61,7 +129,7 @@ Return a JSON object with these fields (use null if you cannot find reliable inf
   "pets": "Pet policy: 'Yes', 'No', or 'Leashed'",
   "brief_description": "2-3 sentences with specific facts about what makes this place notable. Include dates and names.",
   "historical_description": "2-3 paragraphs of historical narrative with specific dates, people, and events. Written in warm local history style.",
-  "sources": ["Array of source URLs or references used"]
+  "sources": ["url1", "url2"]
 }
 
 ALLOWED ERAS (era MUST be one of these exact names):
@@ -81,7 +149,8 @@ IMPORTANT:
 - Only include facts you can verify from search results
 - Use null for fields where you have no reliable information
 - Avoid generic filler text - specific facts or nothing
-- The brief_description and historical_description should contain real, searchable facts`;
+- The brief_description and historical_description should contain real, searchable facts
+- For sources, include MAXIMUM 5 unique URLs. No duplicate URLs.`;
 
 /**
  * Get default prompt for a given key
@@ -247,39 +316,7 @@ export async function researchLocation(pool, destination, availableActivities = 
   const text = response.text();
 
   try {
-    // Try to extract JSON from the response
-    // Sometimes Gemini returns markdown code blocks or duplicated JSON
-    let jsonText = text;
-
-    // Remove markdown code blocks if present
-    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (jsonMatch) {
-      jsonText = jsonMatch[1].trim();
-    }
-
-    // If there are multiple JSON objects, take the first complete one
-    const firstBrace = jsonText.indexOf('{');
-    if (firstBrace > 0) {
-      jsonText = jsonText.substring(firstBrace);
-    }
-
-    // Find the matching closing brace for the first opening brace
-    let braceCount = 0;
-    let endIndex = -1;
-    for (let i = 0; i < jsonText.length; i++) {
-      if (jsonText[i] === '{') braceCount++;
-      if (jsonText[i] === '}') braceCount--;
-      if (braceCount === 0 && jsonText[i] === '}') {
-        endIndex = i + 1;
-        break;
-      }
-    }
-
-    if (endIndex > 0) {
-      jsonText = jsonText.substring(0, endIndex);
-    }
-
-    const researchData = JSON.parse(jsonText);
+    const researchData = parseJsonResponse(text);
     logInfo(runId, 'research', null, destination.name, `Research complete: ${destination.name}`, { completed: true, fields: Object.keys(researchData) });
     await flushJobLogs();
     return researchData;
@@ -404,6 +441,276 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
   logInfo(runId, 'research', null, null, `Icon generated: ${description}`, { completed: true });
   await flushJobLogs();
   return text;
+}
+
+// ============================================================
+// Multi-Pass Research (Issue #102)
+// ============================================================
+
+const RESEARCH_PASS1_TEMPLATE = `You are a researcher for Cuyahoga Valley National Park. Search the web and find accurate information about this location.
+
+Location to research: {{name}}
+%%OPTIONAL_SECTIONS%%
+
+Search for information from NPS.gov, Ohio History Connection, local historical societies, and reliable sources.
+
+Return a JSON object with these fields (use null if you cannot find reliable information):
+
+{
+  "era": "The primary historical era - MUST be one from the ALLOWED ERAS list below",
+  "property_owner": "Current owner/manager (e.g., 'Federal (NPS)', 'Cleveland Metroparks', 'Private')",
+  "primary_activities": "Comma-separated activities from the ALLOWED ACTIVITIES list ONLY",
+  "surface": "Trail/path surface type - MUST be one from the ALLOWED SURFACES list below",
+  "pets": "Pet policy: 'Yes', 'No', or 'Leashed'",
+  "brief_description": "2-3 sentences with specific facts about what makes this place notable. Include dates and names. NO generic phrases like 'rich history', 'beloved destination'.",
+  "sources": ["url1", "url2"]
+}
+
+ALLOWED ERAS (era MUST be one of these exact names):
+{{eras_list}}
+
+ALLOWED ACTIVITIES (only use activities from this list):
+{{activities_list}}
+
+ALLOWED SURFACES (surface MUST be one of these exact names):
+{{surfaces_list}}
+
+IMPORTANT:
+- For era, you MUST select exactly one era from the ALLOWED ERAS list above
+- For primary_activities, ONLY use activities from the ALLOWED ACTIVITIES list above
+- For surface, you MUST select exactly one surface from the ALLOWED SURFACES list above
+- Only include facts you can verify from search results
+- Use null for fields where you have no reliable information
+- Avoid generic filler text - specific facts or nothing
+- For sources, include MAXIMUM 5 unique URLs. No duplicate URLs.`;
+
+const RESEARCH_PASS2_TEMPLATE = `You are writing for Arcadia Publishing's "Images of America" series about Cuyahoga Valley.
+
+Research and write 2-3 paragraphs about: {{name}}
+%%OPTIONAL_SECTIONS%%
+
+CONTEXT FROM INITIAL RESEARCH:
+- Era: {{pass1_era}}
+- Brief description: {{pass1_brief}}
+
+Return a JSON object:
+
+{
+  "historical_description": "2-3 paragraphs of historical narrative with specific dates, people, and events. Written in warm local history style. Include specific dates, names of people, and historical events. Reference primary sources when possible. Describe what the place looked like historically vs today. Connect to broader Ohio & Erie Canal corridor history if relevant. NO filler phrases: avoid 'rich tapestry', 'testament to', 'bygone era'. If information is uncertain, say 'According to local accounts...' or 'Records suggest...'. If you cannot verify facts, acknowledge the gaps.",
+  "additional_sources": ["Array of additional source URLs or references used"]
+}`;
+
+/**
+ * Multi-pass research for a location (Issue #102)
+ * Pass 1: metadata + brief description
+ * Pass 2: historical description with Pass 1 context
+ */
+export async function researchLocationMultiPass(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
+  const genAI = await createGeminiClient(pool);
+
+  const model = genAI.getGenerativeModel({
+    model: GEMINI_MODEL,
+    tools: [{ googleSearch: {} }],
+    generationConfig: { temperature: 0 }
+  });
+
+  // Build optional sections for prompts
+  const optionalSections = [];
+  if (destination.latitude && destination.longitude) {
+    optionalSections.push(`Coordinates: ${destination.latitude}, ${destination.longitude}`);
+  }
+  if (destination.more_info_link) {
+    optionalSections.push(`PRIORITY SOURCE: Consult this URL first: ${destination.more_info_link}`);
+  }
+  if (destination.research_context) {
+    optionalSections.push(`ADMIN CONTEXT (use this to guide your research): ${destination.research_context}`);
+  }
+
+  // Build Pass 1 prompt
+  let pass1Template = RESEARCH_PASS1_TEMPLATE;
+  pass1Template = pass1Template.replace('%%OPTIONAL_SECTIONS%%', optionalSections.join('\n'));
+
+  const activitiesList = availableActivities.length > 0
+    ? availableActivities.join(', ')
+    : 'Hiking, Biking, Photography, Bird Watching, Fishing, Picnicking, Camping, Wildlife Viewing, Historical Tours';
+  pass1Template = pass1Template.replace('{{activities_list}}', activitiesList);
+
+  const erasList = availableEras.length > 0
+    ? availableEras.join(', ')
+    : 'Pre-Colonial, Early Settlement, Canal Era, Railroad Era, Industrial Era, Conservation Era, Modern Era';
+  pass1Template = pass1Template.replace('{{eras_list}}', erasList);
+
+  const surfacesList = availableSurfaces.length > 0
+    ? availableSurfaces.join(', ')
+    : 'Paved, Gravel, Boardwalk, Dirt, Grass, Sand, Rocky, Water, Rail, Mixed';
+  pass1Template = pass1Template.replace('{{surfaces_list}}', surfacesList);
+
+  const pass1Prompt = interpolatePrompt(pass1Template, destination);
+
+  const runId = Math.floor(Date.now() / 1000);
+  console.log(`[Research v2] Pass 1 for: ${destination.name}`);
+  logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1: ${destination.name}`);
+
+  // Pass 1
+  const pass1Generation = await model.generateContent(pass1Prompt);
+  const pass1Text = pass1Generation.response.text();
+  let pass1Data;
+
+  try {
+    pass1Data = parseJsonResponse(pass1Text);
+  } catch (e) {
+    console.error('Failed to parse Pass 1 response:', pass1Text);
+    logError(runId, 'research', null, destination.name, `Research v2 Pass 1 failed: ${destination.name}`, { error_stack: pass1Text.slice(0, 500) });
+    await flushJobLogs();
+    throw new Error('AI returned invalid format in Pass 1. Please try again.');
+  }
+
+  logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1 complete: ${destination.name}`, { fields: Object.keys(pass1Data) });
+
+  // Pass 2 — historical description with Pass 1 context
+  let pass2Template = RESEARCH_PASS2_TEMPLATE;
+  pass2Template = pass2Template.replace('%%OPTIONAL_SECTIONS%%', optionalSections.join('\n'));
+  pass2Template = pass2Template.replace('{{pass1_era}}', pass1Data.era || 'unknown');
+  pass2Template = pass2Template.replace('{{pass1_brief}}', pass1Data.brief_description || 'no description available');
+
+  const pass2Prompt = interpolatePrompt(pass2Template, destination);
+
+  console.log(`[Research v2] Pass 2 for: ${destination.name}`);
+  logInfo(runId, 'research', null, destination.name, `Research v2 Pass 2: ${destination.name}`);
+
+  const pass2Generation = await model.generateContent(pass2Prompt);
+  const pass2Text = pass2Generation.response.text();
+  let pass2Data;
+
+  try {
+    pass2Data = parseJsonResponse(pass2Text);
+  } catch (e) {
+    console.error('Failed to parse Pass 2 response:', pass2Text);
+    logError(runId, 'research', null, destination.name, `Research v2 Pass 2 failed: ${destination.name}`, { error_stack: pass2Text.slice(0, 500) });
+    await flushJobLogs();
+    throw new Error('AI returned invalid format in Pass 2. Please try again.');
+  }
+
+  // Resolve era name → era_id
+  let eraId = null;
+  if (pass1Data.era) {
+    const eraResult = await pool.query(
+      'SELECT id FROM eras WHERE LOWER(name) = LOWER($1)',
+      [pass1Data.era]
+    );
+    if (eraResult.rows.length > 0) {
+      eraId = eraResult.rows[0].id;
+    }
+  }
+
+  // Merge results
+  const mergedSources = [
+    ...(pass1Data.sources || []),
+    ...(pass2Data.additional_sources || [])
+  ];
+
+  const mergedResearch = {
+    era: pass1Data.era,
+    era_id: eraId,
+    property_owner: pass1Data.property_owner,
+    primary_activities: pass1Data.primary_activities,
+    surface: pass1Data.surface,
+    pets: pass1Data.pets,
+    brief_description: pass1Data.brief_description,
+    historical_description: pass2Data.historical_description,
+    sources: mergedSources
+  };
+
+  logInfo(runId, 'research', null, destination.name, `Research v2 complete: ${destination.name}`, { completed: true, fields: Object.keys(mergedResearch) });
+  await flushJobLogs();
+
+  return mergedResearch;
+}
+
+// ============================================================
+// Hero Image Generation (Issue #99)
+// ============================================================
+
+/**
+ * Generate a hero image for a POI using Gemini image generation
+ * @param {object} pool - Database pool
+ * @param {object} poiData - { name, briefDescription, historicalDescription, era }
+ * @returns {{ base64: string, mimeType: string, promptUsed: string }}
+ */
+export async function generateHeroImage(pool, poiData) {
+  // Get API key
+  let apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    const apiKeyQuery = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
+    );
+    if (!apiKeyQuery.rows.length || !apiKeyQuery.rows[0].value) {
+      throw new Error('Gemini API key not configured.');
+    }
+    apiKey = apiKeyQuery.rows[0].value;
+  }
+
+  const prompt = `Generate a historical photograph of ${poiData.name} in the style of 1800s photography.
+
+CONTEXT:
+- Era: ${poiData.era || 'historical'}
+- Description: ${poiData.briefDescription || ''}
+- History: ${(poiData.historicalDescription || '').substring(0, 500)}
+
+STYLE REQUIREMENTS:
+- Sepia-toned or black-and-white photograph from the 1800s
+- Arcadia Publishing "Images of America" aesthetic
+- Period-appropriate architecture, vegetation, and atmosphere
+- Realistic photographic quality, not illustration
+- NO text, watermarks, or labels in the image
+- NO modern elements (cars, power lines, modern buildings)
+- Landscape orientation showing the location in its historical context`;
+
+  // Use REST API directly for image generation (SDK may not support image output modality)
+  // Fix: use x-goog-api-key header instead of URL query param to avoid key leakage in logs (PR #173 review)
+  const modelName = GEMINI_IMAGE_MODEL;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
+
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), 120000);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      signal: abortController.signal,
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          responseModalities: ['TEXT', 'IMAGE']
+        }
+      })
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    console.error('[Hero Image] Gemini API error:', errorText);
+    throw new Error(`Image generation failed: ${response.status}`);
+  }
+
+  const geminiResponse = await response.json();
+
+  const parts = geminiResponse.candidates?.[0]?.content?.parts || [];
+  const imagePart = parts.find(p => p.inlineData);
+
+  if (!imagePart) {
+    throw new Error('No image generated. The model may have refused the request.');
+  }
+
+  return {
+    base64: imagePart.inlineData.data,
+    mimeType: imagePart.inlineData.mimeType || 'image/png',
+    promptUsed: prompt
+  };
 }
 
 /**

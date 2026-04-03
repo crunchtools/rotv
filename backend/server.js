@@ -28,7 +28,8 @@ import {
   scheduleImageBackup,
   registerDatabaseBackupHandler,
   scheduleDatabaseBackup,
-  stopJobScheduler
+  stopJobScheduler,
+  withJitter
 } from './services/jobScheduler.js';
 import { processItem, processPendingItems } from './services/moderationService.js';
 import {
@@ -590,6 +591,11 @@ async function initDatabase() {
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS news_url TEXT
     `);
 
+    // Add research_context column for multi-pass AI research
+    await client.query(`
+      ALTER TABLE pois ADD COLUMN IF NOT EXISTS research_context TEXT
+    `);
+
     // Add status_url column for MTB Trail Status feature
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS status_url VARCHAR(500)
@@ -1069,7 +1075,7 @@ app.get('/api/destinations', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
+             p.image_drive_file_id, p.news_url, p.events_url, p.research_context, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1093,7 +1099,7 @@ app.get('/api/destinations/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_drive_file_id, p.news_url, p.events_url, p.status_url,
+             p.image_drive_file_id, p.news_url, p.events_url, p.research_context, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1881,7 +1887,7 @@ async function start() {
     await initJobScheduler(connectionString);
 
     // Register scheduled news collection handler (daily job for all POIs)
-    await registerNewsCollectionHandler(async () => {
+    await registerNewsCollectionHandler(withJitter(async () => {
       console.log('Running scheduled news collection for all POIs...');
       const newsCollectionResult = await runNewsCollection(pool, null);
       if (newsCollectionResult.totalPois > 0) {
@@ -1889,7 +1895,7 @@ async function start() {
       } else {
         console.log('No POIs to collect');
       }
-    });
+    }, 'news-collection'));
 
     // Register batch news collection handler (for admin-triggered jobs via pg-boss)
     await registerBatchNewsHandler(async (pgBossJobId, jobData) => {
@@ -1901,7 +1907,7 @@ async function start() {
     await scheduleNewsCollection('0 6 * * *');
 
     // Register scheduled trail status collection handler
-    await registerTrailStatusHandler(async () => {
+    await registerTrailStatusHandler(withJitter(async () => {
       console.log('Running scheduled trail status collection for all MTB trails...');
       const { runTrailStatusCollection } = await import('./services/trailStatusService.js');
       const boss = app.get('boss');
@@ -1913,7 +1919,7 @@ async function start() {
       } else {
         console.log('No MTB trails to collect');
       }
-    });
+    }, 'trail-status'));
 
     // Register batch trail status collection handler
     await registerBatchTrailStatusHandler(async (jobId, poiIds) => {
@@ -1931,7 +1937,7 @@ async function start() {
     });
 
     // Register moderation sweep handler (catches unprocessed items)
-    await registerModerationSweepHandler(async () => {
+    await registerModerationSweepHandler(withJitter(async () => {
       await processPendingItems(pool);
       // Retention: purge job logs older than 30 days
       try {
@@ -1942,7 +1948,7 @@ async function start() {
       } catch (err) {
         console.error('[JobLogger] Retention cleanup failed:', err.message);
       }
-    });
+    }, 'moderation-sweep'));
 
     // Schedule moderation sweep every 15 minutes
     await scheduleModerationSweep('*/15 * * * *');
@@ -1972,25 +1978,25 @@ async function start() {
       return createDriveServiceWithRefresh(credentials, pool, adminResult.rows[0].id);
     };
 
-    await registerImageBackupHandler(async () => {
+    await registerImageBackupHandler(withJitter(async () => {
       console.log('Running scheduled image backup...');
       const { triggerImageBackup } = await import('./services/backupService.js');
       const drive = await getAdminDriveService();
       const result = await triggerImageBackup(pool, drive);
       console.log(`Image backup completed: ${result.uploaded} uploaded, ${result.skipped} skipped, ${result.failed} failed`);
-    });
+    }, 'image-backup'));
 
     // Schedule nightly image backup at 2 AM Eastern
     await scheduleImageBackup('0 2 * * *');
 
     // Register database backup handler (nightly pg_dump to Drive)
-    await registerDatabaseBackupHandler(async () => {
+    await registerDatabaseBackupHandler(withJitter(async () => {
       console.log('Running scheduled database backup...');
       const { triggerBackup } = await import('./services/backupService.js');
       const drive = await getAdminDriveService();
       const result = await triggerBackup(pool, drive);
       console.log(`Database backup completed: ${result.filename} (${result.driveFileId})`);
-    });
+    }, 'database-backup'));
 
     // Schedule nightly database backup at 3 AM Eastern
     await scheduleDatabaseBackup('0 3 * * *');
