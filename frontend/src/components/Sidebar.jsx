@@ -663,6 +663,10 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         if (!response.ok) {
           const error = await response.json();
           setAiError(`Hero image save failed: ${error.error}`);
+        } else {
+          // Update local state so the edit page shows the new image
+          const now = new Date().toISOString();
+          setEditedData(prev => ({ ...prev, has_primary_image: true, updated_at: now }));
         }
       } catch (err) {
         setAiError(`Hero image save failed: ${err.message}`);
