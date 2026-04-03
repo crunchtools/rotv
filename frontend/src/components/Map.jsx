@@ -875,7 +875,7 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
           permanent={isSelected}
         >
           <div className="tooltip-content">
-            {dest.image_drive_file_id && (
+            {dest.has_primary_image && (
               <div className="tooltip-thumbnail">
                 <img src={`/api/pois/${dest.id}/thumbnail?size=medium`} alt="" />
               </div>
@@ -1282,7 +1282,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                     // Virtual POIs (organizations) don't count since they don't appear on the map
                     const hasAnySelection = (selectedDestination && selectedDestination.poi_type !== 'virtual') || selectedLinearFeature;
                     if (isSelected || !hasAnySelection) {
-                      const hasImage = feature.image_drive_file_id;
+                      const hasImage = feature.has_primary_image;
                       const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
                       let tooltipHtml = '<div class="tooltip-content">';
@@ -1346,7 +1346,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                   const hasAnySelection = selectedDestination || selectedLinearFeature;
                   if (isSelected || !hasAnySelection) {
                     // Build rich tooltip content (similar to destination tooltips)
-                    const hasImage = feature.image_drive_file_id;
+                    const hasImage = feature.has_primary_image;
                     const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
                     let tooltipHtml = '<div class="tooltip-content">';
