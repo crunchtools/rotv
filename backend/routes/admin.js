@@ -708,6 +708,12 @@ export function createAdminRouter(pool) {
         console.log(`[Hero Image] Deleted old primary asset ${existingPrimary.id} for POI ${sanitizedPoiId}`);
       }
 
+      // Set image_drive_file_id so frontend knows a primary image exists
+      await pool.query(
+        "UPDATE pois SET image_drive_file_id = 'image-server', updated_at = NOW() WHERE id = $1",
+        [sanitizedPoiId]
+      );
+
       console.log(`Admin ${req.user.email} accepted hero image for POI ${sanitizedPoiId}: asset ${uploadResult.assetId}`);
       res.json({ success: true, assetId: uploadResult.assetId });
     } catch (error) {
