@@ -401,8 +401,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, showIma
 function EditView({ destination, editedData, setEditedData, onSave, onCancel, onDelete, saving, deleting, onPreviewCoordsChange, isNewPOI, isNewOrganization, _onImageUpdate, isLinearFeature, showImage = true }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [aiError, setAiError] = useState(null);
-  const [researchSources, setResearchSources] = useState(null);
-
   // Prompt editor modal state
   const [showPromptEditor, setShowPromptEditor] = useState(false);
   const [promptType, setPromptType] = useState(null); // 'brief' or 'historical'
@@ -412,6 +410,16 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
   // Research state
   const [researching, setResearching] = useState(false);
+
+  // Draft approval modal state (multi-pass research v2)
+  const [researchDraft, setResearchDraft] = useState(null);
+  const [showDraftModal, setShowDraftModal] = useState(false);
+  const [draftFieldStates, setDraftFieldStates] = useState({});
+
+  // Hero image modal state
+  const [heroImageDraft, setHeroImageDraft] = useState(null);
+  const [generatingHeroImage, setGeneratingHeroImage] = useState(false);
+  const [acceptingHeroImage, setAcceptingHeroImage] = useState(false);
 
   // Pending image state (staging area for image uploads until save)
   const [pendingImage, setPendingImage] = useState(null);
@@ -563,18 +571,20 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
     }));
   };
 
-  // Research with AI - fills all fields
+  // Research with AI v2 - multi-pass with draft approval
   const handleResearch = async () => {
     setResearching(true);
     setAiError(null);
-    setResearchSources(null);
 
     try {
-      const response = await fetch('/api/admin/ai/research', {
+      const response = await fetch('/api/admin/ai/research-v2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ destination: editedData })
+        body: JSON.stringify({
+          destination: editedData,
+          adminContext: editedData.research_context || ''
+        })
       });
 
       if (!response.ok) {
@@ -582,27 +592,118 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         throw new Error(error.error || 'Research failed');
       }
 
-      const data = await response.json();
+      const result = await response.json();
 
-      // Update all fields that have data
-      setEditedData(prev => ({
-        ...prev,
-        property_owner: data.property_owner || prev.property_owner,
-        primary_activities: data.primary_activities || prev.primary_activities,
-        surface: data.surface || prev.surface,
-        pets: data.pets || prev.pets,
-        brief_description: data.brief_description || prev.brief_description,
-        historical_description: data.historical_description || prev.historical_description
-      }));
+      // Show draft modal for approval instead of directly applying
+      setResearchDraft(result.data);
+      // Initialize all fields as accepted by default
+      const fields = ['era_id', 'property_owner', 'primary_activities', 'surface', 'pets', 'brief_description', 'historical_description'];
+      const initialStates = {};
+      for (const field of fields) {
+        initialStates[field] = result.data[field] != null;
+      }
+      setDraftFieldStates(initialStates);
+      setShowDraftModal(true);
 
-      // Store sources for display
-      if (data.sources && data.sources.length > 0) {
-        setResearchSources(data.sources);
+      // Auto-start hero image generation concurrently
+      if (destination?.id) {
+        setGeneratingHeroImage(true);
+        fetch('/api/admin/ai/generate-hero-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            poiId: destination.id,
+            poiName: editedData.name,
+            briefDescription: result.data.brief_description || editedData.brief_description,
+            historicalDescription: result.data.historical_description || editedData.historical_description,
+            era: result.data.era || editedData.era_name || ''
+          })
+        })
+          .then(res => res.ok ? res.json() : res.json().then(e => Promise.reject(new Error(e.error || 'Image generation failed'))))
+          .then(img => setHeroImageDraft(img))
+          .catch(err => setAiError(`Hero image: ${err.message}`))
+          .finally(() => setGeneratingHeroImage(false));
       }
     } catch (err) {
       setAiError(err.message);
     } finally {
       setResearching(false);
+    }
+  };
+
+  // Accept research draft — apply selected fields to editedData, optionally save hero image
+  const handleAcceptDraft = async () => {
+    const updates = {};
+    if (draftFieldStates.era_id && researchDraft.era_id) updates.era_id = researchDraft.era_id;
+    if (draftFieldStates.property_owner && researchDraft.property_owner) updates.property_owner = researchDraft.property_owner;
+    if (draftFieldStates.primary_activities && researchDraft.primary_activities) updates.primary_activities = researchDraft.primary_activities;
+    if (draftFieldStates.surface && researchDraft.surface) updates.surface = researchDraft.surface;
+    if (draftFieldStates.pets && researchDraft.pets) updates.pets = researchDraft.pets;
+    if (draftFieldStates.brief_description && researchDraft.brief_description) updates.brief_description = researchDraft.brief_description;
+    if (draftFieldStates.historical_description && researchDraft.historical_description) updates.historical_description = researchDraft.historical_description;
+
+    setEditedData(prev => ({ ...prev, ...updates }));
+
+    // Save hero image if one was generated
+    if (heroImageDraft && destination?.id) {
+      try {
+        setAcceptingHeroImage(true);
+        const response = await fetch('/api/admin/ai/accept-hero-image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({
+            poiId: destination.id,
+            imageData: heroImageDraft.imageData,
+            mimeType: heroImageDraft.mimeType
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          setAiError(`Hero image save failed: ${error.error}`);
+        }
+      } catch (err) {
+        setAiError(`Hero image save failed: ${err.message}`);
+      } finally {
+        setAcceptingHeroImage(false);
+      }
+    }
+
+    setShowDraftModal(false);
+    setResearchDraft(null);
+    setHeroImageDraft(null);
+  };
+
+  // Generate hero image
+  const handleGenerateHeroImage = async () => {
+    setGeneratingHeroImage(true);
+    try {
+      const response = await fetch('/api/admin/ai/generate-hero-image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          poiId: destination?.id,
+          poiName: editedData.name,
+          briefDescription: editedData.brief_description,
+          historicalDescription: editedData.historical_description,
+          era: editedData.era_name || researchDraft?.era || ''
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Image generation failed');
+      }
+
+      const result = await response.json();
+      setHeroImageDraft(result);
+    } catch (err) {
+      setAiError(err.message);
+    } finally {
+      setGeneratingHeroImage(false);
     }
   };
 
@@ -707,6 +808,30 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </div>
       )}
 
+      {/* Research with AI — top of Info tab, right under image */}
+      <div className="research-section">
+        <button
+          className="research-btn"
+          onClick={handleResearch}
+          disabled={researching || !editedData.name}
+          title={!editedData.name ? 'Enter a name first' : 'Research this location and fill all fields'}
+        >
+          {researching ? 'Researching...' : 'Research with AI'}
+        </button>
+        <span className="research-hint">Multi-pass research with draft approval</span>
+      </div>
+
+      <div className="edit-section">
+        <label>Research Context <span className="field-hint">(optional notes for AI)</span></label>
+        <textarea
+          value={editedData.research_context || ''}
+          onChange={(e) => handleChange('research_context', e.target.value)}
+          placeholder="Add context to guide AI research (e.g., 'This is a historic gristmill built in 1810, focus on canal era connections')"
+          rows={2}
+          style={{ resize: 'vertical' }}
+        />
+      </div>
+
       <div className="edit-section">
         <label>Name *</label>
         <input
@@ -717,36 +842,30 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         />
       </div>
 
-      {/* Research with AI button - fills all fields */}
-      <div className="research-section">
-        <button
-          className="research-btn"
-          onClick={handleResearch}
-          disabled={researching || !editedData.name}
-          title={!editedData.name ? 'Enter a name first' : 'Research this location and fill all fields'}
-        >
-          {researching ? 'Researching...' : 'Research with AI'}
-        </button>
-        <span className="research-hint">Searches the web to fill all fields below</span>
-      </div>
-
-      {researchSources && (
-        <div className="research-sources">
-          <strong>Sources:</strong>
-          <ul>
-            {researchSources.map((source, i) => (
-              <li key={i}>
-                {source.startsWith('http') ? (
-                  <a href={source} target="_blank" rel="noopener noreferrer">{source}</a>
-                ) : source}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       <div className="edit-section">
-        <label>Brief Description</label>
+        <label>
+          Brief Description
+          <button
+            className="prompt-edit-icon"
+            title="Edit & generate with AI prompt"
+            onClick={async () => {
+              try {
+                const resp = await fetch('/api/admin/ai/prompt-preview', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  credentials: 'include',
+                  body: JSON.stringify({ promptKey: 'gemini_prompt_brief', destination: editedData })
+                });
+                if (resp.ok) {
+                  const { interpolated } = await resp.json();
+                  setEditablePrompt(interpolated);
+                }
+              } catch { /* ignore */ }
+              setPromptType('brief');
+              setShowPromptEditor(true);
+            }}
+          >&#9998;</button>
+        </label>
         <textarea
           value={editedData.brief_description || ''}
           onChange={(e) => {
@@ -1049,7 +1168,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
           <button className="cancel-btn" onClick={handleCancelWithCleanup} disabled={saving || deleting}>
             Cancel
           </button>
-          <button className="save-btn" onClick={handleSaveWithImage} disabled={saving || deleting}>
+          <button className="save-btn" onClick={handleSaveWithImage} disabled={saving || deleting || researching}>
             {saving ? 'Saving...' : (isNewPOI ? 'Create POI' : isNewOrganization ? 'Create Organization' : 'Save Changes')}
           </button>
         </div>
@@ -1080,6 +1199,123 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
                 {deleting ? 'Deleting...' : 'Yes, Delete'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Draft Approval Modal — multi-pass research results */}
+      {showDraftModal && researchDraft && (
+        <div className="prompt-editor-overlay" onClick={() => { setShowDraftModal(false); setResearchDraft(null); }}>
+          <div className="draft-approval-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="prompt-editor-header">
+              <h3>Research Draft</h3>
+              <button className="close-btn" onClick={() => { setShowDraftModal(false); setResearchDraft(null); }}>&times;</button>
+            </div>
+            <p className="prompt-editor-hint">Review AI research results. Toggle fields to accept or skip.</p>
+
+            {destination?.id && (
+              <div className="draft-hero-section">
+                {generatingHeroImage && !heroImageDraft ? (
+                  <div className="draft-hero-generating">
+                    <div className="hero-generating-indicator">
+                      <div className="hero-spinner"></div>
+                      <span>Generating hero image...</span>
+                    </div>
+                  </div>
+                ) : heroImageDraft ? (
+                  <div className="draft-hero-preview">
+                    <div className="hero-image-preview">
+                      <img
+                        src={`data:${heroImageDraft.mimeType};base64,${heroImageDraft.imageData}`}
+                        alt="Generated hero image"
+                      />
+                    </div>
+                    <div className="draft-hero-actions">
+                      <button
+                        className="research-btn"
+                        onClick={() => { setHeroImageDraft(null); handleGenerateHeroImage(); }}
+                        disabled={generatingHeroImage}
+                      >
+                        {generatingHeroImage ? 'Generating...' : 'Regenerate'}
+                      </button>
+                      <button
+                        className="reject-btn"
+                        onClick={() => setHeroImageDraft(null)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            <div className="draft-fields">
+              {[
+                { key: 'era_id', label: 'Era', display: researchDraft.era, short: true },
+                { key: 'property_owner', label: 'Property Owner', display: researchDraft.property_owner, short: true },
+                { key: 'primary_activities', label: 'Activities', display: researchDraft.primary_activities, short: true },
+                { key: 'surface', label: 'Surface', display: researchDraft.surface, short: true },
+                { key: 'pets', label: 'Pets', display: researchDraft.pets, short: true },
+                { key: 'brief_description', label: 'Brief Description', display: researchDraft.brief_description },
+                { key: 'historical_description', label: 'Historical Description', display: researchDraft.historical_description },
+              ].filter(f => f.display != null).map(field => (
+                <div key={field.key} className={`draft-field ${draftFieldStates[field.key] ? 'accepted' : 'rejected'}`}>
+                  <div className="draft-field-header">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={draftFieldStates[field.key] || false}
+                        onChange={(e) => setDraftFieldStates(prev => ({ ...prev, [field.key]: e.target.checked }))}
+                      />
+                      {field.label}
+                    </label>
+                  </div>
+                  {field.short ? (
+                    <input
+                      type="text"
+                      className="draft-field-input"
+                      value={researchDraft[field.key === 'era_id' ? 'era' : field.key] || ''}
+                      onChange={(e) => {
+                        const dataKey = field.key === 'era_id' ? 'era' : field.key;
+                        setResearchDraft(prev => ({ ...prev, [dataKey]: e.target.value }));
+                      }}
+                    />
+                  ) : (
+                    <textarea
+                      className="draft-field-textarea"
+                      value={researchDraft[field.key] || ''}
+                      onChange={(e) => setResearchDraft(prev => ({ ...prev, [field.key]: e.target.value }))}
+                      rows={field.key === 'historical_description' ? 8 : 4}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className="prompt-editor-buttons">
+              <button className="reject-btn" onClick={() => { setShowDraftModal(false); setResearchDraft(null); setHeroImageDraft(null); }}>
+                Reject
+              </button>
+              <button className="research-btn" onClick={handleAcceptDraft} disabled={generatingHeroImage}>
+                {generatingHeroImage ? 'Waiting for image...' : 'Accept'}
+              </button>
+            </div>
+
+            {researchDraft.sources && researchDraft.sources.length > 0 && (
+              <div className="draft-sources">
+                <strong>Sources:</strong>
+                <ul>
+                  {researchDraft.sources.map((source, i) => (
+                    <li key={i}>
+                      {source.startsWith('http') ? (
+                        <a href={source} target="_blank" rel="noopener noreferrer">{source}</a>
+                      ) : source}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3222,7 +3458,29 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             <div className="history-tab-content">
               {isEditing ? (
                 <div className="edit-section">
-                  <label>Historical Description</label>
+                  <label>
+                    Historical Description
+                    <button
+                      className="prompt-edit-icon"
+                      title="Edit & generate with AI prompt"
+                      onClick={async () => {
+                        try {
+                          const resp = await fetch('/api/admin/ai/prompt-preview', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify({ promptKey: 'gemini_prompt_historical', destination: editedData })
+                          });
+                          if (resp.ok) {
+                            const { interpolated } = await resp.json();
+                            setEditablePrompt(interpolated);
+                          }
+                        } catch { /* ignore */ }
+                        setPromptType('historical');
+                        setShowPromptEditor(true);
+                      }}
+                    >&#9998;</button>
+                  </label>
                   <textarea
                     value={editedData.historical_description || ''}
                     onChange={(e) => {
@@ -3522,7 +3780,29 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           <div className="history-tab-content">
             {isEditing ? (
               <div className="edit-section">
-                <label>Historical Description</label>
+                <label>
+                  Historical Description
+                  <button
+                    className="prompt-edit-icon"
+                    title="Edit & generate with AI prompt"
+                    onClick={async () => {
+                      try {
+                        const resp = await fetch('/api/admin/ai/prompt-preview', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          credentials: 'include',
+                          body: JSON.stringify({ promptKey: 'gemini_prompt_historical', destination: editedData })
+                        });
+                        if (resp.ok) {
+                          const { interpolated } = await resp.json();
+                          setEditablePrompt(interpolated);
+                        }
+                      } catch { /* ignore */ }
+                      setPromptType('historical');
+                      setShowPromptEditor(true);
+                    }}
+                  >&#9998;</button>
+                </label>
                 <textarea
                   value={editedData.historical_description || ''}
                   onChange={(e) => {
