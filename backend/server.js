@@ -260,7 +260,7 @@ async function initDatabase() {
         difficulty VARCHAR(50),
 
         -- Image storage
-        image_drive_file_id VARCHAR(255),
+        has_primary_image BOOLEAN DEFAULT FALSE,
 
         deleted BOOLEAN DEFAULT FALSE,
 
@@ -309,11 +309,11 @@ async function initDatabase() {
       const migrated = await client.query(`
         INSERT INTO pois (name, poi_type, latitude, longitude, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
-                          cell_signal, more_info_link, image_drive_file_id,
+                          cell_signal, more_info_link, has_primary_image,
                           deleted, created_at, updated_at)
         SELECT name, 'point', latitude, longitude, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
-               cell_signal, more_info_link, image_drive_file_id,
+               cell_signal, more_info_link, has_primary_image,
                COALESCE(deleted, FALSE),
                created_at, updated_at
         FROM destinations
@@ -338,12 +338,12 @@ async function initDatabase() {
         INSERT INTO pois (name, poi_type, geometry, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
                           cell_signal, more_info_link, length_miles, difficulty,
-                          image_drive_file_id,
+                          has_primary_image,
                           deleted, created_at, updated_at)
         SELECT name, feature_type, geometry, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
                cell_signal, more_info_link, length_miles, difficulty,
-               image_drive_file_id,
+               has_primary_image,
                COALESCE(deleted, FALSE),
                created_at, updated_at
         FROM linear_features
@@ -822,7 +822,7 @@ app.get('/api/pois', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
@@ -854,7 +854,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
@@ -1043,7 +1043,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
       SELECT DISTINCT vp.id, vp.name, vp.poi_type, vp.property_owner,
              vp.brief_description, vp.era_id, e.name as era_name, vp.era, vp.historical_description,
              vp.primary_activities, vp.surface, vp.pets, vp.cell_signal,
-             vp.more_info_link, vp.image_drive_file_id,
+             vp.more_info_link, vp.has_primary_image,
              vp.deleted,
              vp.created_at, vp.updated_at
       FROM pois vp
@@ -1075,7 +1075,7 @@ app.get('/api/destinations', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_drive_file_id, p.news_url, p.events_url, p.research_context, p.status_url,
+             p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1099,7 +1099,7 @@ app.get('/api/destinations/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.image_drive_file_id, p.news_url, p.events_url, p.research_context, p.status_url,
+             p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
@@ -1125,7 +1125,7 @@ app.get('/api/linear-features', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
@@ -1149,7 +1149,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.length_miles, p.difficulty, p.image_drive_file_id,
+             p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p

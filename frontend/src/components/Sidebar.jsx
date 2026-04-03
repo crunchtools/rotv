@@ -210,7 +210,7 @@ function EditableCellSignal({ level, onChange }) {
 function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, showImage = true, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap, onCollectStatus }) {
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
-  const imageUrl = destination.image_drive_file_id
+  const imageUrl = destination.has_primary_image
     ? `/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`
     : null;
 
@@ -780,7 +780,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         !isNewPOI && destination?.id ? (
           <ImageUploader
             destinationId={destination.id}
-            hasImage={!!editedData.image_drive_file_id}
+            hasImage={!!editedData.has_primary_image}
             pendingImage={pendingImage}
             onPendingImageChange={setPendingImage}
             updatedAt={editedData.updated_at}
@@ -2064,7 +2064,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
               {associatedPoisWithAssocId.map(associatedPoi => {
                 // Use thumbnail endpoint for fast, cached small images
                 // Include updated_at for cache busting when image changes
-                const imageUrl = associatedPoi.image_drive_file_id
+                const imageUrl = associatedPoi.has_primary_image
                   ? `/api/pois/${associatedPoi.id}/thumbnail?size=small&v=${associatedPoi.updated_at || Date.now()}`
                   : null;
 
@@ -2392,7 +2392,7 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
             {associatedPoisWithAssocId.map(associatedPoi => {
               // Use thumbnail endpoint for fast, cached small images
               // Include updated_at for cache busting when image changes
-              const imageUrl = associatedPoi.image_drive_file_id
+              const imageUrl = associatedPoi.has_primary_image
                 ? `/api/pois/${associatedPoi.id}/thumbnail?size=small&v=${associatedPoi.updated_at || Date.now()}`
                 : null;
 
@@ -3212,7 +3212,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   if (isLinearFeature) {
     // Use thumbnail service for faster loading
     // Include updated_at for cache busting when image changes
-    const linearImageUrl = linearFeature?.image_drive_file_id
+    const linearImageUrl = linearFeature?.has_primary_image
       ? `/api/pois/${linearFeature.id}/thumbnail?size=medium&v=${linearFeature.updated_at || Date.now()}`
       : null;
 
@@ -3312,7 +3312,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         {isEditing && linearFeature?.id ? (
           <ImageUploader
             destinationId={linearFeature.id}
-            hasImage={!!linearFeature.image_drive_file_id}
+            hasImage={!!linearFeature.has_primary_image}
             pendingImage={pendingImage}
             onPendingImageChange={setPendingImage}
             updatedAt={linearFeature.updated_at}
@@ -3424,7 +3424,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                   if (onLinearFeatureUpdate) {
                     onLinearFeatureUpdate({
                       ...linearFeature,
-                      image_drive_file_id: driveFileId || null
+                      has_primary_image: !!driveFileId
                     });
                   }
                 }}
@@ -3552,7 +3552,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
   // Use thumbnail service for faster loading
   // Include updated_at for cache busting when image changes
-  const imageUrl = destination?.image_drive_file_id
+  const imageUrl = destination?.has_primary_image
     ? `/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`
     : null;
 
@@ -3634,7 +3634,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       {isEditing && destination?.id ? (
         <ImageUploader
           destinationId={destination.id}
-          hasImage={!!destination.image_drive_file_id}
+          hasImage={!!destination.has_primary_image}
           pendingImage={pendingImage}
           onPendingImageChange={setPendingImage}
           updatedAt={destination.updated_at}
@@ -3747,7 +3747,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 if (onDestinationUpdate) {
                   onDestinationUpdate({
                     ...destination,
-                    image_drive_file_id: driveFileId || null
+                    has_primary_image: !!driveFileId
                   });
                 }
               }}

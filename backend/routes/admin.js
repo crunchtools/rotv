@@ -12,7 +12,6 @@ import {
   createDriveServiceWithRefresh,
   ensureDriveFolders,
   uploadIconToDrive,
-  uploadImageToDrive,
   downloadFileFromDrive,
   deleteFileFromDrive,
   getDriveFolderLink,
@@ -365,7 +364,7 @@ export function createAdminRouter(pool) {
     const allowedFields = [
       'poi_type', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
-      'events_url', 'news_url', 'image_drive_file_id'
+      'events_url', 'news_url', 'has_primary_image'
     ];
 
     const fields = ['name'];
@@ -708,9 +707,9 @@ export function createAdminRouter(pool) {
         console.log(`[Hero Image] Deleted old primary asset ${existingPrimary.id} for POI ${sanitizedPoiId}`);
       }
 
-      // Set image_drive_file_id so frontend knows a primary image exists
+      // Flag that this POI has a primary image
       await pool.query(
-        "UPDATE pois SET image_drive_file_id = 'image-server', updated_at = NOW() WHERE id = $1",
+        "UPDATE pois SET has_primary_image = TRUE, updated_at = NOW() WHERE id = $1",
         [sanitizedPoiId]
       );
 
@@ -1744,7 +1743,7 @@ export function createAdminRouter(pool) {
     }
 
     try {
-      const poiCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      const poiCheck = await pool.query('SELECT id, name FROM pois WHERE id = $1', [id]);
       if (poiCheck.rows.length === 0) {
         return res.status(404).json({ error: 'POI not found' });
       }
@@ -1781,44 +1780,15 @@ export function createAdminRouter(pool) {
       }
 
       await pool.query(
-        'UPDATE pois SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
         [id]
       );
-
-      // Also upload to Drive for backup (if user has OAuth credentials)
-      let driveFileId = null;
-      if (req.user.oauth_credentials) {
-        try {
-          if (poi.image_drive_file_id) {
-            const drive = createDriveService(req.user.oauth_credentials);
-            await deleteFileFromDrive(drive, poi.image_drive_file_id);
-            console.log(`Deleted old image from Drive: ${poi.image_drive_file_id}`);
-          }
-
-          const ext = req.file.mimetype.split('/')[1];
-          const sanitizedName = poi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-          const filename = `${sanitizedName}-${Date.now()}.${ext}`;
-
-          const drive = createDriveService(req.user.oauth_credentials);
-          driveFileId = await uploadImageToDrive(drive, pool, filename, req.file.buffer, req.file.mimetype);
-
-          await pool.query(
-            'UPDATE pois SET image_drive_file_id = $1 WHERE id = $2',
-            [driveFileId, id]
-          );
-
-          console.log(`Backed up image to Drive: ${driveFileId}`);
-        } catch (driveError) {
-          console.warn(`Failed to backup image to Drive (non-fatal):`, driveError.message);
-        }
-      }
 
       console.log(`Admin ${req.user.email} uploaded image for POI ${id}`);
       res.json({
         success: true,
         message: 'Image uploaded successfully',
-        image_server_asset_id: imageServerAssetId,
-        drive_file_id: driveFileId
+        image_server_asset_id: imageServerAssetId
       });
     } catch (error) {
       console.error('Error uploading POI image:', error);
@@ -1850,7 +1820,7 @@ export function createAdminRouter(pool) {
         return res.status(400).json({ error: 'Image must be less than 10MB' });
       }
 
-      const poiCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      const poiCheck = await pool.query('SELECT id, name FROM pois WHERE id = $1', [id]);
       if (poiCheck.rows.length === 0) {
         return res.status(404).json({ error: 'POI not found' });
       }
@@ -1887,44 +1857,15 @@ export function createAdminRouter(pool) {
       }
 
       await pool.query(
-        'UPDATE pois SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
         [id]
       );
-
-      // Also upload to Drive as backup if user has OAuth
-      let driveFileId = null;
-      if (req.user.oauth_credentials) {
-        try {
-          const drive = createDriveService(req.user.oauth_credentials);
-
-          if (poi.image_drive_file_id) {
-            try {
-              await deleteFileFromDrive(drive, poi.image_drive_file_id);
-              console.log(`Deleted old image from Drive: ${poi.image_drive_file_id}`);
-            } catch (deleteError) {
-              console.warn('Failed to delete old image from Drive (non-fatal):', deleteError.message);
-            }
-          }
-
-          driveFileId = await uploadImageToDrive(drive, pool, poi.name, buffer, mimeType);
-
-          await pool.query(
-            'UPDATE pois SET image_drive_file_id = $1 WHERE id = $2',
-            [driveFileId, id]
-          );
-
-          console.log(`Backed up image to Drive: ${driveFileId}`);
-        } catch (driveError) {
-          console.warn('Failed to backup to Drive (non-fatal):', driveError.message);
-        }
-      }
 
       console.log(`Admin ${req.user.email} uploaded image for POI ${id}`);
       res.json({
         success: true,
         message: 'Image uploaded successfully',
-        image_server_asset_id: imageServerAssetId,
-        drive_file_id: driveFileId
+        image_server_asset_id: imageServerAssetId
       });
     } catch (error) {
       console.error('Error uploading POI image:', error);
@@ -1937,7 +1878,7 @@ export function createAdminRouter(pool) {
     const { id } = req.params;
 
     try {
-      const poiCheck = await pool.query('SELECT id, name, image_drive_file_id FROM pois WHERE id = $1', [id]);
+      const poiCheck = await pool.query('SELECT id, name, has_primary_image FROM pois WHERE id = $1', [id]);
       if (poiCheck.rows.length === 0) {
         return res.status(404).json({ error: 'POI not found' });
       }
@@ -1959,24 +1900,13 @@ export function createAdminRouter(pool) {
         }
       }
 
-      if (!hasImageServerAsset && !poi.image_drive_file_id) {
+      if (!hasImageServerAsset && !poi.has_primary_image) {
         return res.status(400).json({ error: 'POI has no image' });
-      }
-
-      // Delete from Drive if present and user has OAuth
-      if (poi.image_drive_file_id && req.user.oauth_credentials) {
-        try {
-          const drive = createDriveService(req.user.oauth_credentials);
-          await deleteFileFromDrive(drive, poi.image_drive_file_id);
-          console.log(`Deleted image from Drive: ${poi.image_drive_file_id}`);
-        } catch (driveError) {
-          console.warn(`Failed to delete from Drive (non-fatal):`, driveError.message);
-        }
       }
 
       await pool.query(
         `UPDATE pois
-         SET image_drive_file_id = NULL,
+         SET has_primary_image = FALSE,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [id]
@@ -2196,7 +2126,7 @@ export function createAdminRouter(pool) {
         RETURNING id, name, poi_type, latitude, longitude, property_owner,
                   brief_description, era_id, historical_description, primary_activities,
                   surface, pets, cell_signal, more_info_link, length_miles, difficulty,
-                  image_drive_file_id, geometry_drive_file_id,
+                  has_primary_image, geometry_drive_file_id,
                   boundary_type, boundary_color, status_url, news_url, events_url,
                   deleted, created_at, updated_at
       `, values);
