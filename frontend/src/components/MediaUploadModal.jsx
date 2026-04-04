@@ -1,5 +1,4 @@
 import { useState, useRef } from 'react';
-import PropTypes from 'prop-types';
 import './MediaUploadModal.css';
 
 /**
@@ -332,11 +331,5 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
     </div>
   );
 }
-
-MediaUploadModal.propTypes = {
-  poiId: PropTypes.number.isRequired,
-  onClose: PropTypes.func.isRequired,
-  onSuccess: PropTypes.func.isRequired
-};
 
 export default MediaUploadModal;

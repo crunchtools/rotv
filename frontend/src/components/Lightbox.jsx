@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import PropTypes from 'prop-types';
 import './Lightbox.css';
 
 /**
@@ -169,22 +168,5 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
     </div>
   );
 }
-
-Lightbox.propTypes = {
-  media: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.number.isRequired,
-      media_type: PropTypes.oneOf(['image', 'video', 'youtube']).isRequired,
-      thumbnail_url: PropTypes.string.isRequired,
-      full_url: PropTypes.string,
-      youtube_url: PropTypes.string,
-      embed_url: PropTypes.string,
-      caption: PropTypes.string
-    })
-  ).isRequired,
-  initialIndex: PropTypes.number,
-  onClose: PropTypes.func.isRequired,
-  poiId: PropTypes.number
-};
 
 export default Lightbox;

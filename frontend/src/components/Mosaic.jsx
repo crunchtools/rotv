@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import PropTypes from 'prop-types';
 import Lightbox from './Lightbox';
 import './Mosaic.css';
 
@@ -84,23 +83,5 @@ function Mosaic({ media, poiId }) {
     </>
   );
 }
-
-Mosaic.propTypes = {
-  media: PropTypes.arrayOf(
-    PropTypes.shape({
-      id: PropTypes.number.isRequired,
-      media_type: PropTypes.oneOf(['image', 'video', 'youtube']).isRequired,
-      thumbnail_url: PropTypes.string.isRequired,
-      full_url: PropTypes.string,
-      youtube_url: PropTypes.string,
-      youtube_id: PropTypes.string,
-      embed_url: PropTypes.string,
-      caption: PropTypes.string,
-      role: PropTypes.string,
-      likes_count: PropTypes.number
-    })
-  ).isRequired,
-  poiId: PropTypes.number.isRequired
-};
 
 export default Mosaic;
