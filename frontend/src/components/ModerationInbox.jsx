@@ -438,6 +438,12 @@ function ModerationInbox({ onCountChange }) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   };
 
+  const formatEventDate = (dateStr) => {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+  };
+
   const formatPubDate = (dateStr) => {
     if (!dateStr) return '';
     const str = String(dateStr);
@@ -759,9 +765,9 @@ function ModerationInbox({ onCountChange }) {
                       {/* Event dates */}
                       {item.content_type === 'event' && (item.start_date || item.end_date) && (
                         <div style={{ fontSize: '0.78rem', color: '#7b1fa2', fontWeight: '500', margin: '2px 0' }}>
-                          {item.start_date && formatDate(item.start_date)}
+                          {item.start_date && formatEventDate(item.start_date)}
                           {item.start_date && item.end_date && ' — '}
-                          {item.end_date && formatDate(item.end_date)}
+                          {item.end_date && formatEventDate(item.end_date)}
                         </div>
                       )}
 
