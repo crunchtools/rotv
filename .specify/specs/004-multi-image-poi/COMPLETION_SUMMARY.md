@@ -18,8 +18,9 @@ Successfully implemented comprehensive multi-image support for Points of Interes
 - **Role-based moderation** (auto-approve for media admins)
 - **Security hardened** (4 HIGH severity vulnerabilities fixed)
 
-**Development Effort:** 13 commits, ~2100 lines of code, 5 implementation phases
-**Quality Assurance:** 15 integration tests, Gemini review, Gatehouse security scan
+**Development Effort:** 14 commits, ~2,400 lines of code, 5 implementation phases
+**Quality Assurance:** 15 integration tests, 2 Gemini review rounds, Gatehouse security scan
+**Security Hardening:** 1 CRITICAL + 8 HIGH/MEDIUM severity issues fixed across 2 code reviews
 **Production Ready:** All quality gates passed, deployment runbook created
 
 ---
@@ -179,10 +180,19 @@ Successfully implemented comprehensive multi-image support for Points of Interes
   - Test suite: ✅ 237/239 passing (2 pre-existing failures)
   - POI media tests: ✅ 15/15 passing
   - No regressions introduced
-- ✅ **Gemini Code Review**
+- ✅ **Gemini Code Review (Round 1)**
   - Analyzed authentication middleware
   - Found 1 issue: unused `hasAdminRole` function
   - **Fixed:** Removed dead code
+- ✅ **Gemini Code Review (Round 2 - Comprehensive)**
+  - Analyzed entire PR (database, backend, frontend, security)
+  - Found 1 CRITICAL + 4 MEDIUM issues
+  - **CRITICAL:** DELETE order backwards (guaranteed orphaned files)
+  - **MEDIUM:** Missing CHECK constraint for 'rejected' status
+  - **MEDIUM:** Missing ON DELETE SET NULL for user FKs
+  - **MEDIUM:** Missing caption length constraint
+  - **Deferred:** DoS vulnerability (rate limiting), mosaic caching
+  - **All critical/medium issues fixed** via migration 016
 - ✅ **Gatehouse Security Review**
   - Initial scan: 13 findings (9 HIGH, 1 MEDIUM, 3 LOW)
   - **Fixed 4 HIGH severity issues:**
@@ -204,7 +214,7 @@ Successfully implemented comprehensive multi-image support for Points of Interes
 
 ---
 
-## Commit History (13 commits)
+## Commit History (14 commits)
 
 ### Implementation (8 commits)
 1. `342ea7f` - spec: add specification for multi-image POI support (#181)
@@ -220,21 +230,25 @@ Successfully implemented comprehensive multi-image support for Points of Interes
 9. `801a58e` - fix: remove PropTypes to match existing codebase patterns
 10. `eadb118` - fix: correct admin endpoint paths in integration tests
 
-### Security Fixes (2 commits)
-11. `763c034` - fix: remove unused hasAdminRole middleware (Gemini review)
+### Security Fixes (3 commits)
+11. `763c034` - fix: remove unused hasAdminRole middleware (Gemini review round 1)
 12. `2b83669` - fix: address Gatehouse security and bug findings (4 HIGH severity)
+13. `b7c79bb` - fix: address critical Gemini review findings (#182 review round 2)
+    - CRITICAL: Reversed DELETE order (prevents orphaned files)
+    - Migration 016: Data integrity constraints (moderation_status, user FKs, caption length)
 
 ### Documentation (1 commit)
-13. `054b9eb` - docs: update implementation status - all phases complete
-14. `b50ebc9` - docs: add comprehensive deployment runbook
+14. `054b9eb` - docs: update implementation status - all phases complete
+    - Also includes DEPLOYMENT_RUNBOOK.md, COMPLETION_SUMMARY.md, GEMINI_REVIEW.md
 
 ---
 
 ## Files Changed
 
-### New Files (9)
+### New Files (11)
 **Database & Backend:**
 - `backend/migrations/015_add_poi_media.sql` (185 lines)
+- `backend/migrations/016_fix_poi_media_constraints.sql` (95 lines)
 - `backend/scripts/migrate-primary-images.js` (82 lines)
 - `backend/tests/poiMedia.integration.test.js` (231 lines)
 
@@ -253,21 +267,23 @@ Successfully implemented comprehensive multi-image support for Points of Interes
 - `backend/services/moderationService.js` (1 line change)
 - `frontend/src/components/Sidebar.jsx` (+80 lines, mosaic integration)
 
-### Documentation (4)
+### Documentation (6)
 - `.specify/specs/004-multi-image-poi/spec.md` (350 lines)
 - `.specify/specs/004-multi-image-poi/plan.md` (280 lines)
 - `.specify/specs/004-multi-image-poi/IMPLEMENTATION_STATUS.md` (240 lines)
 - `.specify/specs/004-multi-image-poi/TESTING_CHECKLIST.md` (567 lines)
 - `.specify/specs/004-multi-image-poi/DEPLOYMENT_RUNBOOK.md` (379 lines)
+- `.specify/specs/004-multi-image-poi/COMPLETION_SUMMARY.md` (469 lines)
+- `.specify/specs/004-multi-image-poi/GEMINI_REVIEW.md` (470 lines)
 
-**Total Lines Added:** ~2,100
-**Total Commits:** 13
+**Total Lines Added:** ~2,400
+**Total Commits:** 14
 
 ---
 
 ## Security Improvements
 
-### Vulnerabilities Fixed (4 HIGH Severity)
+### Gatehouse Review - Vulnerabilities Fixed (4 HIGH Severity)
 
 1. **Data Consistency Issue**
    - **Issue:** `/api/pois/:id/thumbnail` queried image server directly, bypassing poi_media table
@@ -292,6 +308,42 @@ Successfully implemented comprehensive multi-image support for Points of Interes
    - **Impact:** Attacker could upload `../../malicious.jpg` to escape intended directory
    - **Fix:** Sanitize filename - strip unsafe chars, remove leading dots, limit length
    - **Severity:** HIGH
+
+### Gemini Review Round 2 - Additional Issues Fixed (1 CRITICAL + 4 MEDIUM)
+
+5. **🚨 CRITICAL: Incorrect DELETE Order**
+   - **Issue:** Database deleted first, then image server - guarantees orphaned files when image server delete fails
+   - **Impact:** Unmanageable orphaned files waste storage, no way to clean up
+   - **Fix:** Reversed order - delete from image server first, then database (see `backend/routes/admin.js:4773`)
+   - **Rationale:** Orphaned files worse than orphaned DB records. DB records detectable/fixable.
+   - **Severity:** CRITICAL
+
+6. **MEDIUM: Missing moderation_status Constraint**
+   - **Issue:** Database allowed arbitrary `moderation_status` values
+   - **Fix:** Added 'rejected' to CHECK constraint (migration 016)
+   - **Severity:** MEDIUM
+
+7. **MEDIUM: User FK ON DELETE Behavior**
+   - **Issue:** Deleting user who submitted/moderated media would fail with foreign key error
+   - **Fix:** Changed to `ON DELETE SET NULL` (migration 016)
+   - **Severity:** MEDIUM
+
+8. **MEDIUM: Caption Length Validation**
+   - **Issue:** Frontend has 200 char max, DB has no limit (allows abuse, breaks layouts)
+   - **Fix:** Added CHECK constraint `length(caption) <= 200` (migration 016)
+   - **Severity:** MEDIUM
+
+9. **LOW: Moderation Queue Index**
+   - **Issue:** Query performance degrades as table grows
+   - **Fix:** Added index on `(moderation_status, created_at)` (migration 016)
+   - **Severity:** LOW
+
+**Deferred for Future** (not critical for MVP):
+- DoS mitigation via rate limiting or signed URL redirects
+- Mosaic caching (Redis)
+- Authorization model consolidation (`req.user.role` vs `is_admin`)
+
+See `.specify/specs/004-multi-image-poi/GEMINI_REVIEW.md` for complete analysis.
 
 ---
 
