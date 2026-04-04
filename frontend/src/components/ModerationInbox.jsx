@@ -180,7 +180,9 @@ function ModerationInbox({ onCountChange }) {
       if (response.ok) {
         const data = await response.json();
         if (data.date_updated) {
-          notify('success', `${type} #${id} — date set: ${data.publication_date} (${data.date_confidence})`);
+          const parts = [`${type} #${id} — date set: ${data.publication_date} (${data.date_confidence})`];
+          if (data.start_date) parts.push(`event: ${data.start_date}${data.end_date ? ' — ' + data.end_date : ''}`);
+          notify('success', parts.join(', '));
         } else {
           notify('success', `${type} #${id} — could not determine date`);
         }
@@ -691,219 +693,226 @@ function ModerationInbox({ onCountChange }) {
                 backgroundColor: selectedItems.has(itemKey) ? '#e3f2fd' : 'white',
                 transition: 'background 0.15s'
               }}>
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                  {isPending && (
-                    <input type="checkbox" checked={selectedItems.has(itemKey)}
-                      onChange={() => toggleSelect(item.content_type, item.id)}
-                      style={{ marginTop: '4px' }} />
-                  )}
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {/* Header row: badges + title + score */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', flexWrap: 'wrap' }}>
-                      <span style={{
-                        backgroundColor: getTypeBadgeColor(item.content_type),
-                        color: 'white', padding: '1px 8px', borderRadius: '10px',
-                        fontSize: '0.72rem', fontWeight: 'bold', textTransform: 'uppercase'
-                      }}>
-                        {item.content_type}
-                      </span>
-
-                      {item.content_source && getSourceBadge(item.content_source) && (
-                        <span style={{
-                          backgroundColor: getSourceBadge(item.content_source).color,
-                          color: 'white', padding: '1px 8px', borderRadius: '10px',
-                          fontSize: '0.72rem', fontWeight: 'bold'
-                        }}>
-                          {getSourceBadge(item.content_source).label}
-                        </span>
-                      )}
-
-                      {!isPending && (
-                        <span style={{
-                          backgroundColor: item.moderation_status === 'rejected' ? '#f44336' : '#4caf50',
-                          color: 'white', padding: '1px 8px', borderRadius: '10px',
-                          fontSize: '0.72rem', fontWeight: 'bold'
-                        }}>
-                          {item.moderation_status === 'rejected' ? 'Rejected' : 'Approved'}
-                        </span>
-                      )}
-
-                      {item.additional_url_count > 0 && (
-                        <span style={{
-                          backgroundColor: '#1565c0', color: 'white',
-                          padding: '1px 8px', borderRadius: '10px',
-                          fontSize: '0.72rem', fontWeight: 'bold'
-                        }}>
-                          +{item.additional_url_count} URL{item.additional_url_count > 1 ? 's' : ''}
-                        </span>
-                      )}
-
-                      <span style={{ fontWeight: 'bold', fontSize: '0.92rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isExpanded ? 'normal' : 'nowrap' }}>
-                        {item.title || '(untitled)'}
-                      </span>
-
-                      {item.confidence_score !== null && item.confidence_score !== undefined && (
-                        <span style={{
-                          color: getConfidenceColor(item.confidence_score),
-                          fontWeight: 'bold', fontSize: '0.82rem', flexShrink: 0
-                        }}>
-                          {(item.confidence_score * 100).toFixed(0)}%
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Description */}
-                    {item.description && (
-                      <p style={{
-                        margin: '2px 0', fontSize: '0.83rem', color: '#555',
-                        overflow: 'hidden', textOverflow: 'ellipsis',
-                        display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 2,
-                        WebkitBoxOrient: 'vertical'
-                      }}>
-                        {item.description}
-                      </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                    {isPending && (
+                      <input type="checkbox" checked={selectedItems.has(itemKey)}
+                        onChange={() => toggleSelect(item.content_type, item.id)}
+                        style={{ marginTop: '4px' }} />
                     )}
-                    <a onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
-                      style={{ color: '#4a7c23', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'none', fontWeight: 500 }}>
-                      {isExpanded ? 'Show less' : 'Show more'}
-                    </a>
 
-                    {/* Source URL (expanded, read-only) */}
-                    {isExpanded && item.source_url && (
-                      <div style={{ margin: '4px 0', fontSize: '0.78rem' }}>
-                        <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
-                          {item.source_url}
-                        </a>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      {/* Header row: badges + title + score */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', flexWrap: 'wrap' }}>
+                        <span style={{
+                          backgroundColor: getTypeBadgeColor(item.content_type),
+                          color: 'white', padding: '1px 8px', borderRadius: '10px',
+                          fontSize: '0.72rem', fontWeight: 'bold', textTransform: 'uppercase'
+                        }}>
+                          {item.content_type}
+                        </span>
+
+                        {item.content_source && getSourceBadge(item.content_source) && (
+                          <span style={{
+                            backgroundColor: getSourceBadge(item.content_source).color,
+                            color: 'white', padding: '1px 8px', borderRadius: '10px',
+                            fontSize: '0.72rem', fontWeight: 'bold'
+                          }}>
+                            {getSourceBadge(item.content_source).label}
+                          </span>
+                        )}
+
+                        {!isPending && (
+                          <span style={{
+                            backgroundColor: item.moderation_status === 'rejected' ? '#f44336' : '#4caf50',
+                            color: 'white', padding: '1px 8px', borderRadius: '10px',
+                            fontSize: '0.72rem', fontWeight: 'bold'
+                          }}>
+                            {item.moderation_status === 'rejected' ? 'Rejected' : 'Approved'}
+                          </span>
+                        )}
+
                         {item.additional_url_count > 0 && (
-                          <span style={{ color: '#888', fontSize: '0.72rem', marginLeft: '6px' }}>
-                            (+{item.additional_url_count} more — click Edit to manage)
+                          <span style={{
+                            backgroundColor: '#1565c0', color: 'white',
+                            padding: '1px 8px', borderRadius: '10px',
+                            fontSize: '0.72rem', fontWeight: 'bold'
+                          }}>
+                            +{item.additional_url_count} URL{item.additional_url_count > 1 ? 's' : ''}
+                          </span>
+                        )}
+
+                        <span style={{ fontWeight: 'bold', fontSize: '0.92rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isExpanded ? 'normal' : 'nowrap' }}>
+                          {item.title || '(untitled)'}
+                        </span>
+
+                        {item.confidence_score !== null && item.confidence_score !== undefined && (
+                          <span style={{
+                            color: getConfidenceColor(item.confidence_score),
+                            fontWeight: 'bold', fontSize: '0.82rem', flexShrink: 0
+                          }}>
+                            {(item.confidence_score * 100).toFixed(0)}%
                           </span>
                         )}
                       </div>
-                    )}
 
-                    {/* Timestamp + Publication Date */}
-                    <div style={{ fontSize: '0.73rem', color: '#aaa', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                      <span>{formatDate(item.created_at)}</span>
-                      {item.moderated_at && <span>&middot; Moderated {formatDate(item.moderated_at)}</span>}
-                      {item.content_type !== 'photo' && item.publication_date && (
-                        <span>&middot; Pub: {formatPubDate(item.publication_date)}</span>
+                      {/* Event dates */}
+                      {item.content_type === 'event' && (item.start_date || item.end_date) && (
+                        <div style={{ fontSize: '0.78rem', color: '#7b1fa2', fontWeight: '500', margin: '2px 0' }}>
+                          {item.start_date && formatDate(item.start_date)}
+                          {item.start_date && item.end_date && ' — '}
+                          {item.end_date && formatDate(item.end_date)}
+                        </div>
+                      )}
+
+                      {/* Description */}
+                      {item.description && (
+                        <p style={{
+                          margin: '2px 0', fontSize: '0.83rem', color: '#555',
+                          overflow: 'hidden', textOverflow: 'ellipsis',
+                          display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 2,
+                          WebkitBoxOrient: 'vertical'
+                        }}>
+                          {item.description}
+                        </p>
+                      )}
+                      <a onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
+                        style={{ color: '#4a7c23', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'none', fontWeight: 500 }}>
+                        {isExpanded ? 'Show less' : 'Show more'}
+                      </a>
+
+                      {/* Source URL (expanded, read-only) */}
+                      {isExpanded && item.source_url && (
+                        <div style={{ margin: '4px 0', fontSize: '0.78rem' }}>
+                          <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
+                            {item.source_url}
+                          </a>
+                          {item.additional_url_count > 0 && (
+                            <span style={{ color: '#888', fontSize: '0.72rem', marginLeft: '6px' }}>
+                              (+{item.additional_url_count} more — click Edit to manage)
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Timestamp + Publication Date */}
+                      <div style={{ fontSize: '0.73rem', color: '#aaa', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
+                        <span>{formatDate(item.created_at)}</span>
+                        {item.moderated_at && <span>&middot; Moderated {formatDate(item.moderated_at)}</span>}
+                        {item.content_type !== 'photo' && item.publication_date && (
+                          <span>&middot; Pub: {formatPubDate(item.publication_date)}</span>
+                        )}
+                      </div>
+
+                      {/* Triage chips — No Date, No URL / Wrong URL, Other */}
+                      {item.content_type !== 'photo' && (() => {
+                        const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
+                        const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
+                        const hasNoDate = !item.publication_date || item.date_confidence === 'unknown';
+                        const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
+                        const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
+                        const hasOther = issues.some(i => !urlIssueCodes.includes(i));
+                        if (!hasNoDate && !hasUrlIssue && !hasOther) return null;
+                        const chipStyle = (color) => ({
+                          padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem',
+                          fontWeight: 'bold', backgroundColor: color, color: 'white'
+                        });
+                        return (
+                          <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
+                            {hasNoDate && <span style={chipStyle('#e65100')}>No Date</span>}
+                            {hasUrlIssue && <span style={chipStyle('#e65100')}>{urlLabel}</span>}
+                            {hasOther && <span style={chipStyle('#b71c1c')}>Other</span>}
+                          </div>
+                        );
+                      })()}
+
+                      {/* Edit form (expanded, all fields) */}
+                      {isEditing && (
+                        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px',
+                          padding: '12px', backgroundColor: '#fffbe6', borderRadius: '6px', border: '1px solid #ffe082' }}>
+                          <div style={{ padding: '8px', backgroundColor: '#fff8e1', borderRadius: '4px',
+                            fontSize: '0.8rem', color: '#555', lineHeight: '1.4', marginBottom: '4px' }}>
+                            {item.ai_reasoning && (<><strong>AI Analysis:</strong> {item.ai_reasoning}<br/></>)}
+                            <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                              Status: {item.moderation_status === 'auto_approved' ? 'Auto-approved by AI' :
+                                item.moderation_status === 'published' ? 'Approved by human' :
+                                item.moderation_status}
+                              {item.confidence_score != null && ` · Score: ${(item.confidence_score * 100).toFixed(0)}%`}
+                            </span>
+                          </div>
+                          {(FIELD_CONFIGS[item.content_type] || []).map(fc => (
+                            <div key={fc.key}>
+                              <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
+                                {fc.label}
+                              </label>
+                              {renderFieldInput(fc, editFields, setEditFields)}
+                            </div>
+                          ))}
+                          {/* Additional URLs management */}
+                          {item.content_type !== 'photo' && (
+                            <div>
+                              <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
+                                Additional URLs
+                              </label>
+                              {(itemUrls[itemKey] || []).map(u => (
+                                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px',
+                                  padding: '4px 8px', backgroundColor: 'white', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
+                                  <a href={u.url} target="_blank" rel="noopener noreferrer"
+                                    style={{ color: '#1976d2', flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {u.url}
+                                  </a>
+                                  {u.source_name && <span style={{ color: '#888', fontSize: '0.7rem', flexShrink: 0 }}>({u.source_name})</span>}
+                                  <button onClick={() => handleRemoveUrl(item.content_type, item.id, u.id)}
+                                    style={{ background: 'none', border: 'none', color: '#f44336', cursor: 'pointer',
+                                      padding: '0 4px', fontSize: '0.85rem', flexShrink: 0, lineHeight: 1 }}
+                                    title="Remove URL">x</button>
+                                </div>
+                              ))}
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <input type="text" value={newUrlInput} onChange={e => setNewUrlInput(e.target.value)}
+                                  placeholder="Add another source URL..."
+                                  onKeyDown={e => e.key === 'Enter' && handleAddUrl(item.content_type, item.id)}
+                                  style={{ flex: 1, padding: '5px 8px', fontSize: '0.78rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+                                <button onClick={() => handleAddUrl(item.content_type, item.id)} disabled={addingUrl || !newUrlInput.trim()}
+                                  style={btnStyle(addingUrl || !newUrlInput.trim() ? '#ccc' : '#1976d2')}>
+                                  {addingUrl ? 'Adding...' : 'Add URL'}
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                            <button onClick={() => handleSave(item.content_type, item.id)}
+                              style={btnStyle('#4caf50')}>Save</button>
+                            <button onClick={() => { setEditingItem(null); setEditFields({}); }}
+                              style={btnStyle('transparent', '#666', '1px solid #ccc')}>Cancel</button>
+                          </div>
+                        </div>
                       )}
                     </div>
-
-                    {/* Triage chips — No Date, No URL / Wrong URL, Other */}
-                    {item.content_type !== 'photo' && (() => {
-                      const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
-                      const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
-                      const hasNoDate = !item.publication_date || item.date_confidence === 'unknown';
-                      const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
-                      const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
-                      const hasOther = issues.some(i => !urlIssueCodes.includes(i));
-                      if (!hasNoDate && !hasUrlIssue && !hasOther) return null;
-                      const chipStyle = (color) => ({
-                        padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem',
-                        fontWeight: 'bold', backgroundColor: color, color: 'white'
-                      });
-                      return (
-                        <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
-                          {hasNoDate && <span style={chipStyle('#e65100')}>No Date</span>}
-                          {hasUrlIssue && <span style={chipStyle('#e65100')}>{urlLabel}</span>}
-                          {hasOther && <span style={chipStyle('#b71c1c')}>Other</span>}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Edit form (expanded, all fields) */}
-                    {isEditing && (
-                      <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px',
-                        padding: '12px', backgroundColor: '#fffbe6', borderRadius: '6px', border: '1px solid #ffe082' }}>
-                        <div style={{ padding: '8px', backgroundColor: '#fff8e1', borderRadius: '4px',
-                          fontSize: '0.8rem', color: '#555', lineHeight: '1.4', marginBottom: '4px' }}>
-                          {item.ai_reasoning && (<><strong>AI Analysis:</strong> {item.ai_reasoning}<br/></>)}
-                          <span style={{ fontSize: '0.75rem', color: '#888' }}>
-                            Status: {item.moderation_status === 'auto_approved' ? 'Auto-approved by AI' :
-                              item.moderation_status === 'published' ? 'Approved by human' :
-                              item.moderation_status}
-                            {item.confidence_score != null && ` · Score: ${(item.confidence_score * 100).toFixed(0)}%`}
-                          </span>
-                        </div>
-                        {(FIELD_CONFIGS[item.content_type] || []).map(fc => (
-                          <div key={fc.key}>
-                            <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
-                              {fc.label}
-                            </label>
-                            {renderFieldInput(fc, editFields, setEditFields)}
-                          </div>
-                        ))}
-                        {/* Additional URLs management */}
-                        {item.content_type !== 'photo' && (
-                          <div>
-                            <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
-                              Additional URLs
-                            </label>
-                            {(itemUrls[itemKey] || []).map(u => (
-                              <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px',
-                                padding: '4px 8px', backgroundColor: 'white', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
-                                <a href={u.url} target="_blank" rel="noopener noreferrer"
-                                  style={{ color: '#1976d2', flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                  {u.url}
-                                </a>
-                                {u.source_name && <span style={{ color: '#888', fontSize: '0.7rem', flexShrink: 0 }}>({u.source_name})</span>}
-                                <button onClick={() => handleRemoveUrl(item.content_type, item.id, u.id)}
-                                  style={{ background: 'none', border: 'none', color: '#f44336', cursor: 'pointer',
-                                    padding: '0 4px', fontSize: '0.85rem', flexShrink: 0, lineHeight: 1 }}
-                                  title="Remove URL">x</button>
-                              </div>
-                            ))}
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <input type="text" value={newUrlInput} onChange={e => setNewUrlInput(e.target.value)}
-                                placeholder="Add another source URL..."
-                                onKeyDown={e => e.key === 'Enter' && handleAddUrl(item.content_type, item.id)}
-                                style={{ flex: 1, padding: '5px 8px', fontSize: '0.78rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-                              <button onClick={() => handleAddUrl(item.content_type, item.id)} disabled={addingUrl || !newUrlInput.trim()}
-                                style={btnStyle(addingUrl || !newUrlInput.trim() ? '#ccc' : '#1976d2')}>
-                                {addingUrl ? 'Adding...' : 'Add URL'}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                          <button onClick={() => handleSave(item.content_type, item.id)}
-                            style={btnStyle('#4caf50')}>Save</button>
-                          <button onClick={() => { setEditingItem(null); setEditFields({}); }}
-                            style={btnStyle('transparent', '#666', '1px solid #ccc')}>Cancel</button>
-                        </div>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Action buttons */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', flexShrink: 0, alignItems: 'flex-end' }}>
-                    <div style={{ display: 'flex', gap: '3px' }}>
-                      <button onClick={() => startEditing(item)}
-                        style={actionBtn()}>Edit</button>
-                      {item.content_type !== 'photo' && (
-                        <button onClick={() => startMerge(item)}
-                          style={actionBtn()}>Merge</button>
-                      )}
-                    </div>
-                    <div style={{ display: 'flex', gap: '3px' }}>
-                      {isPending && (
-                        <>
-                          <button onClick={() => handleApprove(item.content_type, item.id)}
-                            style={actionBtn()}>Approve</button>
-                          <button onClick={() => handleReject(item.content_type, item.id)}
-                            style={actionBtn()}>Reject</button>
-                        </>
-                      )}
-                      {!isPending && (
-                        <button onClick={() => handleRequeue(item.content_type, item.id)}
-                          style={actionBtn()}>Requeue</button>
-                      )}
-                    </div>
+                  {/* Action buttons — horizontal row below content */}
+                  <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', paddingLeft: isPending ? '26px' : '0' }}>
+                    <button onClick={() => startEditing(item)}
+                      style={actionBtn()}>Edit</button>
                     {item.content_type !== 'photo' && (
-                      <div style={{ display: 'flex', gap: '3px' }}>
+                      <button onClick={() => startMerge(item)}
+                        style={actionBtn()}>Merge</button>
+                    )}
+                    {isPending && (
+                      <>
+                        <button onClick={() => handleApprove(item.content_type, item.id)}
+                          style={actionBtn()}>Approve</button>
+                        <button onClick={() => handleReject(item.content_type, item.id)}
+                          style={actionBtn()}>Reject</button>
+                      </>
+                    )}
+                    {!isPending && (
+                      <button onClick={() => handleRequeue(item.content_type, item.id)}
+                        style={actionBtn()}>Requeue</button>
+                    )}
+                    {item.content_type !== 'photo' && (
+                      <>
                         <button onClick={() => handleFixDate(item.content_type, item.id)}
                           disabled={fixingDateItem === itemKey}
                           style={actionBtn(fixingDateItem === itemKey)}>
@@ -914,7 +923,7 @@ function ModerationInbox({ onCountChange }) {
                           style={actionBtn(researchingItem === itemKey)}>
                           {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
                         </button>
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>
