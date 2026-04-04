@@ -920,26 +920,38 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Fix: Query poi_media table for primary image (Gatehouse finding)
+    const result = await pool.query(`
+      SELECT image_server_asset_id
+      FROM poi_media
+      WHERE poi_id = $1
+        AND role = 'primary'
+        AND media_type IN ('image', 'video')
+        AND moderation_status IN ('published', 'auto_approved')
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const assetId = result.rows[0].image_server_asset_id;
+
     if (!imageServerClient.initialized) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    // Get primary asset from image server
-    const asset = await imageServerClient.getPrimaryAsset(id);
-    if (!asset) {
+    const thumbnailResult = await imageServerClient.fetchThumbnailData(assetId);
+    if (!thumbnailResult.success) {
+      console.error(`[Thumbnail] Fetch failed for POI ${id}:`, thumbnailResult.error);
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const result = await imageServerClient.fetchThumbnailData(asset.id);
-    if (!result.success) {
-      console.error(`[Thumbnail] Fetch failed for POI ${id}:`, result.error);
-      return res.status(404).json({ error: 'Image not found' });
-    }
-
-    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Type', thumbnailResult.contentType);
     res.setHeader('Cache-Control', 'public, max-age=604800');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(result.data);
+    res.send(thumbnailResult.data);
   } catch (error) {
     console.error('Error serving POI thumbnail:', error);
     res.status(500).json({ error: 'Failed to serve thumbnail' });
@@ -1079,6 +1091,12 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
         }
       }
 
+      // Fix: Sanitize filename to prevent path traversal (Gatehouse finding)
+      const sanitizedFilename = req.file.originalname
+        .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace unsafe chars with underscore
+        .replace(/^\.+/, '') // Remove leading dots
+        .substring(0, 255); // Limit length
+
       // Upload to image server
       const uploadFn = media_type === 'image'
         ? imageServerClient.uploadImage
@@ -1089,7 +1107,7 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
         req.file.buffer,
         parseInt(id),
         'gallery',
-        req.file.originalname,
+        sanitizedFilename,
         req.file.mimetype
       );
 
@@ -1160,6 +1178,11 @@ app.get('/api/assets/:assetId/thumbnail', async (req, res) => {
   try {
     const { assetId } = req.params;
 
+    // Fix: Validate assetId format to prevent SSRF (Gatehouse finding)
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(assetId)) {
+      return res.status(400).json({ error: 'Invalid asset ID' });
+    }
+
     if (!imageServerClient.initialized) {
       return res.status(404).json({ error: 'Asset not found' });
     }
@@ -1186,6 +1209,11 @@ app.get('/api/assets/:assetId/thumbnail', async (req, res) => {
 app.get('/api/assets/:assetId/original', async (req, res) => {
   try {
     const { assetId } = req.params;
+
+    // Fix: Validate assetId format to prevent SSRF (Gatehouse finding)
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(assetId)) {
+      return res.status(400).json({ error: 'Invalid asset ID' });
+    }
 
     if (!imageServerClient.initialized) {
       return res.status(404).json({ error: 'Asset not found' });

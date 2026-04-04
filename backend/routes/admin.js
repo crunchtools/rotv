@@ -4771,7 +4771,8 @@ export function createAdminRouter(pool) {
       const { permanent } = req.query;
 
       if (permanent === 'true') {
-        // Permanent delete - remove from database and image server
+        // Permanent delete - remove from database first, then image server
+        // Fix: Database delete before image server to avoid dangling references (Gatehouse finding)
         const mediaResult = await pool.query(
           'SELECT * FROM poi_media WHERE id = $1',
           [id]
@@ -4783,14 +4784,20 @@ export function createAdminRouter(pool) {
 
         const media = mediaResult.rows[0];
 
-        // Delete from image server if it's an image/video
-        if (media.image_server_asset_id) {
-          const imageServerClient = (await import('../services/imageServerClient.js')).default;
-          await imageServerClient.deleteAsset(media.image_server_asset_id);
-        }
-
-        // Delete from database
+        // Delete from database first
         await pool.query('DELETE FROM poi_media WHERE id = $1', [id]);
+
+        // Then attempt to delete from image server if it's an image/video
+        // This is best-effort cleanup; database is already consistent
+        if (media.image_server_asset_id) {
+          try {
+            const imageServerClient = (await import('../services/imageServerClient.js')).default;
+            await imageServerClient.deleteAsset(media.image_server_asset_id);
+          } catch (cleanupError) {
+            console.warn(`Failed to delete asset ${media.image_server_asset_id} from image server:`, cleanupError);
+            // Continue - database is clean, image server cleanup failed but not critical
+          }
+        }
 
         res.json({ success: true, message: 'Media permanently deleted' });
       } else {
