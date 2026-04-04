@@ -38,13 +38,14 @@ router.get('/facebook/callback',
 router.get('/user', (req, res) => {
   if (req.isAuthenticated()) {
     // Return user info without sensitive data (no oauth_credentials)
-    const { id, email, name, picture_url, is_admin, favorite_destinations, preferences } = req.user;
+    const { id, email, name, picture_url, is_admin, role, favorite_destinations, preferences } = req.user;
     res.json({
       id,
       email,
       name,
       pictureUrl: picture_url,
       isAdmin: is_admin,
+      role: role || 'viewer',
       favorites: favorite_destinations || [],
       preferences: preferences || {}
     });
@@ -73,7 +74,8 @@ router.post('/logout', (req, res) => {
 router.get('/status', (req, res) => {
   res.json({
     authenticated: req.isAuthenticated(),
-    isAdmin: req.user?.is_admin || false
+    isAdmin: req.user?.is_admin || false,
+    role: req.user?.role || 'viewer'
   });
 });
 

@@ -368,6 +368,7 @@ async function initDatabase() {
         oauth_provider VARCHAR(50) NOT NULL,
         oauth_provider_id VARCHAR(255) NOT NULL,
         is_admin BOOLEAN DEFAULT FALSE,
+        role VARCHAR(20) DEFAULT 'viewer',
         preferences JSONB DEFAULT '{}',
         favorite_destinations INTEGER[] DEFAULT '{}',
         oauth_credentials JSONB DEFAULT NULL,
