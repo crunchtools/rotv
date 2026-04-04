@@ -318,9 +318,21 @@ ENVFILE
             echo "  Install with: npm install"
         fi
 
+        # Run Gatehouse AI code review
+        GATEHOUSE_EXIT_CODE=0
         echo ""
-        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ] && [ $ESLINT_EXIT_CODE -eq 0 ]; then
-            echo "✓ Tests, Gourmand, and ESLint checks completed successfully"
+        echo "Running Gatehouse AI code review..."
+        if command -v gatehouse &> /dev/null; then
+            gatehouse
+            GATEHOUSE_EXIT_CODE=$?
+        else
+            echo "⚠ Gatehouse not installed (skipping)"
+            echo "  Install with: uv tool install gatehouse"
+        fi
+
+        echo ""
+        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ] && [ $ESLINT_EXIT_CODE -eq 0 ] && [ $GATEHOUSE_EXIT_CODE -eq 0 ]; then
+            echo "✓ Tests, Gourmand, ESLint, and Gatehouse checks completed successfully"
         else
             if [ $TEST_EXIT_CODE -ne 0 ]; then
                 echo "❌ Tests failed"
@@ -331,6 +343,9 @@ ENVFILE
             if [ $ESLINT_EXIT_CODE -ne 0 ]; then
                 echo "❌ ESLint found issues"
                 echo "   Try: npm run lint:fix"
+            fi
+            if [ $GATEHOUSE_EXIT_CODE -ne 0 ]; then
+                echo "❌ Gatehouse found blocking issues"
             fi
             exit 1
         fi
@@ -355,6 +370,19 @@ ENVFILE
             echo ""
             echo "Install with:"
             echo "  cargo install --git https://codeberg.org/mattdm/gourmand.git"
+            exit 1
+        fi
+        ;;
+
+    gatehouse)
+        echo "Running Gatehouse AI code review..."
+        if command -v gatehouse &> /dev/null; then
+            gatehouse
+        else
+            echo "❌ Gatehouse not installed"
+            echo ""
+            echo "Install with:"
+            echo "  uv tool install gatehouse"
             exit 1
         fi
         ;;
@@ -545,9 +573,10 @@ ENVFILE
         echo "  seed           Pull fresh data from production server via SSH"
         echo ""
         echo "TESTING COMMANDS"
-        echo "  test           Run full test suite (174 tests) + Gourmand + ESLint"
+        echo "  test           Run full test suite (174 tests) + Gourmand + ESLint + Gatehouse"
         echo "  gourmand       Run Gourmand AI slop detection only (fast iteration)"
         echo "  lint           Run ESLint on JavaScript/React code (fast iteration)"
+        echo "  gatehouse      Run Gatehouse AI code review only (fast iteration)"
         echo ""
         echo "DEBUGGING COMMANDS"
         echo "  logs           Follow all container logs (stdout/stderr)"
