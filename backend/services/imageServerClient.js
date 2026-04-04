@@ -138,7 +138,12 @@ class ImageServerClient {
       const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/original`);
 
       if (!response.ok) {
-        throw new Error(`Fetch failed: ${response.status}`);
+        // Fix: Return detailed error status for better error handling (Gemini review)
+        return {
+          success: false,
+          error: `Fetch failed: ${response.status}`,
+          statusCode: response.status
+        };
       }
 
       const buffer = await response.arrayBuffer();
@@ -151,7 +156,12 @@ class ImageServerClient {
       };
     } catch (error) {
       console.error(`[ImageServer] Failed to fetch asset data:`, error);
-      return { success: false, error: error.message };
+      // Network/timeout errors -> 503 Service Unavailable
+      return {
+        success: false,
+        error: error.message,
+        statusCode: 503
+      };
     }
   }
 
@@ -167,7 +177,12 @@ class ImageServerClient {
       const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/thumbnail`);
 
       if (!response.ok) {
-        throw new Error(`Fetch failed: ${response.status}`);
+        // Fix: Return detailed error status for better error handling (Gemini review)
+        return {
+          success: false,
+          error: `Fetch failed: ${response.status}`,
+          statusCode: response.status
+        };
       }
 
       const buffer = await response.arrayBuffer();
@@ -180,7 +195,12 @@ class ImageServerClient {
       };
     } catch (error) {
       console.error(`[ImageServer] Failed to fetch thumbnail:`, error);
-      return { success: false, error: error.message };
+      // Network/timeout errors -> 503 Service Unavailable
+      return {
+        success: false,
+        error: error.message,
+        statusCode: 503
+      };
     }
   }
 

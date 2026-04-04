@@ -1236,12 +1236,18 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
     }
 
     if (!imageServerClient.initialized) {
-      return res.status(404).json({ error: 'Asset not found' });
+      return res.status(503).json({ error: 'Image service unavailable' });
     }
 
     const result = await imageServerClient.fetchThumbnailData(assetId);
     if (!result.success) {
-      return res.status(404).json({ error: 'Asset not found' });
+      // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
+      // 404 = asset doesn't exist, 502/503 = image server down
+      const statusCode = result.statusCode || 500;
+      const message = statusCode === 404 ? 'Asset not found' :
+                      statusCode >= 500 ? 'Image service error' :
+                      'Failed to fetch asset';
+      return res.status(statusCode).json({ error: message });
     }
 
     res.setHeader('Content-Type', result.contentType);
@@ -1268,12 +1274,18 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
     }
 
     if (!imageServerClient.initialized) {
-      return res.status(404).json({ error: 'Asset not found' });
+      return res.status(503).json({ error: 'Image service unavailable' });
     }
 
     const result = await imageServerClient.fetchAssetData(assetId);
     if (!result.success) {
-      return res.status(404).json({ error: 'Asset not found' });
+      // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
+      // 404 = asset doesn't exist, 502/503 = image server down
+      const statusCode = result.statusCode || 500;
+      const message = statusCode === 404 ? 'Asset not found' :
+                      statusCode >= 500 ? 'Image service error' :
+                      'Failed to fetch asset';
+      return res.status(statusCode).json({ error: message });
     }
 
     res.setHeader('Content-Type', result.contentType);
