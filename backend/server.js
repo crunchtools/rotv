@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
 import session from 'express-session';
+import rateLimit from 'express-rate-limit';
 import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
 import path from 'path';
@@ -62,6 +63,16 @@ const upload = multer({
   limits: {
     fileSize: 10 * 1024 * 1024 // 10MB max
   }
+});
+
+// Rate limiter for asset proxy endpoints (DoS mitigation)
+// Fix: Prevent bandwidth exhaustion attacks on image/video proxy (Gemini review)
+const assetProxyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  message: { error: 'Too many asset requests, please try again later' }
 });
 
 // Trust reverse proxy (for secure cookies behind CloudFlare/Apache)
@@ -1174,7 +1185,7 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
  * GET /api/assets/:assetId/thumbnail
  * Proxy thumbnail from image server
  */
-app.get('/api/assets/:assetId/thumbnail', async (req, res) => {
+app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) => {
   try {
     const { assetId } = req.params;
 
@@ -1206,7 +1217,7 @@ app.get('/api/assets/:assetId/thumbnail', async (req, res) => {
  * GET /api/assets/:assetId/original
  * Proxy original image/video from image server
  */
-app.get('/api/assets/:assetId/original', async (req, res) => {
+app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => {
   try {
     const { assetId } = req.params;
 

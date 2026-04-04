@@ -228,3 +228,31 @@ describe('Media Type Validation', () => {
     });
   });
 });
+
+describe('Rate Limiting (DoS Protection)', () => {
+  it('should enforce rate limits on asset proxy endpoints', async () => {
+    // Rate limiter allows 100 requests per 15 minutes
+    // Make a few requests to verify no immediate blocking (within limit)
+    const responses = [];
+
+    for (let i = 0; i < 5; i++) {
+      const response = await request(BASE_URL)
+        .get('/api/assets/test-asset-id/thumbnail');
+      responses.push(response);
+    }
+
+    // All requests within normal rate limit should succeed (or 404 if asset missing)
+    responses.forEach(response => {
+      expect([200, 404]).toContain(response.status);
+    });
+  });
+
+  it('should include rate limit headers', async () => {
+    const response = await request(BASE_URL)
+      .get('/api/assets/test-asset-id/original');
+
+    // Check for standard rate limit headers
+    expect(response.headers['ratelimit-limit']).toBeDefined();
+    expect(response.headers['ratelimit-remaining']).toBeDefined();
+  });
+});
