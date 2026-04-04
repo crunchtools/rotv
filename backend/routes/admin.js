@@ -691,20 +691,19 @@ export function createAdminRouter(pool) {
       const extension = mimeMap[mimeType] || 'png';
       const filename = `hero-${sanitizedPoiId}-${Date.now()}.${extension}`;
 
-      // Fix: upload first, then delete old — avoids leaving POI imageless if upload fails (PR #173 review)
+      // Delete existing primary asset before uploading (unique constraint on poi_id+role)
+      const existingPrimary = await imageServerClient.getPrimaryAsset(sanitizedPoiId);
+      if (existingPrimary) {
+        await imageServerClient.deleteAsset(existingPrimary.id);
+        console.log(`[Hero Image] Deleted old primary asset ${existingPrimary.id} for POI ${sanitizedPoiId}`);
+      }
+
       const uploadResult = await imageServerClient.uploadImage(
         imageBuffer, sanitizedPoiId, 'primary', filename, mimeType
       );
 
       if (!uploadResult.success) {
         throw new Error(uploadResult.error || 'Upload failed');
-      }
-
-      // Delete old primary asset after successful upload
-      const existingPrimary = await imageServerClient.getPrimaryAsset(sanitizedPoiId);
-      if (existingPrimary && existingPrimary.id !== uploadResult.assetId) {
-        await imageServerClient.deleteAsset(existingPrimary.id);
-        console.log(`[Hero Image] Deleted old primary asset ${existingPrimary.id} for POI ${sanitizedPoiId}`);
       }
 
       // Flag that this POI has a primary image
