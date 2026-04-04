@@ -131,7 +131,40 @@ podman exec rootsofthevalley.org psql -U postgres -d rotv -c "SELECT COUNT(*) FR
 
 **Expected:** Count should match number of POIs with primary images
 
-### Step 6: Pull New Container Image
+### Step 6: Apply Data Integrity Migration
+
+```bash
+# Apply migration 016 (data integrity fixes from Gemini review)
+podman exec rootsofthevalley.org psql -U postgres -d rotv -f /app/migrations/016_fix_poi_media_constraints.sql
+```
+
+**Expected Output:**
+```
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE INDEX
+```
+
+**Verify Constraints:**
+```bash
+podman exec rootsofthevalley.org psql -U postgres -d rotv -c "
+SELECT conname, contype
+FROM pg_constraint
+WHERE conrelid = 'poi_media'::regclass
+ORDER BY conname;
+"
+```
+
+**Expected:** Should show constraints including:
+- `poi_media_caption_length_check`
+- `poi_media_moderation_check`
+- `poi_media_moderated_by_fkey` (with ON DELETE SET NULL)
+- `poi_media_submitted_by_fkey` (with ON DELETE SET NULL)
+
+### Step 7: Pull New Container Image
 
 ```bash
 # Pull latest image
@@ -143,7 +176,7 @@ podman images quay.io/crunchtools/rotv
 
 **Expected:** New image with recent timestamp
 
-### Step 7: Restart Service
+### Step 8: Restart Service
 
 ```bash
 # Restart the service
@@ -174,7 +207,7 @@ journalctl -u rootsofthevalley.org --no-pager -n 50
 # - Port conflict
 ```
 
-### Step 8: Verify Deployment
+### Step 9: Verify Deployment
 
 ```bash
 # Test health endpoint
@@ -192,7 +225,7 @@ journalctl -u rootsofthevalley.org --since "5 minutes ago" --no-pager | grep -i 
 - Media endpoint returns JSON with count
 - No critical errors in logs
 
-### Step 9: Sync Secondary Checkout
+### Step 10: Sync Secondary Checkout
 
 ```bash
 # Exit SSH, return to local machine
@@ -207,7 +240,7 @@ git pull
 cd /home/fatherlinux/Projects/rotv 2>/dev/null && git checkout master && git pull || echo "Secondary checkout not found"
 ```
 
-### Step 10: Cleanup Worktree
+### Step 11: Cleanup Worktree
 
 ```bash
 # Return to main checkout
