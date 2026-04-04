@@ -3,6 +3,8 @@ import ImageUploader from './ImageUploader';
 import CollectionStatus from './CollectionStatus';
 import ThumbnailCarousel from './ThumbnailCarousel';
 import { formatDateTime } from './NewsEventsShared';
+import Mosaic from './Mosaic';
+import MediaUploadModal from './MediaUploadModal';
 
 // Sidebar component with tabs: Info, News, Events, History
 // Share Modal Component
@@ -208,7 +210,38 @@ function EditableCellSignal({ level, onChange }) {
 
 // Read-only view component - works for both destinations and linear features
 function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, showImage = true, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap, onCollectStatus }) {
-  // Use thumbnail service for faster loading
+  // Multi-media state
+  const [media, setMedia] = useState([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [user, setUser] = useState(null);
+
+  // Check authentication status
+  useEffect(() => {
+    fetch('/api/auth/status', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setUser(data?.user || null))
+      .catch(() => setUser(null));
+  }, []);
+
+  // Fetch media for this POI
+  useEffect(() => {
+    if (!destination?.id) return;
+
+    setMediaLoading(true);
+    fetch(`/api/pois/${destination.id}/media`, { credentials: 'include' })
+      .then(res => res.ok ? res.json() : { mosaic: [], all_media: [] })
+      .then(data => {
+        setMedia(data.all_media || []);
+      })
+      .catch(err => {
+        console.error('Failed to load media:', err);
+        setMedia([]);
+      })
+      .finally(() => setMediaLoading(false));
+  }, [destination?.id]);
+
+  // Legacy: Use thumbnail service for backward compatibility
   // Include updated_at for cache busting when image changes
   const imageUrl = destination.has_primary_image
     ? `/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`
@@ -227,18 +260,69 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, showIma
     return '/icons/thumbnails/destination.svg';
   };
 
+  const handleUploadSuccess = () => {
+    // Refresh media after successful upload
+    fetch(`/api/pois/${destination.id}/media`, { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => setMedia(data.all_media || []))
+      .catch(err => console.error('Failed to refresh media:', err));
+  };
+
   return (
     <div className="view-container">
       <div className="view-scroll">
-        {/* Image section - URL computed from ID (can be hidden if shown elsewhere) */}
+        {/* Multi-media section */}
         {showImage && (
-          <div className={`sidebar-image ${destination.poi_type === 'virtual' ? 'virtual-thumbnail' : ''}`}>
-            {imageUrl ? (
-              <img src={imageUrl} alt={destination.name} className={destination.poi_type === 'virtual' ? 'logo-image' : ''} />
+          <div className="sidebar-media-section">
+            {media.length > 0 ? (
+              <Mosaic media={media} poiId={destination.id} />
+            ) : !mediaLoading && destination.has_primary_image ? (
+              // Fallback: Show single image if media endpoint returned empty but has_primary_image is true
+              <div className={`sidebar-image ${destination.poi_type === 'virtual' ? 'virtual-thumbnail' : ''}`}>
+                <img src={imageUrl} alt={destination.name} className={destination.poi_type === 'virtual' ? 'logo-image' : ''} />
+              </div>
+            ) : !mediaLoading ? (
+              // No images - show default thumbnail
+              <div className={`sidebar-image ${destination.poi_type === 'virtual' ? 'virtual-thumbnail' : ''}`}>
+                <img src={getDefaultThumbnail()} alt={destination.name} className="default-thumbnail" />
+              </div>
             ) : (
-              <img src={getDefaultThumbnail()} alt={destination.name} className="default-thumbnail" />
+              // Loading state
+              <div className="sidebar-image loading">
+                <p>Loading media...</p>
+              </div>
+            )}
+
+            {/* Add Media button for authenticated users */}
+            {user && (
+              <button
+                className="add-media-button"
+                onClick={() => setUploadModalOpen(true)}
+                style={{
+                  marginTop: '8px',
+                  padding: '8px 16px',
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '14px',
+                  width: '100%'
+                }}
+              >
+                + Add Photo/Video
+              </button>
             )}
           </div>
+        )}
+
+        {/* Upload Modal */}
+        {uploadModalOpen && (
+          <MediaUploadModal
+            poiId={destination.id}
+            onClose={() => setUploadModalOpen(false)}
+            onSuccess={handleUploadSuccess}
+          />
         )}
 
         <div className="sidebar-content">
