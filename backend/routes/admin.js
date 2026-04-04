@@ -78,7 +78,7 @@ import { logInfo, logError } from '../services/jobLogger.js';
 
 const router = express.Router();
 
-export function createAdminRouter(pool) {
+export function createAdminRouter(pool, invalidateMosaicCache) {
   // Update POI coordinates (for point type POIs)
   router.put('/pois/:id/coordinates', isAdmin, async (req, res) => {
     const { id } = req.params;
@@ -4653,6 +4653,293 @@ export function createAdminRouter(pool) {
       res.status(500).json({ error: 'Failed to update user role' });
     }
   });
+
+  // ============================================================
+  // POI Media Management (Multi-Image Support - Issue #181)
+  // ============================================================
+
+  /**
+   * GET /admin/poi-media
+   * List all media for management
+   */
+  router.get('/poi-media', isAdmin, async (req, res) => {
+    try {
+      const { poi_id, status } = req.query;
+
+      let query = `
+        SELECT
+          pm.id,
+          pm.poi_id,
+          pm.media_type,
+          pm.image_server_asset_id,
+          pm.youtube_url,
+          pm.role,
+          pm.sort_order,
+          pm.likes_count,
+          pm.caption,
+          pm.moderation_status,
+          pm.submitted_by,
+          pm.created_at,
+          p.name AS poi_name,
+          u.email AS submitted_by_email
+        FROM poi_media pm
+        JOIN pois p ON pm.poi_id = p.id
+        LEFT JOIN users u ON pm.submitted_by = u.id
+        WHERE 1=1
+      `;
+
+      const params = [];
+
+      if (poi_id) {
+        params.push(parseInt(poi_id));
+        query += ` AND pm.poi_id = $${params.length}`;
+      }
+
+      if (status) {
+        params.push(status);
+        query += ` AND pm.moderation_status = $${params.length}`;
+      }
+
+      query += ` ORDER BY pm.created_at DESC LIMIT 100`;
+
+      const result = await pool.query(query, params);
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error listing poi media:', error);
+      res.status(500).json({ error: 'Failed to list media' });
+    }
+  });
+
+  /**
+   * PATCH /admin/poi-media/:id
+   * Update media metadata (role, sort_order, caption)
+   */
+  router.patch('/poi-media/:id', isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role, sort_order, caption } = req.body;
+
+      const updates = [];
+      const params = [id];
+
+      if (role !== undefined) {
+        params.push(role);
+        updates.push(`role = $${params.length}`);
+      }
+
+      if (sort_order !== undefined) {
+        params.push(sort_order);
+        updates.push(`sort_order = $${params.length}`);
+      }
+
+      if (caption !== undefined) {
+        params.push(caption);
+        updates.push(`caption = $${params.length}`);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ error: 'No updates provided' });
+      }
+
+      const query = `
+        UPDATE poi_media
+        SET ${updates.join(', ')}
+        WHERE id = $1
+        RETURNING *
+      `;
+
+      const result = await pool.query(query, params);
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Media not found' });
+      }
+
+      // Invalidate mosaic cache when media metadata changes
+      if (invalidateMosaicCache) {
+        invalidateMosaicCache(result.rows[0].poi_id);
+      }
+
+      res.json({ success: true, media: result.rows[0] });
+    } catch (error) {
+      console.error('Error updating poi media:', error);
+      res.status(500).json({ error: 'Failed to update media' });
+    }
+  });
+
+  /**
+   * DELETE /admin/poi-media/:id
+   * Delete media (soft delete by setting moderation_status to 'deleted')
+   */
+  router.delete('/poi-media/:id', isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { permanent } = req.query;
+
+      if (permanent === 'true') {
+        // Permanent delete - remove from image server first, then database
+        // Fix: Image server delete first to prevent orphaned files (Gemini review PR #182)
+        // Rationale: If image server delete fails, we can retry. If it succeeds but DB fails,
+        // we have a dangling DB record (detectable/fixable) vs orphaned file (unmanageable).
+        const mediaResult = await pool.query(
+          'SELECT * FROM poi_media WHERE id = $1',
+          [id]
+        );
+
+        if (mediaResult.rows.length === 0) {
+          return res.status(404).json({ error: 'Media not found' });
+        }
+
+        const media = mediaResult.rows[0];
+
+        // Delete from image server first (if applicable)
+        if (media.image_server_asset_id) {
+          const imageServerClient = (await import('../services/imageServerClient.js')).default;
+          await imageServerClient.deleteAsset(media.image_server_asset_id);
+          // If this fails, it throws and we never reach DB delete (can retry)
+        }
+
+        // Then delete from database (only reached if image server delete succeeded)
+        await pool.query('DELETE FROM poi_media WHERE id = $1', [id]);
+
+        // Invalidate mosaic cache for this POI (media deleted)
+        if (invalidateMosaicCache) {
+          invalidateMosaicCache(media.poi_id);
+        }
+
+        res.json({ success: true, message: 'Media permanently deleted' });
+      } else {
+        // Soft delete - set moderation_status to 'rejected'
+        const result = await pool.query(
+          `UPDATE poi_media
+           SET moderation_status = 'rejected'
+           WHERE id = $1
+           RETURNING id, poi_id`,
+          [id]
+        );
+
+        if (result.rows.length === 0) {
+          return res.status(404).json({ error: 'Media not found' });
+        }
+
+        // Invalidate mosaic cache for this POI (media soft-deleted)
+        if (invalidateMosaicCache) {
+          invalidateMosaicCache(result.rows[0].poi_id);
+        }
+
+        res.json({ success: true, message: 'Media deleted' });
+      }
+    } catch (error) {
+      console.error('Error deleting poi media:', error);
+      res.status(500).json({ error: 'Failed to delete media' });
+    }
+  });
+
+  /**
+   * GET /admin/moderation/media
+   * Get pending media submissions
+   */
+  router.get('/moderation/media', isAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(`
+        SELECT
+          pm.id,
+          pm.poi_id,
+          pm.media_type,
+          pm.image_server_asset_id,
+          pm.youtube_url,
+          pm.caption,
+          pm.confidence_score,
+          pm.ai_reasoning,
+          pm.submitted_by,
+          pm.created_at,
+          p.name AS poi_name,
+          u.email AS submitted_by_email
+        FROM poi_media pm
+        JOIN pois p ON pm.poi_id = p.id
+        LEFT JOIN users u ON pm.submitted_by = u.id
+        WHERE pm.moderation_status = 'pending'
+        ORDER BY pm.created_at DESC
+      `);
+
+      res.json(result.rows);
+    } catch (error) {
+      console.error('Error fetching pending media:', error);
+      res.status(500).json({ error: 'Failed to fetch pending media' });
+    }
+  });
+
+  /**
+   * POST /admin/moderation/media/:id/approve
+   * Approve pending media
+   */
+  router.post('/moderation/media/:id/approve', isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const result = await pool.query(
+        `UPDATE poi_media
+         SET moderation_status = 'published',
+             moderated_at = NOW(),
+             moderated_by = $1
+         WHERE id = $2 AND moderation_status = 'pending'
+         RETURNING *`,
+        [req.user.id, id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Pending media not found' });
+      }
+
+      // Invalidate mosaic cache when media is approved
+      if (invalidateMosaicCache) {
+        invalidateMosaicCache(result.rows[0].poi_id);
+      }
+
+      res.json({ success: true, media: result.rows[0] });
+    } catch (error) {
+      console.error('Error approving media:', error);
+      res.status(500).json({ error: 'Failed to approve media' });
+    }
+  });
+
+  /**
+   * POST /admin/moderation/media/:id/reject
+   * Reject pending media
+   */
+  router.post('/moderation/media/:id/reject', isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { reason } = req.body;
+
+      const result = await pool.query(
+        `UPDATE poi_media
+         SET moderation_status = 'rejected',
+             moderated_at = NOW(),
+             moderated_by = $1,
+             ai_reasoning = $2
+         WHERE id = $3 AND moderation_status = 'pending'
+         RETURNING *`,
+        [req.user.id, reason || 'Rejected by moderator', id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Pending media not found' });
+      }
+
+      // Invalidate mosaic cache when media is rejected
+      if (invalidateMosaicCache) {
+        invalidateMosaicCache(result.rows[0].poi_id);
+      }
+
+      res.json({ success: true, media: result.rows[0] });
+    } catch (error) {
+      console.error('Error rejecting media:', error);
+      res.status(500).json({ error: 'Failed to reject media' });
+    }
+  });
+
+  // End of POI Media Management
+  // ============================================================
 
   return router;
 }

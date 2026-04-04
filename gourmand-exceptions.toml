@@ -702,6 +702,11 @@ check = "deferred_work"
 path = "frontend/src/components/JobsDashboard.jsx"
 justification = "HTML placeholder attribute on input and 'placeholders' data property from collection registry — not deferred work"
 
+[[exceptions]]
+check = "deferred_work"
+path = "frontend/src/components/MediaUploadModal.jsx"
+justification = "HTML placeholder attribute on form inputs — standard HTML syntax, not deferred work"
+
 # Generic names — database query results use 'result'/'data' pattern
 # TODO: Rename these in a dedicated code quality PR
 
@@ -818,3 +823,8 @@ justification = "ensureBackupsFolder creates Google Drive folder structure — s
 check = "single_use_helpers"
 path = "backend/services/mcpServer.js"
 justification = "registerTools encapsulates MCP tool registration with schema definitions — separated from server initialization for readability of the 800+ line tool registry."
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/scripts/migrate-primary-images.js"
+justification = "One-time migration script entry point functions (fetchPrimaryAsset, hasPrimaryMedia, createPrimaryMediaEntry, migrateImages) provide logical separation for the multi-step migration process. Script is run once during feature deployment."

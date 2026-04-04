@@ -12,7 +12,7 @@ import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 const TABLE_MAP = {
   news: 'poi_news',
   event: 'poi_events',
-  photo: 'photo_submissions'
+  photo: 'poi_media' // Updated for multi-image support (Issue #181)
 };
 
 const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];

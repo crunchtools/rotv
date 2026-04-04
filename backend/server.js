@@ -3,14 +3,17 @@ import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
 import session from 'express-session';
+import rateLimit from 'express-rate-limit';
 import connectPgSimple from 'connect-pg-simple';
 import passport from 'passport';
 import path from 'path';
 import fs from 'fs/promises';
+import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { configurePassport } from './config/passport.js';
 import authRoutes from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
+import { isAuthenticated } from './middleware/auth.js';
 import {
   initJobScheduler,
   scheduleNewsCollection,
@@ -53,6 +56,51 @@ const __dirname = path.dirname(__filename);
 const { Pool } = pg;
 
 const app = express();
+
+// Configure multer for memory storage (media uploaded to image server)
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB max
+  }
+});
+
+// Rate limiter for asset proxy endpoints (DoS mitigation)
+// Fix: Prevent bandwidth exhaustion attacks on image/video proxy (Gemini review)
+const assetProxyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
+  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  message: { error: 'Too many asset requests, please try again later' }
+});
+
+// In-memory cache for mosaic data (performance optimization)
+// Fix: Reduce database queries for frequently accessed mosaic data (Gemini review)
+const mosaicCache = new Map();
+const MOSAIC_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getMosaicFromCache(poiId) {
+  const cacheKey = `poi:${poiId}`;
+  const cached = mosaicCache.get(cacheKey);
+  if (cached && Date.now() < cached.expires) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setMosaicCache(poiId, data) {
+  const cacheKey = `poi:${poiId}`;
+  mosaicCache.set(cacheKey, {
+    data,
+    expires: Date.now() + MOSAIC_CACHE_TTL
+  });
+}
+
+function invalidateMosaicCache(poiId) {
+  const cacheKey = `poi:${poiId}`;
+  mosaicCache.delete(cacheKey);
+}
 
 // Trust reverse proxy (for secure cookies behind CloudFlare/Apache)
 app.set('trust proxy', 1);
@@ -109,7 +157,7 @@ app.use(passport.session());
 app.use('/auth', authRoutes);
 
 // Mount admin routes
-app.use('/api/admin', createAdminRouter(pool));
+app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 
 // Import trails and rivers from GeoJSON files into unified pois table
 async function importGeoJSONFeatures(client) {
@@ -910,20 +958,296 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Fix: Query poi_media table for primary image (Gatehouse finding)
+    const result = await pool.query(`
+      SELECT image_server_asset_id
+      FROM poi_media
+      WHERE poi_id = $1
+        AND role = 'primary'
+        AND media_type IN ('image', 'video')
+        AND moderation_status IN ('published', 'auto_approved')
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Image not found' });
+    }
+
+    const assetId = result.rows[0].image_server_asset_id;
+
     if (!imageServerClient.initialized) {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    // Get primary asset from image server
-    const asset = await imageServerClient.getPrimaryAsset(id);
-    if (!asset) {
+    const thumbnailResult = await imageServerClient.fetchThumbnailData(assetId);
+    if (!thumbnailResult.success) {
+      console.error(`[Thumbnail] Fetch failed for POI ${id}:`, thumbnailResult.error);
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const result = await imageServerClient.fetchThumbnailData(asset.id);
+    res.setHeader('Content-Type', thumbnailResult.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=604800');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(thumbnailResult.data);
+  } catch (error) {
+    console.error('Error serving POI thumbnail:', error);
+    res.status(500).json({ error: 'Failed to serve thumbnail' });
+  }
+});
+
+// ============================================================
+// Multi-Media API Endpoints (Issue #181)
+// ============================================================
+
+/**
+ * GET /api/pois/:id/media
+ * Get all approved media for a POI (images, videos, YouTube embeds)
+ * Returns mosaic array (primary + 2 most liked/recent) and all_media for lightbox
+ */
+app.get('/api/pois/:id/media', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check cache first (5min TTL reduces DB load)
+    const cached = getMosaicFromCache(id);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    // Query approved media from poi_media table
+    const result = await pool.query(`
+      SELECT
+        id,
+        media_type,
+        image_server_asset_id,
+        youtube_url,
+        role,
+        sort_order,
+        likes_count,
+        caption,
+        created_at
+      FROM poi_media
+      WHERE poi_id = $1
+        AND moderation_status IN ('published', 'auto_approved')
+      ORDER BY
+        CASE WHEN role = 'primary' THEN 0 ELSE 1 END,
+        likes_count DESC,
+        created_at DESC
+    `, [id]);
+
+    const allMedia = [];
+
+    // Enrich media with URLs
+    for (const media of result.rows) {
+      const item = {
+        id: media.id,
+        media_type: media.media_type,
+        role: media.role,
+        likes_count: media.likes_count,
+        caption: media.caption,
+        created_at: media.created_at
+      };
+
+      if (media.media_type === 'youtube') {
+        // Extract video ID and construct URLs
+        const videoId = extractYouTubeId(media.youtube_url);
+        item.youtube_url = media.youtube_url;
+        item.youtube_id = videoId;
+        item.thumbnail_url = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+        item.embed_url = `https://www.youtube-nocookie.com/embed/${videoId}`;
+      } else {
+        // Image or video from image server
+        item.asset_id = media.image_server_asset_id;
+        item.thumbnail_url = `/api/assets/${media.image_server_asset_id}/thumbnail`;
+        item.full_url = `/api/assets/${media.image_server_asset_id}/original`;
+      }
+
+      allMedia.push(item);
+    }
+
+    // Mosaic = first 3 items (already sorted: primary + most liked + recent)
+    const mosaic = allMedia.slice(0, 3);
+
+    const response = {
+      mosaic,
+      all_media: allMedia,
+      total_count: allMedia.length
+    };
+
+    // Cache the result for 5 minutes
+    setMosaicCache(id, response);
+
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching POI media:', error);
+    res.status(500).json({ error: 'Failed to fetch media' });
+  }
+});
+
+/**
+ * POST /api/pois/:id/media
+ * Upload media (image/video/YouTube URL)
+ * Regular users → moderation queue
+ * Media admins → auto-approved
+ */
+app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { media_type, youtube_url, caption } = req.body;
+    const user = req.user;
+
+    // Validate media_type
+    if (!['image', 'video', 'youtube'].includes(media_type)) {
+      return res.status(400).json({ error: 'Invalid media_type' });
+    }
+
+    // Check if multi_media is enabled
+    const settingResult = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'multi_media_enabled'"
+    );
+    if (settingResult.rows.length && settingResult.rows[0].value !== 'true') {
+      return res.status(403).json({ error: 'Multi-media uploads are currently disabled' });
+    }
+
+    let assetId = null;
+    let youtubeUrlValue = null;
+
+    if (media_type === 'youtube') {
+      // Validate YouTube URL
+      if (!youtube_url) {
+        return res.status(400).json({ error: 'YouTube URL required' });
+      }
+      const videoId = extractYouTubeId(youtube_url);
+      if (!videoId) {
+        return res.status(400).json({ error: 'Invalid YouTube URL' });
+      }
+      youtubeUrlValue = youtube_url;
+    } else {
+      // Image or video upload
+      if (!req.file) {
+        return res.status(400).json({ error: 'File required' });
+      }
+
+      // Video size validation
+      if (media_type === 'video') {
+        const maxSizeMB = 10;
+        const maxSizeBytes = maxSizeMB * 1024 * 1024;
+        if (req.file.size > maxSizeBytes) {
+          return res.status(400).json({
+            error: `Video too large (max ${maxSizeMB}MB). Please upload to YouTube instead.`
+          });
+        }
+      }
+
+      // Fix: Sanitize filename to prevent path traversal (Gatehouse finding)
+      const sanitizedFilename = req.file.originalname
+        .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace unsafe chars with underscore
+        .replace(/^\.+/, '') // Remove leading dots
+        .substring(0, 255); // Limit length
+
+      // Upload to image server
+      const uploadFn = media_type === 'image'
+        ? imageServerClient.uploadImage
+        : imageServerClient.uploadVideo;
+
+      const uploadResult = await uploadFn.call(
+        imageServerClient,
+        req.file.buffer,
+        parseInt(id),
+        'gallery',
+        sanitizedFilename,
+        req.file.mimetype
+      );
+
+      if (!uploadResult.success) {
+        return res.status(500).json({ error: 'Failed to upload: ' + uploadResult.error });
+      }
+
+      assetId = uploadResult.assetId;
+    }
+
+    // Determine moderation status
+    const isMediaAdminUser = user.role === 'media_admin' || user.role === 'admin';
+    const moderationStatus = isMediaAdminUser ? 'published' : 'pending';
+    const moderatedAt = isMediaAdminUser ? new Date() : null;
+    const moderatedBy = isMediaAdminUser ? user.id : null;
+
+    // Create poi_media record
+    const insertResult = await pool.query(`
+      INSERT INTO poi_media (
+        poi_id,
+        media_type,
+        image_server_asset_id,
+        youtube_url,
+        caption,
+        role,
+        moderation_status,
+        submitted_by,
+        moderated_at,
+        moderated_by
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id
+    `, [
+      parseInt(id),
+      media_type,
+      assetId,
+      youtubeUrlValue,
+      caption || null,
+      'gallery',
+      moderationStatus,
+      user.id,
+      moderatedAt,
+      moderatedBy
+    ]);
+
+    const mediaId = insertResult.rows[0].id;
+
+    const message = isMediaAdminUser
+      ? 'Media uploaded and published'
+      : 'Media submitted for review';
+
+    // Invalidate mosaic cache for this POI (new media uploaded)
+    invalidateMosaicCache(id);
+
+    res.json({
+      success: true,
+      message,
+      media_id: mediaId,
+      moderation_status: moderationStatus
+    });
+  } catch (error) {
+    console.error('Error uploading media:', error);
+    res.status(500).json({ error: 'Failed to upload media' });
+  }
+});
+
+/**
+ * GET /api/assets/:assetId/thumbnail
+ * Proxy thumbnail from image server
+ */
+app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) => {
+  try {
+    const { assetId } = req.params;
+
+    // Fix: Validate assetId format to prevent SSRF (Gatehouse finding)
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(assetId)) {
+      return res.status(400).json({ error: 'Invalid asset ID' });
+    }
+
+    if (!imageServerClient.initialized) {
+      return res.status(503).json({ error: 'Image service unavailable' });
+    }
+
+    const result = await imageServerClient.fetchThumbnailData(assetId);
     if (!result.success) {
-      console.error(`[Thumbnail] Fetch failed for POI ${id}:`, result.error);
-      return res.status(404).json({ error: 'Image not found' });
+      // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
+      // 404 = asset doesn't exist, 502/503 = image server down
+      const statusCode = result.statusCode || 500;
+      const message = statusCode === 404 ? 'Asset not found' :
+                      statusCode >= 500 ? 'Image service error' :
+                      'Failed to fetch asset';
+      return res.status(statusCode).json({ error: message });
     }
 
     res.setHeader('Content-Type', result.contentType);
@@ -931,10 +1255,70 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(result.data);
   } catch (error) {
-    console.error('Error serving POI thumbnail:', error);
+    console.error('Error serving asset thumbnail:', error);
     res.status(500).json({ error: 'Failed to serve thumbnail' });
   }
 });
+
+/**
+ * GET /api/assets/:assetId/original
+ * Proxy original image/video from image server
+ */
+app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => {
+  try {
+    const { assetId } = req.params;
+
+    // Fix: Validate assetId format to prevent SSRF (Gatehouse finding)
+    if (!/^[a-zA-Z0-9_-]{1,100}$/.test(assetId)) {
+      return res.status(400).json({ error: 'Invalid asset ID' });
+    }
+
+    if (!imageServerClient.initialized) {
+      return res.status(503).json({ error: 'Image service unavailable' });
+    }
+
+    const result = await imageServerClient.fetchAssetData(assetId);
+    if (!result.success) {
+      // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
+      // 404 = asset doesn't exist, 502/503 = image server down
+      const statusCode = result.statusCode || 500;
+      const message = statusCode === 404 ? 'Asset not found' :
+                      statusCode >= 500 ? 'Image service error' :
+                      'Failed to fetch asset';
+      return res.status(statusCode).json({ error: message });
+    }
+
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.send(result.data);
+  } catch (error) {
+    console.error('Error serving asset:', error);
+    res.status(500).json({ error: 'Failed to serve asset' });
+  }
+});
+
+/**
+ * Helper: Extract YouTube video ID from URL
+ */
+function extractYouTubeId(url) {
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /^([a-zA-Z0-9_-]{11})$/ // Direct video ID
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) {
+      return match[1];
+    }
+  }
+
+  return null;
+}
+
+// End of Multi-Media API Endpoints
+// ============================================================
 
 app.get('/api/filters', async (req, res) => {
   try {
