@@ -605,8 +605,8 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       setDraftFieldStates(initialStates);
       setShowDraftModal(true);
 
-      // Auto-start hero image generation concurrently
-      if (destination?.id) {
+      // Auto-start hero image generation only if POI has no primary image
+      if (destination?.id && !editedData.has_primary_image) {
         setGeneratingHeroImage(true);
         fetch('/api/admin/ai/generate-hero-image', {
           method: 'POST',
