@@ -16,14 +16,6 @@ export function isAdmin(req, res, next) {
   res.status(403).json({ error: 'Admin access required' });
 }
 
-// Require user to have 'admin' role
-export function hasAdminRole(req, res, next) {
-  if (req.isAuthenticated() && req.user.role === 'admin') {
-    return next();
-  }
-  res.status(403).json({ error: 'Admin access required' });
-}
-
 // Require user to be media_admin or admin
 export function isMediaAdmin(req, res, next) {
   if (req.isAuthenticated() && (req.user.role === 'media_admin' || req.user.role === 'admin')) {
