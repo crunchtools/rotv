@@ -38,7 +38,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt) {
   try {
     const response = await client.chat.completions.create({
       model: 'sonar',
-      temperature: 0,
+      temperature: 0.3,
       messages: [
         {
           role: 'user',

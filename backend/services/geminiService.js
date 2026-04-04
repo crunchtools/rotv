@@ -254,7 +254,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
 
   const modelConfig = {
     model: GEMINI_MODEL,
-    generationConfig: { temperature: 0 }
+    generationConfig: { temperature: 0.3 }
   };
   if (useSearchGrounding) {
     modelConfig.tools = [{ googleSearch: {} }];

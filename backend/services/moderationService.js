@@ -701,8 +701,9 @@ export async function fixDate(pool, contentType, contentId) {
   const table = TABLE_MAP[contentType];
   const descField = contentType === 'news' ? 'summary' : 'description';
 
+  const extraFields = contentType === 'event' ? ', t.start_date, t.end_date' : '';
   const itemQuery = await pool.query(
-    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date, t.date_confidence, p.name AS poi_name
+    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date, t.date_confidence, p.name AS poi_name${extraFields}
      FROM ${table} t
      LEFT JOIN pois p ON t.poi_id = p.id
      WHERE t.id = $1`,
@@ -777,7 +778,16 @@ export async function fixDate(pool, contentType, contentId) {
   }
 
   const typeLabel = contentType === 'news' ? 'news article' : 'event';
-  const prompt = `Find the publication date for this ${typeLabel}:
+  const eventDateInstructions = contentType === 'event' ? `
+- EVENT DATES: Find the event start date/time and end date/time. These are the dates the event actually occurs, NOT when the article was published.
+  Include "start_date" (YYYY-MM-DD), "start_time" (HH:MM in 24h format or null),
+  "end_date" (YYYY-MM-DD or null), "end_time" (HH:MM in 24h format or null) in your response.` : '';
+
+  const eventJsonFields = contentType === 'event'
+    ? ', "start_date": "YYYY-MM-DD", "start_time": "HH:MM", "end_date": "YYYY-MM-DD", "end_time": "HH:MM"'
+    : '';
+
+  const prompt = `Find the ${contentType === 'event' ? 'event dates and ' : ''}publication date for this ${typeLabel}:
 
 Title: "${item.title}"
 ${item.description ? `Description: "${item.description}"` : ''}
@@ -789,10 +799,10 @@ ${pageContent ? `\nPage Content:\n${pageContent}` : ''}
 Look for:
 - Publication date, byline date, or article timestamp in the page content
 - Date in the URL pattern (e.g., /2025/03/article-name)
-- References to specific dated events that pin down the timeframe
+- References to specific dated events that pin down the timeframe${eventDateInstructions}
 
 Return ONLY valid JSON (no markdown, no code blocks):
-{"publication_date": "YYYY-MM-DD", "date_confidence": "exact", "reasoning": "Found date in..."}
+{"publication_date": "YYYY-MM-DD", "date_confidence": "exact", "reasoning": "Found date in..."${eventJsonFields}}
 
 If exact date found, use date_confidence "exact".
 If estimated from context, use "estimated".
@@ -835,18 +845,65 @@ If truly impossible to determine, use "unknown" and set publication_date to null
 
   const { publicationDate, dateConfidence } = extractDateFields(result);
 
-  if (publicationDate) {
-    await pool.query(
-      `UPDATE ${table} SET publication_date = $1, date_confidence = $2 WHERE id = $3`,
-      [publicationDate, dateConfidence, contentId]
-    );
-    console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: ${publicationDate} (${dateConfidence})`);
-    logInfo(runId, 'moderation', null, item.title, `Fix Date: ${publicationDate} (${dateConfidence}, via AI)`, { completed: true, publication_date: publicationDate, date_confidence: dateConfidence });
+  // For events, also extract start_date/end_date with optional times
+  let startDateStr = null;
+  let endDateStr = null;
+  if (contentType === 'event') {
+    if (result.start_date && /^\d{4}-\d{2}-\d{2}$/.test(String(result.start_date))) {
+      const timeStr = result.start_time && /^\d{2}:\d{2}$/.test(String(result.start_time))
+        ? `${result.start_date}T${result.start_time}:00` : `${result.start_date}T00:00:00`;
+      startDateStr = timeStr;
+    }
+    if (result.end_date && /^\d{4}-\d{2}-\d{2}$/.test(String(result.end_date))) {
+      const timeStr = result.end_time && /^\d{2}:\d{2}$/.test(String(result.end_time))
+        ? `${result.end_date}T${result.end_time}:00` : `${result.end_date}T23:59:00`;
+      endDateStr = timeStr;
+    }
+  }
+
+  const anyDateFound = publicationDate || startDateStr;
+
+  if (anyDateFound) {
+    if (contentType === 'event' && (startDateStr || endDateStr)) {
+      // Update publication_date + event dates
+      const setClauses = ['date_confidence = $2'];
+      const values = [contentId, dateConfidence];
+      let idx = 3;
+      if (publicationDate) {
+        setClauses.push(`publication_date = $${idx}`);
+        values.push(publicationDate);
+        idx++;
+      }
+      if (startDateStr) {
+        setClauses.push(`start_date = $${idx}`);
+        values.push(startDateStr);
+        idx++;
+      }
+      if (endDateStr) {
+        setClauses.push(`end_date = $${idx}`);
+        values.push(endDateStr);
+        idx++;
+      }
+      await pool.query(
+        `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`,
+        values
+      );
+      console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: pub=${publicationDate}, start=${startDateStr}, end=${endDateStr} (${dateConfidence})`);
+    } else {
+      await pool.query(
+        `UPDATE ${table} SET publication_date = $1, date_confidence = $2 WHERE id = $3`,
+        [publicationDate, dateConfidence, contentId]
+      );
+      console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: ${publicationDate} (${dateConfidence})`);
+    }
+    logInfo(runId, 'moderation', null, item.title, `Fix Date: ${publicationDate || 'no pub date'} (${dateConfidence}, via AI)`, { completed: true, publication_date: publicationDate, date_confidence: dateConfidence, start_date: startDateStr, end_date: endDateStr });
     await flushJobLogs();
     return {
       date_updated: true,
       publication_date: publicationDate,
       date_confidence: dateConfidence,
+      start_date: startDateStr || null,
+      end_date: endDateStr || null,
       reasoning: result.reasoning || null
     };
   }
@@ -873,6 +930,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues,
            n.submitted_by, n.moderated_by, n.moderated_at, n.created_at, n.source_url,
            n.content_source, n.publication_date, n.date_confidence,
+           NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
            COUNT(u.id)::int AS additional_url_count
     FROM poi_news n
     LEFT JOIN poi_news_urls u ON u.news_id = n.id
@@ -883,6 +941,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
            e.submitted_by, e.moderated_by, e.moderated_at, e.created_at, e.source_url,
            e.content_source, e.publication_date, e.date_confidence,
+           e.start_date, e.end_date,
            COUNT(u.id)::int AS additional_url_count
     FROM poi_events e
     LEFT JOIN poi_event_urls u ON u.event_id = e.id
@@ -893,6 +952,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            moderation_status, confidence_score, ai_reasoning, NULL AS ai_issues,
            submitted_by, moderated_by, moderated_at, created_at, NULL AS source_url,
            NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR AS date_confidence,
+           NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
            0 AS additional_url_count
     FROM photo_submissions WHERE moderation_status = ANY($1)`;
 
