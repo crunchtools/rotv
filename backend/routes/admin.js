@@ -78,7 +78,7 @@ import { logInfo, logError } from '../services/jobLogger.js';
 
 const router = express.Router();
 
-export function createAdminRouter(pool) {
+export function createAdminRouter(pool, invalidateMosaicCache) {
   // Update POI coordinates (for point type POIs)
   router.put('/pois/:id/coordinates', isAdmin, async (req, res) => {
     const { id } = req.params;
@@ -4754,6 +4754,11 @@ export function createAdminRouter(pool) {
         return res.status(404).json({ error: 'Media not found' });
       }
 
+      // Invalidate mosaic cache when media metadata changes
+      if (invalidateMosaicCache) {
+        invalidateMosaicCache(result.rows[0].poi_id);
+      }
+
       res.json({ success: true, media: result.rows[0] });
     } catch (error) {
       console.error('Error updating poi media:', error);
@@ -4796,6 +4801,11 @@ export function createAdminRouter(pool) {
         // Then delete from database (only reached if image server delete succeeded)
         await pool.query('DELETE FROM poi_media WHERE id = $1', [id]);
 
+        // Invalidate mosaic cache for this POI (media deleted)
+        if (invalidateMosaicCache) {
+          invalidateMosaicCache(media.poi_id);
+        }
+
         res.json({ success: true, message: 'Media permanently deleted' });
       } else {
         // Soft delete - set moderation_status to 'rejected'
@@ -4803,12 +4813,17 @@ export function createAdminRouter(pool) {
           `UPDATE poi_media
            SET moderation_status = 'rejected'
            WHERE id = $1
-           RETURNING id`,
+           RETURNING id, poi_id`,
           [id]
         );
 
         if (result.rows.length === 0) {
           return res.status(404).json({ error: 'Media not found' });
+        }
+
+        // Invalidate mosaic cache for this POI (media soft-deleted)
+        if (invalidateMosaicCache) {
+          invalidateMosaicCache(result.rows[0].poi_id);
         }
 
         res.json({ success: true, message: 'Media deleted' });
@@ -4875,6 +4890,11 @@ export function createAdminRouter(pool) {
         return res.status(404).json({ error: 'Pending media not found' });
       }
 
+      // Invalidate mosaic cache when media is approved
+      if (invalidateMosaicCache) {
+        invalidateMosaicCache(result.rows[0].poi_id);
+      }
+
       res.json({ success: true, media: result.rows[0] });
     } catch (error) {
       console.error('Error approving media:', error);
@@ -4904,6 +4924,11 @@ export function createAdminRouter(pool) {
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Pending media not found' });
+      }
+
+      // Invalidate mosaic cache when media is rejected
+      if (invalidateMosaicCache) {
+        invalidateMosaicCache(result.rows[0].poi_id);
       }
 
       res.json({ success: true, media: result.rows[0] });

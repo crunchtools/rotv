@@ -75,6 +75,33 @@ const assetProxyLimiter = rateLimit({
   message: { error: 'Too many asset requests, please try again later' }
 });
 
+// In-memory cache for mosaic data (performance optimization)
+// Fix: Reduce database queries for frequently accessed mosaic data (Gemini review)
+const mosaicCache = new Map();
+const MOSAIC_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getMosaicFromCache(poiId) {
+  const cacheKey = `poi:${poiId}`;
+  const cached = mosaicCache.get(cacheKey);
+  if (cached && Date.now() < cached.expires) {
+    return cached.data;
+  }
+  return null;
+}
+
+function setMosaicCache(poiId, data) {
+  const cacheKey = `poi:${poiId}`;
+  mosaicCache.set(cacheKey, {
+    data,
+    expires: Date.now() + MOSAIC_CACHE_TTL
+  });
+}
+
+function invalidateMosaicCache(poiId) {
+  const cacheKey = `poi:${poiId}`;
+  mosaicCache.delete(cacheKey);
+}
+
 // Trust reverse proxy (for secure cookies behind CloudFlare/Apache)
 app.set('trust proxy', 1);
 
@@ -130,7 +157,7 @@ app.use(passport.session());
 app.use('/auth', authRoutes);
 
 // Mount admin routes
-app.use('/api/admin', createAdminRouter(pool));
+app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 
 // Import trails and rivers from GeoJSON files into unified pois table
 async function importGeoJSONFeatures(client) {
@@ -982,6 +1009,12 @@ app.get('/api/pois/:id/media', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Check cache first (5min TTL reduces DB load)
+    const cached = getMosaicFromCache(id);
+    if (cached) {
+      return res.json(cached);
+    }
+
     // Query approved media from poi_media table
     const result = await pool.query(`
       SELECT
@@ -1036,11 +1069,16 @@ app.get('/api/pois/:id/media', async (req, res) => {
     // Mosaic = first 3 items (already sorted: primary + most liked + recent)
     const mosaic = allMedia.slice(0, 3);
 
-    res.json({
+    const response = {
       mosaic,
       all_media: allMedia,
       total_count: allMedia.length
-    });
+    };
+
+    // Cache the result for 5 minutes
+    setMosaicCache(id, response);
+
+    res.json(response);
   } catch (error) {
     console.error('Error fetching POI media:', error);
     res.status(500).json({ error: 'Failed to fetch media' });
@@ -1168,6 +1206,9 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
     const message = isMediaAdminUser
       ? 'Media uploaded and published'
       : 'Media submitted for review';
+
+    // Invalidate mosaic cache for this POI (new media uploaded)
+    invalidateMosaicCache(id);
 
     res.json({
       success: true,
