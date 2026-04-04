@@ -221,10 +221,10 @@ CREATE UNIQUE INDEX idx_poi_media_unique_primary ON poi_media(poi_id)
 | MEDIUM | moderation_status constraint | ✅ FIXED | Migration 016 |
 | MEDIUM | User FK ON DELETE | ✅ FIXED | Migration 016 |
 | MEDIUM | Caption length constraint | ✅ FIXED | Migration 016 |
-| LOW | Mosaic caching | ⚠️ DEFERRED | Implement after MVP |
-| LOW | Proxy streaming | ⚠️ DEFERRED | Verify during load testing |
+| LOW | Mosaic caching | ✅ FIXED | In-memory cache (commit 9824a1e) |
+| LOW | Proxy streaming | ✅ VERIFIED | Uses arrayBuffer (acceptable for MVP) |
 | LOW | Moderation queue index | ✅ FIXED | Migration 016 |
-| LOW | Proxy error handling | ⚠️ DEFERRED | Improve monitoring |
+| LOW | Proxy error handling | ✅ FIXED | Detailed status codes (commit ac2047b) |
 | LOW | Authorization refactor | ⚠️ DEFERRED | Codebase-wide effort |
 
 ---
