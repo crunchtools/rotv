@@ -12,7 +12,6 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
   const [success, setSuccess] = useState(null);
   const [dragActive, setDragActive] = useState(false);
 
-  // Form states
   const [youtubeUrl, setYoutubeUrl] = useState('');
   const [caption, setCaption] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -34,13 +33,11 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
       return;
     }
 
-    // Video size validation
     if (isVideo && file.size > 10 * 1024 * 1024) {
       setError('Video must be less than 10MB. Please upload larger videos to YouTube instead.');
       return;
     }
 
-    // Image size validation
     if (!isVideo && file.size > 10 * 1024 * 1024) {
       setError('Image must be less than 10MB');
       return;
@@ -49,7 +46,6 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
     setError(null);
     setSelectedFile(file);
 
-    // Create preview
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreview(e.target.result);
@@ -91,7 +87,6 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
 
     try {
       if (activeTab === 'youtube') {
-        // YouTube URL upload
         if (!youtubeUrl.trim()) {
           setError('Please enter a YouTube URL');
           setUploading(false);
@@ -123,7 +118,6 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
           onClose();
         }, 1500);
       } else {
-        // Image or video upload
         if (!selectedFile) {
           setError('Please select a file');
           setUploading(false);

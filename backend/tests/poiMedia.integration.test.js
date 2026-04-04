@@ -32,24 +32,20 @@ describe('POI Media API Integration Tests', () => {
       expect(Array.isArray(response.body.all_media)).toBe(true);
       expect(typeof response.body.total_count).toBe('number');
 
-      // Mosaic should contain at most 3 items
       expect(response.body.mosaic.length).toBeLessThanOrEqual(3);
 
-      // If media exists, verify structure
       if (response.body.all_media.length > 0) {
         const mediaItem = response.body.all_media[0];
         expect(mediaItem).toHaveProperty('id');
         expect(mediaItem).toHaveProperty('media_type');
         expect(['image', 'video', 'youtube']).toContain(mediaItem.media_type);
 
-        // Images and videos should have asset_id and URLs
         if (mediaItem.media_type === 'image' || mediaItem.media_type === 'video') {
           expect(mediaItem).toHaveProperty('asset_id');
           expect(mediaItem).toHaveProperty('thumbnail_url');
           expect(mediaItem).toHaveProperty('full_url');
         }
 
-        // YouTube should have YouTube-specific fields
         if (mediaItem.media_type === 'youtube') {
           expect(mediaItem).toHaveProperty('youtube_url');
           expect(mediaItem).toHaveProperty('youtube_id');
@@ -73,11 +69,7 @@ describe('POI Media API Integration Tests', () => {
         .get(`/api/pois/${TEST_POI_ID}/media`)
         .expect(200);
 
-      // All media should be published or auto_approved
-      // (pending/rejected should not appear)
       response.body.all_media.forEach(media => {
-        // We don't get moderation_status in the response, but we can verify
-        // that the media is present (which means it passed the WHERE clause filter)
         expect(media).toHaveProperty('id');
       });
     });
@@ -87,11 +79,9 @@ describe('POI Media API Integration Tests', () => {
         .get(`/api/pois/${TEST_POI_ID}/media`)
         .expect(200);
 
-      // If there's a primary image and mosaic is not empty
       if (response.body.mosaic.length > 0) {
         const primaryImage = response.body.mosaic.find(m => m.role === 'primary');
 
-        // If a primary exists, it should be first in mosaic
         if (primaryImage) {
           expect(response.body.mosaic[0].role).toBe('primary');
         }
@@ -101,22 +91,18 @@ describe('POI Media API Integration Tests', () => {
 
   describe('GET /api/assets/:assetId/thumbnail', () => {
     it('should return 404 when image server not configured', async () => {
-      // This test assumes image server might not be running in CI
       const response = await request(BASE_URL)
         .get('/api/assets/test-asset-id/thumbnail');
 
-      // Could be 404 (not found), 503 (service unavailable), or 200 (found)
       expect([200, 404, 503]).toContain(response.status);
     });
   });
 
   describe('GET /api/assets/:assetId/original', () => {
     it('should return 404 when image server not configured', async () => {
-      // This test assumes image server might not be running in CI
       const response = await request(BASE_URL)
         .get('/api/assets/test-asset-id/original');
 
-      // Could be 404 (not found), 503 (service unavailable), or 200 (found)
       expect([200, 404, 503]).toContain(response.status);
     });
   });
@@ -130,9 +116,6 @@ describe('POI Media API Integration Tests', () => {
 
       expect(response.body).toHaveProperty('error');
     });
-
-    // Note: Authenticated upload tests would require session/auth setup
-    // These are tested manually or in E2E tests with authenticated sessions
   });
 });
 
@@ -202,9 +185,6 @@ describe('Admin POI Media Management API', () => {
 });
 
 describe('YouTube URL Extraction', () => {
-  // Note: Testing the extractYouTubeId helper function indirectly through API
-  // Direct unit tests would require exporting the function
-
   it('should handle standard YouTube URLs in upload', async () => {
     const testUrls = [
       'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
@@ -212,7 +192,6 @@ describe('YouTube URL Extraction', () => {
       'https://www.youtube.com/embed/dQw4w9WgXcQ'
     ];
 
-    // All should be valid (would need auth to actually test upload)
     testUrls.forEach(url => {
       expect(url).toMatch(/youtube|youtu\.be/);
     });
@@ -231,8 +210,6 @@ describe('Media Type Validation', () => {
 
 describe('Rate Limiting (DoS Protection)', () => {
   it('should enforce rate limits on asset proxy endpoints', async () => {
-    // Rate limiter allows 100 requests per 15 minutes
-    // Make a few requests to verify no immediate blocking (within limit)
     const responses = [];
 
     for (let i = 0; i < 5; i++) {
@@ -241,7 +218,6 @@ describe('Rate Limiting (DoS Protection)', () => {
       responses.push(response);
     }
 
-    // All requests within normal rate limit should succeed (or 404 if asset missing, 503 if service down)
     responses.forEach(response => {
       expect([200, 404, 503]).toContain(response.status);
     });
@@ -251,7 +227,6 @@ describe('Rate Limiting (DoS Protection)', () => {
     const response = await request(BASE_URL)
       .get('/api/assets/test-asset-id/original');
 
-    // Check for standard rate limit headers
     expect(response.headers['ratelimit-limit']).toBeDefined();
     expect(response.headers['ratelimit-remaining']).toBeDefined();
   });
@@ -265,7 +240,6 @@ describe('Rate Limiting (DoS Protection)', () => {
       .get('/api/assets/test-asset-id/thumbnail');
     const remaining2 = parseInt(response2.headers['ratelimit-remaining']);
 
-    // Second request should have fewer remaining slots
     expect(remaining2).toBeLessThan(remaining1);
   });
 });
@@ -278,11 +252,9 @@ describe('Mosaic Caching (Performance)', () => {
     const response2 = await request(BASE_URL)
       .get(`/api/pois/${TEST_POI_ID}/media`);
 
-    // Both requests should return valid JSON
     expect(response1.status).toBe(200);
     expect(response2.status).toBe(200);
 
-    // Data structure should be consistent
     expect(response1.body).toHaveProperty('mosaic');
     expect(response1.body).toHaveProperty('all_media');
     expect(response1.body).toHaveProperty('total_count');
@@ -291,28 +263,22 @@ describe('Mosaic Caching (Performance)', () => {
     expect(response2.body).toHaveProperty('all_media');
     expect(response2.body).toHaveProperty('total_count');
 
-    // Content should match (cache hit)
     expect(response2.body.total_count).toBe(response1.body.total_count);
   });
 
   it('should return mosaic data consistently across cache hits', async () => {
-    // First request (cache miss)
     const response1 = await request(BASE_URL)
       .get(`/api/pois/${TEST_POI_ID}/media`);
 
-    // Second request (should be cache hit within 5min TTL)
     const response2 = await request(BASE_URL)
       .get(`/api/pois/${TEST_POI_ID}/media`);
 
-    // Third request (also cache hit)
     const response3 = await request(BASE_URL)
       .get(`/api/pois/${TEST_POI_ID}/media`);
 
-    // All should return same total count
     expect(response1.body.total_count).toBe(response2.body.total_count);
     expect(response2.body.total_count).toBe(response3.body.total_count);
 
-    // Mosaic size should be consistent
     expect(response1.body.mosaic.length).toBe(response2.body.mosaic.length);
     expect(response2.body.mosaic.length).toBe(response3.body.mosaic.length);
   });

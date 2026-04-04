@@ -24,7 +24,6 @@ function Mosaic({ media, poiId }) {
     setLightboxOpen(false);
   };
 
-  // Mosaic shows up to 3 images
   const mosaicImages = media.slice(0, 3);
 
   return (

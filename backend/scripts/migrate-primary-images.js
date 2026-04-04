@@ -14,11 +14,9 @@ import fetch from 'node-fetch';
 
 const { Pool } = pg;
 
-// Configuration
 const DRY_RUN = process.argv.includes('--dry-run');
 const IMAGE_SERVER_URL = process.env.IMAGE_SERVER_URL || 'http://10.89.1.100:8000';
 
-// Database connection
 const pool = new Pool({
   host: process.env.POSTGRES_HOST || 'localhost',
   port: process.env.POSTGRES_PORT || 5432,
@@ -50,11 +48,11 @@ async function fetchPrimaryAsset(poiId) {
  * Check if POI already has a primary entry in poi_media
  */
 async function hasPrimaryMedia(poiId) {
-  const result = await pool.query(
+  const existingMedia = await pool.query(
     `SELECT id FROM poi_media WHERE poi_id = $1 AND role = 'primary' LIMIT 1`,
     [poiId]
   );
-  return result.rows.length > 0;
+  return existingMedia.rows.length > 0;
 }
 
 /**
@@ -66,7 +64,7 @@ async function createPrimaryMediaEntry(poiId, assetId) {
     return { id: -1 };
   }
 
-  const result = await pool.query(
+  const createdMedia = await pool.query(
     `INSERT INTO poi_media (
       poi_id,
       media_type,
@@ -81,7 +79,7 @@ async function createPrimaryMediaEntry(poiId, assetId) {
     [poiId, 'image', assetId, 'primary', 0, 'published']
   );
 
-  return result.rows[0];
+  return createdMedia.rows[0];
 }
 
 /**
@@ -96,12 +94,11 @@ async function migrateImages() {
   console.log('');
 
   try {
-    // Get all POIs with has_primary_image = true
-    const result = await pool.query(
+    const poisWithImages = await pool.query(
       `SELECT id, name FROM pois WHERE has_primary_image = true ORDER BY id`
     );
 
-    const pois = result.rows;
+    const pois = poisWithImages.rows;
     console.log(`Found ${pois.length} POIs with primary images\n`);
 
     let migrated = 0;
@@ -109,7 +106,6 @@ async function migrateImages() {
     let failed = 0;
 
     for (const poi of pois) {
-      // Check if already migrated
       const hasEntry = await hasPrimaryMedia(poi.id);
       if (hasEntry) {
         console.log(`✓ POI ${poi.id} (${poi.name}): Already has primary entry, skipping`);
@@ -117,7 +113,6 @@ async function migrateImages() {
         continue;
       }
 
-      // Fetch asset from image server
       const asset = await fetchPrimaryAsset(poi.id);
 
       if (!asset) {
@@ -126,7 +121,6 @@ async function migrateImages() {
         continue;
       }
 
-      // Create poi_media entry
       await createPrimaryMediaEntry(poi.id, asset.id);
       console.log(`✓ POI ${poi.id} (${poi.name}): Migrated asset ${asset.id}`);
       migrated++;
@@ -155,5 +149,4 @@ async function migrateImages() {
   }
 }
 
-// Run migration
 migrateImages();

@@ -17,7 +17,6 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
     setCurrentIndex((prev) => (prev < media.length - 1 ? prev + 1 : 0));
   }, [media.length]);
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
@@ -33,7 +32,6 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, handlePrevious, handleNext]);
 
-  // Prevent body scroll when lightbox is open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
