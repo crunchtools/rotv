@@ -1,0 +1,125 @@
+/* Mosaic Container */
+.mosaic {
+  width: 100%;
+  display: grid;
+  gap: 4px;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+
+/* Single image - full width */
+.mosaic-1 {
+  grid-template-columns: 1fr;
+}
+
+/* Two images - split equally */
+.mosaic-2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* Three images - Facebook style: 1 large left, 2 stacked right */
+.mosaic-3 {
+  grid-template-columns: 2fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.mosaic-3 .mosaic-item-0 {
+  grid-row: 1 / 3; /* Span both rows */
+}
+
+.mosaic-3 .mosaic-item-1 {
+  grid-row: 1;
+}
+
+.mosaic-3 .mosaic-item-2 {
+  grid-row: 2;
+}
+
+/* Mosaic Item */
+.mosaic-item {
+  position: relative;
+  overflow: hidden;
+  background-color: #f0f0f0;
+  aspect-ratio: 4 / 3;
+  transition: opacity 0.2s;
+}
+
+.mosaic-item:hover {
+  opacity: 0.9;
+}
+
+.mosaic-item:focus {
+  outline: 2px solid #007bff;
+  outline-offset: -2px;
+}
+
+.mosaic-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Video/YouTube Indicators */
+.mosaic-video-indicator,
+.mosaic-youtube-indicator {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  padding: 12px;
+  pointer-events: none;
+  transition: background-color 0.2s;
+}
+
+.mosaic-item:hover .mosaic-video-indicator,
+.mosaic-item:hover .mosaic-youtube-indicator {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+/* More Photos Overlay */
+.mosaic-more-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 24px;
+  font-weight: bold;
+  pointer-events: none;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 768px) {
+  /* Stack all images on mobile */
+  .mosaic-2,
+  .mosaic-3 {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  .mosaic-3 .mosaic-item-0 {
+    grid-row: 1;
+  }
+
+  .mosaic-3 .mosaic-item-1 {
+    grid-row: 2;
+  }
+
+  .mosaic-3 .mosaic-item-2 {
+    grid-row: 3;
+  }
+
+  .mosaic-item {
+    aspect-ratio: 16 / 9; /* Wider aspect ratio on mobile */
+  }
+}
