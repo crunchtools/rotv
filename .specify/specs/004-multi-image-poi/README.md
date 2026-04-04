@@ -126,7 +126,7 @@
 
 ### Deferred (Not Critical for MVP)
 
-- DoS mitigation (rate limiting / signed URLs)
+- ✅ **IMPLEMENTED:** DoS mitigation (rate limiting - 100 req/15min per IP)
 - Mosaic caching (Redis)
 - Authorization model consolidation
 

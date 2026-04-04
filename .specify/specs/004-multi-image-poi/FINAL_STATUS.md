@@ -45,7 +45,7 @@ Multi-image POI support feature is **complete and production-ready**. All implem
   - Added caption length constraint (200 char)
   - Added moderation queue index for performance
 - **Deferred (Not Critical for MVP):**
-  - DoS mitigation (rate limiting / signed URL redirects)
+  - ✅ **IMPLEMENTED:** DoS mitigation (rate limiting on asset proxy endpoints)
   - Mosaic caching (Redis)
   - Authorization model consolidation
 
@@ -163,10 +163,10 @@ Complete 11-step runbook available at:
 
 ### Known Deferred Items (Non-Blocking)
 
-1. **DoS Vulnerability** (Asset proxy endpoints)
-   - **Risk:** Medium (requires targeted attack)
-   - **Mitigation:** Rate limiting or signed URL redirects
-   - **Timeline:** Post-MVP
+1. ✅ **DoS Vulnerability RESOLVED** (Asset proxy endpoints)
+   - **Status:** Rate limiting implemented (100 req/15min per IP)
+   - **Commit:** 3ecb28a
+   - **Tests:** 241/241 passing
 
 2. **Performance** (Mosaic calculation on every request)
    - **Risk:** Low (acceptable for MVP traffic)

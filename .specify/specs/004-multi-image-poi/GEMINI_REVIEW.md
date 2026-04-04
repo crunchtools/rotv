@@ -217,7 +217,7 @@ CREATE UNIQUE INDEX idx_poi_media_unique_primary ON poi_media(poi_id)
 | Priority | Issue | Status | Action |
 |----------|-------|--------|--------|
 | CRITICAL | DELETE order | ✅ FIXED | Reversed deletion order |
-| HIGH | DoS vulnerability | ⚠️ DEFERRED | Add rate limiting or signed URLs |
+| HIGH | DoS vulnerability | ✅ FIXED | Rate limiting implemented (commit 3ecb28a) |
 | MEDIUM | moderation_status constraint | ✅ FIXED | Migration 016 |
 | MEDIUM | User FK ON DELETE | ✅ FIXED | Migration 016 |
 | MEDIUM | Caption length constraint | ✅ FIXED | Migration 016 |
@@ -236,7 +236,7 @@ CREATE UNIQUE INDEX idx_poi_media_unique_primary ON poi_media(poi_id)
 - `backend/migrations/016_fix_poi_media_constraints.sql` - Data integrity constraints
 
 **Deferred Items:**
-- DoS mitigation (rate limiting / signed URLs)
+- ✅ **IMPLEMENTED:** DoS mitigation (rate limiting on asset proxy - commit 3ecb28a)
 - Mosaic caching (Redis)
 - Authorization model consolidation
 
