@@ -89,6 +89,21 @@ curl http://localhost:8080/
 - Frontend loading correctly
 - React app compiled and served
 
+### 6. OAuth Graceful Degradation (Fix for "Unknown authentication strategy" error)
+```bash
+curl http://localhost:8080/api/auth/google
+```
+**Result:** ✅ PASS
+```json
+{
+  "error": "Google OAuth not configured. Contact administrator."
+}
+```
+- Returns 501 Not Implemented (was crashing with 500)
+- Helpful error message instead of stack trace
+- Auth routes conditionally registered based on env vars
+- **Fix Applied:** `backend/routes/auth.js` - Commit 7828118
+
 ---
 
 ## 📊 Test Summary
@@ -102,6 +117,7 @@ curl http://localhost:8080/
 | Rate Limiting | ✅ PASS | Headers present, counter works |
 | Mosaic Caching | ✅ PASS | Identical responses, fast |
 | Frontend | ✅ PASS | Page loads correctly |
+| OAuth Degradation | ✅ PASS | Returns 501 vs crash (commit 7828118) |
 
 ---
 
