@@ -1,0 +1,49 @@
+#!/bin/bash
+# Gatehouse AI code review — runs before push
+# Uses the containerized version with diff piped via stdin
+# to avoid worktree .git mount issues.
+
+set -e
+
+GATEHOUSE_IMAGE="quay.io/fatherlinux/gatehouse:latest"
+ENV_FILE="$HOME/.config/mcp-env/gatehouse.env"
+
+# Load API key from env file
+GEMINI_API_KEY=""
+if [ -f "$ENV_FILE" ]; then
+    GEMINI_API_KEY=$(grep '^GEMINI_API_KEY=' "$ENV_FILE" | cut -d= -f2-)
+fi
+
+if [ -z "$GEMINI_API_KEY" ]; then
+    echo "Warning: GEMINI_API_KEY not found in $ENV_FILE, skipping gatehouse"
+    exit 0
+fi
+
+# Detect the default branch
+BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
+if [ -z "$BASE" ]; then
+    if git rev-parse --verify main >/dev/null 2>&1; then
+        BASE="main"
+    else
+        BASE="master"
+    fi
+fi
+
+# Generate diff on the host (works in worktrees)
+DIFF=$(git diff "${BASE}...HEAD" 2>/dev/null)
+
+if [ -z "$DIFF" ]; then
+    echo "Gatehouse: no changes to review"
+    exit 0
+fi
+
+echo "Running Gatehouse AI code review..."
+
+# Mount the repo read-only for styleguide access, pipe diff via stdin
+REPO_ROOT=$(git rev-parse --show-toplevel)
+
+echo "$DIFF" | podman run --rm -i \
+    -e "GEMINI_API_KEY=${GEMINI_API_KEY}" \
+    -v "${REPO_ROOT}:/repo:ro,Z" \
+    -w /repo \
+    "$GATEHOUSE_IMAGE" --stdin --advisory
