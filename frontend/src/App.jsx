@@ -18,6 +18,7 @@ import ParkEvents from './components/ParkEvents';
 import DataCollectionSettings from './components/DataCollectionSettings';
 import ModerationInbox from './components/ModerationInbox';
 import JobsDashboard from './components/JobsDashboard';
+import UsersSettings from './components/UsersSettings';
 import ResultsTab from './components/ResultsTab';
 
 // Default icon type IDs for initializing the filter
@@ -1718,6 +1719,12 @@ function AppContent() {
               >
                 Google
               </button>
+              <button
+                className={`settings-tab-btn ${settingsTab === 'users' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('users')}
+              >
+                Users
+              </button>
             </nav>
 
             <div className="settings-tab-content">
@@ -1737,6 +1744,7 @@ function AppContent() {
                   <AISettings />
                 </div>
               )}
+              {settingsTab === 'users' && <UsersSettings />}
             </div>
           </div>
         </main>

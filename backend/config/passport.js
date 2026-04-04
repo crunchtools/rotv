@@ -45,6 +45,14 @@ export function configurePassport(pool) {
       const updateFields = ['last_login_at = CURRENT_TIMESTAMP', 'picture_url = $1', 'name = $2'];
       const updateValues = [pictureUrl, name];
 
+      // Sync is_admin and role on login (only promote to admin, never demote via login)
+      if (isAdmin && !userLookup.rows[0].is_admin) {
+        updateFields.push(`is_admin = $${updateValues.length + 1}`);
+        updateValues.push(true);
+        updateFields.push(`role = $${updateValues.length + 1}`);
+        updateValues.push('admin');
+      }
+
       if (isAdmin && credentials) {
         updateFields.push(`oauth_credentials = $${updateValues.length + 1}`);
         updateValues.push(JSON.stringify(credentials));
@@ -62,11 +70,12 @@ export function configurePassport(pool) {
     }
 
     // Create new user
+    const role = isAdmin ? 'admin' : 'viewer';
     const insertResult = await pool.query(
-      `INSERT INTO users (email, name, picture_url, oauth_provider, oauth_provider_id, is_admin, oauth_credentials, last_login_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)
+      `INSERT INTO users (email, name, picture_url, oauth_provider, oauth_provider_id, is_admin, role, oauth_credentials, last_login_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
        RETURNING *`,
-      [email, name, pictureUrl, provider, providerId, isAdmin, isAdmin && credentials ? JSON.stringify(credentials) : null]
+      [email, name, pictureUrl, provider, providerId, isAdmin, role, isAdmin && credentials ? JSON.stringify(credentials) : null]
     );
 
     return insertResult.rows[0];

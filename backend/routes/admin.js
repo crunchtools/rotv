@@ -4586,5 +4586,73 @@ export function createAdminRouter(pool) {
     }
   });
 
+  // ============================================================
+  // User Management
+  // ============================================================
+
+  // GET /users - list all users
+  router.get('/users', isAdmin, async (req, res) => {
+    try {
+      const result = await pool.query(
+        `SELECT id, email, name, picture_url, oauth_provider, role, is_admin, last_login_at, created_at
+         FROM users ORDER BY last_login_at DESC NULLS LAST`
+      );
+      const users = result.rows.map(row => ({
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        pictureUrl: row.picture_url,
+        oauthProvider: row.oauth_provider,
+        role: row.role || 'viewer',
+        isAdmin: row.is_admin,
+        lastLoginAt: row.last_login_at,
+        createdAt: row.created_at
+      }));
+      res.json(users);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ error: 'Failed to fetch users' });
+    }
+  });
+
+  // PUT /users/:id/role - update user role
+  router.put('/users/:id/role', isAdmin, async (req, res) => {
+    try {
+      const userId = parseInt(req.params.id);
+      if (isNaN(userId)) {
+        return res.status(400).json({ error: 'Invalid user ID' });
+      }
+
+      const { role } = req.body;
+      const validRoles = ['viewer', 'poi_admin', 'media_admin', 'admin'];
+
+      if (!validRoles.includes(role)) {
+        return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+      }
+
+      if (userId === req.user.id) {
+        return res.status(400).json({ error: 'Cannot change your own role' });
+      }
+
+      // Keep is_admin in sync
+      const isAdminValue = role === 'admin';
+
+      const result = await pool.query(
+        'UPDATE users SET role = $1, is_admin = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
+        [role, isAdminValue, userId]
+      );
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      console.log(`Admin ${req.user.email} changed user ${userId} role to ${role}`);
+      res.json({ success: true, role });
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      res.status(500).json({ error: 'Failed to update user role' });
+    }
+  });
+
   return router;
 }

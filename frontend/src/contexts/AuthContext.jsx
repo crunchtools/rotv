@@ -85,6 +85,7 @@ export function AuthProvider({ children }) {
     error,
     isAuthenticated: !!user,
     isAdmin: user?.isAdmin || false,
+    role: user?.role || 'viewer',
     logout,
     loginWithGoogle,
     loginWithFacebook,
