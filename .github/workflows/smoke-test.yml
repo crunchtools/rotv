@@ -1,0 +1,234 @@
+name: Production Smoke Tests
+
+# Run manually after deployment to verify production health
+# Usage: gh workflow run smoke-test.yml
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+      base_url:
+        description: 'Base URL to test (leave empty for default)'
+        required: false
+        type: string
+
+jobs:
+  smoke-test:
+    name: Smoke Test - ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set base URL
+        id: set-url
+        run: |
+          if [ -n "${{ github.event.inputs.base_url }}" ]; then
+            echo "BASE_URL=${{ github.event.inputs.base_url }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event.inputs.environment }}" = "production" ]; then
+            echo "BASE_URL=https://rootsofthevalley.org" >> $GITHUB_OUTPUT
+          else
+            echo "BASE_URL=https://staging.rootsofthevalley.org" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Test 1 - Health Endpoint
+        run: |
+          echo "Testing health endpoint..."
+          RESPONSE=$(curl -sf "${{ steps.set-url.outputs.BASE_URL }}/api/health" || echo "FAILED")
+          if [ "$RESPONSE" = "FAILED" ]; then
+            echo "❌ Health endpoint failed"
+            exit 1
+          fi
+          echo "✅ Health endpoint responding"
+          echo "Response: $RESPONSE"
+
+      - name: Test 2 - POI List Endpoint
+        run: |
+          echo "Testing POI list endpoint..."
+          RESPONSE=$(curl -sf "${{ steps.set-url.outputs.BASE_URL }}/api/pois?limit=1")
+          if [ $? -ne 0 ]; then
+            echo "❌ POI list endpoint failed"
+            exit 1
+          fi
+
+          COUNT=$(echo "$RESPONSE" | jq '. | length')
+          if [ "$COUNT" -lt 1 ]; then
+            echo "❌ No POIs returned"
+            exit 1
+          fi
+
+          echo "✅ POI list endpoint working (returned $COUNT POIs)"
+
+      - name: Test 3 - Media Endpoint (PR #182 Critical)
+        run: |
+          echo "Testing media endpoint..."
+          RESPONSE=$(curl -sf "${{ steps.set-url.outputs.BASE_URL }}/api/pois/1/media")
+          if [ $? -ne 0 ]; then
+            echo "❌ Media endpoint failed"
+            exit 1
+          fi
+
+          TOTAL=$(echo "$RESPONSE" | jq -r '.total_count // "MISSING"')
+          if [ "$TOTAL" = "MISSING" ]; then
+            echo "❌ Media endpoint missing total_count field"
+            exit 1
+          fi
+
+          echo "✅ Media endpoint working (POI 1 has $TOTAL media items)"
+
+          # Warning if zero but don't fail (POI might legitimately have no media)
+          if [ "$TOTAL" -eq 0 ]; then
+            echo "⚠️  Warning: POI 1 has zero media items (may be expected)"
+          fi
+
+      - name: Test 4 - Thumbnail Endpoint
+        run: |
+          echo "Testing thumbnail endpoint..."
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "${{ steps.set-url.outputs.BASE_URL }}/api/pois/1/thumbnail")
+
+          # 200 = image found, 404 = no image (both are valid responses)
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Thumbnail endpoint working (POI 1 has image)"
+          elif [ "$HTTP_CODE" = "404" ]; then
+            echo "✅ Thumbnail endpoint working (POI 1 has no image - expected)"
+          else
+            echo "❌ Thumbnail endpoint returned unexpected status: $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Test 5 - Asset Proxy Validation
+        run: |
+          echo "Testing asset proxy SSRF protection..."
+          # Should return 400 for invalid asset ID (proves validation works)
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "${{ steps.set-url.outputs.BASE_URL }}/api/assets/../../etc/passwd/thumbnail" || echo "000")
+
+          if [ "$HTTP_CODE" = "400" ]; then
+            echo "✅ Asset proxy SSRF protection working"
+          else
+            echo "❌ Asset proxy returned unexpected status for invalid ID: $HTTP_CODE"
+            echo "⚠️  SECURITY: SSRF protection may be failing!"
+            exit 1
+          fi
+
+      - name: Test 6 - Auth Status Endpoint
+        run: |
+          echo "Testing auth status endpoint..."
+          RESPONSE=$(curl -sf "${{ steps.set-url.outputs.BASE_URL }}/api/auth/status")
+          if [ $? -ne 0 ]; then
+            echo "❌ Auth status endpoint failed"
+            exit 1
+          fi
+
+          AUTH=$(echo "$RESPONSE" | jq -r '.authenticated // "MISSING"')
+          if [ "$AUTH" = "MISSING" ]; then
+            echo "❌ Auth status missing authenticated field"
+            exit 1
+          fi
+
+          echo "✅ Auth status endpoint working (authenticated: $AUTH)"
+
+      - name: Test 7 - Frontend Loads
+        run: |
+          echo "Testing frontend HTML..."
+          HTTP_CODE=$(curl -sf -o /dev/null -w "%{http_code}" "${{ steps.set-url.outputs.BASE_URL }}/")
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Frontend loads successfully"
+          else
+            echo "❌ Frontend returned status: $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Test 8 - Database Connection (via API)
+        run: |
+          echo "Testing database connectivity..."
+          # Get POI count - requires database connection
+          RESPONSE=$(curl -sf "${{ steps.set-url.outputs.BASE_URL }}/api/pois")
+          if [ $? -ne 0 ]; then
+            echo "❌ Database query failed"
+            exit 1
+          fi
+
+          COUNT=$(echo "$RESPONSE" | jq '. | length')
+          if [ "$COUNT" -lt 1 ]; then
+            echo "❌ Database appears empty (no POIs)"
+            exit 1
+          fi
+
+          echo "✅ Database connection working ($COUNT POIs in database)"
+
+      - name: Test 9 - Response Time Check
+        run: |
+          echo "Testing API response times..."
+
+          # Measure response time for POI list
+          START=$(date +%s%N)
+          curl -sf "${{ steps.set-url.outputs.BASE_URL }}/api/pois?limit=10" > /dev/null
+          END=$(date +%s%N)
+          DURATION=$(( (END - START) / 1000000 ))  # Convert to milliseconds
+
+          echo "POI list response time: ${DURATION}ms"
+
+          if [ "$DURATION" -gt 5000 ]; then
+            echo "⚠️  Warning: Slow response time (${DURATION}ms > 5000ms)"
+          else
+            echo "✅ Response time acceptable (${DURATION}ms)"
+          fi
+
+      - name: Summary
+        if: success()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "✅ ALL SMOKE TESTS PASSED"
+          echo "=========================================="
+          echo ""
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "URL: ${{ steps.set-url.outputs.BASE_URL }}"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+          echo "Tests executed:"
+          echo "  ✅ Health endpoint"
+          echo "  ✅ POI list endpoint"
+          echo "  ✅ Media endpoint (PR #182)"
+          echo "  ✅ Thumbnail endpoint"
+          echo "  ✅ Asset proxy SSRF protection"
+          echo "  ✅ Auth status endpoint"
+          echo "  ✅ Frontend loads"
+          echo "  ✅ Database connectivity"
+          echo "  ✅ Response time check"
+          echo ""
+          echo "Production is healthy ✨"
+
+      - name: Failure Summary
+        if: failure()
+        run: |
+          echo ""
+          echo "=========================================="
+          echo "❌ SMOKE TESTS FAILED"
+          echo "=========================================="
+          echo ""
+          echo "Environment: ${{ github.event.inputs.environment }}"
+          echo "URL: ${{ steps.set-url.outputs.BASE_URL }}"
+          echo "Timestamp: $(date -u +"%Y-%m-%d %H:%M:%S UTC")"
+          echo ""
+          echo "⚠️  Production may have issues!"
+          echo ""
+          echo "Next steps:"
+          echo "  1. Check failed test output above"
+          echo "  2. Review production logs: journalctl -u rootsofthevalley.org"
+          echo "  3. Run diagnostics: bash scripts/diagnose-production.sh"
+          echo "  4. Consider rollback if critical"
+          echo ""
+          echo "See PROD_TROUBLESHOOT.md for detailed troubleshooting"

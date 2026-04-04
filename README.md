@@ -49,10 +49,17 @@ See [CLAUDE.md](CLAUDE.md) for development guidelines and [CONTRIBUTING.md](CONT
 
 ## Documentation
 
+### Development
 - [Development Architecture](docs/DEVELOPMENT_ARCHITECTURE.md)
 - [News & Events Architecture](docs/NEWS_EVENTS_ARCHITECTURE.md)
 - [Trail Status Architecture](docs/TRAIL_STATUS_ARCHITECTURE.md)
 - [CI/CD & Testing](docs/CI_CD_TESTING.md)
+
+### Production Operations
+- **[Production Operations Guide](README_PRODUCTION.md)** - Start here for production ops
+- [Deployment Guide](DEPLOYMENT_GUIDE.md) - Standard deployment procedures
+- [Troubleshooting Package](TROUBLESHOOTING_PACKAGE_INDEX.md) - Complete incident response
+- [Quick Fix Reference](PROD_FIX_QUICKREF.md) - Copy-paste commands for common issues
 
 ## License
 
