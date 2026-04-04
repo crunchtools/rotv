@@ -4771,8 +4771,10 @@ export function createAdminRouter(pool) {
       const { permanent } = req.query;
 
       if (permanent === 'true') {
-        // Permanent delete - remove from database first, then image server
-        // Fix: Database delete before image server to avoid dangling references (Gatehouse finding)
+        // Permanent delete - remove from image server first, then database
+        // Fix: Image server delete first to prevent orphaned files (Gemini review PR #182)
+        // Rationale: If image server delete fails, we can retry. If it succeeds but DB fails,
+        // we have a dangling DB record (detectable/fixable) vs orphaned file (unmanageable).
         const mediaResult = await pool.query(
           'SELECT * FROM poi_media WHERE id = $1',
           [id]
@@ -4784,20 +4786,15 @@ export function createAdminRouter(pool) {
 
         const media = mediaResult.rows[0];
 
-        // Delete from database first
-        await pool.query('DELETE FROM poi_media WHERE id = $1', [id]);
-
-        // Then attempt to delete from image server if it's an image/video
-        // This is best-effort cleanup; database is already consistent
+        // Delete from image server first (if applicable)
         if (media.image_server_asset_id) {
-          try {
-            const imageServerClient = (await import('../services/imageServerClient.js')).default;
-            await imageServerClient.deleteAsset(media.image_server_asset_id);
-          } catch (cleanupError) {
-            console.warn(`Failed to delete asset ${media.image_server_asset_id} from image server:`, cleanupError);
-            // Continue - database is clean, image server cleanup failed but not critical
-          }
+          const imageServerClient = (await import('../services/imageServerClient.js')).default;
+          await imageServerClient.deleteAsset(media.image_server_asset_id);
+          // If this fails, it throws and we never reach DB delete (can retry)
         }
+
+        // Then delete from database (only reached if image server delete succeeded)
+        await pool.query('DELETE FROM poi_media WHERE id = $1', [id]);
 
         res.json({ success: true, message: 'Media permanently deleted' });
       } else {
