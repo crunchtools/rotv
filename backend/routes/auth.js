@@ -9,30 +9,51 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 // Admins get drive.file scope and credentials stored in database
 // accessType: 'offline' requests a refresh token
 // prompt: 'consent' forces consent screen to ensure we get refresh token
-router.get('/google', passport.authenticate('google', {
-  accessType: 'offline',
-  prompt: 'consent'
-}));
+// Fix: Only register routes if strategy is configured (prevents "Unknown strategy" error)
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  router.get('/google', passport.authenticate('google', {
+    accessType: 'offline',
+    prompt: 'consent'
+  }));
 
-router.get('/google/callback',
-  passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
-  (req, res) => {
-    // Always redirect to View tab (default) after login
-    res.redirect(`${FRONTEND_URL}?auth=success`);
-  }
-);
+  router.get('/google/callback',
+    passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
+    (req, res) => {
+      // Always redirect to View tab (default) after login
+      res.redirect(`${FRONTEND_URL}?auth=success`);
+    }
+  );
+} else {
+  // Return helpful error when OAuth not configured
+  router.get('/google', (req, res) => {
+    res.status(501).json({ error: 'Google OAuth not configured. Contact administrator.' });
+  });
+  router.get('/google/callback', (req, res) => {
+    res.status(501).json({ error: 'Google OAuth not configured. Contact administrator.' });
+  });
+}
 
 // Facebook OAuth
-router.get('/facebook', passport.authenticate('facebook', {
-  scope: ['email']
-}));
+if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
+  router.get('/facebook', passport.authenticate('facebook', {
+    scope: ['email']
+  }));
 
-router.get('/facebook/callback',
-  passport.authenticate('facebook', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
-  (req, res) => {
-    res.redirect(`${FRONTEND_URL}?auth=success`);
-  }
-);
+  router.get('/facebook/callback',
+    passport.authenticate('facebook', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
+    (req, res) => {
+      res.redirect(`${FRONTEND_URL}?auth=success`);
+    }
+  );
+} else {
+  // Return helpful error when OAuth not configured
+  router.get('/facebook', (req, res) => {
+    res.status(501).json({ error: 'Facebook OAuth not configured. Contact administrator.' });
+  });
+  router.get('/facebook/callback', (req, res) => {
+    res.status(501).json({ error: 'Facebook OAuth not configured. Contact administrator.' });
+  });
+}
 
 // Get current user
 router.get('/user', (req, res) => {
