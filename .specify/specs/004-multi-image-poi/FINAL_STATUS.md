@@ -46,8 +46,8 @@ Multi-image POI support feature is **complete and production-ready**. All implem
   - Added moderation queue index for performance
 - **Deferred (Not Critical for MVP):**
   - ✅ **IMPLEMENTED:** DoS mitigation (rate limiting on asset proxy endpoints)
-  - Mosaic caching (Redis)
-  - Authorization model consolidation
+  - ✅ **IMPLEMENTED:** Mosaic caching (in-memory with auto-invalidation)
+  - Authorization model consolidation (codebase-wide refactor)
 
 ---
 
@@ -168,10 +168,10 @@ Complete 11-step runbook available at:
    - **Commit:** 3ecb28a
    - **Tests:** 241/241 passing
 
-2. **Performance** (Mosaic calculation on every request)
-   - **Risk:** Low (acceptable for MVP traffic)
-   - **Mitigation:** Redis caching
-   - **Timeline:** After launch monitoring
+2. ✅ **Performance RESOLVED** (Mosaic calculation)
+   - **Status:** In-memory caching implemented (5min TTL)
+   - **Commit:** 9824a1e
+   - **Auto-invalidation:** On upload/update/delete/approve/reject
 
 3. **Architecture Smell** (Dual auth model)
    - **Risk:** Low (isolated to this feature)

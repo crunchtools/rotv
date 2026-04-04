@@ -127,8 +127,8 @@
 ### Deferred (Not Critical for MVP)
 
 - ✅ **IMPLEMENTED:** DoS mitigation (rate limiting - 100 req/15min per IP)
-- Mosaic caching (Redis)
-- Authorization model consolidation
+- ✅ **IMPLEMENTED:** Mosaic caching (in-memory with 5min TTL, auto-invalidation)
+- Authorization model consolidation (codebase-wide refactor)
 
 ---
 

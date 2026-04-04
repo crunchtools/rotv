@@ -237,8 +237,8 @@ CREATE UNIQUE INDEX idx_poi_media_unique_primary ON poi_media(poi_id)
 
 **Deferred Items:**
 - ✅ **IMPLEMENTED:** DoS mitigation (rate limiting on asset proxy - commit 3ecb28a)
-- Mosaic caching (Redis)
-- Authorization model consolidation
+- ✅ **IMPLEMENTED:** Mosaic caching (in-memory Map with 5min TTL - commit 9824a1e)
+- Authorization model consolidation (codebase-wide refactor, beyond feature scope)
 
 ---
 
