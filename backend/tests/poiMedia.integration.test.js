@@ -255,4 +255,65 @@ describe('Rate Limiting (DoS Protection)', () => {
     expect(response.headers['ratelimit-limit']).toBeDefined();
     expect(response.headers['ratelimit-remaining']).toBeDefined();
   });
+
+  it('should decrement rate limit counter with each request', async () => {
+    const response1 = await request(BASE_URL)
+      .get('/api/assets/test-asset-id/thumbnail');
+    const remaining1 = parseInt(response1.headers['ratelimit-remaining']);
+
+    const response2 = await request(BASE_URL)
+      .get('/api/assets/test-asset-id/thumbnail');
+    const remaining2 = parseInt(response2.headers['ratelimit-remaining']);
+
+    // Second request should have fewer remaining slots
+    expect(remaining2).toBeLessThan(remaining1);
+  });
+});
+
+describe('Mosaic Caching (Performance)', () => {
+  it('should return same data structure on repeated requests', async () => {
+    const response1 = await request(BASE_URL)
+      .get(`/api/pois/${TEST_POI_ID}/media`);
+
+    const response2 = await request(BASE_URL)
+      .get(`/api/pois/${TEST_POI_ID}/media`);
+
+    // Both requests should return valid JSON
+    expect(response1.status).toBe(200);
+    expect(response2.status).toBe(200);
+
+    // Data structure should be consistent
+    expect(response1.body).toHaveProperty('mosaic');
+    expect(response1.body).toHaveProperty('all_media');
+    expect(response1.body).toHaveProperty('total_count');
+
+    expect(response2.body).toHaveProperty('mosaic');
+    expect(response2.body).toHaveProperty('all_media');
+    expect(response2.body).toHaveProperty('total_count');
+
+    // Content should match (cache hit)
+    expect(response2.body.total_count).toBe(response1.body.total_count);
+  });
+
+  it('should return mosaic data consistently across cache hits', async () => {
+    // First request (cache miss)
+    const response1 = await request(BASE_URL)
+      .get(`/api/pois/${TEST_POI_ID}/media`);
+
+    // Second request (should be cache hit within 5min TTL)
+    const response2 = await request(BASE_URL)
+      .get(`/api/pois/${TEST_POI_ID}/media`);
+
+    // Third request (also cache hit)
+    const response3 = await request(BASE_URL)
+      .get(`/api/pois/${TEST_POI_ID}/media`);
+
+    // All should return same total count
+    expect(response1.body.total_count).toBe(response2.body.total_count);
+    expect(response2.body.total_count).toBe(response3.body.total_count);
+
+    // Mosaic size should be consistent
+    expect(response1.body.mosaic.length).toBe(response2.body.mosaic.length);
+    expect(response2.body.mosaic.length).toBe(response3.body.mosaic.length);
+  });
 });
