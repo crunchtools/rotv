@@ -489,6 +489,8 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
     : contentType === 'event' ? EDITABLE_EVENT : EDITABLE_PHOTO;
   const table = TABLE_MAP[contentType];
 
+  console.log('[editAndPublish]', { contentType, contentId, edits, table, allowedFields });
+
   const setClauses = [];
   const values = [contentId];
   let idx = 2;
@@ -503,8 +505,8 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
     }
   }
 
-  // When admin sets publication_date, mark confidence as 'exact'
-  if (edits.publication_date) {
+  // When admin sets publication_date, mark confidence as 'exact' (only for news/events, not photos)
+  if (edits.publication_date && contentType !== 'photo') {
     setClauses.push(`date_confidence = 'exact'`);
   }
 
@@ -515,6 +517,7 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   }
 
   if (setClauses.length === 0) return;
+  console.log('[editAndPublish] SQL:', `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
   await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
 }
 
@@ -931,7 +934,8 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            n.submitted_by, n.moderated_by, n.moderated_at, n.created_at, n.source_url,
            n.content_source, n.publication_date, n.date_confidence,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
-           COUNT(u.id)::int AS additional_url_count
+           COUNT(u.id)::int AS additional_url_count,
+           NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role
     FROM poi_news n
     LEFT JOIN poi_news_urls u ON u.news_id = n.id
     WHERE n.moderation_status = ANY($1)
@@ -942,19 +946,26 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            e.submitted_by, e.moderated_by, e.moderated_at, e.created_at, e.source_url,
            e.content_source, e.publication_date, e.date_confidence,
            e.start_date, e.end_date,
-           COUNT(u.id)::int AS additional_url_count
+           COUNT(u.id)::int AS additional_url_count,
+           NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role
     FROM poi_events e
     LEFT JOIN poi_event_urls u ON u.event_id = e.id
     WHERE e.moderation_status = ANY($1)
     GROUP BY e.id
     UNION ALL
-    SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
+    SELECT id, 'photo' AS content_type, poi_id,
+           CASE
+             WHEN media_type = 'youtube' THEN youtube_url
+             ELSE CONCAT(media_type, ' #', id)
+           END AS title,
+           caption AS description,
            moderation_status, confidence_score, ai_reasoning, NULL AS ai_issues,
-           submitted_by, moderated_by, moderated_at, created_at, NULL AS source_url,
+           submitted_by, moderated_by, moderated_at, created_at, youtube_url AS source_url,
            NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR AS date_confidence,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
-           0 AS additional_url_count
-    FROM photo_submissions WHERE moderation_status = ANY($1)`;
+           0 AS additional_url_count,
+           media_type, image_server_asset_id, role
+    FROM poi_media WHERE moderation_status = ANY($1)`;
 
   const filters = [];
   const params = [statusList];
@@ -992,7 +1003,15 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
 }
 
 export async function getPendingCount(pool) {
-  const countRow = await pool.query(`SELECT COUNT(*) FROM moderation_queue`);
+  const countRow = await pool.query(`
+    SELECT COUNT(*) FROM (
+      SELECT id FROM poi_news WHERE moderation_status = 'pending'
+      UNION ALL
+      SELECT id FROM poi_events WHERE moderation_status = 'pending'
+      UNION ALL
+      SELECT id FROM poi_media WHERE moderation_status = 'pending'
+    ) AS pending_items
+  `);
   return parseInt(countRow.rows[0].count);
 }
 
@@ -1004,7 +1023,7 @@ export async function getItemDetail(pool, contentType, contentId) {
     event: `SELECT e.*, p.name as poi_name,
               COALESCE(json_agg(json_build_object('id', u.id, 'url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
             FROM poi_events e LEFT JOIN pois p ON e.poi_id = p.id LEFT JOIN poi_event_urls u ON u.event_id = e.id WHERE e.id = $1 GROUP BY e.id, p.name`,
-    photo: `SELECT ps.*, p.name as poi_name FROM photo_submissions ps LEFT JOIN pois p ON ps.poi_id = p.id WHERE ps.id = $1`
+    photo: `SELECT pm.*, p.name as poi_name FROM poi_media pm LEFT JOIN pois p ON pm.poi_id = p.id WHERE pm.id = $1`
   };
 
   const sql = queryMap[contentType];

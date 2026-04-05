@@ -297,13 +297,16 @@ function AppContent() {
 
   // Fetch moderation pending count for admin badge
   const refreshModerationCount = useCallback(async () => {
+    console.log('[App] Refreshing moderation count...');
     try {
       const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
+        console.log('[App] New moderation count:', data.count);
         setModerationCount(data.count);
       }
     } catch (err) {
+      console.error('[App] Failed to refresh moderation count:', err);
       // Silently ignore — badge just won't show
     }
   }, []);
@@ -312,7 +315,18 @@ function AppContent() {
     if (!isAdmin) return;
     refreshModerationCount();
     const interval = setInterval(refreshModerationCount, 60000);
-    return () => clearInterval(interval);
+
+    // Listen for media upload events to refresh count
+    const handleCountChanged = () => {
+      console.log('[App] Received moderation-count-changed event');
+      refreshModerationCount();
+    };
+    window.addEventListener('moderation-count-changed', handleCountChanged);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('moderation-count-changed', handleCountChanged);
+    };
   }, [isAdmin, refreshModerationCount]);
 
   // Preview coordinates for real-time editing sync between Map and Sidebar
@@ -1879,6 +1893,7 @@ function AppContent() {
             navigate('/mtb-trail-status');
           }}
           isAdmin={isAdmin}
+          user={user}
           editMode={editMode}
           onDestinationUpdate={handleDestinationUpdate}
           onDestinationDelete={handleDestinationDelete}

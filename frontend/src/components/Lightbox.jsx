@@ -1,13 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import MediaUploadModal from './MediaUploadModal';
 import './Lightbox.css';
 
 /**
  * Lightbox Component
  * Full-screen media viewer with prev/next navigation
  * Supports images, videos, and YouTube embeds
+ * Uses React Portal to render outside sidebar DOM
  */
-function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
+function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [settingPrimary, setSettingPrimary] = useState(false);
 
   const handlePrevious = useCallback(() => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : media.length - 1));
@@ -45,6 +51,96 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
 
   const currentMedia = media[currentIndex];
 
+  const handleUploadSuccess = () => {
+    setUploadModalOpen(false);
+    if (onMediaUpdate) {
+      onMediaUpdate();
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm('Are you sure you want to delete this image?')) {
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const response = await fetch(`/api/pois/${poiId}/media/${currentMedia.id}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete');
+      }
+
+      // If this is the last image, close lightbox
+      if (media.length === 1) {
+        onClose();
+        if (onMediaUpdate) {
+          onMediaUpdate();
+        }
+        return;
+      }
+
+      // Move to next image, or previous if we're at the end
+      let newIndex = currentIndex;
+      if (currentIndex >= media.length - 1) {
+        newIndex = Math.max(0, currentIndex - 1);
+      }
+
+      // Update the index first
+      setCurrentIndex(newIndex);
+
+      // Refresh media list
+      if (onMediaUpdate) {
+        onMediaUpdate();
+      }
+    } catch (error) {
+      console.error('Delete failed:', error);
+      alert('Failed to delete image: ' + error.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleSetPrimary = async () => {
+    if (!window.confirm('Set this as the primary image? The current primary will become a gallery image.')) {
+      return;
+    }
+
+    const currentMediaId = currentMedia.id;
+    setSettingPrimary(true);
+    try {
+      const response = await fetch(`/api/pois/${poiId}/media/${currentMedia.id}/set-primary`, {
+        method: 'PATCH',
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to set primary');
+      }
+
+      // Refresh media and stay on the same image (it will move to index 0 as primary)
+      if (onMediaUpdate) {
+        onMediaUpdate();
+      }
+
+      // Emit event to refresh map markers with new primary image
+      window.dispatchEvent(new CustomEvent('poi-updated', { detail: { poiId } }));
+
+      // The image we just set as primary will now be at index 0
+      setCurrentIndex(0);
+    } catch (error) {
+      console.error('Set primary failed:', error);
+      alert('Failed to set as primary: ' + error.message);
+    } finally {
+      setSettingPrimary(false);
+    }
+  };
+
   const renderMedia = () => {
     if (currentMedia.media_type === 'youtube') {
       return (
@@ -81,7 +177,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
     }
   };
 
-  return (
+  return createPortal(
     <div className="lightbox-overlay" onClick={onClose}>
       <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
         {/* Close Button */}
@@ -125,6 +221,20 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
           </div>
         )}
 
+        {/* Pending indicator for user's own uploads */}
+        {currentMedia.moderation_status === 'pending' && (
+          <div className="lightbox-pending-badge">
+            ⏱ Pending Review
+          </div>
+        )}
+
+        {/* Primary image indicator */}
+        {currentMedia.role === 'primary' && (
+          <div className="lightbox-primary-badge">
+            ⭐ Primary Image
+          </div>
+        )}
+
         {/* Counter */}
         <div className="lightbox-counter">
           {currentIndex + 1} / {media.length}
@@ -158,12 +268,71 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId }) {
                 {item.media_type === 'youtube' && (
                   <div className="thumbnail-youtube-indicator">YT</div>
                 )}
+                {item.moderation_status === 'pending' && (
+                  <div className="thumbnail-pending-indicator">⏱</div>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        {/* Set as Primary button for admins on non-primary published images */}
+        {user && (user.role === 'admin' || user.role === 'media_admin') &&
+         currentMedia.role !== 'primary' &&
+         ['published', 'auto_approved'].includes(currentMedia.moderation_status) && (
+          <button
+            className="lightbox-set-primary"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleSetPrimary();
+            }}
+            disabled={settingPrimary}
+            aria-label="Set as primary image"
+          >
+            {settingPrimary ? 'Setting...' : '⭐ Set as Primary'}
+          </button>
+        )}
+
+        {/* Delete button for user's own uploads or admins */}
+        {user && (currentMedia.uploaded_by_user || user.role === 'admin' || user.role === 'media_admin') && (
+          <button
+            className="lightbox-delete-media"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDelete();
+            }}
+            disabled={deleting}
+            aria-label="Delete this image"
+          >
+            {deleting ? 'Deleting...' : '🗑 Delete'}
+          </button>
+        )}
+
+        {/* Add Photo/Video button for authenticated users */}
+        {user && (
+          <button
+            className="lightbox-add-media"
+            onClick={(e) => {
+              e.stopPropagation();
+              setUploadModalOpen(true);
+            }}
+            aria-label="Add photo or video"
+          >
+            + Add Photo/Video
+          </button>
+        )}
       </div>
-    </div>
+
+      {/* Upload Modal */}
+      {uploadModalOpen && (
+        <MediaUploadModal
+          poiId={poiId}
+          onClose={() => setUploadModalOpen(false)}
+          onSuccess={handleUploadSuccess}
+        />
+      )}
+    </div>,
+    document.body
   );
 }
 

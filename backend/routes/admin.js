@@ -3922,14 +3922,17 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.post('/moderation/save', isAdmin, async (req, res) => {
     try {
       const { type, id, edits } = req.body;
+      console.log('[Moderation Save] Request:', { type, id, edits });
       if (!type || !id || !edits) {
         return res.status(400).json({ error: 'type, id, and edits are required' });
       }
       await editAndPublish(pool, type, id, edits, req.user.id, { publish: false });
+      console.log('[Moderation Save] Success');
       res.json({ success: true });
     } catch (error) {
-      console.error('Error saving edits:', error);
-      res.status(500).json({ error: 'Failed to save edits' });
+      console.error('[Moderation Save] Error:', error.message);
+      console.error('[Moderation Save] Stack:', error.stack);
+      res.status(500).json({ error: 'Failed to save edits', details: error.message });
     }
   });
 

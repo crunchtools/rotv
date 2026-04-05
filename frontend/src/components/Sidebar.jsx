@@ -209,121 +209,10 @@ function EditableCellSignal({ level, onChange }) {
 }
 
 // Read-only view component - works for both destinations and linear features
-function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, showImage = true, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap, onCollectStatus }) {
-  // Multi-media state
-  const [media, setMedia] = useState([]);
-  const [mediaLoading, setMediaLoading] = useState(false);
-  const [uploadModalOpen, setUploadModalOpen] = useState(false);
-  const [user, setUser] = useState(null);
-
-  // Check authentication status
-  useEffect(() => {
-    fetch('/api/auth/status', { credentials: 'include' })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => setUser(data?.user || null))
-      .catch(() => setUser(null));
-  }, []);
-
-  // Fetch media for this POI
-  useEffect(() => {
-    if (!destination?.id) return;
-
-    setMediaLoading(true);
-    fetch(`/api/pois/${destination.id}/media`, { credentials: 'include' })
-      .then(res => res.ok ? res.json() : { mosaic: [], all_media: [] })
-      .then(data => {
-        setMedia(data.all_media || []);
-      })
-      .catch(err => {
-        console.error('Failed to load media:', err);
-        setMedia([]);
-      })
-      .finally(() => setMediaLoading(false));
-  }, [destination?.id]);
-
-  // Legacy: Use thumbnail service for backward compatibility
-  // Include updated_at for cache busting when image changes
-  const imageUrl = destination.has_primary_image
-    ? `/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`
-    : null;
-
-  // Get default thumbnail SVG path based on type
-  const getDefaultThumbnail = () => {
-    if (isLinearFeature) {
-      if (destination.feature_type === 'river') return '/icons/thumbnails/river.svg';
-      if (destination.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
-      return '/icons/thumbnails/trail.svg';
-    }
-    if (destination.poi_type === 'virtual') return '/icons/thumbnails/virtual.svg';
-    // MTB trailheads are point POIs with status_url
-    if (destination.poi_type === 'point' && destination.status_url) return '/icons/thumbnails/trail.svg';
-    return '/icons/thumbnails/destination.svg';
-  };
-
-  const handleUploadSuccess = () => {
-    // Refresh media after successful upload
-    fetch(`/api/pois/${destination.id}/media`, { credentials: 'include' })
-      .then(res => res.json())
-      .then(data => setMedia(data.all_media || []))
-      .catch(err => console.error('Failed to refresh media:', err));
-  };
-
+function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap, onCollectStatus }) {
   return (
     <div className="view-container">
       <div className="view-scroll">
-        {/* Multi-media section */}
-        {showImage && (
-          <div className="sidebar-media-section">
-            {media.length > 0 ? (
-              <Mosaic media={media} poiId={destination.id} />
-            ) : !mediaLoading && destination.has_primary_image ? (
-              // Fallback: Show single image if media endpoint returned empty but has_primary_image is true
-              <div className={`sidebar-image ${destination.poi_type === 'virtual' ? 'virtual-thumbnail' : ''}`}>
-                <img src={imageUrl} alt={destination.name} className={destination.poi_type === 'virtual' ? 'logo-image' : ''} />
-              </div>
-            ) : !mediaLoading ? (
-              // No images - show default thumbnail
-              <div className={`sidebar-image ${destination.poi_type === 'virtual' ? 'virtual-thumbnail' : ''}`}>
-                <img src={getDefaultThumbnail()} alt={destination.name} className="default-thumbnail" />
-              </div>
-            ) : (
-              // Loading state
-              <div className="sidebar-image loading">
-                <p>Loading media...</p>
-              </div>
-            )}
-
-            {/* Add Media button for authenticated users */}
-            {user && (
-              <button
-                className="add-media-button"
-                onClick={() => setUploadModalOpen(true)}
-                style={{
-                  marginTop: '8px',
-                  padding: '8px 16px',
-                  backgroundColor: '#007bff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '14px',
-                  width: '100%'
-                }}
-              >
-                + Add Photo/Video
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Upload Modal */}
-        {uploadModalOpen && (
-          <MediaUploadModal
-            poiId={destination.id}
-            onClose={() => setUploadModalOpen(false)}
-            onSuccess={handleUploadSuccess}
-          />
-        )}
 
         <div className="sidebar-content">
         <div className="badges-row">
@@ -482,7 +371,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, showIma
 }
 
 // Edit view component - works for both destinations and linear features
-function EditView({ destination, editedData, setEditedData, onSave, onCancel, onDelete, saving, deleting, onPreviewCoordsChange, isNewPOI, isNewOrganization, _onImageUpdate, isLinearFeature, showImage = true }) {
+function EditView({ destination, editedData, setEditedData, onSave, onCancel, onDelete, saving, deleting, onPreviewCoordsChange, isNewPOI, isNewOrganization, _onImageUpdate, isLinearFeature }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [aiError, setAiError] = useState(null);
   // Prompt editor modal state
@@ -507,6 +396,23 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
   // Pending image state (staging area for image uploads until save)
   const [pendingImage, setPendingImage] = useState(null);
+
+  // User state for admin checks
+  const [user, setUser] = useState(null);
+
+  // Check authentication status
+  useEffect(() => {
+    fetch('/api/auth/status', { credentials: 'include' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => setUser(data?.user || null))
+      .catch(() => setUser(null));
+  }, []);
+
+  // Callback for media updates from ImageUploader (no-op, just for consistency)
+  const handleMediaUpdate = () => {
+    // In edit mode, media updates will be handled by the parent refresh
+    // This is just a placeholder for the ImageUploader interface
+  };
 
   // Handle save with pending image processing
   const handleSaveWithImage = async () => {
@@ -874,6 +780,9 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             updatedAt={editedData.updated_at}
             disabled={saving}
             isVirtualPoi={destination?.poi_type === 'virtual'}
+            user={user}
+            poiId={destination.id}
+            onMediaUpdate={handleMediaUpdate}
           />
         ) : (
           <div className="sidebar-image">
@@ -2785,7 +2694,7 @@ function TrailStatus({ poiId, _poiName, isAdmin, editMode, _selectedFromMtbList,
   );
 }
 
-function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, showNpsMap, onToggleNpsMap }) {
+function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, showNpsMap, onToggleNpsMap }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
   const [saving, setSaving] = useState(false);
@@ -2795,6 +2704,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const [showAssociationsModal, setShowAssociationsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [pendingImage, setPendingImage] = useState(null);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [, setNewsCount] = useState(0);
   const [, setEventsCount] = useState(0);
   const [, setCollectResult] = useState(null);
@@ -2814,6 +2724,83 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       setSelectedPoiIds(newOrganization._selectedPoiIds || new Set());
     }
   }, [newOrganization]);
+
+  // Media state for top-level image/mosaic display
+  const [media, setMedia] = useState([]);
+  const [mediaLoading, setMediaLoading] = useState(false);
+
+  // Fetch media for destination/linear feature
+  useEffect(() => {
+    const poiId = destination?.id || linearFeature?.id;
+    if (!poiId) return;
+
+    setMediaLoading(true);
+    fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
+      .then(res => res.ok ? res.json() : { all_media: [] })
+      .then(data => {
+        setMedia(data.all_media || []);
+        setMediaLoading(false);
+      })
+      .catch(err => {
+        console.error('Failed to load media:', err);
+        setMedia([]);
+        setMediaLoading(false);
+      });
+  }, [destination?.id, linearFeature?.id]);
+
+  // Listen for media updates from moderation queue
+  useEffect(() => {
+    const poiId = destination?.id || linearFeature?.id;
+    if (!poiId) return;
+
+    const handleMediaUpdateEvent = (event) => {
+      if (event.detail.poiId === poiId) {
+        console.log('[Sidebar] POI media updated for', poiId, '- refreshing...');
+        // Refresh media list
+        fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
+          .then(res => res.json())
+          .then(data => setMedia(data.all_media || []))
+          .catch(err => console.error('[Sidebar] Failed to refresh media:', err));
+
+        // Refresh POI data to update has_primary_image flag
+        fetch(`/api/pois/${poiId}`, { credentials: 'include' })
+          .then(res => res.json())
+          .then(data => {
+            if (destination && onDestinationUpdate) {
+              onDestinationUpdate(data);
+            }
+          })
+          .catch(err => console.error('[Sidebar] Failed to refresh POI:', err));
+      }
+    };
+
+    window.addEventListener('poi-media-updated', handleMediaUpdateEvent);
+    return () => window.removeEventListener('poi-media-updated', handleMediaUpdateEvent);
+  }, [destination?.id, linearFeature?.id]);
+
+  // Callback for media updates from ImageUploader or Mosaic
+  const handleMediaUpdate = () => {
+    // Refresh media after upload
+    const poiId = destination?.id || linearFeature?.id;
+    if (!poiId) return;
+
+    // Refresh media list
+    fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
+      .then(res => res.json())
+      .then(data => setMedia(data.all_media || []))
+      .catch(err => console.error('Failed to refresh media:', err));
+
+    // Refresh POI data to update has_primary_image flag
+    if (destination && onDestinationUpdate) {
+      fetch(`/api/pois/${poiId}`, { credentials: 'include' })
+        .then(res => res.json())
+        .then(data => onDestinationUpdate(data))
+        .catch(err => console.error('Failed to refresh POI:', err));
+    }
+
+    // Emit event to refresh moderation count (photo uploads go to pending)
+    window.dispatchEvent(new CustomEvent('moderation-count-changed'));
+  };
 
   // Determine which POI we're showing
   const activePoi = destination || linearFeature;
@@ -3396,7 +3383,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           </div>
         </div>
 
-        {/* Image - always shown at top for all tabs */}
+        {/* Media section - Mosaic in view mode, ImageUploader in edit mode */}
         {isEditing && linearFeature?.id ? (
           <ImageUploader
             destinationId={linearFeature.id}
@@ -3406,57 +3393,29 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             updatedAt={linearFeature.updated_at}
             disabled={saving}
             isVirtualPoi={false}
+            user={user}
+            poiId={linearFeature.id}
+            onMediaUpdate={handleMediaUpdate}
           />
-        ) : (
+        ) : media.length > 0 ? (
+          <Mosaic media={media} poiId={linearFeature?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+        ) : !mediaLoading && linearFeature?.has_primary_image ? (
           <div className="sidebar-image">
-            {linearImageUrl ? (
-              <img src={linearImageUrl} alt={linearFeature?.name} />
-            ) : (
-              <img src={getLinearDefaultThumbnail()} alt={linearFeature?.name} className="default-thumbnail" />
-            )}
-            {/* Navigation chevrons on image - mobile only */}
-            {isMobile && onNavigate && poiNavigationList && poiNavigationList.length > 1 && (
-              <>
-                {currentIndex > 0 && (
-                  <button
-                    className="image-nav-btn image-nav-prev"
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      debouncedNavigate('prev');
-                    }}
-                    onClick={(e) => {
-                      // Fallback for desktop/non-touch devices
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    aria-label="Previous POI"
-                  >
-                    <span className="image-nav-chevron">‹</span>
-                  </button>
-                )}
-                {currentIndex < poiNavigationList.length - 1 && (
-                  <button
-                    className="image-nav-btn image-nav-next"
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      debouncedNavigate('next');
-                    }}
-                    onClick={(e) => {
-                      // Fallback for desktop/non-touch devices
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    aria-label="Next POI"
-                  >
-                    <span className="image-nav-chevron">›</span>
-                  </button>
-                )}
-              </>
-            )}
+            <img
+              src={`/api/pois/${linearFeature.id}/thumbnail?size=medium&v=${linearFeature.updated_at || Date.now()}`}
+              alt={linearFeature?.name}
+            />
           </div>
-        )}
+        ) : user && linearFeature?.id && !mediaLoading ? (
+          <div className="sidebar-no-media">
+            <button
+              className="btn-add-first-media"
+              onClick={() => setUploadModalOpen(true)}
+            >
+              + Add Photo/Video
+            </button>
+          </div>
+        ) : null}
 
         {/* Sidebar Tabs - same as destinations */}
         <div className="sidebar-tabs">
@@ -3507,7 +3466,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 deleting={deleting}
                 isNewPOI={false}
                 isLinearFeature={true}
-                showImage={false}
                 onImageUpdate={(hasImage, driveFileId) => {
                   if (onLinearFeatureUpdate) {
                     onLinearFeatureUpdate({
@@ -3523,7 +3481,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 isLinearFeature={true}
                 isAdmin={isAdmin}
                 editMode={editMode}
-                showImage={false}
                 onShare={() => setShowShareModal(true)}
                 moreInfoLink={linearFeature.more_info_link}
                 trailStatus={trailStatus}
@@ -3718,7 +3675,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         </div>
       </div>
 
-      {/* Image - always shown at top for all tabs */}
+      {/* Media section - Mosaic in view mode, ImageUploader in edit mode */}
       {isEditing && destination?.id ? (
         <ImageUploader
           destinationId={destination.id}
@@ -3728,57 +3685,30 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           updatedAt={destination.updated_at}
           disabled={saving}
           isVirtualPoi={destination?.poi_type === 'virtual'}
+          user={user}
+          poiId={destination.id}
+          onMediaUpdate={handleMediaUpdate}
         />
-      ) : (
+      ) : media.length > 0 ? (
+        <Mosaic media={media} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+      ) : !mediaLoading && destination?.has_primary_image ? (
         <div className={`sidebar-image ${destination?.poi_type === 'virtual' ? 'virtual-thumbnail' : ''}`}>
-          {imageUrl ? (
-            <img src={imageUrl} alt={destination?.name} className={destination?.poi_type === 'virtual' ? 'logo-image' : ''} />
-          ) : (
-            <img src="/icons/thumbnails/destination.svg" alt={destination?.name} className="default-thumbnail" />
-          )}
-          {/* Navigation chevrons on image - mobile only */}
-          {isMobile && onNavigate && poiNavigationList && poiNavigationList.length > 1 && (
-            <>
-              {currentIndex > 0 && (
-                <button
-                  className="image-nav-btn image-nav-prev"
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    debouncedNavigate('prev');
-                  }}
-                  onClick={(e) => {
-                    // Fallback for desktop/non-touch devices
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  aria-label="Previous POI"
-                >
-                  <span className="image-nav-chevron">‹</span>
-                </button>
-              )}
-              {currentIndex < poiNavigationList.length - 1 && (
-                <button
-                  className="image-nav-btn image-nav-next"
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    debouncedNavigate('next');
-                  }}
-                  onClick={(e) => {
-                    // Fallback for desktop/non-touch devices
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  aria-label="Next POI"
-                >
-                  <span className="image-nav-chevron">›</span>
-                </button>
-              )}
-            </>
-          )}
+          <img
+            src={`/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`}
+            alt={destination?.name}
+            className={destination?.poi_type === 'virtual' ? 'logo-image' : ''}
+          />
         </div>
-      )}
+      ) : user && destination?.id && !mediaLoading ? (
+        <div className="sidebar-no-media">
+          <button
+            className="btn-add-first-media"
+            onClick={() => setUploadModalOpen(true)}
+          >
+            + Add Photo/Video
+          </button>
+        </div>
+      ) : null}
 
       {/* Sidebar Tabs - always shown */}
       <div className="sidebar-tabs">
@@ -3999,6 +3929,17 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         editMode={editMode}
         onAssociationsChanged={onAssociationsChanged}
       />
+
+      {uploadModalOpen && destination?.id && (
+        <MediaUploadModal
+          poiId={destination.id}
+          onClose={() => setUploadModalOpen(false)}
+          onSuccess={() => {
+            setUploadModalOpen(false);
+            handleMediaUpdate();
+          }}
+        />
+      )}
     </div>
   );
 }

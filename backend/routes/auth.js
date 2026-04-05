@@ -4,23 +4,46 @@ import passport from 'passport';
 const router = express.Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
 
-// Google OAuth - single flow for all users
-// Admins get drive.file scope and credentials stored in database
-// accessType: 'offline' requests a refresh token
-// prompt: 'consent' forces consent screen to ensure we get refresh token
+// Google OAuth - dual-strategy approach for conditional Drive access
+// Standard route: all users authenticate with basic scopes (profile + email)
+// Upgrade route: admin-only Drive scope via incremental authorization
+// Auto-detection: admin users without Drive credentials are redirected to upgrade flow
 // Fix: Only register routes if strategy is configured (prevents "Unknown strategy" error)
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  router.get('/google', passport.authenticate('google', {
+  // Standard Google OAuth (all users - basic scopes only)
+  router.get('/google', passport.authenticate('google'));
+
+  router.get('/google/callback',
+    passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
+    async (req, res) => {
+      // Auto-detect admin without Drive credentials
+      const isAdmin = req.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
+      const hasCredentials = req.user.oauth_credentials &&
+                            JSON.parse(req.user.oauth_credentials).access_token;
+
+      if (isAdmin && !hasCredentials) {
+        // Redirect admin to upgrade flow for Drive access
+        return res.redirect('/auth/google/upgrade');
+      }
+
+      // Standard success redirect
+      res.redirect(`${FRONTEND_URL}?auth=success`);
+    }
+  );
+
+  // Drive scope upgrade (admin only - incremental authorization)
+  router.get('/google/upgrade', passport.authenticate('google-upgrade', {
     accessType: 'offline',
     prompt: 'consent'
   }));
 
-  router.get('/google/callback',
-    passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
+  router.get('/google/upgrade/callback',
+    passport.authenticate('google-upgrade', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
     (req, res) => {
-      // Always redirect to View tab (default) after login
-      res.redirect(`${FRONTEND_URL}?auth=success`);
+      // Redirect to Sync Settings after Drive access granted
+      res.redirect(`${FRONTEND_URL}/admin?auth=success&tab=sync`);
     }
   );
 } else {

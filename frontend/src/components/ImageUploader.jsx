@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import MediaUploadModal from './MediaUploadModal';
 
 function ImageUploader({
   destinationId,
@@ -7,10 +8,14 @@ function ImageUploader({
   onPendingImageChange,
   disabled,
   isVirtualPoi,
-  updatedAt
+  updatedAt,
+  user,
+  poiId,
+  onMediaUpdate
 }) {
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const fileInputRef = useRef(null);
 
   // Determine what to show:
@@ -138,6 +143,16 @@ function ImageUploader({
     fileInputRef.current?.click();
   };
 
+  const handleUploadSuccess = () => {
+    setUploadModalOpen(false);
+    if (onMediaUpdate) {
+      onMediaUpdate();
+    }
+  };
+
+  // Check if user is media_admin or admin
+  const isMediaAdmin = user && (user.role === 'media_admin' || user.role === 'admin');
+
   return (
     <div className="image-uploader">
       <label>Destination Image</label>
@@ -177,6 +192,19 @@ function ImageUploader({
             >
               Delete
             </button>
+            {isMediaAdmin && poiId && (
+              <button
+                type="button"
+                className="image-add-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setUploadModalOpen(true);
+                }}
+                disabled={disabled}
+              >
+                Add
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -211,6 +239,15 @@ function ImageUploader({
         style={{ display: 'none' }}
         disabled={disabled}
       />
+
+      {/* Upload Modal for additional images (admin only) */}
+      {uploadModalOpen && poiId && (
+        <MediaUploadModal
+          poiId={poiId}
+          onClose={() => setUploadModalOpen(false)}
+          onSuccess={handleUploadSuccess}
+        />
+      )}
     </div>
   );
 }
