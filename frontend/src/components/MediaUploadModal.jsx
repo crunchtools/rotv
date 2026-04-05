@@ -23,11 +23,20 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
     if (!file) return;
 
     const isVideo = activeTab === 'video';
+    const fileName = file.name.toLowerCase();
+
     const allowedTypes = isVideo
       ? ['video/mp4', 'video/webm', 'video/quicktime']
       : ['image/jpeg', 'image/png', 'image/webp'];
 
-    if (!allowedTypes.includes(file.type)) {
+    const allowedExtensions = isVideo
+      ? ['.mp4', '.webm', '.mov']
+      : ['.jpg', '.jpeg', '.png', '.webp'];
+
+    const hasValidType = allowedTypes.includes(file.type);
+    const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+
+    if (!hasValidType && !hasValidExtension) {
       const expected = isVideo ? 'MP4, WebM, or MOV' : 'JPEG, PNG, or WebP';
       setError(`Please select a ${expected} file`);
       return;
@@ -180,8 +189,8 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
             type="file"
             accept={
               activeTab === 'video'
-                ? 'video/mp4,video/webm,video/quicktime'
-                : 'image/jpeg,image/png,image/webp'
+                ? 'video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov'
+                : 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
             }
             onChange={(e) => handleFileSelect(e.target.files[0])}
             style={{ display: 'none' }}

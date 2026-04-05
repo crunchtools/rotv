@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Lightbox from './Lightbox';
 
 const FIELD_CONFIGS = {
   news: [
@@ -28,6 +29,7 @@ const FIELD_CONFIGS = {
 };
 
 function ModerationInbox({ onCountChange }) {
+  console.log('[ModerationInbox] Mounted with onCountChange:', !!onCountChange);
   const [queue, setQueue] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -53,6 +55,10 @@ function ModerationInbox({ onCountChange }) {
   const [addingUrl, setAddingUrl] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchInput, setSearchInput] = useState('');
+  const [lightboxMedia, setLightboxMedia] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(0);
+  const [lightboxPoiId, setLightboxPoiId] = useState(null);
+  const [user, setUser] = useState(null);
   const LIMIT = 20;
 
   const fetchQueue = useCallback(async () => {
@@ -90,27 +96,108 @@ function ModerationInbox({ onCountChange }) {
       .then(r => r.ok ? r.json() : [])
       .then(data => setPois(Array.isArray(data) ? data : []))
       .catch(() => setPois([]));
+
+    fetch('/api/user', { credentials: 'include' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => setUser(data))
+      .catch(() => setUser(null));
   }, []);
 
   const notify = (type, message) => setNotification({ type, message });
 
+  const getThumbnailUrl = (item) => {
+    if (!item.media_type) return null;
+
+    if (item.media_type === 'youtube') {
+      // Extract video ID from YouTube URL
+      const videoId = item.source_url?.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&\s]+)/)?.[1];
+      return videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
+    } else if (item.image_server_asset_id && (item.media_type === 'image' || item.media_type === 'video')) {
+      return `/api/assets/${item.image_server_asset_id}/thumbnail`;
+    }
+    return null;
+  };
+
+  const handleOpenLightbox = async (item) => {
+    if (!item.poi_id) return;
+
+    try {
+      // Fetch all media for this POI
+      const response = await fetch(`/api/pois/${item.poi_id}/media`, { credentials: 'include' });
+      if (!response.ok) return;
+
+      const data = await response.json();
+      const allMedia = data.all_media || [];
+
+      // Find the index of the clicked item
+      const index = allMedia.findIndex(m => m.id === item.id);
+
+      setLightboxMedia(allMedia);
+      setLightboxIndex(index >= 0 ? index : 0);
+      setLightboxPoiId(item.poi_id);
+    } catch (err) {
+      console.error('Failed to load media for lightbox:', err);
+    }
+  };
+
+  const handleLightboxClose = () => {
+    setLightboxMedia(null);
+    setLightboxIndex(0);
+    setLightboxPoiId(null);
+  };
+
+  const handleMediaUpdate = () => {
+    fetchQueue();
+    if (lightboxPoiId) {
+      // Refresh lightbox media
+      fetch(`/api/pois/${lightboxPoiId}/media`, { credentials: 'include' })
+        .then(r => r.json())
+        .then(data => setLightboxMedia(data.all_media || []))
+        .catch(err => console.error('Failed to refresh lightbox media:', err));
+    }
+  };
+
   const handleApprove = async (type, id) => {
     try {
+      // Find the item to get its POI ID before approval
+      const item = queue.find(q => q.content_type === type && q.id === id);
+      console.log('[Moderation] Approving:', { type, id, item });
       const response = await fetch('/api/admin/moderation/approve', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ type, id })
       });
-      if (response.ok) { notify('success', `${type} #${id} approved`); fetchQueue(); if (onCountChange) onCountChange(); }
+      if (response.ok) {
+        notify('success', `${type} #${id} approved`);
+        fetchQueue();
+        console.log('[Moderation] Calling onCountChange:', !!onCountChange);
+        if (onCountChange) onCountChange();
+        // Emit event to refresh media for this POI
+        if (type === 'photo' && item?.poi_id) {
+          console.log('[Moderation] Emitting poi-media-updated event for POI', item.poi_id);
+          window.dispatchEvent(new CustomEvent('poi-media-updated', { detail: { poiId: item.poi_id } }));
+          // Also emit event to refresh map markers (in case this was a primary image change)
+          window.dispatchEvent(new CustomEvent('poi-updated', { detail: { poiId: item.poi_id } }));
+        }
+      }
     } catch (err) { notify('error', err.message); }
   };
 
   const handleReject = async (type, id) => {
     try {
+      const item = queue.find(q => q.content_type === type && q.id === id);
       const response = await fetch('/api/admin/moderation/reject', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ type, id, reason: '' })
       });
-      if (response.ok) { notify('success', `${type} #${id} rejected`); fetchQueue(); if (onCountChange) onCountChange(); }
+      if (response.ok) {
+        notify('success', `${type} #${id} rejected`);
+        fetchQueue();
+        if (onCountChange) onCountChange();
+        // Emit event to refresh media for this POI
+        if (type === 'photo' && item?.poi_id) {
+          window.dispatchEvent(new CustomEvent('poi-media-updated', { detail: { poiId: item.poi_id } }));
+        }
+      }
     } catch (err) { notify('error', err.message); }
   };
 
@@ -119,6 +206,14 @@ function ModerationInbox({ onCountChange }) {
     const items = Array.from(selectedItems).map(key => {
       const [type, id] = key.split(':');
       return { type, id: parseInt(id) };
+    });
+    // Collect unique POI IDs for photo items
+    const photoPoiIds = new Set();
+    items.forEach(({ type, id }) => {
+      if (type === 'photo') {
+        const item = queue.find(q => q.content_type === type && q.id === id);
+        if (item?.poi_id) photoPoiIds.add(item.poi_id);
+      }
     });
     try {
       const response = await fetch('/api/admin/moderation/bulk-approve', {
@@ -131,6 +226,10 @@ function ModerationInbox({ onCountChange }) {
         setSelectedItems(new Set());
         fetchQueue();
         if (onCountChange) onCountChange();
+        // Emit events for all affected POIs
+        photoPoiIds.forEach(poiId => {
+          window.dispatchEvent(new CustomEvent('poi-media-updated', { detail: { poiId } }));
+        });
       }
     } catch (err) { notify('error', err.message); }
   };
@@ -331,21 +430,36 @@ function ModerationInbox({ onCountChange }) {
   };
 
   const handleSave = async (type, id) => {
+    console.log('[Moderation] Saving:', { type, id, edits: editFields });
+    const item = queue.find(q => q.content_type === type && q.id === id);
     try {
       const response = await fetch('/api/admin/moderation/save', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         credentials: 'include', body: JSON.stringify({ type, id, edits: editFields })
       });
       if (response.ok) {
+        console.log('[Moderation] Save successful');
         notify('success', `${type} #${id} saved`);
         setEditingItem(null);
         setEditFields({});
         fetchQueue();
+        // Emit event to refresh media for this POI (in case caption or POI changed)
+        if (type === 'photo' && item?.poi_id) {
+          window.dispatchEvent(new CustomEvent('poi-media-updated', { detail: { poiId: item.poi_id } }));
+          // Also emit for the new POI if it changed
+          if (editFields.poi_id && editFields.poi_id !== item.poi_id) {
+            window.dispatchEvent(new CustomEvent('poi-media-updated', { detail: { poiId: editFields.poi_id } }));
+          }
+        }
       } else {
         const err = await response.json();
+        console.error('[Moderation] Save failed:', err);
         notify('error', err.error || 'Save failed');
       }
-    } catch (err) { notify('error', err.message); }
+    } catch (err) {
+      console.error('[Moderation] Save error:', err);
+      notify('error', err.message);
+    }
   };
 
   const handleCreate = async () => {
@@ -762,6 +876,64 @@ function ModerationInbox({ onCountChange }) {
                         )}
                       </div>
 
+                      {/* Thumbnail for media items */}
+                      {item.content_type === 'photo' && getThumbnailUrl(item) && (
+                        <div
+                          onClick={() => handleOpenLightbox(item)}
+                          style={{
+                            width: '120px',
+                            height: '90px',
+                            borderRadius: '6px',
+                            overflow: 'hidden',
+                            cursor: 'pointer',
+                            margin: '6px 0',
+                            border: '1px solid #e0e0e0',
+                            position: 'relative',
+                            flexShrink: 0
+                          }}
+                        >
+                          <img
+                            src={getThumbnailUrl(item)}
+                            alt={item.title || 'Media'}
+                            style={{
+                              width: '100%',
+                              height: '100%',
+                              objectFit: 'cover'
+                            }}
+                          />
+                          {item.media_type === 'video' && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '50%',
+                              left: '50%',
+                              transform: 'translate(-50%, -50%)',
+                              fontSize: '2rem',
+                              color: 'white',
+                              textShadow: '0 0 4px rgba(0,0,0,0.8)',
+                              pointerEvents: 'none'
+                            }}>
+                              ▶
+                            </div>
+                          )}
+                          {item.media_type === 'youtube' && (
+                            <div style={{
+                              position: 'absolute',
+                              bottom: '4px',
+                              right: '4px',
+                              backgroundColor: 'rgba(255,0,0,0.9)',
+                              color: 'white',
+                              padding: '2px 6px',
+                              borderRadius: '3px',
+                              fontSize: '0.7rem',
+                              fontWeight: 'bold',
+                              pointerEvents: 'none'
+                            }}>
+                              YT
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {/* Event dates */}
                       {item.content_type === 'event' && (item.start_date || item.end_date) && (
                         <div style={{ fontSize: '0.78rem', color: '#7b1fa2', fontWeight: '500', margin: '2px 0' }}>
@@ -776,16 +948,18 @@ function ModerationInbox({ onCountChange }) {
                         <p style={{
                           margin: '2px 0', fontSize: '0.83rem', color: '#555',
                           overflow: 'hidden', textOverflow: 'ellipsis',
-                          display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 2,
+                          display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 3,
                           WebkitBoxOrient: 'vertical'
                         }}>
                           {item.description}
                         </p>
                       )}
-                      <a onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
-                        style={{ color: '#4a7c23', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'none', fontWeight: 500 }}>
-                        {isExpanded ? 'Show less' : 'Show more'}
-                      </a>
+                      {item.description && item.description.length > 200 && (
+                        <a onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
+                          style={{ color: '#4a7c23', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'none', fontWeight: 500 }}>
+                          {isExpanded ? 'Show less' : 'Show more'}
+                        </a>
+                      )}
 
                       {/* Source URL (expanded, read-only) */}
                       {isExpanded && item.source_url && (
@@ -1008,6 +1182,18 @@ function ModerationInbox({ onCountChange }) {
         <div className={`result-message ${notification.type}`} style={{ marginTop: '10px' }}>
           {notification.message}
         </div>
+      )}
+
+      {/* Lightbox */}
+      {lightboxMedia && (
+        <Lightbox
+          media={lightboxMedia}
+          initialIndex={lightboxIndex}
+          onClose={handleLightboxClose}
+          poiId={lightboxPoiId}
+          user={user}
+          onMediaUpdate={handleMediaUpdate}
+        />
       )}
     </div>
   );

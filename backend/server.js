@@ -1008,14 +1008,17 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
 app.get('/api/pois/:id/media', async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.id || null; // Optional authentication
 
-    // Check cache first (5min TTL reduces DB load)
-    const cached = getMosaicFromCache(id);
-    if (cached) {
-      return res.json(cached);
+    // Skip cache if authenticated (user might have pending uploads)
+    if (!userId) {
+      const cached = getMosaicFromCache(id);
+      if (cached) {
+        return res.json(cached);
+      }
     }
 
-    // Query approved media from poi_media table
+    // Query media: published for everyone, pending only for uploader
     const result = await pool.query(`
       SELECT
         id,
@@ -1026,15 +1029,20 @@ app.get('/api/pois/:id/media', async (req, res) => {
         sort_order,
         likes_count,
         caption,
-        created_at
+        created_at,
+        moderation_status,
+        submitted_by
       FROM poi_media
       WHERE poi_id = $1
-        AND moderation_status IN ('published', 'auto_approved')
+        AND (
+          moderation_status IN ('published', 'auto_approved')
+          OR (moderation_status = 'pending' AND submitted_by = $2)
+        )
       ORDER BY
         CASE WHEN role = 'primary' THEN 0 ELSE 1 END,
         likes_count DESC,
         created_at DESC
-    `, [id]);
+    `, [id, userId]);
 
     const allMedia = [];
 
@@ -1046,7 +1054,9 @@ app.get('/api/pois/:id/media', async (req, res) => {
         role: media.role,
         likes_count: media.likes_count,
         caption: media.caption,
-        created_at: media.created_at
+        created_at: media.created_at,
+        moderation_status: media.moderation_status,
+        uploaded_by_user: userId && media.submitted_by === userId
       };
 
       if (media.media_type === 'youtube') {
@@ -1075,8 +1085,10 @@ app.get('/api/pois/:id/media', async (req, res) => {
       total_count: allMedia.length
     };
 
-    // Cache the result for 5 minutes
-    setMosaicCache(id, response);
+    // Only cache for anonymous users (authenticated users see their pending uploads)
+    if (!userId) {
+      setMosaicCache(id, response);
+    }
 
     res.json(response);
   } catch (error) {
@@ -1147,18 +1159,26 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
         .substring(0, 255); // Limit length
 
       // Upload to image server
-      const uploadFn = media_type === 'image'
-        ? imageServerClient.uploadImage
-        : imageServerClient.uploadVideo;
-
-      const uploadResult = await uploadFn.call(
-        imageServerClient,
-        req.file.buffer,
-        parseInt(id),
-        'gallery',
-        sanitizedFilename,
-        req.file.mimetype
-      );
+      let uploadResult;
+      if (media_type === 'image') {
+        // uploadImage(imageBuffer, poiId, role, filename, mimeType, options)
+        uploadResult = await imageServerClient.uploadImage(
+          req.file.buffer,
+          parseInt(id),
+          'gallery',
+          sanitizedFilename,
+          req.file.mimetype
+        );
+      } else {
+        // uploadVideo(videoBuffer, poiId, filename, mimeType, role)
+        uploadResult = await imageServerClient.uploadVideo(
+          req.file.buffer,
+          parseInt(id),
+          sanitizedFilename,
+          req.file.mimetype,
+          'gallery'
+        );
+      }
 
       if (!uploadResult.success) {
         return res.status(500).json({ error: 'Failed to upload: ' + uploadResult.error });
@@ -1167,11 +1187,11 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
       assetId = uploadResult.assetId;
     }
 
-    // Determine moderation status
-    const isMediaAdminUser = user.role === 'media_admin' || user.role === 'admin';
-    const moderationStatus = isMediaAdminUser ? 'published' : 'pending';
-    const moderatedAt = isMediaAdminUser ? new Date() : null;
-    const moderatedBy = isMediaAdminUser ? user.id : null;
+    // All uploads via this interface go to moderation queue
+    // (Admin panel uploads can still bypass queue)
+    const moderationStatus = 'pending';
+    const moderatedAt = null;
+    const moderatedBy = null; // Set during approval, not upload
 
     // Create poi_media record
     const insertResult = await pool.query(`
@@ -1203,9 +1223,8 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
 
     const mediaId = insertResult.rows[0].id;
 
-    const message = isMediaAdminUser
-      ? 'Media uploaded and published'
-      : 'Media submitted for review';
+    // All uploads go to moderation queue
+    const message = 'Media submitted for review';
 
     // Invalidate mosaic cache for this POI (new media uploaded)
     invalidateMosaicCache(id);
@@ -1219,6 +1238,165 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
   } catch (error) {
     console.error('Error uploading media:', error);
     res.status(500).json({ error: 'Failed to upload media' });
+  }
+});
+
+/**
+ * DELETE /api/pois/:poiId/media/:mediaId
+ * Delete media (only allowed for uploader or admin)
+ */
+app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) => {
+  try {
+    const { poiId, mediaId } = req.params;
+    const user = req.user;
+
+    // Check if media exists and get ownership info
+    const mediaResult = await pool.query(
+      'SELECT submitted_by, image_server_asset_id FROM poi_media WHERE id = $1 AND poi_id = $2',
+      [mediaId, poiId]
+    );
+
+    if (mediaResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+
+    const media = mediaResult.rows[0];
+
+    // Check permission: user must be the uploader or an admin
+    const isOwner = media.submitted_by === user.id;
+    const isAdmin = user.role === 'admin' || user.role === 'media_admin';
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ error: 'You can only delete your own media' });
+    }
+
+    // Transaction: delete media and update POI flag atomically
+    await pool.query('BEGIN');
+
+    // Delete from database
+    await pool.query('DELETE FROM poi_media WHERE id = $1', [mediaId]);
+
+    // Update POI's has_primary_image flag based on remaining media
+    const remainingPrimary = await pool.query(
+      `SELECT id FROM poi_media
+       WHERE poi_id = $1
+         AND role = 'primary'
+         AND moderation_status IN ('published', 'auto_approved')
+       LIMIT 1`,
+      [poiId]
+    );
+
+    await pool.query(
+      'UPDATE pois SET has_primary_image = $1 WHERE id = $2',
+      [remainingPrimary.rows.length > 0, poiId]
+    );
+
+    await pool.query('COMMIT');
+
+    // Delete from image server (if it's an image/video, not YouTube)
+    // NOTE: Eventual consistency - DB transaction already committed
+    // If image server delete fails, orphaned assets logged for cleanup (see #186)
+    let imageServerDeleted = true;
+    if (media.image_server_asset_id) {
+      try {
+        await imageServerClient.deleteAsset(media.image_server_asset_id);
+      } catch (err) {
+        console.error('Failed to delete asset from image server:', err);
+        console.error('Orphaned asset (manual cleanup required):', media.image_server_asset_id);
+        imageServerDeleted = false;
+      }
+    }
+
+    // Invalidate mosaic cache
+    invalidateMosaicCache(poiId);
+
+    // Return honest status about partial success
+    if (!imageServerDeleted) {
+      return res.status(202).json({
+        success: true,
+        warning: 'Media deleted from database, image cleanup pending',
+        message: 'Media deleted'
+      });
+    }
+
+    res.json({ success: true, message: 'Media deleted' });
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('Error deleting media:', error);
+    res.status(500).json({ error: 'Failed to delete media' });
+  }
+});
+
+/**
+ * PATCH /api/pois/:poiId/media/:mediaId/set-primary
+ * Set media as primary (admins only)
+ */
+app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async (req, res) => {
+  try {
+    const { poiId, mediaId } = req.params;
+    const user = req.user;
+
+    // Check admin permission
+    const isAdmin = user.role === 'admin' || user.role === 'media_admin';
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Only admins can set primary images' });
+    }
+
+    // Check if media exists and is published
+    const mediaResult = await pool.query(
+      'SELECT id, role, moderation_status FROM poi_media WHERE id = $1 AND poi_id = $2',
+      [mediaId, poiId]
+    );
+
+    if (mediaResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Media not found' });
+    }
+
+    const media = mediaResult.rows[0];
+
+    // Only published/auto-approved media can be primary
+    if (!['published', 'auto_approved'].includes(media.moderation_status)) {
+      return res.status(400).json({ error: 'Only approved media can be set as primary' });
+    }
+
+    // Already primary
+    if (media.role === 'primary') {
+      return res.json({ success: true, message: 'Already primary' });
+    }
+
+    // Transaction: demote old primary to gallery, promote new to primary
+    await pool.query('BEGIN');
+
+    // Demote old primary to gallery
+    await pool.query(
+      `UPDATE poi_media SET role = 'gallery'
+       WHERE poi_id = $1 AND role = 'primary'
+       AND moderation_status IN ('published', 'auto_approved')`,
+      [poiId]
+    );
+
+    // Promote new media to primary
+    await pool.query(
+      `UPDATE poi_media SET role = 'primary' WHERE id = $1`,
+      [mediaId]
+    );
+
+    // Update POI's has_primary_image flag
+    await pool.query(
+      'UPDATE pois SET has_primary_image = true WHERE id = $1',
+      [poiId]
+    );
+
+    await pool.query('COMMIT');
+
+    // Invalidate mosaic cache
+    invalidateMosaicCache(poiId);
+
+    res.json({ success: true, message: 'Primary image updated' });
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error('Error setting primary media:', error);
+    res.status(500).json({ error: 'Failed to set primary media' });
   }
 });
 

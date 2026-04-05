@@ -81,17 +81,36 @@ export function configurePassport(pool) {
     return insertResult.rows[0];
   }
 
-  // Google OAuth Strategy - request drive.file scope for all users
-  // (non-admins won't use it, but it simplifies the flow)
-  // Note: accessType and prompt are set in auth.js route, not here
+  // Google OAuth Strategy (dual-strategy approach for conditional Drive access)
+  // Standard strategy - all users get basic profile + email scopes only
+  // Admin users are auto-redirected to upgrade flow if they lack Drive credentials
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    passport.use(new GoogleStrategy({
+    // Standard strategy - basic scopes for all users (no Drive access)
+    passport.use('google', new GoogleStrategy({
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
+      scope: ['profile', 'email']
+    }, async (accessToken, refreshToken, profile, done) => {
+      try {
+        // Don't store credentials for standard login (admin will get them via upgrade flow)
+        const user = await findOrCreateUser('google', profile, null);
+        done(null, user);
+      } catch (error) {
+        done(error);
+      }
+    }));
+
+    // Upgrade strategy - Drive scope for admin only (incremental authorization)
+    // Uses same callback URL as standard strategy to avoid multiple OAuth app configurations
+    passport.use('google-upgrade', new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
       scope: ['profile', 'email', 'https://www.googleapis.com/auth/drive.file']
     }, async (accessToken, refreshToken, profile, done) => {
       try {
+        // Store Drive credentials for admin
         const credentials = {
           access_token: accessToken,
           refresh_token: refreshToken
@@ -102,7 +121,8 @@ export function configurePassport(pool) {
         done(error);
       }
     }));
-    console.log('Google OAuth strategy configured');
+
+    console.log('Google OAuth strategies configured (standard + upgrade)');
   } else {
     console.log('Google OAuth not configured (missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET)');
   }

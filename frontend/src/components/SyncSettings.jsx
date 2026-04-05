@@ -323,6 +323,14 @@ function SyncSettings({ onDataRefresh, onNavigateToJobs }) {
       {error && <div className="sync-error">{error}</div>}
       {message && <div className="sync-success">{message}</div>}
 
+      {/* Drive access prompt - shown when admin lacks Drive credentials */}
+      {syncStatus && !syncStatus.drive_access_verified && (
+        <div className="drive-access-prompt">
+          <p>⚠️ Drive access required for backup/restore operations.</p>
+          <a href="/auth/google/upgrade" className="sync-btn">Grant Drive Access</a>
+        </div>
+      )}
+
       <div className="sync-drive-info">
         <div className="sync-tile-header">
           <h4>Backup & Restore</h4>
