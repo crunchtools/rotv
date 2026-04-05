@@ -12902,7 +12902,7 @@ svg.leaflet-zoom-animated {
   display: grid;
   grid-template-columns: 12px minmax(80px, 150px) 1fr auto;
   gap: 8px;
-  align-items: baseline;
+  align-items: start;
   padding: 4px 0;
   border-bottom: 1px solid #edf2f7;
   font-size: 0.82rem;
@@ -12933,7 +12933,7 @@ svg.leaflet-zoom-animated {
   width: 12px;
   font-size: 0.7rem;
   color: #718096;
-  margin-top: 2px;
+  margin-top: 4px;
   text-align: center;
 }
 
@@ -12946,7 +12946,7 @@ svg.leaflet-zoom-animated {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-top: 4px;
+  margin-top: 6px;
 }
 
 .log-level-dot.info {
