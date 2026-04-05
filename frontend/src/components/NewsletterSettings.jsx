@@ -5,7 +5,6 @@ function NewsletterSettings({ user }) {
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
 
-  // Admin settings
   const [apiKey, setApiKey] = useState('');
   const [fromEmail, setFromEmail] = useState('');
   const [adminSaving, setAdminSaving] = useState(false);
@@ -30,11 +29,8 @@ function NewsletterSettings({ user }) {
       if (res.ok) {
         const data = await res.json();
 
-        // API keys are returned as { isSet: true/false }
-        // Other settings are returned as { value: "...", updatedAt: "..." }
-        setApiKey(''); // Don't show API key for security
+        setApiKey('');
 
-        // Extract value from the settings object
         if (data.buttondown_from_email?.value) {
           setFromEmail(data.buttondown_from_email.value);
         } else {
@@ -94,7 +90,6 @@ function NewsletterSettings({ user }) {
     setAdminMessage(null);
 
     try {
-      // Save API key
       const apiKeyRes = await fetch('/api/admin/settings/buttondown_api_key', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -107,7 +102,6 @@ function NewsletterSettings({ user }) {
         throw new Error(data.error || 'Failed to save API key');
       }
 
-      // Save from email
       const emailRes = await fetch('/api/admin/settings/buttondown_from_email', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

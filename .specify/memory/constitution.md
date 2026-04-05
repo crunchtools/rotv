@@ -70,6 +70,7 @@ The init service creates the database if not present, imports seed data from `/t
 - Environment file: `/etc/rotv/environment` loaded via systemd `EnvironmentFile=`
 - PostgreSQL connection via standard `PG*` environment variables
 - No hardcoded credentials in production deployments
+- **Test environments:** `.env.test` may contain hardcoded credentials for local testing only (ephemeral databases with tmpfs storage)
 
 ## Registry
 
