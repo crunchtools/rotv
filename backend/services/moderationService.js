@@ -6,7 +6,7 @@
 
 import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
-import { deepCrawlForArticle } from './deepCrawler.js';
+import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 const TABLE_MAP = {
@@ -16,6 +16,49 @@ const TABLE_MAP = {
 };
 
 const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
+
+/**
+ * Domain reputation allowlists for quality filtering
+ */
+const TRUSTED_DOMAINS = [
+  // Federal sources
+  'nps.gov', 'doi.gov', 'usgs.gov',
+
+  // Metro parks
+  'summitmetroparks.org', 'clevelandmetroparks.com', 'metroparks.org',
+
+  // Local news
+  'cleveland.com', 'wkyc.com', 'fox8.com', 'beaconjournal.com', 'recordpub.com',
+
+  // Regional sources
+  'ohiohistory.org', 'clevelandhistorical.org', 'wrhs.org'
+];
+
+const COMPETITOR_DOMAINS = [
+  'cuyahogavalley.com', // The scam site
+  'cvnp.guide',
+  'cuyahogavalleyguide.com'
+];
+
+const TRUSTED_DOMAIN_SET = new Set(TRUSTED_DOMAINS);
+const COMPETITOR_DOMAIN_SET = new Set(COMPETITOR_DOMAINS);
+
+/**
+ * Determine domain reputation for quality filtering.
+ * @param {string} url - URL to check
+ * @returns {'trusted'|'competitor'|'unknown'}
+ */
+export function getDomainReputation(url) {
+  if (!url) return 'unknown';
+  try {
+    const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    if (TRUSTED_DOMAIN_SET.has(hostname)) return 'trusted';
+    if (COMPETITOR_DOMAIN_SET.has(hostname)) return 'competitor';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
 
 /**
  * Validate that a URL is a safe, public http/https URL.
@@ -73,6 +116,45 @@ function extractDateFields(scoring) {
   }
 
   return { publicationDate, dateConfidence };
+}
+
+/**
+ * Apply quality filters to AI scoring before auto-approval decision.
+ * Multiplicative penalties for domain reputation, URL quality, and date confidence.
+ * @param {Object} scoring - AI scoring object with confidence_score, reasoning, issues
+ * @param {string} sourceUrl - Source URL to validate
+ * @param {Object} dateInfo - { publicationDate, dateConfidence }
+ * @returns {Object} Modified scoring object
+ */
+export function applyQualityFilters(scoring, sourceUrl, dateInfo) {
+  const { publicationDate, dateConfidence } = dateInfo;
+
+  // Filter 1: Domain reputation
+  const reputation = getDomainReputation(sourceUrl);
+  if (reputation === 'competitor') {
+    scoring.confidence_score *= 0.3;
+    scoring.reasoning += ' Source is a competitor aggregator site.';
+    if (!scoring.issues) scoring.issues = [];
+    scoring.issues.push('competitor_domain');
+  } else if (reputation === 'unknown') {
+    scoring.confidence_score *= 0.9;
+  }
+
+  // Filter 2: URL validation
+  if (isGenericUrl(sourceUrl)) {
+    scoring.confidence_score *= 0.6;
+    scoring.reasoning += ' Source URL is a bare homepage or generic path.';
+    if (!scoring.issues) scoring.issues = [];
+    scoring.issues.push('generic_url');
+  }
+
+  // Filter 3: Date confidence penalty
+  if (!publicationDate || dateConfidence === 'unknown') {
+    scoring.confidence_score = Math.min(scoring.confidence_score, 0.7);
+    scoring.reasoning += ' No publication date found - capping confidence at 0.70.';
+  }
+
+  return scoring;
 }
 
 /**
@@ -204,8 +286,18 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       ({ scoring, foundIssue } = await attemptDeepCrawl(pool, 'news', contentId, row, scoring));
     }
 
+    // Extract date fields before quality filters
     const { publicationDate: newsPubDate, dateConfidence: newsDateConf } = extractDateFields(scoring);
+
+    // Apply quality filters to adjust confidence_score
+    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: newsPubDate, dateConfidence: newsDateConf });
+
+    // Re-serialize issues after quality filters
     const newsIssuesJson = serializeIssues(scoring);
+
+    // Re-check issues list after quality filters may have added new issues
+    issuesList = scoring.issues || [];
+    foundIssue = REJECTION_ISSUES.find(i => issuesList.includes(i));
 
     if (foundIssue) {
       await pool.query(
@@ -305,8 +397,18 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       ({ scoring, foundIssue: eventFoundIssue } = await attemptDeepCrawl(pool, 'event', contentId, row, scoring));
     }
 
+    // Extract date fields before quality filters
     const { publicationDate: eventPubDate, dateConfidence: eventDateConf } = extractDateFields(scoring);
+
+    // Apply quality filters to adjust confidence_score
+    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: eventPubDate, dateConfidence: eventDateConf });
+
+    // Re-serialize issues after quality filters
     const eventIssuesJson = serializeIssues(scoring);
+
+    // Re-check issues list after quality filters may have added new issues
+    eventIssuesList = scoring.issues || [];
+    eventFoundIssue = REJECTION_ISSUES.find(i => eventIssuesList.includes(i));
 
     if (eventFoundIssue) {
       await pool.query(
