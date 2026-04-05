@@ -1294,17 +1294,31 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
     await pool.query('COMMIT');
 
     // Delete from image server (if it's an image/video, not YouTube)
+    // NOTE: Eventual consistency - DB transaction already committed
+    // If image server delete fails, orphaned assets should be cleaned up by background job
+    let imageServerDeleted = true;
     if (media.image_server_asset_id) {
       try {
         await imageServerClient.deleteAsset(media.image_server_asset_id);
       } catch (err) {
         console.error('Failed to delete asset from image server:', err);
-        // Continue anyway - DB record is already deleted
+        console.error('Orphaned asset:', media.image_server_asset_id);
+        imageServerDeleted = false;
+        // TODO: Implement background job to clean up orphaned assets
       }
     }
 
     // Invalidate mosaic cache
     invalidateMosaicCache(poiId);
+
+    // Return honest status about partial success
+    if (!imageServerDeleted) {
+      return res.status(202).json({
+        success: true,
+        warning: 'Media deleted from database, image cleanup pending',
+        message: 'Media deleted'
+      });
+    }
 
     res.json({ success: true, message: 'Media deleted' });
   } catch (error) {
