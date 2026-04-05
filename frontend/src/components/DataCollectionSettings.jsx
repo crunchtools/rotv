@@ -39,6 +39,13 @@ function DataCollectionSettings() {
   const [moderationConfigLoading, setModerationConfigLoading] = useState(true);
   const [moderationConfigSaving, setModerationConfigSaving] = useState(false);
 
+  // Domain lists state
+  const [domainLists, setDomainLists] = useState({ trusted: [], competitor: [] });
+  const [domainListsLoading, setDomainListsLoading] = useState(true);
+  const [domainListsSaving, setDomainListsSaving] = useState(false);
+  const [newTrustedDomain, setNewTrustedDomain] = useState('');
+  const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
+
   // Results Sub-tabs state
   const [subtabs, setSubtabs] = useState([]);
   const [subtabsLoading, setSubtabsLoading] = useState(true);
@@ -81,6 +88,7 @@ function DataCollectionSettings() {
     fetchApifyStatus();
     fetchPlaywrightStatus();
     fetchModerationConfig();
+    fetchDomainLists();
     fetchSubtabs();
   }, []);
 
@@ -229,6 +237,76 @@ function DataCollectionSettings() {
       setResult({ type: 'success', message: 'Moderation configuration saved' });
     } catch (err) { setResult({ type: 'error', message: `Failed to save moderation config: ${err.message}` }); }
     finally { setModerationConfigSaving(false); }
+  };
+
+  const fetchDomainLists = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) {
+        const settingsArray = await response.json();
+        const settingsMap = Object.fromEntries(settingsArray.map(s => [s.key, s.value]));
+        const trusted = settingsMap.moderation_trusted_domains || '[]';
+        const competitor = settingsMap.moderation_competitor_domains || '[]';
+        try {
+          const parsedTrusted = JSON.parse(trusted);
+          const parsedCompetitor = JSON.parse(competitor);
+          setDomainLists({
+            trusted: Array.isArray(parsedTrusted) ? parsedTrusted : [],
+            competitor: Array.isArray(parsedCompetitor) ? parsedCompetitor : []
+          });
+          if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedCompetitor)) {
+            setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
+          }
+        } catch (e) {
+          console.error('Failed to parse domain lists:', e);
+          setResult({ type: 'error', message: 'Failed to load domain lists - invalid JSON' });
+        }
+      }
+    } catch (err) { console.error('Error fetching domain lists:', err); }
+    finally { setDomainListsLoading(false); }
+  };
+
+  const handleSaveDomainLists = async () => {
+    setDomainListsSaving(true); setResult(null);
+    try {
+      const settings = [
+        { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
+        { key: 'moderation_competitor_domains', value: JSON.stringify(domainLists.competitor) }
+      ];
+      for (const setting of settings) {
+        const response = await fetch(`/api/admin/settings/${setting.key}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ value: setting.value })
+        });
+        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to save setting'); }
+      }
+      setResult({ type: 'success', message: 'Domain lists saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save domain lists: ${err.message}` }); }
+    finally { setDomainListsSaving(false); }
+  };
+
+  const handleAddTrustedDomain = () => {
+    const domain = newTrustedDomain.trim().toLowerCase();
+    if (domain && !domainLists.trusted.includes(domain)) {
+      setDomainLists({ ...domainLists, trusted: [...domainLists.trusted, domain] });
+      setNewTrustedDomain('');
+    }
+  };
+
+  const handleRemoveTrustedDomain = (domain) => {
+    setDomainLists({ ...domainLists, trusted: domainLists.trusted.filter(d => d !== domain) });
+  };
+
+  const handleAddCompetitorDomain = () => {
+    const domain = newCompetitorDomain.trim().toLowerCase();
+    if (domain && !domainLists.competitor.includes(domain)) {
+      setDomainLists({ ...domainLists, competitor: [...domainLists.competitor, domain] });
+      setNewCompetitorDomain('');
+    }
+  };
+
+  const handleRemoveCompetitorDomain = (domain) => {
+    setDomainLists({ ...domainLists, competitor: domainLists.competitor.filter(d => d !== domain) });
   };
 
   const handleTestPlaywright = async () => {
@@ -452,6 +530,105 @@ function DataCollectionSettings() {
             </div>
             <button className="action-btn primary" onClick={handleSaveModerationConfig} disabled={moderationConfigSaving}>
               {moderationConfigSaving ? 'Saving...' : 'Save Moderation Configuration'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Quality Filter Domain Lists */}
+      <div className="ai-config-section">
+        <h4>Quality Filter Domain Lists</h4>
+        <p className="settings-description">Manage trusted and competitor domains for quality filtering in moderation.</p>
+        {domainListsLoading ? <p>Loading domain lists...</p> : (
+          <>
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#28a745' }}>Trusted Domains</h5>
+              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>These domains are considered reliable news sources and receive no penalty.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                {domainLists.trusted.map(domain => (
+                  <span key={domain} style={{
+                    padding: '0.25rem 0.5rem',
+                    backgroundColor: '#d4edda',
+                    color: '#155724',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    {domain}
+                    <button onClick={() => handleRemoveTrustedDomain(domain)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#155724',
+                        cursor: 'pointer',
+                        padding: '0',
+                        fontSize: '1rem',
+                        lineHeight: '1'
+                      }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  value={newTrustedDomain}
+                  onChange={e => setNewTrustedDomain(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleAddTrustedDomain()}
+                  placeholder="example.com"
+                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
+                  disabled={domainListsSaving}
+                />
+                <button className="action-btn secondary" onClick={handleAddTrustedDomain} disabled={domainListsSaving || !newTrustedDomain.trim()}>Add</button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#dc3545' }}>Competitor/Scam Domains</h5>
+              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>These domains receive a severe penalty (×0.3 confidence score).</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                {domainLists.competitor.map(domain => (
+                  <span key={domain} style={{
+                    padding: '0.25rem 0.5rem',
+                    backgroundColor: '#f8d7da',
+                    color: '#721c24',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    {domain}
+                    <button onClick={() => handleRemoveCompetitorDomain(domain)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#721c24',
+                        cursor: 'pointer',
+                        padding: '0',
+                        fontSize: '1rem',
+                        lineHeight: '1'
+                      }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  value={newCompetitorDomain}
+                  onChange={e => setNewCompetitorDomain(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleAddCompetitorDomain()}
+                  placeholder="scam-site.com"
+                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
+                  disabled={domainListsSaving}
+                />
+                <button className="action-btn secondary" onClick={handleAddCompetitorDomain} disabled={domainListsSaving || !newCompetitorDomain.trim()}>Add</button>
+              </div>
+            </div>
+
+            <button className="action-btn primary" onClick={handleSaveDomainLists} disabled={domainListsSaving}>
+              {domainListsSaving ? 'Saving...' : 'Save Domain Lists'}
             </button>
           </>
         )}
