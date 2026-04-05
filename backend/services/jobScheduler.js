@@ -16,6 +16,7 @@ const JOB_NAMES = {
   CONTENT_MODERATION: 'content-moderation',            // LLM moderation for individual items
   CONTENT_MODERATION_SWEEP: 'content-moderation-sweep', // Scheduled sweep for unprocessed items
   NEWSLETTER_PROCESS: 'newsletter-process',              // Process inbound newsletter email
+  NEWSLETTER_DIGEST: 'newsletter-digest',                // Weekly digest send
   IMAGE_BACKUP: 'image-backup',                           // Scheduled image server backup to Drive
   DATABASE_BACKUP: 'database-backup'                      // Scheduled database backup to Drive
 };
@@ -552,6 +553,69 @@ export async function updateSchedule(jobName, cronExpression) {
   const scheduler = getJobScheduler();
   await scheduler.schedule(jobName, cronExpression, {}, { tz: 'America/New_York' });
   console.log(`Schedule updated: ${jobName} → ${cronExpression}`);
+}
+
+/**
+ * Register handler for weekly newsletter digest
+ * @param {Function} handler - Async function to handle digest generation and send
+ */
+export async function registerDigestHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.NEWSLETTER_DIGEST);
+    console.log(`Queue '${JOB_NAMES.NEWSLETTER_DIGEST}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.NEWSLETTER_DIGEST}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.NEWSLETTER_DIGEST, async (jobs) => {
+    // pg-boss v12+ passes an array of jobs
+    const jobList = Array.isArray(jobs) ? jobs : [jobs];
+    for (const job of jobList) {
+      console.log('Starting newsletter digest job:', job.id);
+      try {
+        await handler(job.id, job.data);
+        console.log('Newsletter digest sent successfully:', job.id);
+      } catch (error) {
+        console.error('Newsletter digest job failed:', error);
+        throw error;
+      }
+    }
+  });
+}
+
+/**
+ * Schedule weekly newsletter digest
+ * @param {string} cronExpression - Cron expression (default: every Friday at 6 AM EST)
+ */
+export async function scheduleDigest(cronExpression = '0 6 * * 5') {
+  const scheduler = getJobScheduler();
+
+  // Every Friday at 6 AM EST
+  await scheduler.schedule(JOB_NAMES.NEWSLETTER_DIGEST, cronExpression, {}, {
+    tz: 'America/New_York'
+  });
+
+  console.log(`Newsletter digest scheduled with cron: ${cronExpression}`);
+}
+
+/**
+ * Manually trigger a newsletter digest (for testing)
+ * @returns {Promise<string>} Job ID
+ */
+export async function triggerDigestManually() {
+  const scheduler = getJobScheduler();
+
+  const jobId = await scheduler.send(JOB_NAMES.NEWSLETTER_DIGEST, {
+    triggeredManually: true,
+    triggeredAt: new Date().toISOString()
+  });
+
+  console.log('Manual digest send triggered, job ID:', jobId);
+  return jobId;
 }
 
 /**

@@ -99,6 +99,9 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const [loading, setLoading] = useState(true);
 
+  // Track when to auto-expand the newest run after clicking "Run Now"
+  const [autoExpandNewestRun, setAutoExpandNewestRun] = useState(null);
+
   const fetchScheduledJobs = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/admin/jobs/scheduled`, { credentials: 'include' });
@@ -243,6 +246,42 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     if (expandedRun) fetchRunLogs(expandedRun.jobType, expandedRun.runId);
   }, [expandedRun, logLevelFilter, fetchRunLogs]);
 
+  // Poll logs when a run is expanded and its job is running
+  useEffect(() => {
+    if (!expandedRun) return;
+
+    // Find the job for this run
+    const job = scheduledJobs.find(j =>
+      j.historyTypes && j.historyTypes.includes(expandedRun.jobType)
+    );
+
+    if (!job) return;
+
+    // Check if this job is currently running
+    const isRunning = !!runningJobs[job.id];
+
+    if (!isRunning) return;
+
+    // Poll logs every 2 seconds while running
+    const interval = setInterval(() => {
+      fetchRunLogs(expandedRun.jobType, expandedRun.runId);
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [expandedRun, runningJobs, scheduledJobs, fetchRunLogs]);
+
+  // Auto-expand newest run after clicking "Run Now"
+  useEffect(() => {
+    if (autoExpandNewestRun && jobHistory[autoExpandNewestRun]) {
+      const runs = jobHistory[autoExpandNewestRun];
+      if (runs && runs.length > 0) {
+        const newestRun = runs[0]; // Assuming sorted by created_at DESC
+        setExpandedRun({ jobType: newestRun.job_type, runId: newestRun.id });
+        setAutoExpandNewestRun(null);
+      }
+    }
+  }, [jobHistory, autoExpandNewestRun]);
+
   const handleExpandRun = (jobType, run) => {
     const key = `${jobType}-${run.id}`;
     if (expandedRun && `${expandedRun.jobType}-${expandedRun.runId}` === key) {
@@ -283,6 +322,8 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
         await fetchScheduledJobs();
         await checkRunningJobs();
         setJobHistory(prev => ({ ...prev, [job.id]: undefined }));
+        // Mark this job for auto-expanding its newest run
+        setAutoExpandNewestRun(job.id);
       } else { const err = await res.json(); alert(err.error || 'Failed to trigger job'); }
     } catch (err) { alert('Failed to trigger job: ' + err.message); }
     finally { setTriggeringJob(null); }

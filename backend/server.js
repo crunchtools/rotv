@@ -13,6 +13,7 @@ import { fileURLToPath } from 'url';
 import { configurePassport } from './config/passport.js';
 import authRoutes from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
+import { createNewsletterRouter } from './routes/newsletter.js';
 import { isAuthenticated } from './middleware/auth.js';
 import {
   initJobScheduler,
@@ -27,6 +28,9 @@ import {
   registerModerationSweepHandler,
   scheduleModerationSweep,
   registerNewsletterHandler,
+  registerDigestHandler,
+  scheduleDigest,
+  triggerDigestManually,
   registerImageBackupHandler,
   scheduleImageBackup,
   registerDatabaseBackupHandler,
@@ -47,6 +51,7 @@ import {
 } from './services/trailStatusService.js';
 import imageServerClient from './services/imageServerClient.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
+import { sendWeeklyDigest } from './services/newsletterDigestService.js';
 import { startMcpServer } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 
@@ -158,6 +163,9 @@ app.use('/auth', authRoutes);
 
 // Mount admin routes
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
+
+// Mount newsletter routes
+app.use('/api/newsletter', createNewsletterRouter(pool));
 
 // Import trails and rivers from GeoJSON files into unified pois table
 async function importGeoJSONFeatures(client) {
@@ -2520,6 +2528,14 @@ async function start() {
     await registerNewsletterHandler(async (emailId) => {
       await processNewsletterById(pool, emailId);
     });
+
+    // Register weekly digest handler
+    await registerDigestHandler(async (pgBossJobId, data) => {
+      await sendWeeklyDigest(pool, pgBossJobId);
+    });
+
+    // Schedule digest for Fridays at 6 AM EST
+    await scheduleDigest('0 6 * * 5');
 
     // Register image backup handler (nightly backup of image server to Drive)
     // Shared helper: get authenticated Drive service from admin OAuth credentials

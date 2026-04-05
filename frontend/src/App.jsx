@@ -19,6 +19,8 @@ import DataCollectionSettings from './components/DataCollectionSettings';
 import ModerationInbox from './components/ModerationInbox';
 import JobsDashboard from './components/JobsDashboard';
 import UsersSettings from './components/UsersSettings';
+import UserSettings from './components/UserSettings';
+import NewsletterSettings from './components/NewsletterSettings';
 import ResultsTab from './components/ResultsTab';
 
 // Default icon type IDs for initializing the filter
@@ -290,10 +292,17 @@ function AppContent() {
 
   // Reset to View tab when user loses admin status (e.g., logout)
   useEffect(() => {
-    if (!isAdmin && (activeTab === 'edit' || activeTab === 'settings')) {
+    if (!isAdmin && activeTab === 'edit') {
       setActiveTab('view');
     }
   }, [isAdmin, activeTab]);
+
+  // Reset to View tab when user logs out completely
+  useEffect(() => {
+    if (!isAuthenticated && activeTab === 'settings') {
+      setActiveTab('view');
+    }
+  }, [isAuthenticated, activeTab]);
 
   // Fetch moderation pending count for admin badge
   const refreshModerationCount = useCallback(async () => {
@@ -1488,7 +1497,7 @@ function AppContent() {
               Edit
             </button>
           )}
-          {isAdmin && (
+          {isAuthenticated && (
             <button
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => handleTabChange('settings')}
@@ -1658,12 +1667,28 @@ function AppContent() {
       {activeTab === 'settings' && (
         <main className="settings-content">
           <div className="settings-panel">
+            {isAdmin ? (
+            <>
             <nav className="settings-tabs">
               <button
                 className={`settings-tab-btn ${settingsTab === 'general' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('general')}
               >
                 General
+              </button>
+              <button
+                className={`settings-tab-btn ${settingsTab === 'newsletter' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('newsletter')}
+              >
+                Newsletter
+              </button>
+            </nav>
+            <nav className="settings-tabs settings-tabs-row2">
+              <button
+                className={`settings-tab-btn ${settingsTab === 'users' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('users')}
+              >
+                Users
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'themes' ? 'active' : ''}`}
@@ -1696,7 +1721,7 @@ function AppContent() {
                 Icons
               </button>
             </nav>
-            <nav className="settings-tabs settings-tabs-row2">
+            <nav className="settings-tabs settings-tabs-row3">
               <button
                 className={`settings-tab-btn ${settingsTab === 'moderation' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('moderation')}
@@ -1733,12 +1758,6 @@ function AppContent() {
               >
                 Google
               </button>
-              <button
-                className={`settings-tab-btn ${settingsTab === 'users' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('users')}
-              >
-                Users
-              </button>
             </nav>
 
             <div className="settings-tab-content">
@@ -1759,7 +1778,12 @@ function AppContent() {
                 </div>
               )}
               {settingsTab === 'users' && <UsersSettings />}
+              {settingsTab === 'newsletter' && <NewsletterSettings user={user} />}
             </div>
+            </>
+            ) : (
+              <UserSettings user={user} />
+            )}
           </div>
         </main>
       )}

@@ -478,7 +478,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'apify_api_token',
       'news_collection_prompt',
       'trail_status_prompt',
-      'results_subtabs_config'
+      'results_subtabs_config',
+      'buttondown_api_key',
+      'buttondown_from_email'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
@@ -494,6 +496,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
            updated_by = EXCLUDED.updated_by`,
         [key, value, req.user.id]
       );
+
+      // Clear Buttondown API key cache when settings change
+      if (key === 'buttondown_api_key') {
+        const { clearApiKeyCache } = await import('../services/buttondownClient.js');
+        clearApiKeyCache();
+        console.log('Buttondown API key cache cleared');
+      }
 
       console.log(`Admin ${req.user.email} updated setting: ${key}`);
       res.json({ success: true });
@@ -4359,6 +4368,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         };
       }));
 
+      // Sort jobs alphabetically by label
+      jobs.sort((a, b) => a.label.localeCompare(b.label));
+
       res.json(jobs);
     } catch (error) {
       console.error('Error fetching scheduled jobs:', error);
@@ -4942,6 +4954,54 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   });
 
   // End of POI Media Management
+  // ============================================================
+
+  // ============================================================
+  // Newsletter Management
+  // ============================================================
+
+  // Get newsletter subscriber stats
+  router.get('/newsletter/stats', isAdmin, async (req, res) => {
+    try {
+      const { getSubscriberCount } = await import('../services/buttondownClient.js');
+
+      let totalSubscribers = 0;
+      let source = 'local';
+
+      try {
+        totalSubscribers = await getSubscriberCount(pool);
+        source = 'buttondown';
+      } catch (error) {
+        // If Buttondown not configured, fall back to local count
+        if (error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
+          const localResult = await pool.query(
+            'SELECT COUNT(DISTINCT email) as total FROM newsletter_subscriptions'
+          );
+          totalSubscribers = parseInt(localResult.rows[0].total);
+        } else {
+          throw error;
+        }
+      }
+
+      // Count new subscriptions in last 7 days from local tracking
+      const result = await pool.query(
+        `SELECT COUNT(*) as new_this_week
+         FROM newsletter_subscriptions
+         WHERE subscribed_at > NOW() - INTERVAL '7 days'`
+      );
+
+      res.json({
+        total_subscribers: totalSubscribers,
+        new_this_week: parseInt(result.rows[0].new_this_week),
+        source
+      });
+    } catch (error) {
+      console.error('Newsletter stats error:', error);
+      res.status(500).json({ error: 'Failed to fetch stats' });
+    }
+  });
+
+  // End of Newsletter Management
   // ============================================================
 
   return router;

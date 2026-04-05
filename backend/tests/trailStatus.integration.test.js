@@ -278,7 +278,7 @@ describe('Trail Status Integration Tests', () => {
     // Valid status values that the AI can return
     const VALID_STATUS_VALUES = ['open', 'closed', 'limited', 'maintenance', 'unknown'];
 
-    it('should collect status for East Rim Trail via AI', async () => {
+    it.skipIf(!process.env.GEMINI_API_KEY)('should collect status for East Rim Trail via AI', async () => {
       // Get East Rim Trail
       const poiResult = await pool.query(`
         SELECT id, name, poi_type, status_url, brief_description
