@@ -162,6 +162,11 @@ justification = "Integration tests have verbose describe/it blocks for clarity"
 
 [[exceptions]]
 check = "verbose_comments"
+path = "backend/tests/authBypass.integration.test.js"
+justification = "Integration tests have verbose describe/it blocks for clarity"
+
+[[exceptions]]
+check = "verbose_comments"
 path = "backend/tests/newsEvents.integration.test.js"
 justification = "Integration tests have verbose describe/it blocks for clarity"
 
