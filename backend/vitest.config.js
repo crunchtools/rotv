@@ -8,6 +8,10 @@ export default defineConfig({
     hookTimeout: 30000,
     teardownTimeout: 10000,
     reporters: ['verbose'],
+    env: {
+      NODE_ENV: 'test',
+      BYPASS_AUTH: 'true'
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

@@ -66,34 +66,43 @@ describe('Playwright Integration Tests', () => {
   describe('Playwright API Endpoints', () => {
     it('GET /api/admin/playwright/status - should return Playwright status', async () => {
       // This tests the admin API endpoint for Playwright status
+      // With BYPASS_AUTH=true in test env, should get 200 response
       const response = await fetch('http://localhost:8080/api/admin/playwright/status');
 
-      // Should return 401 without auth, but endpoint should exist
-      expect([200, 401, 403]).toContain(response.status);
+      expect(response.status).toBe(200);
 
-      if (response.status === 200) {
-        const data = await response.json();
-        expect(data).toHaveProperty('status');
-        expect(['working', 'error']).toContain(data.status);
+      const data = await response.json();
+      expect(data).toHaveProperty('status');
+      expect(['working', 'error']).toContain(data.status);
 
-        if (data.status === 'working') {
-          expect(data).toHaveProperty('browser_version');
-          expect(data).toHaveProperty('launch_time_ms');
-          console.log(`[Playwright Test] API status: ${data.status}, version: ${data.browser_version}`);
-        }
+      if (data.status === 'working') {
+        expect(data).toHaveProperty('browser_version');
+        expect(data).toHaveProperty('launch_time_ms');
+        console.log(`[Playwright Test] API status: ${data.status}, version: ${data.browser_version}`);
+      } else {
+        console.log(`[Playwright Test] API status: ${data.status}, error: ${data.error}`);
       }
     });
 
     it('POST /api/admin/playwright/test - should render test page', async () => {
       // This tests the admin API endpoint for Playwright rendering
+      // With BYPASS_AUTH=true in test env, should successfully render
       const response = await fetch('http://localhost:8080/api/admin/playwright/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url: 'https://example.com' })
       });
 
-      // Should return 401 without auth, but endpoint should exist
-      expect([200, 401, 403]).toContain(response.status);
+      expect(response.status).toBe(200);
+
+      const data = await response.json();
+      expect(data).toHaveProperty('success');
+
+      if (data.success) {
+        expect(data).toHaveProperty('text');
+        expect(data.text).toContain('Example Domain');
+        console.log(`[Playwright Test] Rendered example.com: ${data.text.length} chars`);
+      }
     });
   });
 
