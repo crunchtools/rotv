@@ -50,6 +50,9 @@ describe('Header Button Visibility Tests', () => {
     it('should display Login button when not authenticated', async () => {
       const loginButton = page.locator('button:has-text("Login")').first();
 
+      // Wait for button to be visible with a timeout
+      await loginButton.waitFor({ state: 'visible', timeout: 10000 });
+
       const isVisible = await loginButton.isVisible();
       expect(isVisible).toBe(true);
 

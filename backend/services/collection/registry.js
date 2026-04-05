@@ -74,6 +74,20 @@ export const COLLECTION_TYPES = [
     hasPrompt: false
   },
   {
+    id: 'newsletter_digest',
+    label: 'Newsletter Digest',
+    description: 'Weekly email digest sent every Friday at 6 AM',
+    icon: '\u{1F4E7}',
+    promptKeys: [],
+    scheduleJobName: 'newsletter-digest',
+    schedule: '0 6 * * 5',
+    statusTable: null,
+    historyTypes: ['newsletter-digest'],
+    triggerEndpoint: '/api/newsletter/send-digest',
+    manualTriggerMethod: 'POST',
+    hasPrompt: false
+  },
+  {
     id: 'image_backup',
     label: 'Image Server Backup',
     description: 'Syncs image server media files to Google Drive',

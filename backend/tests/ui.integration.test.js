@@ -27,6 +27,9 @@ describe('UI Integration Tests', () => {
       const title = await page.title();
       expect(title).toContain('Roots of The Valley');
 
+      // Wait for map container to be rendered
+      await page.waitForSelector('.leaflet-container', { timeout: 10000 });
+
       // Verify map container exists
       const mapContainer = await page.locator('.leaflet-container').count();
       expect(mapContainer).toBeGreaterThan(0);
