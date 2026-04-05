@@ -25,7 +25,6 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
     const isVideo = activeTab === 'video';
     const fileName = file.name.toLowerCase();
 
-    // Check both MIME type and file extension for better compatibility
     const allowedTypes = isVideo
       ? ['video/mp4', 'video/webm', 'video/quicktime']
       : ['image/jpeg', 'image/png', 'image/webp'];

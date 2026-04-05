@@ -75,7 +75,6 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
         throw new Error(error.error || 'Failed to delete');
       }
 
-      // If this is the last image, close lightbox
       if (media.length === 1) {
         onClose();
         if (onMediaUpdate) {
@@ -84,16 +83,13 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
         return;
       }
 
-      // Move to next image, or previous if we're at the end
       let newIndex = currentIndex;
       if (currentIndex >= media.length - 1) {
         newIndex = Math.max(0, currentIndex - 1);
       }
 
-      // Update the index first
       setCurrentIndex(newIndex);
 
-      // Refresh media list
       if (onMediaUpdate) {
         onMediaUpdate();
       }
@@ -123,15 +119,11 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
         throw new Error(error.error || 'Failed to set primary');
       }
 
-      // Refresh media and stay on the same image (it will move to index 0 as primary)
       if (onMediaUpdate) {
         onMediaUpdate();
       }
 
-      // Emit event to refresh map markers with new primary image
       window.dispatchEvent(new CustomEvent('poi-updated', { detail: { poiId } }));
-
-      // The image we just set as primary will now be at index 0
       setCurrentIndex(0);
     } catch (error) {
       console.error('Set primary failed:', error);
