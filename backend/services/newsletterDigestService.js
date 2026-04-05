@@ -230,6 +230,32 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
   }
   const jobType = 'newsletter-digest';
 
+  // Idempotency check: Don't send multiple digests on the same day
+  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  const alreadySentCheck = await pool.query(
+    `SELECT id FROM job_logs
+     WHERE job_type = $1
+       AND level = 'info'
+       AND message = 'Weekly digest sent successfully'
+       AND created_at::date = $2::date
+     LIMIT 1`,
+    [jobType, today]
+  );
+
+  if (alreadySentCheck.rows.length > 0) {
+    console.log(`Digest already sent today (${today}), skipping duplicate send`);
+
+    if (jobId > 0) {
+      await pool.query(
+        'INSERT INTO job_logs (job_id, job_type, level, message, details) VALUES ($1, $2, $3, $4, $5)',
+        [jobId, jobType, 'info', 'Skipped - digest already sent today',
+         JSON.stringify({ skipped: true, reason: 'already_sent_today', date: today })]
+      );
+    }
+
+    return { success: true, skipped: true, reason: 'already_sent_today' };
+  }
+
   // Log job start
   if (jobId > 0) {
     await pool.query(
@@ -258,17 +284,17 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
     }
 
     // 3. Send via Buttondown
-    const today = new Date();
-    const dateStr = today.toLocaleDateString('en-US', {
+    const sendDate = new Date();
+    const dateStr = sendDate.toLocaleDateString('en-US', {
       month: 'long',
       day: 'numeric',
       year: 'numeric'
     });
 
     // In development, add time to allow multiple sends per day for testing
-    // In production, Buttondown's duplicate detection prevents accidental double-sends
+    // (Idempotency is enforced above via database check to prevent duplicate sends)
     const subject = process.env.NODE_ENV === 'development'
-      ? `What's Happening in the Valley This Weekend - ${dateStr} @ ${today.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+      ? `What's Happening in the Valley This Weekend - ${dateStr} @ ${sendDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
       : `What's Happening in the Valley This Weekend - ${dateStr}`;
 
     await sendEmail(subject, digestHtml, pool);
