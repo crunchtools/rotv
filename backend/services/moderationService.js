@@ -18,42 +18,21 @@ const TABLE_MAP = {
 const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
 
 /**
- * Domain reputation allowlists for quality filtering
- */
-const TRUSTED_DOMAINS = [
-  // Federal sources
-  'nps.gov', 'doi.gov', 'usgs.gov',
-
-  // Metro parks
-  'summitmetroparks.org', 'clevelandmetroparks.com', 'metroparks.org',
-
-  // Local news
-  'cleveland.com', 'wkyc.com', 'fox8.com', 'beaconjournal.com', 'recordpub.com',
-
-  // Regional sources
-  'ohiohistory.org', 'clevelandhistorical.org', 'wrhs.org'
-];
-
-const COMPETITOR_DOMAINS = [
-  'cuyahogavalley.com', // The scam site
-  'cvnp.guide',
-  'cuyahogavalleyguide.com'
-];
-
-const TRUSTED_DOMAIN_SET = new Set(TRUSTED_DOMAINS);
-const COMPETITOR_DOMAIN_SET = new Set(COMPETITOR_DOMAINS);
-
-/**
  * Determine domain reputation for quality filtering.
  * @param {string} url - URL to check
+ * @param {Array<string>} trustedDomains - List of trusted domains (default: empty)
+ * @param {Array<string>} competitorDomains - List of competitor/scam domains (default: empty)
  * @returns {'trusted'|'competitor'|'unknown'}
  */
-export function getDomainReputation(url) {
+export function getDomainReputation(url, trustedDomains = [], competitorDomains = []) {
   if (!url) return 'unknown';
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    if (TRUSTED_DOMAIN_SET.has(hostname)) return 'trusted';
-    if (COMPETITOR_DOMAIN_SET.has(hostname)) return 'competitor';
+    const trustedSet = new Set(trustedDomains.map(d => d.toLowerCase()));
+    const competitorSet = new Set(competitorDomains.map(d => d.toLowerCase()));
+
+    if (trustedSet.has(hostname)) return 'trusted';
+    if (competitorSet.has(hostname)) return 'competitor';
     return 'unknown';
   } catch {
     return 'unknown';
@@ -124,13 +103,15 @@ function extractDateFields(scoring) {
  * @param {Object} scoring - AI scoring object with confidence_score, reasoning, issues
  * @param {string} sourceUrl - Source URL to validate
  * @param {Object} dateInfo - { publicationDate, dateConfidence }
+ * @param {Array<string>} trustedDomains - List of trusted domains (default: empty)
+ * @param {Array<string>} competitorDomains - List of competitor/scam domains (default: empty)
  * @returns {Object} Modified scoring object
  */
-export function applyQualityFilters(scoring, sourceUrl, dateInfo) {
+export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedDomains = [], competitorDomains = []) {
   const { publicationDate, dateConfidence } = dateInfo;
 
   // Filter 1: Domain reputation
-  const reputation = getDomainReputation(sourceUrl);
+  const reputation = getDomainReputation(sourceUrl, trustedDomains, competitorDomains);
   if (reputation === 'competitor') {
     scoring.confidence_score *= 0.3;
     scoring.reasoning += ' Source is a competitor aggregator site.';
@@ -214,12 +195,26 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_auto_reject_floor')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_auto_reject_floor', 'moderation_trusted_domains', 'moderation_competitor_domains')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const autoApproveEnabled = settings.moderation_auto_approve_enabled !== 'false';
   const threshold = parseFloat(settings.moderation_auto_approve_threshold) || 0.9;
   const rejectFloor = parseFloat(settings.moderation_auto_reject_floor) || 0.5;
+
+  // Parse domain lists from settings (stored as JSON arrays)
+  let trustedDomains = [];
+  let competitorDomains = [];
+  try {
+    trustedDomains = JSON.parse(settings.moderation_trusted_domains || '[]');
+  } catch (e) {
+    console.warn('[Moderation] Failed to parse moderation_trusted_domains:', e.message);
+  }
+  try {
+    competitorDomains = JSON.parse(settings.moderation_competitor_domains || '[]');
+  } catch (e) {
+    console.warn('[Moderation] Failed to parse moderation_competitor_domains:', e.message);
+  }
 
   let scoring;
 
@@ -290,7 +285,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const { publicationDate: newsPubDate, dateConfidence: newsDateConf } = extractDateFields(scoring);
 
     // Apply quality filters to adjust confidence_score
-    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: newsPubDate, dateConfidence: newsDateConf });
+    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: newsPubDate, dateConfidence: newsDateConf }, trustedDomains, competitorDomains);
 
     // Re-serialize issues after quality filters
     const newsIssuesJson = serializeIssues(scoring);
@@ -401,7 +396,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const { publicationDate: eventPubDate, dateConfidence: eventDateConf } = extractDateFields(scoring);
 
     // Apply quality filters to adjust confidence_score
-    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: eventPubDate, dateConfidence: eventDateConf });
+    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: eventPubDate, dateConfidence: eventDateConf }, trustedDomains, competitorDomains);
 
     // Re-serialize issues after quality filters
     const eventIssuesJson = serializeIssues(scoring);
