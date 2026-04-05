@@ -1270,18 +1270,11 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
       return res.status(403).json({ error: 'You can only delete your own media' });
     }
 
+    // Transaction: delete media and update POI flag atomically
+    await pool.query('BEGIN');
+
     // Delete from database
     await pool.query('DELETE FROM poi_media WHERE id = $1', [mediaId]);
-
-    // Delete from image server (if it's an image/video, not YouTube)
-    if (media.image_server_asset_id) {
-      try {
-        await imageServerClient.deleteAsset(media.image_server_asset_id);
-      } catch (err) {
-        console.error('Failed to delete asset from image server:', err);
-        // Continue anyway - DB record is deleted
-      }
-    }
 
     // Update POI's has_primary_image flag based on remaining media
     const remainingPrimary = await pool.query(
@@ -1298,11 +1291,24 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
       [remainingPrimary.rows.length > 0, poiId]
     );
 
+    await pool.query('COMMIT');
+
+    // Delete from image server (if it's an image/video, not YouTube)
+    if (media.image_server_asset_id) {
+      try {
+        await imageServerClient.deleteAsset(media.image_server_asset_id);
+      } catch (err) {
+        console.error('Failed to delete asset from image server:', err);
+        // Continue anyway - DB record is already deleted
+      }
+    }
+
     // Invalidate mosaic cache
     invalidateMosaicCache(poiId);
 
     res.json({ success: true, message: 'Media deleted' });
   } catch (error) {
+    await pool.query('ROLLBACK');
     console.error('Error deleting media:', error);
     res.status(500).json({ error: 'Failed to delete media' });
   }

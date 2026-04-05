@@ -4,7 +4,7 @@ import passport from 'passport';
 const router = express.Router();
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 
 // Google OAuth - dual-strategy approach for conditional Drive access
 // Standard route: all users authenticate with basic scopes (profile + email)
@@ -42,9 +42,14 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       // Parse credentials (handles both JSON string and object from pg driver)
       let credentials = null;
       if (req.user.oauth_credentials) {
-        credentials = typeof req.user.oauth_credentials === 'string'
-          ? JSON.parse(req.user.oauth_credentials)
-          : req.user.oauth_credentials;
+        try {
+          credentials = typeof req.user.oauth_credentials === 'string'
+            ? JSON.parse(req.user.oauth_credentials)
+            : req.user.oauth_credentials;
+        } catch (err) {
+          console.error('Failed to parse oauth_credentials:', err);
+          credentials = null;
+        }
       }
       const hasCredentials = credentials && credentials.access_token;
 

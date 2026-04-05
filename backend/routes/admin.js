@@ -3932,7 +3932,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('[Moderation Save] Error:', error.message);
       console.error('[Moderation Save] Stack:', error.stack);
-      res.status(500).json({ error: 'Failed to save edits', details: error.message });
+      res.status(500).json({ error: 'Failed to save edits' });
     }
   });
 
