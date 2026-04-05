@@ -248,12 +248,18 @@ function DataCollectionSettings() {
         const trusted = settingsMap.moderation_trusted_domains || '[]';
         const competitor = settingsMap.moderation_competitor_domains || '[]';
         try {
+          const parsedTrusted = JSON.parse(trusted);
+          const parsedCompetitor = JSON.parse(competitor);
           setDomainLists({
-            trusted: JSON.parse(trusted),
-            competitor: JSON.parse(competitor)
+            trusted: Array.isArray(parsedTrusted) ? parsedTrusted : [],
+            competitor: Array.isArray(parsedCompetitor) ? parsedCompetitor : []
           });
+          if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedCompetitor)) {
+            setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
+          }
         } catch (e) {
           console.error('Failed to parse domain lists:', e);
+          setResult({ type: 'error', message: 'Failed to load domain lists - invalid JSON' });
         }
       }
     } catch (err) { console.error('Error fetching domain lists:', err); }
