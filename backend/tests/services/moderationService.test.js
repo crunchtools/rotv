@@ -6,14 +6,12 @@
 import { describe, test, expect } from 'vitest';
 import { applyQualityFilters, getDomainReputation } from '../../services/moderationService.js';
 
-// Test domain lists (mirrors production config from admin_settings)
+// Test domain lists (mirrors production config from migration 019)
 const TRUSTED_DOMAINS = [
-  'nps.gov',
-  'doi.gov',
-  'summitmetroparks.org',
-  'clevelandmetroparks.com',
-  'cleveland.com',
-  'wkyc.com'
+  'nps.gov', 'doi.gov', 'usgs.gov',
+  'summitmetroparks.org', 'clevelandmetroparks.com', 'metroparks.org',
+  'cleveland.com', 'wkyc.com', 'fox8.com', 'beaconjournal.com', 'recordpub.com',
+  'ohiohistory.org', 'clevelandhistorical.org', 'wrhs.org'
 ];
 
 const COMPETITOR_DOMAINS = [

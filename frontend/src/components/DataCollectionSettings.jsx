@@ -288,7 +288,14 @@ function DataCollectionSettings() {
 
   const handleAddTrustedDomain = () => {
     const domain = newTrustedDomain.trim().toLowerCase();
-    if (domain && !domainLists.trusted.includes(domain)) {
+    // Basic domain validation: alphanumeric + dots + hyphens
+    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+    if (!domain) return;
+    if (!domainRegex.test(domain)) {
+      setResult({ type: 'error', message: 'Invalid domain format (e.g., example.com)' });
+      return;
+    }
+    if (!domainLists.trusted.includes(domain)) {
       setDomainLists({ ...domainLists, trusted: [...domainLists.trusted, domain] });
       setNewTrustedDomain('');
     }
@@ -300,7 +307,14 @@ function DataCollectionSettings() {
 
   const handleAddCompetitorDomain = () => {
     const domain = newCompetitorDomain.trim().toLowerCase();
-    if (domain && !domainLists.competitor.includes(domain)) {
+    // Basic domain validation: alphanumeric + dots + hyphens
+    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+    if (!domain) return;
+    if (!domainRegex.test(domain)) {
+      setResult({ type: 'error', message: 'Invalid domain format (e.g., example.com)' });
+      return;
+    }
+    if (!domainLists.competitor.includes(domain)) {
       setDomainLists({ ...domainLists, competitor: [...domainLists.competitor, domain] });
       setNewCompetitorDomain('');
     }
