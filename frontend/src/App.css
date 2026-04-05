@@ -12903,10 +12903,11 @@ svg.leaflet-zoom-animated {
   grid-template-columns: 12px minmax(80px, 150px) 1fr auto;
   column-gap: 8px;
   row-gap: 0;
-  align-items: baseline;
+  align-items: start;
   padding: 4px 0;
   border-bottom: 1px solid #edf2f7;
   font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 .job-log-entry.error {
@@ -12934,7 +12935,6 @@ svg.leaflet-zoom-animated {
   width: 12px;
   font-size: 0.7rem;
   color: #718096;
-  margin-top: 4px;
   text-align: center;
 }
 
@@ -12947,7 +12947,6 @@ svg.leaflet-zoom-animated {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  margin-top: 6px;
 }
 
 .log-level-dot.info {
