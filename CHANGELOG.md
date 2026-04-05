@@ -7,23 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-- Comprehensive production troubleshooting package (17 files)
-  - Automated diagnostic scripts (diagnose-production.sh, verify-migrations.sh, fix-production.sh, post-deployment-report.sh)
-  - Complete incident response documentation (PRODUCTION_INCIDENT_README.md with 3 resolution paths)
-  - Deployment guides (DEPLOYMENT_GUIDE.md, DEPLOYMENT_VERIFICATION_CHECKLIST.md)
-  - Production operations guide (README_PRODUCTION.md)
-  - Troubleshooting references (PROD_TROUBLESHOOT.md, PROD_FIX_QUICKREF.md, PROD_ISSUE_FLOWCHART.md)
-  - Post-deployment smoke tests via GitHub Actions
-  - Visual debugging flowcharts and data flow diagrams
-  - Executive summary template for stakeholder communication
-  - Complete package index and navigation guides
-  - 30+ automated health checks
-  - 50+ copy-paste commands for common operations
-  - Prevention checklists to avoid future incidents
+## [1.30.1] - 2026-04-05
 
-### Documentation
-- Updated README.md with Production Operations section
+### Fixed
+- **Mosaic positioning**: Now renders at sidebar top (between header and tabs) instead of inside Info tab
+- **POI type unification**: All POI types (destinations, linear features, virtual) now use identical media handling code
+- **Mobile navigation**: Restored POI navigation chevron buttons that were accidentally removed
+- **Primary image indicators**: Added grey star in mosaic, gold badge in lightbox
+- **Lightbox navigation**: Now stays on same image when setting it as primary (was jumping to different index)
+- **Event-driven updates**: Async badge and count updates work correctly across all components
+- **Media deletion**: Wrapped in database transaction for data integrity, implements eventual consistency for image server
+- **Security**: Added error handling for JSON.parse, removed internal error details from responses, removed hardcoded admin email
+- **Code quality**: Re-enabled React.StrictMode, removed 4,387 lines of AI-generated summary litter
+
+### Changed
+- Caption length limit increased from 200 to 2000 characters (migration 017)
+- Media deletion returns 202 Accepted when image server cleanup is pending (eventual consistency)
+
+### Technical
+- Created issue #184 to track long-term POI type architecture refactor
+- Created issue #186 to track background cleanup job for orphaned image server assets
 
 ## [1.30.0] - 2026-04-04
 
