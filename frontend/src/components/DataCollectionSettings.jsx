@@ -243,9 +243,10 @@ function DataCollectionSettings() {
     try {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
       if (response.ok) {
-        const settings = await response.json();
-        const trusted = settings.moderation_trusted_domains?.value || '[]';
-        const competitor = settings.moderation_competitor_domains?.value || '[]';
+        const settingsArray = await response.json();
+        const settingsMap = Object.fromEntries(settingsArray.map(s => [s.key, s.value]));
+        const trusted = settingsMap.moderation_trusted_domains || '[]';
+        const competitor = settingsMap.moderation_competitor_domains || '[]';
         try {
           setDomainLists({
             trusted: JSON.parse(trusted),

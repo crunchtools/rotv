@@ -20,17 +20,14 @@ const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page',
 /**
  * Determine domain reputation for quality filtering.
  * @param {string} url - URL to check
- * @param {Array<string>} trustedDomains - List of trusted domains (default: empty)
- * @param {Array<string>} competitorDomains - List of competitor/scam domains (default: empty)
+ * @param {Set<string>} trustedSet - Set of trusted domains (lowercase)
+ * @param {Set<string>} competitorSet - Set of competitor/scam domains (lowercase)
  * @returns {'trusted'|'competitor'|'unknown'}
  */
-export function getDomainReputation(url, trustedDomains = [], competitorDomains = []) {
+export function getDomainReputation(url, trustedSet = new Set(), competitorSet = new Set()) {
   if (!url) return 'unknown';
   try {
     const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-    const trustedSet = new Set(trustedDomains.map(d => d.toLowerCase()));
-    const competitorSet = new Set(competitorDomains.map(d => d.toLowerCase()));
-
     if (trustedSet.has(hostname)) return 'trusted';
     if (competitorSet.has(hostname)) return 'competitor';
     return 'unknown';
@@ -103,15 +100,15 @@ function extractDateFields(scoring) {
  * @param {Object} scoring - AI scoring object with confidence_score, reasoning, issues
  * @param {string} sourceUrl - Source URL to validate
  * @param {Object} dateInfo - { publicationDate, dateConfidence }
- * @param {Array<string>} trustedDomains - List of trusted domains (default: empty)
- * @param {Array<string>} competitorDomains - List of competitor/scam domains (default: empty)
+ * @param {Set<string>} trustedSet - Set of trusted domains (lowercase)
+ * @param {Set<string>} competitorSet - Set of competitor/scam domains (lowercase)
  * @returns {Object} Modified scoring object
  */
-export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedDomains = [], competitorDomains = []) {
+export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = new Set(), competitorSet = new Set()) {
   const { publicationDate, dateConfidence } = dateInfo;
 
   // Filter 1: Domain reputation
-  const reputation = getDomainReputation(sourceUrl, trustedDomains, competitorDomains);
+  const reputation = getDomainReputation(sourceUrl, trustedSet, competitorSet);
   if (reputation === 'competitor') {
     scoring.confidence_score *= 0.3;
     scoring.reasoning += ' Source is a competitor aggregator site.';
@@ -206,15 +203,27 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   let trustedDomains = [];
   let competitorDomains = [];
   try {
-    trustedDomains = JSON.parse(settings.moderation_trusted_domains || '[]');
+    const parsed = JSON.parse(settings.moderation_trusted_domains || '[]');
+    trustedDomains = Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) {
+      console.warn('[Moderation] moderation_trusted_domains is not an array, defaulting to empty');
+    }
   } catch (e) {
     console.warn('[Moderation] Failed to parse moderation_trusted_domains:', e.message);
   }
   try {
-    competitorDomains = JSON.parse(settings.moderation_competitor_domains || '[]');
+    const parsed = JSON.parse(settings.moderation_competitor_domains || '[]');
+    competitorDomains = Array.isArray(parsed) ? parsed : [];
+    if (!Array.isArray(parsed)) {
+      console.warn('[Moderation] moderation_competitor_domains is not an array, defaulting to empty');
+    }
   } catch (e) {
     console.warn('[Moderation] Failed to parse moderation_competitor_domains:', e.message);
   }
+
+  // Create Sets once for performance (avoids re-creating on every URL check)
+  const trustedSet = new Set(trustedDomains.map(d => d.toLowerCase()));
+  const competitorSet = new Set(competitorDomains.map(d => d.toLowerCase()));
 
   let scoring;
 
@@ -285,7 +294,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const { publicationDate: newsPubDate, dateConfidence: newsDateConf } = extractDateFields(scoring);
 
     // Apply quality filters to adjust confidence_score
-    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: newsPubDate, dateConfidence: newsDateConf }, trustedDomains, competitorDomains);
+    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: newsPubDate, dateConfidence: newsDateConf }, trustedSet, competitorSet);
 
     // Re-serialize issues after quality filters
     const newsIssuesJson = serializeIssues(scoring);
@@ -396,7 +405,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const { publicationDate: eventPubDate, dateConfidence: eventDateConf } = extractDateFields(scoring);
 
     // Apply quality filters to adjust confidence_score
-    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: eventPubDate, dateConfidence: eventDateConf }, trustedDomains, competitorDomains);
+    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: eventPubDate, dateConfidence: eventDateConf }, trustedSet, competitorSet);
 
     // Re-serialize issues after quality filters
     const eventIssuesJson = serializeIssues(scoring);
