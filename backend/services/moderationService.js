@@ -222,8 +222,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   }
 
   // Create Sets once for performance (avoids re-creating on every URL check)
-  const trustedSet = new Set(trustedDomains.map(d => d.toLowerCase()));
-  const competitorSet = new Set(competitorDomains.map(d => d.toLowerCase()));
+  // Filter to only strings to avoid TypeError on non-string elements
+  const trustedSet = new Set(trustedDomains.filter(d => typeof d === 'string').map(d => d.toLowerCase()));
+  const competitorSet = new Set(competitorDomains.filter(d => typeof d === 'string').map(d => d.toLowerCase()));
 
   let scoring;
 

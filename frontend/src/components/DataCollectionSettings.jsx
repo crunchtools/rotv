@@ -251,8 +251,8 @@ function DataCollectionSettings() {
           const parsedTrusted = JSON.parse(trusted);
           const parsedCompetitor = JSON.parse(competitor);
           setDomainLists({
-            trusted: Array.isArray(parsedTrusted) ? parsedTrusted : [],
-            competitor: Array.isArray(parsedCompetitor) ? parsedCompetitor : []
+            trusted: Array.isArray(parsedTrusted) ? parsedTrusted.filter(d => typeof d === 'string') : [],
+            competitor: Array.isArray(parsedCompetitor) ? parsedCompetitor.filter(d => typeof d === 'string') : []
           });
           if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedCompetitor)) {
             setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
