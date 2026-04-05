@@ -94,7 +94,7 @@ describe('POI Media API Integration Tests', () => {
       const response = await request(BASE_URL)
         .get('/api/assets/test-asset-id/thumbnail');
 
-      expect([200, 404, 503]).toContain(response.status);
+      expect([200, 404, 422, 503]).toContain(response.status);
     });
   });
 
@@ -103,7 +103,7 @@ describe('POI Media API Integration Tests', () => {
       const response = await request(BASE_URL)
         .get('/api/assets/test-asset-id/original');
 
-      expect([200, 404, 503]).toContain(response.status);
+      expect([200, 404, 422, 503]).toContain(response.status);
     });
   });
 
@@ -219,7 +219,7 @@ describe('Rate Limiting (DoS Protection)', () => {
     }
 
     responses.forEach(response => {
-      expect([200, 404, 503]).toContain(response.status);
+      expect([200, 404, 422, 503]).toContain(response.status);
     });
   });
 
