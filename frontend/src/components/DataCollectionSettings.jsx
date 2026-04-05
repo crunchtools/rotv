@@ -273,6 +273,7 @@ function DataCollectionSettings() {
         { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
         { key: 'moderation_competitor_domains', value: JSON.stringify(domainLists.competitor) }
       ];
+      // Note: N+1 pattern - acceptable for 2 settings, batch endpoint would be better for scale
       for (const setting of settings) {
         const response = await fetch(`/api/admin/settings/${setting.key}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',

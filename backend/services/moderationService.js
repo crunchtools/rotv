@@ -200,26 +200,19 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   const rejectFloor = parseFloat(settings.moderation_auto_reject_floor) || 0.5;
 
   // Parse domain lists from settings (stored as JSON arrays)
-  let trustedDomains = [];
-  let competitorDomains = [];
-  try {
-    const parsed = JSON.parse(settings.moderation_trusted_domains || '[]');
-    trustedDomains = Array.isArray(parsed) ? parsed : [];
-    if (!Array.isArray(parsed)) {
-      console.warn('[Moderation] moderation_trusted_domains is not an array, defaulting to empty');
+  const parseDomainList = (jsonString, name) => {
+    try {
+      const parsed = JSON.parse(jsonString || '[]');
+      if (Array.isArray(parsed)) return parsed;
+      console.warn(`[Moderation] ${name} is not an array, defaulting to empty`);
+      return [];
+    } catch (e) {
+      console.warn(`[Moderation] Failed to parse ${name}:`, e.message);
+      return [];
     }
-  } catch (e) {
-    console.warn('[Moderation] Failed to parse moderation_trusted_domains:', e.message);
-  }
-  try {
-    const parsed = JSON.parse(settings.moderation_competitor_domains || '[]');
-    competitorDomains = Array.isArray(parsed) ? parsed : [];
-    if (!Array.isArray(parsed)) {
-      console.warn('[Moderation] moderation_competitor_domains is not an array, defaulting to empty');
-    }
-  } catch (e) {
-    console.warn('[Moderation] Failed to parse moderation_competitor_domains:', e.message);
-  }
+  };
+  const trustedDomains = parseDomainList(settings.moderation_trusted_domains, 'moderation_trusted_domains');
+  const competitorDomains = parseDomainList(settings.moderation_competitor_domains, 'moderation_competitor_domains');
 
   // Create Sets once for performance (avoids re-creating on every URL check)
   // Filter to only strings to avoid TypeError on non-string elements
