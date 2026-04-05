@@ -15,13 +15,38 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   // Standard Google OAuth (all users - basic scopes only)
   router.get('/google', passport.authenticate('google'));
 
-  router.get('/google/callback',
-    passport.authenticate('google', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
-    async (req, res) => {
-      // Auto-detect admin without Drive credentials
+  // Drive scope upgrade (admin only - incremental authorization)
+  router.get('/google/upgrade', passport.authenticate('google-upgrade', {
+    accessType: 'offline',
+    prompt: 'consent',
+    state: 'upgrade' // Pass state to identify upgrade flow in callback
+  }));
+
+  // Unified callback handler - handles both standard and upgrade flows
+  router.get('/google/callback', (req, res, next) => {
+    // Check if this is an upgrade callback (state=upgrade)
+    const isUpgrade = req.query.state === 'upgrade';
+    const strategy = isUpgrade ? 'google-upgrade' : 'google';
+
+    passport.authenticate(strategy, {
+      failureRedirect: `${FRONTEND_URL}?auth=failed`
+    })(req, res, async () => {
+      // Handle upgrade flow - redirect to Sync Settings
+      if (isUpgrade) {
+        return res.redirect(`${FRONTEND_URL}/admin?auth=success&tab=sync`);
+      }
+
+      // Handle standard flow - auto-detect admin without Drive credentials
       const isAdmin = req.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-      const hasCredentials = req.user.oauth_credentials &&
-                            JSON.parse(req.user.oauth_credentials).access_token;
+
+      // Parse credentials (handles both JSON string and object from pg driver)
+      let credentials = null;
+      if (req.user.oauth_credentials) {
+        credentials = typeof req.user.oauth_credentials === 'string'
+          ? JSON.parse(req.user.oauth_credentials)
+          : req.user.oauth_credentials;
+      }
+      const hasCredentials = credentials && credentials.access_token;
 
       if (isAdmin && !hasCredentials) {
         // Redirect admin to upgrade flow for Drive access
@@ -30,22 +55,8 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
       // Standard success redirect
       res.redirect(`${FRONTEND_URL}?auth=success`);
-    }
-  );
-
-  // Drive scope upgrade (admin only - incremental authorization)
-  router.get('/google/upgrade', passport.authenticate('google-upgrade', {
-    accessType: 'offline',
-    prompt: 'consent'
-  }));
-
-  router.get('/google/upgrade/callback',
-    passport.authenticate('google-upgrade', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
-    (req, res) => {
-      // Redirect to Sync Settings after Drive access granted
-      res.redirect(`${FRONTEND_URL}/admin?auth=success&tab=sync`);
-    }
-  );
+    });
+  });
 } else {
   // Return helpful error when OAuth not configured
   router.get('/google', (req, res) => {

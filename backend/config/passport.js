@@ -102,10 +102,11 @@ export function configurePassport(pool) {
     }));
 
     // Upgrade strategy - Drive scope for admin only (incremental authorization)
+    // Uses same callback URL as standard strategy to avoid multiple OAuth app configurations
     passport.use('google-upgrade', new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: '/auth/google/upgrade/callback',
+      callbackURL: process.env.GOOGLE_CALLBACK_URL || '/auth/google/callback',
       scope: ['profile', 'email', 'https://www.googleapis.com/auth/drive.file']
     }, async (accessToken, refreshToken, profile, done) => {
       try {
