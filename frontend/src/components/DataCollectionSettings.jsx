@@ -251,8 +251,8 @@ function DataCollectionSettings() {
           const parsedTrusted = JSON.parse(trusted);
           const parsedCompetitor = JSON.parse(competitor);
           setDomainLists({
-            trusted: Array.isArray(parsedTrusted) ? parsedTrusted : [],
-            competitor: Array.isArray(parsedCompetitor) ? parsedCompetitor : []
+            trusted: Array.isArray(parsedTrusted) ? parsedTrusted.filter(d => typeof d === 'string') : [],
+            competitor: Array.isArray(parsedCompetitor) ? parsedCompetitor.filter(d => typeof d === 'string') : []
           });
           if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedCompetitor)) {
             setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
@@ -273,6 +273,7 @@ function DataCollectionSettings() {
         { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
         { key: 'moderation_competitor_domains', value: JSON.stringify(domainLists.competitor) }
       ];
+      // Note: N+1 pattern - acceptable for 2 settings, batch endpoint would be better for scale
       for (const setting of settings) {
         const response = await fetch(`/api/admin/settings/${setting.key}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
@@ -287,7 +288,14 @@ function DataCollectionSettings() {
 
   const handleAddTrustedDomain = () => {
     const domain = newTrustedDomain.trim().toLowerCase();
-    if (domain && !domainLists.trusted.includes(domain)) {
+    // Basic domain validation: alphanumeric + dots + hyphens
+    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+    if (!domain) return;
+    if (!domainRegex.test(domain)) {
+      setResult({ type: 'error', message: 'Invalid domain format (e.g., example.com)' });
+      return;
+    }
+    if (!domainLists.trusted.includes(domain)) {
       setDomainLists({ ...domainLists, trusted: [...domainLists.trusted, domain] });
       setNewTrustedDomain('');
     }
@@ -299,7 +307,14 @@ function DataCollectionSettings() {
 
   const handleAddCompetitorDomain = () => {
     const domain = newCompetitorDomain.trim().toLowerCase();
-    if (domain && !domainLists.competitor.includes(domain)) {
+    // Basic domain validation: alphanumeric + dots + hyphens
+    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+    if (!domain) return;
+    if (!domainRegex.test(domain)) {
+      setResult({ type: 'error', message: 'Invalid domain format (e.g., example.com)' });
+      return;
+    }
+    if (!domainLists.competitor.includes(domain)) {
       setDomainLists({ ...domainLists, competitor: [...domainLists.competitor, domain] });
       setNewCompetitorDomain('');
     }
