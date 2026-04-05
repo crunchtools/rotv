@@ -1295,16 +1295,15 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
 
     // Delete from image server (if it's an image/video, not YouTube)
     // NOTE: Eventual consistency - DB transaction already committed
-    // If image server delete fails, orphaned assets should be cleaned up by background job
+    // If image server delete fails, orphaned assets logged for cleanup (see #186)
     let imageServerDeleted = true;
     if (media.image_server_asset_id) {
       try {
         await imageServerClient.deleteAsset(media.image_server_asset_id);
       } catch (err) {
         console.error('Failed to delete asset from image server:', err);
-        console.error('Orphaned asset:', media.image_server_asset_id);
+        console.error('Orphaned asset (manual cleanup required):', media.image_server_asset_id);
         imageServerDeleted = false;
-        // TODO: Implement background job to clean up orphaned assets
       }
     }
 
