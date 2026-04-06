@@ -50,6 +50,14 @@ jobs:
           docker stop rotv 2>/dev/null || true
           docker rm rotv 2>/dev/null || true
 
+          # Write environment file on host BEFORE container starts
+          # Mounted into the container so systemd reads it on first boot
+          printf '%s\n' \
+            "GEMINI_API_KEY=${GEMINI_API_KEY}" \
+            "PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}" \
+            > ~/.rotv/environment
+          echo "✓ Environment file written"
+
           # Start test container with ephemeral storage
           # systemd needs --tmpfs /run and --tmpfs /tmp; --cgroupns=host for cgroup v2
           docker run -d \
@@ -61,24 +69,8 @@ jobs:
             --tmpfs /run/lock \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
             -v ~/.rotv/seed-data.sql:/data/test-seed.sql:ro \
-            -e NODE_ENV=test \
-            -e BYPASS_AUTH=true \
-            -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
-            -e PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" \
+            -v ~/.rotv/environment:/etc/rotv/environment:ro \
             quay.io/crunchtools/rotv:test
-
-          # Configure test environment inside container
-          # The systemd service reads /etc/rotv/environment, which overrides hardcoded values
-          echo "Configuring test environment..."
-          docker exec rotv mkdir -p /etc/rotv
-          docker exec rotv sh -c 'cat > /etc/rotv/environment <<EOF
-NODE_ENV=test
-BYPASS_AUTH=true
-GEMINI_API_KEY=${GEMINI_API_KEY}
-PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
-EOF'
-          docker exec rotv systemctl restart rotv-backend
-          echo "✓ Test environment configured"
 
           # Wait for server to start and initialize database
           echo "Waiting for server to start and initialize database..."

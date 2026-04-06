@@ -39,11 +39,11 @@ fi
 
 echo "Running Gatehouse AI code review..."
 
-# Mount the repo read-only for styleguide access, pipe diff via stdin
+# Mount the repo read-only and run gatehouse with --base
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-echo "$DIFF" | podman run --rm -i \
+podman run --rm \
     -e "GEMINI_API_KEY=${GEMINI_API_KEY}" \
     -v "${REPO_ROOT}:/repo:ro,Z" \
     -w /repo \
-    "$GATEHOUSE_IMAGE" --stdin --advisory
+    "$GATEHOUSE_IMAGE" --base "$BASE" --advisory

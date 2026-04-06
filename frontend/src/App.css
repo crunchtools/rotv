@@ -2597,8 +2597,8 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Error */
-.error {
+/* Full-page error state (e.g. backend unreachable) */
+.page-error {
   display: flex;
   flex-direction: column;
   align-items: center;
