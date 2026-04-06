@@ -63,6 +63,8 @@ jobs:
             --tmpfs /run/lock \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
             -v ~/.rotv/seed-data.sql:/data/test-seed.sql:ro \
+            -e NODE_ENV=test \
+            -e BYPASS_AUTH=true \
             -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
             -e PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" \
             quay.io/crunchtools/rotv:test
