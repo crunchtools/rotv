@@ -1436,7 +1436,7 @@ function AppContent() {
 
   if (error) {
     return (
-      <div className="error">
+      <div className="page-error">
         <h2>Error loading data</h2>
         <p>{error}</p>
         <p>Make sure the backend server is running.</p>
