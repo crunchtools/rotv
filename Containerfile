@@ -72,7 +72,11 @@ RUN chmod +x /usr/local/bin/rotv-init.sh && \
     systemctl enable postgresql rotv-init rotv-backend
 
 # Create directory for environment file
-RUN mkdir -p /etc/rotv
+# When BUILD_ENV=test, bake test env vars so systemd picks them up on first boot
+RUN mkdir -p /etc/rotv && \
+    if [ "$BUILD_ENV" = "test" ]; then \
+      printf '%s\n' 'NODE_ENV=test' 'BYPASS_AUTH=true' > /etc/rotv/environment; \
+    fi
 
 EXPOSE 8080
 EXPOSE 25
