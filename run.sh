@@ -228,6 +228,8 @@ ENVFILE
         # Create environment file for systemd services (use main 'rotv' database like CI)
         mkdir -p ~/.rotv
         cat > ~/.rotv/environment <<ENVFILE
+NODE_ENV=test
+BYPASS_AUTH=true
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
 SESSION_SECRET=$SESSION_SECRET

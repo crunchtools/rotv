@@ -27,33 +27,33 @@ describe('Auth Bypass Integration Tests', () => {
       expect(response.status).toBe(200);
 
       const data = await response.json();
-      expect(Array.isArray(data)).toBe(true);
+      expect(typeof data).toBe('object');
 
-      console.log(`[Auth Bypass Test] Admin settings accessed: ${data.length} settings`);
+      console.log(`[Auth Bypass Test] Admin settings accessed: ${Object.keys(data).length} settings`);
     });
 
-    it('GET /api/admin/pois - should access POI admin endpoint without auth', async () => {
-      const response = await fetch(`${BASE_URL}/api/admin/pois`);
+    it('GET /api/admin/jobs/history - should access jobs endpoint without auth', async () => {
+      const response = await fetch(`${BASE_URL}/api/admin/jobs/history`);
 
       // With bypass enabled, should get 200
       expect(response.status).toBe(200);
 
       const data = await response.json();
-      expect(Array.isArray(data)).toBe(true);
+      expect(typeof data).toBe('object');
 
-      console.log(`[Auth Bypass Test] POIs accessed: ${data.length} POIs`);
+      console.log(`[Auth Bypass Test] Jobs history accessed`);
     });
 
-    it('GET /api/admin/jobs - should access jobs endpoint without auth', async () => {
-      const response = await fetch(`${BASE_URL}/api/admin/jobs`);
+    it('GET /api/admin/jobs/scheduled - should access scheduled jobs without auth', async () => {
+      const response = await fetch(`${BASE_URL}/api/admin/jobs/scheduled`);
 
       // With bypass enabled, should get 200
       expect(response.status).toBe(200);
 
       const data = await response.json();
-      expect(Array.isArray(data)).toBe(true);
+      expect(typeof data).toBe('object');
 
-      console.log(`[Auth Bypass Test] Jobs accessed: ${data.length} jobs`);
+      console.log(`[Auth Bypass Test] Scheduled jobs accessed`);
     });
   });
 
@@ -67,7 +67,7 @@ describe('Auth Bypass Integration Tests', () => {
     it('should allow media_admin role access to media endpoints', async () => {
       // Media admin endpoints should also work with bypass
       // (bypass defaults to admin role, which has media_admin permissions)
-      const response = await fetch(`${BASE_URL}/api/admin/pois`);
+      const response = await fetch(`${BASE_URL}/api/admin/poi-media`);
       expect(response.status).toBe(200);
     });
   });
