@@ -69,6 +69,19 @@ jobs:
             -e PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" \
             quay.io/crunchtools/rotv:test
 
+          # Configure test environment inside container
+          # The systemd service reads /etc/rotv/environment, which overrides hardcoded values
+          echo "Configuring test environment..."
+          docker exec rotv mkdir -p /etc/rotv
+          docker exec rotv sh -c 'cat > /etc/rotv/environment <<EOF
+NODE_ENV=test
+BYPASS_AUTH=true
+GEMINI_API_KEY=${GEMINI_API_KEY}
+PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+EOF'
+          docker exec rotv systemctl restart rotv-backend
+          echo "✓ Test environment configured"
+
           # Wait for server to start and initialize database
           echo "Waiting for server to start and initialize database..."
           sleep 20
