@@ -1,0 +1,179 @@
+name: Run Tests
+
+on:
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Application Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Quay.io
+        uses: docker/login-action@v3
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Pull base image from Quay.io
+        run: |
+          docker pull quay.io/crunchtools/rotv-base:latest
+          echo "✓ Base image pulled: quay.io/crunchtools/rotv-base:latest"
+
+      - name: Build application image
+        run: |
+          docker build \
+            --build-arg BASE_IMAGE=quay.io/crunchtools/rotv-base:latest \
+            --build-arg BUILD_ENV=test \
+            -t quay.io/crunchtools/rotv:test .
+          echo "✓ Application image built: quay.io/crunchtools/rotv:test"
+
+      - name: Prepare test seed data
+        run: |
+          # Use committed test fixture (minimal data for fast tests)
+          mkdir -p ~/.rotv
+          cp backend/tests/fixtures/test-seed-data.sql ~/.rotv/seed-data.sql
+          echo "✓ Test seed data ready"
+
+      - name: Run tests
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+        run: |
+          # Stop any existing containers
+          docker stop rotv 2>/dev/null || true
+          docker rm rotv 2>/dev/null || true
+
+          # Start test container with ephemeral storage
+          # systemd needs --tmpfs /run and --tmpfs /tmp; --cgroupns=host for cgroup v2
+          docker run -d \
+            --name rotv \
+            --privileged \
+            --cgroupns=host \
+            -p 8080:8080 \
+            --tmpfs /run \
+            --tmpfs /run/lock \
+            --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
+            -v ~/.rotv/seed-data.sql:/data/test-seed.sql:ro \
+            -e NODE_ENV=test \
+            -e BYPASS_AUTH=true \
+            -e GEMINI_API_KEY="${GEMINI_API_KEY}" \
+            -e PERPLEXITY_API_KEY="${PERPLEXITY_API_KEY}" \
+            quay.io/crunchtools/rotv:test
+
+          # Configure test environment inside container
+          # The systemd service reads /etc/rotv/environment, which overrides hardcoded values
+          echo "Configuring test environment..."
+          docker exec rotv mkdir -p /etc/rotv
+          docker exec rotv sh -c 'cat > /etc/rotv/environment <<EOF
+NODE_ENV=test
+BYPASS_AUTH=true
+GEMINI_API_KEY=${GEMINI_API_KEY}
+PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}
+EOF'
+          docker exec rotv systemctl restart rotv-backend
+          echo "✓ Test environment configured"
+
+          # Wait for server to start and initialize database
+          echo "Waiting for server to start and initialize database..."
+          sleep 20
+
+          # Debug: check systemd service status
+          echo "=== systemd service status ==="
+          docker exec rotv systemctl status postgresql rotv-init rotv-backend --no-pager || true
+          echo "=== journalctl for rotv-backend ==="
+          docker exec rotv journalctl -u rotv-backend --no-pager -n 30 || true
+          echo "=== end debug ==="
+
+          # Check if server is ready
+          for i in {1..30}; do
+            if docker exec rotv curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
+              echo "✓ Server is ready"
+              break
+            fi
+            echo "Waiting for server... ($i/30)"
+            sleep 2
+          done
+
+          # Import seed data (INSERT-only — schema was created by server.js initDatabase)
+          echo "Importing seed data..."
+          docker exec rotv psql -U postgres -d rotv -f /data/test-seed.sql
+
+          # Re-run migrations after seed import (adds columns server.js doesn't create)
+          echo "Re-running migrations..."
+          docker exec rotv sh -c 'for m in /app/migrations/*.sql; do [ -f "$m" ] && psql -U postgres -d rotv -f "$m"; done' 2>&1 | grep -i "error" | grep -v "already exists" || true
+
+          # Restart backend so it picks up the complete schema
+          echo "Restarting backend..."
+          docker exec rotv systemctl restart rotv-backend
+          sleep 5
+
+          # Verify server is ready with complete schema
+          for i in {1..15}; do
+            if docker exec rotv curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
+              echo "✓ Server is ready"
+              break
+            fi
+            echo "Waiting for server after restart... ($i/15)"
+            sleep 2
+          done
+
+          # Verify data was imported
+          echo "Verifying data import..."
+          POI_COUNT=$(docker exec rotv psql -U postgres -d rotv -tAc "SELECT COUNT(*) FROM pois;")
+          echo "Imported $POI_COUNT POIs"
+
+          if [ "$POI_COUNT" -eq 0 ]; then
+            echo "ERROR: No data was imported!"
+            exit 1
+          fi
+
+          echo "✓ Test database ready with $POI_COUNT POIs"
+          echo ""
+
+          # Run the tests inside container
+          echo "Running tests inside container..."
+          docker exec rotv sh -c "cd /app && npm test"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop rotv 2>/dev/null || true
+          docker rm rotv 2>/dev/null || true
+
+  gourmand:
+    name: Code Quality (Gourmand)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/
+            ~/.cargo/git/
+          key: ${{ runner.os }}-cargo-gourmand-${{ hashFiles('gourmand.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-gourmand-
+
+      - name: Install Gourmand
+        run: |
+          if ! command -v gourmand &> /dev/null; then
+            cargo install --git https://codeberg.org/mattdm/gourmand.git
+          fi
+
+      - name: Run Gourmand
+        run: gourmand --full .
