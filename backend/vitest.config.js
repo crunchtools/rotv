@@ -9,8 +9,7 @@ export default defineConfig({
     teardownTimeout: 10000,
     reporters: ['verbose'],
     env: {
-      NODE_ENV: 'test',
-      BYPASS_AUTH: 'true'
+      NODE_ENV: 'test'
     },
     coverage: {
       provider: 'v8',

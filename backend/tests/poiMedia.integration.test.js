@@ -107,8 +107,7 @@ describe('POI Media API Integration Tests', () => {
     });
   });
 
-  // Auth-required tests only run without BYPASS_AUTH (these expect 401/403)
-  describe.skipIf(process.env.BYPASS_AUTH === 'true')('POST /api/pois/:id/media', () => {
+  describe('POST /api/pois/:id/media', () => {
     it('should require authentication', async () => {
       const response = await request(BASE_URL)
         .post(`/api/pois/${TEST_POI_ID}/media`)
@@ -120,8 +119,7 @@ describe('POI Media API Integration Tests', () => {
   });
 });
 
-// Auth-enforcement tests — skipped when BYPASS_AUTH is enabled since auth is bypassed
-describe.skipIf(process.env.BYPASS_AUTH === 'true')('Admin POI Media Management API', () => {
+describe('Admin POI Media Management API', () => {
 
   describe('GET /api/admin/poi-media', () => {
     it('should require admin authentication', async () => {

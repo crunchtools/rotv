@@ -63,7 +63,7 @@ describe('Playwright Integration Tests', () => {
     }, 30000);
   });
 
-  describe('Playwright API Endpoints', () => {
+  describe.skipIf(process.env.BYPASS_AUTH !== 'true')('Playwright API Endpoints', () => {
     it('GET /api/admin/playwright/status - should return Playwright status', async () => {
       // This tests the admin API endpoint for Playwright status
       // With BYPASS_AUTH=true in test env, should get 200 response

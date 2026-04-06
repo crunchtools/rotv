@@ -3,10 +3,15 @@
  *
  * These tests verify that the environment-based auth bypass is working
  * correctly for testing admin endpoints without OAuth authentication.
+ *
+ * Only runs when BYPASS_AUTH=true is set (local dev troubleshooting).
+ * Skipped in CI/GHA where auth is not bypassed.
  */
 import { describe, it, expect } from 'vitest';
 
-describe('Auth Bypass Integration Tests', () => {
+const BYPASS_ENABLED = process.env.BYPASS_AUTH === 'true' && process.env.NODE_ENV === 'test';
+
+describe.skipIf(!BYPASS_ENABLED)('Auth Bypass Integration Tests', () => {
   const BASE_URL = 'http://localhost:8080';
 
   describe('Environment Variables', () => {
@@ -22,8 +27,6 @@ describe('Auth Bypass Integration Tests', () => {
   describe('Admin API Access', () => {
     it('GET /api/admin/settings - should access admin endpoint without auth', async () => {
       const response = await fetch(`${BASE_URL}/api/admin/settings`);
-
-      // With bypass enabled, should get 200 (not 401/403)
       expect(response.status).toBe(200);
 
       const data = await response.json();
@@ -34,8 +37,6 @@ describe('Auth Bypass Integration Tests', () => {
 
     it('GET /api/admin/jobs/history - should access jobs endpoint without auth', async () => {
       const response = await fetch(`${BASE_URL}/api/admin/jobs/history`);
-
-      // With bypass enabled, should get 200
       expect(response.status).toBe(200);
 
       const data = await response.json();
@@ -46,8 +47,6 @@ describe('Auth Bypass Integration Tests', () => {
 
     it('GET /api/admin/jobs/scheduled - should access scheduled jobs without auth', async () => {
       const response = await fetch(`${BASE_URL}/api/admin/jobs/scheduled`);
-
-      // With bypass enabled, should get 200
       expect(response.status).toBe(200);
 
       const data = await response.json();
@@ -59,14 +58,11 @@ describe('Auth Bypass Integration Tests', () => {
 
   describe('Role-Based Access', () => {
     it('should allow admin role access to admin endpoints', async () => {
-      // The bypass injects an admin user, so all admin endpoints should work
       const response = await fetch(`${BASE_URL}/api/admin/settings`);
       expect(response.status).toBe(200);
     });
 
     it('should allow media_admin role access to media endpoints', async () => {
-      // Media admin endpoints should also work with bypass
-      // (bypass defaults to admin role, which has media_admin permissions)
       const response = await fetch(`${BASE_URL}/api/admin/poi-media`);
       expect(response.status).toBe(200);
     });
@@ -75,7 +71,6 @@ describe('Auth Bypass Integration Tests', () => {
   describe('Public API (No Auth Required)', () => {
     it('GET /api/destinations - should access public endpoint', async () => {
       const response = await fetch(`${BASE_URL}/api/destinations`);
-
       expect(response.status).toBe(200);
 
       const data = await response.json();
@@ -86,7 +81,6 @@ describe('Auth Bypass Integration Tests', () => {
 
     it('GET /api/pois - should access public POI endpoint', async () => {
       const response = await fetch(`${BASE_URL}/api/pois`);
-
       expect(response.status).toBe(200);
 
       const data = await response.json();
@@ -98,11 +92,9 @@ describe('Auth Bypass Integration Tests', () => {
 
   describe('Security Verification', () => {
     it('should only work when both NODE_ENV and BYPASS_AUTH are set', () => {
-      // This is a meta-test verifying our security assumptions
       expect(process.env.NODE_ENV).toBe('test');
       expect(process.env.BYPASS_AUTH).toBe('true');
 
-      // In production, these should NEVER both be true
       const wouldBypassInProd = process.env.NODE_ENV === 'production' &&
                                 process.env.BYPASS_AUTH === 'true';
       expect(wouldBypassInProd).toBe(false);
