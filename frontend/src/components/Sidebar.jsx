@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import ImageUploader from './ImageUploader';
 import CollectionStatus from './CollectionStatus';
 import ThumbnailCarousel from './ThumbnailCarousel';
-import { formatDateTime } from './NewsEventsShared';
+import { formatDateTime, formatPublicationDate } from './NewsEventsShared';
 import Mosaic from './Mosaic';
 import MediaUploadModal from './MediaUploadModal';
 
@@ -1526,16 +1526,6 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    // Parse date as local date to avoid timezone conversion
-    const [year, month, day] = dateString.split('T')[0].split('-');
-    const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', {
-      month: '2-digit', day: '2-digit', year: 'numeric'
-    });
-  };
-
   if (loading) return <div className="sidebar-tab-loading">Loading news...</div>;
 
   return (
@@ -1586,7 +1576,7 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
           </div>
           {item.published_at && (
             <div className="poi-event-date">
-              {formatDate(item.published_at)}
+              {formatPublicationDate(item.published_at)}
             </div>
           )}
           {item.summary && <p className="poi-news-summary">{item.summary}</p>}
@@ -1755,16 +1745,6 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
     }
   };
 
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
-    // Parse date as local date to avoid timezone conversion
-    const [year, month, day] = dateString.split('T')[0].split('-');
-    const date = new Date(year, month - 1, day);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short', month: '2-digit', day: '2-digit', year: 'numeric'
-    });
-  };
-
   const createGoogleCalendarLink = (event, poiName) => {
     const title = encodeURIComponent(event.title);
     const description = encodeURIComponent(event.description || '');
@@ -1832,9 +1812,9 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
             )}
           </div>
           <div className="poi-event-date">
-            {formatDate(item.start_date)}
+            {formatPublicationDate(item.start_date)}
             {item.end_date && item.end_date !== item.start_date && (
-              <> - {formatDate(item.end_date)}</>
+              <> - {formatPublicationDate(item.end_date)}</>
             )}
           </div>
           {item.description && <p className="poi-event-description">{item.description}</p>}

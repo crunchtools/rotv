@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { formatDate, NewsTypeIcon, EventTypeIcon } from './NewsEventsShared';
+import { formatPublicationDate, NewsTypeIcon, EventTypeIcon } from './NewsEventsShared';
 
 function NewsEvents({ poiId, isAdmin }) {
   const [news, setNews] = useState([]);
@@ -151,7 +151,7 @@ function NewsEvents({ poiId, isAdmin }) {
               {item.summary && <p className="news-summary">{item.summary}</p>}
               <div className="news-meta">
                 {item.source_name && <span className="news-source">{item.source_name}</span>}
-                {item.published_at && <span className="news-date">{formatDate(item.published_at)}</span>}
+                {item.published_at && <span className="news-date">{formatPublicationDate(item.published_at)}</span>}
                 {item.source_url && (
                   <a
                     href={item.source_url}
@@ -187,9 +187,9 @@ function NewsEvents({ poiId, isAdmin }) {
                 )}
               </div>
               <div className="event-date">
-                {formatDate(item.start_date)}
+                {formatPublicationDate(item.start_date)}
                 {item.end_date && item.end_date !== item.start_date && (
-                  <> - {formatDate(item.end_date)}</>
+                  <> - {formatPublicationDate(item.end_date)}</>
                 )}
               </div>
               {item.description && <p className="event-description">{item.description}</p>}

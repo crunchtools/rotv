@@ -147,7 +147,7 @@ export function NewsItemCard({ item, onDelete, deleting, isAdmin }) {
       <div className="item-card-meta">
         {item.poi_name && <span className="item-card-poi">{item.poi_name}</span>}
         {item.source_name && <span className="item-card-source">{item.source_name}</span>}
-        {item.published_at && <span className="item-card-date">{formatDate(item.published_at)}</span>}
+        {item.published_at && <span className="item-card-date">{formatPublicationDate(item.published_at)}</span>}
         {item.source_url && (
           <a
             href={item.source_url}
@@ -184,9 +184,9 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
         )}
       </div>
       <div className="item-card-date-row">
-        {formatDate(item.start_date)}
+        {formatPublicationDate(item.start_date)}
         {item.end_date && item.end_date !== item.start_date && (
-          <> - {formatDate(item.end_date)}</>
+          <> - {formatPublicationDate(item.end_date)}</>
         )}
       </div>
       {item.description && <p className="item-card-summary">{item.description}</p>}
