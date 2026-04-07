@@ -12,6 +12,9 @@ dist/
 *.jpeg
 Screenshot*
 
+# Brand assets (override *.png ignore)
+!frontend/public/brand/
+
 # Local media assets
 media/
 
