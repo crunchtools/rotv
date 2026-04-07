@@ -36,13 +36,12 @@ export async function getGeographicContext(pool, poiId) {
     FROM pois AS point
     LEFT JOIN pois AS boundary
       ON boundary.poi_type = 'boundary'
-      AND ST_Contains(
-        ST_SetSRID(boundary.geometry::geometry, 4326),
-        ST_SetSRID(ST_MakePoint(point.longitude, point.latitude), 4326)
-      )
+      AND boundary.boundary_geom IS NOT NULL
+      AND ST_Contains(boundary.boundary_geom, point.geom)
     WHERE point.id = $1
       AND point.poi_type = 'point'
-    ORDER BY ST_Area(boundary.geometry::geometry) ASC  -- Smallest boundary first
+      AND point.geom IS NOT NULL
+    ORDER BY ST_Area(boundary.boundary_geom) ASC  -- Smallest boundary first
     LIMIT 1
   `, [poiId]);
 

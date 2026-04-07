@@ -21,9 +21,11 @@ RUN dnf install -y nodejs npm \
 # Install Playwright globally with Chromium (pinned to match backend/package.json)
 RUN npm install -g playwright@1.58.1 && npx playwright install chromium
 
-# Add PostgreSQL 17 from official pgdg repository (no RHSM needed)
-RUN dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
-    dnf install -y postgresql17-server postgresql17 && \
+# Add PostgreSQL 17 + PostGIS from official pgdg repository (no RHSM needed)
+# EPEL provides PostGIS dependencies (hdf5, xerces-c)
+RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
+    dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
+    dnf install -y postgresql17-server postgresql17 postgis35_17 && \
     dnf clean all
 
 # Create symlinks for PostgreSQL commands
