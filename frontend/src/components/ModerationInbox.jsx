@@ -549,7 +549,7 @@ function ModerationInbox({ onCountChange }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
   };
 
   const formatEventDate = (dateStr) => {
@@ -1132,7 +1132,7 @@ function ModerationInbox({ onCountChange }) {
                               <div style={{ fontSize: '0.7rem', color: '#888', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                                 <span>#{c.id}</span>
                                 <span>{c.moderation_status}</span>
-                                {c.publication_date && <span>{new Date(c.publication_date).toLocaleDateString()}</span>}
+                                {c.publication_date && <span>{new Date(c.publication_date + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}</span>}
                                 {c.additional_url_count > 0 && <span>+{c.additional_url_count} URLs</span>}
                               </div>
                               {c.source_url && (
