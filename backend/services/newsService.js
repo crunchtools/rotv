@@ -12,6 +12,7 @@ import { calculateSimilarity } from './textUtils.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
+import { searchNewsUrls } from './serperService.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -1214,27 +1215,95 @@ Extract ALL news from this content using these relaxed criteria.`;
 
     let allNews = result.news || [];
 
-    checkCancellation(); // Check before Google News search
+    checkCancellation(); // Check before Serper search
 
-    // SECOND PASS: If we used a dedicated news URL, also search Google News for external coverage
-    if (usedDedicatedNewsUrl) {
+    // LAYER 2: External news via Serper (runs for EVERY POI when collecting news)
+    if (collectionType !== 'events') {
       try {
         updateProgress(poi.id, {
-          phase: 'google_news',
-          message: 'Searching Google News for external coverage...',
-          steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links', 'Searching Google News']
+          phase: 'serper_search',
+          message: 'Searching for external news coverage...',
+          steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links', 'Searching external news']
         });
 
-        console.log(`[AI Research] 🔍 Second pass: Searching Google News for external coverage...`);
+        console.log(`[Serper] 🔍 Layer 2: Searching for external news coverage...`);
 
-        const googleNewsPrompt = `Search Google News, PR Newswire, and other news sources for press releases, news articles, and media coverage about "${poi.name}" from the last 365 days.
+        // Get Serper URLs with geographic grounding
+        const serperResult = await searchNewsUrls(pool, poi);
+        console.log(`[Serper] Found ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded}, query: "${serperResult.query}")`);
+
+        if (serperResult.urls.length > 0) {
+          // Render each Serper URL with Playwright (same pipeline as official URLs)
+          const renderedSerperContent = [];
+          let renderedCount = 0;
+
+          for (const urlData of serperResult.urls) {
+            try {
+              checkCancellation();
+
+              // 1.5 second delay between renders (matching Events system)
+              if (renderedCount > 0) {
+                await new Promise(resolve => setTimeout(resolve, 1500));
+              }
+
+              console.log(`[Serper] Rendering ${urlData.url}...`);
+
+              const extracted = await extractPageContent(urlData.url, {
+                timeout: 30000,
+                hardTimeout: 60000,
+                extractLinks: false
+              });
+
+              if (extracted.reachable && extracted.markdown) {
+                const MIN_CONTENT_LENGTH = 200;
+                if (extracted.markdown.length >= MIN_CONTENT_LENGTH) {
+                  renderedSerperContent.push({
+                    url: urlData.url,
+                    title: urlData.title,
+                    snippet: urlData.snippet,
+                    date: urlData.date,
+                    markdown: extracted.markdown
+                  });
+                  renderedCount++;
+                  console.log(`[Serper] ✓ Rendered ${urlData.url} (${extracted.markdown.length} chars)`);
+                } else {
+                  console.log(`[Serper] ⚠️ Insufficient content from ${urlData.url} (${extracted.markdown.length} chars)`);
+                }
+              } else {
+                console.log(`[Serper] ❌ Failed to render ${urlData.url}: ${extracted.reason || 'no content'}`);
+              }
+            } catch (renderError) {
+              console.error(`[Serper] Error rendering ${urlData.url}: ${renderError.message}`);
+            }
+          }
+
+          console.log(`[Serper] Rendered ${renderedCount} of ${serperResult.urls.length} URLs`);
+
+          // If we have rendered content, use Gemini to extract structured news
+          if (renderedSerperContent.length > 0) {
+            updateProgress(poi.id, {
+              phase: 'extracting_external_news',
+              message: `Extracting news from ${renderedSerperContent.length} external sources...`,
+              steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links', 'Extracting external news']
+            });
+
+            // Build markdown content for Gemini
+            const serperMarkdown = renderedSerperContent.map(page =>
+              `### External News Page: ${page.url}
+Title: ${page.title}
+Snippet: ${page.snippet}
+${page.date ? `Date: ${page.date}` : ''}
+
+${page.markdown}`
+            ).join('\n\n---\n\n');
+
+            const serperPrompt = `Extract news items from these external news sources about "${poi.name}".
 
 TIMEZONE CONTEXT:
 - The current timezone is: ${timezone}
 - When you see dates in articles, interpret them as being in ${timezone}
 - Return ALL dates in ISO 8601 format: YYYY-MM-DD
 - CRITICAL: Copy dates EXACTLY as they appear. Do NOT add or subtract days.
-- Example: "August 26, 2024" → "2024-08-26" (not 2024-08-25 or 2024-08-27)
 
 MISSION SCOPE — Roots of The Valley:
 Only include news that connects to Cuyahoga Valley National Park themes: nature, trails,
@@ -1243,70 +1312,78 @@ scenic railroads, canal towpath heritage, or arts/culture organizations that ser
 Skip generic urban news, restaurant openings, nightlife, sports, or entertainment unrelated
 to the park's mission. Ask: "Would a CVNP visitor care about this?"
 
-Focus on:
-- Press releases from the organization
-- News articles from local/regional media about nature, parks, trails, conservation
-- Award announcements related to the park mission
-- Major initiatives or programs tied to outdoor recreation, heritage, or ecology
+EXTERNAL NEWS SOURCES:
+We visited these external news pages and extracted their content.
+Each section below is from a REAL page we visited — the URL is verified.
 
-Return ONLY news from external sources (not from ${poi.name}'s own website).
+${serperMarkdown}
 
-Use this exact JSON structure:
+**CRITICAL: URL INSTRUCTIONS**
+- For each news item, set source_url to the EXACT page URL shown in the "### External News Page:" header
+- Do NOT invent, modify, or guess URLs — use ONLY the URLs provided above
+- Use 95% confidence filtering since these are external sources
+- Only include news from the last 365 days
+- Extract dates from the content or use the "Date:" field if provided
+
+Return your results in this exact JSON structure:
 {
   "news": [
     {
       "title": "News headline",
       "summary": "2-3 sentence summary",
-      "source_name": "Source name (e.g., PR Newswire, Cleveland.com)",
-      "source_url": "URL from Google Search results",
-      "published_date": "YYYY-MM-DD in ISO 8601 format",
+      "source_name": "Source name (extracted from URL or content)",
+      "source_url": "EXACT URL from header above",
+      "published_date": "YYYY-MM-DD in ISO 8601 format or null",
       "news_type": "general|alert|wildlife|infrastructure|community"
     }
   ]
 }
 
-IMPORTANT:
-- Only include news from the last 365 days
-- Only include items that are 95%+ certain to be about "${poi.name}"
-- Include the source_url from the Google Search result
-- Return {"news": []} if no relevant external news found
-- All dates must be in ISO 8601 format (YYYY-MM-DD)`;
+Return {"news": []} if no relevant news found.`;
 
-        const googleNewsResult = await generateTextWithCustomPrompt(pool, googleNewsPrompt);
-        const googleNewsResponse = googleNewsResult.response;
-        console.log(`[AI Research] Received Google News response (${googleNewsResponse.length} chars) from ${googleNewsResult.provider}`);
-
-        const googleJsonMatch = googleNewsResponse.match(/\{[\s\S]*\}/);
-        if (googleJsonMatch) {
-          const googleResult = JSON.parse(googleJsonMatch[0]);
-          const googleNews = googleResult.news || [];
-
-          if (googleNews.length > 0) {
-            console.log(`[AI Research] ✓ Found ${googleNews.length} news items from Google News`);
-            googleNews.forEach((item, idx) => {
-              console.log(`[AI Research]   ${idx + 1}. ${item.title} (${item.published_date}) - ${item.source_name}`);
+            const serperAiResult = await generateTextWithCustomPrompt(pool, serperPrompt, {
+              useSearchGrounding: false,
+              forceProvider: 'gemini'
             });
 
-            // Merge with existing news, avoiding duplicates by title
-            const existingTitles = new Set(allNews.map(n => n.title.toLowerCase().trim()));
-            const newItems = googleNews.filter(item => {
-              const titleLower = item.title.toLowerCase().trim();
-              return !existingTitles.has(titleLower);
-            });
+            const serperAiResponse = serperAiResult.response;
+            console.log(`[Serper] Received extraction response (${serperAiResponse.length} chars) from ${serperAiResult.provider}`);
 
-            if (newItems.length > 0) {
-              console.log(`[AI Research] Adding ${newItems.length} unique items from Google News`);
-              allNews = [...allNews, ...newItems];
-            } else {
-              console.log(`[AI Research] All Google News items were duplicates, skipped`);
+            const serperJsonMatch = serperAiResponse.match(/\{[\s\S]*\}/);
+            if (serperJsonMatch) {
+              const serperExtracted = JSON.parse(serperJsonMatch[0]);
+              const serperNews = serperExtracted.news || [];
+
+              if (serperNews.length > 0) {
+                console.log(`[Serper] ✓ Extracted ${serperNews.length} news items from external sources`);
+                serperNews.forEach((item, idx) => {
+                  console.log(`[Serper]   ${idx + 1}. ${item.title} (${item.published_date || 'no date'}) - ${item.source_name || 'unknown source'}`);
+                });
+
+                // Merge with existing news, avoiding duplicates by title
+                const existingTitles = new Set(allNews.map(n => n.title.toLowerCase().trim()));
+                const newItems = serperNews.filter(item => {
+                  const titleLower = item.title.toLowerCase().trim();
+                  return !existingTitles.has(titleLower);
+                });
+
+                if (newItems.length > 0) {
+                  console.log(`[Serper] Adding ${newItems.length} unique items from external sources`);
+                  allNews = [...allNews, ...newItems];
+                } else {
+                  console.log(`[Serper] All external news items were duplicates, skipped`);
+                }
+              } else {
+                console.log(`[Serper] No relevant news extracted from external sources`);
+              }
             }
-          } else {
-            console.log(`[AI Research] No external news found in Google News`);
           }
+        } else {
+          console.log(`[Serper] No external news URLs found`);
         }
-      } catch (googleError) {
-        console.error(`[AI Research] ⚠️ Google News search failed: ${googleError.message}`);
-        // Continue with first pass results even if second pass fails
+      } catch (serperError) {
+        console.error(`[Serper] ⚠️ External news search failed: ${serperError.message}`);
+        // Continue with Layer 1 results even if Layer 2 fails
       }
     }
 
