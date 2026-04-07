@@ -27,6 +27,12 @@ function DataCollectionSettings() {
   const [apifyTokenSet, setApifyTokenSet] = useState(false);
   const [apifySaving, setApifySaving] = useState(false);
 
+  // Serper API key state
+  const [serperApiKey, setSerperApiKey] = useState('');
+  const [serperApiKeySet, setSerperApiKeySet] = useState(false);
+  const [serperSaving, setSerperSaving] = useState(false);
+  const [serperTesting, setSerperTesting] = useState(false);
+
   // Playwright status state
   const [playwrightStatus, setPlaywrightStatus] = useState(null);
   const [playwrightLoading, setPlaywrightLoading] = useState(true);
@@ -86,6 +92,7 @@ function DataCollectionSettings() {
     fetchTwitterCredentials();
     fetchTwitterAuthStatus();
     fetchApifyStatus();
+    fetchSerperStatus();
     fetchPlaywrightStatus();
     fetchModerationConfig();
     fetchDomainLists();
@@ -144,6 +151,43 @@ function DataCollectionSettings() {
       else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
     } catch (err) { setResult({ type: 'error', message: `Failed to save Apify token: ${err.message}` }); }
     finally { setApifySaving(false); }
+  };
+
+  const fetchSerperStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) { const settings = await response.json(); setSerperApiKeySet(settings.serper_api_key?.isSet || false); }
+    } catch (err) { console.error('Error fetching Serper status:', err); }
+  };
+
+  const handleSaveSerperApiKey = async () => {
+    if (!serperApiKey.trim()) { setResult({ type: 'error', message: 'API key cannot be empty' }); return; }
+    setSerperSaving(true); setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/serper_api_key', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: serperApiKey })
+      });
+      if (response.ok) { setResult({ type: 'success', message: 'Serper API key saved successfully' }); setSerperApiKey(''); setSerperApiKeySet(true); }
+      else { const error = await response.json(); throw new Error(error.error || 'Failed to save key'); }
+    } catch (err) { setResult({ type: 'error', message: `Failed to save Serper API key: ${err.message}` }); }
+    finally { setSerperSaving(false); }
+  };
+
+  const handleTestSerperApiKey = async () => {
+    setSerperTesting(true); setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/serper-api-key/test', {
+        method: 'POST', credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setResult({ type: 'success', message: 'Serper API key is valid and working!' });
+      } else {
+        setResult({ type: 'error', message: data.message || 'Serper API key test failed' });
+      }
+    } catch (err) { setResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    finally { setSerperTesting(false); }
   };
 
   const handleSaveAiConfig = async () => {
@@ -506,6 +550,36 @@ function DataCollectionSettings() {
         </button>
         <p className="settings-description" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
           Get your token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
+        </p>
+      </div>
+
+      {/* Serper API Key */}
+      <div className="ai-config-section">
+        <h4>Serper API Key</h4>
+        <p className="settings-description">Required for external news search with geographic grounding (Layer 2 news collection).</p>
+        <div className="config-row">
+          <label>Status:</label>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span className={`status-indicator ${serperApiKeySet ? 'configured' : 'not-configured'}`}></span>
+            <span>{serperApiKeySet ? 'API key configured' : 'API key not configured'}</span>
+          </div>
+        </div>
+        <div className="config-row">
+          <label>API Key:</label>
+          <input type="password" value={serperApiKey} onChange={e => setSerperApiKey(e.target.value)} placeholder="Enter Serper API key..." disabled={serperSaving} />
+        </div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="action-btn primary" onClick={handleSaveSerperApiKey} disabled={serperSaving || !serperApiKey.trim()}>
+            {serperSaving ? 'Saving...' : 'Save API Key'}
+          </button>
+          {serperApiKeySet && (
+            <button className="action-btn secondary" onClick={handleTestSerperApiKey} disabled={serperTesting}>
+              {serperTesting ? 'Testing...' : 'Test API Key'}
+            </button>
+          )}
+        </div>
+        <p className="settings-description" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
+          Get your API key from <a href="https://serper.dev/api-key" target="_blank" rel="noopener noreferrer">Serper.dev Dashboard</a>. Cost: ~$0.03/month for 100 POIs.
         </p>
       </div>
 
