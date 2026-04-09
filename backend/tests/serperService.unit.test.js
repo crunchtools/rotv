@@ -97,7 +97,7 @@ describe('Serper Service', () => {
       const mockPool = {
         query: vi.fn()
           .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
-          .mockResolvedValueOnce({ rows: [] });
+          .mockResolvedValueOnce({ rows: [] })
       };
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -115,7 +115,7 @@ describe('Serper Service', () => {
       const mockPool = {
         query: vi.fn()
           .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
-          .mockResolvedValueOnce({ rows: [] });
+          .mockResolvedValueOnce({ rows: [] })
       };
 
       global.fetch = vi.fn().mockResolvedValue({
