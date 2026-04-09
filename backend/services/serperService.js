@@ -14,56 +14,6 @@
 
 import fetch from 'node-fetch';
 
-/**
- * Get geographic grounding context for a POI using PostGIS spatial queries
- *
- * Finds the smallest boundary polygon (municipality, park, etc.) that contains
- * the POI's coordinates. Used to add geographic context to search queries.
- *
- * Supports multiple POI types:
- * - Point POIs: uses geom column (lat/long point)
- * - Trail/boundary POIs: extracts first point from geometry JSON (LineString/Polygon)
- * - River POIs: extracts first point from geometry JSON
- *
- * Examples:
- * - Point POI in Akron → "Akron"
- * - Trail starting in CVNP → "Cuyahoga Valley National Park"
- * - POI in Oak Grove Park (inside Brecksville) → "Oak Grove Park" (smaller wins)
- * - POI outside all boundaries → "" (no grounding)
- *
- * @param {Pool} pool - Database connection pool
- * @param {number} poiId - POI ID
- * @returns {Promise<string>} - Containing boundary name or empty string
- */
-export async function getGeographicContext(pool, poiId) {
-  const result = await pool.query(`
-    WITH poi_point AS (
-      SELECT
-        id,
-        -- For point POIs: use geom directly
-        -- For trail/boundary/river: extract first point from geometry JSON
-        CASE
-          WHEN poi_type = 'point' AND geom IS NOT NULL THEN geom
-          WHEN poi_type IN ('trail', 'boundary', 'river') AND geometry IS NOT NULL THEN
-            ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
-          ELSE NULL
-        END as point_geom
-      FROM pois
-      WHERE id = $1
-    )
-    SELECT boundary.name
-    FROM poi_point
-    LEFT JOIN pois AS boundary
-      ON boundary.poi_type = 'boundary'
-      AND boundary.boundary_geom IS NOT NULL
-      AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
-    WHERE poi_point.point_geom IS NOT NULL
-    ORDER BY ST_Area(boundary.boundary_geom) ASC  -- Smallest boundary first
-    LIMIT 1
-  `, [poiId]);
-
-  return result.rows[0]?.name || '';
-}
 
 /**
  * Search for news about a POI using Serper with geographic grounding
@@ -97,8 +47,47 @@ export async function searchNewsUrls(pool, poi) {
 
   const apiKey = apiKeyResult.rows[0].value;
 
-  // Get geographic context for grounding
-  const context = await getGeographicContext(pool, poi.id);
+  // Get geographic context for grounding using PostGIS spatial queries
+  // Finds the smallest boundary polygon (municipality, park, etc.) that contains
+  // the POI's coordinates. Used to add geographic context to search queries.
+  //
+  // Supports multiple POI types:
+  // - Point POIs: uses geom column (lat/long point)
+  // - Trail/boundary POIs: extracts first point from geometry JSON (LineString/Polygon)
+  // - River POIs: extracts first point from geometry JSON
+  //
+  // Examples:
+  // - Point POI in Akron → "Akron"
+  // - Trail starting in CVNP → "Cuyahoga Valley National Park"
+  // - POI in Oak Grove Park (inside Brecksville) → "Oak Grove Park" (smaller wins)
+  // - POI outside all boundaries → "" (no grounding)
+  const contextResult = await pool.query(`
+    WITH poi_point AS (
+      SELECT
+        id,
+        -- For point POIs: use geom directly
+        -- For trail/boundary/river: extract first point from geometry JSON
+        CASE
+          WHEN poi_type = 'point' AND geom IS NOT NULL THEN geom
+          WHEN poi_type IN ('trail', 'boundary', 'river') AND geometry IS NOT NULL THEN
+            ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
+          ELSE NULL
+        END as point_geom
+      FROM pois
+      WHERE id = $1
+    )
+    SELECT boundary.name
+    FROM poi_point
+    LEFT JOIN pois AS boundary
+      ON boundary.poi_type = 'boundary'
+      AND boundary.boundary_geom IS NOT NULL
+      AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
+    WHERE poi_point.point_geom IS NOT NULL
+    ORDER BY ST_Area(boundary.boundary_geom) ASC  -- Smallest boundary first
+    LIMIT 1
+  `, [poi.id]);
+
+  const context = contextResult.rows[0]?.name || '';
 
   // Build grounded query
   // With grounding: "Ledges Trail Cuyahoga Valley National Park news"
