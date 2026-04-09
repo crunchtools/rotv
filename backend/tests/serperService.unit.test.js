@@ -4,7 +4,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+
+vi.mock('node-fetch', () => ({
+  default: vi.fn()
+}));
+
 import { searchNewsUrls, testSerperApiKey } from '../services/serperService.js';
+import fetch from 'node-fetch';
 
 describe('Serper Service', () => {
   describe('searchNewsUrls', () => {
@@ -26,7 +32,7 @@ describe('Serper Service', () => {
           })
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({
           organic: [
@@ -48,7 +54,7 @@ describe('Serper Service', () => {
       expect(result.urls[1].date).toBeNull();
       expect(result.credits).toBe(1);
 
-      expect(global.fetch).toHaveBeenCalledWith(
+      expect(fetch).toHaveBeenCalledWith(
         'https://google.serper.dev/search',
         expect.objectContaining({
           method: 'POST',
@@ -68,7 +74,7 @@ describe('Serper Service', () => {
           .mockResolvedValueOnce({ rows: [] })
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({
           organic: [{ link: 'https://example.com/news', title: 'News', snippet: 'Snippet' }],
@@ -100,7 +106,7 @@ describe('Serper Service', () => {
           .mockResolvedValueOnce({ rows: [] })
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetch.mockResolvedValue({
         ok: false,
         status: 401,
         text: async () => 'Unauthorized'
@@ -118,7 +124,7 @@ describe('Serper Service', () => {
           .mockResolvedValueOnce({ rows: [] })
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetch.mockResolvedValue({
         ok: true,
         json: async () => ({
           organic: [],
@@ -141,7 +147,7 @@ describe('Serper Service', () => {
         })
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetch.mockResolvedValue({
         ok: true
       });
 
@@ -169,7 +175,7 @@ describe('Serper Service', () => {
         })
       };
 
-      global.fetch = vi.fn().mockResolvedValue({
+      fetch.mockResolvedValue({
         ok: false,
         status: 401
       });
