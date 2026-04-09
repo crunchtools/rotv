@@ -26,7 +26,6 @@ describe('Serper Service', () => {
           })
       };
 
-      // Mock fetch
       global.fetch = vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
