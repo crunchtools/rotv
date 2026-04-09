@@ -6,7 +6,6 @@ Requires=postgresql.service
 [Service]
 Type=simple
 WorkingDirectory=/app
-Environment=NODE_ENV=development
 Environment=NODE_PATH=/usr/local/lib/node_modules
 Environment=PORT=8080
 Environment=STATIC_PATH=/app/public

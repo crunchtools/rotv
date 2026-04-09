@@ -487,43 +487,54 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
           )}
         </div>
 
-        {/* AI usage counters + Active Slots */}
-        {(slots || geminiUsage > 0 || perplexityUsage > 0 || total429 > 0) && (
+        {/* Active Slots */}
+        {slots && (
           <div className="active-slots-table" style={{ marginTop: '8px' }}>
-            {(geminiUsage > 0 || perplexityUsage > 0 || total429 > 0) && (
-              <div className="ai-usage-counters">
-                {geminiUsage > 0 && <span className="usage-badge gemini">{'\u{1F537}'} Gemini: {geminiUsage}</span>}
-                {perplexityUsage > 0 && <span className="usage-badge perplexity">{'\u{1F52E}'} Perplexity: {perplexityUsage}</span>}
-                {total429 > 0 && <span className="usage-badge error">{'\u26A0\uFE0F'} 429 Errors: {total429}</span>}
-              </div>
-            )}
-            {slots && slots.some(s => s !== null) && (
+            {slots.some(s => s !== null) && (
               <>
                 <div className="slots-header">
                   <div>{isNews ? 'POI' : 'Trail'}</div>
                   <div>Status</div>
-                  <div>Provider</div>
                 </div>
                 {slots.map((slot, idx) => {
                   if (!slot || !slot.poiName) return (
-                    <div key={idx} className="slots-row empty-slot"><div>Waiting</div><div>--</div><div>--</div></div>
+                    <div key={idx} className="slots-row empty-slot"><div>Waiting</div><div>--</div></div>
                   );
+
+                  // Map internal phases to user-friendly labels
+                  let statusLabel = '--';
+                  if (slot.status === 'completed') {
+                    statusLabel = '✓ Done';
+                  } else if (slot.phase === 'error') {
+                    statusLabel = '✗ Error';
+                  } else if (slot.phase === 'initializing') {
+                    statusLabel = '🚀 Starting';
+                  } else if (slot.phase === 'classifying_events' || slot.phase === 'classifying_news') {
+                    statusLabel = '🕷️ Crawling site';
+                  } else if (slot.phase === 'rendering_events' || slot.phase === 'rendering_news' || slot.phase === 'rendering') {
+                    statusLabel = '📄 Reading page';
+                  } else if (slot.phase === 'ai_search') {
+                    statusLabel = '🤖 AI extraction';
+                  } else if (slot.phase === 'processing_results') {
+                    statusLabel = '⚙️ Processing';
+                  } else if (slot.phase === 'matching_links') {
+                    statusLabel = '🔗 Linking articles';
+                  } else if (slot.phase === 'deep_crawling') {
+                    statusLabel = '🔎 Verifying URLs';
+                  } else if (slot.phase === 'serper_search') {
+                    statusLabel = '🌐 Finding coverage';
+                  } else if (slot.phase === 'extracting_external_news') {
+                    statusLabel = '📰 Reading articles';
+                  } else if (slot.phase === 'complete') {
+                    statusLabel = '✓ Complete';
+                  } else if (slot.phase) {
+                    statusLabel = slot.phase;
+                  }
+
                   return (
                     <div key={idx} className={`slots-row ${slot.status === 'active' ? 'active' : ''}`}>
                       <div className="slot-poi">{slot.poiName}</div>
-                      <div className="slot-status">
-                        {slot.status === 'completed' ? '\u2713 Done'
-                          : slot.phase === 'error' ? '\u274C Error'
-                          : slot.phase === 'rendering' || slot.phase === 'rendering_events' || slot.phase === 'rendering_news' ? '\u{1F4C4} Rendering'
-                          : slot.phase === 'ai_search' || slot.phase === 'ai_extraction' ? '\u{1F50D} AI'
-                          : slot.phase === 'matching_links' ? '\u{1F517} Matching'
-                          : slot.phase === 'google_news' ? '\u{1F4F0} Google'
-                          : slot.phase || '--'}
-                      </div>
-                      <div className="slot-provider">
-                        {slot.provider === 'gemini' ? '\u{1F537} Gemini'
-                          : slot.provider === 'perplexity' ? '\u{1F52E} Perplexity' : '--'}
-                      </div>
+                      <div className="slot-status">{statusLabel}</div>
                     </div>
                   );
                 })}

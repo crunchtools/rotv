@@ -129,3 +129,30 @@ export async function fetchFacebookPosts(pool, statusUrl, maxItems = 10) {
 export function isFacebookUrl(url) {
   return url.includes('facebook.com');
 }
+
+/**
+ * Test Apify API token validity
+ * Makes a simple API call to verify the token works
+ * @param {Pool} pool - Database connection pool
+ * @returns {Promise<boolean>} - True if token is valid
+ */
+export async function testApifyToken(pool) {
+  const token = await getApifyToken(pool);
+  if (!token) {
+    return false;
+  }
+
+  try {
+    // Test with a simple actor list call
+    const url = `${APIFY_BASE_URL}/acts?token=${token}&limit=1`;
+    const response = await fetch(url, {
+      method: 'GET',
+      signal: AbortSignal.timeout(10000) // 10 second timeout
+    });
+
+    return response.ok;
+  } catch (err) {
+    console.error('[Apify] API token test failed:', err.message);
+    return false;
+  }
+}

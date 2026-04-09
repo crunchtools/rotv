@@ -114,7 +114,7 @@ const pool = new Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT || 5432,
   database: process.env.PGDATABASE || 'rotv',
-  user: process.env.PGUSER || 'rotv',
+  user: process.env.PGUSER || 'postgres',  // Use standard PostgreSQL superuser
   password: process.env.PGPASSWORD || 'rotv',
   // Background jobs use up to 10 concurrent connections
   // Reserve extra for API requests to prevent blocking
@@ -2612,7 +2612,7 @@ async function start() {
     startMcpServer(pool, app.get('boss'), parseInt(process.env.MCP_PORT || '3001'));
   }
 
-  app.listen(PORT, '::', () => {
+  app.listen(PORT, '0.0.0.0', () => {
     console.log(`Roots of The Valley API running on port ${PORT}`);
   });
 }

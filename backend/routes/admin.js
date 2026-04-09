@@ -463,6 +463,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
     const allowedKeys = [
       'gemini_api_key',
+      'serper_api_key',
       'gemini_prompt_brief',
       'gemini_prompt_historical',
       'ai_search_primary',
@@ -509,6 +510,40 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('Error updating setting:', error);
       res.status(500).json({ error: 'Failed to update setting' });
+    }
+  });
+
+  // Test Serper API key
+  router.post('/settings/serper-api-key/test', isAdmin, async (req, res) => {
+    try {
+      const { testSerperApiKey } = await import('../services/serperService.js');
+      const isValid = await testSerperApiKey(pool);
+
+      if (isValid) {
+        res.json({ success: true, message: 'Serper API key is valid' });
+      } else {
+        res.json({ success: false, message: 'Serper API key is invalid or not configured' });
+      }
+    } catch (error) {
+      console.error('Error testing Serper API key:', error);
+      res.status(500).json({ success: false, message: 'Failed to test API key', error: error.message });
+    }
+  });
+
+  // Test Apify API token
+  router.post('/settings/apify-api-token/test', isAdmin, async (req, res) => {
+    try {
+      const { testApifyToken } = await import('../services/apifyService.js');
+      const isValid = await testApifyToken(pool);
+
+      if (isValid) {
+        res.json({ success: true, message: 'Apify API token is valid' });
+      } else {
+        res.json({ success: false, message: 'Apify API token is invalid or not configured' });
+      }
+    } catch (error) {
+      console.error('Error testing Apify API token:', error);
+      res.status(500).json({ success: false, message: 'Failed to test API token', error: error.message });
     }
   });
 
