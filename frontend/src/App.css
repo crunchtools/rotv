@@ -5150,13 +5150,13 @@ body {
 }
 
 .collection-progress-card .count-value {
-  color: white;
+  color: #0f172a;
   font-weight: 700;
   font-size: 1.1rem;
 }
 
 .collection-progress-card .count-label {
-  color: rgba(255, 255, 255, 0.9);
+  color: #334155;
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -6028,13 +6028,13 @@ body {
 }
 
 .count-value {
-  color: white;
+  color: #0f172a;
   font-weight: 700;
   font-size: 1.1rem;
 }
 
 .count-label {
-  color: rgba(255, 255, 255, 0.9);
+  color: #334155;
   font-size: 0.85rem;
   font-weight: 500;
 }
@@ -6183,9 +6183,9 @@ body {
 
 /* Cancel button */
 .status-cancel-btn {
-  background: rgba(244, 67, 54, 0.3);
-  border: 1px solid rgba(244, 67, 54, 0.5);
-  color: rgba(255, 255, 255, 0.95);
+  background: rgba(244, 67, 54, 0.15);
+  border: 1px solid rgba(244, 67, 54, 0.6);
+  color: #b71c1c;
   font-size: 0.8rem;
   padding: 0.25rem 0.75rem;
   border-radius: 6px;
@@ -7927,17 +7927,18 @@ body {
 }
 
 .status-indicator {
+  display: inline-block;
   width: 10px;
   height: 10px;
   border-radius: 50%;
 }
 
 .status-indicator.configured {
-  background: #4caf50;
+  background-color: #4caf50;
 }
 
 .status-indicator.not-configured {
-  background: #f44336;
+  background-color: #f44336;
 }
 
 .api-key-form {
@@ -13257,8 +13258,8 @@ svg.leaflet-zoom-animated {
 
 .slots-header {
   display: grid;
-  grid-template-columns: 1fr 100px 100px;
-  gap: 4px;
+  grid-template-columns: 1fr 150px;
+  gap: 8px;
   padding: 4px 6px;
   font-weight: 600;
   color: #1565c0;
@@ -13268,18 +13269,23 @@ svg.leaflet-zoom-animated {
 
 .slots-row {
   display: grid;
-  grid-template-columns: 1fr 100px 100px;
-  gap: 4px;
-  padding: 3px 6px;
+  grid-template-columns: 1fr 150px;
+  gap: 8px;
+  padding: 4px 8px;
   border-radius: 3px;
+  color: #0f172a;
+  font-weight: 500;
 }
 
 .slots-row.active {
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(33, 150, 243, 0.1);
+  color: #0d47a1;
+  border-left: 3px solid #2196f3;
 }
 
 .slots-row.empty-slot {
-  color: #90caf9;
+  color: #78909c;
+  font-style: italic;
 }
 
 .slot-poi {

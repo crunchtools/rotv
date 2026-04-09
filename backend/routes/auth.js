@@ -96,6 +96,20 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
 
 // Get current user
 router.get('/user', (req, res) => {
+  // Test bypass for local development
+  if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
+    return res.json({
+      id: 999,
+      email: 'test-admin@rotv.local',
+      name: 'Test Admin',
+      pictureUrl: null,
+      isAdmin: true,
+      role: 'admin',
+      favorites: [],
+      preferences: {}
+    });
+  }
+
   if (req.isAuthenticated()) {
     // Return user info without sensitive data (no oauth_credentials)
     const { id, email, name, picture_url, is_admin, role, favorite_destinations, preferences } = req.user;
@@ -132,6 +146,15 @@ router.post('/logout', (req, res) => {
 
 // Check auth status (lightweight)
 router.get('/status', (req, res) => {
+  // Test bypass for local development
+  if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
+    return res.json({
+      authenticated: true,
+      isAdmin: true,
+      role: 'admin'
+    });
+  }
+
   res.json({
     authenticated: req.isAuthenticated(),
     isAdmin: req.user?.is_admin || false,

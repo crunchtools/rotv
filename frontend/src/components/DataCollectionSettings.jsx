@@ -4,6 +4,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 // Job triggering, progress, and history are in the Jobs tab (JobsDashboard.jsx).
 function DataCollectionSettings() {
   const [result, setResult] = useState(null);
+  const [geminiResult, setGeminiResult] = useState(null);
+  const [serperResult, setSerperResult] = useState(null);
+  const [apifyResult, setApifyResult] = useState(null);
 
   // AI provider configuration state
   const [aiConfig, setAiConfig] = useState({ primary: 'perplexity', fallback: 'none', primaryLimit: 0 });
@@ -22,12 +25,17 @@ function DataCollectionSettings() {
   const [twitterCookiesJson, setTwitterCookiesJson] = useState('');
   const [showCookieInput, setShowCookieInput] = useState(false);
 
-  // Apify API token state
+  // API Keys state
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [geminiApiKeySet, setGeminiApiKeySet] = useState(false);
+  const [geminiSaving, setGeminiSaving] = useState(false);
+  const [geminiTesting, setGeminiTesting] = useState(false);
+
   const [apifyToken, setApifyToken] = useState('');
   const [apifyTokenSet, setApifyTokenSet] = useState(false);
   const [apifySaving, setApifySaving] = useState(false);
+  const [apifyTesting, setApifyTesting] = useState(false);
 
-  // Serper API key state
   const [serperApiKey, setSerperApiKey] = useState('');
   const [serperApiKeySet, setSerperApiKeySet] = useState(false);
   const [serperSaving, setSerperSaving] = useState(false);
@@ -91,6 +99,7 @@ function DataCollectionSettings() {
     fetchAiConfig();
     fetchTwitterCredentials();
     fetchTwitterAuthStatus();
+    fetchGeminiStatus();
     fetchApifyStatus();
     fetchSerperStatus();
     fetchPlaywrightStatus();
@@ -105,6 +114,24 @@ function DataCollectionSettings() {
     const timer = setTimeout(() => setResult(null), 5000);
     return () => clearTimeout(timer);
   }, [result]);
+
+  useEffect(() => {
+    if (!geminiResult) return;
+    const timer = setTimeout(() => setGeminiResult(null), 5000);
+    return () => clearTimeout(timer);
+  }, [geminiResult]);
+
+  useEffect(() => {
+    if (!serperResult) return;
+    const timer = setTimeout(() => setSerperResult(null), 5000);
+    return () => clearTimeout(timer);
+  }, [serperResult]);
+
+  useEffect(() => {
+    if (!apifyResult) return;
+    const timer = setTimeout(() => setApifyResult(null), 5000);
+    return () => clearTimeout(timer);
+  }, [apifyResult]);
 
   const fetchAiConfig = async () => {
     try {
@@ -132,6 +159,13 @@ function DataCollectionSettings() {
     finally { setTwitterLoading(false); }
   };
 
+  const fetchGeminiStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) { const settings = await response.json(); setGeminiApiKeySet(settings.gemini_api_key?.isSet || false); }
+    } catch (err) { console.error('Error fetching Gemini status:', err); }
+  };
+
   const fetchApifyStatus = async () => {
     try {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
@@ -139,18 +173,70 @@ function DataCollectionSettings() {
     } catch (err) { console.error('Error fetching Apify status:', err); }
   };
 
+  const handleSaveGeminiApiKey = async () => {
+    if (!geminiApiKey.trim()) { setGeminiResult({ type: 'error', message: 'API key cannot be empty' }); return; }
+    setGeminiSaving(true); setGeminiResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/gemini_api_key', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: geminiApiKey })
+      });
+      if (response.ok) {
+        setGeminiResult({ type: 'success', message: 'Saved successfully' });
+        setGeminiApiKey('');
+        setGeminiApiKeySet(true);
+        await fetchGeminiStatus();
+      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save key'); }
+    } catch (err) { setGeminiResult({ type: 'error', message: `Save failed: ${err.message}` }); }
+    finally { setGeminiSaving(false); }
+  };
+
+  const handleTestGeminiApiKey = async () => {
+    setGeminiTesting(true); setGeminiResult(null);
+    try {
+      const response = await fetch('/api/admin/ai/test-key', { method: 'POST', credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        setGeminiResult({ type: 'success', message: 'Test passed ✓' });
+      } else {
+        setGeminiResult({ type: 'error', message: data.error || 'Test failed' });
+      }
+    } catch (err) { setGeminiResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    finally { setGeminiTesting(false); }
+  };
+
   const handleSaveApifyToken = async () => {
-    if (!apifyToken.trim()) { setResult({ type: 'error', message: 'API token cannot be empty' }); return; }
-    setApifySaving(true); setResult(null);
+    if (!apifyToken.trim()) { setApifyResult({ type: 'error', message: 'API token cannot be empty' }); return; }
+    setApifySaving(true); setApifyResult(null);
     try {
       const response = await fetch('/api/admin/settings/apify_api_token', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ value: apifyToken })
       });
-      if (response.ok) { setResult({ type: 'success', message: 'Apify API token saved successfully' }); setApifyToken(''); setApifyTokenSet(true); }
-      else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
-    } catch (err) { setResult({ type: 'error', message: `Failed to save Apify token: ${err.message}` }); }
+      if (response.ok) {
+        setApifyResult({ type: 'success', message: 'Saved successfully' });
+        setApifyToken('');
+        setApifyTokenSet(true);
+        await fetchApifyStatus();
+      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
+    } catch (err) { setApifyResult({ type: 'error', message: `Save failed: ${err.message}` }); }
     finally { setApifySaving(false); }
+  };
+
+  const handleTestApifyToken = async () => {
+    setApifyTesting(true); setApifyResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/apify-api-token/test', {
+        method: 'POST', credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setApifyResult({ type: 'success', message: 'Test passed ✓' });
+      } else {
+        setApifyResult({ type: 'error', message: data.message || 'Test failed' });
+      }
+    } catch (err) { setApifyResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    finally { setApifyTesting(false); }
   };
 
   const fetchSerperStatus = async () => {
@@ -161,32 +247,36 @@ function DataCollectionSettings() {
   };
 
   const handleSaveSerperApiKey = async () => {
-    if (!serperApiKey.trim()) { setResult({ type: 'error', message: 'API key cannot be empty' }); return; }
-    setSerperSaving(true); setResult(null);
+    if (!serperApiKey.trim()) { setSerperResult({ type: 'error', message: 'API key cannot be empty' }); return; }
+    setSerperSaving(true); setSerperResult(null);
     try {
       const response = await fetch('/api/admin/settings/serper_api_key', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ value: serperApiKey })
       });
-      if (response.ok) { setResult({ type: 'success', message: 'Serper API key saved successfully' }); setSerperApiKey(''); setSerperApiKeySet(true); }
-      else { const error = await response.json(); throw new Error(error.error || 'Failed to save key'); }
-    } catch (err) { setResult({ type: 'error', message: `Failed to save Serper API key: ${err.message}` }); }
+      if (response.ok) {
+        setSerperResult({ type: 'success', message: 'Saved successfully' });
+        setSerperApiKey('');
+        setSerperApiKeySet(true);
+        await fetchSerperStatus();
+      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save key'); }
+    } catch (err) { setSerperResult({ type: 'error', message: `Save failed: ${err.message}` }); }
     finally { setSerperSaving(false); }
   };
 
   const handleTestSerperApiKey = async () => {
-    setSerperTesting(true); setResult(null);
+    setSerperTesting(true); setSerperResult(null);
     try {
       const response = await fetch('/api/admin/settings/serper-api-key/test', {
         method: 'POST', credentials: 'include'
       });
       const data = await response.json();
       if (data.success) {
-        setResult({ type: 'success', message: 'Serper API key is valid and working!' });
+        setSerperResult({ type: 'success', message: 'Test passed ✓' });
       } else {
-        setResult({ type: 'error', message: data.message || 'Serper API key test failed' });
+        setSerperResult({ type: 'error', message: data.message || 'Test failed' });
       }
-    } catch (err) { setResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    } catch (err) { setSerperResult({ type: 'error', message: `Test failed: ${err.message}` }); }
     finally { setSerperTesting(false); }
   };
 
@@ -428,6 +518,156 @@ function DataCollectionSettings() {
         To trigger and monitor jobs, use the <strong>Jobs</strong> tab.
       </p>
 
+      {/* API Keys Section */}
+      <div className="ai-config-section">
+        <h4>API Keys</h4>
+        <p className="settings-description">Configure external API keys for data collection services.</p>
+
+        {/* Google Gemini API Key */}
+        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Google Gemini</h5>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+            <span className={`status-indicator ${geminiApiKeySet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{geminiApiKeySet ? 'Configured' : 'Not configured'}</span>
+            {geminiResult && (
+              <span
+                style={{
+                  marginLeft: '12px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  backgroundColor: geminiResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: geminiResult.type === 'success' ? '#155724' : '#721c24',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setGeminiResult(null)}
+                title="Click to dismiss"
+              >
+                {geminiResult.message}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
+            <input
+              type="password"
+              value={geminiApiKey || (geminiApiKeySet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setGeminiApiKey(e.target.value)}
+              placeholder="Enter API key..."
+              disabled={geminiSaving}
+              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
+            />
+            <button className="action-btn primary" onClick={handleSaveGeminiApiKey} disabled={geminiSaving || !geminiApiKey.trim()}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {geminiSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button className="action-btn secondary" onClick={handleTestGeminiApiKey} disabled={geminiTesting || !geminiApiKeySet}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {geminiTesting ? 'Testing...' : 'Test'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+            AI-powered content generation. Get key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+          </p>
+        </div>
+
+        {/* Serper API Key */}
+        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Serper</h5>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+            <span className={`status-indicator ${serperApiKeySet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{serperApiKeySet ? 'Configured' : 'Not configured'}</span>
+            {serperResult && (
+              <span
+                style={{
+                  marginLeft: '12px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  backgroundColor: serperResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: serperResult.type === 'success' ? '#155724' : '#721c24',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setSerperResult(null)}
+                title="Click to dismiss"
+              >
+                {serperResult.message}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
+            <input
+              type="password"
+              value={serperApiKey || (serperApiKeySet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setSerperApiKey(e.target.value)}
+              placeholder="Enter API key..."
+              disabled={serperSaving}
+              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
+            />
+            <button className="action-btn primary" onClick={handleSaveSerperApiKey} disabled={serperSaving || !serperApiKey.trim()}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {serperSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button className="action-btn secondary" onClick={handleTestSerperApiKey} disabled={serperTesting || !serperApiKeySet}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {serperTesting ? 'Testing...' : 'Test'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+            External news search with geographic grounding. Get key from <a href="https://serper.dev/api-key" target="_blank" rel="noopener noreferrer">Serper Dashboard</a>
+          </p>
+        </div>
+
+        {/* Apify API Token */}
+        <div style={{ marginTop: '1.5rem' }}>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Apify</h5>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+            <span className={`status-indicator ${apifyTokenSet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{apifyTokenSet ? 'Configured' : 'Not configured'}</span>
+            {apifyResult && (
+              <span
+                style={{
+                  marginLeft: '12px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  backgroundColor: apifyResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: apifyResult.type === 'success' ? '#155724' : '#721c24',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setApifyResult(null)}
+                title="Click to dismiss"
+              >
+                {apifyResult.message}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
+            <input
+              type="password"
+              value={apifyToken || (apifyTokenSet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setApifyToken(e.target.value)}
+              placeholder="Enter API token..."
+              disabled={apifySaving}
+              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
+            />
+            <button className="action-btn primary" onClick={handleSaveApifyToken} disabled={apifySaving || !apifyToken.trim()}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {apifySaving ? 'Saving...' : 'Save'}
+            </button>
+            <button className="action-btn secondary" onClick={handleTestApifyToken} disabled={apifyTesting || !apifyTokenSet}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {apifyTesting ? 'Testing...' : 'Test'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+            Twitter/X and Facebook scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
+          </p>
+        </div>
+      </div>
+
       {/* AI Provider Configuration */}
       <div className="ai-config-section">
         <h4>AI Search Provider</h4>
@@ -528,59 +768,6 @@ function DataCollectionSettings() {
             )}
           </>
         )}
-      </div>
-
-      {/* Apify API Token */}
-      <div className="ai-config-section">
-        <h4>Apify API Token</h4>
-        <p className="settings-description">Required for scraping Twitter/X and Facebook trail status pages.</p>
-        <div className="config-row">
-          <label>Status:</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span className={`status-indicator ${apifyTokenSet ? 'configured' : 'not-configured'}`}></span>
-            <span>{apifyTokenSet ? 'API token configured' : 'API token not configured'}</span>
-          </div>
-        </div>
-        <div className="config-row">
-          <label>API Token:</label>
-          <input type="password" value={apifyToken} onChange={e => setApifyToken(e.target.value)} placeholder="Enter Apify API token..." disabled={apifySaving} />
-        </div>
-        <button className="action-btn primary" onClick={handleSaveApifyToken} disabled={apifySaving || !apifyToken.trim()}>
-          {apifySaving ? 'Saving...' : 'Save Token'}
-        </button>
-        <p className="settings-description" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
-          Get your token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
-        </p>
-      </div>
-
-      {/* Serper API Key */}
-      <div className="ai-config-section">
-        <h4>Serper API Key</h4>
-        <p className="settings-description">Required for external news search with geographic grounding (Layer 2 news collection).</p>
-        <div className="config-row">
-          <label>Status:</label>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span className={`status-indicator ${serperApiKeySet ? 'configured' : 'not-configured'}`}></span>
-            <span>{serperApiKeySet ? 'API key configured' : 'API key not configured'}</span>
-          </div>
-        </div>
-        <div className="config-row">
-          <label>API Key:</label>
-          <input type="password" value={serperApiKey} onChange={e => setSerperApiKey(e.target.value)} placeholder="Enter Serper API key..." disabled={serperSaving} />
-        </div>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="action-btn primary" onClick={handleSaveSerperApiKey} disabled={serperSaving || !serperApiKey.trim()}>
-            {serperSaving ? 'Saving...' : 'Save API Key'}
-          </button>
-          {serperApiKeySet && (
-            <button className="action-btn secondary" onClick={handleTestSerperApiKey} disabled={serperTesting}>
-              {serperTesting ? 'Testing...' : 'Test API Key'}
-            </button>
-          )}
-        </div>
-        <p className="settings-description" style={{ fontSize: '0.85rem', marginTop: '0.75rem' }}>
-          Get your API key from <a href="https://serper.dev/api-key" target="_blank" rel="noopener noreferrer">Serper.dev Dashboard</a>. Cost: ~$0.03/month for 100 POIs.
-        </p>
       </div>
 
       {/* Moderation Configuration */}
@@ -850,8 +1037,6 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Result message */}
-      {result && <div className={`result-message ${result.type}`}>{result.message}</div>}
     </div>
   );
 }

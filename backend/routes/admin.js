@@ -530,6 +530,23 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  // Test Apify API token
+  router.post('/settings/apify-api-token/test', isAdmin, async (req, res) => {
+    try {
+      const { testApifyToken } = await import('../services/apifyService.js');
+      const isValid = await testApifyToken(pool);
+
+      if (isValid) {
+        res.json({ success: true, message: 'Apify API token is valid' });
+      } else {
+        res.json({ success: false, message: 'Apify API token is invalid or not configured' });
+      }
+    } catch (error) {
+      console.error('Error testing Apify API token:', error);
+      res.status(500).json({ success: false, message: 'Failed to test API token', error: error.message });
+    }
+  });
+
   // ============================================
   // AI Content Generation Routes (Gemini)
   // ============================================

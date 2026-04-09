@@ -63,6 +63,28 @@ describe('Serper Service', () => {
 
       await expect(getGeographicContext(mockPool, 123)).rejects.toThrow('Database connection failed');
     });
+
+    it('should ground trail POIs using first point of LineString geometry', async () => {
+      // Test that trail POIs are grounded by extracting first point from geometry
+      const mockPool = {
+        query: vi.fn().mockResolvedValue({
+          rows: [{ name: 'Cuyahoga Valley National Park' }]
+        })
+      };
+
+      const result = await getGeographicContext(mockPool, 1071); // Trail POI ID
+
+      expect(result).toBe('Cuyahoga Valley National Park');
+      expect(mockPool.query).toHaveBeenCalledOnce();
+
+      // Verify the SQL handles trail geometry extraction
+      const queryCall = mockPool.query.mock.calls[0];
+      const sql = queryCall[0];
+      expect(sql).toContain('ST_StartPoint');
+      expect(sql).toContain('ST_GeometryN');
+      expect(sql).toContain('ST_GeomFromGeoJSON');
+      expect(sql).toContain("poi_type IN ('trail', 'boundary', 'river')");
+    });
   });
 
   describe('searchNewsUrls', () => {

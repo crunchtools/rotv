@@ -20,9 +20,14 @@ import fetch from 'node-fetch';
  * Finds the smallest boundary polygon (municipality, park, etc.) that contains
  * the POI's coordinates. Used to add geographic context to search queries.
  *
+ * Supports multiple POI types:
+ * - Point POIs: uses geom column (lat/long point)
+ * - Trail/boundary POIs: extracts first point from geometry JSON (LineString/Polygon)
+ * - River POIs: extracts first point from geometry JSON
+ *
  * Examples:
- * - POI in Akron → "Akron"
- * - POI in Cuyahoga Valley National Park → "Cuyahoga Valley National Park"
+ * - Point POI in Akron → "Akron"
+ * - Trail starting in CVNP → "Cuyahoga Valley National Park"
  * - POI in Oak Grove Park (inside Brecksville) → "Oak Grove Park" (smaller wins)
  * - POI outside all boundaries → "" (no grounding)
  *
@@ -32,15 +37,27 @@ import fetch from 'node-fetch';
  */
 export async function getGeographicContext(pool, poiId) {
   const result = await pool.query(`
+    WITH poi_point AS (
+      SELECT
+        id,
+        -- For point POIs: use geom directly
+        -- For trail/boundary/river: extract first point from geometry JSON
+        CASE
+          WHEN poi_type = 'point' AND geom IS NOT NULL THEN geom
+          WHEN poi_type IN ('trail', 'boundary', 'river') AND geometry IS NOT NULL THEN
+            ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
+          ELSE NULL
+        END as point_geom
+      FROM pois
+      WHERE id = $1
+    )
     SELECT boundary.name
-    FROM pois AS point
+    FROM poi_point
     LEFT JOIN pois AS boundary
       ON boundary.poi_type = 'boundary'
       AND boundary.boundary_geom IS NOT NULL
-      AND ST_Contains(boundary.boundary_geom, point.geom)
-    WHERE point.id = $1
-      AND point.poi_type = 'point'
-      AND point.geom IS NOT NULL
+      AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
+    WHERE poi_point.point_geom IS NOT NULL
     ORDER BY ST_Area(boundary.boundary_geom) ASC  -- Smallest boundary first
     LIMIT 1
   `, [poiId]);
