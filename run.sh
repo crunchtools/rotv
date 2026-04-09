@@ -143,6 +143,8 @@ case "${1:-help}" in
         # Create environment file for systemd services
         mkdir -p ~/.rotv
         cat > ~/.rotv/environment <<ENVFILE
+NODE_ENV=test
+BYPASS_AUTH=true
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
 SESSION_SECRET=$SESSION_SECRET
