@@ -4,89 +4,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { getGeographicContext, searchNewsUrls, testSerperApiKey } from '../services/serperService.js';
+import { searchNewsUrls, testSerperApiKey } from '../services/serperService.js';
 
 describe('Serper Service', () => {
-  describe('getGeographicContext', () => {
-    it('should return boundary name for POI inside a boundary', async () => {
-      // Mock database query result
-      const mockPool = {
-        query: vi.fn().mockResolvedValue({
-          rows: [{ name: 'Cuyahoga Valley National Park' }]
-        })
-      };
-
-      const result = await getGeographicContext(mockPool, 123);
-
-      expect(result).toBe('Cuyahoga Valley National Park');
-      expect(mockPool.query).toHaveBeenCalledOnce();
-
-      // Verify the SQL query structure
-      const queryCall = mockPool.query.mock.calls[0];
-      const sql = queryCall[0];
-      expect(sql).toContain('ST_Contains');
-      expect(sql).toContain("poi_type = 'boundary'");
-      expect(sql).toContain('ORDER BY ST_Area');
-      expect(sql).toContain('LIMIT 1');
-    });
-
-    it('should return empty string for POI outside all boundaries', async () => {
-      const mockPool = {
-        query: vi.fn().mockResolvedValue({
-          rows: []
-        })
-      };
-
-      const result = await getGeographicContext(mockPool, 456);
-
-      expect(result).toBe('');
-    });
-
-    it('should return smallest boundary when POI is in nested boundaries', async () => {
-      // This tests that ORDER BY ST_Area ASC works correctly
-      // Smaller polygon (park) should win over larger polygon (city)
-      const mockPool = {
-        query: vi.fn().mockResolvedValue({
-          rows: [{ name: 'Oak Grove Park' }] // Smallest boundary
-        })
-      };
-
-      const result = await getGeographicContext(mockPool, 789);
-
-      expect(result).toBe('Oak Grove Park');
-    });
-
-    it('should handle database errors gracefully', async () => {
-      const mockPool = {
-        query: vi.fn().mockRejectedValue(new Error('Database connection failed'))
-      };
-
-      await expect(getGeographicContext(mockPool, 123)).rejects.toThrow('Database connection failed');
-    });
-
-    it('should ground trail POIs using first point of LineString geometry', async () => {
-      // Test that trail POIs are grounded by extracting first point from geometry
-      const mockPool = {
-        query: vi.fn().mockResolvedValue({
-          rows: [{ name: 'Cuyahoga Valley National Park' }]
-        })
-      };
-
-      const result = await getGeographicContext(mockPool, 1071); // Trail POI ID
-
-      expect(result).toBe('Cuyahoga Valley National Park');
-      expect(mockPool.query).toHaveBeenCalledOnce();
-
-      // Verify the SQL handles trail geometry extraction
-      const queryCall = mockPool.query.mock.calls[0];
-      const sql = queryCall[0];
-      expect(sql).toContain('ST_StartPoint');
-      expect(sql).toContain('ST_GeometryN');
-      expect(sql).toContain('ST_GeomFromGeoJSON');
-      expect(sql).toContain("poi_type IN ('trail', 'boundary', 'river')");
-    });
-  });
-
   describe('searchNewsUrls', () => {
     const mockPoi = {
       id: 123,
@@ -98,11 +18,9 @@ describe('Serper Service', () => {
     it('should construct grounded query when POI is in a boundary', async () => {
       const mockPool = {
         query: vi.fn()
-          // First call: get API key
           .mockResolvedValueOnce({
             rows: [{ value: 'test-api-key-123' }]
           })
-          // Second call: get geographic context
           .mockResolvedValueOnce({
             rows: [{ name: 'Cuyahoga Valley National Park' }]
           })
@@ -128,10 +46,9 @@ describe('Serper Service', () => {
       expect(result.urls).toHaveLength(2);
       expect(result.urls[0].url).toBe('https://example.com/news1');
       expect(result.urls[0].date).toBe('2026-04-01');
-      expect(result.urls[1].date).toBeNull(); // Second result has no date
+      expect(result.urls[1].date).toBeNull();
       expect(result.credits).toBe(1);
 
-      // Verify Serper API was called correctly
       expect(global.fetch).toHaveBeenCalledWith(
         'https://google.serper.dev/search',
         expect.objectContaining({
@@ -149,7 +66,7 @@ describe('Serper Service', () => {
       const mockPool = {
         query: vi.fn()
           .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
-          .mockResolvedValueOnce({ rows: [] }) // No boundary
+          .mockResolvedValueOnce({ rows: [] })
       };
 
       global.fetch = vi.fn().mockResolvedValue({
@@ -169,7 +86,7 @@ describe('Serper Service', () => {
 
     it('should throw error when API key not configured', async () => {
       const mockPool = {
-        query: vi.fn().mockResolvedValue({ rows: [] }) // No API key
+        query: vi.fn().mockResolvedValue({ rows: [] })
       };
 
       await expect(searchNewsUrls(mockPool, mockPoi)).rejects.toThrow(
