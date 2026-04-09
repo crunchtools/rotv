@@ -313,6 +313,37 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
                 <span>{destination.length_miles} miles</span>
               </div>
             )}
+            {destination.cost && (
+              <div className="detail-item">
+                <label>💵 Cost</label>
+                <span>
+                  {destination.cost === 'free' ? 'Free' :
+                   destination.cost === 'low' ? 'Low ($1-10)' :
+                   destination.cost === 'medium' ? 'Medium ($11-25)' :
+                   destination.cost === 'high' ? 'High ($26+)' : destination.cost}
+                </span>
+              </div>
+            )}
+            {destination.hours && (
+              <div className="detail-item">
+                <label>🕐 Hours</label>
+                <span>{destination.hours}</span>
+              </div>
+            )}
+            {destination.mobility && (
+              <div className="detail-item">
+                <label>
+                  {destination.mobility === 'accessible' ? '♿ Accessibility' :
+                   destination.mobility === 'limited' ? '⚠️ Accessibility' :
+                   destination.mobility === 'full' ? '🥾 Accessibility' : 'Accessibility'}
+                </label>
+                <span>
+                  {destination.mobility === 'accessible' ? 'Wheelchair Accessible' :
+                   destination.mobility === 'limited' ? 'Limited Mobility OK' :
+                   destination.mobility === 'full' ? 'Full Mobility Required' : destination.mobility}
+                </span>
+              </div>
+            )}
             {destination.primary_activities && (
               <div className="detail-item">
                 <label>Activities</label>
@@ -999,6 +1030,44 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
                 onChange={(val) => handleChange('cell_signal', val)}
               />
             </div>
+          </div>
+
+          <div className="edit-row">
+            <div className="edit-section half">
+              <label>Cost</label>
+              <select
+                value={editedData.cost || ''}
+                onChange={(e) => handleChange('cost', e.target.value)}
+              >
+                <option value="">Not specified</option>
+                <option value="free">Free</option>
+                <option value="low">Low ($1-10)</option>
+                <option value="medium">Medium ($11-25)</option>
+                <option value="high">High ($26+)</option>
+              </select>
+            </div>
+            <div className="edit-section half">
+              <label>Mobility</label>
+              <select
+                value={editedData.mobility || ''}
+                onChange={(e) => handleChange('mobility', e.target.value)}
+              >
+                <option value="">Not specified</option>
+                <option value="accessible">Wheelchair Accessible</option>
+                <option value="limited">Limited Mobility OK</option>
+                <option value="full">Full Mobility Required</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="edit-section">
+            <label>Operating Hours</label>
+            <input
+              type="text"
+              value={editedData.hours || ''}
+              onChange={(e) => handleChange('hours', e.target.value)}
+              placeholder='e.g., "9am-5pm Mon-Fri", "Dawn to dusk", "Seasonal: May-Oct"'
+            />
           </div>
         </>
       )}
