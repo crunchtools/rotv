@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-04-09
+
+### Changed
+- **Auth bypass architecture**: Moved from container-baked to environment-file based for better separation of concerns (#199)
+  - Development: `./run.sh start` enables auth bypass via `~/.rotv/environment` (localhost only)
+  - Testing: `./run.sh test` uses normal authentication (tests can validate auth properly)
+  - Production: Container no longer has hardcoded test configuration
+  - CI: Auth bypass injected via environment variables in test workflow
+
+### Fixed
+- **POI Edit UI**: Fixed white screen crash when entering Edit mode (missing `showImage` prop in EditView component)
+- **PostGIS installation**: Added fallback to handle RHEL 10 dependency regression (libboost_serialization.so.1.83.0 unavailable as of 2026-04-09)
+- **Test isolation**: Properly mock node-fetch module in serperService tests to prevent real API calls during testing
+
+### Technical
+- Removed `getGeographicContext` as standalone function (inlined into `searchNewsUrls` to eliminate single-use helper)
+- Created issue #200 to track POI image restoration after Immich migration failure
+
 ## [1.30.1] - 2026-04-05
 
 ### Fixed
@@ -80,7 +98,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MINOR** (1.X.0) - New features, backwards-compatible functionality
 - **PATCH** (1.0.X) - Bug fixes, backwards-compatible improvements
 
-[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.30.1...HEAD
+[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.31.0...HEAD
+[1.31.0]: https://github.com/crunchtools/rotv/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/crunchtools/rotv/compare/v1.30.0...v1.30.1
 [1.30.0]: https://github.com/crunchtools/rotv/compare/v1.29.2...v1.30.0
 [1.29.2]: https://github.com/crunchtools/rotv/releases/tag/v1.29.2
