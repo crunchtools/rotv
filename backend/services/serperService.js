@@ -36,7 +36,6 @@ import fetch from 'node-fetch';
  * @throws {Error} - If Serper API key not configured or API error
  */
 export async function searchNewsUrls(pool, poi) {
-  // Get Serper API key from admin settings
   const apiKeyResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'serper_api_key'"
   );
@@ -133,7 +132,6 @@ export async function testSerperApiKey(pool) {
 
     const apiKey = apiKeyResult.rows[0].value;
 
-    // Simple test query
     const response = await fetch('https://google.serper.dev/search', {
       method: 'POST',
       headers: {
