@@ -47,26 +47,10 @@ export async function searchNewsUrls(pool, poi) {
 
   const apiKey = apiKeyResult.rows[0].value;
 
-  // Get geographic context for grounding using PostGIS spatial queries
-  // Finds the smallest boundary polygon (municipality, park, etc.) that contains
-  // the POI's coordinates. Used to add geographic context to search queries.
-  //
-  // Supports multiple POI types:
-  // - Point POIs: uses geom column (lat/long point)
-  // - Trail/boundary POIs: extracts first point from geometry JSON (LineString/Polygon)
-  // - River POIs: extracts first point from geometry JSON
-  //
-  // Examples:
-  // - Point POI in Akron → "Akron"
-  // - Trail starting in CVNP → "Cuyahoga Valley National Park"
-  // - POI in Oak Grove Park (inside Brecksville) → "Oak Grove Park" (smaller wins)
-  // - POI outside all boundaries → "" (no grounding)
   const contextResult = await pool.query(`
     WITH poi_point AS (
       SELECT
         id,
-        -- For point POIs: use geom directly
-        -- For trail/boundary/river: extract first point from geometry JSON
         CASE
           WHEN poi_type = 'point' AND geom IS NOT NULL THEN geom
           WHEN poi_type IN ('trail', 'boundary', 'river') AND geometry IS NOT NULL THEN
@@ -83,22 +67,18 @@ export async function searchNewsUrls(pool, poi) {
       AND boundary.boundary_geom IS NOT NULL
       AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
     WHERE poi_point.point_geom IS NOT NULL
-    ORDER BY ST_Area(boundary.boundary_geom) ASC  -- Smallest boundary first
+    ORDER BY ST_Area(boundary.boundary_geom) ASC
     LIMIT 1
   `, [poi.id]);
 
   const context = contextResult.rows[0]?.name || '';
 
-  // Build grounded query
-  // With grounding: "Ledges Trail Cuyahoga Valley National Park news"
-  // Without: "Ledges Trail news"
   const query = context
     ? `${poi.name} ${context} news`
     : `${poi.name} news`;
 
   console.log(`[Serper] Query: "${query}" (grounded: ${!!context})`);
 
-  // Search with Serper API
   const response = await fetch('https://google.serper.dev/search', {
     method: 'POST',
     headers: {
@@ -113,14 +93,13 @@ export async function searchNewsUrls(pool, poi) {
     throw new Error(`Serper API error: ${response.status} - ${errorText}`);
   }
 
-  const data = await response.json();
+  const searchResults = await response.json();
 
-  // Extract organic search results
-  const urls = (data.organic || []).map(r => ({
+  const urls = (searchResults.organic || []).map(r => ({
     url: r.link,
     title: r.title,
     snippet: r.snippet,
-    date: r.date || null  // Serper provides dates for ~52% of results
+    date: r.date || null
   }));
 
   console.log(`[Serper] Found ${urls.length} external news URLs (${urls.filter(u => u.date).length} with dates)`);
@@ -130,7 +109,7 @@ export async function searchNewsUrls(pool, poi) {
     grounded: !!context,
     groundingContext: context,
     urls,
-    credits: data.credits || 1
+    credits: searchResults.credits || 1
   };
 }
 
