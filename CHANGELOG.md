@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Development image proxy**: Localhost now proxies images from production when IMAGE_SERVER_URL is not configured
+  - Allows viewing actual POI images during local development
+  - Falls back to production ROTV thumbnail endpoint
+  - Only active when NODE_ENV=test or NODE_ENV=development
+
 ### Fixed
 - **Image restoration**: Successfully restored 91 POI images from Immich backup (closes #200)
   - Fixed image server upload endpoint constraint violations

@@ -985,6 +985,28 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     const assetId = result.rows[0].image_server_asset_id;
 
     if (!imageServerClient.initialized) {
+      // Development fallback: proxy from production when IMAGE_SERVER_URL not configured
+      if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+        try {
+          const productionUrl = `https://rootsofthevalley.org/api/pois/${id}/thumbnail`;
+          const productionResponse = await fetch(productionUrl);
+
+          if (!productionResponse.ok) {
+            return res.status(404).json({ error: 'Image not found' });
+          }
+
+          const buffer = await productionResponse.arrayBuffer();
+          const contentType = productionResponse.headers.get('content-type') || 'image/jpeg';
+
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=604800');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          return res.send(Buffer.from(buffer));
+        } catch (fallbackError) {
+          console.error(`[Thumbnail] Production fallback failed for POI ${id}:`, fallbackError);
+          return res.status(404).json({ error: 'Image not found' });
+        }
+      }
       return res.status(404).json({ error: 'Image not found' });
     }
 
