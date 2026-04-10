@@ -1383,9 +1383,7 @@ Return {"news": []} if no relevant news found.`;
         }
       } catch (serperError) {
         console.error(`[Serper] ⚠️ External news search failed: ${serperError.message}`);
-        if (jobId) {
-          logWarn(jobId, 'news', poi.id, poi.name, `External news search failed: ${serperError.message}`);
-        }
+        logWarn(jobId, 'news', poi.id, poi.name, `External news search failed: ${serperError.message}`);
         // Continue with Layer 1 results even if Layer 2 fails
       }
     }
