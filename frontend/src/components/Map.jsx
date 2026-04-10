@@ -1294,7 +1294,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
                       let tooltipHtml = '<div class="tooltip-content">';
                       if (hasImage) {
-                        tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" /></div>`;
+                        tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                       }
                       tooltipHtml += `<strong>${feature.name}</strong>`;
                       if (feature.brief_description) {
@@ -1358,7 +1358,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
                     let tooltipHtml = '<div class="tooltip-content">';
                     if (hasImage) {
-                      tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" /></div>`;
+                      tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                     }
                     tooltipHtml += `<strong>${feature.name}</strong>`;
                     if (feature.brief_description) {
