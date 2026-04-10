@@ -16,44 +16,34 @@ const pool = new Pool({
   password: process.env.PGPASSWORD
 });
 
-async function main() {
-  console.log('Fixing has_primary_image flags...\n');
+console.log('Fixing has_primary_image flags...\n');
 
-  // Clear stale flags (UPDATE returns row count, no need for separate COUNT query)
-  const result = await pool.query(`
-    UPDATE pois
-    SET has_primary_image = false
-    WHERE has_primary_image = true
-      AND id NOT IN (
-        SELECT DISTINCT poi_id
-        FROM poi_media
-        WHERE role = 'primary'
-          AND moderation_status IN ('published', 'auto_approved')
-      )
-  `);
+const clearedStaleFlags = await pool.query(`
+  UPDATE pois
+  SET has_primary_image = false
+  WHERE has_primary_image = true
+    AND id NOT IN (
+      SELECT DISTINCT poi_id
+      FROM poi_media
+      WHERE role = 'primary'
+        AND moderation_status IN ('published', 'auto_approved')
+    )
+`);
 
-  console.log(`Found ${result.rowCount} POIs with stale has_primary_image flags`);
-  console.log(`✓ Cleared ${result.rowCount} stale flags\n`);
+console.log(`Found ${clearedStaleFlags.rowCount} POIs with stale has_primary_image flags`);
+console.log(`✓ Cleared ${clearedStaleFlags.rowCount} stale flags\n`);
 
-  // Verify counts match
-  const poisWithFlag = await pool.query('SELECT COUNT(*) FROM pois WHERE has_primary_image = true');
-  const poisWithImage = await pool.query(`
-    SELECT COUNT(DISTINCT poi_id)
-    FROM poi_media
-    WHERE role = 'primary'
-      AND moderation_status IN ('published', 'auto_approved')
-  `);
+const poisWithFlag = await pool.query('SELECT COUNT(*) FROM pois WHERE has_primary_image = true');
+const poisWithImage = await pool.query(`
+  SELECT COUNT(DISTINCT poi_id)
+  FROM poi_media
+  WHERE role = 'primary'
+    AND moderation_status IN ('published', 'auto_approved')
+`);
 
-  console.log('=== Verification ===');
-  console.log(`POIs with has_primary_image=true: ${poisWithFlag.rows[0].count}`);
-  console.log(`POIs with actual primary images: ${poisWithImage.rows[0].count}`);
-  console.log(`Match: ${poisWithFlag.rows[0].count === poisWithImage.rows[0].count ? '✓' : '✗'}`);
+console.log('=== Verification ===');
+console.log(`POIs with has_primary_image=true: ${poisWithFlag.rows[0].count}`);
+console.log(`POIs with actual primary images: ${poisWithImage.rows[0].count}`);
+console.log(`Match: ${poisWithFlag.rows[0].count === poisWithImage.rows[0].count ? '✓' : '✗'}`);
 
-  await pool.end();
-}
-
-main().catch(error => {
-  console.error('Fatal error:', error);
-  pool.end();
-  process.exit(1);
-});
+await pool.end();
