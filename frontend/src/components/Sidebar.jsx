@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ImageUploader from './ImageUploader';
-import CollectionStatus from './CollectionStatus';
 import ThumbnailCarousel from './ThumbnailCarousel';
 import { formatDateTime, formatPublicationDate } from './NewsEventsShared';
 import Mosaic from './Mosaic';
@@ -1374,17 +1374,11 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
 // POI-specific News component
 function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
+  const navigate = useNavigate();
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(null);
-  const [collecting, setCollecting] = useState(() => {
-    // Check localStorage to see if collection was in progress
-    const stored = localStorage.getItem(`news-collecting-${poiId}`);
-    return stored === 'true';
-  });
-  const [collectionSession, setCollectionSession] = useState(0);
-  const [showCompletedStatus, setShowCompletedStatus] = useState(false);
-  const [, setCollectResult] = useState(null);
+  const [collecting, setCollecting] = useState(false);
 
   const fetchNews = async () => {
     if (!poiId) {
@@ -1409,103 +1403,35 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
 
   useEffect(() => {
     fetchNews();
-    // Clean up collecting state if we're loading fresh data
-    if (collecting) {
-      // If we were collecting but now mounting fresh, the collection likely completed
-      setTimeout(() => {
-        localStorage.removeItem(`news-collecting-${poiId}`);
-        setCollecting(false);
-      }, 2000);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiId]); // fetchNews and collecting intentionally excluded to avoid re-fetching on state changes
+  }, [poiId]);
 
-  // Clear completed status when editMode changes
-  useEffect(() => {
-    if (!editMode) {
-      setShowCompletedStatus(false);
-    }
-  }, [editMode]);
-
-  // Collect news for this POI and refresh
+  // Collect news for this POI and redirect to Jobs dashboard
   const handleCollectNews = async () => {
     if (!poiId) return;
     setCollecting(true);
-    setShowCompletedStatus(false); // Clear previous completed status
-    setCollectionSession(prev => prev + 1); // Increment session to force timer reset
-    localStorage.setItem(`news-collecting-${poiId}`, 'true');
-    setCollectResult(null);
-
-    let shouldStopCollecting = false;
 
     try {
-      // Read timezone from localStorage (defaults to America/New_York)
       const timezone = localStorage.getItem('app-timezone') || 'America/New_York';
-
       const response = await fetch(`/api/admin/pois/${poiId}/news/collect`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timezone })
       });
+
       if (response.ok) {
         const result = await response.json();
-
-        // If collection is already running, just attach to it
-        if (result.alreadyRunning) {
-          // The status widget will poll and show the current progress
-          // Don't change collecting state - keep it true to show widget
-          return;
-        }
-
-        setCollectResult({
-          type: 'success',
-          newsFound: result.newsFound,
-          newsSaved: result.newsSaved,
-          newsDuplicate: result.newsDuplicate || 0
-        });
-        // Refresh the news list
-        await fetchNews();
-        shouldStopCollecting = true;
+        // Redirect to Jobs dashboard with job identifier
+        navigate(`/admin/jobs?job=${result.jobId}&type=${result.jobType}`);
       } else {
         const error = await response.json();
-        setCollectResult({ type: 'error', message: error.error || 'Collection failed' });
-        shouldStopCollecting = true;
+        alert(`Collection failed: ${error.error || 'Unknown error'}`);
+        setCollecting(false);
       }
     } catch (err) {
-      setCollectResult({ type: 'error', message: err.message });
-      shouldStopCollecting = true;
-    } finally {
-      if (shouldStopCollecting) {
-        // Give the CollectionStatus widget time to fetch final progress before stopping polling
-        setTimeout(() => {
-          setCollecting(false);
-          setShowCompletedStatus(true); // Keep status widget visible after completion
-          localStorage.removeItem(`news-collecting-${poiId}`);
-        }, 1500); // 1.5 second delay to ensure final progress is fetched
-      }
-    }
-  };
-
-  const handleCancelCollection = async () => {
-    if (!poiId) return;
-    try {
-      const response = await fetch(`/api/admin/pois/${poiId}/collection-cancel`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      if (response.ok) {
-        // The status widget will update to show cancelled state
-        setTimeout(() => {
-          setCollecting(false);
-          setShowCompletedStatus(true);
-          localStorage.removeItem(`news-collecting-${poiId}`);
-        }, 500);
-      }
-    } catch (err) {
-      console.error('[PoiNews] Error cancelling collection:', err);
+      alert(`Collection failed: ${err.message}`);
+      setCollecting(false);
     }
   };
 
@@ -1543,21 +1469,6 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
       )}
 
       <div className="poi-news-list-content">
-        {isAdmin && editMode && (collecting || showCompletedStatus) && (
-          <CollectionStatus
-            key={`news-${collectionSession}`}
-            poiId={poiId}
-            isCollecting={collecting}
-            onComplete={(_data) => {
-              // Keep showing status even after completion
-            }}
-            onClose={() => {
-              setShowCompletedStatus(false);
-            }}
-            onCancel={handleCancelCollection}
-          />
-        )}
-
         {news.length === 0 ? (
           <div className="sidebar-tab-empty">No news for this location.</div>
         ) : news.map(item => (
@@ -1597,17 +1508,11 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
 
 // POI-specific Events component
 function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
+  const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(null);
-  const [collecting, setCollecting] = useState(() => {
-    // Check localStorage to see if collection was in progress
-    const stored = localStorage.getItem(`events-collecting-${poiId}`);
-    return stored === 'true';
-  });
-  const [collectionSession, setCollectionSession] = useState(0);
-  const [showCompletedStatus, setShowCompletedStatus] = useState(false);
-  const [, setCollectResult] = useState(null);
+  const [collecting, setCollecting] = useState(false);
 
   const fetchEvents = async () => {
     if (!poiId) return;
@@ -1628,103 +1533,35 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
 
   useEffect(() => {
     fetchEvents();
-    // Clean up collecting state if we're loading fresh data
-    if (collecting) {
-      // If we were collecting but now mounting fresh, the collection likely completed
-      setTimeout(() => {
-        localStorage.removeItem(`events-collecting-${poiId}`);
-        setCollecting(false);
-      }, 2000);
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiId]); // fetchEvents and collecting intentionally excluded to avoid re-fetching on state changes
+  }, [poiId]);
 
-  // Clear completed status when editMode changes
-  useEffect(() => {
-    if (!editMode) {
-      setShowCompletedStatus(false);
-    }
-  }, [editMode]);
-
-  // Collect events for this POI and refresh
+  // Collect events for this POI and redirect to Jobs dashboard
   const handleCollectEvents = async () => {
     if (!poiId) return;
     setCollecting(true);
-    setShowCompletedStatus(false); // Clear previous completed status
-    setCollectionSession(prev => prev + 1); // Increment session to force timer reset
-    localStorage.setItem(`events-collecting-${poiId}`, 'true');
-    setCollectResult(null);
-
-    let shouldStopCollecting = false;
 
     try {
-      // Read timezone from localStorage (defaults to America/New_York)
       const timezone = localStorage.getItem('app-timezone') || 'America/New_York';
-
       const response = await fetch(`/api/admin/pois/${poiId}/events/collect`, {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timezone })
       });
+
       if (response.ok) {
         const result = await response.json();
-
-        // If collection is already running, just attach to it
-        if (result.alreadyRunning) {
-          // The status widget will poll and show the current progress
-          // Don't change collecting state - keep it true to show widget
-          return;
-        }
-
-        setCollectResult({
-          type: 'success',
-          eventsFound: result.eventsFound,
-          eventsSaved: result.eventsSaved,
-          eventsDuplicate: result.eventsDuplicate || 0
-        });
-        // Refresh the events list
-        await fetchEvents();
-        shouldStopCollecting = true;
+        // Redirect to Jobs dashboard with job identifier
+        navigate(`/admin/jobs?job=${result.jobId}&type=${result.jobType}`);
       } else {
         const error = await response.json();
-        setCollectResult({ type: 'error', message: error.error || 'Collection failed' });
-        shouldStopCollecting = true;
+        alert(`Collection failed: ${error.error || 'Unknown error'}`);
+        setCollecting(false);
       }
     } catch (err) {
-      setCollectResult({ type: 'error', message: err.message });
-      shouldStopCollecting = true;
-    } finally {
-      if (shouldStopCollecting) {
-        // Give the CollectionStatus widget time to fetch final progress before stopping polling
-        setTimeout(() => {
-          setCollecting(false);
-          setShowCompletedStatus(true); // Keep status widget visible after completion
-          localStorage.removeItem(`events-collecting-${poiId}`);
-        }, 1500); // 1.5 second delay to ensure final progress is fetched
-      }
-    }
-  };
-
-  const handleCancelCollection = async () => {
-    if (!poiId) return;
-    try {
-      const response = await fetch(`/api/admin/pois/${poiId}/collection-cancel`, {
-        method: 'POST',
-        credentials: 'include'
-      });
-      if (response.ok) {
-        // The status widget will update to show cancelled state
-        setTimeout(() => {
-          setCollecting(false);
-          setShowCompletedStatus(true);
-          localStorage.removeItem(`events-collecting-${poiId}`);
-        }, 500);
-      }
-    } catch (err) {
-      console.error('[PoiEvents] Error cancelling collection:', err);
+      alert(`Collection failed: ${err.message}`);
+      setCollecting(false);
     }
   };
 
@@ -1780,21 +1617,6 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
       )}
 
       <div className="poi-events-list-content">
-        {isAdmin && editMode && (collecting || showCompletedStatus) && (
-          <CollectionStatus
-            key={`events-${collectionSession}`}
-            poiId={poiId}
-            isCollecting={collecting}
-            onComplete={(_data) => {
-              // Keep showing status even after completion
-            }}
-            onClose={() => {
-              setShowCompletedStatus(false);
-            }}
-            onCancel={handleCancelCollection}
-          />
-        )}
-
         {events.length === 0 ? (
           <div className="sidebar-tab-empty">No upcoming events for this location.</div>
         ) : events.map(item => (
