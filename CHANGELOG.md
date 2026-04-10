@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Image restoration**: Successfully restored 91 POI images from Immich backup (closes #200)
+  - Fixed image server upload endpoint constraint violations
+  - Corrected poi_media schema usage (role vs is_primary)
+  - Migration checks both ROTV and image server databases for existing primaries
+
 ## [1.31.0] - 2026-04-09
 
 ### Changed
