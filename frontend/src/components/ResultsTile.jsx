@@ -48,7 +48,16 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       {/* Thumbnail */}
       <div className={`results-tile-image ${isVirtual ? 'virtual-thumbnail' : ''}`}>
         {imageUrl ? (
-          <img src={imageUrl} alt={poi.name} loading="lazy" className={isVirtual ? 'logo-image' : ''} />
+          <img
+            src={imageUrl}
+            alt={poi.name}
+            loading="lazy"
+            className={isVirtual ? 'logo-image' : ''}
+            onError={(e) => {
+              e.target.src = getDefaultThumbnail();
+              e.target.className = 'default-thumbnail';
+            }}
+          />
         ) : (
           <img src={getDefaultThumbnail()} alt={poi.name} className="default-thumbnail" loading="lazy" />
         )}

@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Corrected poi_media schema usage (role vs is_primary)
   - Migration checks both ROTV and image server databases for existing primaries
 - **Broken image icons**: Fixed POIs showing broken image icons when has_primary_image flag was stale
-  - Added onError handler to hide broken images gracefully (destinations and linear features)
+  - Added onError handler to hide broken images gracefully (Sidebar destinations and linear features)
+  - Added onError handler to Results tab tile thumbnails (falls back to default SVG icons)
   - Created migration to clean up 400 stale has_primary_image flags
   - Database now consistent: 53 POIs with flag match 53 POIs with actual images
   - Fixed missing showImage prop in EditView for linear features
