@@ -2084,7 +2084,16 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                     >
                       <div className={`association-item-thumbnail ${associatedPoi._isVirtual ? 'virtual-thumbnail' : ''}`}>
                         {imageUrl ? (
-                          <img src={imageUrl} alt={associatedPoi.name} loading="lazy" className={associatedPoi._isVirtual ? 'logo-image' : ''} />
+                          <img
+                            src={imageUrl}
+                            alt={associatedPoi.name}
+                            loading="lazy"
+                            className={associatedPoi._isVirtual ? 'logo-image' : ''}
+                            onError={(e) => {
+                              e.target.src = getDefaultThumbnail();
+                              e.target.className = 'default-thumbnail';
+                            }}
+                          />
                         ) : (
                           <img src={getDefaultThumbnail()} alt={associatedPoi.name} className="default-thumbnail" loading="lazy" />
                         )}
@@ -2410,7 +2419,16 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                   >
                     <div className={`association-item-thumbnail ${associatedPoi._isVirtual ? 'virtual-thumbnail' : ''}`}>
                       {imageUrl ? (
-                        <img src={imageUrl} alt={associatedPoi.name} loading="lazy" className={associatedPoi._isVirtual ? 'logo-image' : ''} />
+                        <img
+                          src={imageUrl}
+                          alt={associatedPoi.name}
+                          loading="lazy"
+                          className={associatedPoi._isVirtual ? 'logo-image' : ''}
+                          onError={(e) => {
+                            e.target.src = getDefaultThumbnail();
+                            e.target.className = 'default-thumbnail';
+                          }}
+                        />
                       ) : (
                         <img src={getDefaultThumbnail()} alt={associatedPoi.name} className="default-thumbnail" loading="lazy" />
                       )}

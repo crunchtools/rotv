@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added onError handler to hide broken images gracefully (Sidebar destinations and linear features)
   - Added onError handler to Results tab tile thumbnails (falls back to default SVG icons)
   - Added onError handler to Map tooltip thumbnails (JSX and HTML string tooltips)
+  - Added onError handler to Sidebar association item thumbnails (related POIs list)
   - Fixed HTML string tooltips for linear features using inline onerror attribute
   - Created migration to clean up 400 stale has_primary_image flags
   - Database now consistent: 60 POIs with flag match 60 POIs with actual images (53 + 7 MTB trails)
