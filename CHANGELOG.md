@@ -16,8 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added onError handler to hide broken images gracefully (Sidebar destinations and linear features)
   - Added onError handler to Results tab tile thumbnails (falls back to default SVG icons)
   - Created migration to clean up 400 stale has_primary_image flags
-  - Database now consistent: 53 POIs with flag match 53 POIs with actual images
+  - Database now consistent: 60 POIs with flag match 60 POIs with actual images (53 + 7 MTB trails)
   - Fixed missing showImage prop in EditView for linear features
+- **MTB trail images**: Synced 7 MTB trail images from image server to ROTV database
+  - Images existed on image server but missing poi_media linking records
+  - Created migration to sync East Rim, Hampton Hills, Ohio & Erie Canal, Reagan-Huffman, Bedford Reserve, Royalview, and West Creek trailheads
+  - All MTB trail images now display correctly
 
 ## [1.31.0] - 2026-04-09
 
