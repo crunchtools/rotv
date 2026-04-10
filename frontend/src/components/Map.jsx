@@ -877,7 +877,14 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
           <div className="tooltip-content">
             {dest.has_primary_image && (
               <div className="tooltip-thumbnail">
-                <img src={`/api/pois/${dest.id}/thumbnail?size=medium`} alt="" />
+                <img
+                  src={`/api/pois/${dest.id}/thumbnail?size=medium`}
+                  alt=""
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    e.target.parentElement.style.display = 'none';
+                  }}
+                />
               </div>
             )}
             <strong>{dest.name}</strong>
@@ -1287,7 +1294,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
                       let tooltipHtml = '<div class="tooltip-content">';
                       if (hasImage) {
-                        tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" /></div>`;
+                        tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                       }
                       tooltipHtml += `<strong>${feature.name}</strong>`;
                       if (feature.brief_description) {
@@ -1351,7 +1358,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
                     let tooltipHtml = '<div class="tooltip-content">';
                     if (hasImage) {
-                      tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" /></div>`;
+                      tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                     }
                     tooltipHtml += `<strong>${feature.name}</strong>`;
                     if (feature.brief_description) {
