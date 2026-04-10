@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -69,6 +70,10 @@ function formatCronHuman(cron) {
 }
 
 export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) {
+  const [searchParams] = useSearchParams();
+  const urlJobId = searchParams.get('job');
+  const urlJobType = searchParams.get('type');
+
   const [scheduledJobs, setScheduledJobs] = useState([]);
   const [scheduledLoading, setScheduledLoading] = useState(true);
   const [expandedScheduled, setExpandedScheduled] = useState(null);
@@ -134,10 +139,23 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const fetchRunLogs = useCallback(async (jobType, runId) => {
     try {
-      const params = new URLSearchParams({ limit: '200' });
-      if (logLevelFilter !== 'all') params.set('level', logLevelFilter);
-      const res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${runId}/logs?${params}`, { credentials: 'include' });
-      if (res.ok) setRunLogs(await res.json());
+      let res;
+      if (jobType === 'news_single' || jobType === 'events_single') {
+        // Single-POI jobs: query by poiId
+        const params = new URLSearchParams({ jobType, poiId: runId, limit: '200' });
+        if (logLevelFilter !== 'all') params.set('level', logLevelFilter);
+        res = await fetch(`${API_BASE}/api/admin/jobs/logs?${params}`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setRunLogs(data.data?.logs || []);
+        }
+      } else {
+        // Batch jobs: query by job_id
+        const params = new URLSearchParams({ limit: '200' });
+        if (logLevelFilter !== 'all') params.set('level', logLevelFilter);
+        res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${runId}/logs?${params}`, { credentials: 'include' });
+        if (res.ok) setRunLogs(await res.json());
+      }
     } catch (err) {
       console.error('Failed to fetch run logs:', err);
     }
@@ -250,7 +268,22 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   useEffect(() => {
     if (!expandedRun) return;
 
-    // Find the job for this run
+    // For single-POI jobs, poll briefly to catch any late-arriving logs
+    if (expandedRun.jobType === 'news_single' || expandedRun.jobType === 'events_single') {
+      let pollCount = 0;
+      const interval = setInterval(() => {
+        fetchRunLogs(expandedRun.jobType, expandedRun.runId);
+        pollCount++;
+        // Stop polling after 15 attempts (30 seconds)
+        if (pollCount >= 15) {
+          clearInterval(interval);
+        }
+      }, 2000);
+
+      return () => clearInterval(interval);
+    }
+
+    // For batch jobs, find the job and check if running
     const job = scheduledJobs.find(j =>
       j.historyTypes && j.historyTypes.includes(expandedRun.jobType)
     );
@@ -281,6 +314,42 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       }
     }
   }, [jobHistory, autoExpandNewestRun]);
+
+  // Auto-expand job from URL parameters (for single-POI redirects)
+  useEffect(() => {
+    if (urlJobId && urlJobType && !scheduledLoading) {
+      // For single-POI jobs, directly expand using URL parameters
+      if (urlJobType === 'news_single' || urlJobType === 'events_single') {
+        setExpandedRun({ jobType: urlJobType, runId: urlJobId });
+
+        // Scroll to logs panel if it exists (will exist after logs load)
+        setTimeout(() => {
+          const element = document.querySelector('.job-logs-panel');
+          if (element) {
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 500);
+      } else {
+        // For batch jobs, find the matching run in history
+        const runs = Object.values(jobHistory).flat();
+        const targetRun = runs.find(r =>
+          String(r.id) === urlJobId && r.job_type === urlJobType
+        );
+
+        if (targetRun) {
+          setExpandedRun({ jobType: targetRun.job_type, runId: targetRun.id });
+
+          // Scroll to the job entry
+          setTimeout(() => {
+            const element = document.getElementById(`job-${targetRun.job_type}-${targetRun.id}`);
+            if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 100);
+        }
+      }
+    }
+  }, [urlJobId, urlJobType, scheduledLoading, jobHistory]);
 
   const handleExpandRun = (jobType, run) => {
     const key = `${jobType}-${run.id}`;
@@ -673,7 +742,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                           {runs.map(run => {
                             const isExpanded = expandedRun && expandedRun.jobType === run.job_type && expandedRun.runId === run.id;
                             return (
-                              <div key={`${run.job_type}-${run.id}`} className="job-run-item">
+                              <div
+                                key={`${run.job_type}-${run.id}`}
+                                id={`job-${run.job_type}-${run.id}`}
+                                className="job-run-item">
                                 <div className={`job-run-row ${isExpanded ? 'expanded' : ''}`}
                                   onClick={(e) => { e.stopPropagation(); handleExpandRun(run.job_type, run); }}>
                                   <span className="status-badge" style={{ backgroundColor: STATUS_COLORS[run.status] || '#9e9e9e' }}>{run.status}</span>

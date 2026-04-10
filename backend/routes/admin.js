@@ -2806,7 +2806,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         message: `News collection completed for ${poi.name}`,
         newsFound: news.length,
         newsSaved: savedNews,
-        newsDuplicate: news.length - savedNews
+        newsDuplicate: news.length - savedNews,
+        jobId: poi.id,  // Use poi_id as identifier for single-POI jobs
+        jobType: 'news_single'
       });
     } catch (error) {
       console.error('Error collecting news for POI:', error);
@@ -2878,7 +2880,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         message: `Events collection completed for ${poi.name}`,
         eventsFound: events.length,
         eventsSaved: savedEvents,
-        eventsDuplicate: events.length - savedEvents
+        eventsDuplicate: events.length - savedEvents,
+        jobId: poi.id,  // Use poi_id as identifier for single-POI jobs
+        jobType: 'events_single'
       });
     } catch (error) {
       console.error('Error collecting events for POI:', error);
@@ -4256,6 +4260,46 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('Error fetching job history:', error);
       res.status(500).json({ error: 'Failed to fetch job history' });
+    }
+  });
+
+  // Single-POI job logs (query by poi_id instead of job_id)
+  router.get('/jobs/logs', isAdmin, async (req, res) => {
+    try {
+      const { jobType, poiId } = req.query;
+      const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 100, 500));
+      const offset = Math.max(0, parseInt(req.query.offset) || 0);
+
+      if (!jobType || !poiId) {
+        return res.status(400).json({
+          error: 'jobType and poiId are required'
+        });
+      }
+
+      const query = `
+        SELECT id, level, message, details, created_at
+        FROM job_logs
+        WHERE job_type = $1 AND poi_id = $2
+        ORDER BY created_at DESC
+        LIMIT $3 OFFSET $4
+      `;
+
+      const result = await pool.query(query, [jobType, poiId, limit, offset]);
+
+      res.json({
+        success: true,
+        data: {
+          logs: result.rows,
+          pagination: {
+            returned: result.rowCount,
+            limit,
+            offset
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching single-POI job logs:', error);
+      res.status(500).json({ error: 'Failed to fetch job logs' });
     }
   });
 
