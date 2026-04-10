@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Development image proxy**: Localhost now proxies images from production when IMAGE_SERVER_URL is not configured
   - Allows viewing actual POI images during local development
-  - Falls back to production ROTV thumbnail endpoint
+  - Falls back to production asset endpoint for thumbnails
   - Only active when NODE_ENV=test or NODE_ENV=development
 
 ### Fixed
@@ -31,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Images existed on image server but missing poi_media linking records
   - Created migration to sync East Rim, Hampton Hills, Ohio & Erie Canal, Reagan-Huffman, Bedford Reserve, Royalview, and West Creek trailheads
   - All MTB trail images now display correctly
+- **Orphaned gallery images**: Promoted 37 gallery images to primary when no primary existed
+  - Red Lock Trailhead, Stanford Trail, Hampton Hills locations, and 34 others were showing broken images
+  - These images were incorrectly marked as 'gallery' during Immich restore migration
+  - Created migration to promote sole gallery images to primary role
+  - Updated has_primary_image flags for all affected POIs
+  - All 37 POIs now display thumbnails correctly in Results, Map, and Sidebar
 
 ## [1.31.0] - 2026-04-09
 
