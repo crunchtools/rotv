@@ -3385,6 +3385,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               <img
                 src={`/api/pois/${linearFeature.id}/thumbnail?size=medium&v=${linearFeature.updated_at || Date.now()}`}
                 alt={linearFeature?.name}
+                onError={(e) => {
+                  e.target.style.display = 'none';
+                  e.target.parentElement.style.display = 'none';
+                }}
               />
             </div>
           ) : user && linearFeature?.id && !mediaLoading ? (
@@ -3488,6 +3492,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 deleting={deleting}
                 isNewPOI={false}
                 isLinearFeature={true}
+                showImage={false}
                 onImageUpdate={(hasImage, driveFileId) => {
                   if (onLinearFeatureUpdate) {
                     onLinearFeatureUpdate({
@@ -3720,6 +3725,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               src={`/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`}
               alt={destination?.name}
               className={destination?.poi_type === 'virtual' ? 'logo-image' : ''}
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.parentElement.style.display = 'none';
+              }}
             />
           </div>
         ) : user && destination?.id && !mediaLoading ? (
