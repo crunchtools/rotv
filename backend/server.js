@@ -985,10 +985,10 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     const assetId = result.rows[0].image_server_asset_id;
 
     if (!imageServerClient.initialized) {
-      // Development fallback: proxy from production when IMAGE_SERVER_URL not configured
+      // Development fallback: proxy from production asset endpoint when IMAGE_SERVER_URL not configured
       if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
         try {
-          const productionUrl = `https://rootsofthevalley.org/api/pois/${id}/thumbnail`;
+          const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail`;
           const productionResponse = await fetch(productionUrl);
 
           if (!productionResponse.ok) {
@@ -1003,7 +1003,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
           res.setHeader('Access-Control-Allow-Origin', '*');
           return res.send(Buffer.from(buffer));
         } catch (fallbackError) {
-          console.error(`[Thumbnail] Production fallback failed for POI ${id}:`, fallbackError);
+          console.error(`[Thumbnail] Production fallback failed for POI ${id}, asset ${assetId}:`, fallbackError);
           return res.status(404).json({ error: 'Image not found' });
         }
       }
@@ -1444,6 +1444,32 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
     }
 
     if (!imageServerClient.initialized) {
+      // Development fallback: proxy from production when IMAGE_SERVER_URL not configured
+      if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+        try {
+          const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail`;
+          const productionResponse = await fetch(productionUrl);
+
+          if (!productionResponse.ok) {
+            const statusCode = productionResponse.status;
+            const message = statusCode === 404 ? 'Asset not found' :
+                            statusCode >= 500 ? 'Image service error' :
+                            'Failed to fetch asset';
+            return res.status(statusCode).json({ error: message });
+          }
+
+          const buffer = await productionResponse.arrayBuffer();
+          const contentType = productionResponse.headers.get('content-type') || 'image/jpeg';
+
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=604800');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          return res.send(Buffer.from(buffer));
+        } catch (fallbackError) {
+          console.error(`[Asset Thumbnail] Production fallback failed for asset ${assetId}:`, fallbackError);
+          return res.status(503).json({ error: 'Image service unavailable' });
+        }
+      }
       return res.status(503).json({ error: 'Image service unavailable' });
     }
 
@@ -1482,6 +1508,32 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
     }
 
     if (!imageServerClient.initialized) {
+      // Development fallback: proxy from production when IMAGE_SERVER_URL not configured
+      if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+        try {
+          const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/original`;
+          const productionResponse = await fetch(productionUrl);
+
+          if (!productionResponse.ok) {
+            const statusCode = productionResponse.status;
+            const message = statusCode === 404 ? 'Asset not found' :
+                            statusCode >= 500 ? 'Image service error' :
+                            'Failed to fetch asset';
+            return res.status(statusCode).json({ error: message });
+          }
+
+          const buffer = await productionResponse.arrayBuffer();
+          const contentType = productionResponse.headers.get('content-type') || 'image/jpeg';
+
+          res.setHeader('Content-Type', contentType);
+          res.setHeader('Cache-Control', 'public, max-age=86400');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          return res.send(Buffer.from(buffer));
+        } catch (fallbackError) {
+          console.error(`[Asset Original] Production fallback failed for asset ${assetId}:`, fallbackError);
+          return res.status(503).json({ error: 'Image service unavailable' });
+        }
+      }
       return res.status(503).json({ error: 'Image service unavailable' });
     }
 
