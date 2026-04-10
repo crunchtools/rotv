@@ -995,15 +995,17 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
             return res.status(404).json({ error: 'Image not found' });
           }
 
-          const buffer = await productionResponse.arrayBuffer();
-          const contentType = productionResponse.headers.get('content-type') || 'image/jpeg';
-
-          res.setHeader('Content-Type', contentType);
+          const contentType = productionResponse.headers.get('content-type');
+          if (contentType) {
+            res.setHeader('Content-Type', contentType);
+          }
           res.setHeader('Cache-Control', 'public, max-age=604800');
           res.setHeader('Access-Control-Allow-Origin', '*');
-          return res.send(Buffer.from(buffer));
+
+          // Stream response to avoid memory exhaustion (DoS prevention)
+          return productionResponse.body.pipe(res);
         } catch (fallbackError) {
-          console.error(`[Thumbnail] Production fallback failed for POI ${id}, asset ${assetId}:`, fallbackError);
+          console.error(`[Thumbnail] Production fallback failed for POI ${id}, asset ${assetId}:`, fallbackError.message);
           return res.status(404).json({ error: 'Image not found' });
         }
       }
@@ -1458,15 +1460,17 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
             return res.status(statusCode).json({ error: message });
           }
 
-          const buffer = await productionResponse.arrayBuffer();
-          const contentType = productionResponse.headers.get('content-type') || 'image/jpeg';
-
-          res.setHeader('Content-Type', contentType);
+          const contentType = productionResponse.headers.get('content-type');
+          if (contentType) {
+            res.setHeader('Content-Type', contentType);
+          }
           res.setHeader('Cache-Control', 'public, max-age=604800');
           res.setHeader('Access-Control-Allow-Origin', '*');
-          return res.send(Buffer.from(buffer));
+
+          // Stream response to avoid memory exhaustion (DoS prevention)
+          return productionResponse.body.pipe(res);
         } catch (fallbackError) {
-          console.error(`[Asset Thumbnail] Production fallback failed for asset ${assetId}:`, fallbackError);
+          console.error(`[Asset Thumbnail] Production fallback failed for asset ${assetId}:`, fallbackError.message);
           return res.status(503).json({ error: 'Image service unavailable' });
         }
       }
@@ -1522,15 +1526,17 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
             return res.status(statusCode).json({ error: message });
           }
 
-          const buffer = await productionResponse.arrayBuffer();
-          const contentType = productionResponse.headers.get('content-type') || 'image/jpeg';
-
-          res.setHeader('Content-Type', contentType);
+          const contentType = productionResponse.headers.get('content-type');
+          if (contentType) {
+            res.setHeader('Content-Type', contentType);
+          }
           res.setHeader('Cache-Control', 'public, max-age=86400');
           res.setHeader('Access-Control-Allow-Origin', '*');
-          return res.send(Buffer.from(buffer));
+
+          // Stream response to avoid memory exhaustion (DoS prevention)
+          return productionResponse.body.pipe(res);
         } catch (fallbackError) {
-          console.error(`[Asset Original] Production fallback failed for asset ${assetId}:`, fallbackError);
+          console.error(`[Asset Original] Production fallback failed for asset ${assetId}:`, fallbackError.message);
           return res.status(503).json({ error: 'Image service unavailable' });
         }
       }

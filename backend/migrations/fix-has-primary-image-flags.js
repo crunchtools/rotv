@@ -19,10 +19,10 @@ const pool = new Pool({
 async function main() {
   console.log('Fixing has_primary_image flags...\n');
 
-  // Count POIs with stale flags
-  const staleCount = await pool.query(`
-    SELECT COUNT(*)
-    FROM pois
+  // Clear stale flags (UPDATE returns row count, no need for separate COUNT query)
+  const result = await pool.query(`
+    UPDATE pois
+    SET has_primary_image = false
     WHERE has_primary_image = true
       AND id NOT IN (
         SELECT DISTINCT poi_id
@@ -32,24 +32,8 @@ async function main() {
       )
   `);
 
-  console.log(`Found ${staleCount.rows[0].count} POIs with stale has_primary_image flags`);
-
-  if (staleCount.rows[0].count > 0) {
-    // Clear stale flags
-    const result = await pool.query(`
-      UPDATE pois
-      SET has_primary_image = false
-      WHERE has_primary_image = true
-        AND id NOT IN (
-          SELECT DISTINCT poi_id
-          FROM poi_media
-          WHERE role = 'primary'
-            AND moderation_status IN ('published', 'auto_approved')
-        )
-    `);
-
-    console.log(`✓ Cleared ${result.rowCount} stale flags\n`);
-  }
+  console.log(`Found ${result.rowCount} POIs with stale has_primary_image flags`);
+  console.log(`✓ Cleared ${result.rowCount} stale flags\n`);
 
   // Verify counts match
   const poisWithFlag = await pool.query('SELECT COUNT(*) FROM pois WHERE has_primary_image = true');
