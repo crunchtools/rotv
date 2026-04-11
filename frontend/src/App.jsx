@@ -262,6 +262,16 @@ function AppContent() {
     }
   }, [activeTab, location.pathname, navigate]);
 
+  // Sync URL to settings tab (for direct navigation to /admin/jobs)
+  useEffect(() => {
+    if (location.pathname === '/admin/jobs') {
+      console.log('[App] Detected /admin/jobs in URL, opening Jobs dashboard');
+      setActiveTab('settings');
+      setSettingsTab('jobs');
+      // JobsDashboard will auto-expand based on URL params (job= and type=)
+    }
+  }, [location.pathname, location.search]);
+
   // Handle POI type filter - filters map to show only specified types
   // typesToShow: array of POI type names, or null to show all
   const handleFilterByTypes = useCallback((typesToShow) => {
