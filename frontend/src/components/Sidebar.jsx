@@ -1409,10 +1409,12 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
   // Collect news for this POI and redirect to Jobs dashboard
   const handleCollectNews = async () => {
     if (!poiId) return;
+    console.log('[PoiNews] Starting collection for POI:', poiId);
     setCollecting(true);
 
     try {
       const timezone = localStorage.getItem('app-timezone') || 'America/New_York';
+      console.log('[PoiNews] Fetching news with timezone:', timezone);
       const response = await fetch(`/api/admin/pois/${poiId}/news/collect`, {
         method: 'POST',
         credentials: 'include',
@@ -1420,16 +1422,24 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
         body: JSON.stringify({ timezone })
       });
 
+      console.log('[PoiNews] Response:', response.status, response.ok);
+
       if (response.ok) {
         const result = await response.json();
+        console.log('[PoiNews] Result:', result);
+        const targetUrl = `/admin/jobs?job=${result.jobId}&type=${result.jobType}`;
+        console.log('[PoiNews] Navigating to:', targetUrl);
         // Redirect to Jobs dashboard with job identifier
-        navigate(`/admin/jobs?job=${result.jobId}&type=${result.jobType}`);
+        navigate(targetUrl);
+        console.log('[PoiNews] Navigate called');
       } else {
         const error = await response.json();
+        console.error('[PoiNews] Error response:', error);
         alert(`Collection failed: ${error.error || 'Unknown error'}`);
         setCollecting(false);
       }
     } catch (err) {
+      console.error('[PoiNews] Exception:', err);
       alert(`Collection failed: ${err.message}`);
       setCollecting(false);
     }

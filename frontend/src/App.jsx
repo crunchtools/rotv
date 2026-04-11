@@ -264,7 +264,9 @@ function AppContent() {
 
   // Sync URL to settings tab (for direct navigation to /admin/jobs)
   useEffect(() => {
+    console.log('[App] URL changed:', location.pathname, location.search);
     if (location.pathname === '/admin/jobs') {
+      console.log('[App] Detected /admin/jobs, switching to Jobs dashboard');
       setActiveTab('settings');
       setSettingsTab('jobs');
       // JobsDashboard will auto-expand based on URL params (job= and type=)
