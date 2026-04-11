@@ -22,7 +22,7 @@ export const COLLECTION_TYPES = [
     scheduleJobName: 'news-collection',
     schedule: '0 6 * * *',
     statusTable: 'news_job_status',
-    historyTypes: ['news'],
+    historyTypes: ['news', 'news_single', 'events_single'],
     triggerEndpoint: '/api/admin/news/collect',
     manualTriggerMethod: 'POST',
     hasPrompt: true

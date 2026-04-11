@@ -439,10 +439,7 @@ Return ONLY valid JSON:
 For LISTING/HYBRID: populate detail_links with URLs to individual ${contentType} pages (max 15).
 For DETAIL: detail_links should be empty.`;
 
-  const result = await generateTextWithCustomPrompt(pool, prompt, {
-    useSearchGrounding: false,
-    forceProvider: 'gemini'
-  });
+  const result = await generateTextWithCustomPrompt(pool, prompt);
 
   // Parse JSON from response (handle markdown code blocks)
   const text = result.response || result;
@@ -551,7 +548,7 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
  * @param {string} collectionType - 'news', 'events', or 'both' to indicate what's being collected
  * @returns {Object} - { news: [], events: [] }
  */
-export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both') {
+export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null) {
   console.log(`[AI Research] Collection type: ${collectionType}`);
   const activities = poi.primary_activities || 'None specified';
   const website = poi.more_info_link || 'No website available';
@@ -617,6 +614,11 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     jobId    // Preserve job association
   });
 
+  // Progress reporting helper — calls callback if provided
+  const reportProgress = (message) => {
+    if (onProgress) onProgress(message);
+  };
+
   console.log(`[AI Research] Starting search for: ${poi.name}`);
   console.log(`[AI Research]   - Website: ${website}`);
   console.log(`[AI Research]   - Events URL: ${eventsUrl}`);
@@ -654,6 +656,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page') {
     try {
       checkCancellation();
+      reportProgress(`Crawling events page: ${eventsUrl}`);
       updateProgress(poi.id, {
         phase: 'classifying_events',
         message: 'Analyzing events pages...',
@@ -664,11 +667,14 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       if (crawlResult.pages.length > 0) {
         classifiedEventsContent = crawlResult.pages.map(p => `### Event Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
         usedClassifier = true;
+        reportProgress(`Found ${crawlResult.pages.length} event pages (crawled ${crawlResult.totalPagesRendered} pages)`);
         console.log(`[AI Research] Classifier found ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered)`);
       } else {
+        reportProgress('No event pages found on dedicated URL, trying legacy crawl');
         console.log(`[AI Research] Classifier found no event detail pages, falling back to legacy crawl`);
       }
     } catch (err) {
+      reportProgress(`Events page crawl failed: ${err.message}`);
       console.log(`[Classifier] ⚠️ Classification failed: ${err.message}, falling back to legacy crawl`);
     }
   }
@@ -686,6 +692,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
         steps: ['Initialized', 'Extracting events page']
       });
 
+      reportProgress(`Rendering events page: ${eventsPageToRender}`);
       console.log(`[AI Research] Rendering events page with Readability pipeline: ${eventsPageToRender}`);
       const extracted = await extractPageContent(eventsPageToRender, {
         timeout: 30000,
@@ -736,6 +743,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   if (collectionType !== 'events' && newsUrl !== 'No dedicated news page') {
     try {
       checkCancellation();
+      reportProgress(`Crawling news page: ${newsUrl}`);
       updateProgress(poi.id, {
         phase: 'classifying_news',
         message: 'Analyzing news pages...',
@@ -746,11 +754,14 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       if (crawlResult.pages.length > 0) {
         classifiedNewsContent = crawlResult.pages.map(p => `### News Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
         usedNewsClassifier = true;
+        reportProgress(`Found ${crawlResult.pages.length} news pages (crawled ${crawlResult.totalPagesRendered} pages)`);
         console.log(`[AI Research] Classifier found ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered)`);
       } else {
+        reportProgress('No news pages found on dedicated URL, trying legacy crawl');
         console.log(`[AI Research] Classifier found no news detail pages, falling back to legacy crawl`);
       }
     } catch (err) {
+      reportProgress(`News page crawl failed: ${err.message}`);
       console.log(`[Classifier] ⚠️ News classification failed: ${err.message}, falling back to legacy crawl`);
     }
   }
@@ -768,6 +779,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
         steps: ['Initialized', 'Extracting news page']
       });
 
+      reportProgress(`Rendering news page: ${newsPageToRender}`);
       console.log(`[AI Research] Rendering news page with Readability pipeline: ${newsPageToRender}`);
       const extracted = await extractPageContent(newsPageToRender, {
         timeout: 30000,
@@ -908,33 +920,22 @@ Extract ALL news from this content using these relaxed criteria.`;
     const currentProgress = getCollectionProgress(poi.id);
     const initialProvider = currentProgress?.provider || 'perplexity';
 
-    // When we have rich crawled content from a dedicated URL, skip search grounding —
-    // the LLM just needs to extract structured data from what we already have
-    // Classifier path always disables search grounding (we have real crawled content)
-    // Legacy path checks for dedicated URL content as before
-    const hasDedicatedEventsContent = eventsUrl !== 'No dedicated events page' && renderedEventsContent;
-    const hasDedicatedNewsContent = newsUrl !== 'No dedicated news page' && renderedNewsContent;
-    const useSearchGrounding = (usedClassifier || usedNewsClassifier)
-      ? false
-      : (!hasDedicatedEventsContent && !hasDedicatedNewsContent);
+    const hasCrawledContent = renderedEventsContent || renderedNewsContent || usedClassifier || usedNewsClassifier;
+    if (hasCrawledContent) {
+      reportProgress('Sending crawled content to Gemini for extraction');
+    } else {
+      reportProgress(`Sending prompt to ${providerToUse === 'perplexity' ? 'Perplexity' : 'Gemini'} for analysis`);
+    }
 
     const aiOptions = {};
-    if (!useSearchGrounding) {
-      aiOptions.useSearchGrounding = false;
-      // Force Gemini for extraction — Perplexity always searches, defeating the purpose
-      aiOptions.forceProvider = 'gemini';
-      console.log(`[AI Research] Using Gemini without search grounding (have crawled content from dedicated URLs)`);
-    }
 
     updateProgress(poi.id, {
       phase: 'ai_search',
-      message: useSearchGrounding
-        ? 'Searching with AI (web search)...'
-        : 'Extracting events/news from crawled content...',
-      steps: ['Initialized', 'Rendered pages', useSearchGrounding ? 'Searching with AI' : 'Extracting from content']
+      message: hasCrawledContent ? 'Extracting events/news from crawled content...' : 'Analyzing with AI...',
+      steps: ['Initialized', 'Rendered pages', 'AI extraction']
     });
 
-    debugLog(`[AI Research POI ${poi.id}] ====== BEFORE AI CALL (provider=${initialProvider}, searchGrounding=${useSearchGrounding}) ======`);
+    debugLog(`[AI Research POI ${poi.id}] ====== BEFORE AI CALL (provider=${initialProvider}) ======`);
     const aiResult = await generateTextWithCustomPrompt(pool, prompt, aiOptions);
     debugLog(`[AI Research POI ${poi.id}] ====== AFTER AI CALL ======`);
     debugLog(`[AI Research POI ${poi.id}] aiResult: ${JSON.stringify({
@@ -951,6 +952,7 @@ Extract ALL news from this content using these relaxed criteria.`;
       updateProgress(poi.id, { provider: usedProvider });
       debugLog(`[AI Research POI ${poi.id}] Provider changed to: '${usedProvider}'`);
     }
+    reportProgress(`${usedProvider === 'perplexity' ? 'Perplexity' : 'Gemini'} responded (${response.length} chars)`);
     console.log(`[AI Research] Received response (${response.length} chars) from ${usedProvider}`);
 
     // Parse JSON response
@@ -962,6 +964,7 @@ Extract ALL news from this content using these relaxed criteria.`;
     }
 
     const result = JSON.parse(jsonMatch[0]);
+    reportProgress(`Extracted ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
     console.log(`[AI Research] ✓ Found ${result.news?.length || 0} news, ${result.events?.length || 0} events for ${poi.name}`);
 
     // Date correction removed - now using timezone-aware AI prompt with explicit ISO 8601 format
@@ -1013,44 +1016,25 @@ Extract ALL news from this content using these relaxed criteria.`;
     // When search grounding is off, always override — Gemini fabricates URLs from patterns
     // When search grounding is on, only override missing/generic URLs (AI has real search results)
     if (!usedClassifier) {
-      console.log(`[Link Matcher] Checking conditions - events: ${result.events?.length || 0}, eventsLinks: ${eventsLinks.length}, searchGrounding: ${useSearchGrounding}`);
+      console.log(`[Link Matcher] Checking conditions - events: ${result.events?.length || 0}, eventsLinks: ${eventsLinks.length}`);
       if (result.events && result.events.length > 0 && eventsLinks.length > 0) {
         updateProgress(poi.id, {
           phase: 'matching_links',
           message: `Matching ${result.events.length} events to deep links...`,
-          steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links']
+          steps: ['Initialized', 'Rendered pages', 'AI extraction complete', 'Matching deep links']
         });
 
         console.log(`[Link Matcher] Attempting to match ${result.events.length} events to ${eventsLinks.length} links...`);
         let matchCount = 0;
-        let overrideCount = 0;
         result.events.forEach(event => {
-          // Override if no URL, or if URL is a generic/index page
-          const hasIndexUrl = event.source_url && (
-            isGenericUrl(event.source_url) ||
-            event.source_url === eventsUrl  // Exactly matches the events page URL
-          );
-
-          // Without search grounding, always override — AI-generated URLs are fabricated
-          const shouldOverride = !useSearchGrounding ||
-            !event.source_url || event.source_url === 'N/A' || hasIndexUrl;
-
-          if (shouldOverride) {
-            if (!useSearchGrounding && event.source_url && event.source_url !== 'N/A' && !hasIndexUrl) {
-              console.log(`[Link Matcher] Overriding AI-fabricated URL for "${event.title.substring(0, 40)}..."`);
-              overrideCount++;
-            } else if (hasIndexUrl) {
-              console.log(`[Link Matcher] Overriding index URL for "${event.title.substring(0, 40)}..."`);
-              overrideCount++;
-            }
-            const matchedUrl = matchItemToLink(event, eventsLinks, 'event');
-            if (matchedUrl) {
-              event.source_url = matchedUrl;
-              matchCount++;
-            }
+          // Always override AI-generated URLs with matched crawled links
+          const matchedUrl = matchItemToLink(event, eventsLinks, 'event');
+          if (matchedUrl) {
+            event.source_url = matchedUrl;
+            matchCount++;
           }
         });
-        console.log(`[Link Matcher] Matched ${matchCount} events to deep links (${overrideCount} URLs overridden)`);
+        console.log(`[Link Matcher] Matched ${matchCount} events to deep links`);
       } else {
         console.log(`[Link Matcher] Skipping event link matching - conditions not met`);
       }
@@ -1059,44 +1043,25 @@ Extract ALL news from this content using these relaxed criteria.`;
     }
 
     if (!usedNewsClassifier) {
-      console.log(`[Link Matcher] Checking conditions - news: ${result.news?.length || 0}, newsLinks: ${newsLinks.length}, searchGrounding: ${useSearchGrounding}`);
+      console.log(`[Link Matcher] Checking conditions - news: ${result.news?.length || 0}, newsLinks: ${newsLinks.length}`);
       if (result.news && result.news.length > 0 && newsLinks.length > 0) {
         updateProgress(poi.id, {
           phase: 'matching_links',
           message: `Matching ${result.news.length} news items to deep links...`,
-          steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links']
+          steps: ['Initialized', 'Rendered pages', 'AI extraction complete', 'Matching deep links']
         });
 
         console.log(`[Link Matcher] Attempting to match ${result.news.length} news items to ${newsLinks.length} links...`);
         let matchCount = 0;
-        let overrideCount = 0;
         result.news.forEach(newsItem => {
-          // Override if no URL, or if URL is a generic/index page
-          const hasIndexUrl = newsItem.source_url && (
-            isGenericUrl(newsItem.source_url) ||
-            newsItem.source_url === newsUrl  // Exactly matches the news page URL
-          );
-
-          // Without search grounding, always override — AI-generated URLs are fabricated
-          const shouldOverride = !useSearchGrounding ||
-            !newsItem.source_url || newsItem.source_url === 'N/A' || hasIndexUrl;
-
-          if (shouldOverride) {
-            if (!useSearchGrounding && newsItem.source_url && newsItem.source_url !== 'N/A' && !hasIndexUrl) {
-              console.log(`[Link Matcher] Overriding AI-fabricated URL for "${newsItem.title.substring(0, 40)}..."`);
-              overrideCount++;
-            } else if (hasIndexUrl) {
-              console.log(`[Link Matcher] Overriding index URL for "${newsItem.title.substring(0, 40)}..."`);
-              overrideCount++;
-            }
-            const matchedUrl = matchItemToLink(newsItem, newsLinks, 'news');
-            if (matchedUrl) {
-              newsItem.source_url = matchedUrl;
-              matchCount++;
-            }
+          // Always override AI-generated URLs with matched crawled links
+          const matchedUrl = matchItemToLink(newsItem, newsLinks, 'news');
+          if (matchedUrl) {
+            newsItem.source_url = matchedUrl;
+            matchCount++;
           }
         });
-        console.log(`[Link Matcher] Matched ${matchCount} news items to deep links (${overrideCount} index URLs overridden)`);
+        console.log(`[Link Matcher] Matched ${matchCount} news items to deep links`);
       } else {
         console.log(`[Link Matcher] Skipping news link matching - conditions not met`);
       }
@@ -1341,10 +1306,7 @@ Return your results in this exact JSON structure:
 
 Return {"news": []} if no relevant news found.`;
 
-            const serperAiResult = await generateTextWithCustomPrompt(pool, serperPrompt, {
-              useSearchGrounding: false,
-              forceProvider: 'gemini'
-            });
+            const serperAiResult = await generateTextWithCustomPrompt(pool, serperPrompt);
 
             const serperAiResponse = serperAiResult.response;
             console.log(`[Serper] Received extraction response (${serperAiResponse.length} chars) from ${serperAiResult.provider}`);

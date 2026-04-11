@@ -70,9 +70,10 @@ function formatCronHuman(cron) {
 }
 
 export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const urlJobId = searchParams.get('job');
   const urlJobType = searchParams.get('type');
+  const urlPoiId = searchParams.get('poi');
 
   const [scheduledJobs, setScheduledJobs] = useState([]);
   const [scheduledLoading, setScheduledLoading] = useState(true);
@@ -137,18 +138,15 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, []);
 
-  const fetchRunLogs = useCallback(async (jobType, runId) => {
+  const fetchRunLogs = useCallback(async (jobType, runId, poiId) => {
     try {
       let res;
       if (jobType === 'news_single' || jobType === 'events_single') {
-        // Single-POI jobs: query by poiId
-        const params = new URLSearchParams({ jobType, poiId: runId, limit: '200' });
+        // Single-POI jobs: query by job_id (runId) using the batch logs endpoint
+        const params = new URLSearchParams({ limit: '200' });
         if (logLevelFilter !== 'all') params.set('level', logLevelFilter);
-        res = await fetch(`${API_BASE}/api/admin/jobs/logs?${params}`, { credentials: 'include' });
-        if (res.ok) {
-          const data = await res.json();
-          setRunLogs(data.data?.logs || []);
-        }
+        res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${runId}/logs?${params}`, { credentials: 'include' });
+        if (res.ok) setRunLogs(await res.json());
       } else {
         // Batch jobs: query by job_id
         const params = new URLSearchParams({ limit: '200' });
@@ -261,23 +259,28 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   }, [expandedScheduled, scheduledJobs, fetchJobHistory, jobHistory]);
 
   useEffect(() => {
-    if (expandedRun) fetchRunLogs(expandedRun.jobType, expandedRun.runId);
+    if (expandedRun) fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
   }, [expandedRun, logLevelFilter, fetchRunLogs]);
 
   // Poll logs when a run is expanded and its job is running
   useEffect(() => {
     if (!expandedRun) return;
 
-    // For single-POI jobs, poll briefly to catch any late-arriving logs
+    // For single-POI jobs, poll logs and refresh history until job completes
     if (expandedRun.jobType === 'news_single' || expandedRun.jobType === 'events_single') {
       let pollCount = 0;
       const interval = setInterval(() => {
-        fetchRunLogs(expandedRun.jobType, expandedRun.runId);
+        fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
         pollCount++;
-        // Stop polling after 15 attempts (30 seconds)
-        if (pollCount >= 15) {
-          clearInterval(interval);
+        // Also refresh history every 3rd poll so the run entry status updates
+        if (pollCount % 3 === 0) {
+          const job = scheduledJobs.find(j => j.id === 'news');
+          if (job) {
+            setJobHistory(prev => { const next = { ...prev }; delete next[job.id]; return next; });
+          }
         }
+        // Stop after 90 seconds (45 polls at 2s)
+        if (pollCount >= 45) clearInterval(interval);
       }, 2000);
 
       return () => clearInterval(interval);
@@ -297,7 +300,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
     // Poll logs every 2 seconds while running
     const interval = setInterval(() => {
-      fetchRunLogs(expandedRun.jobType, expandedRun.runId);
+      fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
     }, 2000);
 
     return () => clearInterval(interval);
@@ -315,14 +318,18 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, [jobHistory, autoExpandNewestRun]);
 
-  // Auto-expand job from URL parameters (for single-POI redirects)
+  // Auto-expand job from URL parameters (for single-POI and batch redirects)
+  // Clears URL params after consuming to prevent re-firing on every jobHistory change
   useEffect(() => {
     if (urlJobId && urlJobType && !scheduledLoading) {
-      // For single-POI jobs, directly expand using URL parameters
+      // For single-POI jobs, expand the News & Events card and the specific run
       if (urlJobType === 'news_single' || urlJobType === 'events_single') {
-        setExpandedRun({ jobType: urlJobType, runId: urlJobId });
+        setExpandedScheduled('news');
+        setExpandedRun({ jobType: urlJobType, runId: urlJobId, poiId: urlPoiId || urlJobId });
 
-        // Scroll to logs panel if it exists (will exist after logs load)
+        // Clear URL params so this effect doesn't re-fire
+        setSearchParams({}, { replace: true });
+
         setTimeout(() => {
           const element = document.querySelector('.job-logs-panel');
           if (element) {
@@ -338,8 +345,8 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
         if (targetRun) {
           setExpandedRun({ jobType: targetRun.job_type, runId: targetRun.id });
+          setSearchParams({}, { replace: true });
 
-          // Scroll to the job entry
           setTimeout(() => {
             const element = document.getElementById(`job-${targetRun.job_type}-${targetRun.id}`);
             if (element) {
@@ -349,13 +356,16 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
         }
       }
     }
-  }, [urlJobId, urlJobType, scheduledLoading, jobHistory]);
+  }, [urlJobId, urlJobType, scheduledLoading, jobHistory, setSearchParams]);
 
   const handleExpandRun = (jobType, run) => {
-    const key = `${jobType}-${run.id}`;
-    if (expandedRun && `${expandedRun.jobType}-${expandedRun.runId}` === key) {
+    const key = `${jobType}-${String(run.id)}`;
+    if (expandedRun && `${expandedRun.jobType}-${String(expandedRun.runId)}` === key) {
       setExpandedRun(null); setRunLogs([]); setLogLevelFilter('all');
     } else {
+      // For single-POI jobs, the run's id in history is the runId (timestamp), but logs are queried by poi_id
+      // The history query returns poi_id count as items_total, so we can't get poi_id from there
+      // Instead, query logs by job_id (which is the runId) using the batch endpoint
       setExpandedRun({ jobType, runId: run.id }); setLogLevelFilter('all'); setLogDetailsExpanded(new Set());
     }
   };
@@ -740,7 +750,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                       ) : (
                         <div className="job-runs-list">
                           {runs.map(run => {
-                            const isExpanded = expandedRun && expandedRun.jobType === run.job_type && expandedRun.runId === run.id;
+                            const isExpanded = expandedRun && expandedRun.jobType === run.job_type && String(expandedRun.runId) === String(run.id);
                             return (
                               <div
                                 key={`${run.job_type}-${run.id}`}

@@ -221,22 +221,20 @@ export async function getInterpolatedPrompt(pool, promptKey, destination) {
 }
 
 /**
- * Generate text content using Gemini with Google Search grounding
+ * Generate text content using Gemini
  */
 export async function generateText(pool, promptKey, destination) {
   const genAI = await createGeminiClient(pool);
 
-  // Enable Google Search grounding for better factual content
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
 
   const template = await getPromptTemplate(pool, promptKey);
   const prompt = interpolatePrompt(template, destination);
 
-  console.log(`Generating ${promptKey} for destination: ${destination.name} (with Google Search)`);
+  console.log(`Generating ${promptKey} for destination: ${destination.name}`);
 
   const generation = await model.generateContent(prompt);
   const response = generation.response;
@@ -246,22 +244,17 @@ export async function generateText(pool, promptKey, destination) {
 }
 
 /**
- * Generate text content using a custom prompt with Google Search grounding
+ * Generate text content using a custom prompt
  */
 export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {
-  const { useSearchGrounding = true } = options;
   const genAI = await createGeminiClient(pool);
 
-  const modelConfig = {
+  const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
     generationConfig: { temperature: 0.3 }
-  };
-  if (useSearchGrounding) {
-    modelConfig.tools = [{ googleSearch: {} }];
-  }
-  const model = genAI.getGenerativeModel(modelConfig);
+  });
 
-  console.log(`Generating with custom prompt (${customPrompt.length} chars, ${useSearchGrounding ? 'with' : 'without'} Google Search)`);
+  console.log(`Generating with custom prompt (${customPrompt.length} chars)`);
 
   const generation = await model.generateContent(customPrompt);
   const response = generation.response;
@@ -281,10 +274,8 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
 export async function researchLocation(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
   const genAI = await createGeminiClient(pool);
 
-  // Enable Google Search grounding for research
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
 
@@ -308,7 +299,7 @@ export async function researchLocation(pool, destination, availableActivities = 
   const prompt = interpolatePrompt(promptTemplate, destination);
 
   const runId = Math.floor(Date.now() / 1000);
-  console.log(`Researching location: ${destination.name} (with Google Search, ${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
+  console.log(`Researching location: ${destination.name} (${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
   logInfo(runId, 'research', null, destination.name, `Research: ${destination.name}`);
 
   const generation = await model.generateContent(prompt);
@@ -376,7 +367,7 @@ Example 3 - Historic Building (orange background, house shape):
 export async function generateIconSvg(pool, description, color) {
   const genAI = await createGeminiClient(pool);
 
-  // Don't use Google Search for icon generation - we want creative output
+  // Plain LLM for icon generation - we want creative output
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL
   });
@@ -510,7 +501,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
 
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
 
