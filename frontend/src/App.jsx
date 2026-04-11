@@ -968,13 +968,17 @@ function AppContent() {
   // Helper to update URL with POI slug (for shareable links)
   // Uses path-based routing: /:slug instead of ?poi=slug
   const updateUrlWithPoi = useCallback((poiName) => {
+    console.log('[App] updateUrlWithPoi called with:', poiName);
+    console.trace('[App] Stack trace');
     if (poiName) {
       const slug = generateSlug(poiName);
+      console.log('[App] Navigating to POI slug:', slug);
       // Set flag to prevent browser nav effect from clearing POI
       isProgrammaticNavigationRef.current = true;
       navigate(`/${slug}`);
     } else {
       // No POI - navigate to root
+      console.log('[App] Navigating to root (no POI)');
       isProgrammaticNavigationRef.current = true;
       navigate('/');
     }

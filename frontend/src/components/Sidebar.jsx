@@ -1549,10 +1549,12 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
   // Collect events for this POI and redirect to Jobs dashboard
   const handleCollectEvents = async () => {
     if (!poiId) return;
+    console.log('[PoiEvents] Starting collection for POI:', poiId);
     setCollecting(true);
 
     try {
       const timezone = localStorage.getItem('app-timezone') || 'America/New_York';
+      console.log('[PoiEvents] Fetching events with timezone:', timezone);
       const response = await fetch(`/api/admin/pois/${poiId}/events/collect`, {
         method: 'POST',
         credentials: 'include',
@@ -1560,16 +1562,24 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
         body: JSON.stringify({ timezone })
       });
 
+      console.log('[PoiEvents] Response:', response.status, response.ok);
+
       if (response.ok) {
         const result = await response.json();
+        console.log('[PoiEvents] Result:', result);
+        const targetUrl = `/admin/jobs?job=${result.jobId}&type=${result.jobType}`;
+        console.log('[PoiEvents] Navigating to:', targetUrl);
         // Redirect to Jobs dashboard with job identifier
-        navigate(`/admin/jobs?job=${result.jobId}&type=${result.jobType}`);
+        navigate(targetUrl);
+        console.log('[PoiEvents] Navigate called');
       } else {
         const error = await response.json();
+        console.error('[PoiEvents] Error response:', error);
         alert(`Collection failed: ${error.error || 'Unknown error'}`);
         setCollecting(false);
       }
     } catch (err) {
+      console.error('[PoiEvents] Exception:', err);
       alert(`Collection failed: ${err.message}`);
       setCollecting(false);
     }
