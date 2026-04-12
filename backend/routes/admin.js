@@ -74,7 +74,7 @@ import {
   getDisplaySlots as getTrailDisplaySlots
 } from '../services/trailStatusService.js';
 import imageServerClient from '../services/imageServerClient.js';
-import { logInfo, logError } from '../services/jobLogger.js';
+import { logInfo, logError, flush as flushJobLogs } from '../services/jobLogger.js';
 
 const router = express.Router();
 
@@ -613,7 +613,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Research location and fill all fields using AI with Google Search
+  // Research location and fill all fields using AI
   router.post('/ai/research', isAdmin, async (req, res) => {
     const { destination } = req.body;
 
@@ -2767,7 +2767,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           success: true,
           alreadyRunning: true,
           message: 'Collection already in progress',
-          progress: existingProgress
+          progress: existingProgress,
+          jobId: existingProgress.runId || poi.id,
+          poiId: poi.id,
+          jobType: 'news_single'
         });
       }
 
@@ -2781,38 +2784,67 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Get timezone from request body (defaults to America/New_York)
       const timezone = req.body.timezone || 'America/New_York';
-      console.log(`Using timezone: ${timezone}`);
 
-      // Collect news and events for this POI
-      const { news, events, metadata } = await collectNewsForPoi(pool, poi, null, timezone, 'news');
+      // Generate a unique run ID so each collection attempt is a separate entry in history
+      const runIdResult = await pool.query("SELECT nextval('single_poi_run_id_seq')");
+      const runId = parseInt(runIdResult.rows[0].nextval);
+      // Store runId in progress so alreadyRunning response can reference it
+      updateProgress(poi.id, { runId });
 
-      // Save ONLY NEWS to database
-      const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
+      const urls = [
+        poi.news_url ? `news: ${poi.news_url}` : null,
+        poi.events_url ? `events: ${poi.events_url}` : null,
+        poi.more_info_link ? `website: ${poi.more_info_link}` : null
+      ].filter(Boolean).join(', ');
+      logInfo(runId, 'news_single', poi.id, poi.name, `News collection started (${urls || 'no URLs configured'})`);
+      await flushJobLogs();
 
-      // Update final progress with save statistics
-      updateProgress(poi.id, {
-        phase: 'complete',
-        message: `Complete! Found ${news.length} • Saved ${savedNews} • Skipped ${news.length - savedNews}`,
-        newsFound: news.length,
-        newsSaved: savedNews,
-        newsDuplicate: news.length - savedNews,
-        completed: true
-      });
-
-      logInfo(null, 'news_single', poi.id, poi.name, `${savedNews} news saved`, { news_found: news.length, news_saved: savedNews });
-
+      // Respond immediately so the frontend can redirect to Jobs dashboard
+      // jobId = runId for history grouping, poiId for log querying
       res.json({
         success: true,
-        message: `News collection completed for ${poi.name}`,
-        newsFound: news.length,
-        newsSaved: savedNews,
-        newsDuplicate: news.length - savedNews,
-        jobId: poi.id,  // Use poi_id as identifier for single-POI jobs
+        message: `News collection started for ${poi.name}`,
+        jobId: runId,
+        poiId: poi.id,
         jobType: 'news_single'
       });
+
+      // Run collection in the background (after response is sent)
+      // Progress callback logs each business phase in real-time
+      const onProgress = async (message) => {
+        logInfo(runId, 'news_single', poi.id, poi.name, message);
+        await flushJobLogs();
+      };
+
+      try {
+        const { news, events, metadata } = await collectNewsForPoi(pool, poi, null, timezone, 'news', onProgress);
+
+        logInfo(runId, 'news_single', poi.id, poi.name, `Saving ${news.length} news items to database...`);
+        await flushJobLogs();
+
+        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
+
+        updateProgress(poi.id, {
+          phase: 'complete',
+          message: `Complete! Found ${news.length} • Saved ${savedNews} • Skipped ${news.length - savedNews}`,
+          newsFound: news.length,
+          newsSaved: savedNews,
+          newsDuplicate: news.length - savedNews,
+          completed: true
+        });
+
+        logInfo(runId, 'news_single', poi.id, poi.name, `Complete: ${savedNews} saved, ${news.length - savedNews} skipped`, { news_found: news.length, news_saved: savedNews, completed: true });
+        await flushJobLogs();
+      } catch (bgError) {
+        logError(runId, 'news_single', poi.id, poi.name, `Collection failed: ${bgError.message}`);
+        await flushJobLogs();
+        console.error('Background news collection failed for POI:', bgError);
+      }
     } catch (error) {
-      console.error('Error collecting news for POI:', error);
-      res.status(500).json({ error: 'Failed to collect news for POI' });
+      console.error('Error starting news collection for POI:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to start news collection for POI' });
+      }
     }
   });
 
@@ -2841,7 +2873,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           success: true,
           alreadyRunning: true,
           message: 'Collection already in progress',
-          progress: existingProgress
+          progress: existingProgress,
+          jobId: existingProgress.runId || poi.id,
+          poiId: poi.id,
+          jobType: 'events_single'
         });
       }
 
@@ -2855,38 +2890,65 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Get timezone from request body (defaults to America/New_York)
       const timezone = req.body.timezone || 'America/New_York';
-      console.log(`Using timezone: ${timezone}`);
 
-      // Collect news and events for this POI
-      const { news, events, metadata } = await collectNewsForPoi(pool, poi, null, timezone, 'events');
+      // Generate a unique run ID so each collection attempt is a separate entry in history
+      const runIdResult = await pool.query("SELECT nextval('single_poi_run_id_seq')");
+      const runId = parseInt(runIdResult.rows[0].nextval);
+      updateProgress(poi.id, { runId });
 
-      // Save ONLY EVENTS to database
-      const savedEvents = await saveEventItems(pool, poi.id, events);
+      const urls = [
+        poi.events_url ? `events: ${poi.events_url}` : null,
+        poi.news_url ? `news: ${poi.news_url}` : null,
+        poi.more_info_link ? `website: ${poi.more_info_link}` : null
+      ].filter(Boolean).join(', ');
+      logInfo(runId, 'events_single', poi.id, poi.name, `Events collection started (${urls || 'no URLs configured'})`);
+      await flushJobLogs();
 
-      // Update final progress with save statistics
-      updateProgress(poi.id, {
-        phase: 'complete',
-        message: `Complete! Found ${events.length} • Saved ${savedEvents} • Skipped ${events.length - savedEvents}`,
-        eventsFound: events.length,
-        eventsSaved: savedEvents,
-        eventsDuplicate: events.length - savedEvents,
-        completed: true
-      });
-
-      logInfo(null, 'events_single', poi.id, poi.name, `${savedEvents} events saved`, { events_found: events.length, events_saved: savedEvents });
-
+      // Respond immediately so the frontend can redirect to Jobs dashboard
       res.json({
         success: true,
-        message: `Events collection completed for ${poi.name}`,
-        eventsFound: events.length,
-        eventsSaved: savedEvents,
-        eventsDuplicate: events.length - savedEvents,
-        jobId: poi.id,  // Use poi_id as identifier for single-POI jobs
+        message: `Events collection started for ${poi.name}`,
+        jobId: runId,
+        poiId: poi.id,
         jobType: 'events_single'
       });
+
+      // Run collection in the background (after response is sent)
+      // Progress callback logs each business phase in real-time
+      const onProgress = async (message) => {
+        logInfo(runId, 'events_single', poi.id, poi.name, message);
+        await flushJobLogs();
+      };
+
+      try {
+        const { news, events, metadata } = await collectNewsForPoi(pool, poi, null, timezone, 'events', onProgress);
+
+        logInfo(runId, 'events_single', poi.id, poi.name, `Saving ${events.length} event items to database...`);
+        await flushJobLogs();
+
+        const savedEvents = await saveEventItems(pool, poi.id, events);
+
+        updateProgress(poi.id, {
+          phase: 'complete',
+          message: `Complete! Found ${events.length} • Saved ${savedEvents} • Skipped ${events.length - savedEvents}`,
+          eventsFound: events.length,
+          eventsSaved: savedEvents,
+          eventsDuplicate: events.length - savedEvents,
+          completed: true
+        });
+
+        logInfo(runId, 'events_single', poi.id, poi.name, `Complete: ${savedEvents} saved, ${events.length - savedEvents} skipped`, { events_found: events.length, events_saved: savedEvents, completed: true });
+        await flushJobLogs();
+      } catch (bgError) {
+        logError(runId, 'events_single', poi.id, poi.name, `Collection failed: ${bgError.message}`);
+        await flushJobLogs();
+        console.error('Background events collection failed for POI:', bgError);
+      }
     } catch (error) {
-      console.error('Error collecting events for POI:', error);
-      res.status(500).json({ error: 'Failed to collect events for POI' });
+      console.error('Error starting events collection for POI:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to start events collection for POI' });
+      }
     }
   });
 
@@ -4277,7 +4339,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       const query = `
-        SELECT id, level, message, details, created_at
+        SELECT id, level, message, details, poi_name, created_at
         FROM job_logs
         WHERE job_type = $1 AND poi_id = $2
         ORDER BY created_at DESC

@@ -686,8 +686,8 @@ export async function requeueItem(pool, contentType, contentId) {
 }
 
 /**
- * Fix the source URL for a news/event item via Gemini with Google Search grounding.
- * Searches the web to find the correct URL, updates the item, then requeues for moderation.
+ * Fix the source URL for a news/event item via Gemini.
+ * Analyzes the item to find the correct URL, updates the item, then requeues for moderation.
  */
 export async function researchItem(pool, contentType, contentId) {
   if (contentType !== 'news' && contentType !== 'event') {
@@ -727,7 +727,6 @@ Summarize what you found in 1-2 sentences.`;
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    tools: [{ googleSearch: {} }],
     generationConfig: { temperature: 0 }
   });
 
@@ -793,8 +792,8 @@ Summarize what you found in 1-2 sentences.`;
 }
 
 /**
- * Fix the publication date for a news/event item via Gemini with Google Search grounding.
- * Searches the web to find the publication date, updates the item.
+ * Fix the publication date for a news/event item via Gemini.
+ * Analyzes the item to find the publication date, updates the item.
  */
 export async function fixDate(pool, contentType, contentId) {
   if (contentType !== 'news' && contentType !== 'event') {

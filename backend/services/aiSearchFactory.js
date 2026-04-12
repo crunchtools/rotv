@@ -5,7 +5,7 @@
  * Supports:
  * - Primary/fallback provider configuration
  * - Usage limits with automatic fallback
- * - Provider: Gemini (with Google Search grounding) and Perplexity Sonar (with web search)
+ * - Provider: Gemini and Perplexity Sonar
  *
  * Configuration is stored in admin_settings:
  * - ai_search_primary: 'gemini' or 'perplexity'
@@ -113,13 +113,13 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
   const config = await getConfig(pool);
   debugLog(`[AI Search Factory] Config: primary=${config.primary}, fallback=${config.fallback}, limit=${config.primaryLimit}`);
 
-  // Determine which provider to use
+  // Determine which provider to use (forceProvider overrides for extraction from crawled content)
   let provider = options.forceProvider || config.primary;
   const primaryUsage = currentJobUsage[config.primary] || 0;
   debugLog(`[AI Search Factory] Initial provider: ${provider}, usage: ${primaryUsage}`);
 
-  // Check if we've exceeded the primary limit (skip if provider was explicitly forced)
-  if (!options.forceProvider && config.primaryLimit > 0 && primaryUsage >= config.primaryLimit) {
+  // Check if we've exceeded the primary limit
+  if (config.primaryLimit > 0 && primaryUsage >= config.primaryLimit) {
     if (config.fallback && config.fallback !== 'none') {
       console.log(`[AI Search] Primary limit reached (${primaryUsage}/${config.primaryLimit}), switching to fallback: ${config.fallback}`);
       provider = config.fallback;
@@ -146,7 +146,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
     if (provider === 'gemini') {
       currentJobUsage.gemini++;
       console.log(`[AI Search] Calling Gemini (request #${currentJobUsage.gemini})`);
-      result = await geminiSearch(pool, customPrompt, options);
+      result = await geminiSearch(pool, customPrompt);
     } else {
       currentJobUsage.perplexity++;
       console.log(`[AI Search] Calling Perplexity (request #${currentJobUsage.perplexity})`);
@@ -170,7 +170,7 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
       try {
         if (fallbackProvider === 'gemini') {
           currentJobUsage.gemini++;
-          result = await geminiSearch(pool, customPrompt, options);
+          result = await geminiSearch(pool, customPrompt);
         } else {
           currentJobUsage.perplexity++;
           result = await perplexitySearch(pool, customPrompt);
