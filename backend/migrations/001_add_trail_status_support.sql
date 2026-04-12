@@ -65,12 +65,12 @@ DO $$
 BEGIN
   IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'admin_settings') THEN
     -- Insert settings if they don't exist
-    INSERT INTO admin_settings (setting_key, setting_value, description)
+    INSERT INTO admin_settings (key, value)
     VALUES
-      ('trail_status_collection_enabled', 'true', 'Enable/disable trail status collection'),
-      ('trail_status_collection_interval_hours', '2', 'Hours between status collection runs'),
-      ('trail_status_ai_provider', 'gemini', 'AI provider for status extraction (gemini or perplexity)')
-    ON CONFLICT (setting_key) DO NOTHING;
+      ('trail_status_collection_enabled', 'true'),
+      ('trail_status_collection_interval_hours', '2'),
+      ('trail_status_ai_provider', 'gemini')
+    ON CONFLICT (key) DO NOTHING;
   END IF;
 END$$;
 
