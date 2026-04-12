@@ -1928,6 +1928,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const { id } = req.params;
     const upcomingOnly = req.query.upcoming !== 'false';
     const limit = parseInt(req.query.limit) || 50;
+    const tz = req.query.tz || 'America/New_York';
     let query = `
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type, e.location_details, e.source_url, e.created_at,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
@@ -1937,11 +1938,11 @@ app.get('/api/pois/:id/events', async (req, res) => {
         AND e.moderation_status IN ('published', 'auto_approved')
     `;
     if (upcomingOnly) {
-      query += ` AND e.start_date >= CURRENT_DATE`;
+      query += ` AND e.start_date >= (CURRENT_TIMESTAMP AT TIME ZONE $3)::date`;
     }
     query += ` GROUP BY e.id ORDER BY e.start_date ASC LIMIT $2`;
 
-    const eventsQuery = await pool.query(query, [id, limit]);
+    const eventsQuery = await pool.query(query, upcomingOnly ? [id, limit, tz] : [id, limit]);
     res.json(eventsQuery.rows);
   } catch (error) {
     console.error('Error fetching POI events:', error);
@@ -2115,6 +2116,8 @@ app.get('/api/news/recent', async (req, res) => {
 // All upcoming events across the park (public)
 app.get('/api/events/upcoming', async (req, res) => {
   try {
+    // Use client timezone for "today" calculation (defaults to America/New_York)
+    const tz = req.query.tz || 'America/New_York';
     const upcomingEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
              e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type,
@@ -2123,11 +2126,11 @@ app.get('/api/events/upcoming', async (req, res) => {
       JOIN pois p ON e.poi_id = p.id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
-        AND e.start_date >= CURRENT_DATE
+        AND e.start_date >= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY e.id, p.id, p.name, p.poi_type
       ORDER BY e.start_date ASC
-    `);
+    `, [tz]);
     res.json(upcomingEventsQuery.rows);
   } catch (error) {
     console.error('Error fetching upcoming events:', error);
@@ -2139,6 +2142,7 @@ app.get('/api/events/upcoming', async (req, res) => {
 app.get('/api/events/past', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
+    const tz = req.query.tz || 'America/New_York';
     const pastEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
              e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type,
@@ -2147,12 +2151,12 @@ app.get('/api/events/past', async (req, res) => {
       JOIN pois p ON e.poi_id = p.id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
-        AND e.start_date < CURRENT_DATE
+        AND e.start_date < (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY e.id, p.id, p.name, p.poi_type
       ORDER BY e.start_date DESC
       LIMIT $1
-    `, [limit]);
+    `, [limit, tz]);
     res.json(pastEventsQuery.rows);
   } catch (error) {
     console.error('Error fetching past events:', error);

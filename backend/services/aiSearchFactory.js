@@ -113,8 +113,8 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
   const config = await getConfig(pool);
   debugLog(`[AI Search Factory] Config: primary=${config.primary}, fallback=${config.fallback}, limit=${config.primaryLimit}`);
 
-  // Determine which provider to use
-  let provider = config.primary;
+  // Determine which provider to use (forceProvider overrides for extraction from crawled content)
+  let provider = options.forceProvider || config.primary;
   const primaryUsage = currentJobUsage[config.primary] || 0;
   debugLog(`[AI Search Factory] Initial provider: ${provider}, usage: ${primaryUsage}`);
 

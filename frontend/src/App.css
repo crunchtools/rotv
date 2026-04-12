@@ -12899,6 +12899,22 @@ svg.leaflet-zoom-animated {
   overflow-y: auto;
 }
 
+.job-logs-text {
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 8px;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  font-family: 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-all;
+}
+
 .job-log-entry {
   display: grid;
   grid-template-columns: 12px minmax(80px, 150px) 1fr auto;

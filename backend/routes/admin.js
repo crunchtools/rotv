@@ -2791,7 +2791,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       // Store runId in progress so alreadyRunning response can reference it
       updateProgress(poi.id, { runId });
 
-      logInfo(runId, 'news_single', poi.id, poi.name, 'News collection started');
+      const urls = [
+        poi.news_url ? `news: ${poi.news_url}` : null,
+        poi.events_url ? `events: ${poi.events_url}` : null,
+        poi.more_info_link ? `website: ${poi.more_info_link}` : null
+      ].filter(Boolean).join(', ');
+      logInfo(runId, 'news_single', poi.id, poi.name, `News collection started (${urls || 'no URLs configured'})`);
       await flushJobLogs();
 
       // Respond immediately so the frontend can redirect to Jobs dashboard
@@ -2891,7 +2896,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const runId = parseInt(runIdResult.rows[0].nextval);
       updateProgress(poi.id, { runId });
 
-      logInfo(runId, 'events_single', poi.id, poi.name, 'Events collection started');
+      const urls = [
+        poi.events_url ? `events: ${poi.events_url}` : null,
+        poi.news_url ? `news: ${poi.news_url}` : null,
+        poi.more_info_link ? `website: ${poi.more_info_link}` : null
+      ].filter(Boolean).join(', ');
+      logInfo(runId, 'events_single', poi.id, poi.name, `Events collection started (${urls || 'no URLs configured'})`);
       await flushJobLogs();
 
       // Respond immediately so the frontend can redirect to Jobs dashboard

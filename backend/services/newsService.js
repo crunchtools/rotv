@@ -921,13 +921,14 @@ Extract ALL news from this content using these relaxed criteria.`;
     const initialProvider = currentProgress?.provider || 'perplexity';
 
     const hasCrawledContent = renderedEventsContent || renderedNewsContent || usedClassifier || usedNewsClassifier;
+    const aiOptions = {};
     if (hasCrawledContent) {
+      // Force Gemini for extraction — Perplexity always does web searches, wasting time on crawled content
+      aiOptions.forceProvider = 'gemini';
       reportProgress('Sending crawled content to Gemini for extraction');
     } else {
       reportProgress(`Sending prompt to ${providerToUse === 'perplexity' ? 'Perplexity' : 'Gemini'} for analysis`);
     }
-
-    const aiOptions = {};
 
     updateProgress(poi.id, {
       phase: 'ai_search',
@@ -952,7 +953,7 @@ Extract ALL news from this content using these relaxed criteria.`;
       updateProgress(poi.id, { provider: usedProvider });
       debugLog(`[AI Research POI ${poi.id}] Provider changed to: '${usedProvider}'`);
     }
-    reportProgress(`${usedProvider === 'perplexity' ? 'Perplexity' : 'Gemini'} responded (${response.length} chars)`);
+    reportProgress(`Gemini responded (${response.length} chars)`);
     console.log(`[AI Research] Received response (${response.length} chars) from ${usedProvider}`);
 
     // Parse JSON response
@@ -1191,10 +1192,12 @@ Extract ALL news from this content using these relaxed criteria.`;
           steps: ['Initialized', 'Rendered pages', 'AI search complete', 'Matching deep links', 'Searching external news']
         });
 
+        reportProgress('Searching Serper for external news coverage...');
         console.log(`[Serper] 🔍 Layer 2: Searching for external news coverage...`);
 
         // Get Serper URLs with geographic grounding
         const serperResult = await searchNewsUrls(pool, poi);
+        reportProgress(`Serper returned ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
         console.log(`[Serper] Found ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded}, query: "${serperResult.query}")`);
 
         if (serperResult.urls.length > 0) {
@@ -1211,6 +1214,7 @@ Extract ALL news from this content using these relaxed criteria.`;
                 await new Promise(resolve => setTimeout(resolve, 1500));
               }
 
+              reportProgress(`Crawling external: ${urlData.url}`);
               console.log(`[Serper] Rendering ${urlData.url}...`);
 
               const extracted = await extractPageContent(urlData.url, {
@@ -1242,6 +1246,7 @@ Extract ALL news from this content using these relaxed criteria.`;
             }
           }
 
+          reportProgress(`Crawled ${renderedCount} of ${serperResult.urls.length} external URLs`);
           console.log(`[Serper] Rendered ${renderedCount} of ${serperResult.urls.length} URLs`);
 
           // If we have rendered content, use Gemini to extract structured news
@@ -1306,6 +1311,7 @@ Return your results in this exact JSON structure:
 
 Return {"news": []} if no relevant news found.`;
 
+            reportProgress(`Sending ${renderedSerperContent.length} external articles to Gemini for extraction`);
             const serperAiResult = await generateTextWithCustomPrompt(pool, serperPrompt);
 
             const serperAiResponse = serperAiResult.response;
@@ -1330,12 +1336,15 @@ Return {"news": []} if no relevant news found.`;
                 });
 
                 if (newItems.length > 0) {
+                  reportProgress(`Found ${newItems.length} new articles from external sources`);
                   console.log(`[Serper] Adding ${newItems.length} unique items from external sources`);
                   allNews = [...allNews, ...newItems];
                 } else {
+                  reportProgress('External articles were duplicates, skipped');
                   console.log(`[Serper] All external news items were duplicates, skipped`);
                 }
               } else {
+                reportProgress('No relevant news in external articles');
                 console.log(`[Serper] No relevant news extracted from external sources`);
               }
             }
