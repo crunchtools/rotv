@@ -46,31 +46,35 @@ export async function searchNewsUrls(pool, poi) {
 
   const apiKey = apiKeyResult.rows[0].value;
 
-  const contextResult = await pool.query(`
-    WITH poi_point AS (
-      SELECT
-        id,
-        CASE
-          WHEN poi_type = 'point' AND geom IS NOT NULL THEN geom
-          WHEN poi_type IN ('trail', 'boundary', 'river') AND geometry IS NOT NULL THEN
-            ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
-          ELSE NULL
-        END as point_geom
-      FROM pois
-      WHERE id = $1
-    )
-    SELECT boundary.name
-    FROM poi_point
-    LEFT JOIN pois AS boundary
-      ON boundary.poi_type = 'boundary'
-      AND boundary.boundary_geom IS NOT NULL
-      AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
-    WHERE poi_point.point_geom IS NOT NULL
-    ORDER BY ST_Area(boundary.boundary_geom) ASC
-    LIMIT 1
-  `, [poi.id]);
-
-  const context = contextResult.rows[0]?.name || '';
+  let context = '';
+  try {
+    const contextResult = await pool.query(`
+      WITH poi_point AS (
+        SELECT
+          id,
+          CASE
+            WHEN poi_type = 'point' AND geom IS NOT NULL THEN geom
+            WHEN poi_type IN ('trail', 'boundary', 'river') AND geometry IS NOT NULL THEN
+              ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
+            ELSE NULL
+          END as point_geom
+        FROM pois
+        WHERE id = $1
+      )
+      SELECT boundary.name
+      FROM poi_point
+      LEFT JOIN pois AS boundary
+        ON boundary.poi_type = 'boundary'
+        AND boundary.boundary_geom IS NOT NULL
+        AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
+      WHERE poi_point.point_geom IS NOT NULL
+      ORDER BY ST_Area(boundary.boundary_geom) ASC
+      LIMIT 1
+    `, [poi.id]);
+    context = contextResult.rows[0]?.name || '';
+  } catch (err) {
+    console.warn(`[Serper] PostGIS grounding unavailable, using ungrounded search: ${err.message}`);
+  }
 
   const query = context
     ? `${poi.name} ${context} news`

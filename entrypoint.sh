@@ -88,7 +88,7 @@ MIGRATION_COUNT=0
 for migration in /app/migrations/[0-9]*.sql; do
     [ -f "$migration" ] || continue
     MIGRATION_NAME=$(basename "$migration")
-    if psql -h "$PGRUNDIR" -U postgres -d rotv -f "$migration" > /tmp/migration_output.txt 2>&1; then
+    if psql -h "$PGRUNDIR" -U postgres -d rotv -v ON_ERROR_STOP=1 -f "$migration" > /tmp/migration_output.txt 2>&1; then
         MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
     else
         echo "ERROR: Migration $MIGRATION_NAME failed:"
