@@ -195,7 +195,7 @@ export async function ensureNewsJobCheckpointColumns(pool) {
  * @returns {Array} - Array of job records that need resuming
  */
 export async function findIncompleteJobs(pool) {
-  // Only resume jobs from the last 6 hours — older ones are stale
+  // Only resume jobs from the last 1 hour — older ones are stale
   // (e.g. imported via seed data from a previous run)
   const result = await pool.query(`
     SELECT * FROM news_job_status
