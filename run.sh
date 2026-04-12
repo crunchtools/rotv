@@ -273,9 +273,9 @@ ENVFILE
         echo "Importing seed data..."
         podman exec "$CONTAINER_NAME" psql -U postgres -d rotv -f /tmp/seed-data.sql 2>&1 | grep -c "^COPY" | xargs echo "Imported rows from tables:"
 
-        # Re-run migrations after seed import (seed data may restore old schema)
+        # Re-run numbered migrations after seed import (seed data may restore old schema)
         echo "Re-running migrations..."
-        podman exec "$CONTAINER_NAME" sh -c 'for m in /app/migrations/*.sql; do [ -f "$m" ] && psql -U postgres -d rotv -f "$m"; done' 2>&1 | grep -i "notice\|error" || true
+        podman exec "$CONTAINER_NAME" sh -c 'for m in /app/migrations/[0-9]*.sql; do [ -f "$m" ] && psql -U postgres -d rotv -f "$m"; done' 2>&1 | grep -i "notice\|error" || true
 
         echo "✓ Test database ready"
         echo ""

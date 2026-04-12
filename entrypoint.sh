@@ -81,72 +81,22 @@ if [ -f /tmp/seed-data.sql ]; then
     echo "✓ Seed data imported"
 fi
 
-# Run schema migrations (after seed data import)
-echo "Running schema migrations..."
-psql -h "$PGRUNDIR" -U postgres -d rotv << 'EOF'
--- Add status_url column if it doesn't exist (MTB Trail Status feature)
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM information_schema.columns
-                   WHERE table_name = 'pois' AND column_name = 'status_url') THEN
-        ALTER TABLE pois ADD COLUMN status_url VARCHAR(500);
-    END IF;
-END $$;
-
--- Create trail_status_job_status table if it doesn't exist
-CREATE TABLE IF NOT EXISTS trail_status_job_status (
-  id SERIAL PRIMARY KEY,
-  job_type VARCHAR(50),
-  status VARCHAR(20),
-  started_at TIMESTAMP,
-  completed_at TIMESTAMP,
-  total_trails INTEGER,
-  trails_processed INTEGER,
-  status_found INTEGER,
-  error_message TEXT,
-  poi_ids TEXT,
-  processed_poi_ids TEXT,
-  pg_boss_job_id VARCHAR(100),
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create index if it doesn't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_trail_status_job_status_status') THEN
-        CREATE INDEX idx_trail_status_job_status_status ON trail_status_job_status(status);
-    END IF;
-END $$;
-
--- Create trail_status table if it doesn't exist
-CREATE TABLE IF NOT EXISTS trail_status (
-  id SERIAL PRIMARY KEY,
-  poi_id INTEGER NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
-  status VARCHAR(50) NOT NULL,
-  conditions TEXT,
-  last_updated TIMESTAMP,
-  source_name VARCHAR(200),
-  source_url VARCHAR(1000),
-  weather_impact TEXT,
-  seasonal_closure BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-
--- Create indexes for trail_status if they don't exist
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_trail_status_poi_id') THEN
-        CREATE INDEX idx_trail_status_poi_id ON trail_status(poi_id);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_trail_status_updated') THEN
-        CREATE INDEX idx_trail_status_updated ON trail_status(last_updated DESC);
-    END IF;
-    IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_trail_status_status') THEN
-        CREATE INDEX idx_trail_status_status ON trail_status(status);
-    END IF;
-END $$;
-EOF
-echo "✓ Schema migrations complete"
+# Run all numbered SQL migrations (after seed data import)
+# Migrations are idempotent (IF NOT EXISTS, etc.) so safe to re-run
+echo "Running database migrations..."
+MIGRATION_COUNT=0
+for migration in /app/migrations/[0-9]*.sql; do
+    [ -f "$migration" ] || continue
+    MIGRATION_NAME=$(basename "$migration")
+    if psql -h "$PGRUNDIR" -U postgres -d rotv -f "$migration" > /tmp/migration_output.txt 2>&1; then
+        MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
+    else
+        echo "ERROR: Migration $MIGRATION_NAME failed:"
+        cat /tmp/migration_output.txt
+        exit 1
+    fi
+done
+echo "✓ $MIGRATION_COUNT migrations applied"
 
 # Start the Node.js application
 echo "Starting Roots of The Valley application..."
