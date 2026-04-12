@@ -172,8 +172,8 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
         const res = await fetch(`${API_BASE}${endpoint}`, { credentials: 'include' });
         if (res.ok) {
           const data = await res.json();
-          const isRunning = data && data.status === 'running';
-          if (isRunning) {
+          const isActive = data && (data.status === 'running' || data.status === 'queued');
+          if (isActive) {
             const runId = data.id || data.jobId;
             running[registryId] = { ...data, runId };
 
@@ -678,7 +678,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                     </div>
                   </div>
                   <div className="scheduled-job-badges">
-                    {isRunning && <span className="queue-badge queue-badge-running">running</span>}
+                    {isRunning && <span className="queue-badge queue-badge-running"
+                      style={{ backgroundColor: STATUS_COLORS[runningJobs[job.id]?.status] || '#2196f3' }}>
+                      {runningJobs[job.id]?.status || 'running'}
+                    </span>}
                     {job.currentSchedule && <span className="schedule-badge" title={job.currentSchedule}>{formatCronHuman(job.currentSchedule)}</span>}
                     {!isRunning && job.queueSize > 0 ? <span className="queue-badge queue-badge-active">{job.queueSize} queued</span>
                       : !isRunning ? <span className="queue-badge queue-badge-idle">idle</span> : null}
