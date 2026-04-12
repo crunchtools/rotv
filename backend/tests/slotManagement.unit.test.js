@@ -19,7 +19,7 @@ describe('Slot Management Unit Tests - News Service', () => {
   const TEST_JOB_ID = 'test-job-123';
   const TEST_POI_ID = 1;
   const TEST_POI_NAME = 'Test Trail';
-  const TEST_PROVIDER = 'perplexity';
+  const TEST_PROVIDER = 'gemini';
 
   beforeEach(() => {
     // Clear any existing slots/progress before each test
@@ -317,7 +317,7 @@ describe('Slot Management Unit Tests - News Service', () => {
         slotId,
         poiName: 'Original Name',
         phase: 'initializing',
-        provider: 'perplexity'
+        provider: 'gemini'
       });
 
       // Update progress (should enrich slots)
@@ -547,7 +547,7 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
         slotId,
         poiName: 'Test Trail',
         phase: 'ai_search',
-        provider: 'perplexity'
+        provider: 'gemini'
       });
 
       const slots = trailStatusService.getDisplaySlots(jobId);
@@ -555,7 +555,7 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
       expect(slots[slotId].poiId).toBe(poiId);
       expect(slots[slotId].poiName).toBe('Test Trail');
       expect(slots[slotId].phase).toBe('ai_search');
-      expect(slots[slotId].provider).toBe('perplexity');
+      expect(slots[slotId].provider).toBe('gemini');
       expect(slots[slotId].status).toBe('active');
 
       // Cleanup

@@ -90,18 +90,8 @@ justification = "Drive image service has JSDoc function documentation"
 
 [[exceptions]]
 check = "verbose_comments"
-path = "backend/services/aiSearchFactory.js"
-justification = "AI search factory has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "backend/services/jobScheduler.js"
 justification = "Job scheduler service has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/perplexityService.js"
-justification = "Perplexity service has JSDoc function documentation"
 
 [[exceptions]]
 check = "verbose_comments"
@@ -398,11 +388,6 @@ justification = "Manual debugging script"
 
 [[exceptions]]
 check = "verbose_comments"
-path = "backend/test-perplexity.js"
-justification = "Manual debugging script"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "backend/test-playwright.js"
 justification = "Manual debugging script"
 
@@ -476,11 +461,6 @@ path = "frontend/src/components/StatusTab.jsx"
 justification = "React useEffect dependency suppression is intentional - line 23 documents that fetchMtbTrails is excluded to only run on component mount"
 
 # Random scripts - test utilities
-
-[[exceptions]]
-check = "random_scripts"
-path = "backend/test-perplexity.js"
-justification = "Manual test script for Perplexity API integration debugging"
 
 [[exceptions]]
 check = "random_scripts"
@@ -589,11 +569,6 @@ justification = "Test setup helper setupEastRimTrail creates consistent test fix
 
 [[exceptions]]
 check = "single_use_helpers"
-path = "backend/test-perplexity.js"
-justification = "Manual test script entry point function for Perplexity API testing"
-
-[[exceptions]]
-check = "single_use_helpers"
 path = "backend/test-playwright.js"
 justification = "Manual test script entry point function for Playwright browser testing"
 
@@ -620,11 +595,6 @@ path = "backend/server.js"
 justification = "Server initialization functions (initDatabase, setupAiSearchDefaults, start) are entry points for server setup. generateSlug is a utility for URL generation. These are separated for testability and error handling clarity."
 
 # Single-use helpers - Service configuration and internal implementations
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/aiSearchFactory.js"
-justification = "getConfig centralizes configuration validation for AI search service factory pattern"
 
 [[exceptions]]
 check = "single_use_helpers"
@@ -661,11 +631,6 @@ justification = "Technical debt: 60+ database query results use generic 'result'
 check = "generic_names"
 path = "backend/services/newsService.js"
 justification = "Technical debt: Database query results and API responses use generic 'result' variable name. Should be refactored in future code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/aiSearchFactory.js"
-justification = "Technical debt: AI API responses use generic 'result' variable name. Should be refactored in future code quality PR."
 
 [[exceptions]]
 check = "generic_names"

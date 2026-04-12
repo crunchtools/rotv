@@ -94,6 +94,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const [runLogs, setRunLogs] = useState([]);
   const [logLevelFilter, setLogLevelFilter] = useState('all');
   const [logDetailsExpanded, setLogDetailsExpanded] = useState(new Set());
+  const [expandedPoiGroups, setExpandedPoiGroups] = useState(new Set());
 
   const [runningJobs, setRunningJobs] = useState({});
   const [activeSlots, setActiveSlots] = useState({});
@@ -265,7 +266,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     if (expandedRun) fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
   }, [expandedRun, logLevelFilter, fetchRunLogs]);
 
-  // Poll logs when a run is expanded and its job is running
+  // Poll logs when a run is expanded and its job is running or recently finished
   useEffect(() => {
     if (!expandedRun) return;
 
@@ -279,17 +280,18 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
     if (!job) return;
 
-    // Check if this job is currently running
     const isRunning = !!runningJobs[job.id];
 
-    if (!isRunning) return;
+    if (isRunning) {
+      // Poll logs every 2 seconds while running
+      const interval = setInterval(() => {
+        fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
+      }, 2000);
+      return () => clearInterval(interval);
+    }
 
-    // Poll logs every 2 seconds while running
-    const interval = setInterval(() => {
-      fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
-    }, 2000);
-
-    return () => clearInterval(interval);
+    // Job just finished — do a final fetch to catch in-flight completion logs
+    fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
   }, [expandedRun, runningJobs, scheduledJobs, fetchRunLogs]);
 
   // Separate polling effect for single-POI jobs — minimal dependencies to avoid teardown
@@ -383,7 +385,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       // For single-POI jobs, the run's id in history is the runId (timestamp), but logs are queried by poi_id
       // The history query returns poi_id count as items_total, so we can't get poi_id from there
       // Instead, query logs by job_id (which is the runId) using the batch endpoint
-      setExpandedRun({ jobType, runId: run.id }); setLogLevelFilter('all'); setLogDetailsExpanded(new Set());
+      setExpandedRun({ jobType, runId: run.id }); setLogLevelFilter('all'); setLogDetailsExpanded(new Set()); setExpandedPoiGroups(new Set());
     }
   };
 
@@ -604,23 +606,25 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                   } else if (slot.phase === 'error') {
                     statusLabel = '✗ Error';
                   } else if (slot.phase === 'initializing') {
-                    statusLabel = '🚀 Starting';
-                  } else if (slot.phase === 'classifying_events' || slot.phase === 'classifying_news') {
-                    statusLabel = '🕷️ Crawling site';
-                  } else if (slot.phase === 'rendering_events' || slot.phase === 'rendering_news' || slot.phase === 'rendering') {
-                    statusLabel = '📄 Reading page';
+                    statusLabel = 'Starting';
+                  } else if (slot.phase === 'classifying_events') {
+                    statusLabel = 'I: Crawling events';
+                  } else if (slot.phase === 'classifying_news') {
+                    statusLabel = 'I: Crawling news';
+                  } else if (slot.phase === 'rendering_events') {
+                    statusLabel = 'I: Reading events';
+                  } else if (slot.phase === 'rendering_news' || slot.phase === 'rendering') {
+                    statusLabel = 'I: Reading news';
                   } else if (slot.phase === 'ai_search') {
-                    statusLabel = '🤖 AI extraction';
+                    statusLabel = 'I: Gemini extraction';
                   } else if (slot.phase === 'processing_results') {
-                    statusLabel = '⚙️ Processing';
-                  } else if (slot.phase === 'matching_links') {
-                    statusLabel = '🔗 Linking articles';
-                  } else if (slot.phase === 'deep_crawling') {
-                    statusLabel = '🔎 Verifying URLs';
+                    statusLabel = 'Processing';
+                  } else if (slot.phase === 'matching_links' || slot.phase === 'deep_crawling') {
+                    statusLabel = 'Verifying URLs';
                   } else if (slot.phase === 'serper_search') {
-                    statusLabel = '🌐 Finding coverage';
+                    statusLabel = 'II: Searching web';
                   } else if (slot.phase === 'extracting_external_news') {
-                    statusLabel = '📰 Reading articles';
+                    statusLabel = 'II: Extracting articles';
                   } else if (slot.phase === 'complete') {
                     statusLabel = '✓ Complete';
                   } else if (slot.phase) {
@@ -805,20 +809,17 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                                         No log entries{logLevelFilter !== 'all' ? ` with level "${logLevelFilter}"` : ''}.
                                       </p>
                                     ) : (
-                                      <pre className="job-logs-text">{runLogs.map(entry => {
-                                        const time = entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : '--';
-                                        const level = entry.level === 'error' ? 'ERR' : entry.level === 'warn' ? 'WRN' : 'INF';
-                                        const poi = entry.poi_name || '--';
-                                        let line = `${time}  ${level}  ${poi}  ${entry.message}`;
-                                        if (entry.details) {
-                                          const detailParts = Object.entries(entry.details)
-                                            .filter(([k]) => k !== 'ai_response' && k !== 'rendered_content' && k !== 'error_stack')
-                                            .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`);
-                                          if (detailParts.length > 0) line += `  (${detailParts.join(', ')})`;
-                                          if (entry.details.error_stack) line += `\n  ${entry.details.error_stack}`;
-                                        }
-                                        return line;
-                                      }).join('\n')}</pre>
+                                      <PoiLogTree
+                                        logs={runLogs}
+                                        expandedPoiGroups={expandedPoiGroups}
+                                        onToggleGroup={(poiId) => {
+                                          setExpandedPoiGroups(prev => {
+                                            const next = new Set(prev);
+                                            if (next.has(poiId)) next.delete(poiId); else next.add(poiId);
+                                            return next;
+                                          });
+                                        }}
+                                      />
                                     )}
                                   </div>
                                 )}
@@ -835,6 +836,94 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function formatLogLine(entry) {
+  const time = entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : '--';
+  const level = entry.level === 'error' ? 'ERR' : entry.level === 'warn' ? 'WRN' : 'INF';
+  let line = `${time}  ${level}  ${entry.message}`;
+  if (entry.details) {
+    const detailParts = Object.entries(entry.details)
+      .filter(([k]) => k !== 'ai_response' && k !== 'rendered_content' && k !== 'error_stack')
+      .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`);
+    if (detailParts.length > 0) line += `  (${detailParts.join(', ')})`;
+    if (entry.details.error_stack) line += `\n  ${entry.details.error_stack}`;
+  }
+  return line;
+}
+
+function PoiLogTree({ logs, expandedPoiGroups, onToggleGroup }) {
+  // Group logs by poi_id (null = job-level entries)
+  const groups = new Map();
+  const jobLevelLogs = [];
+
+  for (const entry of logs) {
+    if (!entry.poi_id) {
+      jobLevelLogs.push(entry);
+    } else {
+      const key = entry.poi_id;
+      if (!groups.has(key)) {
+        groups.set(key, { poiId: key, poiName: entry.poi_name || `POI ${key}`, logs: [], summary: null });
+      }
+      const group = groups.get(key);
+      group.logs.push(entry);
+      // Last log with "saved" in the message becomes the summary
+      if (entry.message && entry.message.includes('saved')) {
+        group.summary = entry.message;
+      }
+    }
+  }
+
+  // Auto-expand the most recent POI group
+  const poiGroups = [...groups.values()];
+  const lastPoiId = poiGroups.length > 0 ? poiGroups[poiGroups.length - 1].poiId : null;
+
+  return (
+    <div className="poi-log-tree">
+      {/* Job-level logs at the top */}
+      {jobLevelLogs.length > 0 && (
+        <pre className="job-logs-text" style={{ marginBottom: '4px' }}>
+          {jobLevelLogs.map(e => formatLogLine(e)).join('\n')}
+        </pre>
+      )}
+
+      {/* Per-POI groups */}
+      {poiGroups.map(group => {
+        const isOpen = expandedPoiGroups.has(group.poiId) || group.poiId === lastPoiId;
+        const hasErrors = group.logs.some(l => l.level === 'error');
+
+        return (
+          <div key={group.poiId} className="poi-log-group" style={{ marginBottom: '2px' }}>
+            <div
+              className="poi-log-header"
+              onClick={(e) => { e.stopPropagation(); onToggleGroup(group.poiId); }}
+              style={{
+                cursor: 'pointer',
+                padding: '3px 6px',
+                fontSize: '0.82rem',
+                fontFamily: 'monospace',
+                backgroundColor: hasErrors ? '#fff5f5' : '#f8f9fa',
+                borderLeft: `3px solid ${hasErrors ? '#f44336' : '#4caf50'}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                userSelect: 'none'
+              }}
+            >
+              <span style={{ transform: isOpen ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.15s', display: 'inline-block', fontSize: '0.7rem' }}>&#9654;</span>
+              <span style={{ fontWeight: 500 }}>{group.poiName}</span>
+              {group.summary && <span style={{ color: '#666', marginLeft: '4px' }}>({group.summary})</span>}
+            </div>
+            {isOpen && (
+              <pre className="job-logs-text" style={{ margin: 0, paddingLeft: '16px', borderLeft: '3px solid #e0e0e0' }}>
+                {group.logs.map(e => formatLogLine(e)).join('\n')}
+              </pre>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
