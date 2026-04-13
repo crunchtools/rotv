@@ -727,13 +727,13 @@ Extract ALL news from this content using these relaxed criteria.`;
         reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
 
         if (serperResult.urls.length > 0) {
-          // Phase II: Render → Classify → Crawl each Serper URL
-          // Fast path: Serper returns news articles which are nearly always detail pages.
-          // Only classify pages that look like listings (high link density, low content).
+          // Phase II: Render each Serper URL as a detail page (no classification).
+          // Serper returns search results — these are already individual articles/pages.
+          // Classification is counterproductive here: news sites have "related articles"
+          // sidebars that Gemini classifies as "hybrid", triggering cascading crawls
+          // across unrelated content (e.g., Yahoo sidebar → 10 random articles).
           const renderedSerperContent = [];
           let renderedCount = 0;
-          const LISTING_HEURISTIC_LINK_THRESHOLD = 15;
-          const LISTING_HEURISTIC_RATIO = 100; // chars per link — low ratio = listing page
 
           for (const urlData of serperResult.urls) {
             try {
@@ -751,7 +751,7 @@ Extract ALL news from this content using these relaxed criteria.`;
               const extracted = await extractPageContent(urlData.url, {
                 timeout: 30000,
                 hardTimeout: 60000,
-                extractLinks: true
+                extractLinks: false
               });
 
               if (!extracted.reachable || !extracted.markdown || extracted.markdown.length < 200) {
@@ -759,56 +759,12 @@ Extract ALL news from this content using these relaxed criteria.`;
                 continue;
               }
 
-              // Fast-path: most Serper results are detail pages (news articles).
-              // Only call Gemini Classify if the page looks like a listing:
-              // high link count + low chars-per-link ratio.
-              const linkCount = (extracted.links || []).length;
-              const charsPerLink = linkCount > 0 ? extracted.markdown.length / linkCount : Infinity;
-              const looksLikeListing = linkCount >= LISTING_HEURISTIC_LINK_THRESHOLD && charsPerLink < LISTING_HEURISTIC_RATIO;
-
-              if (looksLikeListing) {
-                // Phase II: [Classify] — only for suspected listing pages
-                const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], urlData.url, 'news', sheets);
-                logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Classify] ${urlData.url} → ${classification.pageType}`);
-                reportProgress(`Phase II: [Classify] ${urlData.url} → ${classification.pageType}`);
-
-                if (classification.pageType === 'detail') {
-                  renderedSerperContent.push({
-                    url: urlData.url, title: urlData.title, snippet: urlData.snippet,
-                    date: urlData.date, markdown: extracted.markdown
-                  });
-                  renderedCount++;
-                } else {
-                  // Listing or hybrid — crawl detail pages
-                  logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Crawl] Following links from ${urlData.url}`);
-                  const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
-                    maxPages: 5, maxDetailPages: 3, phase: 'Phase II', jobId
-                  });
-                  for (const page of crawlResult.pages) {
-                    renderedSerperContent.push({
-                      url: page.url, title: page.title || urlData.title, snippet: urlData.snippet,
-                      date: urlData.date, markdown: page.markdown
-                    });
-                    renderedCount++;
-                  }
-                  // If crawl found nothing, use the page itself
-                  if (crawlResult.pages.length === 0) {
-                    renderedSerperContent.push({
-                      url: urlData.url, title: urlData.title, snippet: urlData.snippet,
-                      date: urlData.date, markdown: extracted.markdown
-                    });
-                    renderedCount++;
-                  }
-                }
-              } else {
-                // Fast path — treat as detail page, no Gemini classify call
-                logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Classify] ${urlData.url} → detail (fast path: ${linkCount} links, ${Math.round(charsPerLink)} chars/link)`);
-                renderedSerperContent.push({
-                  url: urlData.url, title: urlData.title, snippet: urlData.snippet,
-                  date: urlData.date, markdown: extracted.markdown
-                });
-                renderedCount++;
-              }
+              renderedSerperContent.push({
+                url: urlData.url, title: urlData.title, snippet: urlData.snippet,
+                date: urlData.date, markdown: extracted.markdown
+              });
+              renderedCount++;
+              logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Render] ${urlData.url} (${extracted.markdown.length} chars)`);
             } catch (renderError) {
               logError(jobId, 'news', poi.id, poi.name, `Phase II: [Render] Error: ${urlData.url} — ${renderError.message}`);
             }
