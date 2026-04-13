@@ -16,7 +16,6 @@
     "@google/generative-ai": "^0.21.0",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@mozilla/readability": "^0.6.0",
-    "@perplexity-ai/perplexity_ai": "^0.18.4",
     "axios": "^1.6.0",
     "connect-pg-simple": "^9.0.1",
     "cors": "^2.8.5",

@@ -204,11 +204,11 @@ describe('Slot Architecture UI Tests - News/Events', () => {
       expect(typeof hasPhaseIndicator).toBe('boolean');
     }, TEST_TIMEOUT);
 
-    it('should show provider badges (🔷 Gemini, 🔮 Perplexity)', async () => {
+    it('should show provider badges (Gemini)', async () => {
       await page.waitForTimeout(3000);
 
       // Look for provider indicators
-      const hasProvider = await page.locator('text=/Gemini|Perplexity|🔷|🔮/')
+      const hasProvider = await page.locator('text=/Gemini|🔷/')
         .or(page.locator('.provider-badge'))
         .or(page.locator('[data-testid^="provider-"]'))
         .isVisible()
@@ -258,14 +258,14 @@ describe('Slot Architecture UI Tests - News/Events', () => {
       expect(typeof isVisible).toBe('boolean');
     }, TEST_TIMEOUT);
 
-    it('should display Perplexity usage badge when count > 0', async () => {
+    it('should display Gemini usage when count > 0', async () => {
       await page.waitForTimeout(3000);
 
-      const perplexityUsage = page.locator('text=/Perplexity.*\\d+/')
-        .or(page.locator('[data-testid="perplexity-usage"]'))
-        .or(page.locator('.ai-usage-badge:has-text("Perplexity")'));
+      const geminiUsage = page.locator('text=/Gemini.*\\d+/')
+        .or(page.locator('[data-testid="gemini-usage"]'))
+        .or(page.locator('.ai-usage-badge:has-text("Gemini")'));
 
-      const isVisible = await perplexityUsage.isVisible().catch(() => false);
+      const isVisible = await geminiUsage.isVisible().catch(() => false);
 
       expect(typeof isVisible).toBe('boolean');
     }, TEST_TIMEOUT);

@@ -1,12 +1,41 @@
 /**
  * News Collection Service
- * Uses Perplexity with web search grounding to find and summarize news/events for POIs
+ * Two-phase pipeline: Phase I crawls POI's own pages, Phase II searches via Serper.
+ * Both phases use Gemini for extraction.
  *
  * Job execution is managed by pg-boss for crash recovery and resumability.
  * Progress is checkpointed after each batch so jobs can resume after container restarts.
  */
 
-import { generateTextWithCustomPrompt, resetJobUsage, getJobUsage, getJobStats } from './aiSearchFactory.js';
+import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
+
+// Simple Gemini call counter (replaces aiSearchFactory usage tracking)
+let geminiCallCount = 0;
+
+export function resetJobUsage() {
+  geminiCallCount = 0;
+}
+
+export function getJobUsage() {
+  return { gemini: geminiCallCount };
+}
+
+export function getJobStats() {
+  return {
+    usage: { gemini: geminiCallCount },
+    errors: {},
+    activeProvider: 'gemini'
+  };
+}
+
+/**
+ * Wrapper around geminiService that tracks usage and returns { response, provider }
+ */
+async function generateTextWithCustomPrompt(pool, prompt) {
+  geminiCallCount++;
+  const text = await geminiGenerateText(pool, prompt);
+  return { response: text, provider: 'gemini' };
+}
 import { extractPageContent } from './contentExtractor.js';
 import { calculateSimilarity } from './textUtils.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
@@ -166,9 +195,12 @@ export async function ensureNewsJobCheckpointColumns(pool) {
  * @returns {Array} - Array of job records that need resuming
  */
 export async function findIncompleteJobs(pool) {
+  // Only resume jobs from the last 1 hour — older ones are stale
+  // (e.g. imported via seed data from a previous run)
   const result = await pool.query(`
     SELECT * FROM news_job_status
     WHERE status IN ('queued', 'running')
+    AND created_at > NOW() - INTERVAL '1 hour'
     ORDER BY created_at ASC
   `);
   return result.rows;
@@ -555,35 +587,6 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   const eventsUrl = poi.events_url || 'No dedicated events page';
   const newsUrl = poi.news_url || 'No dedicated news page';
 
-  // Determine which AI provider will be used (at the start, so it's available in all phases)
-  const configResult = await pool.query(`
-    SELECT key, value FROM admin_settings
-    WHERE key IN ('ai_search_primary', 'ai_search_fallback', 'ai_search_primary_limit')
-  `);
-  const aiConfig = {
-    primary: 'perplexity',
-    fallback: 'none',
-    primaryLimit: 0
-  };
-  for (const row of configResult.rows) {
-    if (row.key === 'ai_search_primary') aiConfig.primary = row.value;
-    if (row.key === 'ai_search_fallback') aiConfig.fallback = row.value;
-    if (row.key === 'ai_search_primary_limit') aiConfig.primaryLimit = parseInt(row.value) || 0;
-  }
-
-  // Check current usage and determine which provider will be used
-  const currentUsage = getJobUsage();
-  let providerToUse = aiConfig.primary;
-  const primaryUsage = currentUsage[aiConfig.primary] || 0;
-
-  // Check if we've exceeded the primary limit
-  if (aiConfig.primaryLimit > 0 && primaryUsage >= aiConfig.primaryLimit) {
-    if (aiConfig.fallback && aiConfig.fallback !== 'none') {
-      console.log(`[News Service] Primary limit reached (${primaryUsage}/${aiConfig.primaryLimit}), will use fallback: ${aiConfig.fallback}`);
-      providerToUse = aiConfig.fallback;
-    }
-  }
-
   // Preserve slotId and jobId if they exist (set by job processing loop)
   const existingProgress = tracker.getCollectionProgress(poi.id);
   const slotId = existingProgress?.slotId;
@@ -598,7 +601,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     phase: 'initializing',
     message: `Starting ${typeLabel} search for ${poi.name}...`,
     poiName: poi.name,
-    provider: providerToUse,  // Set provider from the start
+    provider: 'gemini',
     newsFound: 0,
     eventsFound: 0,
     newsSaved: undefined,
@@ -657,6 +660,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     try {
       checkCancellation();
       reportProgress(`Crawling events page: ${eventsUrl}`);
+      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: Crawling events page', { url: eventsUrl });
       updateProgress(poi.id, {
         phase: 'classifying_events',
         message: 'Analyzing events pages...',
@@ -686,6 +690,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     checkCancellation(); // Check before rendering events
     if (collectionType !== 'news' && eventsPageToRender !== 'No website available') {
       console.log(`[AI Research] Extracting events page content (collectionType: ${collectionType})`);
+      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: Rendering events page', { url: eventsPageToRender });
       updateProgress(poi.id, {
         phase: 'rendering_events',
         message: 'Extracting events page content...',
@@ -744,6 +749,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     try {
       checkCancellation();
       reportProgress(`Crawling news page: ${newsUrl}`);
+      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: Crawling news page', { url: newsUrl });
       updateProgress(poi.id, {
         phase: 'classifying_news',
         message: 'Analyzing news pages...',
@@ -773,6 +779,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     checkCancellation(); // Check before rendering news
     if (collectionType !== 'events' && newsPageToRender !== 'No website available') {
       console.log(`[AI Research] Extracting news page content (collectionType: ${collectionType})`);
+      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: Rendering news page', { url: newsPageToRender });
       updateProgress(poi.id, {
         phase: 'rendering_news',
         message: 'Extracting news page content...',
@@ -916,60 +923,44 @@ Extract ALL news from this content using these relaxed criteria.`;
   checkCancellation(); // Check before AI search
 
   try {
-    // Get the current provider (already determined at start of function)
-    const currentProgress = getCollectionProgress(poi.id);
-    const initialProvider = currentProgress?.provider || 'perplexity';
-
     const hasCrawledContent = renderedEventsContent || renderedNewsContent || usedClassifier || usedNewsClassifier;
-    const aiOptions = {};
+
+    // Phase I: Gemini extraction — only runs when we have crawled content
+    // URL-less POIs skip straight to Phase II (Serper)
+    let result = { news: [], events: [] };
+    let response = '';
+    const usedProvider = 'gemini';
+
     if (hasCrawledContent) {
-      // Force Gemini for extraction — Perplexity always does web searches, wasting time on crawled content
-      aiOptions.forceProvider = 'gemini';
       reportProgress('Sending crawled content to Gemini for extraction');
+      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: Gemini extraction', { has_events: !!(renderedEventsContent || usedClassifier), has_news: !!(renderedNewsContent || usedNewsClassifier) });
+
+      updateProgress(poi.id, {
+        phase: 'ai_search',
+        message: 'Extracting events/news from crawled content...',
+        steps: ['Initialized', 'Rendered pages', 'AI extraction']
+      });
+
+      const aiResult = await generateTextWithCustomPrompt(pool, prompt);
+      response = aiResult.response;
+      reportProgress(`Gemini responded (${response.length} chars)`);
+      console.log(`[AI Research] Received response (${response.length} chars) from gemini`);
+
+      // Parse JSON response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        console.log(`[AI Research] No JSON found in response for ${poi.name}`);
+        console.log(`[AI Research] Raw response preview: ${response.substring(0, 500)}...`);
+      } else {
+        result = JSON.parse(jsonMatch[0]);
+        reportProgress(`Extracted ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
+        console.log(`[AI Research] Found ${result.news?.length || 0} news, ${result.events?.length || 0} events for ${poi.name}`);
+      }
     } else {
-      reportProgress(`Sending prompt to ${providerToUse === 'perplexity' ? 'Perplexity' : 'Gemini'} for analysis`);
+      // No crawled content — skip Phase I, go straight to Phase II (Serper)
+      console.log(`[AI Research] No crawled content for ${poi.name}, skipping Phase I`);
+      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: Skipped (no dedicated URLs)', {});
     }
-
-    updateProgress(poi.id, {
-      phase: 'ai_search',
-      message: hasCrawledContent ? 'Extracting events/news from crawled content...' : 'Analyzing with AI...',
-      steps: ['Initialized', 'Rendered pages', 'AI extraction']
-    });
-
-    debugLog(`[AI Research POI ${poi.id}] ====== BEFORE AI CALL (provider=${initialProvider}) ======`);
-    const aiResult = await generateTextWithCustomPrompt(pool, prompt, aiOptions);
-    debugLog(`[AI Research POI ${poi.id}] ====== AFTER AI CALL ======`);
-    debugLog(`[AI Research POI ${poi.id}] aiResult: ${JSON.stringify({
-      type: typeof aiResult,
-      keys: Object.keys(aiResult || {}),
-      provider: aiResult?.provider,
-      responseLength: aiResult?.response?.length
-    })}`);
-    const response = aiResult.response;
-    const usedProvider = aiResult.provider;
-    debugLog(`[AI Research POI ${poi.id}] usedProvider = '${usedProvider}'`);
-    // Update provider if it changed (e.g., fallback was used during the AI call)
-    if (usedProvider !== initialProvider) {
-      updateProgress(poi.id, { provider: usedProvider });
-      debugLog(`[AI Research POI ${poi.id}] Provider changed to: '${usedProvider}'`);
-    }
-    reportProgress(`Gemini responded (${response.length} chars)`);
-    console.log(`[AI Research] Received response (${response.length} chars) from ${usedProvider}`);
-
-    // Parse JSON response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.log(`[AI Research] ❌ No JSON found in response for ${poi.name}`);
-      console.log(`[AI Research] Raw response preview: ${response.substring(0, 500)}...`);
-      return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false } };
-    }
-
-    const result = JSON.parse(jsonMatch[0]);
-    reportProgress(`Extracted ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
-    console.log(`[AI Research] ✓ Found ${result.news?.length || 0} news, ${result.events?.length || 0} events for ${poi.name}`);
-
-    // Date correction removed - now using timezone-aware AI prompt with explicit ISO 8601 format
-    console.log(`[AI Research] Using timezone: ${timezone} for date interpretation`);
 
     // Update progress with counts based on collection type
     let processingMessage;
@@ -1183,7 +1174,7 @@ Extract ALL news from this content using these relaxed criteria.`;
 
     checkCancellation(); // Check before Serper search
 
-    // LAYER 2: External news via Serper (runs for EVERY POI when collecting news)
+    // PHASE II: External news via Serper (runs for EVERY POI when collecting news)
     if (collectionType !== 'events') {
       try {
         updateProgress(poi.id, {
@@ -1193,10 +1184,11 @@ Extract ALL news from this content using these relaxed criteria.`;
         });
 
         reportProgress('Searching Serper for external news coverage...');
-        console.log(`[Serper] 🔍 Layer 2: Searching for external news coverage...`);
+        console.log(`[Serper] Phase II: Searching for external news coverage...`);
 
         // Get Serper URLs with geographic grounding
         const serperResult = await searchNewsUrls(pool, poi);
+        logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: Serper search', { query: serperResult.query, urls_found: serperResult.urls.length });
         reportProgress(`Serper returned ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
         console.log(`[Serper] Found ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded}, query: "${serperResult.query}")`);
 
@@ -1251,6 +1243,7 @@ Extract ALL news from this content using these relaxed criteria.`;
 
           // If we have rendered content, use Gemini to extract structured news
           if (renderedSerperContent.length > 0) {
+            logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: Extracting articles', { article_count: renderedSerperContent.length });
             updateProgress(poi.id, {
               phase: 'extracting_external_news',
               message: `Extracting news from ${renderedSerperContent.length} external sources...`,
@@ -1392,7 +1385,7 @@ Return {"news": []} if no relevant news found.`;
       events: result.events || [],
       metadata: {
         usedDedicatedNewsUrl,
-        provider: usedProvider,
+        provider: 'gemini',
         ai_response: response
       }
     };
@@ -1498,7 +1491,7 @@ function normalizeUrl(url) {
  * Save news items to database
  * @param {Pool} pool - Database connection pool
  * @param {number} poiId - POI ID
- * @param {Array} newsItems - Array of news items from Perplexity
+ * @param {Array} newsItems - Array of news items from AI extraction
  * @param {Object} options - Optional settings
  * @param {boolean} options.skipDateFilter - If true, allow news items older than 365 days
  */
@@ -1607,7 +1600,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
  * Save events to database
  * @param {Pool} pool - Database connection pool
  * @param {number} poiId - POI ID
- * @param {Array} eventItems - Array of events from Perplexity
+ * @param {Array} eventItems - Array of events from AI extraction
  */
 export async function saveEventItems(pool, poiId, eventItems) {
   let savedCount = 0;
@@ -1894,29 +1887,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   const newlyProcessedIds = [...processedPoiIds];
 
   try {
-    // Helper to determine AI provider for slot display
-    const resolveProvider = async () => {
-      const configResult = await pool.query(`
-        SELECT key, value FROM admin_settings
-        WHERE key IN ('ai_search_primary', 'ai_search_fallback', 'ai_search_primary_limit')
-      `);
-      const aiConfig = { primary: 'perplexity', fallback: 'none', primaryLimit: 0 };
-      for (const row of configResult.rows) {
-        if (row.key === 'ai_search_primary') aiConfig.primary = row.value;
-        if (row.key === 'ai_search_fallback') aiConfig.fallback = row.value;
-        if (row.key === 'ai_search_primary_limit') aiConfig.primaryLimit = parseInt(row.value) || 0;
-      }
-      const currentUsage = getJobUsage();
-      let providerToUse = aiConfig.primary;
-      const primaryUsage = currentUsage[aiConfig.primary] || 0;
-      if (aiConfig.primaryLimit > 0 && primaryUsage >= aiConfig.primaryLimit) {
-        if (aiConfig.fallback && aiConfig.fallback !== 'none') {
-          providerToUse = aiConfig.fallback;
-        }
-      }
-      return providerToUse;
-    };
-
     const { results: batchResults, cancelled: jobCancelled } = await runBatch({
       pool,
       jobId,
@@ -1935,17 +1905,17 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       },
 
       onItemStart: async (poi, { slotId, jobId: jid }) => {
-        const providerToUse = await resolveProvider();
-        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, providerToUse);
+        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, 'gemini');
         tracker.updateProgress(poi.id, {
           phase: 'initializing',
           message: `Starting news & events search for ${poi.name}...`,
           poiName: poi.name,
-          provider: providerToUse,
+          provider: 'gemini',
           slotId,
           jobId: jid,
           completed: false
         });
+        logInfo(jobId, 'news', poi.id, poi.name, `Starting collection`, { slot: slotId });
       },
 
       collectFn: async (poi, { index, total }) => {
@@ -1986,7 +1956,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
 
     // Log AI provider usage for this job
     const usage = getJobUsage();
-    console.log(`[Job ${jobId}] AI provider usage: Gemini=${usage.gemini}, Perplexity=${usage.perplexity}`);
+    console.log(`[Job ${jobId}] AI provider usage: Gemini=${usage.gemini}`);
 
     // Only mark complete if not cancelled (cancel endpoint already set status)
     if (!jobCancelled) {

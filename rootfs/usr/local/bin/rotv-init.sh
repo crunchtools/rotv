@@ -36,6 +36,18 @@ for migration in /app/migrations/[0-9]*.sql; do
 done
 echo "$MIGRATION_COUNT migrations applied"
 
+# Clean stale jobs (e.g. imported from seed data snapshots taken mid-job)
+echo "Cleaning stale job state..."
+psql -h localhost -U postgres -d rotv <<'CLEANUP' 2>/dev/null || true
+UPDATE news_job_status SET status = 'cancelled', completed_at = NOW()
+WHERE status IN ('running', 'queued') AND created_at < NOW() - INTERVAL '1 hour';
+
+UPDATE pgboss.job SET state = 'failed', completed_on = NOW(), retry_count = retry_limit
+WHERE name = 'news-batch-collection' AND state IN ('active', 'retry', 'created')
+AND created_on < NOW() - INTERVAL '1 hour';
+CLEANUP
+echo "Stale jobs cleaned"
+
 # Post-migration setup for auth bypass (test mode)
 if [ "$BYPASS_AUTH" = "true" ] || [ "$NODE_ENV" = "test" ]; then
   echo "Setting up auth bypass for test mode..."

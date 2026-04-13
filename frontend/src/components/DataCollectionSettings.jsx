@@ -8,10 +8,7 @@ function DataCollectionSettings() {
   const [serperResult, setSerperResult] = useState(null);
   const [apifyResult, setApifyResult] = useState(null);
 
-  // AI provider configuration state
-  const [aiConfig, setAiConfig] = useState({ primary: 'perplexity', fallback: 'none', primaryLimit: 0 });
-  const [aiConfigLoading, setAiConfigLoading] = useState(true);
-  const [aiConfigSaving, setAiConfigSaving] = useState(false);
+  const [aiConfigLoading, setAiConfigLoading] = useState(false);
 
   // Twitter credentials state
   const [twitterCredentials, setTwitterCredentials] = useState({ username: '', password: '' });
@@ -96,7 +93,6 @@ function DataCollectionSettings() {
   };
 
   useEffect(() => {
-    fetchAiConfig();
     fetchTwitterCredentials();
     fetchTwitterAuthStatus();
     fetchGeminiStatus();
@@ -132,21 +128,6 @@ function DataCollectionSettings() {
     const timer = setTimeout(() => setApifyResult(null), 5000);
     return () => clearTimeout(timer);
   }, [apifyResult]);
-
-  const fetchAiConfig = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        setAiConfig({
-          primary: settings.ai_search_primary?.value || 'perplexity',
-          fallback: settings.ai_search_fallback?.value || 'none',
-          primaryLimit: parseInt(settings.ai_search_primary_limit?.value) || 0
-        });
-      }
-    } catch (err) { console.error('Error fetching AI config:', err); }
-    finally { setAiConfigLoading(false); }
-  };
 
   const fetchTwitterCredentials = async () => {
     try {
@@ -278,26 +259,6 @@ function DataCollectionSettings() {
       }
     } catch (err) { setSerperResult({ type: 'error', message: `Test failed: ${err.message}` }); }
     finally { setSerperTesting(false); }
-  };
-
-  const handleSaveAiConfig = async () => {
-    setAiConfigSaving(true); setResult(null);
-    try {
-      const settings = [
-        { key: 'ai_search_primary', value: aiConfig.primary },
-        { key: 'ai_search_fallback', value: aiConfig.fallback },
-        { key: 'ai_search_primary_limit', value: String(aiConfig.primaryLimit) }
-      ];
-      for (const setting of settings) {
-        const response = await fetch(`/api/admin/settings/${setting.key}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ value: setting.value })
-        });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to save setting'); }
-      }
-      setResult({ type: 'success', message: 'AI provider configuration saved successfully' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save AI config: ${err.message}` }); }
-    finally { setAiConfigSaving(false); }
   };
 
   const handleSaveTwitterCredentials = async () => {
@@ -666,43 +627,6 @@ function DataCollectionSettings() {
             Twitter/X and Facebook scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
           </p>
         </div>
-      </div>
-
-      {/* AI Provider Configuration */}
-      <div className="ai-config-section">
-        <h4>AI Search Provider</h4>
-        <p className="settings-description">Configure which AI provider to use for news/events web search.</p>
-        {aiConfigLoading ? <p>Loading configuration...</p> : (
-          <>
-            <div className="config-row">
-              <label>Primary Provider:</label>
-              <select value={aiConfig.primary} onChange={e => setAiConfig({...aiConfig, primary: e.target.value})} disabled={aiConfigSaving}>
-                <option value="gemini">Google Gemini (with Google Search)</option>
-                <option value="perplexity">Perplexity Sonar (with web search)</option>
-              </select>
-            </div>
-            <div className="config-row">
-              <label>Fallback Provider:</label>
-              <select value={aiConfig.fallback} onChange={e => setAiConfig({...aiConfig, fallback: e.target.value})} disabled={aiConfigSaving}>
-                <option value="none">None (no fallback)</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="perplexity">Perplexity Sonar</option>
-              </select>
-              <span className="config-hint">Used if primary provider fails or hits its limit</span>
-            </div>
-            <div className="config-row">
-              <label>Primary Limit (0 = unlimited):</label>
-              <input type="number" value={aiConfig.primaryLimit === 0 ? '' : aiConfig.primaryLimit}
-                onChange={e => setAiConfig({...aiConfig, primaryLimit: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
-                onBlur={e => { if (e.target.value === '') setAiConfig({...aiConfig, primaryLimit: 0}); }}
-                placeholder="0" min="0" step="100" disabled={aiConfigSaving} />
-              <span className="config-hint">Switch to fallback after this many requests per job</span>
-            </div>
-            <button className="action-btn primary" onClick={handleSaveAiConfig} disabled={aiConfigSaving}>
-              {aiConfigSaving ? 'Saving...' : 'Save AI Configuration'}
-            </button>
-          </>
-        )}
       </div>
 
       {/* Twitter Credentials Configuration */}

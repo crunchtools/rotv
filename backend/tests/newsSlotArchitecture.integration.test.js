@@ -222,7 +222,7 @@ describe('News/Events Slot Architecture Integration Tests', () => {
           }
 
           if (slot.provider !== null) {
-            expect(['perplexity', 'gemini']).toContain(slot.provider);
+            expect(slot.provider).toBe('gemini');
           }
 
           if (slot.status !== null) {
@@ -271,17 +271,6 @@ describe('News/Events Slot Architecture Integration Tests', () => {
         // Should have provider usage counts
         if (response.body.gemini !== undefined) {
           expect(typeof response.body.gemini).toBe('number');
-        }
-        if (response.body.perplexity !== undefined) {
-          expect(typeof response.body.perplexity).toBe('number');
-        }
-
-        // Should have error counts
-        if (response.body.gemini429 !== undefined) {
-          expect(typeof response.body.gemini429).toBe('number');
-        }
-        if (response.body.perplexity429 !== undefined) {
-          expect(typeof response.body.perplexity429).toBe('number');
         }
       }
     }, TEST_TIMEOUT);

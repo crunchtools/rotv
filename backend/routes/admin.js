@@ -62,7 +62,7 @@ import {
   addItemUrl,
   removeItemUrl
 } from '../services/moderationService.js';
-import { getJobStats, resetJobUsage } from '../services/aiSearchFactory.js';
+import { getJobStats, resetJobUsage } from '../services/newsService.js';
 import {
   collectTrailStatus,
   runTrailStatusCollection,
@@ -2975,7 +2975,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       `);
 
       if (result.rows.length === 0) {
-        return res.json({ usage: { gemini: 0, perplexity: 0 }, errors: { gemini429: 0, perplexity429: 0 }, activeProvider: null });
+        return res.json({ usage: { gemini: 0 }, errors: {}, activeProvider: 'gemini' });
       }
 
       const job = result.rows[0];
@@ -2991,28 +2991,23 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       // For completed/cancelled jobs, use database values
-      // Parse ai_usage if it's a string
       let aiUsage = job.ai_usage;
       if (typeof aiUsage === 'string') {
         try {
           aiUsage = JSON.parse(aiUsage);
         } catch (e) {
           console.error('Error parsing ai_usage:', e);
-          aiUsage = { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+          aiUsage = { gemini: 0 };
         }
       }
-      aiUsage = aiUsage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+      aiUsage = aiUsage || { gemini: 0 };
 
       res.json({
         usage: {
-          gemini: aiUsage.gemini || 0,
-          perplexity: aiUsage.perplexity || 0
+          gemini: aiUsage.gemini || 0
         },
-        errors: {
-          gemini429: aiUsage.gemini429 || 0,
-          perplexity429: aiUsage.perplexity429 || 0
-        },
-        activeProvider: null
+        errors: {},
+        activeProvider: 'gemini'
       });
     } catch (error) {
       console.error('Error getting AI stats:', error);
@@ -3444,7 +3439,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       `);
 
       if (result.rows.length === 0) {
-        return res.json({ usage: { gemini: 0, perplexity: 0 }, errors: { gemini429: 0, perplexity429: 0 }, activeProvider: null });
+        return res.json({ usage: { gemini: 0 }, errors: {}, activeProvider: 'gemini' });
       }
 
       const job = result.rows[0];
@@ -3460,28 +3455,23 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       // For completed/cancelled jobs, use database values
-      // Parse ai_usage if it's a string
       let aiUsage = job.ai_usage;
       if (typeof aiUsage === 'string') {
         try {
           aiUsage = JSON.parse(aiUsage);
         } catch (e) {
           console.error('Error parsing ai_usage:', e);
-          aiUsage = { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+          aiUsage = { gemini: 0 };
         }
       }
-      aiUsage = aiUsage || { gemini: 0, perplexity: 0, gemini429: 0, perplexity429: 0 };
+      aiUsage = aiUsage || { gemini: 0 };
 
       res.json({
         usage: {
-          gemini: aiUsage.gemini || 0,
-          perplexity: aiUsage.perplexity || 0
+          gemini: aiUsage.gemini || 0
         },
-        errors: {
-          gemini429: aiUsage.gemini429 || 0,
-          perplexity429: aiUsage.perplexity429 || 0
-        },
-        activeProvider: null
+        errors: {},
+        activeProvider: 'gemini'
       });
     } catch (error) {
       console.error('Error getting AI stats:', error);

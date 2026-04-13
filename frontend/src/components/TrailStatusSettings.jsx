@@ -232,7 +232,6 @@ function TrailStatusSettings() {
               <div className="ai-stat-label">AI Provider Usage</div>
               <div className="ai-stats-row">
                 <span>Gemini: {aiStats.gemini || 0}</span>
-                <span>Perplexity: {aiStats.perplexity || 0}</span>
                 {aiStats.rateLimitHits > 0 && (
                   <span className="rate-limit-warning">Rate limits hit: {aiStats.rateLimitHits}</span>
                 )}

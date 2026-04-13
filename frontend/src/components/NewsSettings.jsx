@@ -11,19 +11,11 @@ function NewsSettings() {
   const [activeJobId, setActiveJobId] = useState(null);
   const [aiStats, setAiStats] = useState(null);
 
-  // AI provider configuration state
-  const [aiConfig, setAiConfig] = useState({
-    primary: 'perplexity',
-    fallback: 'none',
-    primaryLimit: 0
-  });
-  const [aiConfigLoading, setAiConfigLoading] = useState(true);
-  const [aiConfigSaving, setAiConfigSaving] = useState(false);
+  const [aiConfigLoading, setAiConfigLoading] = useState(false);
 
   useEffect(() => {
     fetchJobStatus();
     checkForRunningJob();
-    fetchAiConfig();
   }, []);
 
   // Poll for active job status and AI stats
@@ -136,66 +128,6 @@ function NewsSettings() {
       }
     } catch (err) {
       console.error('Error checking for running job:', err);
-    }
-  };
-
-  const fetchAiConfig = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const settings = await response.json();
-        // Settings are returned as {value, updatedAt} objects
-        setAiConfig({
-          primary: settings.ai_search_primary?.value || 'perplexity',
-          fallback: settings.ai_search_fallback?.value || 'none',
-          primaryLimit: parseInt(settings.ai_search_primary_limit?.value) || 0
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching AI config:', err);
-    } finally {
-      setAiConfigLoading(false);
-    }
-  };
-
-  const handleSaveAiConfig = async () => {
-    setAiConfigSaving(true);
-    setResult(null);
-
-    try {
-      const settings = [
-        { key: 'ai_search_primary', value: aiConfig.primary },
-        { key: 'ai_search_fallback', value: aiConfig.fallback },
-        { key: 'ai_search_primary_limit', value: String(aiConfig.primaryLimit) }
-      ];
-
-      for (const setting of settings) {
-        const response = await fetch(`/api/admin/settings/${setting.key}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ value: setting.value })
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error || 'Failed to save setting');
-        }
-      }
-
-      setResult({
-        type: 'success',
-        message: 'AI provider configuration saved successfully'
-      });
-    } catch (err) {
-      setResult({
-        type: 'error',
-        message: `Failed to save AI config: ${err.message}`
-      });
-    } finally {
-      setAiConfigSaving(false);
     }
   };
 
@@ -359,108 +291,21 @@ function NewsSettings() {
             </div>
           </div>
 
-          {/* AI Stats - Two rows for each provider */}
-          <div className="ai-stats-table">
-            <div className="ai-stats-header">
-              <span className="ai-col-provider">Provider</span>
-              <span className="ai-col-status">Status</span>
-              <span className="ai-col-requests">Requests</span>
-              <span className="ai-col-errors">429 Errors</span>
+          {/* Gemini usage */}
+          {aiStats?.usage?.gemini > 0 && (
+            <div className="ai-stats-table">
+              <div className="ai-stats-row gemini active">
+                <span className="ai-col-provider">Gemini</span>
+                <span className="ai-col-requests">{aiStats.usage.gemini} requests</span>
+              </div>
             </div>
-            <div className={`ai-stats-row gemini ${aiStats?.activeProvider === 'gemini' ? 'active' : ''}`}>
-              <span className="ai-col-provider">🔷 Gemini</span>
-              <span className="ai-col-status">
-                {aiStats?.activeProvider === 'gemini' ? '⚡ Active' : '—'}
-              </span>
-              <span className="ai-col-requests">{aiStats?.usage?.gemini || 0}</span>
-              <span className="ai-col-errors">{aiStats?.errors?.gemini429 || 0}</span>
-            </div>
-            <div className={`ai-stats-row perplexity ${aiStats?.activeProvider === 'perplexity' ? 'active' : ''}`}>
-              <span className="ai-col-provider">🟣 Perplexity</span>
-              <span className="ai-col-status">
-                {aiStats?.activeProvider === 'perplexity' ? '⚡ Active' : '—'}
-              </span>
-              <span className="ai-col-requests">{aiStats?.usage?.perplexity || 0}</span>
-              <span className="ai-col-errors">{aiStats?.errors?.perplexity429 || 0}</span>
-            </div>
-          </div>
+          )}
 
           <p className="progress-hint-text">
             Processing {liveProgress.total_pois > 0 ? liveProgress.total_pois : 'all'} POIs in parallel (1 new job/second)...
           </p>
         </div>
       )}
-
-      {/* AI Provider Configuration */}
-      <div className="ai-config-section">
-        <h4>AI Search Provider</h4>
-        <p className="settings-description">
-          Configure which AI provider to use for news/events web search.
-        </p>
-
-        {aiConfigLoading ? (
-          <p>Loading configuration...</p>
-        ) : (
-          <>
-            <div className="config-row">
-              <label>Primary Provider:</label>
-              <select
-                value={aiConfig.primary}
-                onChange={e => setAiConfig({...aiConfig, primary: e.target.value})}
-                disabled={aiConfigSaving}
-              >
-                <option value="gemini">Google Gemini (with Google Search)</option>
-                <option value="perplexity">Perplexity Sonar (with web search)</option>
-              </select>
-            </div>
-
-            <div className="config-row">
-              <label>Fallback Provider:</label>
-              <select
-                value={aiConfig.fallback}
-                onChange={e => setAiConfig({...aiConfig, fallback: e.target.value})}
-                disabled={aiConfigSaving}
-              >
-                <option value="none">None (no fallback)</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="perplexity">Perplexity Sonar</option>
-              </select>
-              <span className="config-hint">
-                Used if primary provider fails or hits its limit
-              </span>
-            </div>
-
-            <div className="config-row">
-              <label>Primary Limit (0 = unlimited):</label>
-              <input
-                type="number"
-                value={aiConfig.primaryLimit === 0 ? '' : aiConfig.primaryLimit}
-                onChange={e => setAiConfig({...aiConfig, primaryLimit: e.target.value === '' ? 0 : parseInt(e.target.value) || 0})}
-                onBlur={e => {
-                  if (e.target.value === '') {
-                    setAiConfig({...aiConfig, primaryLimit: 0});
-                  }
-                }}
-                placeholder="0"
-                min="0"
-                step="100"
-                disabled={aiConfigSaving}
-              />
-              <span className="config-hint">
-                Switch to fallback after this many requests per job (helps stay under rate limits)
-              </span>
-            </div>
-
-            <button
-              className="action-btn primary"
-              onClick={handleSaveAiConfig}
-              disabled={aiConfigSaving || collecting}
-            >
-              {aiConfigSaving ? 'Saving...' : 'Save AI Configuration'}
-            </button>
-          </>
-        )}
-      </div>
 
       {/* Actions */}
       <div className="news-actions-section">

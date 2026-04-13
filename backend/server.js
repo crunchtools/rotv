@@ -2441,7 +2441,7 @@ async function setupAiSearchDefaults() {
     // Set default AI search config if not already set
     const defaults = [
       { key: 'ai_search_primary', value: 'gemini' },
-      { key: 'ai_search_fallback', value: 'perplexity' },
+      { key: 'ai_search_fallback', value: 'none' },
       { key: 'ai_search_primary_limit', value: '0' } // 0 = unlimited
     ];
 
