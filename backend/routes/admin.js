@@ -4278,7 +4278,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
                  CASE
                    WHEN bool_or(level = 'error') THEN 'failed'
                    WHEN bool_or((details->>'completed')::boolean) THEN 'completed'
-                   WHEN MAX(created_at) > NOW() - INTERVAL '2 minutes' THEN 'running'
+                   WHEN MAX(created_at) > NOW() - INTERVAL '10 minutes' THEN 'running'
                    ELSE 'stale'
                  END AS status,
                  MIN(created_at) AS started_at,
