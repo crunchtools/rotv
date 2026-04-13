@@ -5135,5 +5135,20 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   // End of Newsletter Management
   // ============================================================
 
+  // Moderation Sweep
+  // ============================================================
+
+  router.post('/moderation/sweep', isAdmin, async (req, res) => {
+    try {
+      console.log(`Admin ${req.user.email} triggered manual moderation sweep`);
+      const { processPendingItems } = await import('../services/moderationService.js');
+      await processPendingItems(pool);
+      res.json({ message: 'Moderation sweep completed' });
+    } catch (error) {
+      console.error('Moderation sweep error:', error);
+      res.status(500).json({ error: 'Moderation sweep failed' });
+    }
+  });
+
   return router;
 }

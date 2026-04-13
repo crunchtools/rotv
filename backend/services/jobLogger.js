@@ -71,20 +71,17 @@ export function log(entry) {
  * Convenience: log an info entry
  */
 export function logInfo(jobId, jobType, poiId, poiName, message, details = null) {
+  console.log(message);
   log({ jobId, jobType, poiId, poiName, level: 'info', message, details });
 }
 
-/**
- * Convenience: log a warning entry
- */
 export function logWarn(jobId, jobType, poiId, poiName, message, details = null) {
+  console.warn(message);
   log({ jobId, jobType, poiId, poiName, level: 'warn', message, details });
 }
 
-/**
- * Convenience: log an error entry
- */
 export function logError(jobId, jobType, poiId, poiName, message, details = null) {
+  console.error(message);
   log({ jobId, jobType, poiId, poiName, level: 'error', message, details });
 }
 

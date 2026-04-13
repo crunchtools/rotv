@@ -81,6 +81,16 @@ if [ -f /tmp/seed-data.sql ]; then
     echo "✓ Seed data imported"
 fi
 
+# Create test admin user for auth bypass (after seed data which may overwrite users table)
+if [ "$BYPASS_AUTH" = "true" ] || [ "$NODE_ENV" = "test" ]; then
+    psql -h "$PGRUNDIR" -U postgres -d rotv -c "
+      INSERT INTO users (id, email, name, oauth_provider, oauth_provider_id, is_admin, role)
+      VALUES (999, 'test-admin@rotv.local', 'Test Admin', 'test', '999', true, 'admin')
+      ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, is_admin = true, role = 'admin';
+    " > /dev/null 2>&1
+    echo "✓ Test admin user created (ID 999)"
+fi
+
 # Run all numbered SQL migrations (after seed data import)
 # Migrations are idempotent (IF NOT EXISTS, etc.) so safe to re-run
 echo "Running database migrations..."

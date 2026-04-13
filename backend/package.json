@@ -17,6 +17,7 @@
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@mozilla/readability": "^0.6.0",
     "axios": "^1.6.0",
+    "chrono-node": "^2.9.0",
     "connect-pg-simple": "^9.0.1",
     "cors": "^2.8.5",
     "csv-parse": "^5.5.3",
