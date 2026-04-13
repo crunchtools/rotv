@@ -18,12 +18,17 @@ export function parseDate(raw, timezone = 'America/New_York') {
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     const [y, m, d] = trimmed.split('-').map(Number);
-    if (y >= 1900 && y <= 2100 && m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+    // Validate day-of-month using Date constructor (catches Feb 31 etc.)
+    const probe = new Date(y, m - 1, d);
+    if (probe.getFullYear() === y && probe.getMonth() === m - 1 && probe.getDate() === d) {
       return trimmed;
     }
   }
 
-  const results = chrono.parse(trimmed, { instant: new Date(), timezone });
+  let results;
+  try {
+    results = chrono.parse(trimmed, { instant: new Date(), timezone });
+  } catch { return null; }
   if (results.length === 0) return null;
 
   const d = results[0].start;
@@ -49,7 +54,10 @@ export function parseDateTime(raw, timezone = 'America/New_York') {
   const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)$/);
   if (isoMatch) return `${isoMatch[1]}T${isoMatch[2].length === 5 ? isoMatch[2] + ':00' : isoMatch[2]}`;
 
-  const results = chrono.parse(trimmed, { instant: new Date(), timezone });
+  let results;
+  try {
+    results = chrono.parse(trimmed, { instant: new Date(), timezone });
+  } catch { return null; }
   if (results.length === 0) return null;
 
   const d = results[0].start;
@@ -74,7 +82,10 @@ export function parseDateTime(raw, timezone = 'America/New_York') {
 export function extractDatesFromText(text, timezone = 'America/New_York') {
   if (!text || typeof text !== 'string') return [];
 
-  const results = chrono.parse(text, { instant: new Date(), timezone });
+  let results;
+  try {
+    results = chrono.parse(text, { instant: new Date(), timezone });
+  } catch { return []; }
   return results.map(r => {
     const s = r.start;
     const startStr = `${s.get('year')}-${String(s.get('month')).padStart(2, '0')}-${String(s.get('day')).padStart(2, '0')}`;
