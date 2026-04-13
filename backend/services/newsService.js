@@ -482,7 +482,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page') {
     try {
       checkCancellation();
-      reportProgress(`Rendering events page: ${eventsUrl}`);
+      reportProgress(`Phase I: [Render] Rendering events page: ${eventsUrl}`);
       logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Render] Starting events pipeline`, { url: eventsUrl });
       updateProgress(poi.id, {
         phase: 'classifying_events',
@@ -494,8 +494,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       if (crawlResult.pages.length > 0) {
         classifiedEventsContent = crawlResult.pages.map(p => `### Event Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
         usedClassifier = true;
-        reportProgress(`Found ${crawlResult.pages.length} event pages (crawled ${crawlResult.totalPagesRendered} pages)`);
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: Classifier found ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered)`);
+        reportProgress(`Phase I: [Classify] Found ${crawlResult.pages.length} event pages (crawled ${crawlResult.totalPagesRendered} pages)`);
+        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] Found ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered)`);
       } else {
         // Classifier found nothing — use the listing page itself as content
         logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] No detail pages found, using listing page content`);
@@ -503,15 +503,15 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
         if (extracted.reachable && extracted.markdown?.length >= 200) {
           classifiedEventsContent = `### Event Page: ${eventsUrl}\n\n${extracted.markdown}`;
           usedClassifier = true;
-          reportProgress('Using events listing page content directly');
+          reportProgress('Phase I: [Classify] No detail pages, using listing page directly');
           logInfo(jobId, 'news', poi.id, poi.name, `Phase I: Using listing page content (${extracted.markdown.length} chars)`);
         } else {
-          reportProgress('Events page had insufficient content');
+          reportProgress('Phase I: [Render] Events page had insufficient content');
           logWarn(jobId, 'news', poi.id, poi.name, `Phase I: Events page insufficient content (${extracted.markdown?.length || 0} chars)`);
         }
       }
     } catch (err) {
-      reportProgress(`Events page crawl failed: ${err.message}`);
+      reportProgress(`Phase I: Events crawl failed: ${err.message}`);
       logWarn(jobId, 'news', poi.id, poi.name, `Phase I: Events classification failed: ${err.message}`);
     }
   }
@@ -520,7 +520,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   if (collectionType !== 'events' && newsUrl !== 'No dedicated news page') {
     try {
       checkCancellation();
-      reportProgress(`Rendering news page: ${newsUrl}`);
+      reportProgress(`Phase I: [Render] Rendering news page: ${newsUrl}`);
       logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Render] Starting news pipeline`, { url: newsUrl });
       updateProgress(poi.id, {
         phase: 'classifying_news',
@@ -532,8 +532,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       if (crawlResult.pages.length > 0) {
         classifiedNewsContent = crawlResult.pages.map(p => `### News Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
         usedNewsClassifier = true;
-        reportProgress(`Found ${crawlResult.pages.length} news pages (crawled ${crawlResult.totalPagesRendered} pages)`);
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: Classifier found ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered)`);
+        reportProgress(`Phase I: [Classify] Found ${crawlResult.pages.length} news pages (crawled ${crawlResult.totalPagesRendered} pages)`);
+        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] Found ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered)`);
       } else {
         // Classifier found nothing — use the listing page itself as content
         logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] No detail pages found, using listing page content`);
@@ -541,15 +541,15 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
         if (extracted.reachable && extracted.markdown?.length >= 200) {
           classifiedNewsContent = `### News Page: ${newsUrl}\n\n${extracted.markdown}`;
           usedNewsClassifier = true;
-          reportProgress('Using news listing page content directly');
+          reportProgress('Phase I: [Classify] No detail pages, using listing page directly');
           logInfo(jobId, 'news', poi.id, poi.name, `Phase I: Using listing page content (${extracted.markdown.length} chars)`);
         } else {
-          reportProgress('News page had insufficient content');
+          reportProgress('Phase I: [Render] News page had insufficient content');
           logWarn(jobId, 'news', poi.id, poi.name, `Phase I: News page insufficient content (${extracted.markdown?.length || 0} chars)`);
         }
       }
     } catch (err) {
-      reportProgress(`News page crawl failed: ${err.message}`);
+      reportProgress(`Phase I: News crawl failed: ${err.message}`);
       logWarn(jobId, 'news', poi.id, poi.name, `Phase I: News classification failed: ${err.message}`);
     }
   }
@@ -639,7 +639,7 @@ Extract ALL news from this content using these relaxed criteria.`;
     const usedProvider = 'gemini';
 
     if (hasCrawledContent) {
-      reportProgress('Sending classified content to Gemini for summarization');
+      reportProgress('Phase I: [Summarize] Sending classified content to Gemini');
       logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: [Summarize] Sending classified content to Gemini', { has_events: !!usedClassifier, has_news: !!usedNewsClassifier });
 
       updateProgress(poi.id, {
@@ -650,7 +650,7 @@ Extract ALL news from this content using these relaxed criteria.`;
 
       const aiResult = await generateTextWithCustomPrompt(pool, prompt);
       response = aiResult.response;
-      reportProgress(`Gemini responded (${response.length} chars)`);
+      reportProgress(`Phase I: [Summarize] Gemini responded (${response.length} chars)`);
       logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Summarize] Received response (${response.length} chars)`);
 
       // Parse JSON response
@@ -659,7 +659,7 @@ Extract ALL news from this content using these relaxed criteria.`;
         logWarn(jobId, 'news', poi.id, poi.name, `No JSON found in response, preview: ${response.substring(0, 500)}...`);
       } else {
         result = JSON.parse(jsonMatch[0]);
-        reportProgress(`Summarized ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
+        reportProgress(`Phase I: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
         logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
       }
     } else {
@@ -718,18 +718,22 @@ Extract ALL news from this content using these relaxed criteria.`;
           steps: ['Initialized', 'Phase I complete', 'Searching external news']
         });
 
-        reportProgress('Searching Serper for external news coverage...');
+        reportProgress('Phase II: [Search] Querying Serper for external coverage');
         logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
 
         // Phase II: [Search] — Serper API returns URLs
         const serperResult = await searchNewsUrls(pool, poi);
         logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Search] ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`, { query: serperResult.query, urls_found: serperResult.urls.length });
-        reportProgress(`Serper returned ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
+        reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
 
         if (serperResult.urls.length > 0) {
           // Phase II: Render → Classify → Crawl each Serper URL
+          // Fast path: Serper returns news articles which are nearly always detail pages.
+          // Only classify pages that look like listings (high link density, low content).
           const renderedSerperContent = [];
           let renderedCount = 0;
+          const LISTING_HEURISTIC_LINK_THRESHOLD = 15;
+          const LISTING_HEURISTIC_RATIO = 100; // chars per link — low ratio = listing page
 
           for (const urlData of serperResult.urls) {
             try {
@@ -742,7 +746,7 @@ Extract ALL news from this content using these relaxed criteria.`;
 
               // Phase II: [Render]
               logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Render] ${urlData.url}`);
-              reportProgress(`Rendering external: ${urlData.url}`);
+              reportProgress(`Phase II: [Render] ${urlData.url}`);
 
               const extracted = await extractPageContent(urlData.url, {
                 timeout: 30000,
@@ -755,45 +759,62 @@ Extract ALL news from this content using these relaxed criteria.`;
                 continue;
               }
 
-              // Phase II: [Classify]
-              const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], urlData.url, 'news', sheets);
-              logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Classify] ${urlData.url} → ${classification.pageType}`);
+              // Fast-path: most Serper results are detail pages (news articles).
+              // Only call Gemini Classify if the page looks like a listing:
+              // high link count + low chars-per-link ratio.
+              const linkCount = (extracted.links || []).length;
+              const charsPerLink = linkCount > 0 ? extracted.markdown.length / linkCount : Infinity;
+              const looksLikeListing = linkCount >= LISTING_HEURISTIC_LINK_THRESHOLD && charsPerLink < LISTING_HEURISTIC_RATIO;
 
-              if (classification.pageType === 'detail') {
-                // Detail page — use content directly
-                renderedSerperContent.push({
-                  url: urlData.url, title: urlData.title, snippet: urlData.snippet,
-                  date: urlData.date, markdown: extracted.markdown
-                });
-                renderedCount++;
-              } else {
-                // Listing or hybrid — crawl detail pages
-                logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Crawl] Following links from ${urlData.url}`);
-                const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
-                  maxPages: 5, maxDetailPages: 3, phase: 'Phase II', jobId
-                });
-                for (const page of crawlResult.pages) {
-                  renderedSerperContent.push({
-                    url: page.url, title: page.title || urlData.title, snippet: urlData.snippet,
-                    date: urlData.date, markdown: page.markdown
-                  });
-                  renderedCount++;
-                }
-                // If crawl found nothing, use the page itself
-                if (crawlResult.pages.length === 0) {
+              if (looksLikeListing) {
+                // Phase II: [Classify] — only for suspected listing pages
+                const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], urlData.url, 'news', sheets);
+                logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Classify] ${urlData.url} → ${classification.pageType}`);
+                reportProgress(`Phase II: [Classify] ${urlData.url} → ${classification.pageType}`);
+
+                if (classification.pageType === 'detail') {
                   renderedSerperContent.push({
                     url: urlData.url, title: urlData.title, snippet: urlData.snippet,
                     date: urlData.date, markdown: extracted.markdown
                   });
                   renderedCount++;
+                } else {
+                  // Listing or hybrid — crawl detail pages
+                  logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Crawl] Following links from ${urlData.url}`);
+                  const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
+                    maxPages: 5, maxDetailPages: 3, phase: 'Phase II', jobId
+                  });
+                  for (const page of crawlResult.pages) {
+                    renderedSerperContent.push({
+                      url: page.url, title: page.title || urlData.title, snippet: urlData.snippet,
+                      date: urlData.date, markdown: page.markdown
+                    });
+                    renderedCount++;
+                  }
+                  // If crawl found nothing, use the page itself
+                  if (crawlResult.pages.length === 0) {
+                    renderedSerperContent.push({
+                      url: urlData.url, title: urlData.title, snippet: urlData.snippet,
+                      date: urlData.date, markdown: extracted.markdown
+                    });
+                    renderedCount++;
+                  }
                 }
+              } else {
+                // Fast path — treat as detail page, no Gemini classify call
+                logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Classify] ${urlData.url} → detail (fast path: ${linkCount} links, ${Math.round(charsPerLink)} chars/link)`);
+                renderedSerperContent.push({
+                  url: urlData.url, title: urlData.title, snippet: urlData.snippet,
+                  date: urlData.date, markdown: extracted.markdown
+                });
+                renderedCount++;
               }
             } catch (renderError) {
               logError(jobId, 'news', poi.id, poi.name, `Phase II: [Render] Error: ${urlData.url} — ${renderError.message}`);
             }
           }
 
-          reportProgress(`Rendered ${renderedCount} pages from ${serperResult.urls.length} external URLs`);
+          reportProgress(`Phase II: [Render] ${renderedCount} pages from ${serperResult.urls.length} URLs`);
           logInfo(jobId, 'news', poi.id, poi.name, `Phase II: Rendered ${renderedCount} pages from ${serperResult.urls.length} URLs`);
 
           // Phase II: [Summarize] — send all rendered content to Gemini
@@ -866,7 +887,7 @@ Return {"news": []} if no relevant news found.`;
             }
             logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Dates] ${serperDateHints.length} dates extracted from ${renderedSerperContent.length} pages`);
 
-            reportProgress(`Sending ${renderedSerperContent.length} external pages to Gemini for summarization`);
+            reportProgress(`Phase II: [Summarize] Sending ${renderedSerperContent.length} pages to Gemini`);
             const serperAiResult = await generateTextWithCustomPrompt(pool, serperPrompt);
 
             const serperAiResponse = serperAiResult.response;
@@ -891,15 +912,15 @@ Return {"news": []} if no relevant news found.`;
                 });
 
                 if (newItems.length > 0) {
-                  reportProgress(`Found ${newItems.length} new articles from external sources`);
+                  reportProgress(`Phase II: [Summarize] ${newItems.length} new articles from external sources`);
                   logInfo(jobId, 'news', poi.id, poi.name, `Phase II: Adding ${newItems.length} unique items`);
                   allNews = [...allNews, ...newItems];
                 } else {
-                  reportProgress('External articles were duplicates, skipped');
+                  reportProgress('Phase II: [Summarize] All duplicates, skipped');
                   logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: All external news items were duplicates, skipped');
                 }
               } else {
-                reportProgress('No relevant news in external articles');
+                reportProgress('Phase II: [Summarize] No relevant news found');
                 logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: No relevant news extracted from external sources');
               }
             }
