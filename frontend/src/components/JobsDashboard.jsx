@@ -795,6 +795,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                                 <div className={`job-run-row ${isExpanded ? 'expanded' : ''}`}
                                   onClick={(e) => { e.stopPropagation(); handleExpandRun(run.job_type, run); }}>
                                   <span className="status-badge" style={{ backgroundColor: STATUS_COLORS[run.status] || '#9e9e9e' }}>{run.status}</span>
+                                  <span className="run-job-id" style={{ color: '#777', fontSize: '0.75rem', fontFamily: 'monospace' }}>#{run.id}</span>
                                   <span className="run-items">{run.items_processed != null ? `${run.items_processed}/${run.items_total}` : '--'}</span>
                                   <span className="run-time">{formatTime(run.started_at || run.created_at)}</span>
                                   <span className="run-duration">
