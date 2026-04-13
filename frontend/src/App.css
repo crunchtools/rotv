@@ -12864,27 +12864,6 @@ svg.leaflet-zoom-animated {
   background: #fafafa;
 }
 
-.log-level-filters {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.log-filter-btn {
-  padding: 4px 12px;
-  border: 1px solid #cbd5e0;
-  border-radius: 4px;
-  background: white;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.log-filter-btn.active {
-  background: #4a7c23;
-  color: white;
-  border-color: #4a7c23;
-}
-
 .job-error-banner {
   background: #fed7d7;
   color: #742a2a;

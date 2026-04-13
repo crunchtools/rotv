@@ -4278,7 +4278,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
                  CASE
                    WHEN bool_or(level = 'error') THEN 'failed'
                    WHEN bool_or((details->>'completed')::boolean) THEN 'completed'
-                   WHEN MAX(created_at) > NOW() - INTERVAL '2 minutes' THEN 'running'
+                   WHEN MAX(created_at) > NOW() - INTERVAL '10 minutes' THEN 'running'
                    ELSE 'stale'
                  END AS status,
                  MIN(created_at) AS started_at,
@@ -5134,6 +5134,24 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   // End of Newsletter Management
   // ============================================================
+
+  // Moderation Sweep
+  // ============================================================
+
+  router.post('/moderation/sweep', isAdmin, async (req, res) => {
+    try {
+      console.log(`Admin ${req.user.email} triggered manual moderation sweep`);
+      // Fire-and-forget — sweep runs in background, response returns immediately
+      const { processPendingItems } = await import('../services/moderationService.js');
+      processPendingItems(pool).catch(err => {
+        console.error('Background moderation sweep error:', err.message);
+      });
+      res.json({ message: 'Moderation sweep started' });
+    } catch (error) {
+      console.error('Moderation sweep error:', error);
+      res.status(500).json({ error: 'Moderation sweep failed to start' });
+    }
+  });
 
   return router;
 }

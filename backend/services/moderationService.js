@@ -8,6 +8,7 @@ import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL } from
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
+import { findPublicationDate, findEventDates, parseDate } from './dateExtractor.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -73,14 +74,11 @@ function extractDateFields(scoring) {
   let dateConfidence = 'unknown';
 
   if (scoring.publication_date) {
-    // Validate YYYY-MM-DD format strictly — don't trust Date constructor parsing
-    const dateStr = String(scoring.publication_date);
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-        publicationDate = dateStr;
-        dateConfidence = scoring.date_confidence || 'estimated';
-      }
+    // Normalize through chrono-node first — handles natural language, European format, etc.
+    const normalized = parseDate(String(scoring.publication_date));
+    if (normalized) {
+      publicationDate = normalized;
+      dateConfidence = scoring.date_confidence || 'estimated';
     }
   } else if (scoring.date_confidence) {
     dateConfidence = scoring.date_confidence;
@@ -223,7 +221,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
   if (contentType === 'news') {
     const newsQuery = await pool.query(
-      `SELECT n.id, n.title, n.summary, n.source_url, p.name as poi_name
+      `SELECT n.id, n.title, n.summary, n.source_url, n.publication_date, n.date_confidence, p.name as poi_name
        FROM poi_news n
        LEFT JOIN pois p ON n.poi_id = p.id
        WHERE n.id = $1`, [contentId]
@@ -284,8 +282,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       ({ scoring, foundIssue } = await attemptDeepCrawl(pool, 'news', contentId, row, scoring));
     }
 
-    // Extract date fields before quality filters
-    const { publicationDate: newsPubDate, dateConfidence: newsDateConf } = extractDateFields(scoring);
+    // Use dates from collection (set by chrono-node), not from Gemini moderation
+    const newsPubDate = row.publication_date ? parseDate(String(row.publication_date).slice(0, 10)) : null;
+    const newsDateConf = newsPubDate ? (row.date_confidence || 'estimated') : 'unknown';
 
     // Apply quality filters to adjust confidence_score
     scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: newsPubDate, dateConfidence: newsDateConf }, trustedSet, competitorSet);
@@ -331,7 +330,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
   } else if (contentType === 'event') {
     const eventQuery = await pool.query(
-      `SELECT e.id, e.title, e.description, e.source_url, e.start_date, e.content_source, p.name as poi_name
+      `SELECT e.id, e.title, e.description, e.source_url, e.start_date, e.content_source,
+              e.publication_date, e.date_confidence, p.name as poi_name
        FROM poi_events e
        LEFT JOIN pois p ON e.poi_id = p.id
        WHERE e.id = $1`, [contentId]
@@ -395,8 +395,18 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       ({ scoring, foundIssue: eventFoundIssue } = await attemptDeepCrawl(pool, 'event', contentId, row, scoring));
     }
 
-    // Extract date fields before quality filters
-    const { publicationDate: eventPubDate, dateConfidence: eventDateConf } = extractDateFields(scoring);
+    // Use dates from collection (set by chrono-node), not from Gemini moderation
+    let eventPubDate = row.publication_date ? parseDate(String(row.publication_date).slice(0, 10)) : null;
+    let eventDateConf = eventPubDate ? (row.date_confidence || 'estimated') : 'unknown';
+
+    // Fallback: events with start_date but no pub date shouldn't get stuck as 'unknown'
+    if (eventDateConf === 'unknown' && row.start_date) {
+      const startStr = String(row.start_date).slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(startStr)) {
+        eventPubDate = startStr;
+        eventDateConf = 'estimated';
+      }
+    }
 
     // Apply quality filters to adjust confidence_score
     scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: eventPubDate, dateConfidence: eventDateConf }, trustedSet, competitorSet);
@@ -820,55 +830,9 @@ export async function fixDate(pool, contentType, contentId) {
   console.log(`[Moderation] Fixing date for ${contentType} #${contentId}: "${item.title}"`);
   logInfo(runId, 'moderation', null, item.title, `Fix Date: ${contentType} #${contentId}`);
 
-  // Fetch actual page content if source URL exists
+  // Render page content via Playwright + Readability for chrono-node and Gemini
   let pageContent = '';
-  let htmlDateHints = '';
   if (item.source_url && isSafePublicUrl(item.source_url)) {
-    try {
-      // Simple fetch to get raw HTML for date metadata extraction
-      const res = await fetch(item.source_url, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ROTV/1.0)' },
-        signal: AbortSignal.timeout(10000)
-      });
-      if (res.ok) {
-        const html = await res.text();
-        // Extract date hints from HTML metadata and structured elements
-        const datePatterns = [];
-        const metaMatch = html.match(/<meta[^>]+(?:property|name)=["'](?:article:published_time|og:article:published_time|datePublished|date|DC\.date)["'][^>]+content=["']([^"']+)["']/i);
-        if (metaMatch) datePatterns.push(metaMatch[1]);
-        const timeMatch = html.match(/<time[^>]+datetime=["']([^"']+)["']/i);
-        if (timeMatch) datePatterns.push(timeMatch[1]);
-        const ldMatch = html.match(/"datePublished"\s*:\s*"([^"]+)"/);
-        if (ldMatch) datePatterns.push(ldMatch[1]);
-
-        // If we found a machine-readable date, use it directly — skip Gemini
-        if (datePatterns.length > 0) {
-          for (const raw of datePatterns) {
-            const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-            if (isoMatch) {
-              const dateStr = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
-              const [y, m, d] = [parseInt(isoMatch[1]), parseInt(isoMatch[2]), parseInt(isoMatch[3])];
-              if (m >= 1 && m <= 12 && d >= 1 && d <= 31 && y >= 1900 && y <= 2100) {
-                await pool.query(
-                  `UPDATE ${table} SET publication_date = $1, date_confidence = 'exact' WHERE id = $2`,
-                  [dateStr, contentId]
-                );
-                console.log(`[Moderation] Fix date from HTML metadata: ${contentType} #${contentId} → ${dateStr}`);
-                logInfo(runId, 'moderation', null, item.title, `Fix Date: ${dateStr} (from HTML metadata)`, { completed: true, publication_date: dateStr });
-                await flushJobLogs();
-                return { date_updated: true, publication_date: dateStr, date_confidence: 'exact', reasoning: 'Extracted from HTML metadata' };
-              }
-            }
-          }
-          // Have hints but couldn't parse — pass to Gemini
-          htmlDateHints = '\nDate metadata found in HTML:\n' + datePatterns.join('\n');
-        }
-      }
-    } catch (fetchErr) {
-      console.warn(`[Moderation] Could not fetch raw HTML for fix-date: ${fetchErr.message}`);
-    }
-
-    // Also get readable content via Playwright + Readability
     try {
       const extracted = await extractPageContent(item.source_url, { maxLength: 4000, timeout: 15000 });
       if (extracted.markdown) {
@@ -879,6 +843,48 @@ export async function fixDate(pool, contentType, contentId) {
     }
   }
 
+  // Try chrono-node first — deterministic, no API call needed
+  if (pageContent) {
+    const chronoPubDate = findPublicationDate(pageContent, item.title, 'America/New_York');
+    if (chronoPubDate) {
+      // Fast path: chrono-node found a date, skip Gemini
+      if (contentType === 'event') {
+        const eventDates = findEventDates(pageContent, item.title, 'America/New_York');
+        const setClauses = ['publication_date = $2', "date_confidence = 'exact'"];
+        const values = [contentId, chronoPubDate];
+        let idx = 3;
+        if (eventDates.startDate) {
+          const startTs = eventDates.startTime
+            ? `${eventDates.startDate}T${eventDates.startTime}:00`
+            : `${eventDates.startDate}T00:00:00`;
+          setClauses.push(`start_date = $${idx}`);
+          values.push(startTs);
+          idx++;
+        }
+        if (eventDates.endDate) {
+          const endTs = eventDates.endTime
+            ? `${eventDates.endDate}T${eventDates.endTime}:00`
+            : `${eventDates.endDate}T23:59:00`;
+          setClauses.push(`end_date = $${idx}`);
+          values.push(endTs);
+          idx++;
+        }
+        await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
+        console.log(`[Moderation] Fix date via chrono-node: ${contentType} #${contentId} → pub=${chronoPubDate}, start=${eventDates.startDate}`);
+      } else {
+        await pool.query(
+          `UPDATE ${table} SET publication_date = $1, date_confidence = 'exact' WHERE id = $2`,
+          [chronoPubDate, contentId]
+        );
+        console.log(`[Moderation] Fix date via chrono-node: ${contentType} #${contentId} → ${chronoPubDate}`);
+      }
+      logInfo(runId, 'moderation', null, item.title, `Fix Date: ${chronoPubDate} (chrono-node)`, { completed: true, publication_date: chronoPubDate });
+      await flushJobLogs();
+      return { date_updated: true, publication_date: chronoPubDate, date_confidence: 'exact', reasoning: 'Extracted by chrono-node' };
+    }
+  }
+
+  // Chrono-node failed — fall through to Gemini
   const typeLabel = contentType === 'news' ? 'news article' : 'event';
   const eventDateInstructions = contentType === 'event' ? `
 - EVENT DATES: Find the event start date/time and end date/time. These are the dates the event actually occurs, NOT when the article was published.
@@ -895,7 +901,6 @@ Title: "${item.title}"
 ${item.description ? `Description: "${item.description}"` : ''}
 ${item.source_url ? `Source URL: ${item.source_url}` : ''}
 ${item.poi_name ? `Location/Organization: ${item.poi_name}` : ''}
-${htmlDateHints}
 ${pageContent ? `\nPage Content:\n${pageContent}` : ''}
 
 Look for:
@@ -944,6 +949,11 @@ If truly impossible to determine, use "unknown" and set publication_date to null
     await flushJobLogs();
     return { date_updated: false, reasoning: 'Failed to parse AI response' };
   }
+
+  // Post-process Gemini dates through chrono-node for normalization
+  if (result.publication_date) result.publication_date = parseDate(result.publication_date) || result.publication_date;
+  if (result.start_date) result.start_date = parseDate(result.start_date) || result.start_date;
+  if (result.end_date) result.end_date = parseDate(result.end_date) || result.end_date;
 
   const { publicationDate, dateConfidence } = extractDateFields(result);
 

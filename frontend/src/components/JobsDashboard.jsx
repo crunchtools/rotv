@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -92,9 +92,9 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const [expandedRun, setExpandedRun] = useState(null);
   const [runLogs, setRunLogs] = useState([]);
-  const [logLevelFilter, setLogLevelFilter] = useState('all');
   const [logDetailsExpanded, setLogDetailsExpanded] = useState(new Set());
   const [expandedPoiGroups, setExpandedPoiGroups] = useState(new Set());
+  const autoExpandedPoisRef = useRef(new Set());
 
   const [runningJobs, setRunningJobs] = useState({});
   const [activeSlots, setActiveSlots] = useState({});
@@ -142,7 +142,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const fetchRunLogs = useCallback(async (jobType, runId, poiId) => {
     try {
       const params = new URLSearchParams({ limit: '200' });
-      if (logLevelFilter !== 'all') params.set('level', logLevelFilter);
       const res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${runId}/logs?${params}`, { credentials: 'include' });
       if (res.ok) {
         const newLogs = await res.json();
@@ -161,7 +160,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     } catch (err) {
       console.error('Failed to fetch run logs:', err);
     }
-  }, [logLevelFilter]);
+  }, []);
 
   const checkRunningJobs = useCallback(async () => {
     const running = {};
@@ -264,7 +263,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   useEffect(() => {
     if (expandedRun) fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
-  }, [expandedRun, logLevelFilter, fetchRunLogs]);
+  }, [expandedRun, fetchRunLogs]);
 
   // Poll logs when a run is expanded and its job is running or recently finished
   useEffect(() => {
@@ -325,6 +324,19 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, [expandedRun, runLogs]);
 
+  // Auto-expand the most recent POI in the log tree (so user sees live progress),
+  // but only once per POI — user can collapse it and it stays collapsed
+  useEffect(() => {
+    if (!runLogs || runLogs.length === 0) return;
+    const poiLogs = runLogs.filter(l => l.poi_id);
+    if (poiLogs.length === 0) return;
+    const lastPoiId = poiLogs[poiLogs.length - 1].poi_id;
+    if (lastPoiId && !autoExpandedPoisRef.current.has(lastPoiId)) {
+      autoExpandedPoisRef.current.add(lastPoiId);
+      setExpandedPoiGroups(prev => new Set([...prev, lastPoiId]));
+    }
+  }, [runLogs]);
+
   // Auto-expand newest run after clicking "Run Now"
   useEffect(() => {
     if (autoExpandNewestRun && jobHistory[autoExpandNewestRun]) {
@@ -380,12 +392,12 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const handleExpandRun = (jobType, run) => {
     const key = `${jobType}-${String(run.id)}`;
     if (expandedRun && `${expandedRun.jobType}-${String(expandedRun.runId)}` === key) {
-      setExpandedRun(null); setRunLogs([]); setLogLevelFilter('all');
+      setExpandedRun(null); setRunLogs([]);
     } else {
       // For single-POI jobs, the run's id in history is the runId (timestamp), but logs are queried by poi_id
       // The history query returns poi_id count as items_total, so we can't get poi_id from there
       // Instead, query logs by job_id (which is the runId) using the batch endpoint
-      setExpandedRun({ jobType, runId: run.id }); setLogLevelFilter('all'); setLogDetailsExpanded(new Set()); setExpandedPoiGroups(new Set());
+      setExpandedRun({ jobType, runId: run.id }); setLogDetailsExpanded(new Set()); setExpandedPoiGroups(new Set()); autoExpandedPoisRef.current = new Set();
     }
   };
 
@@ -795,18 +807,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
                                 {isExpanded && (
                                   <div className="job-logs-panel">
-                                    <div className="log-level-filters">
-                                      {['all', 'error', 'warn'].map(level => (
-                                        <button key={level} className={`log-filter-btn ${logLevelFilter === level ? 'active' : ''}`}
-                                          onClick={(e) => { e.stopPropagation(); setLogLevelFilter(level); }}>
-                                          {level === 'all' ? 'All' : level === 'error' ? 'Errors' : 'Warnings'}
-                                        </button>
-                                      ))}
-                                    </div>
                                     {run.error_message && <div className="job-error-banner">{run.error_message}</div>}
                                     {runLogs.length === 0 ? (
                                       <p style={{ color: '#999', padding: '8px 0', margin: 0, fontSize: '0.82rem' }}>
-                                        No log entries{logLevelFilter !== 'all' ? ` with level "${logLevelFilter}"` : ''}.
+                                        No log entries.
                                       </p>
                                     ) : (
                                       <PoiLogTree
@@ -842,7 +846,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
 function formatLogLine(entry) {
   const time = entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : '--';
-  const level = entry.level === 'error' ? 'ERR' : entry.level === 'warn' ? 'WRN' : 'INF';
+  const level = entry.level === 'error' ? 'Error' : entry.level === 'warn' ? 'Warning' : 'Info';
   let line = `${time}  ${level}  ${entry.message}`;
   if (entry.details) {
     const detailParts = Object.entries(entry.details)
@@ -876,22 +880,18 @@ function PoiLogTree({ logs, expandedPoiGroups, onToggleGroup }) {
     }
   }
 
-  // Auto-expand the most recent POI group
   const poiGroups = [...groups.values()];
-  const lastPoiId = poiGroups.length > 0 ? poiGroups[poiGroups.length - 1].poiId : null;
 
   return (
     <div className="poi-log-tree">
-      {/* Job-level logs at the top */}
       {jobLevelLogs.length > 0 && (
         <pre className="job-logs-text" style={{ marginBottom: '4px' }}>
           {jobLevelLogs.map(e => formatLogLine(e)).join('\n')}
         </pre>
       )}
 
-      {/* Per-POI groups */}
       {poiGroups.map(group => {
-        const isOpen = expandedPoiGroups.has(group.poiId) || group.poiId === lastPoiId;
+        const isOpen = expandedPoiGroups.has(group.poiId);
         const hasErrors = group.logs.some(l => l.level === 'error');
 
         return (

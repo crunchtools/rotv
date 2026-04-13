@@ -410,9 +410,13 @@ function ModerationInbox({ onCountChange }) {
         const fieldConfigs = FIELD_CONFIGS[item.content_type] || [];
         for (const fc of fieldConfigs) {
           if (fc.type === 'datetime-local' && detail[fc.key]) {
-            fields[fc.key] = new Date(detail[fc.key]).toISOString().slice(0, 16);
+            const raw = String(detail[fc.key]);
+            const match = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+            fields[fc.key] = match ? `${match[1]}T${match[2]}` : raw.slice(0, 16);
           } else if (fc.type === 'date' && detail[fc.key]) {
-            fields[fc.key] = new Date(detail[fc.key]).toISOString().slice(0, 10);
+            const raw = String(detail[fc.key]);
+            const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+            fields[fc.key] = match ? match[1] : raw.slice(0, 10);
           } else {
             fields[fc.key] = detail[fc.key] || '';
           }
@@ -988,7 +992,9 @@ function ModerationInbox({ onCountChange }) {
                       {item.content_type !== 'photo' && (() => {
                         const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
                         const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
-                        const hasNoDate = !item.publication_date || item.date_confidence === 'unknown';
+                        const hasNoDate = item.content_type === 'event'
+                          ? !item.publication_date && !item.start_date
+                          : !item.publication_date || item.date_confidence === 'unknown';
                         const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
                         const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
                         const hasOther = issues.some(i => !urlIssueCodes.includes(i));

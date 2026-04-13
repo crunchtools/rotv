@@ -82,7 +82,7 @@ export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
       visited.add(url);
 
       pagesChecked++;
-      console.log(`[Deep Crawler] Rendering (depth=${depth}, page=${pagesChecked}/${maxPages}): ${url}`);
+      console.log(`[Render] Rendering (depth=${depth}, page=${pagesChecked}/${maxPages}): ${url}`);
 
       const extracted = await extractor(url, {
         timeout: 15000,
@@ -93,7 +93,7 @@ export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
       if (!extracted.reachable || !extracted.markdown) continue;
 
       if (contentMatchesItem(extracted.markdown, item)) {
-        console.log(`[Deep Crawler] Match found at depth ${depth}: ${url}`);
+        console.log(`[Render] Match found at depth ${depth}: ${url}`);
         return { foundUrl: url, foundContent: extracted.markdown };
       }
 
@@ -123,7 +123,7 @@ export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
   if (prefetched && prefetched.markdown) {
     visited.add(sourceUrl);
     if (contentMatchesItem(prefetched.markdown, item)) {
-      console.log(`[Deep Crawler] Match found at depth 0 (prefetched): ${sourceUrl}`);
+      console.log(`[Render] Match found at depth 0 (prefetched): ${sourceUrl}`);
       return { foundUrl: sourceUrl, foundContent: prefetched.markdown, pagesChecked: 0 };
     }
     const candidateLinks = [];
@@ -168,6 +168,6 @@ export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
     currentCandidates = levelResult.candidateLinks || [];
   }
 
-  console.log(`[Deep Crawler] No match found after checking ${pagesChecked} pages`);
+  console.log(`[Render] No match found after checking ${pagesChecked} pages`);
   return { foundUrl: null, foundContent: null, pagesChecked };
 }

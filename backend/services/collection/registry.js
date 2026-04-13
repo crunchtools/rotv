@@ -55,8 +55,8 @@ export const COLLECTION_TYPES = [
     schedule: '*/15 * * * *',
     statusTable: null,
     historyTypes: ['moderation'],
-    triggerEndpoint: null,
-    manualTriggerMethod: null,
+    triggerEndpoint: '/api/admin/moderation/sweep',
+    manualTriggerMethod: 'POST',
     hasPrompt: false
   },
   {
