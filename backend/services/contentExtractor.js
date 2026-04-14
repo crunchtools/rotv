@@ -56,6 +56,7 @@ const STEALTH_INIT_SCRIPT = `
   window.chrome = { runtime: {} };
 `;
 
+
 async function acquireBrowser() {
   if (browserCloseTimer) {
     clearTimeout(browserCloseTimer);

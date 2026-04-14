@@ -50,6 +50,7 @@ import {
   approveItem,
   rejectItem,
   bulkApprove,
+  bulkReject,
   editAndPublish,
   requeueItem,
   researchItem,
@@ -2788,8 +2789,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       // Generate a unique run ID so each collection attempt is a separate entry in history
       const runIdResult = await pool.query("SELECT nextval('single_poi_run_id_seq')");
       const runId = parseInt(runIdResult.rows[0].nextval);
-      // Store runId in progress so alreadyRunning response can reference it
-      updateProgress(poi.id, { runId });
+      // Store runId + jobType in progress so collectNewsForPoi picks them up for logInfo
+      updateProgress(poi.id, { runId, jobId: runId, jobType: 'news_single' });
 
       const urls = [
         poi.news_url ? `news: ${poi.news_url}` : null,
@@ -2822,7 +2823,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         logInfo(runId, 'news_single', poi.id, poi.name, `Saving ${news.length} news items to database...`);
         await flushJobLogs();
 
-        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
+        const saveLog = (msg) => { logInfo(runId, 'news_single', poi.id, poi.name, msg); };
+        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl, log: saveLog });
+        await flushJobLogs();
 
         updateProgress(poi.id, {
           phase: 'complete',
@@ -2894,7 +2897,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       // Generate a unique run ID so each collection attempt is a separate entry in history
       const runIdResult = await pool.query("SELECT nextval('single_poi_run_id_seq')");
       const runId = parseInt(runIdResult.rows[0].nextval);
-      updateProgress(poi.id, { runId });
+      updateProgress(poi.id, { runId, jobId: runId, jobType: 'events_single' });
 
       const urls = [
         poi.events_url ? `events: ${poi.events_url}` : null,
@@ -2926,7 +2929,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         logInfo(runId, 'events_single', poi.id, poi.name, `Saving ${events.length} event items to database...`);
         await flushJobLogs();
 
-        const savedEvents = await saveEventItems(pool, poi.id, events);
+        const saveLog = (msg) => { logInfo(runId, 'events_single', poi.id, poi.name, msg); };
+        const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog });
+        await flushJobLogs();
 
         updateProgress(poi.id, {
           phase: 'complete',
@@ -4000,6 +4005,21 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('Error bulk approving:', error);
       res.status(500).json({ error: 'Failed to bulk approve' });
+    }
+  });
+
+  // Bulk reject
+  router.post('/moderation/bulk-reject', isAdmin, async (req, res) => {
+    try {
+      const { items } = req.body;
+      if (!items || !Array.isArray(items)) {
+        return res.status(400).json({ error: 'items array is required' });
+      }
+      const result = await bulkReject(pool, items, req.user.id);
+      res.json(result);
+    } catch (error) {
+      console.error('Error bulk rejecting:', error);
+      res.status(500).json({ error: 'Failed to bulk reject' });
     }
   });
 
