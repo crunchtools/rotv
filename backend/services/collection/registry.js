@@ -173,10 +173,8 @@ export const COLLECTION_TYPES = [
  */
 export async function getDefaultPrompt(key) {
   switch (key) {
-    case 'news_collection_prompt': {
-      const { NEWS_COLLECTION_PROMPT } = await import('../newsService.js');
-      return NEWS_COLLECTION_PROMPT;
-    }
+    case 'news_collection_prompt':
+      return null;
     case 'trail_status_prompt': {
       const { TRAIL_STATUS_PROMPT } = await import('../trailStatusService.js');
       return TRAIL_STATUS_PROMPT;

@@ -8,23 +8,42 @@ The system solves this with an automated pipeline that discovers, renders, class
 
 ## Pipeline Architecture
 
-Every piece of content flows through seven stages. Both Phase I and Phase II follow the same pipeline — Phase II simply adds a Search step at the front.
+The pipeline is **per-URL** — every URL gets its own complete pipeline run. There is no batching or concatenation of content across URLs.
 
 ```
- [Search]  →  [Render]  →  [Classify]  →  [Crawl]  →  [Dates]  →  [Summarize]  →  [Save]
-  Serper      Playwright     Gemini       Playwright   chrono-node    Gemini        PostgreSQL
+URL  →  [Render]  →  [Dates]  →  [Summarize]  →  [Save]
+        Playwright   chrono-node    Gemini        PostgreSQL
 ```
 
-### The Seven Stages
+Every item produced by `[Summarize]` has `source_url` set to the URL that was rendered. This is deterministic — no guessing, no cross-page attribution.
+
+### The Core Function: `processOneUrl`
+
+~30 lines. Does one thing: takes a URL, renders it, extracts dates, sends the single page to Gemini, forces `source_url` on every returned item.
+
+```
+processOneUrl(pool, url, poi, contentType, options)
+  → { news: [], events: [] }
+```
+
+### Discovery vs. Processing
+
+Discovery (finding which URLs to process) is separate from processing (the per-URL pipeline above):
+
+- **Phase I Discovery**: `crawlWithClassification` walks the POI's dedicated pages, classifying each as listing/detail/hybrid and following links. Returns a list of detail page URLs.
+- **Phase II Discovery**: Serper API returns search result URLs. Each is processed directly as a detail page.
+- **Processing**: Every discovered URL goes through `processOneUrl` independently.
+
+### The Stages
 
 | Stage | Log Prefix | Tool | Responsibility |
 |-------|-----------|------|----------------|
 | **Search** | `[Search]` | Serper API | Find URLs for external coverage (Phase II only) |
-| **Render** | `[Render]` | Playwright + Readability | Convert URLs to clean markdown |
-| **Classify** | `[Classify]` | Google Gemini | Determine if a page is a listing, detail, or hybrid |
-| **Crawl** | `[Crawl]` | Playwright + Readability | Follow links from listing/hybrid pages to detail pages |
-| **Dates** | `[Dates]` | chrono-node | Extract and normalize all dates deterministically |
-| **Summarize** | `[Summarize]` | Google Gemini | Identify distinct items, write summaries, classify types |
+| **Classify** | `[Classify]` | Google Gemini | Determine if a page is a listing, detail, or hybrid (discovery only) |
+| **Crawl** | `[Crawl]` | Playwright + Readability | Follow links from listing/hybrid pages (discovery only) |
+| **Render** | `[Render]` | Playwright + Readability | Convert a URL to clean markdown |
+| **Dates** | `[Dates]` | chrono-node | Extract and normalize dates from THIS page only |
+| **Summarize** | `[Summarize]` | Google Gemini | Extract items from THIS page only, with source_url forced |
 | **Save** | `[Save]` | PostgreSQL | Deduplicate, normalize, persist |
 
 ### Key Design Principle: Tools Stay in Their Lane
@@ -33,32 +52,31 @@ Every piece of content flows through seven stages. Both Phase I and Phase II fol
 - **Gemini classifies pages, not content.** Classification asks "Is this page a listing or a detail page?" — it does not summarize or extract data.
 - **chrono-node never summarizes.** It only finds and normalizes date references in text.
 - **Serper never renders.** It returns URLs. Playwright renders them.
+- **source_url is deterministic.** Every item's source_url is the URL that was rendered — forced after Gemini returns, not relying on Gemini to attribute URLs correctly.
 - **Moderation never overwrites collection dates.** Dates are set during collection and preserved through moderation. The only exception is the manual "Fix Date" button, which uses chrono-node first and Gemini as a fallback.
 
 ### Gemini's Three Roles
 
 Gemini is used for three distinct tasks, each with a clear boundary:
 
-1. **Classification** — "Is this page a listing, detail, or hybrid?" Called per-page during the Classify stage. Returns a page type and links to follow.
-2. **Summarization** — "What news/events are on these pages?" Called once per phase with all rendered content batched together. Returns structured JSON.
+1. **Classification** — "Is this page a listing, detail, or hybrid?" Called per-page during discovery. Returns a page type and links to follow.
+2. **Summarization** — "What news/events are on this page?" Called once per URL via `processOneUrl`. Returns structured JSON with items from that single page.
 3. **Moderation** — "Is this item relevant and high-quality?" Called per-item during the separate moderation sweep. Returns a quality score.
 
 ## Two-Phase Collection
 
-Content collection happens in two phases per POI. Both phases follow the same Render → Classify → Crawl → Dates → Summarize pipeline. Logs always show `Phase I:` or `Phase II:` prefix so you can tell which phase a URL is in.
+Content collection happens in two phases per POI. Logs always show `Phase I:` or `Phase II:` prefix so you can tell which phase a URL is in.
 
 ### Phase I: POI's Own Pages
 
 If a POI has dedicated `events_url` or `news_url` configured:
 
-1. **Render** the dedicated page via Playwright
-2. **Classify** the page as listing, detail, or hybrid via Gemini
-3. **Crawl** — if listing/hybrid, follow links to detail pages and render each one
-4. If classifier finds no detail pages, use the listing page content directly (fallback)
-5. **Dates** — extract dates from all rendered content via chrono-node (passed as hints to Gemini)
-6. **Summarize** all rendered content in a single Gemini call with relaxed filtering (75% confidence)
+1. **Classify & Crawl** the dedicated page using `crawlWithClassification` — renders it, classifies as listing/detail/hybrid, follows links to detail pages
+2. If classifier finds detail pages, each gets `processOneUrl` with 75% confidence
+3. If classifier finds no detail pages, the listing URL itself gets `processOneUrl` (fallback)
+4. Each `processOneUrl` call: Render → Dates → Summarize → force source_url
 
-Phase I uses relaxed confidence thresholds because content on an organization's own events/news page is inherently relevant to that POI.
+Phase I uses relaxed confidence thresholds (75%) because content on an organization's own events/news page is inherently relevant to that POI.
 
 POIs without dedicated URLs skip Phase I entirely and go straight to Phase II.
 
@@ -67,19 +85,20 @@ POIs without dedicated URLs skip Phase I entirely and go straight to Phase II.
 After Phase I, the system searches for external news coverage:
 
 1. **Search** via Serper API for news about the POI
-2. **Render** each returned URL via Playwright (with `extractLinks: true`)
-3. **Classify** each page as listing, detail, or hybrid via Gemini
-4. **Crawl** — if listing/hybrid, follow links to detail pages (capped at 5 pages, 3 detail pages per URL)
-5. If crawl finds nothing, use the page content directly (same fallback as Phase I)
-6. **Dates** — extract dates from all rendered content via chrono-node
-7. **Summarize** all rendered content in a single Gemini call with strict filtering (95% confidence)
-8. **Merge** with Phase I results, deduplicating by URL and normalized title
+2. For each Serper URL: `processOneUrl` with 95% confidence
+3. **Merge** with Phase I results, deduplicating by normalized title
 
-Phase II uses strict confidence thresholds because external sources may mention a POI tangentially without being truly relevant. Per-URL crawl limits are tight to prevent 10 Serper URLs x 5 crawled pages = 50 renders.
+Phase II uses strict confidence thresholds (95%) because external sources may mention a POI tangentially without being truly relevant.
 
-### Single Gemini Call per Phase
+### Why Per-URL, Not Batched
 
-Both phases batch all rendered content into a single Gemini API call rather than one-per-URL. This is a deliberate design choice: one call with 9 articles is faster and cheaper than 9 separate calls, and gives Gemini context to deduplicate across articles.
+The previous architecture batched all rendered content into a single Gemini call per phase. This caused:
+
+- **Date cross-contamination**: chrono-node ran on concatenated pages, mixing dates between articles
+- **URL misattribution**: Gemini couldn't reliably attribute items to source URLs when seeing 9 articles at once
+- **Non-deterministic source_url**: Items' source_url depended on Gemini guessing correctly
+
+The per-URL approach trades more Gemini calls (~5-20 per POI instead of 2-3) for correctness: every item has a verified source_url, and dates come from the item's page only.
 
 ## AI Moderation Pipeline
 
@@ -134,7 +153,13 @@ The admin UI shows a per-POI log tree during collection. Each POI entry expands 
 
 ## Deduplication Strategy
 
-Content is deduplicated at the Save stage using two complementary strategies:
+Content is deduplicated at two levels:
+
+### During Collection (In-Memory)
+
+Phase II results are deduplicated against Phase I results by normalized title before saving. This prevents the same article from being saved twice within a single collection run.
+
+### At Save Time (Database)
 
 - **URL matching**: Same resolved URL across any POI = same article. Catches the same content found through different search paths or different POIs.
 - **Normalized title matching**: Strips date suffixes and compares titles within the same POI. Catches the same content with slightly different formatting.
@@ -159,7 +184,7 @@ When a duplicate is detected with a different URL, the new URL is merged into th
 | Rendering | Playwright + Chromium + Readability | JavaScript rendering and content extraction |
 | Classification | Google Gemini | Page type classification (listing/detail/hybrid) |
 | Dates | chrono-node | Deterministic date parsing and normalization |
-| Summarization | Google Gemini | Content identification, summarization, type classification |
+| Summarization | Google Gemini | Per-URL content extraction and type classification |
 | Quality scoring | Google Gemini | AI-powered moderation with issue detection |
 | Job queue | pg-boss | Crash-recoverable background job processing |
 | Database | PostgreSQL | Content storage, deduplication, moderation state |
@@ -169,7 +194,7 @@ When a duplicate is detected with a different URL, the new URL is merged into th
 
 | File | Stage | Purpose |
 |------|-------|---------|
-| `backend/services/newsService.js` | Render, Classify, Crawl, Dates, Summarize, Save | Main collection orchestrator |
+| `backend/services/newsService.js` | All stages | Main collection orchestrator, `processOneUrl`, `buildSinglePagePrompt` |
 | `backend/services/dateExtractor.js` | Dates | chrono-node wrapper utilities |
 | `backend/services/geminiService.js` | Summarize, Moderation | Gemini API integration and prompts |
 | `backend/services/moderationService.js` | Moderation | Quality scoring, Fix Date, auto-approval |
