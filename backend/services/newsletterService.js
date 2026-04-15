@@ -312,7 +312,7 @@ IMPORTANT:
     for (const item of matchedNews) {
       try {
         const newsInsert = await pool.query(`
-          INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, published_at,
+          INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date,
                                 moderation_status, content_source)
           VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'newsletter')
           RETURNING id

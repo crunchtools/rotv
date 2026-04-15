@@ -590,6 +590,21 @@ export async function bulkApprove(pool, items, adminUserId) {
   return { approved };
 }
 
+export async function bulkReject(pool, items, adminUserId) {
+  let rejected = 0;
+  for (const { type, id } of items) {
+    const table = TABLE_MAP[type];
+    await pool.query(
+      `UPDATE ${table} SET moderation_status = 'rejected', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP,
+         ai_reasoning = COALESCE(ai_reasoning, '') || E'\n--- Bulk rejected by admin'
+       WHERE id = $2`,
+      [adminUserId, id]
+    );
+    rejected++;
+  }
+  return { rejected };
+}
+
 export async function editAndPublish(pool, contentType, contentId, edits, adminUserId, { publish = true } = {}) {
   const EDITABLE_NEWS = ['title', 'summary', 'source_url', 'source_name', 'news_type', 'poi_id', 'publication_date'];
   const EDITABLE_EVENT = ['title', 'description', 'start_date', 'end_date', 'event_type', 'location_details', 'source_url', 'poi_id', 'publication_date'];
@@ -1040,7 +1055,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
   const baseQuery = `
     SELECT n.id, 'news' AS content_type, n.poi_id, n.title, n.summary AS description,
            n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues,
-           n.submitted_by, n.moderated_by, n.moderated_at, n.created_at, n.source_url,
+           n.submitted_by, n.moderated_by, n.moderated_at, n.collection_date AS created_at, n.source_url,
            n.content_source, n.publication_date, n.date_confidence,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
            COUNT(u.id)::int AS additional_url_count,
@@ -1052,7 +1067,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
     UNION ALL
     SELECT e.id, 'event' AS content_type, e.poi_id, e.title, e.description,
            e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
-           e.submitted_by, e.moderated_by, e.moderated_at, e.created_at, e.source_url,
+           e.submitted_by, e.moderated_by, e.moderated_at, e.collection_date AS created_at, e.source_url,
            e.content_source, e.publication_date, e.date_confidence,
            e.start_date, e.end_date,
            COUNT(u.id)::int AS additional_url_count,
@@ -1223,14 +1238,14 @@ export async function getMergeCandidates(pool, contentType, contentId) {
 
   // Get all other items from the same POI
   const result = await pool.query(`
-    SELECT t.id, t.title, t.source_url, t.moderation_status, t.created_at,
+    SELECT t.id, t.title, t.source_url, t.moderation_status, t.collection_date,
            t.publication_date,
            COUNT(u.id)::int AS additional_url_count
     FROM ${table} t
     LEFT JOIN ${urlTable} u ON u.${fkColumn} = t.id
     WHERE t.poi_id = $1 AND t.id != $2
     GROUP BY t.id
-    ORDER BY t.created_at DESC
+    ORDER BY t.collection_date DESC
     LIMIT 50
   `, [poiId, contentId]);
 

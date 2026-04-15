@@ -147,7 +147,7 @@ export function NewsItemCard({ item, onDelete, deleting, isAdmin }) {
       <div className="item-card-meta">
         {item.poi_name && <span className="item-card-poi">{item.poi_name}</span>}
         {item.source_name && <span className="item-card-source">{item.source_name}</span>}
-        {item.published_at && <span className="item-card-date">{formatPublicationDate(item.published_at)}</span>}
+        {item.publication_date && <span className="item-card-date">{formatPublicationDate(item.publication_date)}</span>}
         {item.source_url && (
           <a
             href={item.source_url}

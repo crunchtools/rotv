@@ -79,6 +79,10 @@ export function parseDateTime(raw, timezone = 'America/New_York') {
  * @param {string} timezone - IANA timezone
  * @returns {Array<{text: string, start: string, end: string|null, index: number}>}
  */
+// Relative words that chrono-node resolves to today's date but are
+// almost never publication dates — they're prose ("Now part of...", "Today, it's...")
+const RELATIVE_DATE_WORDS = /^(now|today|tomorrow|yesterday|this morning|this evening|this afternoon|tonight|last night)$/i;
+
 export function extractDatesFromText(text, timezone = 'America/New_York') {
   if (!text || typeof text !== 'string') return [];
 
@@ -86,6 +90,14 @@ export function extractDatesFromText(text, timezone = 'America/New_York') {
   try {
     results = chrono.parse(text, { instant: new Date(), timezone });
   } catch { return []; }
+  // Filter out relative prose words that resolve to today — not real dates.
+  // Also filter fragments under 4 chars (e.g. "10 a" from "10 a.m.") — false positives.
+  results = results.filter(r => {
+    const text = r.text.trim();
+    if (RELATIVE_DATE_WORDS.test(text)) return false;
+    if (text.length < 5) return false;
+    return true;
+  });
   return results.map(r => {
     const s = r.start;
     const startStr = `${s.get('year')}-${String(s.get('month')).padStart(2, '0')}-${String(s.get('day')).padStart(2, '0')}`;

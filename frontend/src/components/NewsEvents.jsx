@@ -151,7 +151,7 @@ function NewsEvents({ poiId, isAdmin }) {
               {item.summary && <p className="news-summary">{item.summary}</p>}
               <div className="news-meta">
                 {item.source_name && <span className="news-source">{item.source_name}</span>}
-                {item.published_at && <span className="news-date">{formatPublicationDate(item.published_at)}</span>}
+                {item.publication_date && <span className="news-date">{formatPublicationDate(item.publication_date)}</span>}
                 {item.source_url && (
                   <a
                     href={item.source_url}

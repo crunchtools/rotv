@@ -569,14 +569,12 @@ async function initDatabase() {
         source_url TEXT,
         source_name VARCHAR(255),
         news_type VARCHAR(50) DEFAULT 'general',
-        published_at DATE,
         content_source VARCHAR(20) DEFAULT 'ai',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        collection_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_poi_id ON poi_news(poi_id)`);
-    await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_published_at ON poi_news(published_at)`);
 
     // Events table for POI-related events
     await client.query(`
@@ -592,7 +590,7 @@ async function initDatabase() {
         source_url TEXT,
         calendar_event_id VARCHAR(255),
         content_source VARCHAR(20) DEFAULT 'ai',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        collection_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
@@ -805,13 +803,13 @@ async function initDatabase() {
       CREATE VIEW moderation_queue AS
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
                moderation_status, confidence_score, ai_reasoning,
-               submitted_by, moderated_by, moderated_at, created_at,
+               submitted_by, moderated_by, moderated_at, collection_date AS created_at,
                content_source, publication_date, date_confidence
         FROM poi_news WHERE moderation_status = 'pending'
         UNION ALL
         SELECT id, 'event' AS content_type, poi_id, title, description,
                moderation_status, confidence_score, ai_reasoning,
-               submitted_by, moderated_by, moderated_at, created_at,
+               submitted_by, moderated_by, moderated_at, collection_date AS created_at,
                content_source, publication_date, date_confidence
         FROM poi_events WHERE moderation_status = 'pending'
         UNION ALL
@@ -828,18 +826,18 @@ async function initDatabase() {
     await client.query(`
       CREATE VIEW newsletter_digest AS
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
-               created_at, moderated_at, content_source
+               collection_date AS created_at, moderated_at, content_source
         FROM poi_news
         WHERE moderation_status IN ('published', 'auto_approved')
           AND weekly_newsletter = TRUE
-          AND created_at >= NOW() - INTERVAL '7 days'
+          AND collection_date >= NOW() - INTERVAL '7 days'
         UNION ALL
         SELECT id, 'event' AS content_type, poi_id, title, description,
-               created_at, moderated_at, content_source
+               collection_date AS created_at, moderated_at, content_source
         FROM poi_events
         WHERE moderation_status IN ('published', 'auto_approved')
           AND weekly_newsletter = TRUE
-          AND created_at >= NOW() - INTERVAL '7 days'
+          AND collection_date >= NOW() - INTERVAL '7 days'
         UNION ALL
         SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
                created_at, moderated_at, NULL AS content_source
@@ -1904,7 +1902,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const newsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.published_at, n.publication_date, n.date_confidence, n.created_at,
+             n.publication_date, n.date_confidence, n.collection_date,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
@@ -1912,8 +1910,8 @@ app.get('/api/pois/:id/news', async (req, res) => {
         AND n.moderation_status IN ('published', 'auto_approved')
       GROUP BY n.id
       ORDER BY
-        COALESCE(n.publication_date, n.created_at::date) DESC,
-        n.created_at DESC
+        COALESCE(n.publication_date, n.collection_date::date) DESC,
+        n.collection_date DESC
       LIMIT $2
     `, [id, limit]);
     res.json(newsQuery.rows);
@@ -1930,7 +1928,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const tz = req.query.tz || 'America/New_York';
     let query = `
-      SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type, e.location_details, e.source_url, e.created_at,
+      SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type, e.location_details, e.source_url, e.collection_date,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
@@ -2094,7 +2092,7 @@ app.get('/api/news/recent', async (req, res) => {
     const limit = parseInt(req.query.limit) || 500;
     const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.published_at, n.publication_date, n.date_confidence, n.created_at,
+             n.publication_date, n.date_confidence, n.collection_date,
              p.id as poi_id, p.name as poi_name, p.poi_type,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
@@ -2103,7 +2101,7 @@ app.get('/api/news/recent', async (req, res) => {
       WHERE n.moderation_status IN ('published', 'auto_approved')
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY n.id, p.id, p.name, p.poi_type
-      ORDER BY COALESCE(n.publication_date, n.created_at::date) DESC, n.created_at DESC
+      ORDER BY COALESCE(n.publication_date, n.collection_date::date) DESC, n.collection_date DESC
       LIMIT $1
     `, [limit]);
     res.json(recentNewsQuery.rows);
