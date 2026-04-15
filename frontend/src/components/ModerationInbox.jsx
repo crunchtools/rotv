@@ -664,6 +664,32 @@ function ModerationInbox({ onCountChange }) {
               Purge Rejected
             </button>
           )}
+          {/* Reject All visible pending items */}
+          {statusFilter === 'pending' && queue.length > 0 && (
+            <button
+              onClick={async () => {
+                const pendingItems = queue.filter(q => q.moderation_status === 'pending');
+                if (pendingItems.length === 0) return;
+                if (!window.confirm(`Reject all ${pendingItems.length} pending items on this page?`)) return;
+                try {
+                  const items = pendingItems.map(q => ({ type: q.content_type, id: q.id }));
+                  const response = await fetch('/api/admin/moderation/bulk-reject', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include', body: JSON.stringify({ items })
+                  });
+                  if (response.ok) {
+                    const data = await response.json();
+                    notify('success', `Rejected ${data.rejected} items`);
+                    fetchQueue();
+                    if (onCountChange) onCountChange();
+                  }
+                } catch (err) { notify('error', err.message); }
+              }}
+              style={btnStyle('#b71c1c')}
+            >
+              Reject All
+            </button>
+          )}
           {/* Create button */}
           <div style={{ position: 'relative' }}>
             <button
@@ -981,7 +1007,7 @@ function ModerationInbox({ onCountChange }) {
 
                       {/* Timestamp + Publication Date */}
                       <div style={{ fontSize: '0.73rem', color: '#aaa', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                        <span>{formatDate(item.created_at)}</span>
+                        <span>{formatDate(item.collection_date || item.created_at)}</span>
                         {item.moderated_at && <span>&middot; Moderated {formatDate(item.moderated_at)}</span>}
                         {item.content_type !== 'photo' && item.publication_date && (
                           <span>&middot; Pub: {formatPubDate(item.publication_date)}</span>

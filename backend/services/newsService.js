@@ -8,7 +8,7 @@
  */
 
 import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
-import { parseDate, parseDateTime, extractDatesFromText } from './dateExtractor.js';
+import { parseDate, extractDatesFromText } from './dateExtractor.js';
 
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
@@ -121,158 +121,8 @@ export async function findIncompleteJobs(pool) {
   return result.rows;
 }
 
-// Prompt template for news collection (exported for registry.js default prompt access)
-export const NEWS_COLLECTION_PROMPT = `You are a precise news researcher for Cuyahoga Valley National Park and surrounding areas in Northeast Ohio.
-
-Search for recent news and upcoming events SPECIFICALLY about: "{{name}}"
-Location type: {{poi_type}}
-
-MISSION SCOPE — Roots of The Valley:
-This is a guide to Cuyahoga Valley National Park and surrounding communities. Content must connect
-to the park's themes: nature, trails, outdoor recreation, conservation, local history, ecology,
-wildlife, community stewardship, scenic railroads, canal towpath heritage, or the arts/culture
-organizations that serve the valley.
-
-For broad POIs like cities, townships, or metro park districts:
-- ONLY collect events/news that relate to the mission above
-- A generic concert at a Cleveland bar is NOT relevant
-- A nature photography exhibit in Cleveland IS relevant
-- A trail race through Akron IS relevant
-- A random restaurant opening in Akron is NOT relevant
-- Outdoor festivals celebrating nature, history, or community near the valley ARE relevant
-- Generic urban nightlife, sports, dining, or entertainment are NOT relevant
-
-Ask yourself: "Would a visitor to Cuyahoga Valley National Park care about this?" If not, skip it.
-
-PRIORITY SOURCES TO SEARCH (check these first):
-- National Park Service (NPS) - nps.gov/cuva
-- Ohio Department of Transportation (ODOT) - transportation.ohio.gov
-- Summit Metro Parks - summitmetroparks.org
-- Cleveland Metroparks - clevelandmetroparks.com
-- Cuyahoga Valley Scenic Railroad - cvsr.org
-- Conservancy for Cuyahoga Valley National Park - conservancyforcvnp.org
-- Local news: Cleveland.com, Akron Beacon Journal, WKYC, News 5 Cleveland
-
-CRITICAL REQUIREMENTS - BE EXTREMELY STRICT:
-- Only include items that EXPLICITLY mention "{{name}}" by name
-- The news/event must be DIRECTLY about this specific location, not just the general park area
-- You must be 95%+ confident the item is specifically about "{{name}}"
-- Do NOT include general park news that doesn't specifically mention this location
-- Do NOT include news about similarly-named places in other locations
-- Do NOT include news about the general Cuyahoga Valley area unless it specifically names "{{name}}"
-
-OFFICIAL WEBSITE:
-{{website}}
-
-DEDICATED EVENT PAGE:
-{{eventsUrl}}
-
-DEDICATED NEWS PAGE:
-{{newsUrl}}
-
-Search for:
-1. Recent news articles (last 30 days) that specifically mention "{{name}}"
-2. Upcoming events happening AT "{{name}}" specifically
-3. Closures, road work, or maintenance specifically affecting "{{name}}"
-4. Trail conditions, seasonal updates, or access changes for "{{name}}"
-
-IMPORTANT - MULTI-STRATEGY EVENT & NEWS SEARCH:
-HIGHEST PRIORITY - Use Dedicated URLs if provided:
-- If a dedicated event page URL is provided above, START THERE FIRST
-- If a dedicated news page URL is provided above, START THERE FIRST
-- These are the most direct sources - prioritize them over general searches
-- Look for event listings, dates, descriptions on these specific pages
-- CRITICAL: Many sites use JavaScript frameworks (Wix, Squarespace, React) that don't show content in basic HTML
-- For JavaScript-heavy pages, you MUST use alternative search strategies below
-
-WARNING - JavaScript-Heavy Websites (Wix, Squarespace, React sites):
-- If the dedicated URL or official website appears to be JavaScript-rendered (minimal HTML content, lots of <script> tags)
-- DO NOT rely solely on that URL - it won't show events/news in search results
-- IMMEDIATELY pivot to alternative sources listed below
-- Signs of JavaScript-heavy sites: Wix.com, Squarespace, modern single-page apps
-- These sites require EXTERNAL sources to find their content
-
-MANDATORY ALTERNATIVE SEARCH STRATEGIES (use ALL of these, especially for JS-heavy sites):
-
-PRIMARY ALTERNATIVE - Social Media & Event Platforms (MOST RELIABLE for JS sites):
-- **Facebook Events** (BEST SOURCE): Search "{{name}} Facebook events" or "{{name}} Facebook page"
-  - Most organizations post all events on Facebook even if their website fails
-  - Search: "site:facebook.com {{name}} events 2026"
-  - Look for their official page and Events tab
-- **Eventbrite**: Search "{{name}} Eventbrite" or "site:eventbrite.com {{name}}"
-- **Meetup**: Search "{{name}} Meetup" or "site:meetup.com {{name}}"
-- **Instagram**: Many orgs announce events on Instagram - search "{{name}} Instagram"
-- **Google Business Profile**: Events often listed on Google Maps/Business listings
-
-SECONDARY ALTERNATIVE - Local Event Aggregators:
-- Cuyahoga Valley National Park calendar (might list partner events)
-- Regional tourism sites: visitakron.com, destinationcleveland.com
-- Local news event calendars: Cleveland.com events, Akron Beacon Journal events
-- Chamber of Commerce event listings
-- Trail and outdoor recreation event calendars
-
-TERTIARY ALTERNATIVE - Web Search Queries (cast a wide net):
-- "{{name}} events 2026" (general web search)
-- "{{name}} upcoming programs 2026"
-- "{{name}} adventures 2026" OR "{{name}} activities 2026"
-- "things to do at {{name}}" OR "visit {{name}}"
-- "{{name}} calendar" OR "{{name}} schedule"
-- Look for mentions in blog posts, news articles, press releases
-
-SEARCH THOROUGHNESS - BE AGGRESSIVE:
-- For JavaScript-heavy sites, assume the official website WON'T work
-- You MUST try ALL alternative sources above, not just one or two
-- Organizations often post events ONLY on Facebook/social media, not their website
-- Cast a wide net - search multiple platforms and sources
-- Cross-reference: if you find an event on Facebook, check if it's also on Eventbrite
-- Be especially thorough for small organizations - they may have rich calendars on social platforms
-- Don't give up if the official site fails - that's where alternative sources become critical
-
-ACTIVITY-BASED EVENT TYPE GUIDANCE:
-The primary activities at this location are: {{activities}}
-Use these activities to prioritize event types:
-- If activities include "Music" or "Concert": prioritize looking for concert events
-- If activities include "Hiking" or "Walking": prioritize guided-tour and educational events
-- If activities include "History" or "Historical": prioritize educational and program events
-- If activities include "Volunteer": prioritize volunteer events
-- If activities include "Festival" or "Events": prioritize festival events
-When categorizing events, match the event type to the most relevant activity.
-
-Return a JSON object with this exact structure:
-{
-  "news": [
-    {
-      "title": "News headline",
-      "summary": "2-3 sentence summary - must explain how this relates to {{name}} specifically",
-      "source_name": "Source name (e.g., NPS.gov, Cleveland.com)",
-      "source_url": "URL if available, or null",
-      "published_date": "date if visible on page, or null",
-      "news_type": "general|alert|wildlife|infrastructure|community"
-    }
-  ],
-  "events": [
-    {
-      "title": "Event name",
-      "description": "Brief description - must specify this event is at {{name}}",
-      "start_date": "event date if visible on page",
-      "end_date": "end date or null if single day",
-      "event_type": "hike|race|concert|festival|program|volunteer|arts|community|alert",
-      "location_details": "Must be at or near {{name}} specifically",
-      "source_url": "Registration or info URL if available"
-    }
-  ]
-}
-
-IMPORTANT:
-- If you are not 95%+ certain an item is specifically about "{{name}}", DO NOT include it
-- It is better to return empty arrays than to include false positives
-- If no news or events found specifically for "{{name}}", return: {"news": [], "events": []}
-- Include the exact JSON structure above, no additional text
-- NEWS should be from the last 365 days only - do NOT include older news
-- EVENTS must be upcoming (future dates) or currently happening - do NOT include past events`;
-
 /**
- * Classify a web page as LISTING, DETAIL, or HYBRID using Gemini.
+ * Classify a web page as LISTING or DETAIL using Gemini.
  * Sends first 3000 chars of markdown + first 20 links, returns classification.
  *
  * @param {Pool} pool - Database connection pool
@@ -284,21 +134,44 @@ IMPORTANT:
  * @returns {Object} - { pageType, detailLinks, reasoning }
  */
 async function classifyPage(pool, markdown, links, url, contentType, sheets) {
+  // Prioritize content links over navigation — "Read More", article-pattern URLs, etc.
+  // Navigation links (menus, footers) dominate the first positions in DOM order,
+  // burying the actual article links the classifier needs to see.
+  let sourceOrigin;
+  try { sourceOrigin = new URL(url).pathname; } catch { sourceOrigin = ''; }
+  const contentLinks = (links || []).filter(l => {
+    const text = (l.text || '').toLowerCase();
+    // Links with action text
+    if (/read\s*more|continue|full\s*(article|story)|learn\s*more|details/i.test(text)) return true;
+    // Links in article-like containers
+    if (/\b(article|post|news|event|card|entry|blog)\b/i.test(l.parentClassName || '')) return true;
+    if (/\b(article|post|news|event|card|entry|blog)\b/i.test(l.className || '')) return true;
+    // Links whose URL extends the current page path (e.g., /news-updates/ → /news-updates/article-slug/)
+    try {
+      const linkPath = new URL(l.url).pathname;
+      if (sourceOrigin.length > 1 && linkPath.startsWith(sourceOrigin) && linkPath !== sourceOrigin && linkPath !== sourceOrigin + '/') return true;
+    } catch { /* ignore */ }
+    return false;
+  });
+  // Use content links first, then fill with remaining links up to 30
+  const seen = new Set(contentLinks.map(l => l.url));
+  const otherLinks = links.filter(l => !seen.has(l.url));
+  const rankedLinks = [...contentLinks, ...otherLinks].slice(0, 30);
+
   const prompt = `Classify this web page. Based on the content, is it:
 A) LISTING — lists multiple ${contentType}s with links to individual pages
 B) DETAIL — describes a single ${contentType} with dates/descriptions/details
-C) HYBRID — contains inline ${contentType} details AND links to more pages
 
 PAGE URL: ${url}
 CONTENT (first 3000 chars):
 ${markdown.substring(0, 3000)}
 
-LINKS (first 20):
-${links.slice(0, 20).map(l => `- "${(l.text || '').substring(0, 60)}" → ${l.url}`).join('\n')}
+LINKS (${rankedLinks.length} most relevant, content links first):
+${rankedLinks.map(l => `- "${(l.text || '').substring(0, 60)}" → ${l.url}`).join('\n')}
 
 Return ONLY valid JSON:
-{"page_type": "listing|detail|hybrid", "reasoning": "one sentence", "detail_links": ["url1", "url2"]}
-For LISTING/HYBRID: populate detail_links with URLs to individual ${contentType} pages (max 15).
+{"page_type": "listing|detail", "reasoning": "one sentence", "detail_links": ["url1", "url2"]}
+For LISTING: populate detail_links with URLs to individual ${contentType} pages (max 15).
 For DETAIL: detail_links should be empty.`;
 
   const result = await generateTextWithCustomPrompt(pool, prompt);
@@ -311,7 +184,7 @@ For DETAIL: detail_links should be empty.`;
   }
   try {
     const parsed = JSON.parse(jsonMatch[0]);
-    return { pageType: parsed.page_type, detailLinks: parsed.detail_links || [], reasoning: parsed.reasoning };
+    return { pageType: (parsed.page_type || '').toLowerCase(), detailLinks: parsed.detail_links || [], reasoning: parsed.reasoning };
   } catch {
     return { pageType: 'listing', detailLinks: links.map(l => l.url).slice(0, 15), reasoning: 'parse failure fallback' };
   }
@@ -341,6 +214,172 @@ function filterDetailLinks(detailLinks, sourceUrl) {
 }
 
 /**
+ * Extract {news: [], events: []} from Gemini response text.
+ * Handles markdown code blocks and raw JSON.
+ *
+ * @param {string} responseText - Raw Gemini response
+ * @returns {Object} - { news: [], events: [] }
+ */
+function parseGeminiResponse(responseText) {
+  const text = responseText || '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return { news: [], events: [] };
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    return { news: parsed.news || [], events: parsed.events || [] };
+  } catch {
+    return { news: [], events: [] };
+  }
+}
+
+/**
+ * Build a Gemini prompt for a single rendered page.
+ * No multi-page headers, no concatenation — one page per call.
+ *
+ * @param {Object} poi - POI object (name, poi_type, primary_activities)
+ * @param {string} url - The URL that was rendered
+ * @param {string} markdown - Rendered page markdown
+ * @param {Array} dateHints - chrono-node date hints from this page
+ * @param {string} contentType - 'event' or 'news'
+ * @param {string} confidence - '75%' for Phase I, '95%' for Phase II
+ * @returns {string} - Complete prompt
+ */
+function buildSinglePagePrompt(poi, url, markdown, contentType, confidence) {
+  const activities = poi.primary_activities || 'None specified';
+
+  // Gemini identifies items and writes summaries. It does NOT extract dates.
+  // chrono-node handles all date extraction — dates are applied after Gemini returns.
+
+  let prompt = `Extract ${contentType === 'event' ? 'events' : 'news'} from this single web page about "${poi.name}".
+
+POI: "${poi.name}" (${poi.poi_type})
+Activities: ${activities}
+Source URL: ${url}
+
+MISSION SCOPE — Roots of The Valley:
+Only include items that connect to Cuyahoga Valley National Park themes: nature, trails,
+outdoor recreation, conservation, local history, ecology, wildlife, community stewardship,
+scenic railroads, canal towpath heritage, or arts/culture organizations that serve the valley.
+Skip generic urban news, restaurant openings, nightlife, sports, or entertainment unrelated
+to the park's mission. Ask: "Would a CVNP visitor care about this?"
+
+CONFIDENCE THRESHOLD: ${confidence}
+You must be at least ${confidence} confident that each item is specifically about "${poi.name}".
+
+PAGE CONTENT:
+${markdown}`;
+
+  if (contentType === 'event') {
+    prompt += `
+
+**MULTIPLE EVENTS ON ONE PAGE**
+- If the page lists multiple events, create a SEPARATE entry for each one
+- This is common for recurring excursions — treat each as its own event
+
+Return a JSON object with this exact structure:
+{
+  "events": [
+    {
+      "title": "Event name",
+      "description": "Brief description - must specify this event is at ${poi.name}",
+      "event_type": "hike|race|concert|festival|program|volunteer|arts|community|alert",
+      "location_details": "Must be at or near ${poi.name} specifically",
+      "source_url": "${url}"
+    }
+  ]
+}
+
+IMPORTANT:
+- Do NOT include date fields — dates are extracted separately
+- Set source_url to "${url}" on every event
+- Return {"events": []} if no relevant events found`;
+  } else {
+    prompt += `
+
+Return a JSON object with this exact structure:
+{
+  "news": [
+    {
+      "title": "News headline",
+      "summary": "2-3 sentence summary - must explain how this relates to ${poi.name} specifically",
+      "source_name": "Source name (e.g., NPS.gov, Cleveland.com)",
+      "source_url": "${url}",
+      "news_type": "general|alert|wildlife|infrastructure|community"
+    }
+  ]
+}
+
+IMPORTANT:
+- Do NOT include date fields — dates are extracted separately
+- Set source_url to "${url}" on every news item
+- Return {"news": []} if no relevant news found`;
+  }
+
+  return prompt;
+}
+
+/**
+ * Process a single URL through the complete pipeline:
+ * Render → Dates → Summarize → force source_url
+ *
+ * Every item returned has source_url = the URL that was rendered.
+ * No batching, no concatenation, no cross-page anything.
+ *
+ * @param {Pool} pool - Database connection pool
+ * @param {string} url - URL to process
+ * @param {Object} poi - POI object
+ * @param {string} contentType - 'event' or 'news'
+ * @param {Object} options - { phase, jobId, timezone, confidence }
+ * @returns {Object} - { news: [], events: [] }
+ */
+async function processOneUrl(pool, url, poi, contentType, options = {}) {
+  const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', confidence = '75%', jobType = 'news' } = options;
+
+  // [Render]
+  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url}`);
+  const extracted = await extractPageContent(url, { timeout: 30000, hardTimeout: 60000 });
+  if (!extracted.reachable || !extracted.markdown || extracted.markdown.length < 200) {
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'too short'} (${extracted.markdown?.length || 0} chars)`);
+    return { news: [], events: [] };
+  }
+
+  // [Dates] — OG metadata first (structured, reliable), chrono-node as fallback
+  // These are applied directly to items AFTER Gemini returns — Gemini never touches dates
+  const ogPublished = extracted.ogDates?.publishedTime
+    ? parseDate(extracted.ogDates.publishedTime, timezone)
+    : null;
+  const dateHints = extractDatesFromText(extracted.markdown, timezone);
+  const primaryDate = ogPublished || (dateHints.length > 0 ? dateHints[0].start?.substring(0, 10) : null);
+  const secondDate = dateHints.length > 1 ? dateHints[1].start?.substring(0, 10) : null;
+  const dateSource = ogPublished ? 'og' : (dateHints.length > 0 ? 'chrono' : 'none');
+  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] ${primaryDate || 'none'} (${dateSource}), ${dateHints.length} chrono hints from ${url}`);
+
+  // [Summarize] — Gemini identifies items and writes summaries (no date fields)
+  const prompt = buildSinglePagePrompt(poi, url, extracted.markdown, contentType, confidence);
+  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${url}`);
+  const aiResult = await generateTextWithCustomPrompt(pool, prompt);
+
+  // Parse Gemini response, then apply dates and force source_url.
+  // Every URL that reaches processOneUrl is a DETAIL page (one article or one event).
+  // The crawler already resolved listings → detail pages before we get here.
+  const result = parseGeminiResponse(aiResult.response);
+
+  for (const item of (result.news || [])) {
+    item.source_url = url;
+    item.published_date = primaryDate;
+  }
+
+  for (const event of (result.events || [])) {
+    event.source_url = url;
+    event.start_date = primaryDate;
+    event.end_date = secondDate || null;
+  }
+
+  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events from ${url}`);
+  return result;
+}
+
+/**
  * Recursive AI-classified tree walker for dedicated URL crawling.
  * Visits each page, asks Gemini to classify it, follows links on listing pages,
  * collects content from detail pages. URLs come from actual page visits — no fabrication.
@@ -355,7 +394,7 @@ function filterDetailLinks(detailLinks, sourceUrl) {
  * @returns {Object} - { pages: [{url, markdown, title}], totalPagesRendered, totalDetailPages }
  */
 async function crawlWithClassification(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
-  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, renderDelayMs = 1500, extractor = extractPageContent, phase = 'Phase I', jobId = 0 } = options;
+  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, renderDelayMs = 1500, extractor = extractPageContent, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
   const visited = new Set();
   let totalPagesRendered = 0;
   const collectedPages = []; // { url, markdown, title }
@@ -374,29 +413,22 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
         await new Promise(resolve => setTimeout(resolve, renderDelayMs));
       }
 
-      logInfo(jobId, 'news', poi.id, poi.name, `${phase}: [Render] ${url} (depth=${depth}, page=${totalPagesRendered})`);
+      logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url} (depth=${depth}, page=${totalPagesRendered})`);
       const extracted = await extractor(url, { timeout: 30000, hardTimeout: 60000, extractLinks: true });
       if (!extracted.reachable || !extracted.markdown) {
-        logInfo(jobId, 'news', poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'no content'}`);
+        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'no content'}`);
         continue;
       }
 
       const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets);
-      logInfo(jobId, 'news', poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
+      logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
 
       if (classification.pageType === 'detail') {
         collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
       } else if (classification.pageType === 'listing') {
         const validLinks = filterDetailLinks(classification.detailLinks, url);
-        logInfo(jobId, 'news', poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
+        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
-      } else if (classification.pageType === 'hybrid') {
-        collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
-        const validLinks = filterDetailLinks(classification.detailLinks, url);
-        if (validLinks.length > 0) {
-          logInfo(jobId, 'news', poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from hybrid page ${url}`);
-          await processLevel(validLinks, depth + 1);
-        }
       }
     }
   }
@@ -420,12 +452,13 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   const eventsUrl = poi.events_url || 'No dedicated events page';
   const newsUrl = poi.news_url || 'No dedicated news page';
 
-  // Preserve slotId and jobId if they exist (set by job processing loop)
+  // Preserve slotId, jobId, and jobType if they exist (set by job processing loop or single-POI trigger)
   const existingProgress = tracker.getCollectionProgress(poi.id);
   const slotId = existingProgress?.slotId;
   const jobId = existingProgress?.jobId;
+  const jobType = existingProgress?.jobType || 'news';
 
-  logInfo(jobId, 'news', poi.id, poi.name, `Collection type: ${collectionType}`);
+  logInfo(jobId, jobType, poi.id, poi.name, `Collection type: ${collectionType}`);
 
   // Clear any old progress data for this POI before starting
   tracker.clearProgress(poi.id);
@@ -457,12 +490,12 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     if (onProgress) onProgress(message);
   };
 
-  logInfo(jobId, 'news', poi.id, poi.name, 'Starting search', { website, eventsUrl, newsUrl, activities });
+  logInfo(jobId, jobType, poi.id, poi.name, 'Starting search', { website, eventsUrl, newsUrl, activities });
 
   // Helper to check for cancellation and throw if requested
   const checkCancellation = () => {
     if (isCancellationRequested(poi.id)) {
-      logInfo(jobId, 'news', poi.id, poi.name, 'Cancellation detected');
+      logInfo(jobId, jobType, poi.id, poi.name, 'Cancellation detected');
       updateProgress(poi.id, {
         phase: 'error',
         message: 'Collection cancelled by user',
@@ -472,244 +505,108 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     }
   };
 
-  // Classified content from Phase I (Render → Classify → Crawl pipeline)
-  let classifiedEventsContent = null;
-  let classifiedNewsContent = null;
-  let usedClassifier = false;
-  let usedNewsClassifier = false;
+  const allEvents = [];
+  const allNews = [];
+  let usedDedicatedNewsUrl = false;
 
-  // PHASE I EVENTS: Render → Classify → Crawl for dedicated events URL
+  // Per-URL caps — each page gets its own Gemini call
+  const MAX_PHASE1_PAGES = 10;
+  const MAX_PHASE2_PAGES = 5;
+
+  // PHASE I EVENTS: Classify → Crawl → per-URL pipeline
   if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page') {
     try {
       checkCancellation();
       reportProgress(`Phase I: [Render] Rendering events page: ${eventsUrl}`);
-      logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Render] Starting events pipeline`, { url: eventsUrl });
+      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Render] Starting events pipeline`, { url: eventsUrl });
       updateProgress(poi.id, {
         phase: 'classifying_events',
         message: 'Analyzing events pages...',
         steps: ['Initialized', 'Classifying events pages']
       });
-      const crawlResult = await crawlWithClassification(pool, eventsUrl, 'event', poi, sheets, checkCancellation, { phase: 'Phase I', jobId });
+      const crawlResult = await crawlWithClassification(pool, eventsUrl, 'event', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
 
-      if (crawlResult.pages.length > 0) {
-        classifiedEventsContent = crawlResult.pages.map(p => `### Event Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
-        usedClassifier = true;
-        reportProgress(`Phase I: [Classify] Found ${crawlResult.pages.length} event pages (crawled ${crawlResult.totalPagesRendered} pages)`);
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] Found ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered)`);
-      } else {
-        // Classifier found nothing — use the listing page itself as content
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] No detail pages found, using listing page content`);
-        const extracted = await extractPageContent(eventsUrl, { timeout: 30000, hardTimeout: 60000 });
-        if (extracted.reachable && extracted.markdown?.length >= 200) {
-          classifiedEventsContent = `### Event Page: ${eventsUrl}\n\n${extracted.markdown}`;
-          usedClassifier = true;
-          reportProgress('Phase I: [Classify] No detail pages, using listing page directly');
-          logInfo(jobId, 'news', poi.id, poi.name, `Phase I: Using listing page content (${extracted.markdown.length} chars)`);
-        } else {
-          reportProgress('Phase I: [Render] Events page had insufficient content');
-          logWarn(jobId, 'news', poi.id, poi.name, `Phase I: Events page insufficient content (${extracted.markdown?.length || 0} chars)`);
-        }
+      const pages = crawlResult.pages.slice(0, MAX_PHASE1_PAGES);
+
+      reportProgress(`Phase I: [Classify] ${crawlResult.pages.length} event pages found (${crawlResult.totalPagesRendered} rendered)`);
+      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered), processing ${pages.length} URLs`);
+
+      for (const page of pages) {
+        checkCancellation();
+        const items = await processOneUrl(pool, page.url, poi, 'event', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
+        allEvents.push(...(items.events || []));
       }
     } catch (err) {
+      if (err.message === 'Collection cancelled by user') throw err;
       reportProgress(`Phase I: Events crawl failed: ${err.message}`);
-      logWarn(jobId, 'news', poi.id, poi.name, `Phase I: Events classification failed: ${err.message}`);
+      logWarn(jobId, jobType, poi.id, poi.name, `Phase I: Events classification failed: ${err.message}`);
     }
   }
 
-  // PHASE I NEWS: Render → Classify → Crawl for dedicated news URL
+  // PHASE I NEWS: Classify → Crawl → per-URL pipeline
   if (collectionType !== 'events' && newsUrl !== 'No dedicated news page') {
     try {
       checkCancellation();
       reportProgress(`Phase I: [Render] Rendering news page: ${newsUrl}`);
-      logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Render] Starting news pipeline`, { url: newsUrl });
+      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Render] Starting news pipeline`, { url: newsUrl });
       updateProgress(poi.id, {
         phase: 'classifying_news',
         message: 'Analyzing news pages...',
         steps: ['Initialized', 'Classifying news pages']
       });
-      const crawlResult = await crawlWithClassification(pool, newsUrl, 'news', poi, sheets, checkCancellation, { phase: 'Phase I', jobId });
+      const crawlResult = await crawlWithClassification(pool, newsUrl, 'news', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
 
-      if (crawlResult.pages.length > 0) {
-        classifiedNewsContent = crawlResult.pages.map(p => `### News Page: ${p.url}\n\n${p.markdown}`).join('\n\n---\n\n');
-        usedNewsClassifier = true;
-        reportProgress(`Phase I: [Classify] Found ${crawlResult.pages.length} news pages (crawled ${crawlResult.totalPagesRendered} pages)`);
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] Found ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered)`);
-      } else {
-        // Classifier found nothing — use the listing page itself as content
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Classify] No detail pages found, using listing page content`);
-        const extracted = await extractPageContent(newsUrl, { timeout: 30000, hardTimeout: 60000 });
-        if (extracted.reachable && extracted.markdown?.length >= 200) {
-          classifiedNewsContent = `### News Page: ${newsUrl}\n\n${extracted.markdown}`;
-          usedNewsClassifier = true;
-          reportProgress('Phase I: [Classify] No detail pages, using listing page directly');
-          logInfo(jobId, 'news', poi.id, poi.name, `Phase I: Using listing page content (${extracted.markdown.length} chars)`);
-        } else {
-          reportProgress('Phase I: [Render] News page had insufficient content');
-          logWarn(jobId, 'news', poi.id, poi.name, `Phase I: News page insufficient content (${extracted.markdown?.length || 0} chars)`);
-        }
+      const pages = crawlResult.pages.slice(0, MAX_PHASE1_PAGES);
+
+      if (pages.length > 0) usedDedicatedNewsUrl = true;
+
+      reportProgress(`Phase I: [Classify] ${crawlResult.pages.length} news pages found (${crawlResult.totalPagesRendered} rendered)`);
+      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered), processing ${pages.length} URLs`);
+
+      for (const page of pages) {
+        checkCancellation();
+        const items = await processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
+        allNews.push(...(items.news || []));
       }
     } catch (err) {
+      if (err.message === 'Collection cancelled by user') throw err;
       reportProgress(`Phase I: News crawl failed: ${err.message}`);
-      logWarn(jobId, 'news', poi.id, poi.name, `Phase I: News classification failed: ${err.message}`);
+      logWarn(jobId, jobType, poi.id, poi.name, `Phase I: News classification failed: ${err.message}`);
     }
   }
 
-  // Phase I: [Dates] Pre-extract dates from classified content using chrono-node
-  const pageDateHints = [];
-  if (classifiedEventsContent) {
-    pageDateHints.push(...extractDatesFromText(classifiedEventsContent, timezone));
-  }
-  if (classifiedNewsContent) {
-    pageDateHints.push(...extractDatesFromText(classifiedNewsContent, timezone));
-  }
-  if (pageDateHints.length > 0) {
-    logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Dates] ${pageDateHints.length} dates extracted from classified content`);
+  if (allEvents.length === 0 && allNews.length === 0 &&
+      eventsUrl === 'No dedicated events page' && newsUrl === 'No dedicated news page') {
+    logInfo(jobId, jobType, poi.id, poi.name, 'Phase I: Skipped (no dedicated URLs)');
   }
 
-  // Build prompt with extracted content if available
-  // Use custom prompt from admin_settings if configured, otherwise fall back to hardcoded default
-  const { getPromptTemplate } = await import('./geminiService.js');
-  const promptTemplate = await getPromptTemplate(pool, 'news_collection_prompt');
-  const basePrompt = promptTemplate || NEWS_COLLECTION_PROMPT;
-  let prompt = basePrompt
-    .replace(/\{\{timezone\}\}/g, timezone)
-    .replace('{{name}}', poi.name)
-    .replace('{{poi_type}}', poi.poi_type)
-    .replace('{{activities}}', activities)
-    .replace('{{website}}', website)
-    .replace('{{eventsUrl}}', eventsUrl)
-    .replace('{{newsUrl}}', newsUrl);
-
-  // Append pre-extracted date hints to prompt
-  if (pageDateHints.length > 0) {
-    const uniqueHints = [...new Map(pageDateHints.map(h => [h.text, h])).values()].slice(0, 30);
-    const hintLines = uniqueHints.map(h =>
-      `- "${h.text}" → ${h.start}${h.end ? ` to ${h.end}` : ''}`
-    );
-    prompt += `\n\nDATES FOUND IN PAGE TEXT (use these exact dates, do not re-interpret):\n${hintLines.join('\n')}`;
-  }
-
-  // Add classified content to prompt
-  if (classifiedEventsContent) {
-    prompt += `\n\nCLASSIFIED EVENT PAGES:
-We visited the organization's events pages and identified individual event detail pages.
-Each section below is from a REAL page we visited — the URL is verified.
-
-${classifiedEventsContent}
-
-**CRITICAL: URL INSTRUCTIONS**
-- For each event, set source_url to the EXACT page URL shown in the "### Event Page:" header
-- Do NOT invent, modify, or guess URLs — use ONLY the URLs provided above
-- Use RELAXED filtering (75% confidence) since these are from the organization's own site
-- Still exclude past events - only include upcoming/current events
-
-**MULTIPLE DATES ON ONE PAGE**
-- If a single page lists multiple dates for the same event (e.g., "March 21" and "May 31"), create a SEPARATE event entry for each date
-- Each entry gets the same title, description, and source_url but a different start_date
-- This is common for recurring excursions — treat each date as its own event
-
-Extract ALL events from this content using these relaxed criteria.`;
-  }
-
-  if (classifiedNewsContent) {
-    prompt += `\n\nCLASSIFIED NEWS PAGES:
-We visited the organization's news pages and identified individual news detail pages.
-Each section below is from a REAL page we visited — the URL is verified.
-
-${classifiedNewsContent}
-
-**CRITICAL: URL INSTRUCTIONS**
-- For each news item, set source_url to the EXACT page URL shown in the "### News Page:" header
-- Do NOT invent, modify, or guess URLs — use ONLY the URLs provided above
-- Use RELAXED filtering (75% confidence) since these are from the organization's own site
-- Include ALL news items regardless of age
-
-Extract ALL news from this content using these relaxed criteria.`;
-  }
-
-  checkCancellation(); // Check before AI search
+  checkCancellation(); // Check before Phase II
 
   try {
-    const hasCrawledContent = usedClassifier || usedNewsClassifier;
-
-    // Phase I: [Summarize] — only runs when we have classified content
-    // URL-less POIs skip straight to Phase II (Serper)
-    let result = { news: [], events: [] };
-    let response = '';
-    const usedProvider = 'gemini';
-
-    if (hasCrawledContent) {
-      reportProgress('Phase I: [Summarize] Sending classified content to Gemini');
-      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: [Summarize] Sending classified content to Gemini', { has_events: !!usedClassifier, has_news: !!usedNewsClassifier });
-
-      updateProgress(poi.id, {
-        phase: 'ai_search',
-        message: 'Summarizing rendered content via Gemini...',
-        steps: ['Initialized', 'Rendered pages', 'AI summarization']
-      });
-
-      const aiResult = await generateTextWithCustomPrompt(pool, prompt);
-      response = aiResult.response;
-      reportProgress(`Phase I: [Summarize] Gemini responded (${response.length} chars)`);
-      logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Summarize] Received response (${response.length} chars)`);
-
-      // Parse JSON response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) {
-        logWarn(jobId, 'news', poi.id, poi.name, `No JSON found in response, preview: ${response.substring(0, 500)}...`);
-      } else {
-        result = JSON.parse(jsonMatch[0]);
-        reportProgress(`Phase I: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase I: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events`);
-      }
-    } else {
-      // No classified content — skip Phase I, go straight to Phase II (Serper)
-      logInfo(jobId, 'news', poi.id, poi.name, 'Phase I: Skipped (no dedicated URLs)');
-    }
-
-    // Update progress with counts based on collection type
-    let processingMessage;
-    let processingUpdate = {
+    // Update progress after Phase I
+    updateProgress(poi.id, {
       phase: 'processing_results',
-      steps: ['Initialized', 'Rendered pages', 'AI search complete']
-    };
+      message: `Phase I: ${allNews.length} news, ${allEvents.length} events`,
+      newsFound: allNews.length,
+      eventsFound: allEvents.length,
+      steps: ['Initialized', 'Phase I complete']
+    });
 
-    if (collectionType === 'news') {
-      processingMessage = `Found ${result.news?.length || 0} news`;
-      processingUpdate.newsFound = result.news?.length || 0;
-      processingUpdate.eventsFound = 0;
-    } else if (collectionType === 'events') {
-      processingMessage = `Found ${result.events?.length || 0} events`;
-      processingUpdate.eventsFound = result.events?.length || 0;
-      processingUpdate.newsFound = 0;
-    } else {
-      processingMessage = `Found ${result.news?.length || 0} news, ${result.events?.length || 0} events`;
-      processingUpdate.newsFound = result.news?.length || 0;
-      processingUpdate.eventsFound = result.events?.length || 0;
-    }
-
-    processingUpdate.message = processingMessage;
-    updateProgress(poi.id, processingUpdate);
-
-    if (result.events && result.events.length > 0) {
-      const eventsList = result.events.map((event, idx) =>
+    if (allEvents.length > 0) {
+      const eventsList = allEvents.map((event, idx) =>
         `${idx + 1}. ${event.title} (${event.start_date}) - ${event.source_url || 'N/A'}`
       ).join('\n  ');
-      logInfo(jobId, 'news', poi.id, poi.name, `Events found:\n  ${eventsList}`);
+      logInfo(jobId, jobType, poi.id, poi.name, `Events found:\n  ${eventsList}`);
     }
 
-    if (result.news && result.news.length > 0) {
-      const newsList = result.news.map((item, idx) =>
+    if (allNews.length > 0) {
+      const newsList = allNews.map((item, idx) =>
         `${idx + 1}. ${item.title} (${item.published_date})`
       ).join('\n  ');
-      logInfo(jobId, 'news', poi.id, poi.name, `News found:\n  ${newsList}`);
+      logInfo(jobId, jobType, poi.id, poi.name, `News found:\n  ${newsList}`);
     }
 
-    let allNews = result.news || [];
-
-    checkCancellation(); // Check before Serper search
-
-    // PHASE II: External news via Serper — Search → Render → Classify → Crawl → Dates → Summarize
+    // PHASE II: External news via Serper — per-URL pipeline
     if (collectionType !== 'events') {
       try {
         updateProgress(poi.id, {
@@ -719,174 +616,93 @@ Extract ALL news from this content using these relaxed criteria.`;
         });
 
         reportProgress('Phase II: [Search] Querying Serper for external coverage');
-        logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
+        logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
 
-        // Phase II: [Search] — Serper API returns URLs
         const serperResult = await searchNewsUrls(pool, poi);
-        logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Search] ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`, { query: serperResult.query, urls_found: serperResult.urls.length });
+        logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`, { query: serperResult.query, urls_found: serperResult.urls.length });
         reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
 
         if (serperResult.urls.length > 0) {
-          // Phase II: Render each Serper URL as a detail page (no classification).
-          // Serper returns search results — these are already individual articles/pages.
-          // Classification is counterproductive here: news sites have "related articles"
-          // sidebars that Gemini classifies as "hybrid", triggering cascading crawls
-          // across unrelated content (e.g., Yahoo sidebar → 10 random articles).
-          const renderedSerperContent = [];
-          let renderedCount = 0;
+          // Skip Serper URLs from the POI's own domains — Phase I already covered them
+          const poiOrigins = new Set();
+          for (const u of [website, eventsUrl, newsUrl]) {
+            try { poiOrigins.add(new URL(u).origin); } catch { /* skip invalid */ }
+          }
+          const externalUrls = serperResult.urls.filter(urlData => {
+            try {
+              const origin = new URL(urlData.url).origin;
+              if (poiOrigins.has(origin)) {
+                logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Skip same-origin URL: ${urlData.url}`);
+                return false;
+              }
+              return true;
+            } catch { return false; }
+          });
 
-          for (const urlData of serperResult.urls) {
+          // Cap Phase II URLs — each gets its own Gemini call, so 5 is plenty
+          const MAX_PHASE2_URLS = 5;
+          const urlsToProcess = externalUrls.slice(0, MAX_PHASE2_URLS);
+          if (externalUrls.length > MAX_PHASE2_URLS) {
+            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_PHASE2_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
+          }
+
+          let renderedCount = 0;
+          let phase2PagesCollected = 0;
+
+          for (const urlData of urlsToProcess) {
             try {
               checkCancellation();
+              if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
 
-              // 1.5 second delay between renders
-              if (renderedCount > 0) {
-                await new Promise(resolve => setTimeout(resolve, 1500));
-              }
-
-              // Phase II: [Render]
-              logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Render] ${urlData.url}`);
-              reportProgress(`Phase II: [Render] ${urlData.url}`);
-
-              const extracted = await extractPageContent(urlData.url, {
-                timeout: 30000,
-                hardTimeout: 60000,
-                extractLinks: false
+              // Classify each Serper URL — articles pass through as DETAIL (1 render),
+              // listing pages get 1-level-deep link-following with tight caps
+              reportProgress(`Phase II: [Classify] ${urlData.url}`);
+              const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
+                maxDepth: 1,
+                maxPages: 6,
+                maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2PagesCollected),
+                phase: 'Phase II',
+                jobId,
+                jobType
               });
 
-              if (!extracted.reachable || !extracted.markdown || extracted.markdown.length < 200) {
-                logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Render] Skip — ${extracted.reason || 'too short'} (${extracted.markdown?.length || 0} chars)`);
-                continue;
-              }
+              const pagesToProcess = crawlResult.pages;
 
-              renderedSerperContent.push({
-                url: urlData.url, title: urlData.title, snippet: urlData.snippet,
-                date: urlData.date, markdown: extracted.markdown
-              });
-              renderedCount++;
-              logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Render] ${urlData.url} (${extracted.markdown.length} chars)`);
-            } catch (renderError) {
-              logError(jobId, 'news', poi.id, poi.name, `Phase II: [Render] Error: ${urlData.url} — ${renderError.message}`);
-            }
-          }
+              for (const page of pagesToProcess) {
+                checkCancellation();
+                if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
 
-          reportProgress(`Phase II: [Render] ${renderedCount} pages from ${serperResult.urls.length} URLs`);
-          logInfo(jobId, 'news', poi.id, poi.name, `Phase II: Rendered ${renderedCount} pages from ${serperResult.urls.length} URLs`);
-
-          // Phase II: [Summarize] — send all rendered content to Gemini
-          if (renderedSerperContent.length > 0) {
-            logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Summarize] Sending ${renderedSerperContent.length} pages to Gemini`);
-            updateProgress(poi.id, {
-              phase: 'summarizing_external_news',
-              message: `Summarizing ${renderedSerperContent.length} external pages via Gemini...`,
-              steps: ['Initialized', 'Phase I complete', 'Rendering external news', 'Summarizing']
-            });
-
-            // Build markdown content for Gemini — normalize Serper dates via chrono-node
-            const serperMarkdown = renderedSerperContent.map(page => {
-              const normalizedDate = parseDate(page.date) || page.date;
-              return `### External News Page: ${page.url}
-Title: ${page.title}
-Snippet: ${page.snippet}
-${normalizedDate ? `Date: ${normalizedDate}` : ''}
-
-${page.markdown}`;
-            }).join('\n\n---\n\n');
-
-            let serperPrompt = `Summarize news items from these external news sources about "${poi.name}".
-
-MISSION SCOPE — Roots of The Valley:
-Only include news that connects to Cuyahoga Valley National Park themes: nature, trails,
-outdoor recreation, conservation, local history, ecology, wildlife, community stewardship,
-scenic railroads, canal towpath heritage, or arts/culture organizations that serve the valley.
-Skip generic urban news, restaurant openings, nightlife, sports, or entertainment unrelated
-to the park's mission. Ask: "Would a CVNP visitor care about this?"
-
-EXTERNAL NEWS SOURCES:
-We visited these external news pages and extracted their content.
-Each section below is from a REAL page we visited — the URL is verified.
-
-${serperMarkdown}
-
-**CRITICAL: URL INSTRUCTIONS**
-- For each news item, set source_url to the EXACT page URL shown in the "### External News Page:" header
-- Do NOT invent, modify, or guess URLs — use ONLY the URLs provided above
-- Use 95% confidence filtering since these are external sources
-- Only include news from the last 365 days
-
-Return your results in this exact JSON structure:
-{
-  "news": [
-    {
-      "title": "News headline",
-      "summary": "2-3 sentence summary",
-      "source_name": "Source name (extracted from URL or content)",
-      "source_url": "EXACT URL from header above",
-      "published_date": "date if visible on page, or null",
-      "news_type": "general|alert|wildlife|infrastructure|community"
-    }
-  ]
-}
-
-Return {"news": []} if no relevant news found.`;
-
-            // Phase II: [Dates] — chrono-node date hints for Serper content
-            const serperDateHints = [];
-            for (const page of renderedSerperContent) {
-              serperDateHints.push(...extractDatesFromText(page.markdown, timezone));
-            }
-            if (serperDateHints.length > 0) {
-              const hintBlock = serperDateHints.slice(0, 30).map(h =>
-                `- "${h.text}" → ${h.start}${h.end ? ' to ' + h.end : ''}`
-              ).join('\n');
-              serperPrompt += `\n\nDATES FOUND IN PAGE TEXT (use these, do not re-interpret):\n${hintBlock}`;
-            }
-            logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Dates] ${serperDateHints.length} dates extracted from ${renderedSerperContent.length} pages`);
-
-            reportProgress(`Phase II: [Summarize] Sending ${renderedSerperContent.length} pages to Gemini`);
-            const serperAiResult = await generateTextWithCustomPrompt(pool, serperPrompt);
-
-            const serperAiResponse = serperAiResult.response;
-            logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Summarize] Received response (${serperAiResponse.length} chars)`);
-
-            const serperJsonMatch = serperAiResponse.match(/\{[\s\S]*\}/);
-            if (serperJsonMatch) {
-              const serperExtracted = JSON.parse(serperJsonMatch[0]);
-              const serperNews = serperExtracted.news || [];
-
-              if (serperNews.length > 0) {
-                const serperList = serperNews.map((item, idx) =>
-                  `${idx + 1}. ${item.title} (${item.published_date || 'no date'}) - ${item.source_name || 'unknown source'}`
-                ).join('\n  ');
-                logInfo(jobId, 'news', poi.id, poi.name, `Phase II: [Summarize] ${serperNews.length} news items:\n  ${serperList}`);
+                const items = await processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase II', jobId, jobType, timezone, confidence: '95%' });
 
                 // Merge with existing news, avoiding duplicates by title
-                const existingTitles = new Set(allNews.map(n => n.title.toLowerCase().trim()));
-                const newItems = serperNews.filter(item => {
+                const newNews = (items.news || []).filter(item => {
                   const titleLower = item.title.toLowerCase().trim();
-                  return !existingTitles.has(titleLower);
+                  return !allNews.some(n => n.title.toLowerCase().trim() === titleLower);
                 });
 
-                if (newItems.length > 0) {
-                  reportProgress(`Phase II: [Summarize] ${newItems.length} new articles from external sources`);
-                  logInfo(jobId, 'news', poi.id, poi.name, `Phase II: Adding ${newItems.length} unique items`);
-                  allNews = [...allNews, ...newItems];
-                } else {
-                  reportProgress('Phase II: [Summarize] All duplicates, skipped');
-                  logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: All external news items were duplicates, skipped');
+                if (newNews.length > 0) {
+                  logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Adding ${newNews.length} unique items from ${page.url}`);
+                  allNews.push(...newNews);
                 }
-              } else {
-                reportProgress('Phase II: [Summarize] No relevant news found');
-                logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: No relevant news extracted from external sources');
+
+                phase2PagesCollected++;
               }
+
+              renderedCount++;
+            } catch (renderError) {
+              if (renderError.message === 'Collection cancelled by user') throw renderError;
+              logError(jobId, jobType, poi.id, poi.name, `Phase II: Error: ${urlData.url} — ${renderError.message}`);
             }
           }
+
+          reportProgress(`Phase II: Processed ${renderedCount} Serper URLs, ${phase2PagesCollected} pages collected`);
+          logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Processed ${renderedCount} of ${serperResult.urls.length} Serper URLs, ${phase2PagesCollected} pages collected`);
         } else {
-          logInfo(jobId, 'news', poi.id, poi.name, 'Phase II: [Search] No external news URLs found');
+          logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] No external news URLs found');
         }
       } catch (serperError) {
-        logWarn(jobId, 'news', poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`);
-        // Continue with Phase I results even if Phase II fails
+        if (serperError.message === 'Collection cancelled by user') throw serperError;
+        logWarn(jobId, jobType, poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`);
       }
     }
 
@@ -894,41 +710,37 @@ Return {"news": []} if no relevant news found.`;
     let completionMessage;
     let progressUpdate = {
       phase: 'complete',
-      steps: ['Initialized', 'Phase I: Classify & Crawl', 'Phase I: Summarize', 'Phase II: Search & Classify', 'Phase II: Summarize', 'Complete'],
+      steps: ['Initialized', 'Phase I: Classify & Crawl', 'Phase I: per-URL Summarize', 'Phase II: per-URL Summarize', 'Complete'],
       completed: true
     };
 
     if (collectionType === 'news') {
       completionMessage = `Complete! Found ${allNews.length} news`;
       progressUpdate.newsFound = allNews.length;
-      progressUpdate.eventsFound = 0; // Don't show events when collecting news
+      progressUpdate.eventsFound = 0;
     } else if (collectionType === 'events') {
-      completionMessage = `Complete! Found ${result.events?.length || 0} events`;
-      progressUpdate.eventsFound = result.events?.length || 0;
-      progressUpdate.newsFound = 0; // Don't show news when collecting events
+      completionMessage = `Complete! Found ${allEvents.length} events`;
+      progressUpdate.eventsFound = allEvents.length;
+      progressUpdate.newsFound = 0;
     } else {
-      completionMessage = `Complete! Found ${allNews.length} news, ${result.events?.length || 0} events`;
+      completionMessage = `Complete! Found ${allNews.length} news, ${allEvents.length} events`;
       progressUpdate.newsFound = allNews.length;
-      progressUpdate.eventsFound = result.events?.length || 0;
+      progressUpdate.eventsFound = allEvents.length;
     }
 
     progressUpdate.message = completionMessage;
     updateProgress(poi.id, progressUpdate);
 
-    // Keep progress available - frontend will clear it when appropriate
-    // Don't auto-clear - let the UI control when it goes away
-
     return {
       news: allNews,
-      events: result.events || [],
+      events: allEvents,
       metadata: {
-        usedDedicatedNewsUrl: usedNewsClassifier,
-        provider: 'gemini',
-        ai_response: response
+        usedDedicatedNewsUrl,
+        provider: 'gemini'
       }
     };
   } catch (error) {
-    logError(jobId, 'news', poi.id, poi.name, `Error collecting news: ${error.message}`);
+    logError(jobId, jobType, poi.id, poi.name, `Error collecting news: ${error.message}`);
 
     updateProgress(poi.id, {
       phase: 'error',
@@ -937,8 +749,6 @@ Return {"news": []} if no relevant news found.`;
       completed: true,
       error: error.message
     });
-
-    // Keep error visible - frontend will clear it when appropriate
 
     return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false, provider: 'gemini' } };
   }
@@ -1036,7 +846,7 @@ function normalizeUrl(url) {
 export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
-  const { skipDateFilter = false } = options;
+  const { skipDateFilter = false, log = null } = options;
 
   // Calculate 365 days ago as a date string (YYYY-MM-DD) to avoid timezone issues
   const today = new Date();
@@ -1049,10 +859,9 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       item.published_date = parseDate(item.published_date) || null;
 
       // Skip news older than 365 days (unless skipDateFilter is true)
-      // Use string comparison to avoid timezone conversion issues
       if (!skipDateFilter && item.published_date && /^\d{4}-\d{2}-\d{2}$/.test(item.published_date)) {
         if (item.published_date < oneYearAgoStr) {
-          console.log(`[Save] Skipping old news: ${item.title} (${item.published_date})`);
+          if (log) log(`[Save] Skip old: "${item.title}" (${item.published_date} < ${oneYearAgoStr})`);
           continue;
         }
       }
@@ -1061,25 +870,19 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;
 
       // Skip items where redirect resolution failed
-      // We keep items with no URL (null), but skip items where we tried to resolve a redirect and failed
       const isRedirectUrl = item.source_url && (
         item.source_url.includes('grounding-api-redirect') ||
         item.source_url.includes('vertexaisearch.cloud.google.com')
       );
 
       if (isRedirectUrl && !resolvedUrl) {
-        console.log(`[Save] Skipping news (failed URL resolution): "${item.title}"`);
+        if (log) log(`[Save] Skip bad redirect: "${item.title}" (${item.source_url})`);
         continue;
       }
 
       // Normalize the title for duplicate checking
       const normalizedTitle = normalizeNewsTitle(item.title);
 
-      // Check if duplicate exists using URL (cross-POI) and title (same POI)
-      // This catches:
-      // 1. Same normalized URL across ANY POI (alerts pages, blog indexes)
-      // 2. Same title within the same POI
-      // 3. Title variants like "Article | January 30" vs "Article | 2026-01-30" (same POI)
       const normalizedUrl = normalizeUrl(resolvedUrl);
       const existing = await pool.query(
         `SELECT id, title, source_url, poi_id FROM poi_news
@@ -1092,44 +895,46 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       );
 
       if (existing.rows.length > 0) {
-        const matchedUrl = normalizeUrl(existing.rows[0].source_url);
+        const match = existing.rows[0];
+        const matchedUrl = normalizeUrl(match.source_url);
         if (matchedUrl === normalizedUrl) {
-          // Exact same URL — truly skip
           duplicateCount++;
-          console.log(`[Save] Skipping duplicate (same URL): "${item.title}"`);
+          if (log) log(`[Save] Skip duplicate (same URL): "${item.title}" — matches existing #${match.id}`);
           continue;
         }
         // Different URL, similar title — merge URL into existing item
-        const existingId = existing.rows[0].id;
         await pool.query(
           `INSERT INTO poi_news_urls (news_id, url, source_name)
            SELECT $1, $2, $3
            WHERE NOT EXISTS (
              SELECT 1 FROM poi_news_urls WHERE news_id = $1 AND url = $2
            )`,
-          [existingId, resolvedUrl, item.source_name || null]
+          [match.id, resolvedUrl, item.source_name || null]
         );
         duplicateCount++;
-        console.log(`[Save] Merged URL into news #${existingId}: "${item.title}"`);
+        if (log) log(`[Save] Merged URL into existing #${match.id}: "${item.title}" (title match, different URL: ${resolvedUrl})`);
         continue;
       }
 
-      // Save the news item with the RESOLVED URL (not the redirect)
-      // New items enter as 'pending' for moderation review
+      // New item — save as pending for moderation
+      const dateConfidence = item.published_date ? 'exact' : 'unknown';
       await pool.query(`
-        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, published_at, moderation_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_confidence, moderation_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
       `, [
         poiId,
         item.title,
         item.summary,
-        resolvedUrl, // Use resolved URL, not the original redirect
+        resolvedUrl,
         item.source_name,
         item.news_type || 'general',
-        item.published_date || null
+        item.published_date || null,
+        dateConfidence
       ]);
       savedCount++;
+      if (log) log(`[Save] Saved (pending): "${item.title}" (${item.published_date || 'no date'}, ${dateConfidence}) → ${resolvedUrl}`);
     } catch (error) {
+      if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
       console.error(`Error saving news item for POI ${poiId}:`, error.message);
     }
   }
@@ -1143,9 +948,10 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
  * @param {number} poiId - POI ID
  * @param {Array} eventItems - Array of events from AI summarization
  */
-export async function saveEventItems(pool, poiId, eventItems) {
+export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
+  const { log = null } = options;
 
   // Get today's date as a string (YYYY-MM-DD) to avoid timezone issues
   const today = new Date();
@@ -1153,15 +959,15 @@ export async function saveEventItems(pool, poiId, eventItems) {
 
   for (const item of eventItems) {
     try {
-      // Normalize event dates via chrono-node — handles natural language, European format, etc.
+      // Normalize event dates via chrono-node
       item.start_date = parseDate(item.start_date) || item.start_date;
       item.end_date = parseDate(item.end_date) || null;
 
-      // Skip past events using string comparison to avoid timezone issues
+      // Skip past events
       if (item.start_date && /^\d{4}-\d{2}-\d{2}$/.test(item.start_date)) {
         const endDateStr = item.end_date || item.start_date;
         if (endDateStr < todayStr) {
-          console.log(`[Save] Skipping past event: ${item.title} (${item.start_date})`);
+          if (log) log(`[Save] Skip past event: "${item.title}" (${item.start_date})`);
           continue;
         }
       }
@@ -1176,14 +982,10 @@ export async function saveEventItems(pool, poiId, eventItems) {
       );
 
       if (isRedirectUrl && !resolvedUrl) {
-        console.log(`[Save] Skipping event (failed URL resolution): "${item.title}"`);
+        if (log) log(`[Save] Skip bad redirect: "${item.title}" (${item.source_url})`);
         continue;
       }
 
-      // Check if duplicate exists using URL (cross-POI) and title+date (same POI)
-      // This catches:
-      // 1. Same normalized URL across ANY POI
-      // 2. Same title + start_date within same POI
       const normalizedEventUrl = normalizeUrl(resolvedUrl);
       const existing = await pool.query(
         `SELECT id, title, source_url, poi_id FROM poi_events
@@ -1195,33 +997,31 @@ export async function saveEventItems(pool, poiId, eventItems) {
       );
 
       if (existing.rows.length > 0) {
-        const matchedEventUrl = normalizeUrl(existing.rows[0].source_url);
+        const match = existing.rows[0];
+        const matchedEventUrl = normalizeUrl(match.source_url);
         if (matchedEventUrl === normalizedEventUrl) {
-          // Exact same URL — truly skip
           duplicateCount++;
-          console.log(`[Save] Skipping duplicate event (same URL): "${item.title}"`);
+          if (log) log(`[Save] Skip duplicate event (same URL): "${item.title}" — matches existing #${match.id}`);
           continue;
         }
-        // Different URL, similar title+date — merge URL into existing item
-        const existingId = existing.rows[0].id;
         await pool.query(
           `INSERT INTO poi_event_urls (event_id, url, source_name)
            SELECT $1, $2, $3
            WHERE NOT EXISTS (
              SELECT 1 FROM poi_event_urls WHERE event_id = $1 AND url = $2
            )`,
-          [existingId, resolvedUrl, item.source_name || null]
+          [match.id, resolvedUrl, item.source_name || null]
         );
         duplicateCount++;
-        console.log(`[Save] Merged URL into event #${existingId}: "${item.title}"`);
+        if (log) log(`[Save] Merged URL into existing event #${match.id}: "${item.title}" (different URL: ${resolvedUrl})`);
         continue;
       }
 
-      // Save the event with the RESOLVED URL (not the redirect)
-      // New items enter as 'pending' for moderation review
+      // New event — save as pending for moderation
+      const dateConfidence = item.start_date ? 'exact' : 'unknown';
       await pool.query(`
-        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, moderation_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_confidence, moderation_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
       `, [
         poiId,
         item.title,
@@ -1230,10 +1030,14 @@ export async function saveEventItems(pool, poiId, eventItems) {
         item.end_date || null,
         item.event_type,
         item.location_details,
-        resolvedUrl // Use resolved URL, not the original redirect
+        resolvedUrl,
+        item.start_date || null,
+        dateConfidence
       ]);
       savedCount++;
+      if (log) log(`[Save] Saved event (pending): "${item.title}" (${item.start_date}, ${dateConfidence}) → ${resolvedUrl}`);
     } catch (error) {
+      if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
       console.error(`Error saving event for POI ${poiId}:`, error.message);
     }
   }
@@ -1459,13 +1263,14 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
           jobId: jid,
           completed: false
         });
-        logInfo(jobId, 'news', poi.id, poi.name, `Starting collection`, { slot: slotId });
+        logInfo(jobId, jobType, poi.id, poi.name, `Starting collection`, { slot: slotId });
       },
 
       collectFn: async (poi, { index, total }) => {
         const { news, events, metadata } = await collectNewsForPoi(pool, poi, sheets, 'America/New_York');
-        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
-        const savedEvents = await saveEventItems(pool, poi.id, events);
+        const saveLog = (msg) => { logInfo(jobId, 'news', poi.id, poi.name, msg); };
+        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl, log: saveLog });
+        const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog });
         logInfo(jobId, 'news', poi.id, poi.name, `[${index + 1}/${total}] ${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents });
 
         // Update last_news_collection timestamp
@@ -1485,7 +1290,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
           eventsFound += result.savedEvents;
         }
         if (error) {
-          logError(jobId, 'news', poi.id, poi.name, error.message, { error_stack: error.stack?.split('\n').slice(0, 3).join('\n') });
+          logError(jobId, jobType, poi.id, poi.name, error.message, { error_stack: error.stack?.split('\n').slice(0, 3).join('\n') });
         }
 
         const currentAiUsage = getJobUsage();
@@ -1634,11 +1439,11 @@ export async function getJobStatus(pool, jobId) {
  */
 export async function getNewsForPoi(pool, poiId, limit = 10) {
   const result = await pool.query(`
-    SELECT id, title, summary, source_url, source_name, news_type, published_at, created_at
+    SELECT id, title, summary, source_url, source_name, news_type, publication_date, collection_date
     FROM poi_news
     WHERE poi_id = $1
       AND moderation_status IN ('published', 'auto_approved')
-    ORDER BY COALESCE(published_at, created_at) DESC
+    ORDER BY COALESCE(publication_date, collection_date::date) DESC
     LIMIT $2
   `, [poiId, limit]);
 
@@ -1653,7 +1458,7 @@ export async function getNewsForPoi(pool, poiId, limit = 10) {
  */
 export async function getEventsForPoi(pool, poiId, upcomingOnly = true) {
   let query = `
-    SELECT id, title, description, start_date, end_date, event_type, location_details, source_url, created_at
+    SELECT id, title, description, start_date, end_date, event_type, location_details, source_url, collection_date
     FROM poi_events
     WHERE poi_id = $1
       AND moderation_status IN ('published', 'auto_approved')
@@ -1677,11 +1482,11 @@ export async function getEventsForPoi(pool, poiId, upcomingOnly = true) {
 export async function getRecentNews(pool, limit = 20) {
   const result = await pool.query(`
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-           n.published_at, n.created_at, p.id as poi_id, p.name as poi_name, p.poi_type
+           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_type
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
-    ORDER BY COALESCE(n.published_at, n.created_at) DESC
+    ORDER BY COALESCE(n.publication_date, n.collection_date::date) DESC
     LIMIT $1
   `, [limit]);
 
@@ -1731,7 +1536,7 @@ export async function cleanupOldNews(pool, daysOld = 90) {
   const runId = Math.floor(Date.now() / 1000);
   const result = await pool.query(`
     DELETE FROM poi_news
-    WHERE created_at < CURRENT_DATE - INTERVAL '1 day' * $1
+    WHERE collection_date < CURRENT_DATE - INTERVAL '1 day' * $1
   `, [daysOld]);
 
   logInfo(runId, 'cleanup', null, null, `Cleanup: deleted ${result.rowCount} news older than ${daysOld} days`, { completed: true, deleted: result.rowCount, type: 'news', days_old: daysOld });

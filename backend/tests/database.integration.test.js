@@ -80,8 +80,7 @@ describe('Database Schema Tests', () => {
     expect(columns).toContain('poi_id');
     expect(columns).toContain('title');
     expect(columns).toContain('source_url');
-    expect(columns).toContain('published_at');
-    expect(columns).toContain('created_at');
+    expect(columns).toContain('collection_date');
     expect(columns).toContain('content_source');
     expect(columns).not.toContain('ai_generated');
   });
@@ -102,7 +101,7 @@ describe('Database Schema Tests', () => {
     expect(columns).toContain('title');
     expect(columns).toContain('start_date');
     expect(columns).toContain('source_url');
-    expect(columns).toContain('created_at');
+    expect(columns).toContain('collection_date');
     expect(columns).toContain('content_source');
     expect(columns).not.toContain('ai_generated');
   });
@@ -178,7 +177,7 @@ describe('Database Query Tests', () => {
         pn.id,
         pn.title,
         pn.source_url,
-        pn.published_at,
+        pn.publication_date,
         p.name as poi_name
       FROM poi_news pn
       JOIN pois p ON pn.poi_id = p.id

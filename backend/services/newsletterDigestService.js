@@ -22,12 +22,12 @@ export async function generateDigest(pool) {
   // Get news published in last 7 days
   const newsQuery = `
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-           n.published_at, n.created_at, p.id as poi_id, p.name as poi_name, p.poi_type
+           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_type
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
-      AND COALESCE(n.published_at, n.created_at) > NOW() - INTERVAL '7 days'
-    ORDER BY COALESCE(n.published_at, n.created_at) DESC
+      AND COALESCE(n.publication_date, n.collection_date::date) > NOW() - INTERVAL '7 days'
+    ORDER BY COALESCE(n.publication_date, n.collection_date::date) DESC
     LIMIT 5
   `;
 

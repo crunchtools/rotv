@@ -1486,9 +1486,9 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
               </button>
             )}
           </div>
-          {item.published_at && (
+          {item.publication_date && (
             <div className="poi-event-date">
-              {formatPublicationDate(item.published_at)}
+              {formatPublicationDate(item.publication_date)}
             </div>
           )}
           {item.summary && <p className="poi-news-summary">{item.summary}</p>}
