@@ -215,7 +215,7 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
               ) : null}
               {isAdmin && onEditNewsItem && (
                 <button
-                  onClick={() => onEditNewsItem(item.id)}
+                  onClick={() => onEditNewsItem(item.id, item.title)}
                   className="news-link"
                   style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
                 >
