@@ -29,12 +29,14 @@ const FIELD_CONFIGS = {
 };
 
 function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
-  console.log('[ModerationInbox] Mounted with onCountChange:', !!onCountChange);
   const [queue, setQueue] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState(null);
-  const [statusFilter, setStatusFilter] = useState('pending');
+  // Lazy-initialize statusFilter/searchInput/idFilter from props so the very first
+  // fetchQueue already has the right values — avoids a race condition where the
+  // initial fetch fires with default state before effects run.
+  const [statusFilter, setStatusFilter] = useState(() => focusItemId ? 'all' : 'pending');
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState(new Set());
   const [expandedItem, setExpandedItem] = useState(null);
@@ -54,7 +56,9 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
   const [newUrlInput, setNewUrlInput] = useState('');
   const [addingUrl, setAddingUrl] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchInput, setSearchInput] = useState('');
+  const [searchInput, setSearchInput] = useState(() => focusItemTitle || '');
+  // idFilter drives API fetch by ID (exactly 1 result) when coming from Edit link
+  const [idFilter, setIdFilter] = useState(() => focusItemId || null);
   const [lightboxMedia, setLightboxMedia] = useState(null);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxPoiId, setLightboxPoiId] = useState(null);
@@ -62,17 +66,18 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
   const [confirmDelete, setConfirmDelete] = useState(null); // "news:123" key
   const LIMIT = 20;
 
-  // When focusItemId/focusItemTitle is set (Edit link from news tab):
-  // fill the search bar with the title (visible to user) and show all statuses
+  // Handle focusItemId changes (e.g. user clicks Edit on a second article without
+  // leaving the Moderation tab — the component stays mounted but props change).
   const startEditingRef = React.useRef(null);
   useEffect(() => {
-    if (!focusItemId || !focusItemTitle) return;
+    if (!focusItemId) return;
     setStatusFilter('all');
     setFilter(null);
     setSourceFilter(null);
+    setSearchQuery('');
     setPage(1);
-    setSearchInput(focusItemTitle);
-    setSearchQuery(focusItemTitle);
+    setSearchInput(focusItemTitle || '');
+    setIdFilter(focusItemId);
   }, [focusItemId, focusItemTitle]);
 
   // After queue loads, auto-expand and open edit mode for the focused item
@@ -98,7 +103,11 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
       const params = new URLSearchParams({ page, limit: LIMIT, status: statusFilter });
       if (filter) params.set('type', filter);
       if (sourceFilter) params.set('source', sourceFilter);
-      if (searchQuery) params.set('search', searchQuery);
+      if (idFilter) {
+        params.set('id', idFilter);
+      } else if (searchQuery) {
+        params.set('search', searchQuery);
+      }
       const response = await fetch(`/api/admin/moderation/queue?${params}`, {
         credentials: 'include'
       });
@@ -112,7 +121,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
     } finally {
       setLoading(false);
     }
-  }, [page, filter, statusFilter, sourceFilter, searchQuery]);
+  }, [page, filter, statusFilter, sourceFilter, searchQuery, idFilter]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -759,8 +768,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
         <input
           type="text"
           value={searchInput}
-          onChange={e => setSearchInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') { setSearchQuery(searchInput); setPage(1); } }}
+          onChange={e => { setSearchInput(e.target.value); if (!e.target.value) { setIdFilter(null); setSearchQuery(''); setPage(1); } }}
+          onKeyDown={e => { if (e.key === 'Enter') { setIdFilter(null); setSearchQuery(searchInput); setPage(1); } }}
           placeholder="Search by title or description..."
           style={{
             width: '100%', padding: '8px 12px', fontSize: '0.88rem',
