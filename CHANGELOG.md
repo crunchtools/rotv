@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **News date year corruption**: Fixed systematic 2025→2026 year shift in publication dates (#228)
+  - Root cause: pg library returns `date` columns as JavaScript Date objects; `String(dateObj).slice(0,10)` produces `"Sat May 31"` (no year), which chrono-node re-parses as the next future occurrence
+  - Fix: global pg type parsers (`types.setTypeParser`) for OID 1082/1114/1184 now return raw ISO strings
+  - Defense-in-depth: `moderationService.js` guards with `instanceof Date` checks before slicing
+  - Corrected 3 existing corrupted rows in DB (ids 8568, 8616, 8653)
+- **Moderation inbox blank screen on Edit deep-link**: Fixed `ReferenceError: idFilter is not defined` crashing ModerationInbox (#227)
+  - Stale `idFilter` reference left in `useCallback` dependency array after PR #226 rewrote the approach
+- **Edit deep-link showing multiple results**: Fixed Edit button in Park News opening 5 related articles instead of exactly the targeted one (#229)
+  - Switched from title `ILIKE` search (could match multiple) to `?id=N` exact fetch
+  - Lazy state initialization (`useState(() => focusItemId)`) eliminates race condition where first fetch fired before useEffect set the filter
+
 ### Added
 - **Development image proxy**: Localhost now proxies images from production when IMAGE_SERVER_URL is not configured
   - Allows viewing actual POI images during local development

@@ -355,14 +355,21 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Discarding future OG date ${ogRaw}, falling back to chrono-node`);
   }
   const dateHints = extractDatesFromText(extracted.markdown, timezone);
-  const rawPrimaryDate = ogPublished || (dateHints.length > 0 ? dateHints[0].start?.substring(0, 10) : null);
+  const chronoPrimary = dateHints.length > 0 ? dateHints[0].start?.substring(0, 10) : null;
+  // Discard chrono-node date when it equals today and there's no OG metadata — live pages
+  // often show today's date in navigation/footers, which is page noise not a publication date.
+  const chronoUsable = (chronoPrimary && chronoPrimary !== today) ? chronoPrimary : null;
+  if (chronoPrimary && chronoPrimary === today && !ogPublished) {
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Discarding today-date from chrono-node (likely page noise), no OG fallback`);
+  }
+  const rawPrimaryDate = ogPublished || chronoUsable;
   // For news, cap publication date at today — future dates are issue/cover dates, not publish dates
   const primaryDate = (contentType === 'news' && rawPrimaryDate && rawPrimaryDate > today) ? today : rawPrimaryDate;
   if (contentType === 'news' && rawPrimaryDate && rawPrimaryDate > today) {
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Capping future news date ${rawPrimaryDate} to today ${today}`);
   }
   const secondDate = dateHints.length > 1 ? dateHints[1].start?.substring(0, 10) : null;
-  const dateSource = ogPublished ? 'og' : (dateHints.length > 0 ? 'chrono' : 'none');
+  const dateSource = ogPublished ? 'og' : (chronoUsable ? 'chrono' : 'none');
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] ${primaryDate || 'none'} (${dateSource}), ${dateHints.length} chrono hints from ${url}`);
 
   // [Summarize] — Gemini identifies items and writes summaries (no date fields)
