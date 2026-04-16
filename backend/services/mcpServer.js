@@ -832,28 +832,30 @@ function registerTools(server, pool, boss) {
     },
     async ({ type, poi_ids }) => {
       if (type === 'news') {
-        // Create job record first
-        const jobResult = await pool.query(
-          `INSERT INTO news_job_status (job_type, status, started_at, created_at)
-           VALUES ('batch_collection', 'queued', NOW(), NOW()) RETURNING id`
-        );
-        const jobId = jobResult.rows[0].id;
-
-        // If no POI IDs given, get all POIs with news/events URLs
+        // If no POI IDs given, get all active POIs (same as the /news/collect route)
         let targetPoiIds = poi_ids;
         if (!targetPoiIds || targetPoiIds.length === 0) {
           const poisResult = await pool.query(`
             SELECT id FROM pois
-            WHERE (news_url IS NOT NULL OR events_url IS NOT NULL)
-              AND (deleted IS NULL OR deleted = FALSE)
+            WHERE (deleted IS NULL OR deleted = FALSE)
+            ORDER BY
+              CASE poi_type
+                WHEN 'point' THEN 1
+                WHEN 'boundary' THEN 2
+                ELSE 3
+              END,
+              name
           `);
           targetPoiIds = poisResult.rows.map(r => r.id);
         }
 
-        await pool.query(
-          `UPDATE news_job_status SET total_pois = $1 WHERE id = $2`,
-          [targetPoiIds.length, jobId]
+        // Create job record with poi_ids stored (required by processNewsCollectionJob)
+        const jobResult = await pool.query(
+          `INSERT INTO news_job_status (job_type, status, started_at, created_at, total_pois, poi_ids, processed_poi_ids)
+           VALUES ('batch_collection', 'queued', NOW(), NOW(), $1, $2, $3) RETURNING id`,
+          [targetPoiIds.length, JSON.stringify(targetPoiIds), JSON.stringify([])]
         );
+        const jobId = jobResult.rows[0].id;
 
         await submitBatchNewsJob({ jobId, poiIds: targetPoiIds });
         return { content: [{ type: 'text', text: `News collection job #${jobId} started for ${targetPoiIds.length} POIs` }] };
