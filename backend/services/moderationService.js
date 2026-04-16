@@ -1044,7 +1044,7 @@ If truly impossible to determine, use "unknown" and set publication_date to null
   };
 }
 
-export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null, search = null } = {}) {
+export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null, search = null, id = null } = {}) {
   const offset = (page - 1) * limit;
   const statusList = status === 'all'
     ? ['pending', 'published', 'auto_approved', 'rejected']
@@ -1108,6 +1108,11 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
   if (search) {
     filters.push(`(title ILIKE $${paramIdx} OR description ILIKE $${paramIdx})`);
     params.push(`%${search}%`);
+    paramIdx++;
+  }
+  if (id) {
+    filters.push(`id = $${paramIdx}`);
+    params.push(parseInt(id));
     paramIdx++;
   }
 

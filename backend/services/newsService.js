@@ -345,11 +345,22 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
 
   // [Dates] — OG metadata first (structured, reliable), chrono-node as fallback
   // These are applied directly to items AFTER Gemini returns — Gemini never touches dates
-  const ogPublished = extracted.ogDates?.publishedTime
+  const today = new Date().toISOString().substring(0, 10);
+  const ogRaw = extracted.ogDates?.publishedTime
     ? parseDate(extracted.ogDates.publishedTime, timezone)
     : null;
+  // Discard OG date if it's in the future — likely an event date or bad metadata, not the publish date
+  const ogPublished = (ogRaw && ogRaw <= today) ? ogRaw : null;
+  if (ogRaw && ogRaw > today) {
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Discarding future OG date ${ogRaw}, falling back to chrono-node`);
+  }
   const dateHints = extractDatesFromText(extracted.markdown, timezone);
-  const primaryDate = ogPublished || (dateHints.length > 0 ? dateHints[0].start?.substring(0, 10) : null);
+  const rawPrimaryDate = ogPublished || (dateHints.length > 0 ? dateHints[0].start?.substring(0, 10) : null);
+  // For news, cap publication date at today — future dates are issue/cover dates, not publish dates
+  const primaryDate = (contentType === 'news' && rawPrimaryDate && rawPrimaryDate > today) ? today : rawPrimaryDate;
+  if (contentType === 'news' && rawPrimaryDate && rawPrimaryDate > today) {
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Capping future news date ${rawPrimaryDate} to today ${today}`);
+  }
   const secondDate = dateHints.length > 1 ? dateHints[1].start?.substring(0, 10) : null;
   const dateSource = ogPublished ? 'og' : (dateHints.length > 0 ? 'chrono' : 'none');
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] ${primaryDate || 'none'} (${dateSource}), ${dateHints.length} chrono hints from ${url}`);

@@ -8,7 +8,7 @@ const DEFAULT_PARK_BOUNDS = [
   [41.45, -81.50]   // Northeast corner
 ];
 
-function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -213,6 +213,15 @@ function ParkNews({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearF
                   Read more
                 </a>
               ) : null}
+              {isAdmin && onEditNewsItem && (
+                <button
+                  onClick={() => onEditNewsItem(item.id)}
+                  className="news-link"
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
+                >
+                  Edit
+                </button>
+              )}
             </div>
           </div>
         ))}

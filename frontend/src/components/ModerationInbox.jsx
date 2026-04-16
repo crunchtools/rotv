@@ -28,7 +28,7 @@ const FIELD_CONFIGS = {
   ]
 };
 
-function ModerationInbox({ onCountChange }) {
+function ModerationInbox({ onCountChange, focusItemId }) {
   console.log('[ModerationInbox] Mounted with onCountChange:', !!onCountChange);
   const [queue, setQueue] = useState([]);
   const [total, setTotal] = useState(0);
@@ -59,7 +59,31 @@ function ModerationInbox({ onCountChange }) {
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [lightboxPoiId, setLightboxPoiId] = useState(null);
   const [user, setUser] = useState(null);
+  const [idFilter, setIdFilter] = useState(null);
   const LIMIT = 20;
+
+  // When focusItemId is set (Edit link from news tab), switch to all-status view and filter by ID
+  useEffect(() => {
+    if (!focusItemId) return;
+    setStatusFilter('all');
+    setFilter(null);
+    setSourceFilter(null);
+    setSearchQuery('');
+    setSearchInput('');
+    setPage(1);
+    setIdFilter(focusItemId);
+  }, [focusItemId]);
+
+  // After queue loads with a focused item, auto-expand and open edit mode
+  // startEditing is defined below — captured via ref so this effect doesn't need it as a dep
+  const startEditingRef = React.useRef(null);
+  useEffect(() => {
+    if (!idFilter || loading || queue.length === 0) return;
+    const item = queue.find(i => i.id === idFilter && i.content_type === 'news');
+    if (!item) return;
+    setExpandedItem(`news:${item.id}`);
+    if (startEditingRef.current) startEditingRef.current(item);
+  }, [idFilter, loading, queue]);
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -68,6 +92,7 @@ function ModerationInbox({ onCountChange }) {
       if (filter) params.set('type', filter);
       if (sourceFilter) params.set('source', sourceFilter);
       if (searchQuery) params.set('search', searchQuery);
+      if (idFilter) params.set('id', idFilter);
       const response = await fetch(`/api/admin/moderation/queue?${params}`, {
         credentials: 'include'
       });
@@ -81,7 +106,7 @@ function ModerationInbox({ onCountChange }) {
     } finally {
       setLoading(false);
     }
-  }, [page, filter, statusFilter, sourceFilter, searchQuery]);
+  }, [page, filter, statusFilter, sourceFilter, searchQuery, idFilter]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -433,6 +458,9 @@ function ModerationInbox({ onCountChange }) {
     }
   };
 
+  // Keep ref current so the auto-focus effect can call startEditing without it as a dep
+  useEffect(() => { startEditingRef.current = startEditing; });
+
   const handleSave = async (type, id) => {
     console.log('[Moderation] Saving:', { type, id, edits: editFields });
     const item = queue.find(q => q.content_type === type && q.id === id);
@@ -612,9 +640,12 @@ function ModerationInbox({ onCountChange }) {
         </select>
       );
     }
+    // Use text input for date fields — browser <input type="date"> renders in OS locale (e.g. European DD/MM/YYYY)
+    const inputType = (fc.type === 'date') ? 'text' : (fc.type || 'text');
+    const placeholder = (fc.type === 'date') ? 'YYYY-MM-DD' : fc.label;
     return (
-      <input type={fc.type || 'text'} value={val} onChange={e => onChange(e.target.value)}
-        style={inputStyle} placeholder={fc.label} required={fc.required} />
+      <input type={inputType} value={val} onChange={e => onChange(e.target.value)}
+        style={inputStyle} placeholder={placeholder} required={fc.required} />
     );
   };
 
