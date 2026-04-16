@@ -110,6 +110,15 @@ function invalidateMosaicCache(poiId) {
 // Trust reverse proxy (for secure cookies behind CloudFlare/Apache)
 app.set('trust proxy', 1);
 
+// Return date/timestamp columns as ISO strings, not JavaScript Date objects.
+// Date objects lose the year when passed through String().slice(0,10) because
+// their .toString() format is locale-dependent ("Sat May 31 2025 ...").
+// OID 1082 = date, 1114 = timestamp without tz, 1184 = timestamp with tz
+const { types } = pg;
+types.setTypeParser(1082, (val) => val);   // date → 'YYYY-MM-DD' string
+types.setTypeParser(1114, (val) => val);   // timestamp → string
+types.setTypeParser(1184, (val) => val);   // timestamptz → string
+
 const pool = new Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT || 5432,
