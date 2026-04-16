@@ -283,7 +283,10 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     // Use dates from collection (set by chrono-node), not from Gemini moderation
-    const newsPubDate = row.publication_date ? parseDate(String(row.publication_date).slice(0, 10)) : null;
+    // Use toISOString() for Date objects to avoid losing the year in .toString() output
+    const newsPubDate = row.publication_date ? parseDate(
+      row.publication_date instanceof Date ? row.publication_date.toISOString().slice(0, 10) : String(row.publication_date).slice(0, 10)
+    ) : null;
     const newsDateConf = newsPubDate ? (row.date_confidence || 'estimated') : 'unknown';
 
     // Apply quality filters to adjust confidence_score
@@ -396,12 +399,15 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     // Use dates from collection (set by chrono-node), not from Gemini moderation
-    let eventPubDate = row.publication_date ? parseDate(String(row.publication_date).slice(0, 10)) : null;
+    // Use toISOString() for Date objects to avoid losing the year in .toString() output
+    let eventPubDate = row.publication_date ? parseDate(
+      row.publication_date instanceof Date ? row.publication_date.toISOString().slice(0, 10) : String(row.publication_date).slice(0, 10)
+    ) : null;
     let eventDateConf = eventPubDate ? (row.date_confidence || 'estimated') : 'unknown';
 
     // Fallback: events with start_date but no pub date shouldn't get stuck as 'unknown'
     if (eventDateConf === 'unknown' && row.start_date) {
-      const startStr = String(row.start_date).slice(0, 10);
+      const startStr = row.start_date instanceof Date ? row.start_date.toISOString().slice(0, 10) : String(row.start_date).slice(0, 10);
       if (/^\d{4}-\d{2}-\d{2}$/.test(startStr)) {
         eventPubDate = startStr;
         eventDateConf = 'estimated';
