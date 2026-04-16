@@ -116,6 +116,9 @@ function AppContent() {
   // Moderation queue pending count for badge
   const [moderationCount, setModerationCount] = useState(0);
 
+  // Focus a specific news item in the moderation queue (from Edit link in news tab)
+  const [moderationFocusId, setModerationFocusId] = useState(null);
+
   // News refresh trigger - increments when news collection completes
   const [newsRefreshTrigger, setNewsRefreshTrigger] = useState(0);
 
@@ -1646,6 +1649,11 @@ function AppContent() {
               setActiveTab('view');
             }
           }}
+          onEditNewsItem={(newsId) => {
+            setModerationFocusId(newsId);
+            setActiveTab('settings');
+            setSettingsTab('moderation');
+          }}
         />
         </main>
       )}
@@ -1780,7 +1788,7 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
-              {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} />}
+              {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} focusItemId={moderationFocusId} />}
               {settingsTab === 'jobs' && <JobsDashboard expandTarget={jobsExpandTarget} onExpandTargetConsumed={() => setJobsExpandTarget(null)} />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
