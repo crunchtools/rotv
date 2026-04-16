@@ -60,6 +60,7 @@ function ModerationInbox({ onCountChange, focusItemId }) {
   const [lightboxPoiId, setLightboxPoiId] = useState(null);
   const [user, setUser] = useState(null);
   const [idFilter, setIdFilter] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(null); // "news:123" key
   const LIMIT = 20;
 
   // When focusItemId is set (Edit link from news tab), switch to all-status view and filter by ID
@@ -81,9 +82,17 @@ function ModerationInbox({ onCountChange, focusItemId }) {
     if (!idFilter || loading || queue.length === 0) return;
     const item = queue.find(i => i.id === idFilter && i.content_type === 'news');
     if (!item) return;
-    setExpandedItem(`news:${item.id}`);
+    const itemKey = `news:${item.id}`;
+    setExpandedItem(itemKey);
     if (startEditingRef.current) startEditingRef.current(item);
   }, [idFilter, loading, queue]);
+
+  // Scroll focused item into view after it expands
+  useEffect(() => {
+    if (!expandedItem) return;
+    const el = document.getElementById(`moderation-item-${expandedItem}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [expandedItem]);
 
   const fetchQueue = useCallback(async () => {
     setLoading(true);
@@ -266,6 +275,21 @@ function ModerationInbox({ onCountChange, focusItemId }) {
         credentials: 'include', body: JSON.stringify({ type, id })
       });
       if (response.ok) { notify('success', `${type} #${id} requeued`); fetchQueue(); if (onCountChange) onCountChange(); }
+    } catch (err) { notify('error', err.message); }
+  };
+
+  const handleDelete = async (type, id) => {
+    const endpoint = type === 'news' ? `/api/admin/news/${id}` : `/api/admin/events/${id}`;
+    try {
+      const response = await fetch(endpoint, { method: 'DELETE', credentials: 'include' });
+      if (response.ok) {
+        setQueue(prev => prev.filter(i => !(i.content_type === type && i.id === id)));
+        setConfirmDelete(null);
+        notify('success', `${type} #${id} deleted`);
+        if (onCountChange) onCountChange();
+      } else {
+        notify('error', `Failed to delete ${type} #${id}`);
+      }
     } catch (err) { notify('error', err.message); }
   };
 
@@ -869,7 +893,7 @@ function ModerationInbox({ onCountChange, focusItemId }) {
             const statusBadge = getStatusBadge(item.moderation_status);
 
             return (
-              <div key={itemKey} style={{
+              <div key={itemKey} id={`moderation-item-${itemKey}`} style={{
                 border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px',
                 backgroundColor: selectedItems.has(itemKey) ? '#e3f2fd' : 'white',
                 transition: 'background 0.15s'
@@ -1167,6 +1191,23 @@ function ModerationInbox({ onCountChange, focusItemId }) {
                           {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
                         </button>
                       </>
+                    )}
+                    {item.content_type !== 'photo' && (
+                      confirmDelete === itemKey ? (
+                        <>
+                          <button onClick={() => handleDelete(item.content_type, item.id)}
+                            style={{ ...actionBtn(), backgroundColor: '#ffebee', color: '#c62828', borderColor: '#ef9a9a', width: 'auto', padding: '4px 8px' }}>
+                            Confirm Delete
+                          </button>
+                          <button onClick={() => setConfirmDelete(null)}
+                            style={actionBtn()}>Cancel</button>
+                        </>
+                      ) : (
+                        <button onClick={() => setConfirmDelete(itemKey)}
+                          style={{ ...actionBtn(), backgroundColor: '#ffebee', color: '#c62828', borderColor: '#ef9a9a' }}>
+                          Delete
+                        </button>
+                      )
                     )}
                   </div>
                 </div>
