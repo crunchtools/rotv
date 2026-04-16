@@ -112,7 +112,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
     } finally {
       setLoading(false);
     }
-  }, [page, filter, statusFilter, sourceFilter, searchQuery, idFilter]);
+  }, [page, filter, statusFilter, sourceFilter, searchQuery]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
