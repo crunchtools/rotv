@@ -670,12 +670,9 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
         </select>
       );
     }
-    // Use text input for date fields — browser <input type="date"> renders in OS locale (e.g. European DD/MM/YYYY)
-    const inputType = (fc.type === 'date') ? 'text' : (fc.type || 'text');
-    const placeholder = (fc.type === 'date') ? 'YYYY-MM-DD' : fc.label;
     return (
-      <input type={inputType} value={val} onChange={e => onChange(e.target.value)}
-        style={inputStyle} placeholder={placeholder} required={fc.required} />
+      <input type={fc.type || 'text'} value={val} onChange={e => onChange(e.target.value)}
+        style={inputStyle} placeholder={fc.label} required={fc.required} />
     );
   };
 
