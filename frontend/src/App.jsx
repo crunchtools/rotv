@@ -118,6 +118,7 @@ function AppContent() {
 
   // Focus a specific news item in the moderation queue (from Edit link in news tab)
   const [moderationFocusId, setModerationFocusId] = useState(null);
+  const [moderationFocusTitle, setModerationFocusTitle] = useState(null);
 
   // News refresh trigger - increments when news collection completes
   const [newsRefreshTrigger, setNewsRefreshTrigger] = useState(0);
@@ -1649,8 +1650,9 @@ function AppContent() {
               setActiveTab('view');
             }
           }}
-          onEditNewsItem={(newsId) => {
+          onEditNewsItem={(newsId, newsTitle) => {
             setModerationFocusId(newsId);
+            setModerationFocusTitle(newsTitle || null);
             setActiveTab('settings');
             setSettingsTab('moderation');
           }}
@@ -1788,7 +1790,7 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
-              {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} focusItemId={moderationFocusId} />}
+              {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} focusItemId={moderationFocusId} focusItemTitle={moderationFocusTitle} />}
               {settingsTab === 'jobs' && <JobsDashboard expandTarget={jobsExpandTarget} onExpandTargetConsumed={() => setJobsExpandTarget(null)} />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
