@@ -867,8 +867,9 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let duplicateCount = 0;
   const { skipDateFilter = false, log = null } = options;
 
-  // Calculate 365 days ago as a date string (YYYY-MM-DD) to avoid timezone issues
+  // Calculate date strings (YYYY-MM-DD) to avoid timezone issues
   const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const oneYearAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 365);
   const oneYearAgoStr = `${oneYearAgo.getFullYear()}-${String(oneYearAgo.getMonth() + 1).padStart(2, '0')}-${String(oneYearAgo.getDate()).padStart(2, '0')}`;
 
@@ -876,6 +877,13 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
     try {
       // Normalize dates via chrono-node — handles natural language, European format, partial dates
       item.published_date = parseDate(item.published_date) || null;
+
+      // Defense-in-depth: cap future news dates at today (primary cap is in processOneUrl,
+      // but this catches any case where a future date slips through to saveNewsItems)
+      if (item.published_date && item.published_date > todayStr) {
+        if (log) log(`[Save] Capping future date ${item.published_date} → ${todayStr} for "${item.title}"`);
+        item.published_date = todayStr;
+      }
 
       // Skip news older than 365 days (unless skipDateFilter is true)
       if (!skipDateFilter && item.published_date && /^\d{4}-\d{2}-\d{2}$/.test(item.published_date)) {
