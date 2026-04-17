@@ -2615,8 +2615,8 @@ async function start() {
       }
     }, 'moderation-sweep'));
 
-    // Schedule moderation sweep every 15 minutes
-    await scheduleModerationSweep('*/15 * * * *');
+    // Schedule moderation sweep every hour — avoids resource contention with news collection
+    await scheduleModerationSweep('0 * * * *');
 
     // Register newsletter email processing handler
     await registerNewsletterHandler(async (emailId) => {
