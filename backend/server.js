@@ -879,10 +879,10 @@ async function initDatabase() {
 // API Routes - Unified POIs
 app.get('/api/pois', async (req, res) => {
   try {
-    const { type } = req.query;
+    const { type, role } = req.query;
 
     let query = `
-      SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+      SELECT p.id, p.name, p.poi_type, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -890,15 +890,18 @@ app.get('/api/pois', async (req, res) => {
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
+      LEFT JOIN pois o ON p.owner_id = o.id
       LEFT JOIN eras e ON p.era_id = e.id
       WHERE (p.deleted IS NULL OR p.deleted = FALSE)
     `;
 
     const params = [];
-    if (type) {
+    if (role) {
+      params.push(role);
+      query += ` AND $${params.length} = ANY(p.poi_roles)`;
+    } else if (type) {
       params.push(type);
-      query += ` AND p.poi_type = $1`;
+      query += ` AND p.poi_type = $${params.length}`;
     }
 
     query += ` ORDER BY p.poi_type, p.name`;
@@ -914,7 +917,7 @@ app.get('/api/pois', async (req, res) => {
 app.get('/api/pois/:id', async (req, res) => {
   try {
     const poiQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+      SELECT p.id, p.name, p.poi_type, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -922,7 +925,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
+      LEFT JOIN pois o ON p.owner_id = o.id
       LEFT JOIN eras e ON p.era_id = e.id
       WHERE p.id = $1`,
       [req.params.id]

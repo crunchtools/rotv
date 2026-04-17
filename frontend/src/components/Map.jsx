@@ -1202,7 +1202,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
   // Track if anything is selected (used to suppress hover tooltips on other features)
   // Virtual POIs (organizations) don't count since they don't appear on the map
-  const hasAnySelection = !!((selectedDestination && selectedDestination.poi_type !== 'virtual') || selectedLinearFeature);
+  const hasAnySelection = !!((selectedDestination && (selectedDestination.geometry || selectedDestination.latitude)) || selectedLinearFeature);
 
   return (
     <div className={`map-container ${editMode ? 'edit-mode-active' : ''}`}>
@@ -1287,7 +1287,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
                     // Only show tooltip if this feature is selected OR nothing is selected
                     // Virtual POIs (organizations) don't count since they don't appear on the map
-                    const hasAnySelection = (selectedDestination && selectedDestination.poi_type !== 'virtual') || selectedLinearFeature;
+                    const hasAnySelection = (selectedDestination && (selectedDestination.geometry || selectedDestination.latitude)) || selectedLinearFeature;
                     if (isSelected || !hasAnySelection) {
                       const hasImage = feature.has_primary_image;
                       const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
@@ -1481,7 +1481,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
               onSelect={onSelectDestination}
               onDragEnd={isDraggable ? handleDrag : handleMarkerDragEnd}
               mapMoveCount={mapMoveCount}
-              hasSelection={!!((selectedDestination && selectedDestination.poi_type !== 'virtual') || selectedLinearFeature)}
+              hasSelection={!!((selectedDestination && (selectedDestination.geometry || selectedDestination.latitude)) || selectedLinearFeature)}
             />
           );
         })}

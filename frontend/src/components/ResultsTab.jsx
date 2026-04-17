@@ -176,7 +176,7 @@ const ResultsTab = memo(function ResultsTab({
     const dests = sourceDestinations.map(d => ({
       ...d,
       _isLinear: false,
-      _isVirtual: false,
+      _isVirtual: !d.geometry && !d.latitude,
       _poiType: getDestinationIconTypeFromConfig(d, iconConfig)
     }));
     const linear = sourceLinear.map(f => ({
@@ -188,7 +188,7 @@ const ResultsTab = memo(function ResultsTab({
     const virtual = sourceVirtual.map(v => ({
       ...v,
       _isLinear: false,
-      _isVirtual: true,
+      _isVirtual: !v.geometry && !v.latitude,
       _poiType: 'organization'
     }));
 
