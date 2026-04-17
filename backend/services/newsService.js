@@ -1414,17 +1414,27 @@ export async function runBatchNewsCollection(pool, poiIds, sheets = null, source
  * @returns {Array<number>} - Array of POI IDs
  */
 export async function getAllPoisForCollection(pool) {
-  const result = await pool.query(`
-    SELECT id FROM pois
-    WHERE (deleted IS NULL OR deleted = FALSE)
-    ORDER BY
-      CASE poi_type
-        WHEN 'point' THEN 1
-        WHEN 'boundary' THEN 2
-        ELSE 3
-      END,
-      name
-  `);
+  // Load excluded POI IDs from admin settings
+  const settingResult = await pool.query(
+    "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
+  );
+  const excludedIds = settingResult.rows.length > 0
+    ? JSON.parse(settingResult.rows[0].value || '[]')
+    : [];
+
+  const result = await pool.query(
+    `SELECT id FROM pois
+     WHERE (deleted IS NULL OR deleted = FALSE)
+       ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
+     ORDER BY
+       CASE poi_type
+         WHEN 'point' THEN 1
+         WHEN 'boundary' THEN 2
+         ELSE 3
+       END,
+       name`,
+    excludedIds.length > 0 ? [excludedIds] : []
+  );
   return result.rows.map(r => r.id);
 }
 

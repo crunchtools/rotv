@@ -57,6 +57,13 @@ function DataCollectionSettings() {
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
   const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
 
+  // Excluded POIs state
+  const [excludedPois, setExcludedPois] = useState([]); // [{id, name}]
+  const [excludedPoisLoading, setExcludedPoisLoading] = useState(true);
+  const [excludedPoisSaving, setExcludedPoisSaving] = useState(false);
+  const [allPois, setAllPois] = useState([]);
+  const [selectedPoiId, setSelectedPoiId] = useState('');
+
   // Results Sub-tabs state
   const [subtabs, setSubtabs] = useState([]);
   const [subtabsLoading, setSubtabsLoading] = useState(true);
@@ -101,6 +108,7 @@ function DataCollectionSettings() {
     fetchPlaywrightStatus();
     fetchModerationConfig();
     fetchDomainLists();
+    fetchExcludedPois();
     fetchSubtabs();
   }, []);
 
@@ -416,6 +424,57 @@ function DataCollectionSettings() {
 
   const handleRemoveCompetitorDomain = (domain) => {
     setDomainLists({ ...domainLists, competitor: domainLists.competitor.filter(d => d !== domain) });
+  };
+
+  const fetchExcludedPois = async () => {
+    setExcludedPoisLoading(true);
+    try {
+      const [settingsRes, poisRes] = await Promise.all([
+        fetch('/api/admin/settings', { credentials: 'include' }),
+        fetch('/api/pois', { credentials: 'include' })
+      ]);
+      if (settingsRes.ok && poisRes.ok) {
+        const settings = await settingsRes.json();
+        const pois = await poisRes.json();
+        setAllPois(pois.filter(p => !p.deleted).sort((a, b) => a.name.localeCompare(b.name)));
+        const excludedIds = JSON.parse(settings.news_collection_excluded_pois?.value || '[]');
+        setExcludedPois(
+          excludedIds
+            .map(id => pois.find(p => p.id === id))
+            .filter(Boolean)
+            .map(p => ({ id: p.id, name: p.name }))
+        );
+      }
+    } catch (err) { console.error('Error fetching excluded POIs:', err); }
+    finally { setExcludedPoisLoading(false); }
+  };
+
+  const handleSaveExcludedPois = async () => {
+    setExcludedPoisSaving(true); setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/news_collection_excluded_pois', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: JSON.stringify(excludedPois.map(p => p.id)) })
+      });
+      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
+      setResult({ type: 'success', message: 'Excluded POIs saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save excluded POIs: ${err.message}` }); }
+    finally { setExcludedPoisSaving(false); }
+  };
+
+  const handleAddExcludedPoi = () => {
+    const id = parseInt(selectedPoiId);
+    if (!id) return;
+    if (excludedPois.some(p => p.id === id)) return;
+    const poi = allPois.find(p => p.id === id);
+    if (poi) {
+      setExcludedPois([...excludedPois, { id: poi.id, name: poi.name }]);
+      setSelectedPoiId('');
+    }
+  };
+
+  const handleRemoveExcludedPoi = (id) => {
+    setExcludedPois(excludedPois.filter(p => p.id !== id));
   };
 
   const handleTestPlaywright = async () => {
@@ -828,6 +887,55 @@ function DataCollectionSettings() {
 
             <button className="action-btn primary" onClick={handleSaveDomainLists} disabled={domainListsSaving}>
               {domainListsSaving ? 'Saving...' : 'Save Domain Lists'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Excluded POIs from News Collection */}
+      <div className="ai-config-section">
+        <h4>Excluded POIs from News Collection</h4>
+        <p className="settings-description">POIs in this list are skipped entirely during automated news collection. Use for broad geographic entities (e.g. Cuyahoga County, Cleveland) whose news feeds pull in irrelevant content.</p>
+        {excludedPoisLoading ? <p>Loading...</p> : (
+          <>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              {excludedPois.length === 0 && (
+                <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>No POIs excluded.</p>
+              )}
+              {excludedPois.map(poi => (
+                <span key={poi.id} style={{
+                  padding: '0.25rem 0.5rem',
+                  backgroundColor: '#fff3cd',
+                  color: '#856404',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem'
+                }}>
+                  {poi.name}
+                  <button onClick={() => handleRemoveExcludedPoi(poi.id)}
+                    style={{ background: 'none', border: 'none', color: '#856404', cursor: 'pointer', padding: '0', fontSize: '1rem', lineHeight: '1' }}>×</button>
+                </span>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+              <select
+                value={selectedPoiId}
+                onChange={e => setSelectedPoiId(e.target.value)}
+                style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
+                disabled={excludedPoisSaving}
+              >
+                <option value="">— Select a POI to exclude —</option>
+                {allPois
+                  .filter(p => !excludedPois.some(e => e.id === p.id))
+                  .map(p => <option key={p.id} value={p.id}>{p.name}</option>)
+                }
+              </select>
+              <button className="action-btn secondary" onClick={handleAddExcludedPoi} disabled={excludedPoisSaving || !selectedPoiId}>Add</button>
+            </div>
+            <button className="action-btn primary" onClick={handleSaveExcludedPois} disabled={excludedPoisSaving}>
+              {excludedPoisSaving ? 'Saving...' : 'Save Excluded POIs'}
             </button>
           </>
         )}
