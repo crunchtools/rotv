@@ -15,7 +15,7 @@ function formatDateForCalendar(dateString) {
   return date.toISOString().replace(/-|:|\.\d{3}/g, '').slice(0, 15) + 'Z';
 }
 
-function ParkEvents({ _isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -360,6 +360,9 @@ END:VCALENDAR`;
                   More info
                 </a>
               ) : null}
+              {isAdmin && (
+                <span className="news-item-id" title="Event item ID">#{item.id}</span>
+              )}
             </div>
           </div>
             ))}
