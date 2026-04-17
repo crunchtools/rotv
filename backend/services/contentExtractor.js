@@ -4,10 +4,10 @@
  * Shared utility for both the news scraper and moderation pipeline.
  */
 
-import { chromium } from 'playwright';
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
+import { acquireBrowser, releaseBrowser } from './browserPool.js';
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -16,25 +16,6 @@ const turndown = new TurndownService({
 });
 
 turndown.remove(['img', 'iframe', 'video', 'audio', 'svg', 'canvas', 'figure']);
-
-// Shared browser pool — one Chromium process reused across renders.
-// Each render gets a fresh BrowserContext (cookie/session isolation) but
-// avoids the ~2s cold-start of launching a new Chromium per URL.
-let sharedBrowser = null;
-let browserRefCount = 0;
-let browserCloseTimer = null;
-
-const LAUNCH_OPTIONS = {
-  headless: true,
-  args: [
-    '--no-sandbox',
-    '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage',
-    '--disable-accelerated-2d-canvas',
-    '--disable-gpu',
-    '--disable-blink-features=AutomationControlled'
-  ]
-};
 
 // Realistic browser context defaults to avoid bot detection.
 // Cloudflare checks navigator.webdriver, user-agent, and plugin lists.
@@ -55,37 +36,6 @@ const STEALTH_INIT_SCRIPT = `
   });
   window.chrome = { runtime: {} };
 `;
-
-
-async function acquireBrowser() {
-  if (browserCloseTimer) {
-    clearTimeout(browserCloseTimer);
-    browserCloseTimer = null;
-  }
-  if (!sharedBrowser || !sharedBrowser.isConnected()) {
-    const opts = { ...LAUNCH_OPTIONS };
-    if (process.env.PLAYWRIGHT_PROXY) {
-      opts.proxy = { server: process.env.PLAYWRIGHT_PROXY };
-    }
-    sharedBrowser = await chromium.launch(opts);
-  }
-  browserRefCount++;
-  return sharedBrowser;
-}
-
-function releaseBrowser() {
-  browserRefCount--;
-  if (browserRefCount <= 0) {
-    browserRefCount = 0;
-    // Close after 30s idle to free memory between POIs
-    browserCloseTimer = setTimeout(async () => {
-      if (browserRefCount === 0 && sharedBrowser) {
-        await sharedBrowser.close().catch(() => {});
-        sharedBrowser = null;
-      }
-    }, 30000);
-  }
-}
 
 /**
  * Extract page content as markdown using Playwright + Readability + Turndown.

@@ -103,7 +103,7 @@ export async function registerPoiNewsHandler(handler) {
   const scheduler = getJobScheduler();
 
   await scheduler.work(JOB_NAMES.NEWS_COLLECTION_POI, {
-    teamSize: 5, // Process 5 POIs concurrently
+    teamSize: 3, // Process 3 POIs concurrently
     teamConcurrency: 1
   }, async (job) => {
     try {
