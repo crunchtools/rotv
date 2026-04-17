@@ -24,6 +24,7 @@ import { chromium } from 'playwright';
 let sharedBrowser = null;
 let browserRefCount = 0;
 let browserCloseTimer = null;
+let launchPromise = null; // Prevents concurrent launches (race condition fix)
 
 const LAUNCH_OPTIONS = {
   headless: true,
@@ -48,11 +49,16 @@ export async function acquireBrowser() {
     browserCloseTimer = null;
   }
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
-    const opts = { ...LAUNCH_OPTIONS };
-    if (process.env.PLAYWRIGHT_PROXY) {
-      opts.proxy = { server: process.env.PLAYWRIGHT_PROXY };
+    if (!launchPromise) {
+      launchPromise = (async () => {
+        const opts = { ...LAUNCH_OPTIONS };
+        if (process.env.PLAYWRIGHT_PROXY) {
+          opts.proxy = { server: process.env.PLAYWRIGHT_PROXY };
+        }
+        sharedBrowser = await chromium.launch(opts);
+      })().finally(() => { launchPromise = null; });
     }
-    sharedBrowser = await chromium.launch(opts);
+    await launchPromise;
   }
   browserRefCount++;
   return sharedBrowser;
@@ -64,8 +70,11 @@ export async function acquireBrowser() {
  */
 export function releaseBrowser() {
   browserRefCount--;
-  if (browserRefCount <= 0) {
+  if (browserRefCount < 0) {
+    console.error('[BrowserPool] BUG: releaseBrowser() called more times than acquireBrowser() — resetting to 0');
     browserRefCount = 0;
+  }
+  if (browserRefCount === 0) {
     browserCloseTimer = setTimeout(async () => {
       if (browserRefCount === 0 && sharedBrowser) {
         await sharedBrowser.close().catch(() => {});
