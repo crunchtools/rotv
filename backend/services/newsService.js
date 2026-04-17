@@ -680,7 +680,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
         logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
 
         const serperResult = await searchNewsUrls(pool, poi);
-        logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`, { query: serperResult.query, urls_found: serperResult.urls.length });
+        logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] "${serperResult.query}" → ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`);
         reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
 
         if (serperResult.urls.length > 0) {
