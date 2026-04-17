@@ -343,34 +343,42 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     return { news: [], events: [] };
   }
 
-  // [Dates] — OG metadata first (structured, reliable), chrono-node as fallback
-  // These are applied directly to items AFTER Gemini returns — Gemini never touches dates
+  // [Dates] — Collect all available dates, pick the oldest non-future one.
+  // The original publication date is almost always the earliest date on the page.
+  // Taking the minimum across OG metadata and chrono-node content dates handles sites
+  // that update article:published_time on every edit (making old stories look fresh).
   const today = new Date().toISOString().substring(0, 10);
+
+  // OG published_time — discard only if strictly future
   const ogRaw = extracted.ogDates?.publishedTime
     ? parseDate(extracted.ogDates.publishedTime, timezone)
     : null;
-  // Discard OG date if it's in the future — likely an event date or bad metadata, not the publish date
-  const ogPublished = (ogRaw && ogRaw <= today) ? ogRaw : null;
+  const ogDate = (ogRaw && ogRaw <= today) ? ogRaw : null;
   if (ogRaw && ogRaw > today) {
-    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Discarding future OG date ${ogRaw}, falling back to chrono-node`);
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Discarding future OG date ${ogRaw}`);
   }
+
+  // chrono-node — collect ALL non-future dates from article body, then pick the oldest
   const dateHints = extractDatesFromText(extracted.markdown, timezone);
-  const chronoPrimary = dateHints.length > 0 ? dateHints[0].start?.substring(0, 10) : null;
-  // Discard chrono-node date when it equals today and there's no OG metadata — live pages
-  // often show today's date in navigation/footers, which is page noise not a publication date.
-  const chronoUsable = (chronoPrimary && chronoPrimary !== today) ? chronoPrimary : null;
-  if (chronoPrimary && chronoPrimary === today && !ogPublished) {
-    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Discarding today-date from chrono-node (likely page noise), no OG fallback`);
-  }
-  const rawPrimaryDate = ogPublished || chronoUsable;
+  const pastDates = dateHints
+    .map(d => d.start?.substring(0, 10))
+    .filter(d => d && d <= today);
+  const chronoOldest = pastDates.length > 0 ? pastDates.reduce((a, b) => a < b ? a : b) : null;
+
+  // Use the oldest of the two sources
+  const candidates = [ogDate, chronoOldest].filter(Boolean);
+  const rawPrimaryDate = candidates.length > 0 ? candidates.reduce((a, b) => a < b ? a : b) : null;
+
   // For news, cap publication date at today — future dates are issue/cover dates, not publish dates
   const primaryDate = (contentType === 'news' && rawPrimaryDate && rawPrimaryDate > today) ? today : rawPrimaryDate;
-  if (contentType === 'news' && rawPrimaryDate && rawPrimaryDate > today) {
-    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Capping future news date ${rawPrimaryDate} to today ${today}`);
-  }
+
+  // secondDate for event end_date — use the second chrono-node date in document order
   const secondDate = dateHints.length > 1 ? dateHints[1].start?.substring(0, 10) : null;
-  const dateSource = ogPublished ? 'og' : (chronoUsable ? 'chrono' : 'none');
-  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] ${primaryDate || 'none'} (${dateSource}), ${dateHints.length} chrono hints from ${url}`);
+
+  const dateSource = ogDate && chronoOldest
+    ? (rawPrimaryDate === ogDate ? 'og' : 'chrono')
+    : (ogDate ? 'og' : (chronoOldest ? 'chrono' : 'none'));
+  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] ${primaryDate || 'none'} (${dateSource}, og=${ogDate || 'none'}, chrono=${chronoOldest || 'none'}), ${dateHints.length} hints from ${url}`);
 
   // [Summarize] — Gemini identifies items and writes summaries (no date fields)
   const prompt = buildSinglePagePrompt(poi, url, extracted.markdown, contentType, confidence);

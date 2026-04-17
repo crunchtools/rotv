@@ -2160,6 +2160,13 @@ body {
   text-decoration: underline;
 }
 
+.news-item-id {
+  font-size: 0.75rem;
+  color: #aaa;
+  font-family: monospace;
+  margin-left: 0.25rem;
+}
+
 .news-sources-group, .event-sources-group {
   display: inline-flex;
   gap: 0.5rem;

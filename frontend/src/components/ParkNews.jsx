@@ -222,6 +222,9 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
                   Edit
                 </button>
               )}
+              {isAdmin && (
+                <span className="news-item-id" title="News item ID">#{item.id}</span>
+              )}
             </div>
           </div>
         ))}
