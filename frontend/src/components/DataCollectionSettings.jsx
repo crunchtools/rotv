@@ -64,6 +64,11 @@ function DataCollectionSettings() {
   const [allPois, setAllPois] = useState([]);
   const [selectedPoiId, setSelectedPoiId] = useState('');
 
+  // Max concurrency state
+  const [maxConcurrency, setMaxConcurrency] = useState(10);
+  const [maxConcurrencyLoading, setMaxConcurrencyLoading] = useState(true);
+  const [maxConcurrencySaving, setMaxConcurrencySaving] = useState(false);
+
   // Results Sub-tabs state
   const [subtabs, setSubtabs] = useState([]);
   const [subtabsLoading, setSubtabsLoading] = useState(true);
@@ -109,6 +114,7 @@ function DataCollectionSettings() {
     fetchModerationConfig();
     fetchDomainLists();
     fetchExcludedPois();
+    fetchMaxConcurrency();
     fetchSubtabs();
   }, []);
 
@@ -475,6 +481,31 @@ function DataCollectionSettings() {
 
   const handleRemoveExcludedPoi = (id) => {
     setExcludedPois(excludedPois.filter(p => p.id !== id));
+  };
+
+  const fetchMaxConcurrency = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) {
+        const settings = await response.json();
+        const val = parseInt(settings.news_max_concurrency?.value, 10);
+        setMaxConcurrency(Number.isFinite(val) && val >= 1 ? val : 10);
+      }
+    } catch (err) { console.error('Error fetching max concurrency:', err); }
+    finally { setMaxConcurrencyLoading(false); }
+  };
+
+  const handleSaveMaxConcurrency = async () => {
+    setMaxConcurrencySaving(true); setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/news_max_concurrency', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: String(maxConcurrency) })
+      });
+      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
+      setResult({ type: 'success', message: 'Max concurrency saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save max concurrency: ${err.message}` }); }
+    finally { setMaxConcurrencySaving(false); }
   };
 
   const handleTestPlaywright = async () => {
@@ -936,6 +967,32 @@ function DataCollectionSettings() {
             </div>
             <button className="action-btn primary" onClick={handleSaveExcludedPois} disabled={excludedPoisSaving}>
               {excludedPoisSaving ? 'Saving...' : 'Save Excluded POIs'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* News Collection Concurrency */}
+      <div className="ai-config-section">
+        <h4>News Collection Concurrency</h4>
+        <p className="settings-description">Maximum number of POIs processed simultaneously during a batch news collection run. Higher values finish faster but use more memory (each concurrent POI runs a browser context). Recommended: 5–10.</p>
+        {maxConcurrencyLoading ? <p>Loading...</p> : (
+          <>
+            <div className="config-row">
+              <label>Max Concurrent POIs</label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={maxConcurrency}
+                onChange={e => setMaxConcurrency(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
+                disabled={maxConcurrencySaving}
+              />
+              <span className="config-hint">Range: 1–20 (default: 10)</span>
+            </div>
+            <button className="action-btn primary" onClick={handleSaveMaxConcurrency} disabled={maxConcurrencySaving}>
+              {maxConcurrencySaving ? 'Saving...' : 'Save Concurrency'}
             </button>
           </>
         )}

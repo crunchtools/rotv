@@ -1268,6 +1268,14 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   let processed = processedPoiIds.length;
   const newlyProcessedIds = [...processedPoiIds];
 
+  // Read max concurrency from admin_settings at job start (falls back to module constant)
+  const concurrencyResult = await pool.query(
+    "SELECT value FROM admin_settings WHERE key = 'news_max_concurrency'"
+  );
+  const maxConcurrency = concurrencyResult.rows.length > 0
+    ? Math.max(1, parseInt(concurrencyResult.rows[0].value, 10) || MAX_CONCURRENCY)
+    : MAX_CONCURRENCY;
+
   try {
     const { results: batchResults, cancelled: jobCancelled } = await runBatch({
       pool,
@@ -1275,7 +1283,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       items: pois,
       tracker,
       label: 'News',
-      maxConcurrency: MAX_CONCURRENCY,
+      maxConcurrency,
       dispatchInterval: DISPATCH_INTERVAL_MS,
 
       checkCancelled: async () => {
