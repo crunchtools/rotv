@@ -594,7 +594,7 @@ export async function registerDigestHandler(handler) {
 export async function scheduleDigest(cronExpression = '0 8 * * 5') {
   const scheduler = getJobScheduler();
 
-  // Every Friday at 6 AM EST
+  // Every Friday at 8 AM EST
   await scheduler.schedule(JOB_NAMES.NEWSLETTER_DIGEST, cronExpression, {}, {
     tz: 'America/New_York'
   });

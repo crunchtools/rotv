@@ -338,7 +338,7 @@ function NewsletterSettings({ user }) {
           <li><strong>Buttondown Setup:</strong> Sign up at <a href="https://buttondown.com" target="_blank" rel="noopener noreferrer">buttondown.com</a> (free for up to 100 subscribers)</li>
           <li><strong>Verify Email:</strong> Verify your sender email in Buttondown before sending</li>
           <li><strong>Get API Key:</strong> Generate an API key from Buttondown Settings → API</li>
-          <li><strong>Schedule:</strong> Digest sends automatically every Friday at 6 AM EST</li>
+          <li><strong>Schedule:</strong> Digest sends automatically every Friday at 8 AM EST</li>
           <li><strong>Content:</strong> Includes events (Fri-Sun) and recent news (last 7 days)</li>
           <li><strong>Testing:</strong> Use Settings → Jobs → Newsletter Digest → "Run Now" to test</li>
         </ul>

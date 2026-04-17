@@ -154,7 +154,7 @@ function UserSettings({ user }) {
             <li>Events happening this weekend (Friday-Sunday)</li>
             <li>Recent news from the past week</li>
             <li>Trail status updates (when available)</li>
-            <li>Sent every Friday at 6 AM EST</li>
+            <li>Sent every Friday at 8 AM EST</li>
           </ul>
         </div>
       </div>
