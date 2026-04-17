@@ -2628,8 +2628,8 @@ async function start() {
       await sendWeeklyDigest(pool, pgBossJobId);
     });
 
-    // Schedule digest for Fridays at 6 AM EST
-    await scheduleDigest('0 6 * * 5');
+    // Schedule digest for Fridays at 8 AM EST
+    await scheduleDigest('0 8 * * 5');
 
     // Register image backup handler (nightly backup of image server to Drive)
     // Shared helper: get authenticated Drive service from admin OAuth credentials
