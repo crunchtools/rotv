@@ -332,10 +332,29 @@ IMPORTANT:
  * @param {Object} options - { phase, jobId, timezone, confidence }
  * @returns {Object} - { news: [], events: [] }
  */
+/**
+ * Run up to `limit` async tasks concurrently.
+ * Each task is a zero-arg function returning a Promise.
+ * Results are returned in original order; individual errors are caught and re-thrown per-task.
+ */
+async function runConcurrent(tasks, limit = 10) {
+  const results = new Array(tasks.length);
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      try { results[i] = await tasks[i](); } catch (e) { results[i] = e instanceof Error ? e : new Error(String(e)); }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
+}
+
 async function processOneUrl(pool, url, poi, contentType, options = {}) {
   const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', confidence = '75%', jobType = 'news' } = options;
 
   // [Render]
+  updateProgress(poi.id, { phase: 'render', message: url });
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url}`);
   const extracted = await extractPageContent(url, { timeout: 30000, hardTimeout: 60000 });
   if (!extracted.reachable || !extracted.markdown || extracted.markdown.length < 200) {
@@ -343,7 +362,9 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     return { news: [], events: [] };
   }
 
-  // [Dates] — Collect all available dates, pick the oldest non-future one.
+  // [Dates]
+  updateProgress(poi.id, { phase: 'dates', message: url });
+  // Collect all available dates, pick the oldest non-future one.
   // The original publication date is almost always the earliest date on the page.
   // Taking the minimum across OG metadata and chrono-node content dates handles sites
   // that update article:published_time on every edit (making old stories look fresh).
@@ -380,7 +401,8 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     : (ogDate ? 'og' : (chronoOldest ? 'chrono' : 'none'));
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] ${primaryDate || 'none'} (${dateSource}, og=${ogDate || 'none'}, chrono=${chronoOldest || 'none'}), ${dateHints.length} hints from ${url}`);
 
-  // [Summarize] — Gemini identifies items and writes summaries (no date fields)
+  // [Summarize]
+  updateProgress(poi.id, { phase: 'summarize', message: url });
   const prompt = buildSinglePagePrompt(poi, url, extracted.markdown, contentType, confidence);
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${url}`);
   const aiResult = await generateTextWithCustomPrompt(pool, prompt);
@@ -420,32 +442,32 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
  * @returns {Object} - { pages: [{url, markdown, title}], totalPagesRendered, totalDetailPages }
  */
 async function crawlWithClassification(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
-  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, renderDelayMs = 1500, extractor = extractPageContent, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
+  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, extractor = extractPageContent, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
   const visited = new Set();
   let totalPagesRendered = 0;
   const collectedPages = []; // { url, markdown, title }
 
   async function processLevel(urls, depth) {
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
-    for (const url of urls) {
+
+    // Deduplicate and mark visited upfront to prevent concurrent duplicate fetches
+    const toProcess = urls.filter(url => !visited.has(url));
+    toProcess.forEach(url => visited.add(url));
+
+    await runConcurrent(toProcess.map(url => async () => {
       checkCancellation();
-      if (totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) break;
-      if (visited.has(url)) continue;
-      visited.add(url);
+      if (totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
       totalPagesRendered++;
 
-      // Delay between renders to avoid rate limiting (Wix, etc.)
-      if (totalPagesRendered > 1) {
-        await new Promise(resolve => setTimeout(resolve, renderDelayMs));
-      }
-
+      updateProgress(poi.id, { phase: 'render', message: url });
       logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url} (depth=${depth}, page=${totalPagesRendered})`);
       const extracted = await extractor(url, { timeout: 30000, hardTimeout: 60000, extractLinks: true });
       if (!extracted.reachable || !extracted.markdown) {
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'no content'}`);
-        continue;
+        return;
       }
 
+      updateProgress(poi.id, { phase: 'classify', message: url });
       const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets);
       logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
 
@@ -453,17 +475,19 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
         collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
       } else if (classification.pageType === 'listing') {
         const validLinks = filterDetailLinks(classification.detailLinks, url);
+        updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
       } else if (classification.pageType === 'hybrid') {
         collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
         const validLinks = filterDetailLinks(classification.detailLinks, url);
         if (validLinks.length > 0) {
+          updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from hybrid ${url}` });
           logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from hybrid page ${url}`);
           await processLevel(validLinks, depth + 1);
         }
       }
-    }
+    }), 10);
   }
 
   await processLevel([startUrl], 0);
@@ -553,7 +577,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       reportProgress(`Phase I: [Render] Rendering events page: ${eventsUrl}`);
       logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Render] Starting events pipeline`, { url: eventsUrl });
       updateProgress(poi.id, {
-        phase: 'classifying_events',
+        phase: 'classify',
         message: 'Analyzing events pages...',
         steps: ['Initialized', 'Classifying events pages']
       });
@@ -564,10 +588,12 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       reportProgress(`Phase I: [Classify] ${crawlResult.pages.length} event pages found (${crawlResult.totalPagesRendered} rendered)`);
       logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered), processing ${pages.length} URLs`);
 
-      for (const page of pages) {
+      const eventResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
-        const items = await processOneUrl(pool, page.url, poi, 'event', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
-        allEvents.push(...(items.events || []));
+        return processOneUrl(pool, page.url, poi, 'event', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
+      }), 10);
+      for (const items of eventResults) {
+        if (items && !(items instanceof Error)) allEvents.push(...(items.events || []));
       }
     } catch (err) {
       if (err.message === 'Collection cancelled by user') throw err;
@@ -583,7 +609,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       reportProgress(`Phase I: [Render] Rendering news page: ${newsUrl}`);
       logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Render] Starting news pipeline`, { url: newsUrl });
       updateProgress(poi.id, {
-        phase: 'classifying_news',
+        phase: 'classify',
         message: 'Analyzing news pages...',
         steps: ['Initialized', 'Classifying news pages']
       });
@@ -596,10 +622,12 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       reportProgress(`Phase I: [Classify] ${crawlResult.pages.length} news pages found (${crawlResult.totalPagesRendered} rendered)`);
       logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered), processing ${pages.length} URLs`);
 
-      for (const page of pages) {
+      const newsResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
-        const items = await processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
-        allNews.push(...(items.news || []));
+        return processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
+      }), 10);
+      for (const items of newsResults) {
+        if (items && !(items instanceof Error)) allNews.push(...(items.news || []));
       }
     } catch (err) {
       if (err.message === 'Collection cancelled by user') throw err;
@@ -643,7 +671,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     if (collectionType !== 'events') {
       try {
         updateProgress(poi.id, {
-          phase: 'serper_search',
+          phase: 'search',
           message: 'Searching for external news coverage...',
           steps: ['Initialized', 'Phase I complete', 'Searching external news']
         });
@@ -672,8 +700,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
             } catch { return false; }
           });
 
-          // Cap Phase II URLs — each gets its own Gemini call, so 5 is plenty
-          const MAX_PHASE2_URLS = 5;
+          // Use all Serper results (up to 10 — Serper's default page size)
+          const MAX_PHASE2_URLS = 10;
           const urlsToProcess = externalUrls.slice(0, MAX_PHASE2_URLS);
           if (externalUrls.length > MAX_PHASE2_URLS) {
             logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_PHASE2_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
@@ -682,50 +710,45 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
           let renderedCount = 0;
           let phase2PagesCollected = 0;
 
+          // Crawl all Serper URLs in parallel (each is a different external domain)
+          const phase2Results = await runConcurrent(urlsToProcess.map(urlData => async () => {
+            checkCancellation();
+            if (phase2PagesCollected >= MAX_PHASE2_PAGES) return [];
 
-          for (const urlData of urlsToProcess) {
-            try {
+            // Classify each Serper URL — articles pass through as DETAIL (1 render),
+            // listing pages get 1-level-deep link-following with tight caps
+            reportProgress(`Phase II: [Classify] ${urlData.url}`);
+            const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
+              maxDepth: 1,
+              maxPages: 6,
+              maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2PagesCollected),
+              phase: 'Phase II',
+              jobId,
+              jobType
+            });
+
+            renderedCount++;
+            const pageItems = [];
+            for (const page of crawlResult.pages) {
               checkCancellation();
               if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
+              const items = await processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase II', jobId, jobType, timezone, confidence: '95%' });
+              pageItems.push(...(items.news || []));
+              phase2PagesCollected++;
+            }
+            return pageItems;
+          }), 10);
 
-              // Classify each Serper URL — articles pass through as DETAIL (1 render),
-              // listing pages get 1-level-deep link-following with tight caps
-              reportProgress(`Phase II: [Classify] ${urlData.url}`);
-              const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
-                maxDepth: 1,
-                maxPages: 6,
-                maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2PagesCollected),
-                phase: 'Phase II',
-                jobId,
-                jobType
-              });
-
-              const pagesToProcess = crawlResult.pages;
-
-              for (const page of pagesToProcess) {
-                checkCancellation();
-                if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
-
-                const items = await processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase II', jobId, jobType, timezone, confidence: '95%' });
-
-                // Merge with existing news, avoiding duplicates by title
-                const newNews = (items.news || []).filter(item => {
-                  const titleLower = item.title.toLowerCase().trim();
-                  return !allNews.some(n => n.title.toLowerCase().trim() === titleLower);
-                });
-
-                if (newNews.length > 0) {
-                  logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Adding ${newNews.length} unique items from ${page.url}`);
-                  allNews.push(...newNews);
-                }
-
-                phase2PagesCollected++;
-              }
-
-              renderedCount++;
-            } catch (renderError) {
-              if (renderError.message === 'Collection cancelled by user') throw renderError;
-              logError(jobId, jobType, poi.id, poi.name, `Phase II: Error: ${urlData.url} — ${renderError.message}`);
+          // Merge results, deduplicating by title
+          for (const itemsOrError of phase2Results) {
+            if (!itemsOrError || itemsOrError instanceof Error) continue;
+            const newNews = itemsOrError.filter(item => {
+              const titleLower = item.title.toLowerCase().trim();
+              return !allNews.some(n => n.title.toLowerCase().trim() === titleLower);
+            });
+            if (newNews.length > 0) {
+              logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Adding ${newNews.length} unique items`);
+              allNews.push(...newNews);
             }
           }
 
@@ -1320,6 +1343,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
 
       collectFn: async (poi, { index, total }) => {
         const { news, events, metadata } = await collectNewsForPoi(pool, poi, sheets, 'America/New_York');
+        tracker.updateProgress(poi.id, { phase: 'save', message: `${news.length} news, ${events.length} events` });
         const saveLog = (msg) => { logInfo(jobId, 'news', poi.id, poi.name, msg); };
         const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl, log: saveLog });
         const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog });

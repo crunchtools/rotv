@@ -92,6 +92,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const [expandedRun, setExpandedRun] = useState(null);
   const [runLogs, setRunLogs] = useState([]);
+  const runLogsOffsetRef = useRef(0); // Tracks how many log entries we've fetched — never re-fetches old entries
   const [logDetailsExpanded, setLogDetailsExpanded] = useState(new Set());
   const [expandedPoiGroups, setExpandedPoiGroups] = useState(new Set());
   const autoExpandedPoisRef = useRef(new Set());
@@ -141,21 +142,17 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const fetchRunLogs = useCallback(async (jobType, runId, poiId) => {
     try {
-      const params = new URLSearchParams({ limit: '200' });
+      const params = new URLSearchParams({ limit: '200', offset: String(runLogsOffsetRef.current) });
       const res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${runId}/logs?${params}`, { credentials: 'include' });
       if (res.ok) {
         const newLogs = await res.json();
-        setRunLogs(prev => {
-          // Initial load or filter change — replace
-          if (prev.length === 0) return newLogs;
-          // No new entries — keep same reference (no re-render)
-          if (newLogs.length === prev.length) return prev;
-          // New entries arrived — append only the new ones
-          const existingIds = new Set(prev.map(l => l.id));
-          const added = newLogs.filter(l => !existingIds.has(l.id));
-          if (added.length === 0) return prev;
-          return [...prev, ...added];
-        });
+        if (newLogs.length > 0) {
+          setRunLogs(prev => {
+            const result = [...prev, ...newLogs];
+            runLogsOffsetRef.current = result.length;
+            return result;
+          });
+        }
       }
     } catch (err) {
       console.error('Failed to fetch run logs:', err);
@@ -262,7 +259,11 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   }, [expandedScheduled, scheduledJobs, fetchJobHistory, jobHistory]);
 
   useEffect(() => {
-    if (expandedRun) fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
+    if (expandedRun) {
+      runLogsOffsetRef.current = 0;
+      setRunLogs([]);
+      fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
+    }
   }, [expandedRun, fetchRunLogs]);
 
   // Poll logs when a run is expanded and its job is running or recently finished
@@ -282,9 +283,11 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     const isRunning = !!runningJobs[job.id];
 
     if (isRunning) {
-      // Poll logs every 2 seconds while running
+      // Poll logs every 2 seconds while running; refresh history every 10s so status updates queued→running
+      let tick = 0;
       const interval = setInterval(() => {
         fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
+        if (++tick % 5 === 0) fetchJobHistory(job.id, job.historyTypes);
       }, 2000);
       return () => clearInterval(interval);
     }
@@ -611,7 +614,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                     <div key={idx} className="slots-row empty-slot"><div>Waiting</div><div>--</div></div>
                   );
 
-                  // Map internal phases to user-friendly labels
+                  // Map pipeline stages (from NEWS_EVENTS_ARCHITECTURE.md) to display labels
                   let statusLabel = '--';
                   if (slot.status === 'completed') {
                     statusLabel = '✓ Done';
@@ -619,24 +622,22 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                     statusLabel = '✗ Error';
                   } else if (slot.phase === 'initializing') {
                     statusLabel = 'Starting';
-                  } else if (slot.phase === 'classifying_events') {
-                    statusLabel = 'I: Crawling events';
-                  } else if (slot.phase === 'classifying_news') {
-                    statusLabel = 'I: Crawling news';
-                  } else if (slot.phase === 'rendering_events') {
-                    statusLabel = 'I: Reading events';
-                  } else if (slot.phase === 'rendering_news' || slot.phase === 'rendering') {
-                    statusLabel = 'I: Reading news';
-                  } else if (slot.phase === 'ai_search') {
-                    statusLabel = 'I: Gemini extraction';
+                  } else if (slot.phase === 'search') {
+                    statusLabel = 'Searching';        // Serper API
+                  } else if (slot.phase === 'classify' || slot.phase === 'classifying_events' || slot.phase === 'classifying_news') {
+                    statusLabel = 'Classifying';      // Gemini page-type detection
+                  } else if (slot.phase === 'crawl') {
+                    statusLabel = 'Crawling';         // Following listing links
+                  } else if (slot.phase === 'render') {
+                    statusLabel = 'Rendering';        // Playwright → markdown
+                  } else if (slot.phase === 'dates') {
+                    statusLabel = 'Dates';            // chrono-node extraction
+                  } else if (slot.phase === 'summarize') {
+                    statusLabel = 'Summarizing';      // Gemini item extraction
+                  } else if (slot.phase === 'save') {
+                    statusLabel = 'Saving';           // PostgreSQL persist
                   } else if (slot.phase === 'processing_results') {
                     statusLabel = 'Processing';
-                  } else if (slot.phase === 'matching_links' || slot.phase === 'deep_crawling') {
-                    statusLabel = 'Verifying URLs';
-                  } else if (slot.phase === 'serper_search') {
-                    statusLabel = 'II: Searching web';
-                  } else if (slot.phase === 'extracting_external_news') {
-                    statusLabel = 'II: Extracting articles';
                   } else if (slot.phase === 'complete') {
                     statusLabel = '✓ Complete';
                   } else if (slot.phase) {
