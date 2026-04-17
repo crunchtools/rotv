@@ -76,11 +76,11 @@ export const COLLECTION_TYPES = [
   {
     id: 'newsletter_digest',
     label: 'Newsletter Digest',
-    description: 'Weekly email digest sent every Friday at 6 AM',
+    description: 'Weekly email digest sent every Friday at 8 AM',
     icon: '\u{1F4E7}',
     promptKeys: [],
     scheduleJobName: 'newsletter-digest',
-    schedule: '0 6 * * 5',
+    schedule: '0 8 * * 5',
     statusTable: null,
     historyTypes: ['newsletter-digest'],
     triggerEndpoint: '/api/newsletter/send-digest',
