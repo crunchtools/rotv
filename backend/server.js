@@ -2615,8 +2615,8 @@ async function start() {
       }
     }, 'moderation-sweep'));
 
-    // Schedule moderation sweep every hour — avoids resource contention with news collection
-    await scheduleModerationSweep('0 * * * *');
+    // Schedule moderation sweep daily at 7 AM — runs after 6 AM news collection completes
+    await scheduleModerationSweep('0 7 * * *');
 
     // Register newsletter email processing handler
     await registerNewsletterHandler(async (emailId) => {
