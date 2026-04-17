@@ -670,9 +670,11 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
         </select>
       );
     }
+    // lang="en-US" forces MM/DD/YYYY display regardless of browser language locale
+    const lang = fc.type === 'date' ? 'en-US' : undefined;
     return (
       <input type={fc.type || 'text'} value={val} onChange={e => onChange(e.target.value)}
-        style={inputStyle} placeholder={fc.label} required={fc.required} />
+        style={inputStyle} placeholder={fc.label} required={fc.required} lang={lang} />
     );
   };
 
