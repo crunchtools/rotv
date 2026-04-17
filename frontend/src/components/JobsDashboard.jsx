@@ -149,7 +149,13 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const fetchRunLogs = useCallback(async (jobType, runId, poiId) => {
     try {
-      const params = new URLSearchParams({ limit: '200', offset: String(runLogsOffsetRef.current) });
+      // Initial load (offset=0): fetch up to 10000 entries to get everything at once.
+      // Subsequent polls: fetch only new entries since last offset.
+      const isInitial = runLogsOffsetRef.current === 0;
+      const params = new URLSearchParams({
+        limit: isInitial ? '10000' : '200',
+        offset: String(runLogsOffsetRef.current)
+      });
       const res = await fetch(`${API_BASE}/api/admin/jobs/${jobType}/${runId}/logs?${params}`, { credentials: 'include' });
       if (res.ok) {
         const newLogs = await res.json();

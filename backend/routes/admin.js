@@ -4385,7 +4385,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'Invalid job ID' });
       }
       const level = req.query.level || null;
-      const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 200, 500));
+      const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 200, 10000));
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
       let query = 'SELECT * FROM job_logs WHERE job_type = $1 AND job_id = $2';
