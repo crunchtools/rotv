@@ -589,9 +589,9 @@ export async function registerDigestHandler(handler) {
 
 /**
  * Schedule weekly newsletter digest
- * @param {string} cronExpression - Cron expression (default: every Friday at 6 AM EST)
+ * @param {string} cronExpression - Cron expression (default: every Friday at 8 AM EST)
  */
-export async function scheduleDigest(cronExpression = '0 6 * * 5') {
+export async function scheduleDigest(cronExpression = '0 8 * * 5') {
   const scheduler = getJobScheduler();
 
   // Every Friday at 6 AM EST
