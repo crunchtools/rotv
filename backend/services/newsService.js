@@ -1272,9 +1272,11 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   const concurrencyResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'news_max_concurrency'"
   );
-  const maxConcurrency = concurrencyResult.rows.length > 0
-    ? Math.max(1, parseInt(concurrencyResult.rows[0].value, 10) || MAX_CONCURRENCY)
-    : MAX_CONCURRENCY;
+  const maxConcurrency = (() => {
+    if (!concurrencyResult.rows.length) return MAX_CONCURRENCY;
+    const val = parseInt(concurrencyResult.rows[0].value, 10);
+    return Number.isFinite(val) ? Math.min(50, Math.max(1, val)) : MAX_CONCURRENCY;
+  })();
 
   try {
     const { results: batchResults, cancelled: jobCancelled } = await runBatch({
@@ -1426,9 +1428,15 @@ export async function getAllPoisForCollection(pool) {
   const settingResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
   );
-  const excludedIds = settingResult.rows.length > 0
-    ? JSON.parse(settingResult.rows[0].value || '[]')
-    : [];
+  let excludedIds = [];
+  if (settingResult.rows.length > 0 && settingResult.rows[0].value) {
+    try {
+      const parsed = JSON.parse(settingResult.rows[0].value);
+      excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
+    } catch (e) {
+      console.error('[newsService] Failed to parse news_collection_excluded_pois:', e.message);
+    }
+  }
 
   const result = await pool.query(
     `SELECT id FROM pois

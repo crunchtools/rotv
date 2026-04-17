@@ -443,7 +443,13 @@ function DataCollectionSettings() {
         const settings = await settingsRes.json();
         const pois = await poisRes.json();
         setAllPois(pois.filter(p => !p.deleted).sort((a, b) => a.name.localeCompare(b.name)));
-        const excludedIds = JSON.parse(settings.news_collection_excluded_pois?.value || '[]');
+        let excludedIds = [];
+        try {
+          const parsed = JSON.parse(settings.news_collection_excluded_pois?.value || '[]');
+          excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
+        } catch (e) {
+          console.error('Failed to parse excluded POIs:', e);
+        }
         setExcludedPois(
           excludedIds
             .map(id => pois.find(p => p.id === id))
