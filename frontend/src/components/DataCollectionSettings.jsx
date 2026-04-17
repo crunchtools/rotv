@@ -989,13 +989,13 @@ function DataCollectionSettings() {
               <input
                 type="number"
                 min="1"
-                max="20"
+                max="50"
                 value={maxConcurrency}
-                onChange={e => setMaxConcurrency(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                onChange={e => setMaxConcurrency(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1)))}
                 style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
                 disabled={maxConcurrencySaving}
               />
-              <span className="config-hint">Range: 1–20 (default: 10)</span>
+              <span className="config-hint">Range: 1–50 (default: 10)</span>
             </div>
             <button className="action-btn primary" onClick={handleSaveMaxConcurrency} disabled={maxConcurrencySaving}>
               {maxConcurrencySaving ? 'Saving...' : 'Save Concurrency'}
