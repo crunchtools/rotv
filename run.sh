@@ -170,7 +170,7 @@ ENVFILE
         podman run -d \
             --name "$CONTAINER_NAME" \
             --privileged \
-            --network=pasta:--dns-forward,8.8.8.8 \
+            --network=host \
             -p 8080:8080 \
             -p 2525:25 \
             $MCP_PORT_MAP \
@@ -246,7 +246,7 @@ ENVFILE
         podman run -d \
             --name "$CONTAINER_NAME" \
             --privileged \
-            --network=pasta:--dns-forward,8.8.8.8 \
+            --network=host \
             -p 8080:8080 \
             -p 2525:25 \
             --tmpfs /run \

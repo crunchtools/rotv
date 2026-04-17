@@ -1,4 +1,4 @@
-import { chromium } from 'playwright';
+import { acquireBrowser, releaseBrowser } from './browserPool.js';
 
 /**
  * Hard timeout wrapper - ensures a promise resolves within a time limit
@@ -198,26 +198,26 @@ export async function renderJavaScriptPage(url, options = {}) {
     twitterCredentials = null // Twitter credentials { username, password }
   } = options;
 
-  console.log(`[JS Renderer] Starting browser for: ${url}`);
+  console.log(`[JS Renderer] Acquiring browser context for: ${url}`);
 
-  // Track browser instance for cleanup on hard timeout
-  let browserRef = { browser: null };
+  // Track the BrowserContext for cleanup on hard timeout.
+  // We close only the context, never the shared browser process.
+  let contextRef = { context: null };
   let hardTimeoutId;
   let isTimedOut = false;
 
-  // Create a promise that will be rejected on hard timeout and clean up browser
   const hardTimeoutPromise = new Promise((_, reject) => {
     hardTimeoutId = setTimeout(async () => {
       isTimedOut = true;
       console.error(`[JS Renderer] ⏰ Hard timeout (${hardTimeout}ms) reached for ${url}, forcing cleanup...`);
 
-      // Force close the browser if it exists
-      if (browserRef.browser) {
+      if (contextRef.context) {
         try {
-          await browserRef.browser.close();
-          console.log(`[JS Renderer] ✓ Browser force-closed after hard timeout`);
+          await contextRef.context.close();
+          releaseBrowser();
+          console.log(`[JS Renderer] ✓ Context force-closed after hard timeout`);
         } catch (closeError) {
-          console.error(`[JS Renderer] Failed to force-close browser: ${closeError.message}`);
+          console.error(`[JS Renderer] Failed to force-close context: ${closeError.message}`);
         }
       }
 
@@ -226,15 +226,13 @@ export async function renderJavaScriptPage(url, options = {}) {
   });
 
   try {
-    // Auto-detect Twitter login requirement
     const needsTwitterLogin = requireTwitterLogin !== null
       ? requireTwitterLogin
       : (url.includes('twitter.com') || url.includes('x.com'));
 
-    // Race between the rendering operation and the hard timeout
     const result = await Promise.race([
       renderJavaScriptPageInternal(url, {
-        timeout, waitForSelector, waitTime, extractSelectors, browserLaunchTimeout, browserRef, needsTwitterLogin, twitterCredentials
+        timeout, waitForSelector, waitTime, extractSelectors, contextRef, needsTwitterLogin, twitterCredentials
       }),
       hardTimeoutPromise
     ]);
@@ -253,12 +251,13 @@ export async function renderJavaScriptPage(url, options = {}) {
   } finally {
     clearTimeout(hardTimeoutId);
 
-    // Extra safety: close browser if it's still open after hard timeout
-    if (isTimedOut && browserRef.browser) {
+    // Extra safety: release context if still open after hard timeout
+    if (isTimedOut && contextRef.context) {
       try {
-        await browserRef.browser.close();
+        await contextRef.context.close();
+        releaseBrowser();
       } catch (e) {
-        // Ignore - browser may already be closed
+        // Ignore - context may already be closed
       }
     }
   }
@@ -268,36 +267,21 @@ export async function renderJavaScriptPage(url, options = {}) {
  * Internal implementation of page rendering (wrapped by hard timeout)
  */
 async function renderJavaScriptPageInternal(url, options) {
-  const { timeout, waitForSelector, waitTime, extractSelectors, browserLaunchTimeout, browserRef, needsTwitterLogin, twitterCredentials } = options;
+  const { timeout, waitForSelector, waitTime, extractSelectors, contextRef, needsTwitterLogin, twitterCredentials } = options;
 
-  let browser = null;
+  let context = null;
   try {
-    // Launch browser with its own timeout to catch hangs during launch
-    console.log(`[JS Renderer] Launching browser (timeout: ${browserLaunchTimeout}ms)...`);
-    browser = await withHardTimeout(
-      chromium.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--disable-gpu'
-        ]
-      }),
-      browserLaunchTimeout,
-      'Browser launch'
-    );
+    const browser = await acquireBrowser();
 
-    // Store browser reference for hard timeout cleanup
-    if (browserRef) {
-      browserRef.browser = browser;
-    }
-
-    const context = await browser.newContext({
+    context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-      ignoreHTTPSErrors: true // Ignore SSL certificate errors for sites with invalid certs
+      ignoreHTTPSErrors: true
     });
+
+    // Store context reference so the hard timeout can close it if needed
+    if (contextRef) {
+      contextRef.context = context;
+    }
 
     // Load Twitter cookies if this is a Twitter URL
     if (needsTwitterLogin) {
@@ -525,7 +509,8 @@ async function renderJavaScriptPageInternal(url, options) {
     console.log(`[JS Renderer]   Title: ${content.title}`);
     console.log(`[JS Renderer]   Found ${content.links.length} links on page`);
 
-    await browser.close();
+    await context.close();
+    releaseBrowser();
 
     return {
       ...content,
@@ -535,8 +520,9 @@ async function renderJavaScriptPageInternal(url, options) {
   } catch (error) {
     console.error(`[JS Renderer] ❌ Error rendering ${url}:`, error.message);
 
-    if (browser) {
-      await browser.close().catch(() => {});
+    if (context) {
+      await context.close().catch(() => {});
+      releaseBrowser();
     }
 
     return {
