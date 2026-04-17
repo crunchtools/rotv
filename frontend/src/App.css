@@ -2106,11 +2106,14 @@ body {
   flex-shrink: 0;
 }
 
-.news-type-icon.general { background: #4a7c23; }
+.news-type-icon.general { background: #6a1b9a; }
+.news-type-icon.alert { background: #c62828; }
+.news-type-icon.wildlife { background: #2e7d32; }
+.news-type-icon.infrastructure { background: #f57c00; }
+.news-type-icon.community { background: #1565c0; }
 .news-type-icon.closure { background: #c62828; }
 .news-type-icon.maintenance { background: #f57c00; }
 .news-type-icon.seasonal { background: #1565c0; }
-.news-type-icon.wildlife { background: #2e7d32; }
 
 .event-type-icon { background: #7b2d8e; }
 .event-type-icon.guided-tour { background: #1565c0; }
