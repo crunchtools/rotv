@@ -1276,6 +1276,16 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   let processed = processedPoiIds.length;
   const newlyProcessedIds = [...processedPoiIds];
 
+  // Read max concurrency from admin_settings at job start (falls back to module constant)
+  const concurrencyResult = await pool.query(
+    "SELECT value FROM admin_settings WHERE key = 'news_max_concurrency'"
+  );
+  const maxConcurrency = (() => {
+    if (!concurrencyResult.rows.length) return MAX_CONCURRENCY;
+    const val = parseInt(concurrencyResult.rows[0].value, 10);
+    return Number.isFinite(val) ? Math.min(50, Math.max(1, val)) : MAX_CONCURRENCY;
+  })();
+
   try {
     const { results: batchResults, cancelled: jobCancelled } = await runBatch({
       pool,
@@ -1283,7 +1293,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       items: pois,
       tracker,
       label: 'News',
-      maxConcurrency: MAX_CONCURRENCY,
+      maxConcurrency,
       dispatchInterval: DISPATCH_INTERVAL_MS,
 
       checkCancelled: async () => {
@@ -1422,17 +1432,33 @@ export async function runBatchNewsCollection(pool, poiIds, sheets = null, source
  * @returns {Array<number>} - Array of POI IDs
  */
 export async function getAllPoisForCollection(pool) {
-  const result = await pool.query(`
-    SELECT id FROM pois
-    WHERE (deleted IS NULL OR deleted = FALSE)
-    ORDER BY
-      CASE poi_type
-        WHEN 'point' THEN 1
-        WHEN 'boundary' THEN 2
-        ELSE 3
-      END,
-      name
-  `);
+  // Load excluded POI IDs from admin settings
+  const settingResult = await pool.query(
+    "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
+  );
+  let excludedIds = [];
+  if (settingResult.rows.length > 0 && settingResult.rows[0].value) {
+    try {
+      const parsed = JSON.parse(settingResult.rows[0].value);
+      excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
+    } catch (e) {
+      console.error('[newsService] Failed to parse news_collection_excluded_pois:', e.message);
+    }
+  }
+
+  const result = await pool.query(
+    `SELECT id FROM pois
+     WHERE (deleted IS NULL OR deleted = FALSE)
+       ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
+     ORDER BY
+       CASE poi_type
+         WHEN 'point' THEN 1
+         WHEN 'boundary' THEN 2
+         ELSE 3
+       END,
+       name`,
+    excludedIds.length > 0 ? [excludedIds] : []
+  );
   return result.rows.map(r => r.id);
 }
 
