@@ -153,7 +153,7 @@ const StatusTab = memo(function StatusTab({
     };
 
     // Handle both point POIs and linear features
-    if (trail.poi_type === 'point') {
+    if (trail.poi_roles?.includes('point') || trail.poi_type === 'point') {
       // Find the full destination object
       const fullDestination = destinations?.find(d => d.id === trail.id);
       if (fullDestination) {

@@ -166,7 +166,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.put('/pois/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const allowedFields = [
-      'name', 'poi_type', 'latitude', 'longitude', 'geometry', 'geometry_drive_file_id',
+      'name', 'poi_type', 'poi_roles', 'latitude', 'longitude', 'geometry', 'geometry_drive_file_id',
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'research_context',
@@ -331,25 +331,23 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Create POI (supports all types including virtual)
+  // Create POI
   router.post('/pois', isAdmin, async (req, res) => {
-    const { name, poi_type, latitude, longitude } = req.body;
+    const { name, poi_type, poi_roles, latitude, longitude } = req.body;
 
     // Validate required fields
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
 
-    if (!poi_type || !['point', 'trail', 'river', 'boundary', 'virtual'].includes(poi_type)) {
-      return res.status(400).json({ error: 'Invalid poi_type. Must be: point, trail, river, boundary, or virtual' });
+    const validTypes = ['point', 'trail', 'river', 'boundary'];
+    if (!poi_type || !validTypes.includes(poi_type)) {
+      return res.status(400).json({ error: 'Invalid poi_type. Must be: point, trail, river, or boundary' });
     }
 
-    // Virtual POIs don't need coordinates
-    if (poi_type !== 'virtual') {
-      if (latitude === undefined || longitude === undefined) {
-        return res.status(400).json({ error: 'Latitude and longitude are required for non-virtual POIs' });
-      }
-
+    // Only validate coordinates when geometry is not provided and lat/lon are given
+    const hasCoords = latitude !== undefined && longitude !== undefined;
+    if (hasCoords) {
       const lat = parseFloat(latitude);
       const lng = parseFloat(longitude);
 
@@ -363,28 +361,30 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     const allowedFields = [
-      'poi_type', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id', 'historical_description',
-      'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
+      'poi_type', 'poi_roles', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
+      'historical_description', 'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'has_primary_image'
     ];
 
     const fields = ['name'];
     const values = [name.trim()];
-    let paramIndex = 2;
 
-    // Add latitude/longitude for non-virtual POIs
-    if (poi_type !== 'virtual') {
+    if (hasCoords) {
       fields.push('latitude', 'longitude');
       values.push(parseFloat(latitude), parseFloat(longitude));
-      paramIndex += 2;
     }
 
     for (const field of allowedFields) {
       if (req.body[field] !== undefined && req.body[field] !== null && req.body[field] !== '') {
         fields.push(field);
         values.push(req.body[field]);
-        paramIndex++;
       }
+    }
+
+    // Seed poi_roles from poi_type if not provided
+    if (!fields.includes('poi_roles')) {
+      fields.push('poi_roles');
+      values.push([poi_type]);
     }
 
     const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
@@ -2750,7 +2750,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Get POI details
       const poiResult = await pool.query(
-        'SELECT id, name, poi_type, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
+        'SELECT id, name, poi_type, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
         [id]
       );
 
@@ -2858,7 +2858,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Get POI details
       const poiResult = await pool.query(
-        'SELECT id, name, poi_type, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
+        'SELECT id, name, poi_type, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
         [id]
       );
 
@@ -3125,18 +3125,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'virtual_poi_id and physical_poi_id are required' });
       }
 
-      // Validate that virtual_poi_id is actually a virtual POI
+      // Validate that virtual_poi_id has the organization role
       const virtualPoi = await pool.query(
-        'SELECT poi_type FROM pois WHERE id = $1',
+        'SELECT poi_roles FROM pois WHERE id = $1',
         [virtual_poi_id]
       );
 
       if (virtualPoi.rows.length === 0) {
-        return res.status(400).json({ error: 'Virtual POI not found' });
+        return res.status(400).json({ error: 'Organization POI not found' });
       }
 
-      if (virtualPoi.rows[0].poi_type !== 'virtual') {
-        return res.status(400).json({ error: 'Specified virtual_poi_id is not a virtual POI' });
+      if (!virtualPoi.rows[0].poi_roles?.includes('organization')) {
+        return res.status(400).json({ error: 'Specified virtual_poi_id does not have the organization role' });
       }
 
       // Create association
@@ -3148,7 +3148,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         RETURNING *
       `, [virtual_poi_id, physical_poi_id, association_type || 'manages']);
 
-      console.log(`Admin ${req.user.email} created association between virtual POI ${virtual_poi_id} and physical POI ${physical_poi_id}`);
+      console.log(`Admin ${req.user.email} created association between org POI ${virtual_poi_id} and POI ${physical_poi_id}`);
       res.json(result.rows[0]);
     } catch (error) {
       console.error('Error creating POI association:', error);
@@ -3186,18 +3186,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'virtual_poi_id and physical_poi_ids array are required' });
       }
 
-      // Validate virtual POI
+      // Validate organization POI
       const virtualPoi = await pool.query(
-        'SELECT poi_type FROM pois WHERE id = $1',
+        'SELECT poi_roles FROM pois WHERE id = $1',
         [virtual_poi_id]
       );
 
       if (virtualPoi.rows.length === 0) {
-        return res.status(400).json({ error: 'Virtual POI not found' });
+        return res.status(400).json({ error: 'Organization POI not found' });
       }
 
-      if (virtualPoi.rows[0].poi_type !== 'virtual') {
-        return res.status(400).json({ error: 'Specified virtual_poi_id is not a virtual POI' });
+      if (!virtualPoi.rows[0].poi_roles?.includes('organization')) {
+        return res.status(400).json({ error: 'Specified virtual_poi_id does not have the organization role' });
       }
 
       // Create all associations

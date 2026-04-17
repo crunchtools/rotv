@@ -712,7 +712,7 @@ function AppContent() {
         fetch('/api/destinations'),
         fetch('/api/linear-features'),
         fetch('/api/admin/icons'),
-        fetch('/api/pois?type=virtual'),
+        fetch('/api/pois?role=organization'),
         fetch('/api/associations')
       ]);
 
@@ -859,18 +859,18 @@ function AppContent() {
     const dests = destSource.map(d => ({
       ...d,
       _isLinear: false,
-      _isVirtual: d.poi_type === 'virtual'
+      _isVirtual: !d.geometry && !d.latitude
     }));
 
     // In MTB mode: NO linear features or virtual POIs (only MTB trailheads)
-    // In Organizations mode: NO linear features, use ALL virtual POIs
-    // In normal mode: include viewport-filtered linear features and virtual POIs
+    // In Organizations mode: NO linear features, use ALL organization POIs
+    // In normal mode: include viewport-filtered linear features and organization POIs
     const linear = (isInMtbMode || isInOrganizationsMode) ? [] : (viewportFilteredLinearFeatures || []).map(f => ({ ...f, _isLinear: true }));
     const virtual = isInMtbMode
       ? []
       : isInOrganizationsMode
-        ? (virtualPois || []).map(v => ({ ...v, _isLinear: false, _isVirtual: true }))
-        : (viewportFilteredVirtualPois || []).map(v => ({ ...v, _isLinear: false, _isVirtual: true }));
+        ? (virtualPois || []).map(v => ({ ...v, _isLinear: false, _isVirtual: !v.geometry && !v.latitude }))
+        : (viewportFilteredVirtualPois || []).map(v => ({ ...v, _isLinear: false, _isVirtual: !v.geometry && !v.latitude }));
 
     return [...dests, ...linear, ...virtual].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [destinations, virtualPois, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, isInMtbMode, isInOrganizationsMode]);
@@ -1324,7 +1324,8 @@ function AppContent() {
       more_info_link: '',
       events_url: '',
       news_url: '',
-      poi_type: 'virtual',
+      poi_type: 'point',
+      poi_roles: ['organization'],
       _poisInBounds: poisInBounds,
       _selectedPoiIds: new Set(poisInBounds.map(p => p.id))
     });
@@ -1369,9 +1370,8 @@ function AppContent() {
         brief_description: organizationData.brief_description,
         property_owner: organizationData.property_owner,
         more_info_link: organizationData.more_info_link,
-        poi_type: 'virtual',
-        latitude: null,
-        longitude: null
+        poi_type: 'point',
+        poi_roles: ['organization']
       })
     });
 
@@ -1912,7 +1912,7 @@ function AppContent() {
             setCurrentMtbIndex(newIndex);
 
             // Select the next/previous trail
-            if (nextTrail.poi_type === 'point') {
+            if (nextTrail.poi_roles?.includes('point') || nextTrail.poi_type === 'point') {
               const fullDestination = destinations?.find(d => d.id === nextTrail.id);
               if (fullDestination) {
                 setSelectedDestination(fullDestination);

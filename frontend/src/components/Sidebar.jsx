@@ -222,7 +222,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
               {destination.feature_type === 'river' ? 'River' :
                destination.feature_type === 'boundary' ? 'Boundary' : 'Trail'}
             </span>
-          ) : destination.poi_type === 'virtual' ? (
+          ) : destination.poi_roles?.includes('organization') ? (
             <span className="poi-type-badge virtual">
               Organization
             </span>
@@ -241,10 +241,10 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
               {destination.difficulty}
             </span>
           )}
-          {destination.era_name && destination.poi_type !== 'virtual' && (
+          {destination.era_name && !destination.poi_roles?.includes('organization') && (
             <span className="era-badge-large">{destination.era_name}</span>
           )}
-          {(destination.owner_name || destination.property_owner) && destination.poi_type !== 'virtual' && (
+          {(destination.owner_name || destination.property_owner) && !destination.poi_roles?.includes('organization') && (
             <span className={`owner-badge ${getOwnerClass(destination.owner_name || destination.property_owner)}`}>
               {destination.owner_name || destination.property_owner}
             </span>
@@ -779,7 +779,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             onPendingImageChange={setPendingImage}
             updatedAt={editedData.updated_at}
             disabled={saving}
-            isVirtualPoi={destination?.poi_type === 'virtual'}
+            isVirtualPoi={destination?.poi_roles?.includes('organization') && !destination?.geometry && !destination?.latitude}
             user={user}
             poiId={destination.id}
             onMediaUpdate={handleMediaUpdate}
@@ -881,7 +881,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       </div>
 
       {/* Hide these fields for organizations/virtual POIs */}
-      {!isNewOrganization && destination?.poi_type !== 'virtual' && (
+      {!isNewOrganization && !destination?.poi_roles?.includes('organization') && (
         <>
           <div className="edit-row">
             <div className="edit-section half">
@@ -1082,7 +1082,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       )}
 
       {/* Lat/long fields - only for point destinations, not for virtual/organizations */}
-      {!isLinearFeature && destination?.poi_type !== 'virtual' && (
+      {!isLinearFeature && !destination?.poi_roles?.includes('organization') && (
         <div className="edit-row">
           <div className="edit-section half">
             <label>Latitude</label>
@@ -1679,7 +1679,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
   const availablePois = useMemo(() => {
     if (!isOpen || !poi) return [];
 
-    const isVirtualPoi = poi.poi_type === 'virtual';
+    const isVirtualPoi = poi.poi_roles?.includes('organization');
     if (!isVirtualPoi) return [];
 
     // Find associations for this POI
@@ -1731,8 +1731,8 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
     assoc.virtual_poi_id === poi.id || assoc.physical_poi_id === poi.id
   );
 
-  // Determine if this is a virtual POI
-  const isVirtualPoi = poi.poi_type === 'virtual';
+  // Determine if this is an organization POI
+  const isVirtualPoi = poi.poi_roles?.includes('organization');
 
   // Get regular associations
   const regularAssociations = poiAssociations.map(assoc => {
@@ -2035,8 +2035,8 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
     assoc.virtual_poi_id === poi.id || assoc.physical_poi_id === poi.id
   );
 
-  // Determine if this is a virtual POI
-  const isVirtualPoi = poi.poi_type === 'virtual';
+  // Determine if this is an organization POI
+  const isVirtualPoi = poi.poi_roles?.includes('organization');
 
   // Get the associated POIs with association IDs (regular associations from table)
   const regularAssociations = poiAssociations.map(assoc => {
@@ -3554,7 +3554,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             onPendingImageChange={setPendingImage}
             updatedAt={destination.updated_at}
             disabled={saving}
-            isVirtualPoi={destination?.poi_type === 'virtual'}
+            isVirtualPoi={destination?.poi_roles?.includes('organization') && !destination?.geometry && !destination?.latitude}
             user={user}
             poiId={destination.id}
             onMediaUpdate={handleMediaUpdate}
