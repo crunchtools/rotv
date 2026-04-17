@@ -33,10 +33,17 @@ const AI_STATS_ENDPOINTS = {
   trail_status: '/api/admin/trail-status/ai-stats'
 };
 
+// DB stores TIMESTAMP (no tz) — treat bare strings as UTC by appending Z
+function toUtcDate(val) {
+  if (!val) return null;
+  const s = String(val);
+  return new Date(s.includes('Z') || s.includes('+') ? s : s + 'Z');
+}
+
 function formatDuration(startedAt, completedAt) {
   if (!startedAt) return '--';
-  const start = new Date(startedAt);
-  const end = completedAt ? new Date(completedAt) : new Date();
+  const start = toUtcDate(startedAt);
+  const end = completedAt ? toUtcDate(completedAt) : new Date();
   const seconds = Math.floor((end - start) / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
@@ -48,7 +55,7 @@ function formatDuration(startedAt, completedAt) {
 
 function formatTime(isoString) {
   if (!isoString) return '--';
-  const d = new Date(isoString);
+  const d = toUtcDate(isoString);
   return d.toLocaleString(undefined, {
     month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit'
@@ -131,7 +138,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
         const res = await fetch(`${API_BASE}/api/admin/jobs/history?${params}`, { credentials: 'include' });
         if (res.ok) allRuns.push(...(await res.json()));
       }
-      allRuns.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      allRuns.sort((a, b) => toUtcDate(b.created_at) - toUtcDate(a.created_at));
       setJobHistory(prev => ({ ...prev, [jobId]: allRuns.slice(0, 10) }));
     } catch (err) {
       console.error('Failed to fetch job history:', err);
@@ -847,7 +854,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 }
 
 function formatLogLine(entry) {
-  const time = entry.created_at ? new Date(entry.created_at).toLocaleTimeString() : '--';
+  const time = entry.created_at ? toUtcDate(entry.created_at).toLocaleTimeString() : '--';
   const level = entry.level === 'error' ? 'Error' : entry.level === 'warn' ? 'Warning' : 'Info';
   let line = `${time}  ${level}  ${entry.message}`;
   if (entry.details) {
