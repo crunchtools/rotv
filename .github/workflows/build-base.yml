@@ -43,3 +43,10 @@ jobs:
             org_id=${{ secrets.RHSM_ORG_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Trigger rotv rebuild
+        env:
+          GH_TOKEN: ${{ secrets.CRUNCHTOOLS_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/crunchtools/rotv/dispatches \
+            -f event_type=parent-image-updated
