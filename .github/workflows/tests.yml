@@ -116,6 +116,11 @@ jobs:
             sleep 2
           done
 
+          # Debug: journal after restart
+          echo "=== journal after restart ==="
+          docker exec rotv journalctl -u rotv-backend --no-pager -n 50 || true
+          echo "=== end journal after restart ==="
+
           # Verify data was imported
           echo "Verifying data import..."
           POI_COUNT=$(docker exec rotv psql -U postgres -d rotv -tAc "SELECT COUNT(*) FROM pois;")
