@@ -1,14 +1,15 @@
 /**
  * News Collection Service
  * Two-phase pipeline: Phase I crawls POI's own pages, Phase II searches via Serper.
- * Both phases use Gemini for summarization, chrono-node for dates.
+ * Both phases use Gemini for summarization and consensus date scoring (JSON-LD,
+ * LLM extraction, meta tags, <time> elements, URL patterns).
  *
  * Job execution is managed by pg-boss for crash recovery and resumability.
  * Progress is checkpointed after each batch so jobs can resume after container restarts.
  */
 
 import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
-import { parseDate, extractDatesFromText } from './dateExtractor.js';
+import { parseDate, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
 
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
@@ -362,44 +363,48 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     return { news: [], events: [] };
   }
 
-  // [Dates]
+  // [Dates] — Consensus scoring across multiple structured sources.
+  // Each source carries a weight; a date reaching ≥ 4 pts is treated as verified.
+  //   JSON-LD datePublished/startDate : 3 pts
+  //   LLM extraction (small Gemini call): 2 pts
+  //   Meta tags (OG, Parsely, DC)      : 1 pt
+  //   HTML <time datetime>              : 1 pt
+  //   URL path /YYYY/MM/DD/             : 1 pt
   updateProgress(poi.id, { phase: 'dates', message: url });
-  // Collect all available dates, pick the oldest non-future one.
-  // The original publication date is almost always the earliest date on the page.
-  // Taking the minimum across OG metadata and chrono-node content dates handles sites
-  // that update article:published_time on every edit (making old stories look fresh).
-  const today = new Date().toISOString().substring(0, 10);
 
-  // OG published_time — discard only if strictly future
-  const ogRaw = extracted.ogDates?.publishedTime
-    ? parseDate(extracted.ogDates.publishedTime, timezone)
-    : null;
-  const ogDate = (ogRaw && ogRaw <= today) ? ogRaw : null;
-  if (ogRaw && ogRaw > today) {
-    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Discarding future OG date ${ogRaw}`);
-  }
+  // --- [1] Collect raw date strings from all extraction sources ---
+  const od = extracted.ogDates || {};
+  const rawSources = {
+    jsonLd:   od.jsonLdDates || [],
+    meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
+    timeTags: od.timeDates || [],
+    url:      extractUrlDate(url),
+    llm:      null  // filled below
+  };
 
-  // chrono-node — collect ALL non-future dates from article body, then pick the oldest
+  // --- [2] LLM date extraction (lightweight Gemini call on first 1000 chars) ---
+  try {
+    const datePrompt = `Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${extracted.markdown.substring(0, 1000)}`;
+    const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
+    const raw = (llmResult.response || '').trim().replace(/^["']|["']$/g, '');
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) rawSources.llm = raw;
+  } catch { /* LLM date extraction is best-effort */ }
+
+  // --- [3] Normalize: convert all raw strings to ISO 8601, discard unparseable ---
+  const normalizedSources = normalizeDateSources(rawSources, timezone);
+
+  // --- [4] Score: consensus across normalized sources ---
+  const consensus = scoreDateConsensus(normalizedSources);
+
+  const primaryDate = consensus.date;
+
+  // chrono-node scan of article body — used only for event end_date fallback,
+  // NOT as a scored consensus source (too noisy for publication dates).
   const dateHints = extractDatesFromText(extracted.markdown, timezone);
-  const pastDates = dateHints
-    .map(d => d.start?.substring(0, 10))
-    .filter(d => d && d <= today);
-  const chronoOldest = pastDates.length > 0 ? pastDates.reduce((a, b) => a < b ? a : b) : null;
-
-  // Use the oldest of the two sources
-  const candidates = [ogDate, chronoOldest].filter(Boolean);
-  const rawPrimaryDate = candidates.length > 0 ? candidates.reduce((a, b) => a < b ? a : b) : null;
-
-  // For news, cap publication date at today — future dates are issue/cover dates, not publish dates
-  const primaryDate = (contentType === 'news' && rawPrimaryDate && rawPrimaryDate > today) ? today : rawPrimaryDate;
-
-  // secondDate for event end_date — use the second chrono-node date in document order
   const secondDate = dateHints.length > 1 ? dateHints[1].start?.substring(0, 10) : null;
 
-  const dateSource = ogDate && chronoOldest
-    ? (rawPrimaryDate === ogDate ? 'og' : 'chrono')
-    : (ogDate ? 'og' : (chronoOldest ? 'chrono' : 'none'));
-  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] ${primaryDate || 'none'} (${dateSource}, og=${ogDate || 'none'}, chrono=${chronoOldest || 'none'}), ${dateHints.length} hints from ${url}`);
+  logInfo(jobId, jobType, poi.id, poi.name,
+    `${phase}: [Dates] ${primaryDate || 'none'} (score=${consensus.score}, confidence=${consensus.confidence}, sources=${JSON.stringify(consensus.sourceMap)}) from ${url}`);
 
   // [Summarize]
   updateProgress(poi.id, { phase: 'summarize', message: url });
@@ -415,12 +420,14 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   for (const item of (result.news || [])) {
     item.source_url = url;
     item.published_date = primaryDate;
+    item.date_confidence = consensus.confidence;
   }
 
   for (const event of (result.events || [])) {
     event.source_url = url;
     event.start_date = primaryDate;
     event.end_date = secondDate || null;
+    event.date_confidence = consensus.confidence;
   }
 
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events from ${url}`);
@@ -1086,7 +1093,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       }
 
       // New item — save as pending for moderation
-      const dateConfidence = item.published_date ? 'exact' : 'unknown';
+      // Use consensus confidence if set by processOneUrl; fall back to binary exact/unknown
+      const dateConfidence = item.date_confidence || (item.published_date ? 'exact' : 'unknown');
       await pool.query(`
         INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_confidence, moderation_status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
@@ -1187,7 +1195,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
       }
 
       // New event — save as pending for moderation
-      const dateConfidence = item.start_date ? 'exact' : 'unknown';
+      // Use consensus confidence if set by processOneUrl; fall back to binary exact/unknown
+      const dateConfidence = item.date_confidence || (item.start_date ? 'exact' : 'unknown');
       await pool.query(`
         INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_confidence, moderation_status)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
