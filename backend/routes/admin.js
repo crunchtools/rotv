@@ -166,7 +166,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.put('/pois/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const allowedFields = [
-      'name', 'poi_type', 'poi_roles', 'latitude', 'longitude', 'geometry', 'geometry_drive_file_id',
+      'name', 'poi_roles', 'latitude', 'longitude', 'geometry', 'geometry_drive_file_id',
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'research_context',
@@ -333,16 +333,17 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   // Create POI
   router.post('/pois', isAdmin, async (req, res) => {
-    const { name, poi_type, poi_roles, latitude, longitude } = req.body;
+    const { name, poi_roles, latitude, longitude } = req.body;
 
     // Validate required fields
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
 
-    const validTypes = ['point', 'trail', 'river', 'boundary'];
-    if (!poi_type || !validTypes.includes(poi_type)) {
-      return res.status(400).json({ error: 'Invalid poi_type. Must be: point, trail, river, or boundary' });
+    const validRoles = ['point', 'trail', 'river', 'boundary', 'organization'];
+    const rolesArray = Array.isArray(poi_roles) ? poi_roles : (poi_roles ? [poi_roles] : []);
+    if (rolesArray.length === 0 || !rolesArray.every(r => validRoles.includes(r))) {
+      return res.status(400).json({ error: 'Invalid poi_roles. Must include at least one of: point, trail, river, boundary, organization' });
     }
 
     // Only validate coordinates when geometry is not provided and lat/lon are given
@@ -361,13 +362,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     const allowedFields = [
-      'poi_type', 'poi_roles', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
+      'poi_roles', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
       'historical_description', 'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'has_primary_image'
     ];
 
-    const fields = ['name'];
-    const values = [name.trim()];
+    const fields = ['name', 'poi_roles'];
+    const values = [name.trim(), rolesArray];
 
     if (hasCoords) {
       fields.push('latitude', 'longitude');
@@ -375,16 +376,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     for (const field of allowedFields) {
+      if (field === 'poi_roles') continue; // already added
       if (req.body[field] !== undefined && req.body[field] !== null && req.body[field] !== '') {
         fields.push(field);
         values.push(req.body[field]);
       }
-    }
-
-    // Seed poi_roles from poi_type if not provided
-    if (!fields.includes('poi_roles')) {
-      fields.push('poi_roles');
-      values.push([poi_type]);
     }
 
     const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
@@ -397,7 +393,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         values
       );
 
-      console.log(`Admin ${req.user.email} created new POI (${poi_type}): ${name}`);
+      console.log(`Admin ${req.user.email} created new POI (${rolesArray.join(', ')}): ${name}`);
       res.status(201).json(result.rows[0]);
     } catch (error) {
       console.error('Error creating POI:', error);
@@ -1433,7 +1429,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const result = await pool.query(`
         SELECT id, name, boundary_type, boundary_color
         FROM pois
-        WHERE poi_type = 'boundary' AND (deleted IS NULL OR deleted = FALSE)
+        WHERE 'boundary' = ANY(poi_roles) AND (deleted IS NULL OR deleted = FALSE)
         ORDER BY name
       `);
       res.json(result.rows);
@@ -1479,7 +1475,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const result = await pool.query(`
         UPDATE pois
         SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $${paramIndex} AND poi_type = 'boundary'
+        WHERE id = $${paramIndex} AND 'boundary' = ANY(poi_roles)
         RETURNING id, name, boundary_type, boundary_color
       `, values);
 
@@ -2105,13 +2101,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const result = await pool.query(`
         INSERT INTO pois (
-          name, poi_type, geometry, property_owner, owner_id, brief_description,
+          name, poi_roles, geometry, property_owner, owner_id, brief_description,
           era_id, historical_description, primary_activities, surface, pets,
           cell_signal, more_info_link, length_miles, difficulty
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
         RETURNING *
       `, [
-        name, feature_type, JSON.stringify(geometry), property_owner, owner_id, brief_description,
+        name, [feature_type], JSON.stringify(geometry), property_owner, owner_id, brief_description,
         era_id, historical_description, primary_activities, surface, pets,
         cell_signal, more_info_link, length_miles, difficulty
       ]);
@@ -2133,16 +2129,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     try {
       const { id } = req.params;
       const allowedFields = [
-        'name', 'poi_type', 'geometry', 'property_owner', 'owner_id', 'brief_description',
+        'name', 'poi_roles', 'geometry', 'property_owner', 'owner_id', 'brief_description',
         'era_id', 'historical_description', 'primary_activities', 'surface', 'pets',
         'cell_signal', 'more_info_link', 'length_miles', 'difficulty',
         'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url'
       ];
-
-      // Map feature_type to poi_type for backward compatibility
-      if (req.body.feature_type && !req.body.poi_type) {
-        req.body.poi_type = req.body.feature_type;
-      }
 
       const updates = [];
       const values = [];
@@ -2167,7 +2158,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const result = await pool.query(`
         UPDATE pois SET ${updates.join(', ')}
         WHERE id = $${paramIndex}
-        RETURNING id, name, poi_type, latitude, longitude, property_owner,
+        RETURNING id, name, poi_roles, latitude, longitude, property_owner,
                   brief_description, era_id, historical_description, primary_activities,
                   surface, pets, cell_signal, more_info_link, length_miles, difficulty,
                   has_primary_image, geometry_drive_file_id,
@@ -2258,11 +2249,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           for (const trail of consolidatedTrails) {
             try {
               await pool.query(`
-                INSERT INTO pois (name, poi_type, geometry)
-                VALUES ($1, 'trail', $2)
+                INSERT INTO pois (name, poi_roles, geometry)
+                VALUES ($1, '{trail}', $2)
                 ON CONFLICT (name) DO UPDATE SET
                   geometry = EXCLUDED.geometry,
-                  poi_type = EXCLUDED.poi_type,
+                  poi_roles = EXCLUDED.poi_roles,
                   updated_at = CURRENT_TIMESTAMP
               `, [trail.name, JSON.stringify(trail.geometry)]);
               results.trails++;
@@ -2285,11 +2276,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           for (const river of consolidatedRivers) {
             try {
               await pool.query(`
-                INSERT INTO pois (name, poi_type, geometry)
-                VALUES ($1, 'river', $2)
+                INSERT INTO pois (name, poi_roles, geometry)
+                VALUES ($1, '{river}', $2)
                 ON CONFLICT (name) DO UPDATE SET
                   geometry = EXCLUDED.geometry,
-                  poi_type = EXCLUDED.poi_type,
+                  poi_roles = EXCLUDED.poi_roles,
                   updated_at = CURRENT_TIMESTAMP
               `, [river.name, JSON.stringify(river.geometry)]);
               results.rivers++;
@@ -2312,11 +2303,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
             const name = feature.properties?.name || 'Park Boundary';
             try {
               await pool.query(`
-                INSERT INTO pois (name, poi_type, geometry)
-                VALUES ($1, 'boundary', $2)
+                INSERT INTO pois (name, poi_roles, geometry)
+                VALUES ($1, '{boundary}', $2)
                 ON CONFLICT (name) DO UPDATE SET
                   geometry = EXCLUDED.geometry,
-                  poi_type = EXCLUDED.poi_type,
+                  poi_roles = EXCLUDED.poi_roles,
                   updated_at = CURRENT_TIMESTAMP
               `, [name, JSON.stringify(feature.geometry)]);
               results.boundaries++;
@@ -2439,13 +2430,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       for (const feature of consolidatedFeatures) {
         try {
           await pool.query(`
-            INSERT INTO pois (name, poi_type, geometry, deleted)
+            INSERT INTO pois (name, poi_roles, geometry, deleted)
             VALUES ($1, $2, $3, FALSE)
-            ON CONFLICT (name, poi_type) DO UPDATE SET
+            ON CONFLICT (name) DO UPDATE SET
               geometry = EXCLUDED.geometry,
+              poi_roles = EXCLUDED.poi_roles,
               deleted = FALSE,
               updated_at = CURRENT_TIMESTAMP
-          `, [feature.name, feature_type, JSON.stringify(feature.geometry)]);
+          `, [feature.name, [feature_type], JSON.stringify(feature.geometry)]);
           importedCount++;
         } catch (err) {
           errors.push(`"${feature.name}": ${err.message}`);
@@ -2530,13 +2522,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       for (const feature of consolidatedFeatures) {
         try {
           await pool.query(`
-            INSERT INTO pois (name, poi_type, geometry, deleted)
+            INSERT INTO pois (name, poi_roles, geometry, deleted)
             VALUES ($1, $2, $3, FALSE)
-            ON CONFLICT (name, poi_type) DO UPDATE SET
+            ON CONFLICT (name) DO UPDATE SET
               geometry = EXCLUDED.geometry,
+              poi_roles = EXCLUDED.poi_roles,
               deleted = FALSE,
               updated_at = CURRENT_TIMESTAMP
-          `, [feature.name, feature_type, JSON.stringify(feature.geometry)]);
+          `, [feature.name, [feature_type], JSON.stringify(feature.geometry)]);
           importedCount++;
         } catch (err) {
           errors.push(`"${feature.name}": ${err.message}`);
@@ -2620,9 +2613,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         SELECT id FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
         ORDER BY
-          CASE poi_type
-            WHEN 'point' THEN 1
-            WHEN 'boundary' THEN 2
+          CASE
+            WHEN 'point' = ANY(poi_roles) THEN 1
+            WHEN 'boundary' = ANY(poi_roles) THEN 2
             ELSE 3
           END,
           name
@@ -2750,7 +2743,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Get POI details
       const poiResult = await pool.query(
-        'SELECT id, name, poi_type, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
+        'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
         [id]
       );
 
@@ -2858,7 +2851,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Get POI details
       const poiResult = await pool.query(
-        'SELECT id, name, poi_type, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
+        'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
         [id]
       );
 
@@ -3231,7 +3224,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Get trail details
       const poiResult = await pool.query(
-        'SELECT id, name, poi_type, status_url, location FROM pois WHERE id = $1',
+        'SELECT id, name, poi_roles, status_url, location FROM pois WHERE id = $1',
         [id]
       );
 

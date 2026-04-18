@@ -64,15 +64,15 @@ describe('Trail Status Integration Tests', () => {
     console.log(`[Test Setup] Inserted Twitter cookies for authenticated access`);
 
     // Remove any existing East Rim trails (including variations) to ensure clean state
-    await pool.query(`DELETE FROM pois WHERE name LIKE '%East Rim%' AND poi_type = 'trail'`);
+    await pool.query(`DELETE FROM pois WHERE name LIKE '%East Rim%' AND 'trail' = ANY(poi_roles)`);
     console.log(`[Test Setup] Removed any existing East Rim trail entries`);
 
     // Insert East Rim Trail with explicit ID (avoids sequence conflicts from seed data)
     const maxId = await pool.query(`SELECT COALESCE(MAX(id), 0) as max_id FROM pois`);
     const nextId = maxId.rows[0].max_id + 1;
     await pool.query(`
-      INSERT INTO pois (id, name, poi_type, status_url, brief_description, latitude, longitude)
-      VALUES ($1, $2, 'trail', $3, 'MTB trail system in Cuyahoga Valley National Park', 41.2275, -81.5558)
+      INSERT INTO pois (id, name, poi_roles, status_url, brief_description, latitude, longitude)
+      VALUES ($1, $2, '{trail}', $3, 'MTB trail system in Cuyahoga Valley National Park', 41.2275, -81.5558)
     `, [nextId, EAST_RIM_NAME, EAST_RIM_STATUS_URL]);
     console.log(`[Test Setup] Created ${EAST_RIM_NAME} (id=${nextId}) with status_url: ${EAST_RIM_STATUS_URL}`);
 
@@ -127,9 +127,9 @@ describe('Trail Status Integration Tests', () => {
   describe('East Rim Trail Configuration', () => {
     it('should have East Rim Trail in the database', async () => {
       const result = await pool.query(`
-        SELECT id, name, status_url, poi_type
+        SELECT id, name, status_url, poi_roles
         FROM pois
-        WHERE name = $1 AND poi_type = 'trail'
+        WHERE name = $1 AND 'trail' = ANY(poi_roles)
       `, [EAST_RIM_NAME]);
 
       expect(result.rows.length).toBe(1);
@@ -140,7 +140,7 @@ describe('Trail Status Integration Tests', () => {
       const result = await pool.query(`
         SELECT id, name, status_url
         FROM pois
-        WHERE name = $1 AND poi_type = 'trail'
+        WHERE name = $1 AND 'trail' = ANY(poi_roles)
       `, [EAST_RIM_NAME]);
 
       expect(result.rows.length).toBe(1);
@@ -281,7 +281,7 @@ describe('Trail Status Integration Tests', () => {
     it.skipIf(!process.env.GEMINI_API_KEY)('should collect status for East Rim Trail via AI', async () => {
       // Get East Rim Trail
       const poiResult = await pool.query(`
-        SELECT id, name, poi_type, status_url, brief_description
+        SELECT id, name, poi_roles, status_url, brief_description
         FROM pois
         WHERE name = $1
       `, [EAST_RIM_NAME]);

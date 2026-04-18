@@ -9,7 +9,7 @@ export async function generateDigest(pool) {
   // Get events happening Friday-Sunday (next 3 days from Friday)
   const eventsQuery = `
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-           e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
+           e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_events e
     JOIN pois p ON e.poi_id = p.id
     WHERE e.start_date >= CURRENT_DATE
@@ -22,7 +22,7 @@ export async function generateDigest(pool) {
   // Get news published in last 7 days
   const newsQuery = `
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_type
+           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')

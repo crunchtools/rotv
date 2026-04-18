@@ -461,7 +461,7 @@ const ResultsTab = memo(function ResultsTab({
                 {activeSubTab === 'mtb'
                   ? 'Configure status_url on trails to enable status tracking.'
                   : activeSubTab === 'organizations'
-                  ? 'Create virtual POIs with poi_type="organization" to add organizations.'
+                  ? 'Create POIs with poi_roles including "organization" to add organizations.'
                   : 'Try zooming out or panning to see more locations.'}
               </div>
             </div>
