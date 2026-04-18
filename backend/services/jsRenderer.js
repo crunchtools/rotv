@@ -200,9 +200,9 @@ export async function renderJavaScriptPage(url, options = {}) {
 
   console.log(`[JS Renderer] Acquiring browser context for: ${url}`);
 
-  // Track the BrowserContext for cleanup on hard timeout.
+  // Track the BrowserContext and acquisitionId for cleanup on hard timeout.
   // We close only the context, never the shared browser process.
-  let contextRef = { context: null };
+  let contextRef = { context: null, acquisitionId: null };
   let hardTimeoutId;
   let isTimedOut = false;
 
@@ -214,7 +214,7 @@ export async function renderJavaScriptPage(url, options = {}) {
       if (contextRef.context) {
         try {
           await contextRef.context.close();
-          releaseBrowser();
+          releaseBrowser(contextRef.acquisitionId);
           console.log(`[JS Renderer] ✓ Context force-closed after hard timeout`);
         } catch (closeError) {
           console.error(`[JS Renderer] Failed to force-close context: ${closeError.message}`);
@@ -255,7 +255,7 @@ export async function renderJavaScriptPage(url, options = {}) {
     if (isTimedOut && contextRef.context) {
       try {
         await contextRef.context.close();
-        releaseBrowser();
+        releaseBrowser(contextRef.acquisitionId);
       } catch (e) {
         // Ignore - context may already be closed
       }
@@ -271,7 +271,8 @@ async function renderJavaScriptPageInternal(url, options) {
 
   let context = null;
   try {
-    const browser = await acquireBrowser();
+    const { browser, acquisitionId } = await acquireBrowser();
+    contextRef.acquisitionId = acquisitionId;
 
     context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -510,7 +511,7 @@ async function renderJavaScriptPageInternal(url, options) {
     console.log(`[JS Renderer]   Found ${content.links.length} links on page`);
 
     await context.close();
-    releaseBrowser();
+    releaseBrowser(contextRef.acquisitionId);
 
     return {
       ...content,
@@ -522,7 +523,7 @@ async function renderJavaScriptPageInternal(url, options) {
 
     if (context) {
       await context.close().catch(() => {});
-      releaseBrowser();
+      releaseBrowser(contextRef.acquisitionId);
     }
 
     return {

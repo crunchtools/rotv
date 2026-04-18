@@ -62,6 +62,7 @@ export async function extractPageContent(url, options = {}) {
 
   let context = null;
   let hardTimeoutId;
+  let acquisitionId = null;
 
   try {
     const hardTimeoutPromise = new Promise((_, reject) => {
@@ -71,7 +72,9 @@ export async function extractPageContent(url, options = {}) {
     });
 
     const extractionPromise = (async () => {
-      const browser = await acquireBrowser();
+      const acquired = await acquireBrowser();
+      const browser = acquired.browser;
+      acquisitionId = acquired.acquisitionId;
 
       context = await browser.newContext({
         ...STEALTH_CONTEXT,
@@ -231,7 +234,7 @@ export async function extractPageContent(url, options = {}) {
 
       await context.close();
       context = null;
-      releaseBrowser();
+      releaseBrowser(acquisitionId);
 
       const dom = new JSDOM(html, { url });
       const reader = new Readability(dom.window.document, {
@@ -283,7 +286,7 @@ export async function extractPageContent(url, options = {}) {
     clearTimeout(hardTimeoutId);
     if (context) {
       await context.close().catch(() => {});
-      releaseBrowser();
+      releaseBrowser(acquisitionId);
     }
   }
 }
