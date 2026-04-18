@@ -324,11 +324,17 @@ async function initDatabase() {
         -- Image storage
         has_primary_image BOOLEAN DEFAULT FALSE,
 
+        poi_roles TEXT[] DEFAULT '{}',
+
         deleted BOOLEAN DEFAULT FALSE,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE pois ADD COLUMN IF NOT EXISTS poi_roles TEXT[] DEFAULT '{}'
     `);
 
     // Create index for faster lookups by role (GIN index on array)
@@ -349,6 +355,14 @@ async function initDatabase() {
         END IF;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_poi_type_active_key;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_key;
+      END $$;
+    `);
+
+    await client.query(`
+      DO $$ BEGIN
+        CREATE UNIQUE INDEX pois_name_key ON pois(name);
+      EXCEPTION WHEN unique_violation OR duplicate_object THEN
+        NULL;
       END $$;
     `);
 
