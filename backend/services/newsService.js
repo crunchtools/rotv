@@ -1414,7 +1414,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
 
   // Read max concurrency from admin_settings at job start (falls back to module constant)
   const concurrencyResult = await pool.query(
-    "SELECT value FROM admin_settings WHERE key = 'news_max_concurrency'"
+    "SELECT value FROM admin_settings WHERE key = 'max_concurrency'"
   );
   const maxConcurrency = (() => {
     if (!concurrencyResult.rows.length) return MAX_CONCURRENCY;

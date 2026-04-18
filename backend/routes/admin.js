@@ -479,7 +479,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'results_subtabs_config',
       'buttondown_api_key',
       'buttondown_from_email',
-      'news_max_concurrency',
+      'max_concurrency',
       'max_search_urls'
     ];
     if (!allowedKeys.includes(key)) {
