@@ -500,7 +500,7 @@ function DataCollectionSettings() {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
       if (response.ok) {
         const settings = await response.json();
-        const val = parseInt(settings.news_max_concurrency?.value, 10);
+        const val = parseInt(settings.max_concurrency?.value, 10);
         setMaxConcurrency(Number.isFinite(val) && val >= 1 ? val : 10);
       }
     } catch (err) { console.error('Error fetching max concurrency:', err); }
@@ -510,7 +510,7 @@ function DataCollectionSettings() {
   const handleSaveMaxConcurrency = async () => {
     setMaxConcurrencySaving(true); setResult(null);
     try {
-      const response = await fetch('/api/admin/settings/news_max_concurrency', {
+      const response = await fetch('/api/admin/settings/max_concurrency', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
         body: JSON.stringify({ value: String(maxConcurrency) })
       });
@@ -1009,14 +1009,14 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* News Collection Concurrency */}
+      {/* Collection Concurrency */}
       <div className="ai-config-section">
-        <h4>News Collection Concurrency</h4>
-        <p className="settings-description">Maximum number of POIs processed simultaneously during a batch news collection run. Higher values finish faster but use more memory (each concurrent POI runs a browser context). Recommended: 5–10.</p>
+        <h4>MAX_CONCURRENCY — Collection Concurrency</h4>
+        <p className="settings-description">How many POIs run concurrently during a collection job (news, events, or both). Each slot opens a browser context — higher values finish faster but use more memory. Range: 1–50, default: 10.</p>
         {maxConcurrencyLoading ? <p>Loading...</p> : (
           <>
             <div className="config-row">
-              <label>Max Concurrent POIs</label>
+              <label>MAX_CONCURRENCY</label>
               <input
                 type="number"
                 min="1"
@@ -1029,7 +1029,7 @@ function DataCollectionSettings() {
               <span className="config-hint">Range: 1–50 (default: 10)</span>
             </div>
             <button className="action-btn primary" onClick={handleSaveMaxConcurrency} disabled={maxConcurrencySaving}>
-              {maxConcurrencySaving ? 'Saving...' : 'Save Concurrency'}
+              {maxConcurrencySaving ? 'Saving...' : 'Save'}
             </button>
           </>
         )}
@@ -1037,12 +1037,12 @@ function DataCollectionSettings() {
 
       {/* Max Serper URLs */}
       <div className="ai-config-section">
-        <h4>Serper URL Limit (Phase II)</h4>
-        <p className="settings-description">Maximum number of external Serper search result URLs crawled per POI during Phase II of all collection runs (news, events, and both). Serper returns up to 10 results by default; higher values require a paid Serper plan. Recommended: 5–10.</p>
+        <h4>MAX_SEARCH_URLS — Phase II URL Crawl Limit</h4>
+        <p className="settings-description">How many Serper search result URLs are crawled per POI during Phase II (runs for all collection types). Serper returns up to 10 results; raise this only if you have a paid Serper plan. Range: 1–20, default: 10.</p>
         {maxSearchUrlsLoading ? <p>Loading...</p> : (
           <>
             <div className="config-row">
-              <label>Max Serper URLs</label>
+              <label>MAX_SEARCH_URLS</label>
               <input
                 type="number"
                 min="1"
@@ -1055,7 +1055,7 @@ function DataCollectionSettings() {
               <span className="config-hint">Range: 1–20 (default: 10)</span>
             </div>
             <button className="action-btn primary" onClick={handleSaveMaxSearchUrls} disabled={maxSearchUrlsSaving}>
-              {maxSearchUrlsSaving ? 'Saving...' : 'Save Serper URL Limit'}
+              {maxSearchUrlsSaving ? 'Saving...' : 'Save'}
             </button>
           </>
         )}
