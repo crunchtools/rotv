@@ -23,10 +23,9 @@ RUN npm install -g playwright@1.58.1 && npx playwright install chromium
 
 # Add PostgreSQL 17 + PostGIS from official pgdg repository (no RHSM needed)
 # EPEL provides PostGIS dependencies (hdf5, xerces-c, boost-serialization)
-# boost-serialization must be installed explicitly before postgis35_17 (EPEL 10 dep)
+# EPEL must be installed first so dnf can resolve boost-serialization as a transitive dep
 RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
     dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
-    dnf install -y boost-serialization && \
     dnf install -y postgresql17-server postgresql17 postgis35_17 && \
     dnf clean all
 
