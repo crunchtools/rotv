@@ -23,7 +23,7 @@ describe('Serper Service', () => {
           .mockResolvedValueOnce({
             rows: [{ value: 'test-api-key-123' }]
           })
-          .mockResolvedValueOnce({ rows: [] }) // serper_max_results (defaults to 3)
+          .mockResolvedValueOnce({ rows: [] })
           .mockResolvedValueOnce({
             rows: [{ name: 'Cuyahoga Valley National Park' }]
           })
@@ -71,7 +71,7 @@ describe('Serper Service', () => {
           .mockResolvedValueOnce({
             rows: [{ value: 'test-api-key-123' }]
           })
-          .mockResolvedValueOnce({ rows: [] }) // serper_max_results (defaults to 3)
+          .mockResolvedValueOnce({ rows: [] })
           .mockResolvedValueOnce({
             rows: [
               { name: 'Cuyahoga Falls' },
@@ -103,7 +103,7 @@ describe('Serper Service', () => {
           .mockResolvedValueOnce({
             rows: [{ value: 'test-api-key-123' }]
           })
-          .mockResolvedValueOnce({ rows: [] }) // serper_max_results (defaults to 3)
+          .mockResolvedValueOnce({ rows: [] })
           .mockResolvedValueOnce({
             rows: [{ name: 'Cuyahoga Valley National Park' }]
           })
@@ -173,7 +173,7 @@ describe('Serper Service', () => {
       const mockPool = {
         query: vi.fn()
           .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
-          .mockResolvedValueOnce({ rows: [] }) // serper_max_results (defaults to 3)
+          .mockResolvedValueOnce({ rows: [] })
           .mockResolvedValueOnce({ rows: [{ name: 'Cuyahoga Valley National Park' }] })
       };
 
@@ -184,7 +184,6 @@ describe('Serper Service', () => {
 
       const result = await searchNewsUrls(mockPool, pointPoi);
 
-      // Verify the boundary query used poi_roles check (not poi_type)
       const boundaryQueryCall = mockPool.query.mock.calls[2][0];
       expect(boundaryQueryCall).toContain("'point' = ANY(poi_roles)");
       expect(boundaryQueryCall).toContain("'boundary' = ANY(boundary.poi_roles)");
