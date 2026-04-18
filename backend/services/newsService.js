@@ -236,7 +236,7 @@ function parseGeminiResponse(responseText) {
  * Build a Gemini prompt for a single rendered page.
  * No multi-page headers, no concatenation — one page per call.
  *
- * @param {Object} poi - POI object (name, poi_type, primary_activities)
+ * @param {Object} poi - POI object (name, poi_roles, primary_activities)
  * @param {string} url - The URL that was rendered
  * @param {string} markdown - Rendered page markdown
  * @param {Array} dateHints - chrono-node date hints from this page
@@ -252,7 +252,7 @@ function buildSinglePagePrompt(poi, url, markdown, contentType, confidence) {
 
   let prompt = `Extract ${contentType === 'event' ? 'events' : 'news'} from this single web page about "${poi.name}".
 
-POI: "${poi.name}" (${poi.poi_type})
+POI: "${poi.name}" (roles: ${(poi.poi_roles || []).join(', ') || 'unknown'})
 Activities: ${activities}
 Source URL: ${url}
 
@@ -497,13 +497,23 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
 /**
  * Collect news and events for a specific POI
  * @param {Pool} pool - Database connection pool
- * @param {Object} poi - POI object with id, name, poi_type, primary_activities, more_info_link, events_url, news_url
+ * @param {Object} poi - POI object with id, name, poi_roles, primary_activities, more_info_link, events_url, news_url
  * @param {Object} sheets - Optional sheets client for API key restore
  * @param {string} timezone - IANA timezone string (e.g., 'America/New_York')
  * @param {string} collectionType - 'news', 'events', or 'both' to indicate what's being collected
  * @returns {Object} - { news: [], events: [] }
  */
 export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null) {
+  // Only collect news/events for POIs with roles: point, organization, or river
+  const collectibleRoles = ['point', 'organization', 'river'];
+  const poiRoles = poi.poi_roles || [];
+  if (!poiRoles.some(r => collectibleRoles.includes(r))) {
+    const jobId = tracker.getCollectionProgress(poi.id)?.jobId;
+    const jobType = tracker.getCollectionProgress(poi.id)?.jobType || 'news';
+    logInfo(jobId, jobType, poi.id, poi.name, `Skipping: no collectible role (roles: ${poiRoles.join(', ') || 'none'})`);
+    return { news: [], events: [], metadata: { skipped: true, reason: 'no collectible role' } };
+  }
+
   const activities = poi.primary_activities || 'None specified';
   const website = poi.more_info_link || 'No website available';
   const eventsUrl = poi.events_url || 'No dedicated events page';
@@ -679,7 +689,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
         reportProgress('Phase II: [Search] Querying Serper for external coverage');
         logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
 
-        const serperResult = await searchNewsUrls(pool, poi);
+        const serperResult = await searchNewsUrls(pool, poi, { contentType: 'news' });
         logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] "${serperResult.query}" → ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`);
         reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
 
@@ -700,8 +710,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
             } catch { return false; }
           });
 
-          // Use all Serper results (up to 10 — Serper's default page size)
-          const MAX_PHASE2_URLS = 10;
+          // Serper is configured to return 3 results max
+          const MAX_PHASE2_URLS = 3;
           const urlsToProcess = externalUrls.slice(0, MAX_PHASE2_URLS);
           if (externalUrls.length > MAX_PHASE2_URLS) {
             logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_PHASE2_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
@@ -760,6 +770,93 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       } catch (serperError) {
         if (serperError.message === 'Collection cancelled by user') throw serperError;
         logWarn(jobId, jobType, poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`);
+      }
+    }
+
+    // PHASE II: External events via Serper — per-URL pipeline
+    if (collectionType !== 'news') {
+      try {
+        updateProgress(poi.id, {
+          phase: 'search',
+          message: 'Searching for external events coverage...',
+          steps: ['Initialized', 'Phase I complete', 'Searching external events']
+        });
+
+        reportProgress('Phase II: [Search] Querying Serper for external events');
+        logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] Querying Serper for external events');
+
+        const serperEventsResult = await searchNewsUrls(pool, poi, { contentType: 'events' });
+        logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] "${serperEventsResult.query}" → ${serperEventsResult.urls.length} URLs (grounded: ${serperEventsResult.grounded})`);
+        reportProgress(`Phase II: [Search] ${serperEventsResult.urls.length} event URLs (query: "${serperEventsResult.query}")`);
+
+        if (serperEventsResult.urls.length > 0) {
+          const poiOrigins = new Set();
+          for (const u of [website, eventsUrl, newsUrl]) {
+            try { poiOrigins.add(new URL(u).origin); } catch { /* skip invalid */ }
+          }
+          const externalEventUrls = serperEventsResult.urls.filter(urlData => {
+            try {
+              const origin = new URL(urlData.url).origin;
+              if (poiOrigins.has(origin)) {
+                logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: Skip same-origin URL: ${urlData.url}`);
+                return false;
+              }
+              return true;
+            } catch { return false; }
+          });
+
+          const MAX_PHASE2_EVENT_URLS = 3;
+          const eventUrlsToProcess = externalEventUrls.slice(0, MAX_PHASE2_EVENT_URLS);
+
+          let renderedEventCount = 0;
+          let phase2EventPagesCollected = 0;
+
+          const phase2EventResults = await runConcurrent(eventUrlsToProcess.map(urlData => async () => {
+            checkCancellation();
+            if (phase2EventPagesCollected >= MAX_PHASE2_PAGES) return [];
+
+            reportProgress(`Phase II Events: [Classify] ${urlData.url}`);
+            const crawlResult = await crawlWithClassification(pool, urlData.url, 'event', poi, sheets, checkCancellation, {
+              maxDepth: 1,
+              maxPages: 6,
+              maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2EventPagesCollected),
+              phase: 'Phase II Events',
+              jobId,
+              jobType
+            });
+
+            renderedEventCount++;
+            const pageItems = [];
+            for (const page of crawlResult.pages) {
+              checkCancellation();
+              if (phase2EventPagesCollected >= MAX_PHASE2_PAGES) break;
+              const items = await processOneUrl(pool, page.url, poi, 'event', { phase: 'Phase II Events', jobId, jobType, timezone, confidence: '95%' });
+              pageItems.push(...(items.events || []));
+              phase2EventPagesCollected++;
+            }
+            return pageItems;
+          }), 3);
+
+          for (const itemsOrError of phase2EventResults) {
+            if (!itemsOrError || itemsOrError instanceof Error) continue;
+            const newEvents = itemsOrError.filter(item => {
+              const titleLower = item.title.toLowerCase().trim();
+              return !allEvents.some(e => e.title.toLowerCase().trim() === titleLower);
+            });
+            if (newEvents.length > 0) {
+              logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: Adding ${newEvents.length} unique items`);
+              allEvents.push(...newEvents);
+            }
+          }
+
+          reportProgress(`Phase II Events: Processed ${renderedEventCount} Serper URLs, ${phase2EventPagesCollected} pages collected`);
+          logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: Processed ${renderedEventCount} of ${serperEventsResult.urls.length} Serper URLs, ${phase2EventPagesCollected} pages collected`);
+        } else {
+          logInfo(jobId, jobType, poi.id, poi.name, 'Phase II Events: [Search] No external event URLs found');
+        }
+      } catch (serperError) {
+        if (serperError.message === 'Collection cancelled by user') throw serperError;
+        logWarn(jobId, jobType, poi.id, poi.name, `Phase II Events: Search failed: ${serperError.message}`);
       }
     }
 
@@ -1288,7 +1385,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
 
   // Get POI details for remaining POIs
   const poisResult = await pool.query(
-    'SELECT id, name, poi_type, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = ANY($1)',
+    'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = ANY($1)',
     [remainingPoiIds]
   );
   const pois = poisResult.rows;
@@ -1475,9 +1572,9 @@ export async function getAllPoisForCollection(pool) {
      WHERE (deleted IS NULL OR deleted = FALSE)
        ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
      ORDER BY
-       CASE poi_type
-         WHEN 'point' THEN 1
-         WHEN 'boundary' THEN 2
+       CASE
+         WHEN 'point' = ANY(poi_roles) THEN 1
+         WHEN 'boundary' = ANY(poi_roles) THEN 2
          ELSE 3
        END,
        name`,
@@ -1574,7 +1671,7 @@ export async function getEventsForPoi(pool, poiId, upcomingOnly = true) {
 export async function getRecentNews(pool, limit = 20) {
   const result = await pool.query(`
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_type
+           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
@@ -1593,7 +1690,7 @@ export async function getRecentNews(pool, limit = 20) {
 export async function getUpcomingEvents(pool, daysAhead = 30) {
   const result = await pool.query(`
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-           e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type
+           e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_events e
     JOIN pois p ON e.poi_id = p.id
     WHERE e.start_date >= CURRENT_DATE

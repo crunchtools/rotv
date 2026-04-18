@@ -226,7 +226,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
             <span className="poi-type-badge virtual">
               Organization
             </span>
-          ) : destination.poi_type === 'point' && destination.status_url ? (
+          ) : destination.poi_roles?.includes('point') && destination.status_url ? (
             <span className="poi-type-badge mtb">
               MTB Trailhead
             </span>
@@ -3562,11 +3562,11 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         ) : media.length > 0 ? (
           <Mosaic media={media} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
         ) : !mediaLoading && destination?.has_primary_image ? (
-          <div className={`sidebar-image ${destination?.poi_type === 'virtual' ? 'virtual-thumbnail' : ''}`}>
+          <div className={`sidebar-image ${destination?.poi_roles?.includes('organization') ? 'virtual-thumbnail' : ''}`}>
             <img
               src={`/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`}
               alt={destination?.name}
-              className={destination?.poi_type === 'virtual' ? 'logo-image' : ''}
+              className={destination?.poi_roles?.includes('organization') ? 'logo-image' : ''}
               onError={(e) => {
                 e.target.style.display = 'none';
                 e.target.parentElement.style.display = 'none';
