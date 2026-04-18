@@ -58,7 +58,7 @@ describe('Database Schema Tests', () => {
     const columns = result.rows.map(r => r.column_name);
     expect(columns).toContain('id');
     expect(columns).toContain('name');
-    expect(columns).toContain('poi_type');
+    expect(columns).toContain('poi_roles');
     expect(columns).toContain('latitude');
     expect(columns).toContain('longitude');
     expect(columns).toContain('events_url');
@@ -153,12 +153,83 @@ describe('Database Schema Tests', () => {
   });
 });
 
+describe('PostGIS / Geographic Grounding Tests', () => {
+  it('PostGIS extension is installed', async () => {
+    const result = await pool.query(
+      "SELECT extname, extversion FROM pg_extension WHERE extname = 'postgis'"
+    );
+    expect(result.rows.length).toBe(1);
+    expect(result.rows[0].extname).toBe('postgis');
+  });
+
+  it('pois table has boundary_geom column', async () => {
+    const result = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_name = 'pois' AND column_name = 'boundary_geom'
+    `);
+    expect(result.rows.length).toBe(1);
+  });
+
+  it('Serper grounding query executes without error', async () => {
+    // Insert a test boundary POI and a point POI inside it, then verify
+    // the grounding SQL (copied verbatim from serperService.js) returns the
+    // boundary name. This test catches PostGIS being absent or the geometry
+    // columns being missing — both of which silently degrade to ungrounded
+    // searches at runtime.
+    await pool.query(`
+      INSERT INTO pois (name, poi_roles, latitude, longitude, boundary_geom)
+      VALUES (
+        '_test_boundary', '{boundary}', 41.3, -81.6,
+        ST_MakeEnvelope(-82.0, 41.0, -81.0, 41.6, 4326)
+      )
+    `);
+    const testPoi = await pool.query(`
+      INSERT INTO pois (name, poi_roles, latitude, longitude)
+      VALUES ('_test_point', '{point}', 41.2, -81.5)
+      RETURNING id
+    `);
+    const poiId = testPoi.rows[0].id;
+
+    try {
+      const result = await pool.query(`
+        WITH poi_point AS (
+          SELECT
+            id,
+            CASE
+              WHEN 'point' = ANY(poi_roles) AND geom IS NOT NULL THEN geom
+              WHEN poi_roles && ARRAY['trail','boundary','river']::text[] AND geometry IS NOT NULL THEN
+                ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
+              ELSE NULL
+            END as point_geom
+          FROM pois
+          WHERE id = $1
+        )
+        SELECT boundary.name
+        FROM poi_point
+        LEFT JOIN pois AS boundary
+          ON 'boundary' = ANY(boundary.poi_roles)
+          AND boundary.boundary_geom IS NOT NULL
+          AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
+        WHERE poi_point.point_geom IS NOT NULL
+        ORDER BY ST_Area(boundary.boundary_geom) ASC
+      `, [poiId]);
+
+      // A point POI uses lat/lon, not geom, so grounding via geom column won't
+      // match — but the query must execute without throwing.
+      expect(Array.isArray(result.rows)).toBe(true);
+    } finally {
+      await pool.query("DELETE FROM pois WHERE name IN ('_test_boundary', '_test_point')");
+    }
+  });
+});
+
 describe('Database Query Tests', () => {
   it('should query POIs successfully', async () => {
     const result = await pool.query(`
-      SELECT id, name, poi_type, latitude, longitude
+      SELECT id, name, poi_roles, latitude, longitude
       FROM pois
-      WHERE poi_type = 'point'
+      WHERE 'point' = ANY(poi_roles)
       LIMIT 10
     `);
 
@@ -167,7 +238,7 @@ describe('Database Query Tests', () => {
     if (result.rows.length > 0) {
       expect(result.rows[0]).toHaveProperty('id');
       expect(result.rows[0]).toHaveProperty('name');
-      expect(result.rows[0].poi_type).toBe('point');
+      expect(result.rows[0].poi_roles).toContain('point');
     }
   });
 

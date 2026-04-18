@@ -1324,7 +1324,6 @@ function AppContent() {
       more_info_link: '',
       events_url: '',
       news_url: '',
-      poi_type: 'point',
       poi_roles: ['organization'],
       _poisInBounds: poisInBounds,
       _selectedPoiIds: new Set(poisInBounds.map(p => p.id))
@@ -1370,7 +1369,6 @@ function AppContent() {
         brief_description: organizationData.brief_description,
         property_owner: organizationData.property_owner,
         more_info_link: organizationData.more_info_link,
-        poi_type: 'point',
         poi_roles: ['organization']
       })
     });
@@ -1912,7 +1910,7 @@ function AppContent() {
             setCurrentMtbIndex(newIndex);
 
             // Select the next/previous trail
-            if (nextTrail.poi_roles?.includes('point') || nextTrail.poi_type === 'point') {
+            if (nextTrail.poi_roles?.includes('point')) {
               const fullDestination = destinations?.find(d => d.id === nextTrail.id);
               if (fullDestination) {
                 setSelectedDestination(fullDestination);

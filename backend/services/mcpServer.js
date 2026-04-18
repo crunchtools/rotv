@@ -63,11 +63,11 @@ function registerTools(server, pool, boss) {
 
   server.tool(
     'poi_list',
-    'List POIs with optional type filter',
-    { type: z.enum(['point', 'trail', 'river', 'boundary', 'virtual']).optional().describe('Filter by POI type') },
-    async ({ type }) => {
+    'List POIs with optional role filter',
+    { role: z.enum(['point', 'trail', 'river', 'boundary', 'organization']).optional().describe('Filter by POI role') },
+    async ({ role }) => {
       let query = `
-        SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude,
+        SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude,
                p.brief_description, p.news_url, p.events_url, p.status_url,
                e.name as era_name
         FROM pois p
@@ -75,11 +75,11 @@ function registerTools(server, pool, boss) {
         WHERE (p.deleted IS NULL OR p.deleted = FALSE)
       `;
       const params = [];
-      if (type) {
-        params.push(type);
-        query += ` AND p.poi_type = $1`;
+      if (role) {
+        params.push(role);
+        query += ` AND $1 = ANY(p.poi_roles)`;
       }
-      query += ` ORDER BY p.poi_type, p.name`;
+      query += ` ORDER BY p.poi_roles, p.name`;
       const result = await pool.query(query, params);
       return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
     }
@@ -94,7 +94,7 @@ function registerTools(server, pool, boss) {
         SELECT p.*, e.name as era_name, o.name as owner_name
         FROM pois p
         LEFT JOIN eras e ON p.era_id = e.id
-        LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
+        LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
         WHERE p.id = $1
       `, [id]);
       if (result.rows.length === 0) {
@@ -174,7 +174,7 @@ function registerTools(server, pool, boss) {
     { query: z.string().describe('Name substring to search for') },
     async ({ query }) => {
       const result = await pool.query(`
-        SELECT id, name, poi_type, brief_description
+        SELECT id, name, poi_roles, brief_description
         FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
           AND LOWER(name) LIKE $1
@@ -187,33 +187,33 @@ function registerTools(server, pool, boss) {
 
   server.tool(
     'poi_create',
-    'Create a new POI (point of interest or virtual organization)',
+    'Create a new POI (point of interest or organization)',
     {
       name: z.string().describe('POI name'),
-      poi_type: z.enum(['point', 'trail', 'river', 'boundary', 'virtual']).describe('POI type (use virtual for organizations)'),
+      poi_roles: z.array(z.enum(['point', 'trail', 'river', 'boundary', 'organization'])).describe('POI roles (use organization for organizations; a POI can have multiple roles)'),
       brief_description: z.string().optional().describe('Short description'),
-      latitude: z.number().optional().describe('Latitude (not needed for virtual POIs)'),
-      longitude: z.number().optional().describe('Longitude (not needed for virtual POIs)'),
+      latitude: z.number().optional().describe('Latitude (not needed for organization-only POIs)'),
+      longitude: z.number().optional().describe('Longitude (not needed for organization-only POIs)'),
       news_url: z.string().url().optional().describe('URL for news collection'),
       events_url: z.string().url().optional().describe('URL for events collection'),
       status_url: z.string().url().optional().describe('URL for trail status collection'),
       more_info_link: z.string().url().optional().describe('External link for more info'),
-      owner_id: z.number().optional().describe('ID of virtual POI that owns/manages this POI')
+      owner_id: z.number().optional().describe('ID of organization POI that owns/manages this POI')
     },
     async (args) => {
-      if (args.poi_type !== 'virtual' && (args.latitude === undefined || args.longitude === undefined)) {
-        return { content: [{ type: 'text', text: `POI type '${args.poi_type}' requires latitude and longitude.` }], isError: true };
+      if (!args.poi_roles?.includes('organization') && (args.latitude === undefined || args.longitude === undefined)) {
+        return { content: [{ type: 'text', text: `POI roles '${(args.poi_roles || []).join(', ')}' require latitude and longitude.` }], isError: true };
       }
 
       const fields = Object.keys(args).filter(key => args[key] !== undefined);
       const values = fields.map(key => args[key]);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
       const result = await pool.query(
-        `INSERT INTO pois (${fields.join(', ')}) VALUES (${placeholders}) RETURNING id, name, poi_type`,
+        `INSERT INTO pois (${fields.join(', ')}) VALUES (${placeholders}) RETURNING id, name, poi_roles`,
         values
       );
       const row = result.rows[0];
-      return { content: [{ type: 'text', text: `Created POI #${row.id}: ${row.name} (${row.poi_type})` }] };
+      return { content: [{ type: 'text', text: `Created POI #${row.id}: ${row.name} (${(row.poi_roles || []).join(', ')})` }] };
     }
   );
 
@@ -730,7 +730,7 @@ function registerTools(server, pool, boss) {
       const result = await pool.query(`
         SELECT a.id, a.virtual_poi_id, a.physical_poi_id, a.association_type,
                vp.name as virtual_poi_name, pp.name as physical_poi_name,
-               pp.poi_type as physical_poi_type
+               pp.poi_roles as physical_poi_roles
         FROM poi_associations a
         LEFT JOIN pois vp ON a.virtual_poi_id = vp.id
         LEFT JOIN pois pp ON a.physical_poi_id = pp.id
@@ -839,9 +839,9 @@ function registerTools(server, pool, boss) {
             SELECT id FROM pois
             WHERE (deleted IS NULL OR deleted = FALSE)
             ORDER BY
-              CASE poi_type
-                WHEN 'point' THEN 1
-                WHEN 'boundary' THEN 2
+              CASE
+                WHEN 'point' = ANY(poi_roles) THEN 1
+                WHEN 'boundary' = ANY(poi_roles) THEN 2
                 ELSE 3
               END,
               name

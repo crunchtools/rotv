@@ -451,7 +451,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
     let trails;
     if (poiIds && poiIds.length > 0) {
       const trailsQuery = await pool.query(`
-        SELECT id, name, poi_type, status_url, brief_description
+        SELECT id, name, poi_roles, status_url, brief_description
         FROM pois
         WHERE id = ANY($1)
         AND status_url IS NOT NULL
@@ -461,7 +461,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
       trails = trailsQuery.rows;
     } else {
       const trailsQuery = await pool.query(`
-        SELECT id, name, poi_type, status_url, brief_description
+        SELECT id, name, poi_roles, status_url, brief_description
         FROM pois
         WHERE status_url IS NOT NULL
         AND status_url != ''
@@ -583,7 +583,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
       onItemStart: async (poiId, { slotId, jobId: jid }) => {
         // Get trail data for slot assignment
         const poiResult = await pool.query(`
-          SELECT id, name, poi_type, status_url, brief_description
+          SELECT id, name, poi_roles, status_url, brief_description
           FROM pois WHERE id = $1
         `, [poiId]);
 
@@ -607,7 +607,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
       collectFn: async (poiId, { index, total }) => {
         // Get trail data
         const poiResult = await pool.query(`
-          SELECT id, name, poi_type, status_url, brief_description
+          SELECT id, name, poi_roles, status_url, brief_description
           FROM pois WHERE id = $1
         `, [poiId]);
 

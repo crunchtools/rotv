@@ -17,7 +17,7 @@ export const COLLECTION_TYPES = [
     promptKeys: [{
       key: 'news_collection_prompt',
       label: 'News Collection Prompt',
-      placeholders: ['{{name}}', '{{poi_type}}', '{{timezone}}', '{{website}}', '{{eventsUrl}}', '{{newsUrl}}']
+      placeholders: ['{{name}}', '{{poi_roles}}', '{{timezone}}', '{{website}}', '{{eventsUrl}}', '{{newsUrl}}']
     }],
     scheduleJobName: 'news-collection',
     schedule: '0 6 * * *',

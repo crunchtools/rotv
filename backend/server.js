@@ -214,9 +214,9 @@ async function importGeoJSONFeatures(client) {
 
     for (const trail of consolidatedTrails) {
       await client.query(
-        `INSERT INTO pois (name, poi_type, geometry)
-         VALUES ($1, 'trail', $2)
-         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry WHERE pois.poi_type = 'trail'`,
+        `INSERT INTO pois (name, poi_roles, geometry)
+         VALUES ($1, '{trail}', $2)
+         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry`,
         [trail.name, JSON.stringify(trail.geometry)]
       );
     }
@@ -229,9 +229,9 @@ async function importGeoJSONFeatures(client) {
 
     for (const river of consolidatedRivers) {
       await client.query(
-        `INSERT INTO pois (name, poi_type, geometry)
-         VALUES ($1, 'river', $2)
-         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry WHERE pois.poi_type = 'river'`,
+        `INSERT INTO pois (name, poi_roles, geometry)
+         VALUES ($1, '{river}', $2)
+         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry`,
         [river.name, JSON.stringify(river.geometry)]
       );
     }
@@ -244,9 +244,9 @@ async function importGeoJSONFeatures(client) {
     for (const feature of boundaryData.features) {
       const name = feature.properties?.name || 'Park Boundary';
       await client.query(
-        `INSERT INTO pois (name, poi_type, geometry)
-         VALUES ($1, 'boundary', $2)
-         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry WHERE pois.poi_type = 'boundary'`,
+        `INSERT INTO pois (name, poi_roles, geometry)
+         VALUES ($1, '{boundary}', $2)
+         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry`,
         [name, JSON.stringify(feature.geometry)]
       );
     }
@@ -297,9 +297,6 @@ async function initDatabase() {
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
 
-        -- POI type: 'point', 'trail', 'river', or 'boundary'
-        poi_type VARCHAR(50) NOT NULL DEFAULT 'point',
-
         -- Point geometry (for point POIs)
         latitude DECIMAL(10, 8),
         longitude DECIMAL(11, 8),
@@ -334,9 +331,9 @@ async function initDatabase() {
       )
     `);
 
-    // Create index for faster lookups by type
+    // Create index for faster lookups by role (GIN index on array)
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_pois_type ON pois(poi_type)
+      CREATE INDEX IF NOT EXISTS idx_pois_roles ON pois USING GIN(poi_roles)
     `);
 
     // Create index for owner lookups
@@ -344,21 +341,14 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_pois_owner_id ON pois(owner_id)
     `);
 
-    // Create unique constraint on (name, poi_type) to allow same-named features of different types
-    // Only applies to non-deleted POIs (partial index) to allow reusing names after deletion
+    // Drop old poi_type-based constraints if they exist (cleanup only, no replacement)
     await client.query(`
       DO $$ BEGIN
-        -- Drop old constraint if it exists
         IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pois_name_poi_type_key') THEN
           ALTER TABLE pois DROP CONSTRAINT pois_name_poi_type_key;
         END IF;
-        -- Drop old name-only constraint if it exists
+        ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_poi_type_active_key;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_key;
-        -- Create partial unique index that excludes deleted POIs
-        IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'pois_name_poi_type_active_key') THEN
-          CREATE UNIQUE INDEX pois_name_poi_type_active_key ON pois(name, poi_type)
-          WHERE (deleted IS NULL OR deleted = FALSE);
-        END IF;
       END $$;
     `);
 
@@ -372,11 +362,11 @@ async function initDatabase() {
     if (destTableExists.rows[0].exists) {
       // Migrate destinations to pois table
       const migrated = await client.query(`
-        INSERT INTO pois (name, poi_type, latitude, longitude, property_owner, brief_description,
+        INSERT INTO pois (name, poi_roles, latitude, longitude, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
                           cell_signal, more_info_link, has_primary_image,
                           deleted, created_at, updated_at)
-        SELECT name, 'point', latitude, longitude, property_owner, brief_description,
+        SELECT name, '{point}', latitude, longitude, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
                cell_signal, more_info_link, has_primary_image,
                COALESCE(deleted, FALSE),
@@ -400,12 +390,12 @@ async function initDatabase() {
     if (linearTableExists.rows[0].exists) {
       // Migrate linear_features to pois table
       const migrated = await client.query(`
-        INSERT INTO pois (name, poi_type, geometry, property_owner, brief_description,
+        INSERT INTO pois (name, poi_roles, geometry, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
                           cell_signal, more_info_link, length_miles, difficulty,
                           has_primary_image,
                           deleted, created_at, updated_at)
-        SELECT name, feature_type, geometry, property_owner, brief_description,
+        SELECT name, ARRAY[feature_type]::text[], geometry, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
                cell_signal, more_info_link, length_miles, difficulty,
                has_primary_image,
@@ -414,8 +404,7 @@ async function initDatabase() {
         FROM linear_features
         ON CONFLICT (name) DO UPDATE SET
           geometry = EXCLUDED.geometry,
-          poi_type = EXCLUDED.poi_type
-        WHERE pois.poi_type IN ('trail', 'river', 'boundary')
+          poi_roles = EXCLUDED.poi_roles
         RETURNING id
       `);
       if (migrated.rowCount > 0) {
@@ -644,7 +633,7 @@ async function initDatabase() {
     `);
     // Set default boundary_type for existing boundaries
     await client.query(`
-      UPDATE pois SET boundary_type = 'cvnp' WHERE poi_type = 'boundary' AND boundary_type IS NULL
+      UPDATE pois SET boundary_type = 'cvnp' WHERE 'boundary' = ANY(poi_roles) AND boundary_type IS NULL
     `);
 
     // Add events_url and news_url columns for targeted AI Research
@@ -882,7 +871,7 @@ app.get('/api/pois', async (req, res) => {
     const { type, role } = req.query;
 
     let query = `
-      SELECT p.id, p.name, p.poi_type, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -901,10 +890,10 @@ app.get('/api/pois', async (req, res) => {
       query += ` AND $${params.length} = ANY(p.poi_roles)`;
     } else if (type) {
       params.push(type);
-      query += ` AND p.poi_type = $${params.length}`;
+      query += ` AND $${params.length} = ANY(p.poi_roles)`;
     }
 
-    query += ` ORDER BY p.poi_type, p.name`;
+    query += ` ORDER BY p.poi_roles, p.name`;
 
     const poisQuery = await pool.query(query, params);
     res.json(poisQuery.rows);
@@ -917,7 +906,7 @@ app.get('/api/pois', async (req, res) => {
 app.get('/api/pois/:id', async (req, res) => {
   try {
     const poiQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_type, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -1602,7 +1591,7 @@ app.get('/api/filters', async (req, res) => {
     const owners = await pool.query(`
       SELECT DISTINCT o.id, o.name
       FROM pois o
-      WHERE o.poi_type = 'virtual'
+      WHERE 'organization' = ANY(o.poi_roles)
         AND (o.deleted IS NULL OR o.deleted = FALSE)
         AND EXISTS (SELECT 1 FROM pois p WHERE p.owner_id = o.id)
       ORDER BY o.name
@@ -1629,7 +1618,7 @@ app.get('/api/owner-organizations', async (req, res) => {
     const organizationsQuery = await pool.query(`
       SELECT id, name, brief_description
       FROM pois
-      WHERE poi_type = 'virtual'
+      WHERE 'organization' = ANY(poi_roles)
         AND (deleted IS NULL OR deleted = FALSE)
       ORDER BY name
     `);
@@ -1646,8 +1635,8 @@ app.get('/api/pois/:id/associations', async (req, res) => {
     const { id } = req.params;
     const associationsQuery = await pool.query(`
       SELECT a.id, a.virtual_poi_id, a.physical_poi_id, a.association_type,
-             vp.name as virtual_poi_name, vp.poi_type as virtual_poi_type,
-             pp.name as physical_poi_name, pp.poi_type as physical_poi_type,
+             vp.name as virtual_poi_name, vp.poi_roles as virtual_poi_roles,
+             pp.name as physical_poi_name, pp.poi_roles as physical_poi_roles,
              a.created_at, a.updated_at
       FROM poi_associations a
       LEFT JOIN pois vp ON a.virtual_poi_id = vp.id
@@ -1701,7 +1690,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
 
     // Find virtual POIs that have at least one associated physical POI within bounds
     const virtualPoisQuery = await pool.query(`
-      SELECT DISTINCT vp.id, vp.name, vp.poi_type, vp.property_owner,
+      SELECT DISTINCT vp.id, vp.name, vp.poi_roles, vp.property_owner,
              vp.brief_description, vp.era_id, e.name as era_name, vp.era, vp.historical_description,
              vp.primary_activities, vp.surface, vp.pets, vp.cell_signal,
              vp.more_info_link, vp.has_primary_image,
@@ -1711,7 +1700,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
       JOIN poi_associations a ON vp.id = a.virtual_poi_id
       JOIN pois pp ON a.physical_poi_id = pp.id
       LEFT JOIN eras e ON vp.era_id = e.id
-      WHERE vp.poi_type = 'virtual'
+      WHERE 'organization' = ANY(vp.poi_roles)
         AND (vp.deleted IS NULL OR vp.deleted = FALSE)
         AND (pp.deleted IS NULL OR pp.deleted = FALSE)
         AND pp.latitude IS NOT NULL
@@ -1732,16 +1721,16 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
 app.get('/api/destinations', async (req, res) => {
   try {
     const destinationsQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude,
+      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
+      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
-      WHERE p.poi_type = 'point'
+      WHERE 'point' = ANY(p.poi_roles)
         AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY p.name
@@ -1756,14 +1745,14 @@ app.get('/api/destinations', async (req, res) => {
 app.get('/api/destinations/:id', async (req, res) => {
   try {
     const destinationQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_type, p.latitude, p.longitude,
+      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
+      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
       WHERE p.id = $1`,
       [req.params.id]
@@ -1782,7 +1771,7 @@ app.get('/api/destinations/:id', async (req, res) => {
 app.get('/api/linear-features', async (req, res) => {
   try {
     const linearFeaturesQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_type as feature_type, p.geometry,
+      SELECT p.id, p.name, p.poi_roles, p.geometry,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -1790,11 +1779,11 @@ app.get('/api/linear-features', async (req, res) => {
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
+      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
-      WHERE p.poi_type IN ('trail', 'river', 'boundary')
+      WHERE p.poi_roles && ARRAY['trail','river','boundary']::text[]
         AND (p.deleted IS NULL OR p.deleted = FALSE)
-      ORDER BY p.poi_type, p.name
+      ORDER BY p.poi_roles, p.name
     `);
     res.json(linearFeaturesQuery.rows);
   } catch (error) {
@@ -1806,7 +1795,7 @@ app.get('/api/linear-features', async (req, res) => {
 app.get('/api/linear-features/:id', async (req, res) => {
   try {
     const linearFeatureQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_type as feature_type, p.geometry,
+      SELECT p.id, p.name, p.poi_roles, p.geometry,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -1814,7 +1803,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND o.poi_type = 'virtual'
+      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
       WHERE p.id = $1`,
       [req.params.id]
@@ -1999,7 +1988,7 @@ app.get('/api/trails/mtb', async (req, res) => {
     const includeStatus = req.query.includeStatus === 'true';
 
     let query = `
-      SELECT id, name, brief_description, poi_type, status_url,
+      SELECT id, name, brief_description, poi_roles, status_url,
              latitude, longitude,
              length_miles, difficulty, surface, primary_activities,
              geometry
@@ -2065,7 +2054,7 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
       SELECT
         p.id,
         p.name,
-        p.poi_type,
+        p.poi_roles,
         p.latitude,
         p.longitude,
         p.geometry,
@@ -2086,7 +2075,7 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
       ) ts ON true
       WHERE p.status_url IS NOT NULL
         AND p.status_url != ''
-        AND p.poi_type = 'point'
+        AND 'point' = ANY(p.poi_roles)
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY p.name
     `);
@@ -2105,14 +2094,14 @@ app.get('/api/news/recent', async (req, res) => {
     const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.publication_date, n.date_confidence, n.collection_date,
-             p.id as poi_id, p.name as poi_name, p.poi_type,
+             p.id as poi_id, p.name as poi_name, p.poi_roles,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
       WHERE n.moderation_status IN ('published', 'auto_approved')
         AND (p.deleted IS NULL OR p.deleted = FALSE)
-      GROUP BY n.id, p.id, p.name, p.poi_type
+      GROUP BY n.id, p.id, p.name, p.poi_roles
       ORDER BY COALESCE(n.publication_date, n.collection_date::date) DESC, n.collection_date DESC
       LIMIT $1
     `, [limit]);
@@ -2130,7 +2119,7 @@ app.get('/api/events/upcoming', async (req, res) => {
     const tz = req.query.tz || 'America/New_York';
     const upcomingEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type,
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
@@ -2138,7 +2127,7 @@ app.get('/api/events/upcoming', async (req, res) => {
       WHERE e.moderation_status IN ('published', 'auto_approved')
         AND e.start_date >= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
-      GROUP BY e.id, p.id, p.name, p.poi_type
+      GROUP BY e.id, p.id, p.name, p.poi_roles
       ORDER BY e.start_date ASC
     `, [tz]);
     res.json(upcomingEventsQuery.rows);
@@ -2155,7 +2144,7 @@ app.get('/api/events/past', async (req, res) => {
     const tz = req.query.tz || 'America/New_York';
     const pastEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_type,
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
@@ -2163,7 +2152,7 @@ app.get('/api/events/past', async (req, res) => {
       WHERE e.moderation_status IN ('published', 'auto_approved')
         AND e.start_date < (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
-      GROUP BY e.id, p.id, p.name, p.poi_type
+      GROUP BY e.id, p.id, p.name, p.poi_roles
       ORDER BY e.start_date DESC
       LIMIT $1
     `, [limit, tz]);
@@ -2268,7 +2257,7 @@ app.get('/share/linear-feature/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const featureQuery = await pool.query(
-      `SELECT id, name, poi_type, brief_description FROM pois WHERE id = $1`,
+      `SELECT id, name, poi_roles, brief_description FROM pois WHERE id = $1`,
       [id]
     );
 
@@ -2353,7 +2342,7 @@ app.use(async (req, res, next) => {
     try {
       // Look up POI by matching slug against name
       const poisQuery = await pool.query(`
-        SELECT id, name, poi_type, brief_description
+        SELECT id, name, poi_roles, brief_description
         FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
       `);
