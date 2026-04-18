@@ -347,7 +347,7 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_pois_owner_id ON pois(owner_id)
     `);
 
-    // Drop old poi_type-based constraints if they exist (cleanup only, no replacement)
+    // Drop old poi_type-based constraints/indexes if they exist (cleanup only, no replacement)
     await client.query(`
       DO $$ BEGIN
         IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pois_name_poi_type_key') THEN
@@ -355,13 +355,14 @@ async function initDatabase() {
         END IF;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_poi_type_active_key;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_key;
+        DROP INDEX IF EXISTS pois_name_key;
       END $$;
     `);
 
     await client.query(`
       DO $$ BEGIN
         CREATE UNIQUE INDEX pois_name_key ON pois(name);
-      EXCEPTION WHEN unique_violation OR duplicate_object THEN
+      EXCEPTION WHEN unique_violation OR duplicate_table THEN
         NULL;
       END $$;
     `);
