@@ -133,11 +133,46 @@ export async function extractPageContent(url, options = {}) {
       const html = await page.content();
       const pageTitle = await page.title();
 
+      // Extract structured date metadata before Readability strips it.
+      // Collects from JSON-LD, OG/meta tags, and <time> elements — all inputs
+      // for the consensus date scoring pipeline in dateExtractor.js.
       const ogDates = await page.evaluate(() => {
-        const get = (prop) => document.querySelector(`meta[property="${prop}"]`)?.content || null;
+        // Meta tag helpers
+        const getMeta = (prop) => document.querySelector(`meta[property="${prop}"]`)?.content || null;
+        const getMetaName = (name) => document.querySelector(`meta[name="${name}"]`)?.content || null;
+
+        // JSON-LD: parse all ld+json blocks, collect date fields from any schema type
+        const jsonLdDates = [];
+        document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
+          try {
+            const data = JSON.parse(script.textContent);
+            const items = Array.isArray(data) ? data : [data];
+            for (const item of items) {
+              const candidates = [
+                item.datePublished,
+                item.dateModified,
+                item.startDate,
+                item['@graph']?.map?.(n => n.datePublished || n.startDate)
+              ].flat().filter(Boolean);
+              jsonLdDates.push(...candidates);
+            }
+          } catch { /* ignore malformed JSON-LD */ }
+        });
+
+        // <time> tags with datetime attribute
+        const timeDates = [];
+        document.querySelectorAll('time[datetime]').forEach(el => {
+          const dt = el.getAttribute('datetime');
+          if (dt) timeDates.push(dt);
+        });
+
         return {
-          publishedTime: get('article:published_time'),
-          modifiedTime: get('article:modified_time')
+          publishedTime: getMeta('article:published_time'),
+          modifiedTime: getMeta('article:modified_time'),
+          parselyPubDate: getMetaName('parsely-pub-date'),
+          dcDate: getMetaName('dc.date'),
+          jsonLdDates,
+          timeDates
         };
       });
 

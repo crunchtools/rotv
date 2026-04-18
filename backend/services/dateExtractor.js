@@ -152,6 +152,126 @@ export function findPublicationDate(text, title, timezone = 'America/New_York') 
 }
 
 /**
+ * Extract a date from a URL path using the pattern /YYYY/MM/DD/.
+ * Common on WordPress and news sites (e.g. /2024/03/15/article-slug/).
+ * @param {string} url - The article URL
+ * @returns {string|null} 'YYYY-MM-DD' or null
+ */
+export function extractUrlDate(url) {
+  if (!url) return null;
+  let path;
+  try { path = new URL(url).pathname; } catch { path = url; }
+  // Match /YYYY/MM/DD/ (with trailing slash) or /YYYY/MM/DD at end of path
+  const match = path.match(/\/(\d{4})\/(\d{2})\/(\d{2})(?:\/|$)/);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  // Sanity-check the values
+  const year = parseInt(y, 10);
+  const month = parseInt(m, 10);
+  const day = parseInt(d, 10);
+  if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Normalize raw date strings from all extraction sources to ISO 8601 (YYYY-MM-DD).
+ * Unparseable strings are discarded. This is the normalization step between
+ * extraction and consensus scoring.
+ *
+ * @param {Object} rawSources - Raw extracted date strings by source
+ * @param {string[]} rawSources.jsonLd   - Raw strings from JSON-LD
+ * @param {string|null} rawSources.llm   - Raw string from LLM extraction
+ * @param {string[]} rawSources.meta     - Raw strings from meta tags
+ * @param {string[]} rawSources.timeTags - Raw strings from <time> elements
+ * @param {string|null} rawSources.url   - Raw string from URL pattern
+ * @param {string} [timezone]            - IANA timezone for chrono-node parsing
+ * @returns {Object} Normalized sources with only valid YYYY-MM-DD strings
+ */
+export function normalizeDateSources(rawSources = {}, timezone = 'America/New_York') {
+  const norm = (raw) => (raw ? parseDate(String(raw), timezone) : null);
+  const normList = (arr) => (arr || []).map(norm).filter(Boolean);
+
+  return {
+    jsonLd:   normList(rawSources.jsonLd),
+    llm:      norm(rawSources.llm),
+    meta:     normList(rawSources.meta),
+    timeTags: normList(rawSources.timeTags),
+    url:      norm(rawSources.url)
+  };
+}
+
+/**
+ * Consensus date scoring across multiple extraction sources.
+ *
+ * Weights:
+ *   JSON-LD datePublished / startDate  — 3 pts (most authoritative structured data)
+ *   LLM extraction                      — 2 pts (model reasoning over raw text)
+ *   Meta tags (OG, Parsely, DC)         — 1 pt  (common but editable by CMS)
+ *   HTML <time datetime>                — 1 pt  (structural HTML, usually reliable)
+ *   URL path /YYYY/MM/DD/               — 1 pt  (static, never wrong when present)
+ *
+ * A date that accumulates ≥ 4 pts is "verified" (stored as date_confidence='exact').
+ * A date that accumulates 1-3 pts is "estimated" (date_confidence='estimated').
+ * No date → date_confidence='unknown'.
+ *
+ * Expects pre-normalized sources from normalizeDateSources() — all values are
+ * already valid YYYY-MM-DD strings. No re-parsing happens here.
+ *
+ * @param {Object} sources - Normalized date strings by source (from normalizeDateSources)
+ * @param {string[]} sources.jsonLd   - ISO dates from JSON-LD (weight 3 each)
+ * @param {string|null} sources.llm   - ISO date from LLM extraction (weight 2)
+ * @param {string[]} sources.meta     - ISO dates from meta tags (weight 1 each)
+ * @param {string[]} sources.timeTags - ISO dates from <time> elements (weight 1 each)
+ * @param {string|null} sources.url   - ISO date from URL path (weight 1)
+ * @returns {{ date: string|null, score: number, confidence: 'exact'|'estimated'|'unknown', sourceMap: Object }}
+ */
+export function scoreDateConsensus(sources = {}) {
+  const today = new Date().toISOString().substring(0, 10);
+
+  // Accumulate score per date
+  const scores = {}; // date → total score
+  const sourceMap = {}; // date → [source labels]
+
+  const add = (date, weight, label) => {
+    if (!date || date > today) return; // discard future dates (normalizeDateSources may pass them through)
+    scores[date] = (scores[date] || 0) + weight;
+    if (!sourceMap[date]) sourceMap[date] = [];
+    sourceMap[date].push(label);
+  };
+
+  // JSON-LD sources (3 pts each)
+  for (const d of (sources.jsonLd || [])) add(d, 3, 'json-ld');
+
+  // LLM extraction (2 pts)
+  add(sources.llm, 2, 'llm');
+
+  // Meta tag sources (1 pt each)
+  for (const d of (sources.meta || [])) add(d, 1, 'meta');
+
+  // <time> tag sources (1 pt each)
+  for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
+
+  // URL date pattern (1 pt)
+  add(sources.url, 1, 'url');
+
+  if (Object.keys(scores).length === 0) {
+    return { date: null, score: 0, confidence: 'unknown', sourceMap: {} };
+  }
+
+  // Pick the date with the highest score; break ties by choosing the oldest
+  // (publication date is almost always earlier than modification date)
+  const bestDate = Object.keys(scores).reduce((a, b) => {
+    if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
+    return a < b ? a : b; // prefer older date on tie
+  });
+
+  const bestScore = scores[bestDate];
+  const confidence = bestScore >= 4 ? 'exact' : 'estimated';
+
+  return { date: bestDate, score: bestScore, confidence, sourceMap };
+}
+
+/**
  * Find start/end dates and times for an event from rendered page text.
  * @param {string} text - Rendered page content
  * @param {string} title - Event title
