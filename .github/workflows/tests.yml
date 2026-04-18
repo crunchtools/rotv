@@ -104,17 +104,22 @@ jobs:
           # Restart backend so it picks up the complete schema
           echo "Restarting backend..."
           docker exec rotv systemctl restart rotv-backend
-          sleep 5
+          sleep 10
 
           # Verify server is ready with complete schema
-          for i in {1..15}; do
+          for i in {1..30}; do
             if docker exec rotv curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
               echo "✓ Server is ready"
               break
             fi
-            echo "Waiting for server after restart... ($i/15)"
+            echo "Waiting for server after restart... ($i/30)"
             sleep 2
           done
+
+          # Debug: journal after restart
+          echo "=== journal after restart ==="
+          docker exec rotv journalctl -u rotv-backend --no-pager -n 50 || true
+          echo "=== end journal after restart ==="
 
           # Verify data was imported
           echo "Verifying data import..."

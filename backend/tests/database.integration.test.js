@@ -177,16 +177,19 @@ describe('PostGIS / Geographic Grounding Tests', () => {
     // boundary name. This test catches PostGIS being absent or the geometry
     // columns being missing — both of which silently degrade to ungrounded
     // searches at runtime.
+    //
+    // Use explicit high IDs to avoid sequence conflicts with seed data.
+    await pool.query("DELETE FROM pois WHERE name IN ('_test_boundary', '_test_point')");
     await pool.query(`
-      INSERT INTO pois (name, poi_roles, latitude, longitude, boundary_geom)
+      INSERT INTO pois (id, name, poi_roles, latitude, longitude, boundary_geom)
       VALUES (
-        '_test_boundary', '{boundary}', 41.3, -81.6,
+        999998, '_test_boundary', '{boundary}', 41.3, -81.6,
         ST_MakeEnvelope(-82.0, 41.0, -81.0, 41.6, 4326)
       )
     `);
     const testPoi = await pool.query(`
-      INSERT INTO pois (name, poi_roles, latitude, longitude)
-      VALUES ('_test_point', '{point}', 41.2, -81.5)
+      INSERT INTO pois (id, name, poi_roles, latitude, longitude)
+      VALUES (999999, '_test_point', '{point}', 41.2, -81.5)
       RETURNING id
     `);
     const poiId = testPoi.rows[0].id;

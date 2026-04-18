@@ -677,6 +677,16 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       logInfo(jobId, jobType, poi.id, poi.name, `News found:\n  ${newsList}`);
     }
 
+    // Read MAX_SEARCH_URLS once — used by both news and events Phase II blocks
+    const searchUrlsResult = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'max_search_urls'"
+    );
+    const MAX_SEARCH_URLS = (() => {
+      if (!searchUrlsResult.rows.length) return 10;
+      const val = parseInt(searchUrlsResult.rows[0].value, 10);
+      return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : 10;
+    })();
+
     // PHASE II: External news via Serper — per-URL pipeline
     if (collectionType !== 'events') {
       try {
@@ -710,11 +720,9 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
             } catch { return false; }
           });
 
-          // Serper is configured to return 3 results max
-          const MAX_PHASE2_URLS = 3;
-          const urlsToProcess = externalUrls.slice(0, MAX_PHASE2_URLS);
-          if (externalUrls.length > MAX_PHASE2_URLS) {
-            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_PHASE2_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
+          const urlsToProcess = externalUrls.slice(0, MAX_SEARCH_URLS);
+          if (externalUrls.length > MAX_SEARCH_URLS) {
+            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
           }
 
           let renderedCount = 0;
@@ -805,8 +813,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
             } catch { return false; }
           });
 
-          const MAX_PHASE2_EVENT_URLS = 3;
-          const eventUrlsToProcess = externalEventUrls.slice(0, MAX_PHASE2_EVENT_URLS);
+          const eventUrlsToProcess = externalEventUrls.slice(0, MAX_SEARCH_URLS);
 
           let renderedEventCount = 0;
           let phase2EventPagesCollected = 0;

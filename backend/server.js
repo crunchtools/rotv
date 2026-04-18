@@ -324,11 +324,17 @@ async function initDatabase() {
         -- Image storage
         has_primary_image BOOLEAN DEFAULT FALSE,
 
+        poi_roles TEXT[] DEFAULT '{}',
+
         deleted BOOLEAN DEFAULT FALSE,
 
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+
+    await client.query(`
+      ALTER TABLE pois ADD COLUMN IF NOT EXISTS poi_roles TEXT[] DEFAULT '{}'
     `);
 
     // Create index for faster lookups by role (GIN index on array)
@@ -341,7 +347,7 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_pois_owner_id ON pois(owner_id)
     `);
 
-    // Drop old poi_type-based constraints if they exist (cleanup only, no replacement)
+    // Drop old poi_type-based constraints/indexes if they exist (cleanup only, no replacement)
     await client.query(`
       DO $$ BEGIN
         IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pois_name_poi_type_key') THEN
@@ -349,6 +355,15 @@ async function initDatabase() {
         END IF;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_poi_type_active_key;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_key;
+        DROP INDEX IF EXISTS pois_name_key;
+      END $$;
+    `);
+
+    await client.query(`
+      DO $$ BEGIN
+        CREATE UNIQUE INDEX pois_name_key ON pois(name);
+      EXCEPTION WHEN unique_violation OR duplicate_table THEN
+        NULL;
       END $$;
     `);
 
@@ -761,6 +776,8 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS publication_date DATE`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS date_confidence VARCHAR(10) DEFAULT 'unknown'`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_moderation ON poi_news(moderation_status)`);
 
     // Moderation columns on poi_events
@@ -772,6 +789,8 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS publication_date DATE`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS date_confidence VARCHAR(10) DEFAULT 'unknown'`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_moderation ON poi_events(moderation_status)`);
 
     // Photo submissions table
