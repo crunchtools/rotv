@@ -789,9 +789,13 @@ Score 0.0-1.0 on these criteria:
      is NOT relevant to the POI in our system.
    If the headline topic is NOT the specific POI location, add "wrong_poi" and score 0.0.
 8. CONTENT TYPE: If this is classified as "${content.type}", is that correct?
-   If content labeled "news" is actually an event announcement (has a specific date,
-   time, and venue for a future gathering/activity), add "misclassified_type" to issues
-   and score 0.0. Event announcements belong in the events system, not news.
+   News articles that REPORT ON upcoming events are legitimate news — "Board to meet
+   Tuesday," "5K planned for May," "Progress report scheduled." Most news is about
+   something happening in the future. Do NOT reject these.
+   Only add "misclassified_type" (score 0.0) if the content is a BARE event listing
+   with no editorial content — just a date, time, venue, and registration link with
+   no surrounding news narrative or context. If the article has a headline, a lede,
+   quotes, background, or any journalistic framing, it is news, not a bare listing.
 9. PRIVATE/PERSONAL CONTENT: Reject content about private individuals' personal events
    that happen to take place at a park location. Examples: wedding photography blog posts,
    personal trip reports, engagement announcements, family reunion recaps. These are not
