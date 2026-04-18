@@ -17,15 +17,12 @@ const turndown = new TurndownService({
 
 turndown.remove(['img', 'iframe', 'video', 'audio', 'svg', 'canvas', 'figure']);
 
-// Realistic browser context defaults to avoid bot detection.
-// Cloudflare checks navigator.webdriver, user-agent, and plugin lists.
 const STEALTH_CONTEXT = {
   userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   locale: 'en-US',
   timezoneId: 'America/New_York'
 };
 
-// Script injected before any page JS runs to mask automation signals.
 const STEALTH_INIT_SCRIPT = `
   Object.defineProperty(navigator, 'webdriver', { get: () => false });
   Object.defineProperty(navigator, 'plugins', {
@@ -125,7 +122,6 @@ export async function extractPageContent(url, options = {}) {
 
       await page.waitForTimeout(dynamicContentWait);
 
-      // Detect JS challenge pages (Cloudflare, WP.com Atomic) and wait for redirect
       const challengeTitle = await page.title();
       if (/checking your browser|just a moment|attention required/i.test(challengeTitle)) {
         try {
@@ -137,8 +133,6 @@ export async function extractPageContent(url, options = {}) {
       const html = await page.content();
       const pageTitle = await page.title();
 
-      // Extract OpenGraph date metadata before Readability strips it.
-      // article:published_time is standard OG and present on most news/WordPress sites.
       const ogDates = await page.evaluate(() => {
         const get = (prop) => document.querySelector(`meta[property="${prop}"]`)?.content || null;
         return {

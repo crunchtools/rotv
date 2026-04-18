@@ -25,13 +25,13 @@ export function parseDate(raw, timezone = 'America/New_York') {
     }
   }
 
-  let results;
+  let eventDatess;
   try {
-    results = chrono.parse(trimmed, { instant: new Date(), timezone });
+    eventDatess = chrono.parse(trimmed, { instant: new Date(), timezone });
   } catch { return null; }
-  if (results.length === 0) return null;
+  if (eventDatess.length === 0) return null;
 
-  const d = results[0].start;
+  const d = eventDatess[0].start;
   const year = d.get('year');
   const month = d.get('month');
   const day = d.get('day');
@@ -54,13 +54,13 @@ export function parseDateTime(raw, timezone = 'America/New_York') {
   const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)$/);
   if (isoMatch) return `${isoMatch[1]}T${isoMatch[2].length === 5 ? isoMatch[2] + ':00' : isoMatch[2]}`;
 
-  let results;
+  let eventDatess;
   try {
-    results = chrono.parse(trimmed, { instant: new Date(), timezone });
+    eventDatess = chrono.parse(trimmed, { instant: new Date(), timezone });
   } catch { return null; }
-  if (results.length === 0) return null;
+  if (eventDatess.length === 0) return null;
 
-  const d = results[0].start;
+  const d = eventDatess[0].start;
   const year = d.get('year');
   const month = d.get('month');
   const day = d.get('day');
@@ -86,19 +86,19 @@ const RELATIVE_DATE_WORDS = /^(now|today|tomorrow|yesterday|this morning|this ev
 export function extractDatesFromText(text, timezone = 'America/New_York') {
   if (!text || typeof text !== 'string') return [];
 
-  let results;
+  let eventDatess;
   try {
-    results = chrono.parse(text, { instant: new Date(), timezone });
+    eventDatess = chrono.parse(text, { instant: new Date(), timezone });
   } catch { return []; }
   // Filter out relative prose words that resolve to today — not real dates.
   // Also filter fragments under 4 chars (e.g. "10 a" from "10 a.m.") — false positives.
-  results = results.filter(r => {
+  eventDatess = eventDatess.filter(r => {
     const text = r.text.trim();
     if (RELATIVE_DATE_WORDS.test(text)) return false;
     if (text.length < 5) return false;
     return true;
   });
-  return results.map(r => {
+  return eventDatess.map(r => {
     const s = r.start;
     const startStr = `${s.get('year')}-${String(s.get('month')).padStart(2, '0')}-${String(s.get('day')).padStart(2, '0')}`;
     const hasTime = s.isCertain('hour');
@@ -164,24 +164,24 @@ export function findPublicationDate(text, title, timezone = 'America/New_York') 
  * @returns {{startDate: string|null, startTime: string|null, endDate: string|null, endTime: string|null}}
  */
 export function findEventDates(text, title, timezone = 'America/New_York') {
-  const result = { startDate: null, startTime: null, endDate: null, endTime: null };
-  if (!text) return result;
+  const eventDates = { startDate: null, startTime: null, endDate: null, endTime: null };
+  if (!text) return eventDates;
 
   const dates = extractDatesFromText(text, timezone);
-  if (dates.length === 0) return result;
+  if (dates.length === 0) return eventDates;
 
   const first = dates[0];
-  result.startDate = first.start.slice(0, 10);
+  eventDates.startDate = first.start.slice(0, 10);
   if (first.start.length > 10) {
-    result.startTime = first.start.slice(11);
+    eventDates.startTime = first.start.slice(11);
   }
 
   if (first.end) {
-    result.endDate = first.end.slice(0, 10);
+    eventDates.endDate = first.end.slice(0, 10);
     if (first.end.length > 10) {
-      result.endTime = first.end.slice(11);
+      eventDates.endTime = first.end.slice(11);
     }
   }
 
-  return result;
+  return eventDates;
 }
