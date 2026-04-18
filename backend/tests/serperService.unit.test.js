@@ -1,8 +1,3 @@
-/**
- * Unit tests for Serper Service
- * Tests geographic grounding and Serper API integration
- */
-
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 vi.mock('node-fetch', () => ({
