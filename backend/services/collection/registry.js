@@ -52,7 +52,7 @@ export const COLLECTION_TYPES = [
     icon: '\u{1F50D}',
     promptKeys: [],
     scheduleJobName: 'content-moderation-sweep',
-    schedule: '*/15 * * * *',
+    schedule: '0 7 * * *',
     statusTable: null,
     historyTypes: ['moderation'],
     triggerEndpoint: '/api/admin/moderation/sweep',

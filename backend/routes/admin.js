@@ -4450,14 +4450,20 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const boss = getJobScheduler();
 
       const jobs = await Promise.all(COLLECTION_TYPES.map(async (type) => {
-        // Get current schedule from admin_settings (overrides default)
-        const schedResult = await pool.query(
-          'SELECT value FROM admin_settings WHERE key = $1',
-          [`schedule_${type.scheduleJobName}`]
-        );
-        const currentSchedule = schedResult.rows.length > 0
-          ? schedResult.rows[0].value
-          : type.schedule;
+        // Read the actual schedule from pg-boss — single source of truth.
+        // Falls back to registry default only for jobs without a pg-boss schedule.
+        let currentSchedule = type.schedule;
+        if (type.scheduleJobName) {
+          try {
+            const pgbossResult = await pool.query(
+              'SELECT cron FROM pgboss.schedule WHERE name = $1',
+              [type.scheduleJobName]
+            );
+            if (pgbossResult.rows.length > 0) {
+              currentSchedule = pgbossResult.rows[0].cron;
+            }
+          } catch { /* pgboss.schedule may not exist on first boot */ }
+        }
 
         // Get queue size
         let queueSize = 0;

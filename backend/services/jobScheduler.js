@@ -353,10 +353,10 @@ export async function queueModerationJob(contentType, contentId) {
 }
 
 /**
- * Schedule the moderation sweep job (every 15 minutes)
+ * Schedule the moderation sweep job (daily at 7 AM after news collection)
  * @param {string} cronExpression - Cron expression
  */
-export async function scheduleModerationSweep(cronExpression = '*/15 * * * *') {
+export async function scheduleModerationSweep(cronExpression = '0 7 * * *') {
   const scheduler = getJobScheduler();
 
   await scheduler.schedule(JOB_NAMES.CONTENT_MODERATION_SWEEP, cronExpression, {}, {
