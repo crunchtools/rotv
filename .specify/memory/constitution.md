@@ -61,7 +61,10 @@ The init service creates the database if not present, imports seed data from `/t
 - Single-stage build on `ubi10-core`
 - Frontend built in-image: `npm run build` creates `/app/public/`
 - `rootfs/` directory provides systemd units and init script
-- PostgreSQL 17 installed from pgdg RPM repo (no RHSM needed)
+- PostgreSQL 17 + PostGIS installed from pgdg RPM repo
+- RHSM registration required at build time for boost-serialization (SFCGAL dep for PostGIS)
+  — uses `--mount=type=secret` pattern per crunchtools container-image profile Section II
+  — CI passes `activation_key` and `org_id` secrets; local builds skip registration gracefully
 - Playwright + Chromium installed globally for testing
 - Required LABELs: `maintainer`, `description`
 

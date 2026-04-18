@@ -55,7 +55,8 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             BASE_IMAGE=quay.io/crunchtools/rotv-base:latest
-            RHSM_ORG_ID=${{ secrets.RHSM_ORG_ID }}
-            RHSM_ACTIVATION_KEY=${{ secrets.RHSM_ACTIVATION_KEY }}
+          secrets: |
+            activation_key=${{ secrets.RHSM_ACTIVATION_KEY }}
+            org_id=${{ secrets.RHSM_ORG_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

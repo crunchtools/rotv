@@ -22,17 +22,19 @@ RUN dnf install -y nodejs npm \
 RUN npm install -g playwright@1.58.1 && npx playwright install chromium
 
 # Add PostgreSQL 17 + PostGIS from official pgdg repository
-# RHSM registration provides RHEL BaseOS/AppStream (required for boost-serialization)
+# RHSM registration provides RHEL BaseOS/AppStream (required for boost-serialization → SFCGAL → postgis35_17)
 # EPEL provides additional PostGIS dependencies (hdf5, xerces-c)
-ARG RHSM_ORG_ID
-ARG RHSM_ACTIVATION_KEY
-RUN if [ -n "$RHSM_ORG_ID" ] && [ -n "$RHSM_ACTIVATION_KEY" ]; then \
-      subscription-manager register --org="$RHSM_ORG_ID" --activationkey="$RHSM_ACTIVATION_KEY"; \
+RUN --mount=type=secret,id=activation_key \
+    --mount=type=secret,id=org_id \
+    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
+        subscription-manager register \
+            --activationkey="$(cat /run/secrets/activation_key)" \
+            --org="$(cat /run/secrets/org_id)"; \
     fi && \
     dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
     dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
     dnf install -y postgresql17-server postgresql17 postgis35_17 && \
-    if [ -n "$RHSM_ORG_ID" ]; then subscription-manager unregister || true; fi && \
+    subscription-manager unregister 2>/dev/null || true && \
     dnf clean all
 
 # Create symlinks for PostgreSQL commands
