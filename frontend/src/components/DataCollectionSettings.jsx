@@ -69,6 +69,11 @@ function DataCollectionSettings() {
   const [maxConcurrencyLoading, setMaxConcurrencyLoading] = useState(true);
   const [maxConcurrencySaving, setMaxConcurrencySaving] = useState(false);
 
+  // Max Serper URLs state
+  const [maxSearchUrls, setMaxSearchUrls] = useState(10);
+  const [maxSearchUrlsLoading, setMaxSearchUrlsLoading] = useState(true);
+  const [maxSearchUrlsSaving, setMaxSearchUrlsSaving] = useState(false);
+
   // Results Sub-tabs state
   const [subtabs, setSubtabs] = useState([]);
   const [subtabsLoading, setSubtabsLoading] = useState(true);
@@ -115,6 +120,7 @@ function DataCollectionSettings() {
     fetchDomainLists();
     fetchExcludedPois();
     fetchMaxConcurrency();
+    fetchMaxSearchUrls();
     fetchSubtabs();
   }, []);
 
@@ -512,6 +518,31 @@ function DataCollectionSettings() {
       setResult({ type: 'success', message: 'Max concurrency saved' });
     } catch (err) { setResult({ type: 'error', message: `Failed to save max concurrency: ${err.message}` }); }
     finally { setMaxConcurrencySaving(false); }
+  };
+
+  const fetchMaxSearchUrls = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) {
+        const settings = await response.json();
+        const val = parseInt(settings.max_search_urls?.value, 10);
+        setMaxSearchUrls(Number.isFinite(val) && val >= 1 ? val : 10);
+      }
+    } catch (err) { console.error('Error fetching max Serper URLs:', err); }
+    finally { setMaxSearchUrlsLoading(false); }
+  };
+
+  const handleSaveMaxSearchUrls = async () => {
+    setMaxSearchUrlsSaving(true); setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/max_search_urls', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: String(maxSearchUrls) })
+      });
+      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
+      setResult({ type: 'success', message: 'Max Serper URLs saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save max Serper URLs: ${err.message}` }); }
+    finally { setMaxSearchUrlsSaving(false); }
   };
 
   const handleTestPlaywright = async () => {
@@ -999,6 +1030,32 @@ function DataCollectionSettings() {
             </div>
             <button className="action-btn primary" onClick={handleSaveMaxConcurrency} disabled={maxConcurrencySaving}>
               {maxConcurrencySaving ? 'Saving...' : 'Save Concurrency'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Max Serper URLs */}
+      <div className="ai-config-section">
+        <h4>Serper URL Limit (Phase II)</h4>
+        <p className="settings-description">Maximum number of external Serper search result URLs crawled per POI during Phase II of all collection runs (news, events, and both). Serper returns up to 10 results by default; higher values require a paid Serper plan. Recommended: 5–10.</p>
+        {maxSearchUrlsLoading ? <p>Loading...</p> : (
+          <>
+            <div className="config-row">
+              <label>Max Serper URLs</label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={maxSearchUrls}
+                onChange={e => setMaxSearchUrls(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
+                disabled={maxSearchUrlsSaving}
+              />
+              <span className="config-hint">Range: 1–20 (default: 10)</span>
+            </div>
+            <button className="action-btn primary" onClick={handleSaveMaxSearchUrls} disabled={maxSearchUrlsSaving}>
+              {maxSearchUrlsSaving ? 'Saving...' : 'Save Serper URL Limit'}
             </button>
           </>
         )}

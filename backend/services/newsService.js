@@ -667,100 +667,107 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
       logInfo(jobId, jobType, poi.id, poi.name, `News found:\n  ${newsList}`);
     }
 
-    // PHASE II: External news via Serper — per-URL pipeline
-    if (collectionType !== 'events') {
-      try {
-        updateProgress(poi.id, {
-          phase: 'search',
-          message: 'Searching for external news coverage...',
-          steps: ['Initialized', 'Phase I complete', 'Searching external news']
+    // PHASE II: External search via Serper — per-URL pipeline (runs for news, events, and both)
+    try {
+      const phase2ContentType = collectionType === 'events' ? 'events' : 'news';
+      updateProgress(poi.id, {
+        phase: 'search',
+        message: 'Searching for external coverage...',
+        steps: ['Initialized', 'Phase I complete', 'Searching external coverage']
+      });
+
+      reportProgress('Phase II: [Search] Querying Serper for external coverage');
+      logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
+
+      const serperResult = await searchNewsUrls(pool, poi);
+      logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] "${serperResult.query}" → ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`);
+      reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
+
+      if (serperResult.urls.length > 0) {
+        // Skip Serper URLs from the POI's own domains — Phase I already covered them
+        const poiOrigins = new Set();
+        for (const u of [website, eventsUrl, newsUrl]) {
+          try { poiOrigins.add(new URL(u).origin); } catch { /* skip invalid */ }
+        }
+        const externalUrls = serperResult.urls.filter(urlData => {
+          try {
+            const origin = new URL(urlData.url).origin;
+            if (poiOrigins.has(origin)) {
+              logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Skip same-origin URL: ${urlData.url}`);
+              return false;
+            }
+            return true;
+          } catch { return false; }
         });
 
-        reportProgress('Phase II: [Search] Querying Serper for external coverage');
-        logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
+        // Use all Serper results, capped by admin-configurable limit (default 10 — Serper's page size)
+        const serperUrlsResult = await pool.query(
+          "SELECT value FROM admin_settings WHERE key = 'max_search_urls'"
+        );
+        const MAX_SEARCH_URLS = (() => {
+          if (!serperUrlsResult.rows.length) return 10;
+          const val = parseInt(serperUrlsResult.rows[0].value, 10);
+          return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : 10;
+        })();
+        const urlsToProcess = externalUrls.slice(0, MAX_SEARCH_URLS);
+        if (externalUrls.length > MAX_SEARCH_URLS) {
+          logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
+        }
 
-        const serperResult = await searchNewsUrls(pool, poi);
-        logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] "${serperResult.query}" → ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`);
-        reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
+        let renderedCount = 0;
+        let phase2PagesCollected = 0;
 
-        if (serperResult.urls.length > 0) {
-          // Skip Serper URLs from the POI's own domains — Phase I already covered them
-          const poiOrigins = new Set();
-          for (const u of [website, eventsUrl, newsUrl]) {
-            try { poiOrigins.add(new URL(u).origin); } catch { /* skip invalid */ }
-          }
-          const externalUrls = serperResult.urls.filter(urlData => {
-            try {
-              const origin = new URL(urlData.url).origin;
-              if (poiOrigins.has(origin)) {
-                logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Skip same-origin URL: ${urlData.url}`);
-                return false;
-              }
-              return true;
-            } catch { return false; }
+        // Crawl all Serper URLs in parallel (each is a different external domain)
+        const phase2Results = await runConcurrent(urlsToProcess.map(urlData => async () => {
+          checkCancellation();
+          if (phase2PagesCollected >= MAX_PHASE2_PAGES) return [];
+
+          // Classify each Serper URL — articles pass through as DETAIL (1 render),
+          // listing pages get 1-level-deep link-following with tight caps
+          reportProgress(`Phase II: [Classify] ${urlData.url}`);
+          const crawlResult = await crawlWithClassification(pool, urlData.url, phase2ContentType, poi, sheets, checkCancellation, {
+            maxDepth: 1,
+            maxPages: 6,
+            maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2PagesCollected),
+            phase: 'Phase II',
+            jobId,
+            jobType
           });
 
-          // Use all Serper results (up to 10 — Serper's default page size)
-          const MAX_PHASE2_URLS = 10;
-          const urlsToProcess = externalUrls.slice(0, MAX_PHASE2_URLS);
-          if (externalUrls.length > MAX_PHASE2_URLS) {
-            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_PHASE2_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
-          }
-
-          let renderedCount = 0;
-          let phase2PagesCollected = 0;
-
-          // Crawl all Serper URLs in parallel (each is a different external domain)
-          const phase2Results = await runConcurrent(urlsToProcess.map(urlData => async () => {
+          renderedCount++;
+          const pageItems = [];
+          for (const page of crawlResult.pages) {
             checkCancellation();
-            if (phase2PagesCollected >= MAX_PHASE2_PAGES) return [];
-
-            // Classify each Serper URL — articles pass through as DETAIL (1 render),
-            // listing pages get 1-level-deep link-following with tight caps
-            reportProgress(`Phase II: [Classify] ${urlData.url}`);
-            const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
-              maxDepth: 1,
-              maxPages: 6,
-              maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2PagesCollected),
-              phase: 'Phase II',
-              jobId,
-              jobType
-            });
-
-            renderedCount++;
-            const pageItems = [];
-            for (const page of crawlResult.pages) {
-              checkCancellation();
-              if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
-              const items = await processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase II', jobId, jobType, timezone, confidence: '95%' });
-              pageItems.push(...(items.news || []));
-              phase2PagesCollected++;
-            }
-            return pageItems;
-          }), 10);
-
-          // Merge results, deduplicating by title
-          for (const itemsOrError of phase2Results) {
-            if (!itemsOrError || itemsOrError instanceof Error) continue;
-            const newNews = itemsOrError.filter(item => {
-              const titleLower = item.title.toLowerCase().trim();
-              return !allNews.some(n => n.title.toLowerCase().trim() === titleLower);
-            });
-            if (newNews.length > 0) {
-              logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Adding ${newNews.length} unique items`);
-              allNews.push(...newNews);
-            }
+            if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
+            const items = await processOneUrl(pool, page.url, poi, phase2ContentType, { phase: 'Phase II', jobId, jobType, timezone, confidence: '95%' });
+            pageItems.push(...(items[phase2ContentType] || []));
+            phase2PagesCollected++;
           }
+          return pageItems;
+        }), 10);
 
-          reportProgress(`Phase II: Processed ${renderedCount} Serper URLs, ${phase2PagesCollected} pages collected`);
-          logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Processed ${renderedCount} of ${serperResult.urls.length} Serper URLs, ${phase2PagesCollected} pages collected`);
-        } else {
-          logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] No external news URLs found');
+        // Merge results into appropriate collection, deduplicating by title
+        const targetCollection = phase2ContentType === 'events' ? allEvents : allNews;
+        for (const itemsOrError of phase2Results) {
+          if (!itemsOrError || itemsOrError instanceof Error) continue;
+          const newItems = itemsOrError.filter(item => {
+            const titleLower = item.title.toLowerCase().trim();
+            return !targetCollection.some(n => n.title.toLowerCase().trim() === titleLower);
+          });
+          if (newItems.length > 0) {
+            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Adding ${newItems.length} unique items`);
+            targetCollection.push(...newItems);
+          }
         }
-      } catch (serperError) {
-        if (serperError.message === 'Collection cancelled by user') throw serperError;
-        logWarn(jobId, jobType, poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`);
+
+        reportProgress(`Phase II: Processed ${renderedCount} Serper URLs, ${phase2PagesCollected} pages collected`);
+        logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Processed ${renderedCount} of ${serperResult.urls.length} Serper URLs, ${phase2PagesCollected} pages collected`);
+      } else {
+        logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] No external URLs found');
       }
+    } catch (serperError) {
+      if (serperError.message === 'Collection cancelled by user') throw serperError;
+      logWarn(jobId, jobType, poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`);
     }
 
     // Build completion message and stats based on collection type

@@ -482,7 +482,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'trail_status_prompt',
       'results_subtabs_config',
       'buttondown_api_key',
-      'buttondown_from_email'
+      'buttondown_from_email',
+      'news_max_concurrency',
+      'max_search_urls'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
