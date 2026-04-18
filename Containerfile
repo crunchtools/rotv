@@ -21,13 +21,20 @@ RUN dnf install -y nodejs npm \
 # Install Playwright globally with Chromium (pinned to match backend/package.json)
 RUN npm install -g playwright@1.58.1 && npx playwright install chromium
 
-# Add PostgreSQL 17 + PostGIS from official pgdg repository (no RHSM needed)
-# EPEL provides PostGIS dependencies (hdf5, xerces-c)
-# WORKAROUND: PostGIS fails on RHEL 10 due to missing libboost_serialization.so.1.83.0 (as of 2026-04-09)
-# Allow build to continue without PostGIS until RHEL 10 repos are fixed
-RUN dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
+# Add PostgreSQL 17 + PostGIS from official pgdg repository
+# RHSM registration provides RHEL BaseOS/AppStream (required for boost-serialization → SFCGAL → postgis35_17)
+# EPEL provides additional PostGIS dependencies (hdf5, xerces-c)
+RUN --mount=type=secret,id=activation_key \
+    --mount=type=secret,id=org_id \
+    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
+        subscription-manager register \
+            --activationkey="$(cat /run/secrets/activation_key)" \
+            --org="$(cat /run/secrets/org_id)"; \
+    fi && \
+    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
     dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
-    (dnf install -y postgresql17-server postgresql17 postgis35_17 || dnf install -y postgresql17-server postgresql17) && \
+    dnf install -y postgresql17-server postgresql17 postgis35_17 && \
+    subscription-manager unregister 2>/dev/null || true && \
     dnf clean all
 
 # Create symlinks for PostgreSQL commands

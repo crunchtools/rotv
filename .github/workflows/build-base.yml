@@ -1,19 +1,15 @@
-name: Build and Push Container Image
+name: Build and Push Base Image
 
 on:
   push:
     branches: [main, master]
-  pull_request:
-    branches: [main, master]
-  repository_dispatch:
-    types: [parent-image-updated]
+    paths:
+      - Containerfile.base
   workflow_dispatch:
-  schedule:
-    - cron: '15 4 * * 1'
 
 env:
   REGISTRY: quay.io
-  IMAGE_NAME: crunchtools/rotv
+  IMAGE_NAME: crunchtools/rotv-base
 
 jobs:
   build:
@@ -35,28 +31,22 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=pr
-            type=sha,prefix=
-
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Containerfile
+          file: Containerfile.base
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=quay.io/crunchtools/rotv-base:latest
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
           secrets: |
             activation_key=${{ secrets.RHSM_ACTIVATION_KEY }}
             org_id=${{ secrets.RHSM_ORG_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Trigger rotv rebuild
+        env:
+          GH_TOKEN: ${{ secrets.CRUNCHTOOLS_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/crunchtools/rotv/dispatches \
+            -f event_type=parent-image-updated
