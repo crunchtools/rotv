@@ -17,6 +17,9 @@
  *
  * Idle behaviour: the browser closes 30 s after the last context is
  * released, freeing memory between collection runs.
+ *
+ * Watchdog: 90 s per-acquisition timeout force-kills the browser if
+ * releaseBrowser() is never called (above jsRenderer's 60 s hard timeout).
  */
 
 import { chromium } from 'playwright';
@@ -25,6 +28,10 @@ let sharedBrowser = null;
 let browserRefCount = 0;
 let browserCloseTimer = null;
 let launchPromise = null; // Prevents concurrent launches (race condition fix)
+
+const WATCHDOG_TIMEOUT_MS = 90_000;
+const watchdogTimers = new Map(); // acquisitionId → timeoutId
+let nextAcquisitionId = 0;
 
 const LAUNCH_OPTIONS = {
   headless: true,
@@ -39,9 +46,7 @@ const LAUNCH_OPTIONS = {
 };
 
 /**
- * Acquire the shared browser, launching it if not running.
- * Every call must be paired with releaseBrowser().
- * @returns {Promise<import('playwright').Browser>}
+ * @returns {Promise<{browser: import('playwright').Browser, acquisitionId: number}>}
  */
 export async function acquireBrowser() {
   if (browserCloseTimer) {
@@ -61,14 +66,38 @@ export async function acquireBrowser() {
     await launchPromise;
   }
   browserRefCount++;
-  return sharedBrowser;
+
+  const id = nextAcquisitionId++;
+  const timer = setTimeout(async () => {
+    console.error(`[BrowserPool] Watchdog: acquisition ${id} held browser for >${WATCHDOG_TIMEOUT_MS / 1000}s without release — force-killing (refCount was ${browserRefCount})`);
+    watchdogTimers.delete(id);
+    const browser = sharedBrowser;
+    sharedBrowser = null;
+    browserRefCount = 0;
+    launchPromise = null;
+    if (browserCloseTimer) {
+      clearTimeout(browserCloseTimer);
+      browserCloseTimer = null;
+    }
+    for (const [, t] of watchdogTimers) clearTimeout(t);
+    watchdogTimers.clear();
+    if (browser) await browser.close().catch(() => {});
+  }, WATCHDOG_TIMEOUT_MS);
+  watchdogTimers.set(id, timer);
+
+  return { browser: sharedBrowser, acquisitionId: id };
 }
 
 /**
  * Release a browser reference acquired with acquireBrowser().
  * Schedules the browser to close after 30 s of full idle.
+ * @param {number} [acquisitionId] - The id returned by acquireBrowser(). Clears the watchdog.
  */
-export function releaseBrowser() {
+export function releaseBrowser(acquisitionId) {
+  if (acquisitionId != null && watchdogTimers.has(acquisitionId)) {
+    clearTimeout(watchdogTimers.get(acquisitionId));
+    watchdogTimers.delete(acquisitionId);
+  }
   browserRefCount--;
   if (browserRefCount < 0) {
     console.error('[BrowserPool] BUG: releaseBrowser() called more times than acquireBrowser() — resetting to 0');
