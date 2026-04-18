@@ -775,6 +775,8 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS publication_date DATE`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS date_confidence VARCHAR(10) DEFAULT 'unknown'`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_moderation ON poi_news(moderation_status)`);
 
     // Moderation columns on poi_events
@@ -786,6 +788,8 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderated_at TIMESTAMP`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS publication_date DATE`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS date_confidence VARCHAR(10) DEFAULT 'unknown'`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_moderation ON poi_events(moderation_status)`);
 
     // Photo submissions table
