@@ -711,7 +711,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
       `${phase}: [Dates] start=${eventStartDateTime || 'none'} (score=${eventStartScore}, sources=${JSON.stringify(startConsensus.sourceMap)}), end=${eventEndDateTime || 'none'} (score=${eventEndScore}) from ${url}`);
   } else {
     const consensus = await scoreNewsDate(pool, {
-      title: null, description: null,
+      title: page.title || null, description: null,
       pageContent: page.rawText || page.markdown,
       ogDates: od, sourceUrl: url, timezone
     });
