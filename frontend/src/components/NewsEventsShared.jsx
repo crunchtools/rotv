@@ -237,6 +237,154 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
 }
 
 /**
+ * Format event date range for display.
+ * Shared between ParkEvents and ModerationInbox.
+ */
+export function formatEventDateRange(startDate, endDate) {
+  const startStr = String(startDate || '');
+  const endStr = String(endDate || '');
+  if (!startStr) return '';
+  const startDateOnly = startStr.substring(0, 10);
+  const endDateOnly = endStr.substring(0, 10);
+  const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
+  const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
+  const sameDay = endDateOnly === startDateOnly;
+  const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+
+  if (sameDay && startHasTime) {
+    const d = new Date(startStr);
+    const dateLabel = d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const startTime = fmtTime(startStr);
+    if (endHasTime) return `${dateLabel}, ${startTime} – ${fmtTime(endStr)}`;
+    return `${dateLabel}, ${startTime}`;
+  } else if (endStr && !sameDay) {
+    return `${formatDateWithWeekday(startStr)} – ${formatDateWithWeekday(endStr)}`;
+  }
+  return formatDateWithWeekday(startStr);
+}
+
+/**
+ * Shared news card body — single source of truth for news item rendering.
+ * Used by ParkNews, ModerationInbox, and anywhere news items appear.
+ *
+ * Props:
+ *   item         - news item data (title, summary/description, news_type, poi_name, source_url, publication_date, source_name, additional_urls)
+ *   onSelectPoi  - optional callback when POI name is clicked
+ *   children     - optional content rendered below the meta row (moderation extras, action buttons)
+ *   className    - optional extra class on the outer div
+ *   id           - optional id attribute on the outer div
+ */
+export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
+  const summary = item.summary || item.description;
+  return (
+    <div className={`park-news-item ${item.news_type || 'general'}${className ? ' ' + className : ''}`} id={id}>
+      <div className="park-news-header">
+        <NewsTypeIcon type={item.news_type} />
+        <div className="park-news-title-section">
+          <span className="park-news-title">{item.title || '(untitled)'}</span>
+          {item.poi_name && onSelectPoi ? (
+            <button
+              className="park-news-poi-link"
+              onClick={() => onSelectPoi(item.poi_id)}
+              title={`View ${item.poi_name}`}
+            >
+              {item.poi_name}
+            </button>
+          ) : item.poi_name ? (
+            <span className="park-news-poi-link" style={{ cursor: 'default' }}>{item.poi_name}</span>
+          ) : null}
+        </div>
+      </div>
+      {summary && <p className="park-news-summary">{summary}</p>}
+      <div className="park-news-meta">
+        {item.source_name && <span className="news-source">{item.source_name}</span>}
+        {item.publication_date && <span className="news-date">{formatPublicationDate(item.publication_date)}</span>}
+        {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
+          <span className="news-sources-group">
+            <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">Source</a>
+            {item.additional_urls.map((u, i) => (
+              <a key={i} href={u.url} target="_blank" rel="noopener noreferrer" className="news-link">
+                {u.source_name || `Source ${i + 2}`}
+              </a>
+            ))}
+          </span>
+        ) : item.source_url ? (
+          <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">Read more</a>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Shared event card body — single source of truth for event item rendering.
+ * Used by ParkEvents, ModerationInbox, and anywhere event items appear.
+ *
+ * Props:
+ *   item             - event item data (title, description, event_type, poi_name, start_date, end_date, source_url, location_details, additional_urls)
+ *   onSelectPoi      - optional callback when POI name is clicked
+ *   calendarButtons  - optional ReactNode for calendar action buttons
+ *   children         - optional content rendered below the actions row (moderation extras, action buttons)
+ *   className        - optional extra class on the outer div
+ *   id               - optional id attribute on the outer div
+ */
+export function EventCardBody({ item, onSelectPoi, calendarButtons, children, className, id }) {
+  return (
+    <div className={`park-event-item ${item.event_type || 'program'}${className ? ' ' + className : ''}`} id={id}>
+      <div className="park-event-header">
+        <EventTypeIcon type={item.event_type} />
+        <div className="park-event-title-section">
+          <span className="park-event-title">{item.title || '(untitled)'}</span>
+          {item.poi_name && onSelectPoi ? (
+            <button
+              className="park-event-poi-link"
+              onClick={() => onSelectPoi(item.poi_id)}
+              title={`View ${item.poi_name}`}
+            >
+              {item.poi_name}
+            </button>
+          ) : item.poi_name ? (
+            <span className="park-event-poi-link" style={{ cursor: 'default' }}>{item.poi_name}</span>
+          ) : null}
+        </div>
+      </div>
+
+      {(item.start_date || item.end_date) && (
+        <div className="park-event-date">
+          {formatEventDateRange(item.start_date, item.end_date)}
+        </div>
+      )}
+
+      {item.description && <p className="park-event-description">{item.description}</p>}
+
+      {item.location_details && (
+        <div className="park-event-location">
+          <strong>Location:</strong> {item.location_details}
+        </div>
+      )}
+
+      <div className="park-event-actions">
+        {calendarButtons}
+        {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
+          <span className="event-sources-group">
+            <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="event-link">Source</a>
+            {item.additional_urls.map((u, i) => (
+              <a key={i} href={u.url} target="_blank" rel="noopener noreferrer" className="event-link">
+                {u.source_name || `Source ${i + 2}`}
+              </a>
+            ))}
+          </span>
+        ) : item.source_url ? (
+          <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="event-link">More info</a>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/**
  * Type filter chips component for news
  */
 export function NewsTypeFilters({ filters, onChange }) {

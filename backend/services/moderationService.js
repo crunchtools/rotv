@@ -195,7 +195,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   if (contentType === 'news' || contentType === 'event') {
     const table = contentType === 'news' ? 'poi_news' : 'poi_events';
     const descField = contentType === 'news' ? 'summary' : 'description';
-    const extraFields = contentType === 'event' ? ', e.start_date, e.content_source' : '';
+    const extraFields = contentType === 'event' ? ', t.start_date, t.content_source' : '';
 
     const itemQuery = await pool.query(
       `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
@@ -725,11 +725,14 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            n.content_source, n.publication_date, n.date_consensus_score,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
            COUNT(u.id)::int AS additional_url_count,
-           NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role
+           NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role,
+           p.name AS poi_name, n.news_type, NULL::VARCHAR AS event_type,
+           n.source_name, NULL::VARCHAR AS location_details
     FROM poi_news n
     LEFT JOIN poi_news_urls u ON u.news_id = n.id
+    LEFT JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status = ANY($1)
-    GROUP BY n.id
+    GROUP BY n.id, p.name
     UNION ALL
     SELECT e.id, 'event' AS content_type, e.poi_id, e.title, e.description,
            e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
@@ -737,11 +740,14 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            e.content_source, e.publication_date, e.date_consensus_score,
            e.start_date, e.end_date,
            COUNT(u.id)::int AS additional_url_count,
-           NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role
+           NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role,
+           p.name AS poi_name, NULL::VARCHAR AS news_type, e.event_type,
+           NULL::VARCHAR AS source_name, e.location_details
     FROM poi_events e
     LEFT JOIN poi_event_urls u ON u.event_id = e.id
+    LEFT JOIN pois p ON e.poi_id = p.id
     WHERE e.moderation_status = ANY($1)
-    GROUP BY e.id
+    GROUP BY e.id, p.name
     UNION ALL
     SELECT id, 'photo' AS content_type, poi_id,
            CASE
@@ -754,7 +760,9 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            NULL AS content_source, NULL::DATE AS publication_date, 0 AS date_consensus_score,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
            0 AS additional_url_count,
-           media_type, image_server_asset_id, role
+           media_type, image_server_asset_id, role,
+           NULL::VARCHAR AS poi_name, NULL::VARCHAR AS news_type, NULL::VARCHAR AS event_type,
+           NULL::VARCHAR AS source_name, NULL::VARCHAR AS location_details
     FROM poi_media WHERE moderation_status = ANY($1)`;
 
   const filters = [];

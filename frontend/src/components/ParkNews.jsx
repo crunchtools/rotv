@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
-import { formatPublicationDate, NewsTypeIcon } from './NewsEventsShared';
+import { NewsCardBody } from './NewsEventsShared';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -176,57 +176,11 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
           ) : (
           <div className="park-news-list">
         {paginatedNews.map(item => (
-          <div key={item.id} className={`park-news-item ${item.news_type || 'general'}`}>
-            <div className="park-news-header">
-              <NewsTypeIcon type={item.news_type} />
-              <div className="park-news-title-section">
-                <span className="park-news-title">{item.title}</span>
-                <button
-                  className="park-news-poi-link"
-                  onClick={() => onSelectPoi && onSelectPoi(item.poi_id)}
-                  title={`View ${item.poi_name}`}
-                >
-                  {item.poi_name}
-                </button>
-              </div>
-            </div>
-            {item.summary && <p className="park-news-summary">{item.summary}</p>}
-            <div className="park-news-meta">
-              {item.source_name && <span className="news-source">{item.source_name}</span>}
-              {item.publication_date && <span className="news-date">{formatPublicationDate(item.publication_date)}</span>}
-              {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
-                <span className="news-sources-group">
-                  <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">Source</a>
-                  {item.additional_urls.map((u, i) => (
-                    <a key={i} href={u.url} target="_blank" rel="noopener noreferrer" className="news-link">
-                      {u.source_name || `Source ${i + 2}`}
-                    </a>
-                  ))}
-                </span>
-              ) : item.source_url ? (
-                <a
-                  href={item.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="news-link"
-                >
-                  Read more
-                </a>
-              ) : null}
-              {isAdmin && onEditNewsItem && (
-                <button
-                  onClick={() => onEditNewsItem(item.id, item.title)}
-                  className="news-link"
-                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', font: 'inherit' }}
-                >
-                  Edit
-                </button>
-              )}
-              {isAdmin && (
-                <span className="news-item-id" title="News item ID">#{item.id}</span>
-              )}
-            </div>
-          </div>
+          <NewsCardBody
+            key={item.id}
+            item={item}
+            onSelectPoi={onSelectPoi}
+          />
         ))}
           </div>
           )}

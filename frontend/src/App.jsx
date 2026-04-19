@@ -324,7 +324,7 @@ function AppContent() {
   const refreshModerationCount = useCallback(async () => {
     console.log('[App] Refreshing moderation count...');
     try {
-      const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include' });
+      const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include', cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         console.log('[App] New moderation count:', data.count);
@@ -339,7 +339,7 @@ function AppContent() {
   useEffect(() => {
     if (!isAdmin) return;
     refreshModerationCount();
-    const interval = setInterval(refreshModerationCount, 60000);
+    const interval = setInterval(refreshModerationCount, 5000);
 
     // Listen for media upload events to refresh count
     const handleCountChanged = () => {
