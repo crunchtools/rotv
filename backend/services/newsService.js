@@ -9,10 +9,50 @@
  */
 
 import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
-import { parseDate, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
+import { parseDate, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus } from './dateExtractor.js';
 
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
+
+const LLM_DATE_VOTES = 5;
+
+/**
+ * Normalize social media URLs to canonical forms for better metadata extraction.
+ * Instagram /reel/ and /reels/ → /p/ (exposes <time> elements).
+ * Applied before rendering only — original URL preserved as source_url.
+ */
+export function normalizeRenderUrl(url) {
+  if (!url) return url;
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('instagram.com')) {
+      parsed.pathname = parsed.pathname.replace(/^\/(reels?)\//, '/p/');
+      return parsed.toString();
+    }
+    return url;
+  } catch { return url; }
+}
+
+/**
+ * Run LLM date extraction N times in parallel with today's date seeded.
+ * Returns array of parsed date strings (YYYY-MM-DD or null).
+ */
+export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES) {
+  const today = new Date().toISOString().substring(0, 10);
+  const datePrompt = `Today's date is ${today}. Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${snippet}`;
+
+  const results = await Promise.all(
+    Array.from({ length: numVotes }, () =>
+      generateTextWithCustomPrompt(pool, datePrompt)
+        .then(r => {
+          const raw = (r.response || '').trim().replace(/^["']|["']$/g, '');
+          return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+        })
+        .catch(() => null)
+    )
+  );
+  return results;
+}
 
 export function resetJobUsage() {
   geminiCallCount = 0;
@@ -354,47 +394,43 @@ async function runConcurrent(tasks, limit = 10) {
 async function processOneUrl(pool, url, poi, contentType, options = {}) {
   const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', confidence = '75%', jobType = 'news' } = options;
 
-  // [Render]
+  // [Render] — normalize social media URLs for better metadata extraction
+  const renderUrl = normalizeRenderUrl(url);
   updateProgress(poi.id, { phase: 'render', message: url });
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url}`);
-  const extracted = await extractPageContent(url, { timeout: 30000, hardTimeout: 60000 });
+  const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
   if (!extracted.reachable || !extracted.markdown || extracted.markdown.length < 200) {
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'too short'} (${extracted.markdown?.length || 0} chars)`);
     return { news: [], events: [] };
   }
 
-  // [Dates] — Consensus scoring across multiple structured sources.
-  // Each source carries a weight; a date reaching ≥ 4 pts is treated as verified.
-  //   JSON-LD datePublished/startDate : 3 pts
-  //   LLM extraction (small Gemini call): 2 pts
-  //   Meta tags (OG, Parsely, DC)      : 1 pt
-  //   HTML <time datetime>              : 1 pt
-  //   URL path /YYYY/MM/DD/             : 1 pt
+  // [Dates] — Consensus scoring across deterministic sources + LLM multi-vote.
+  //   JSON-LD datePublished/startDate : 3 pts each
+  //   LLM 5-vote unanimous           : 4 pts (minus competing deterministic)
+  //   LLM 3-4/5 majority             : 1 pt
+  //   Meta tags (OG, Parsely, DC)     : 1 pt each
+  //   HTML <time datetime>            : 1 pt each
+  //   URL path date                   : 1 pt
   updateProgress(poi.id, { phase: 'dates', message: url });
 
-  // --- [1] Collect raw date strings from all extraction sources ---
+  // --- [1] Collect raw deterministic date strings ---
   const od = extracted.ogDates || {};
   const rawSources = {
     jsonLd:   od.jsonLdDates || [],
     meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
     timeTags: od.timeDates || [],
-    url:      extractUrlDate(url),
-    llm:      null  // filled below
+    url:      extractUrlDate(url)
   };
 
-  // --- [2] LLM date extraction (lightweight Gemini call on first 1000 chars) ---
-  try {
-    const datePrompt = `Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${extracted.markdown.substring(0, 1000)}`;
-    const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
-    const raw = (llmResult.response || '').trim().replace(/^["']|["']$/g, '');
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) rawSources.llm = raw;
-  } catch { /* LLM date extraction is best-effort */ }
+  // --- [2] LLM multi-vote date extraction (5 parallel calls with date seeding) ---
+  const dateText = extracted.rawText || extracted.markdown;
+  const llmResults = await runLlmDateVotes(pool, dateText.substring(0, 2000));
 
-  // --- [3] Normalize: convert all raw strings to ISO 8601, discard unparseable ---
+  // --- [3] Normalize deterministic sources to ISO 8601 ---
   const normalizedSources = normalizeDateSources(rawSources, timezone);
 
-  // --- [4] Score: consensus across normalized sources ---
-  const consensus = scoreDateConsensus(normalizedSources);
+  // --- [4] Score: deterministic + LLM consensus ---
+  const consensus = scoreDateConsensus(normalizedSources, llmResults);
 
   const primaryDate = consensus.date;
 
