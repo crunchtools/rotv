@@ -256,14 +256,18 @@ export function scoreDateConsensus(sources = {}) {
 
 /**
  * Normalize raw datetime strings from event extraction sources to ISO 8601
- * (YYYY-MM-DDTHH:MM:SS). Same shape as normalizeDateSources but preserves times.
+ * at minute precision (YYYY-MM-DDTHH:MM). Seconds are dropped so that sources
+ * returning "10:30" and "10:30:00" match during consensus scoring.
  *
  * @param {Object} rawSources - Raw extracted datetime strings by source
  * @param {string} [timezone] - IANA timezone for chrono-node parsing
- * @returns {Object} Normalized sources with valid YYYY-MM-DDTHH:MM:SS strings
+ * @returns {Object} Normalized sources with valid YYYY-MM-DDTHH:MM strings
  */
 export function normalizeEventDateSources(rawSources = {}, timezone = 'America/New_York') {
-  const norm = (raw) => (raw ? parseDateTime(String(raw), timezone) : null);
+  const norm = (raw) => {
+    const dt = raw ? parseDateTime(String(raw), timezone) : null;
+    return dt ? dt.substring(0, 16) : null;  // YYYY-MM-DDTHH:MM (drop seconds)
+  };
   const normList = (arr) => (arr || []).map(norm).filter(Boolean);
 
   return {
