@@ -337,17 +337,36 @@ IMPORTANT:
  * Run up to `limit` async tasks concurrently.
  * Each task is a zero-arg function returning a Promise.
  * Results are returned in original order; individual errors are caught and re-thrown per-task.
+ * @param {number} delayMs - Optional delay (ms) between dispatching each new task to avoid rate limiting
  */
-async function runConcurrent(tasks, limit = 10) {
+async function runConcurrent(tasks, limit = 10, delayMs = 0) {
   const results = new Array(tasks.length);
-  let idx = 0;
-  async function worker() {
-    while (idx < tasks.length) {
-      const i = idx++;
-      try { results[i] = await tasks[i](); } catch (e) { results[i] = e instanceof Error ? e : new Error(String(e)); }
+
+  if (delayMs <= 0) {
+    // Fast path: worker pool with no delays
+    let idx = 0;
+    async function worker() {
+      while (idx < tasks.length) {
+        const i = idx++;
+        try { results[i] = await tasks[i](); } catch (e) { results[i] = e instanceof Error ? e : new Error(String(e)); }
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  } else {
+    // Staggered dispatch: one task dispatched every delayMs, max `limit` in flight
+    const inFlight = new Set();
+    for (let i = 0; i < tasks.length; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, delayMs));
+      while (inFlight.size >= limit) await Promise.race(inFlight);
+      const p = (async () => {
+        try { results[i] = await tasks[i](); } catch (e) { results[i] = e instanceof Error ? e : new Error(String(e)); }
+      })();
+      const tracked = p.then(() => inFlight.delete(tracked), () => inFlight.delete(tracked));
+      inFlight.add(tracked);
+    }
+    await Promise.all(inFlight);
   }
-  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+
   return results;
 }
 
@@ -557,7 +576,7 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
           await processLevel(validLinks, depth + 1);
         }
       }
-    }), 10);
+    }), 3, 2000);
   }
 
   await processLevel([startUrl], 0);
