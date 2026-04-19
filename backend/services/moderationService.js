@@ -209,7 +209,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
     if (dupCheck.rows.length) {
       await pool.query(
-        `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        `UPDATE poi_news SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         [`Rejected: duplicate of approved news #${dupCheck.rows[0].id}`, contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
@@ -220,7 +220,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // No source URL check (cheap)
     if (!row.source_url || !row.source_url.trim()) {
       await pool.query(
-        `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        `UPDATE poi_news SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         ['Rejected: no source URL (Read More link required)', contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (no source URL)`);
@@ -236,8 +236,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     scoring = { confidence_score: dateScore / 8.0, reasoning: `Date consensus score: ${dateScore}/8` };
     await pool.query(
-      `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3 WHERE id = $4`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
+      `UPDATE poi_news SET moderation_processed = true, moderation_status = $1 WHERE id = $2`,
+      [resolvedStatus, contentId]
     );
 
   } else if (contentType === 'event') {
@@ -259,7 +259,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
     if (dupCheck.rows.length) {
       await pool.query(
-        `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        `UPDATE poi_events SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         [`Rejected: duplicate of approved event #${dupCheck.rows[0].id}`, contentId]
       );
       console.log(`[Moderation] event #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
@@ -270,7 +270,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // No source URL check for non-human items (cheap)
     if (row.content_source !== 'human' && (!row.source_url || !row.source_url.trim())) {
       await pool.query(
-        `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        `UPDATE poi_events SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         ['Rejected: non-human event without source URL', contentId]
       );
       console.log(`[Moderation] event #${contentId}: rejected (non-human, no source URL)`);
@@ -286,8 +286,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     scoring = { confidence_score: dateScore / 8.0, reasoning: `Date consensus score: ${dateScore}/8` };
     await pool.query(
-      `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3 WHERE id = $4`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
+      `UPDATE poi_events SET moderation_processed = true, moderation_status = $1 WHERE id = $2`,
+      [resolvedStatus, contentId]
     );
 
   } else if (contentType === 'photo') {
@@ -314,7 +314,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       ? 'auto_approved' : 'pending';
 
     await pool.query(
-      `UPDATE photo_submissions SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3 WHERE id = $4`,
+      `UPDATE photo_submissions SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3, moderation_processed = true WHERE id = $4`,
       [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
     );
   }
@@ -329,7 +329,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 }
 
 /**
- * Process all unscored pending items (sweep job, runs every 15 minutes)
+ * Process all unprocessed pending items (sweep job, runs every 15 minutes)
  */
 export async function processPendingItems(pool) {
   const runId = Math.floor(Date.now() / 1000);
@@ -342,13 +342,13 @@ export async function processPendingItems(pool) {
   }
 
   const pendingNews = await pool.query(
-    `SELECT id FROM poi_news WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
+    `SELECT id FROM poi_news WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT 20`
   );
   const pendingEvents = await pool.query(
-    `SELECT id FROM poi_events WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
+    `SELECT id FROM poi_events WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT 20`
   );
   const pendingPhotos = await pool.query(
-    `SELECT id FROM photo_submissions WHERE moderation_status = 'pending' AND confidence_score IS NULL LIMIT 20`
+    `SELECT id FROM photo_submissions WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT 20`
   );
   const totalPending = pendingNews.rows.length + pendingEvents.rows.length + pendingPhotos.rows.length;
 
@@ -357,7 +357,7 @@ export async function processPendingItems(pool) {
     return { processed: 0 };
   }
 
-  logInfo(runId, 'moderation', null, null, `Sweep starting: ${totalPending} unscored items (${pendingNews.rows.length} news, ${pendingEvents.rows.length} events, ${pendingPhotos.rows.length} photos)`);
+  logInfo(runId, 'moderation', null, null, `Sweep starting: ${totalPending} unprocessed items (${pendingNews.rows.length} news, ${pendingEvents.rows.length} events, ${pendingPhotos.rows.length} photos)`);
 
   let processed = 0;
   for (const row of pendingNews.rows) {
@@ -544,7 +544,7 @@ export async function requeueItem(pool, contentType, contentId) {
   const table = TABLE_MAP[contentType];
   await pool.query(
     `UPDATE ${table}
-     SET moderation_status = 'pending', confidence_score = NULL, ai_reasoning = NULL,
+     SET moderation_status = 'pending', moderation_processed = false,
          moderated_by = NULL, moderated_at = NULL
      WHERE id = $1`,
     [contentId]

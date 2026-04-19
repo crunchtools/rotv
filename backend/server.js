@@ -778,6 +778,7 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS publication_date DATE`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS date_consensus_score INTEGER DEFAULT 0`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderation_processed BOOLEAN DEFAULT FALSE`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_moderation ON poi_news(moderation_status)`);
 
     // Moderation columns on poi_events
@@ -791,6 +792,7 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS publication_date DATE`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS date_consensus_score INTEGER DEFAULT 0`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderation_processed BOOLEAN DEFAULT FALSE`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_moderation ON poi_events(moderation_status)`);
 
     // Photo submissions table
@@ -807,6 +809,7 @@ async function initDatabase() {
         ai_reasoning TEXT,
         moderated_by INTEGER REFERENCES users(id),
         moderated_at TIMESTAMP,
+        moderation_processed BOOLEAN DEFAULT FALSE,
         weekly_newsletter BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
