@@ -45,7 +45,7 @@ function DataCollectionSettings() {
 
   // Moderation configuration state
   const [moderationConfig, setModerationConfig] = useState({
-    enabled: true, autoApproveEnabled: true, autoApproveThreshold: 0.9, photoSubmissionsEnabled: false
+    enabled: true, autoApproveEnabled: true, newsDateThreshold: 4, photoConfidenceThreshold: 0.9, photoSubmissionsEnabled: false
   });
   const [moderationConfigLoading, setModerationConfigLoading] = useState(true);
   const [moderationConfigSaving, setModerationConfigSaving] = useState(false);
@@ -325,7 +325,8 @@ function DataCollectionSettings() {
         setModerationConfig({
           enabled: settings.moderation_enabled?.value !== 'false',
           autoApproveEnabled: settings.moderation_auto_approve_enabled?.value !== 'false',
-          autoApproveThreshold: parseFloat(settings.moderation_auto_approve_threshold?.value) || 0.9,
+          newsDateThreshold: parseInt(settings.moderation_news_date_threshold?.value) || 4,
+          photoConfidenceThreshold: parseFloat(settings.moderation_auto_approve_threshold?.value) || 0.9,
           photoSubmissionsEnabled: settings.photo_submissions_enabled?.value === 'true'
         });
       }
@@ -339,7 +340,8 @@ function DataCollectionSettings() {
       const settings = [
         { key: 'moderation_enabled', value: String(moderationConfig.enabled) },
         { key: 'moderation_auto_approve_enabled', value: String(moderationConfig.autoApproveEnabled) },
-        { key: 'moderation_auto_approve_threshold', value: String(moderationConfig.autoApproveThreshold) },
+        { key: 'moderation_news_date_threshold', value: String(moderationConfig.newsDateThreshold) },
+        { key: 'moderation_auto_approve_threshold', value: String(moderationConfig.photoConfidenceThreshold) },
         { key: 'photo_submissions_enabled', value: String(moderationConfig.photoSubmissionsEnabled) }
       ];
       for (const setting of settings) {
@@ -842,8 +844,14 @@ function DataCollectionSettings() {
               <span className="config-hint">Automatically publish items scoring above the threshold</span>
             </div>
             <div className="config-row">
-              <label>Auto-Approve Threshold:</label>
-              <input type="number" value={moderationConfig.autoApproveThreshold} onChange={e => setModerationConfig({...moderationConfig, autoApproveThreshold: parseFloat(e.target.value) || 0})}
+              <label>Minimum News & Events Date Consensus Score:</label>
+              <input type="number" value={moderationConfig.newsDateThreshold} onChange={e => setModerationConfig({...moderationConfig, newsDateThreshold: parseInt(e.target.value) || 0})}
+                min="0" max="8" step="1" disabled={moderationConfigSaving || !moderationConfig.enabled || !moderationConfig.autoApproveEnabled} style={{ width: '80px' }} />
+              <span className="config-hint">Score 0-8 (recommended: 4)</span>
+            </div>
+            <div className="config-row">
+              <label>Gemini Photo Confidence:</label>
+              <input type="number" value={moderationConfig.photoConfidenceThreshold} onChange={e => setModerationConfig({...moderationConfig, photoConfidenceThreshold: parseFloat(e.target.value) || 0})}
                 min="0" max="1" step="0.05" disabled={moderationConfigSaving || !moderationConfig.enabled || !moderationConfig.autoApproveEnabled} style={{ width: '80px' }} />
               <span className="config-hint">Score 0.0-1.0 (recommended: 0.9)</span>
             </div>
