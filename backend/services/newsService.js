@@ -404,7 +404,7 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   const secondDate = dateHints.length > 1 ? dateHints[1].start?.substring(0, 10) : null;
 
   logInfo(jobId, jobType, poi.id, poi.name,
-    `${phase}: [Dates] ${primaryDate || 'none'} (score=${consensus.score}, confidence=${consensus.confidence}, sources=${JSON.stringify(consensus.sourceMap)}) from ${url}`);
+    `${phase}: [Dates] ${primaryDate || 'none'} (score=${consensus.score}, sources=${JSON.stringify(consensus.sourceMap)}) from ${url}`);
 
   // [Summarize]
   updateProgress(poi.id, { phase: 'summarize', message: url });
@@ -420,14 +420,14 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   for (const item of (result.news || [])) {
     item.source_url = url;
     item.published_date = primaryDate;
-    item.date_confidence = consensus.confidence;
+    item.date_consensus_score = consensus.score;
   }
 
   for (const event of (result.events || [])) {
     event.source_url = url;
     event.start_date = primaryDate;
     event.end_date = secondDate || null;
-    event.date_confidence = consensus.confidence;
+    event.date_consensus_score = consensus.score;
   }
 
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events from ${url}`);
@@ -1092,12 +1092,12 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         continue;
       }
 
-      // New item — save as pending for moderation
-      // Use consensus confidence if set by processOneUrl; fall back to binary exact/unknown
-      const dateConfidence = item.date_confidence || (item.published_date ? 'exact' : 'unknown');
+      // New item — auto-approve if date consensus score is high enough, otherwise pending
+      const dateScore = item.date_consensus_score || 0;
+      const status = dateScore >= 4 ? 'auto_approved' : 'pending';
       await pool.query(`
-        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_confidence, moderation_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending')
+        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `, [
         poiId,
         item.title,
@@ -1106,10 +1106,11 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         item.source_name,
         item.news_type || 'general',
         item.published_date || null,
-        dateConfidence
+        dateScore,
+        status
       ]);
       savedCount++;
-      if (log) log(`[Save] Saved (pending): "${item.title}" (${item.published_date || 'no date'}, ${dateConfidence}) → ${resolvedUrl}`);
+      if (log) log(`[Save] Saved (${status}): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
       if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
       console.error(`Error saving news item for POI ${poiId}:`, error.message);
@@ -1194,12 +1195,12 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         continue;
       }
 
-      // New event — save as pending for moderation
-      // Use consensus confidence if set by processOneUrl; fall back to binary exact/unknown
-      const dateConfidence = item.date_confidence || (item.start_date ? 'exact' : 'unknown');
+      // New event — auto-approve if date consensus score is high enough, otherwise pending
+      const dateScore = item.date_consensus_score || 0;
+      const status = dateScore >= 4 ? 'auto_approved' : 'pending';
       await pool.query(`
-        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_confidence, moderation_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')
+        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `, [
         poiId,
         item.title,
@@ -1210,10 +1211,11 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         item.location_details,
         resolvedUrl,
         item.start_date || null,
-        dateConfidence
+        dateScore,
+        status
       ]);
       savedCount++;
-      if (log) log(`[Save] Saved event (pending): "${item.title}" (${item.start_date}, ${dateConfidence}) → ${resolvedUrl}`);
+      if (log) log(`[Save] Saved event (${status}): "${item.title}" (${item.start_date}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
       if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
       console.error(`Error saving event for POI ${poiId}:`, error.message);

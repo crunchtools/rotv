@@ -334,7 +334,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
       if (response.ok) {
         const data = await response.json();
         if (data.date_updated) {
-          const parts = [`${type} #${id} — date set: ${data.publication_date} (${data.date_confidence})`];
+          const parts = [`${type} #${id} — date set: ${data.publication_date} (score=${data.date_consensus_score})`];
           if (data.start_date) parts.push(`event: ${data.start_date}${data.end_date ? ' — ' + data.end_date : ''}`);
           notify('success', parts.join(', '));
         } else {
@@ -1080,7 +1080,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
                         const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
                         const hasNoDate = item.content_type === 'event'
                           ? !item.publication_date && !item.start_date
-                          : !item.publication_date || item.date_confidence === 'unknown';
+                          : !item.publication_date || !item.date_consensus_score;
                         const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
                         const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
                         const hasOther = issues.some(i => !urlIssueCodes.includes(i));

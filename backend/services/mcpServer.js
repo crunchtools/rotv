@@ -118,7 +118,7 @@ function registerTools(server, pool, boss) {
       const result = await pool.query(`
         SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
                n.moderation_status, n.confidence_score, n.content_source,
-               n.publication_date, n.date_confidence, n.collection_date,
+               n.publication_date, n.date_consensus_score, n.collection_date,
                COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
         FROM poi_news n
         LEFT JOIN poi_news_urls u ON u.news_id = n.id
@@ -142,7 +142,7 @@ function registerTools(server, pool, boss) {
       const result = await pool.query(`
         SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
                e.location_details, e.source_url, e.moderation_status, e.confidence_score, e.content_source,
-               e.publication_date, e.date_confidence, e.collection_date,
+               e.publication_date, e.date_consensus_score, e.collection_date,
                COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
         FROM poi_events e
         LEFT JOIN poi_event_urls u ON u.event_id = e.id
@@ -357,7 +357,7 @@ function registerTools(server, pool, boss) {
       const result = await fixDate(pool, content_type, id);
       let msg = `Fix date for ${content_type} #${id}: `;
       if (result.date_updated) {
-        msg += `Date set to ${result.publication_date} (${result.date_confidence}).`;
+        msg += `Date set to ${result.publication_date} (${result.date_consensus_score}).`;
       } else {
         msg += `Could not determine date.`;
       }
