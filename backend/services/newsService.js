@@ -385,7 +385,6 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     // --- Event datetime consensus: separate start and end pipelines ---
 
     // [1] Collect raw datetime sources for start and end
-    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Raw sources: eventStartDate=${od.eventStartDate}, eventEndDate=${od.eventEndDate}, timeDates=${JSON.stringify(od.timeDates?.slice(0, 4))}`);
     const startSources = {
       jsonLd:   od.eventStartDate ? [od.eventStartDate] : [],
       meta:     [],
@@ -411,19 +410,13 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
       const datePrompt = `Extract the event start and end date/time from this page. The current year is ${new Date().getFullYear()}. If no year is shown, assume the current year. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${snippet}`;
       const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
       const raw = (llmResult.response || '').trim();
-      logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] LLM raw response: ${raw.substring(0, 200)}`);
       try {
         const cleaned = raw.replace(/^```json\s*/, '').replace(/\s*```$/, '');
         const parsed = JSON.parse(cleaned);
         if (parsed.start && typeof parsed.start === 'string') startSources.llm = parsed.start;
         if (parsed.end && typeof parsed.end === 'string') endSources.llm = parsed.end;
-        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] LLM parsed: start=${startSources.llm}, end=${endSources.llm}`);
-      } catch (parseErr) {
-        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] LLM parse failed: ${parseErr.message}`);
-      }
-    } catch (llmErr) {
-      logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] LLM call failed: ${llmErr.message}`);
-    }
+      } catch { /* LLM returned non-JSON — skip */ }
+    } catch { /* LLM extraction is best-effort */ }
 
     // [3] Normalize to YYYY-MM-DDTHH:MM:SS
     const normStart = normalizeEventDateSources(startSources, timezone);

@@ -1027,9 +1027,24 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
                       {/* Event dates */}
                       {item.content_type === 'event' && (item.start_date || item.end_date) && (
                         <div style={{ fontSize: '0.78rem', color: '#7b1fa2', fontWeight: '500', margin: '2px 0' }}>
-                          {item.start_date && formatEventDate(item.start_date)}
-                          {item.start_date && item.end_date && ' — '}
-                          {item.end_date && formatEventDate(item.end_date)}
+                          {(() => {
+                            const startStr = String(item.start_date || '');
+                            const endStr = String(item.end_date || '');
+                            const startDateOnly = startStr.substring(0, 10);
+                            const endDateOnly = endStr.substring(0, 10);
+                            const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
+                            const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
+                            const sameDay = endDateOnly === startDateOnly;
+                            const fmtDate = (s) => new Date(s).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
+                            const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+
+                            if (sameDay && startHasTime) {
+                              return `${fmtDate(startStr)}, ${fmtTime(startStr)}${endHasTime ? ` – ${fmtTime(endStr)}` : ''}`;
+                            } else if (endStr && !sameDay) {
+                              return `${fmtDate(startStr)} – ${fmtDate(endStr)}`;
+                            }
+                            return fmtDate(startStr);
+                          })()}
                         </div>
                       )}
 
@@ -1051,8 +1066,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
                         </a>
                       )}
 
-                      {/* Source URL (expanded, read-only) */}
-                      {isExpanded && item.source_url && (
+                      {/* Source URL (always visible) */}
+                      {item.source_url && (
                         <div style={{ margin: '4px 0', fontSize: '0.78rem' }}>
                           <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
                             {item.source_url}
