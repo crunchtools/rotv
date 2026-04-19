@@ -1147,24 +1147,13 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   const parsedThreshold = parseInt(moderationSettings.moderation_news_date_threshold);
   const newsDateThreshold = Number.isNaN(parsedThreshold) ? 4 : parsedThreshold;
 
-  // Get today's date as a string (YYYY-MM-DD) to avoid timezone issues
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-
   for (const item of eventItems) {
     try {
       // Normalize event dates via chrono-node
       item.start_date = parseDate(item.start_date) || item.start_date;
       item.end_date = parseDate(item.end_date) || null;
 
-      // Skip past events
-      if (item.start_date && /^\d{4}-\d{2}-\d{2}$/.test(item.start_date)) {
-        const endDateStr = item.end_date || item.start_date;
-        if (endDateStr < todayStr) {
-          if (log) log(`[Save] Skip past event: "${item.title}" (${item.start_date})`);
-          continue;
-        }
-      }
+      // Save all events regardless of date — past events provide historical value
 
       // Resolve redirect URLs to final destination URLs
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;
