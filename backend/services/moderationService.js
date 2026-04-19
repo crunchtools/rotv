@@ -4,7 +4,7 @@
  * Processes pending items via pg-boss queue, auto-approves high-confidence content.
  */
 
-import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL } from './geminiService.js';
+import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL, generateTextWithCustomPrompt } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
@@ -171,6 +171,43 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
 }
 
 /**
+ * Run LLM content relevance voting — 3 parallel yes/no votes.
+ * Returns array of { relevant: boolean, reasoning: string }.
+ */
+async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
+  const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park.
+
+Title: "${title}"
+Summary: "${description || '(none)'}"
+Location: ${poiName || '(unknown)'}
+Type: ${contentType}
+
+Is this actual ${contentType} relevant to Cuyahoga Valley National Park visitors?
+Consider: Is it about the park region? Does it connect to nature, trails, recreation,
+conservation, history, ecology, wildlife, or community stewardship? Is it timely
+(actual news/event, not a static reference page)?
+
+Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
+
+  const results = await Promise.all(
+    Array.from({ length: numVotes }, () =>
+      generateTextWithCustomPrompt(pool, prompt)
+        .then(r => {
+          const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          try {
+            const parsed = JSON.parse(raw);
+            return { relevant: !!parsed.relevant, reasoning: parsed.reasoning || '' };
+          } catch {
+            return null;
+          }
+        })
+        .catch(() => null)
+    )
+  );
+  return results.filter(Boolean);
+}
+
+/**
  * Process a single moderation item (called by pg-boss worker)
  * @param {Pool} pool - Database connection pool
  * @param {string} contentType - 'news', 'event', or 'photo'
@@ -181,10 +218,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_news_date_threshold')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_threshold', 'moderation_news_date_threshold')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
-  const autoApproveEnabled = settings.moderation_auto_approve_enabled !== 'false';
   const parsedNewsThreshold = parseInt(settings.moderation_news_date_threshold);
   const newsDateThreshold = Number.isNaN(parsedNewsThreshold) ? 4 : parsedNewsThreshold;
   const parsedPhotoThreshold = parseFloat(settings.moderation_auto_approve_threshold);
@@ -242,37 +278,23 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     let dateScore = row.date_consensus_score || 0;
+    let newScore = dateScore;
+    let newDate = row.publication_date;
 
-    // Fast path: already scored >= threshold during collection — just apply threshold
-    if (dateScore >= newsDateThreshold && !forceStatus) {
-      scoring = { confidence_score: dateScore / 8.0, reasoning: `Date consensus score: ${dateScore}/8` };
-      await pool.query(
-        `UPDATE ${table} SET moderation_processed = true, moderation_status = $1 WHERE id = $2`,
-        [autoApproveEnabled ? 'auto_approved' : 'pending', contentId]
-      );
-    } else {
-      // Slow path: re-render and rescore with full consensus pipeline
+    // --- Step 1: Date scoring (rescore from cached signals or full extraction) ---
+    if (dateScore < newsDateThreshold || forceStatus) {
       console.log(`[Moderation] ${contentType} #${contentId}: rescoring (current score=${dateScore}, threshold=${newsDateThreshold})`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rescoring ${contentType} #${contentId} (score=${dateScore})`);
 
-      let newScore = dateScore;
-      let newDate = row.publication_date;
-
       try {
         let consensus;
-
         if (row.date_signals) {
-          // Fast path: rescore from cached signals (no Playwright, no LLM calls)
           const signals = row.date_signals;
-          const deterministicSources = {
-            jsonLd: signals.jsonLd || [],
-            meta: signals.meta || [],
-            timeTags: signals.timeTags || [],
-            url: signals.url || null
-          };
-          consensus = scoreDateConsensus(deterministicSources, signals.llmVotes || []);
+          consensus = scoreDateConsensus(
+            { jsonLd: signals.jsonLd || [], meta: signals.meta || [], timeTags: signals.timeTags || [], url: signals.url || null },
+            signals.llmVotes || []
+          );
         } else {
-          // Slow path: no cached signals — render + LLM
           let pageContent = null;
           let ogDates = {};
           if (row.source_url && isSafePublicUrl(row.source_url)) {
@@ -305,19 +327,58 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         console.error(`[Moderation] ${contentType} #${contentId}: date scoring failed: ${err.message}`);
         logError(itemRunId, 'moderation', null, row.title, `Date scoring failed: ${err.message}`);
       }
-
-      const resolvedStatus = forceStatus ? forceStatus
-        : autoApproveEnabled && newScore >= newsDateThreshold ? 'auto_approved'
-        : 'pending';
-
-      scoring = { confidence_score: newScore / 8.0, reasoning: `Date consensus score: ${newScore}/8` };
-      await pool.query(
-        `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
-                publication_date = $2, date_consensus_score = $3
-         WHERE id = $4`,
-        [resolvedStatus, newDate, newScore, contentId]
-      );
     }
+
+    // --- Step 2: Content relevance voting (3 LLM votes) ---
+    let relevanceVotes = [];
+    try {
+      relevanceVotes = await runContentRelevanceVotes(pool, {
+        title: row.title, description: row.description,
+        poiName: row.poi_name, contentType
+      });
+
+      const yesCount = relevanceVotes.filter(v => v.relevant).length;
+      const noCount = relevanceVotes.filter(v => !v.relevant).length;
+      console.log(`[Moderation] ${contentType} #${contentId}: relevance votes ${yesCount}/${relevanceVotes.length} yes`);
+      logInfo(itemRunId, 'moderation', null, row.title,
+        `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes`);
+    } catch (err) {
+      console.error(`[Moderation] ${contentType} #${contentId}: relevance voting failed: ${err.message}`);
+      logError(itemRunId, 'moderation', null, row.title, `Relevance voting failed: ${err.message}`);
+    }
+
+    // --- Step 3: Decision ---
+    const yesCount = relevanceVotes.filter(v => v.relevant).length;
+    const noCount = relevanceVotes.filter(v => !v.relevant).length;
+    const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
+    const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
+
+    let resolvedStatus;
+    let reasoning;
+    if (forceStatus) {
+      resolvedStatus = forceStatus;
+      reasoning = `Forced to ${forceStatus}`;
+    } else if (unanimousNo) {
+      resolvedStatus = 'rejected';
+      reasoning = `Rejected: relevance vote unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})`;
+    } else if (unanimousYes && newScore >= newsDateThreshold) {
+      resolvedStatus = 'published';
+      reasoning = `Published: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${newsDateThreshold}`;
+    } else {
+      resolvedStatus = 'pending';
+      reasoning = `Pending: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${newsDateThreshold}`;
+    }
+
+    scoring = { confidence_score: newScore / 8.0, reasoning };
+    await pool.query(
+      `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
+              publication_date = $2, date_consensus_score = $3,
+              ai_reasoning = $4, relevance_signals = $5
+       WHERE id = $6`,
+      [resolvedStatus, newDate, newScore, reasoning,
+       relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
+       contentId]
+    );
 
   } else if (contentType === 'photo') {
     const photoQuery = await pool.query(

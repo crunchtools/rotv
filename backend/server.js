@@ -2648,8 +2648,8 @@ async function start() {
       }
     }, 'moderation-sweep'));
 
-    // Schedule moderation sweep daily at 7 AM — runs after 6 AM news collection completes
-    await scheduleModerationSweep('0 7 * * *');
+    // Schedule moderation sweep every 15 minutes — relevance voting + promotion
+    await scheduleModerationSweep('*/15 * * * *');
 
     // Register newsletter email processing handler
     await registerNewsletterHandler(async (emailId) => {
