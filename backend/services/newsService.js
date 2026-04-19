@@ -385,6 +385,7 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     // --- Event datetime consensus: separate start and end pipelines ---
 
     // [1] Collect raw datetime sources for start and end
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] Raw sources: eventStartDate=${od.eventStartDate}, eventEndDate=${od.eventEndDate}, timeDates=${JSON.stringify(od.timeDates?.slice(0, 4))}`);
     const startSources = {
       jsonLd:   od.eventStartDate ? [od.eventStartDate] : [],
       meta:     [],
