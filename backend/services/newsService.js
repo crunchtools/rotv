@@ -79,8 +79,20 @@ async function generateTextWithCustomPrompt(pool, prompt) {
   return { response: text, provider: 'gemini' };
 }
 import { extractPageContent } from './contentExtractor.js';
+import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
+
+/**
+ * Thrown when the browser health check fails mid-crawl.
+ * Signals an infrastructure failure (not the POI's fault) so the POI can be retried.
+ */
+export class BrowserOverloadError extends Error {
+  constructor(poiName) {
+    super(`Browser circuit breaker tripped during crawl of ${poiName}`);
+    this.name = 'BrowserOverloadError';
+  }
+}
 import { searchNewsUrls } from './serperService.js';
 import fs from 'fs';
 
@@ -137,6 +149,12 @@ export async function ensureNewsJobCheckpointColumns(pool) {
     await pool.query(`
       ALTER TABLE news_job_status
       ADD COLUMN IF NOT EXISTS pg_boss_job_id VARCHAR(100)
+    `);
+
+    // Add circuit_breaker_retries column for tracking retriable failures
+    await pool.query(`
+      ALTER TABLE news_job_status
+      ADD COLUMN IF NOT EXISTS circuit_breaker_retries TEXT
     `);
 
     logInfo(runId, 'news', null, null, 'News job checkpoint columns verified');
@@ -578,6 +596,16 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
     // Deduplicate and mark visited upfront to prevent concurrent duplicate fetches
     const toProcess = urls.filter(url => !visited.has(url));
     toProcess.forEach(url => visited.add(url));
+
+    // Circuit breaker: verify browser is responsive before dispatching renders
+    if (toProcess.length > 0) {
+      const healthy = await healthCheck(1000);
+      if (!healthy) {
+        logWarn(jobId, jobType, poi.id, poi.name, `${phase}: [CircuitBreaker] Browser unresponsive — killing and aborting crawl`);
+        await forceKill(`Circuit breaker tripped during ${poi.name} crawl`);
+        throw new BrowserOverloadError(poi.name);
+      }
+    }
 
     await runConcurrent(toProcess.map(url => async () => {
       checkCancellation();
@@ -1495,12 +1523,16 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   // Parse POI IDs - handle both JSON strings and arrays
   let allPoiIds = job.poi_ids;
   let processedPoiIds = job.processed_poi_ids || [];
+  let circuitBreakerRetries = job.circuit_breaker_retries || {};
 
   if (typeof allPoiIds === 'string') {
     allPoiIds = JSON.parse(allPoiIds);
   }
   if (typeof processedPoiIds === 'string') {
     processedPoiIds = JSON.parse(processedPoiIds);
+  }
+  if (typeof circuitBreakerRetries === 'string') {
+    circuitBreakerRetries = JSON.parse(circuitBreakerRetries);
   }
 
   // Filter out already processed POIs (for resumability)
@@ -1604,6 +1636,26 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       },
 
       checkpointFn: async (poi, result, error) => {
+        // Circuit breaker: don't mark browser-killed POIs as processed (they'll retry on resume)
+        const MAX_CB_RETRIES = 3;
+        if (error && error.name === 'BrowserOverloadError') {
+          const retryCount = (circuitBreakerRetries[poi.id] || 0) + 1;
+          circuitBreakerRetries[poi.id] = retryCount;
+          if (retryCount >= MAX_CB_RETRIES) {
+            logWarn(jobId, jobType, poi.id, poi.name, `Circuit breaker retry cap reached (${retryCount}/${MAX_CB_RETRIES}) — giving up`);
+            newlyProcessedIds.push(poi.id);
+            processed++;
+          } else {
+            logWarn(jobId, jobType, poi.id, poi.name, `Circuit breaker tripped (${retryCount}/${MAX_CB_RETRIES}) — will retry on resume`);
+          }
+          await pool.query(`
+            UPDATE news_job_status
+            SET pois_processed = $1, processed_poi_ids = $2, circuit_breaker_retries = $3
+            WHERE id = $4
+          `, [processed, JSON.stringify(newlyProcessedIds), JSON.stringify(circuitBreakerRetries), jobId]);
+          return;
+        }
+
         processed++;
         newlyProcessedIds.push(poi.id);
 
