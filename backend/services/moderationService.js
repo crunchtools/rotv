@@ -184,8 +184,10 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const autoApproveEnabled = settings.moderation_auto_approve_enabled !== 'false';
-  const newsDateThreshold = parseInt(settings.moderation_news_date_threshold) || 4;
-  const photoThreshold = parseFloat(settings.moderation_auto_approve_threshold) || 0.9;
+  const parsedNewsThreshold = parseInt(settings.moderation_news_date_threshold);
+  const newsDateThreshold = Number.isNaN(parsedNewsThreshold) ? 4 : parsedNewsThreshold;
+  const parsedPhotoThreshold = parseFloat(settings.moderation_auto_approve_threshold);
+  const photoThreshold = Number.isNaN(parsedPhotoThreshold) ? 0.9 : parsedPhotoThreshold;
 
   let scoring;
 

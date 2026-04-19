@@ -1021,7 +1021,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   );
   const moderationSettings = Object.fromEntries(moderationRows.rows.map(r => [r.key, r.value]));
   const autoApproveEnabled = moderationSettings.moderation_auto_approve_enabled !== 'false';
-  const newsDateThreshold = parseInt(moderationSettings.moderation_news_date_threshold) || 4;
+  const parsedThreshold = parseInt(moderationSettings.moderation_news_date_threshold);
+  const newsDateThreshold = Number.isNaN(parsedThreshold) ? 4 : parsedThreshold;
 
   // Calculate date strings (YYYY-MM-DD) to avoid timezone issues
   const today = new Date();
@@ -1143,7 +1144,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   );
   const moderationSettings = Object.fromEntries(moderationRows.rows.map(r => [r.key, r.value]));
   const autoApproveEnabled = moderationSettings.moderation_auto_approve_enabled !== 'false';
-  const newsDateThreshold = parseInt(moderationSettings.moderation_news_date_threshold) || 4;
+  const parsedThreshold = parseInt(moderationSettings.moderation_news_date_threshold);
+  const newsDateThreshold = Number.isNaN(parsedThreshold) ? 4 : parsedThreshold;
 
   // Get today's date as a string (YYYY-MM-DD) to avoid timezone issues
   const today = new Date();
