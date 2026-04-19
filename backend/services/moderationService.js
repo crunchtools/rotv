@@ -67,29 +67,19 @@ function isSafePublicUrl(urlStr) {
 
 /**
  * Extract and validate publication date fields from AI scoring response.
- * Returns { publicationDate, dateConfidence } with safe defaults.
+ * Returns { publicationDate } with safe defaults.
  */
 function extractDateFields(scoring) {
   let publicationDate = null;
-  let dateConfidence = 'unknown';
 
   if (scoring.publication_date) {
-    // Normalize through chrono-node first — handles natural language, European format, etc.
     const normalized = parseDate(String(scoring.publication_date));
     if (normalized) {
       publicationDate = normalized;
-      dateConfidence = scoring.date_confidence || 'estimated';
     }
-  } else if (scoring.date_confidence) {
-    dateConfidence = scoring.date_confidence;
   }
 
-  // Ensure confidence is a valid enum value
-  if (!['exact', 'estimated', 'unknown'].includes(dateConfidence)) {
-    dateConfidence = 'unknown';
-  }
-
-  return { publicationDate, dateConfidence };
+  return { publicationDate };
 }
 
 /**
@@ -190,38 +180,20 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_auto_reject_floor', 'moderation_trusted_domains', 'moderation_competitor_domains')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_news_date_threshold')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const autoApproveEnabled = settings.moderation_auto_approve_enabled !== 'false';
-  const threshold = parseFloat(settings.moderation_auto_approve_threshold) || 0.9;
-  const rejectFloor = parseFloat(settings.moderation_auto_reject_floor) || 0.5;
-
-  // Parse domain lists from settings (stored as JSON arrays)
-  const parseDomainList = (jsonString, name) => {
-    try {
-      const parsed = JSON.parse(jsonString || '[]');
-      if (Array.isArray(parsed)) return parsed;
-      console.warn(`[Moderation] ${name} is not an array, defaulting to empty`);
-      return [];
-    } catch (e) {
-      console.warn(`[Moderation] Failed to parse ${name}:`, e.message);
-      return [];
-    }
-  };
-  const trustedDomains = parseDomainList(settings.moderation_trusted_domains, 'moderation_trusted_domains');
-  const competitorDomains = parseDomainList(settings.moderation_competitor_domains, 'moderation_competitor_domains');
-
-  // Create Sets once for performance (avoids re-creating on every URL check)
-  // Filter to only strings to avoid TypeError on non-string elements
-  const trustedSet = new Set(trustedDomains.filter(d => typeof d === 'string').map(d => d.toLowerCase()));
-  const competitorSet = new Set(competitorDomains.filter(d => typeof d === 'string').map(d => d.toLowerCase()));
+  const parsedNewsThreshold = parseInt(settings.moderation_news_date_threshold);
+  const newsDateThreshold = Number.isNaN(parsedNewsThreshold) ? 4 : parsedNewsThreshold;
+  const parsedPhotoThreshold = parseFloat(settings.moderation_auto_approve_threshold);
+  const photoThreshold = Number.isNaN(parsedPhotoThreshold) ? 0.9 : parsedPhotoThreshold;
 
   let scoring;
 
   if (contentType === 'news') {
     const newsQuery = await pool.query(
-      `SELECT n.id, n.title, n.summary, n.source_url, n.publication_date, n.date_confidence, p.name as poi_name
+      `SELECT n.id, n.title, n.summary, n.source_url, n.publication_date, n.date_consensus_score, p.name as poi_name
        FROM poi_news n
        LEFT JOIN pois p ON n.poi_id = p.id
        WHERE n.id = $1`, [contentId]
@@ -229,6 +201,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     if (!newsQuery.rows.length) return;
     const row = newsQuery.rows[0];
 
+    // Duplicate check (cheap DB query)
     const dupCheck = await pool.query(
       `SELECT id FROM poi_news WHERE LOWER(title) = LOWER($1) AND id != $2
        AND moderation_status IN ('published', 'auto_approved') LIMIT 1`,
@@ -244,97 +217,33 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       return;
     }
 
+    // No source URL check (cheap)
     if (!row.source_url || !row.source_url.trim()) {
-      scoring = { confidence_score: 0, reasoning: 'Rejected: no source URL (Read More link required)', issues: ['missing_source_url'] };
       await pool.query(
-        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected' WHERE id = $3`,
-        [scoring.confidence_score, scoring.reasoning, contentId]
+        `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        ['Rejected: no source URL (Read More link required)', contentId]
       );
       console.log(`[Moderation] news #${contentId}: rejected (no source URL)`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rejected news #${contentId}: no source URL`, { completed: true });
       return;
     }
 
-    const sourceCheck = await extractPageContent(row.source_url);
-    if (!sourceCheck.reachable) {
-      await pool.query(
-        `UPDATE poi_news SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-        [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
-      );
-      console.log(`[Moderation] news #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
-      logInfo(itemRunId, 'moderation', null, row.title, `Rejected news #${contentId}: URL unreachable (${sourceCheck.reason})`, { completed: true });
-      return;
-    }
-
-    scoring = await moderateContent(pool, {
-      type: 'news',
-      title: row.title,
-      summary: row.summary,
-      source_url: row.source_url,
-      source_page_content: sourceCheck.markdown,
-      poi_name: row.poi_name
-    });
-
-    let issuesList = scoring.issues || [];
-    let foundIssue = REJECTION_ISSUES.find(i => issuesList.includes(i));
-
-    if (foundIssue === 'content_not_on_source_page') {
-      ({ scoring, foundIssue } = await attemptDeepCrawl(pool, 'news', contentId, row, scoring));
-    }
-
-    // Use dates from collection (set by chrono-node), not from Gemini moderation
-    // Use toISOString() for Date objects to avoid losing the year in .toString() output
-    const newsPubDate = row.publication_date ? parseDate(
-      row.publication_date instanceof Date ? row.publication_date.toISOString().slice(0, 10) : String(row.publication_date).slice(0, 10)
-    ) : null;
-    const newsDateConf = newsPubDate ? (row.date_confidence || 'estimated') : 'unknown';
-
-    // Apply quality filters to adjust confidence_score
-    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: newsPubDate, dateConfidence: newsDateConf }, trustedSet, competitorSet);
-
-    // Re-serialize issues after quality filters
-    const newsIssuesJson = serializeIssues(scoring);
-
-    // Re-check issues list after quality filters may have added new issues
-    issuesList = scoring.issues || [];
-    foundIssue = REJECTION_ISSUES.find(i => issuesList.includes(i));
-
-    if (foundIssue) {
-      await pool.query(
-        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
-         publication_date = $3, date_confidence = $4, ai_issues = $5 WHERE id = $6`,
-        [scoring.confidence_score, scoring.reasoning, newsPubDate, newsDateConf, newsIssuesJson, contentId]
-      );
-      console.log(`[Moderation] news #${contentId}: rejected (${foundIssue})`);
-      return;
-    }
-
-    if (scoring.confidence_score < rejectFloor) {
-      await pool.query(
-        `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
-         publication_date = $3, date_confidence = $4, ai_issues = $5 WHERE id = $6`,
-        [scoring.confidence_score, scoring.reasoning, newsPubDate, newsDateConf, newsIssuesJson, contentId]
-      );
-      console.log(`[Moderation] news #${contentId}: rejected (score ${scoring.confidence_score} below floor ${rejectFloor})`);
-      return;
-    }
-
-    // Hold items with unknown publication date for human review regardless of score
+    // Auto-approve based on date consensus score (no re-render needed)
+    const dateScore = row.date_consensus_score || 0;
     const resolvedStatus = forceStatus ? forceStatus
-      : newsDateConf === 'unknown' ? 'pending'
-      : autoApproveEnabled && scoring.confidence_score >= threshold ? 'auto_approved'
+      : autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved'
       : 'pending';
 
+    scoring = { confidence_score: dateScore / 8.0, reasoning: `Date consensus score: ${dateScore}/8` };
     await pool.query(
-      `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3,
-       publication_date = $4, date_confidence = $5, ai_issues = $6 WHERE id = $7`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, newsPubDate, newsDateConf, newsIssuesJson, contentId]
+      `UPDATE poi_news SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3 WHERE id = $4`,
+      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
     );
 
   } else if (contentType === 'event') {
     const eventQuery = await pool.query(
       `SELECT e.id, e.title, e.description, e.source_url, e.start_date, e.content_source,
-              e.publication_date, e.date_confidence, p.name as poi_name
+              e.publication_date, e.date_consensus_score, p.name as poi_name
        FROM poi_events e
        LEFT JOIN pois p ON e.poi_id = p.id
        WHERE e.id = $1`, [contentId]
@@ -342,6 +251,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     if (!eventQuery.rows.length) return;
     const row = eventQuery.rows[0];
 
+    // Duplicate check (cheap DB query)
     const dupCheck = await pool.query(
       `SELECT id FROM poi_events WHERE LOWER(title) = LOWER($1) AND start_date = $2 AND id != $3
        AND moderation_status IN ('published', 'auto_approved') LIMIT 1`,
@@ -357,6 +267,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       return;
     }
 
+    // No source URL check for non-human items (cheap)
     if (row.content_source !== 'human' && (!row.source_url || !row.source_url.trim())) {
       await pool.query(
         `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
@@ -367,93 +278,16 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       return;
     }
 
-    let eventSourceContent = null;
-    if (row.source_url && row.source_url.trim()) {
-      const sourceCheck = await extractPageContent(row.source_url);
-      if (!sourceCheck.reachable) {
-        await pool.query(
-          `UPDATE poi_events SET confidence_score = 0, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-          [`Rejected: source URL unreachable (${sourceCheck.reason})`, contentId]
-        );
-        console.log(`[Moderation] event #${contentId}: rejected (source URL unreachable: ${sourceCheck.reason})`);
-        logInfo(itemRunId, 'moderation', null, row.title, `Rejected event #${contentId}: URL unreachable (${sourceCheck.reason})`, { completed: true });
-        return;
-      }
-      eventSourceContent = sourceCheck.markdown;
-    }
-
-    scoring = await moderateContent(pool, {
-      type: 'event',
-      title: row.title,
-      summary: row.description,
-      source_url: row.source_url,
-      source_page_content: eventSourceContent,
-      poi_name: row.poi_name
-    });
-
-    let eventIssuesList = scoring.issues || [];
-    let eventFoundIssue = REJECTION_ISSUES.find(i => eventIssuesList.includes(i));
-
-    if (eventFoundIssue === 'content_not_on_source_page') {
-      ({ scoring, foundIssue: eventFoundIssue } = await attemptDeepCrawl(pool, 'event', contentId, row, scoring));
-    }
-
-    // Use dates from collection (set by chrono-node), not from Gemini moderation
-    // Use toISOString() for Date objects to avoid losing the year in .toString() output
-    let eventPubDate = row.publication_date ? parseDate(
-      row.publication_date instanceof Date ? row.publication_date.toISOString().slice(0, 10) : String(row.publication_date).slice(0, 10)
-    ) : null;
-    let eventDateConf = eventPubDate ? (row.date_confidence || 'estimated') : 'unknown';
-
-    // Fallback: events with start_date but no pub date shouldn't get stuck as 'unknown'
-    if (eventDateConf === 'unknown' && row.start_date) {
-      const startStr = row.start_date instanceof Date ? row.start_date.toISOString().slice(0, 10) : String(row.start_date).slice(0, 10);
-      if (/^\d{4}-\d{2}-\d{2}$/.test(startStr)) {
-        eventPubDate = startStr;
-        eventDateConf = 'estimated';
-      }
-    }
-
-    // Apply quality filters to adjust confidence_score
-    scoring = applyQualityFilters(scoring, row.source_url, { publicationDate: eventPubDate, dateConfidence: eventDateConf }, trustedSet, competitorSet);
-
-    // Re-serialize issues after quality filters
-    const eventIssuesJson = serializeIssues(scoring);
-
-    // Re-check issues list after quality filters may have added new issues
-    eventIssuesList = scoring.issues || [];
-    eventFoundIssue = REJECTION_ISSUES.find(i => eventIssuesList.includes(i));
-
-    if (eventFoundIssue) {
-      await pool.query(
-        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
-         publication_date = $3, date_confidence = $4, ai_issues = $5 WHERE id = $6`,
-        [scoring.confidence_score, scoring.reasoning, eventPubDate, eventDateConf, eventIssuesJson, contentId]
-      );
-      console.log(`[Moderation] event #${contentId}: rejected (${eventFoundIssue})`);
-      return;
-    }
-
-    if (scoring.confidence_score < rejectFloor) {
-      await pool.query(
-        `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = 'rejected',
-         publication_date = $3, date_confidence = $4, ai_issues = $5 WHERE id = $6`,
-        [scoring.confidence_score, scoring.reasoning, eventPubDate, eventDateConf, eventIssuesJson, contentId]
-      );
-      console.log(`[Moderation] event #${contentId}: rejected (score ${scoring.confidence_score} below floor ${rejectFloor})`);
-      return;
-    }
-
-    // Hold items with unknown publication date for human review regardless of score
+    // Auto-approve based on date consensus score (no re-render needed)
+    const dateScore = row.date_consensus_score || 0;
     const resolvedStatus = forceStatus ? forceStatus
-      : eventDateConf === 'unknown' ? 'pending'
-      : autoApproveEnabled && scoring.confidence_score >= threshold ? 'auto_approved'
+      : autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved'
       : 'pending';
 
+    scoring = { confidence_score: dateScore / 8.0, reasoning: `Date consensus score: ${dateScore}/8` };
     await pool.query(
-      `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3,
-       publication_date = $4, date_confidence = $5, ai_issues = $6 WHERE id = $7`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, eventPubDate, eventDateConf, eventIssuesJson, contentId]
+      `UPDATE poi_events SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3 WHERE id = $4`,
+      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
     );
 
   } else if (contentType === 'photo') {
@@ -476,7 +310,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     });
 
     const resolvedStatus = forceStatus ? forceStatus
-      : autoApproveEnabled && scoring.confidence_score >= threshold
+      : autoApproveEnabled && scoring.confidence_score >= photoThreshold
       ? 'auto_approved' : 'pending';
 
     await pool.query(
@@ -485,8 +319,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
   }
 
-  const decision = scoring?.confidence_score >= threshold ? 'auto_approved'
-    : scoring?.confidence_score < rejectFloor ? 'rejected' : 'pending';
+  const decision = contentType === 'photo'
+    ? (scoring?.confidence_score >= photoThreshold ? 'auto_approved' : 'pending')
+    : (scoring?.confidence_score >= (newsDateThreshold / 8.0) ? 'auto_approved' : 'pending');
   console.log(`[Moderation] ${contentType} #${contentId}: score=${scoring?.confidence_score}`);
   logInfo(itemRunId || 0, 'moderation', null, null,
     `Score ${contentType} #${contentId}: ${scoring?.confidence_score?.toFixed(2)} → ${decision}`,
@@ -636,9 +471,9 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
     }
   }
 
-  // When admin sets publication_date, mark confidence as 'exact' (only for news/events, not photos)
+  // When admin sets publication_date, set high consensus score (only for news/events, not photos)
   if (edits.publication_date && contentType !== 'photo') {
-    setClauses.push(`date_confidence = 'exact'`);
+    setClauses.push(`date_consensus_score = 6`);
   }
 
   if (publish) {
@@ -836,7 +671,7 @@ export async function fixDate(pool, contentType, contentId) {
 
   const extraFields = contentType === 'event' ? ', t.start_date, t.end_date' : '';
   const itemQuery = await pool.query(
-    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date, t.date_confidence, p.name AS poi_name${extraFields}
+    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date, t.date_consensus_score, p.name AS poi_name${extraFields}
      FROM ${table} t
      LEFT JOIN pois p ON t.poi_id = p.id
      WHERE t.id = $1`,
@@ -871,7 +706,7 @@ export async function fixDate(pool, contentType, contentId) {
       // Fast path: chrono-node found a date, skip Gemini
       if (contentType === 'event') {
         const eventDates = findEventDates(pageContent, item.title, 'America/New_York');
-        const setClauses = ['publication_date = $2', "date_confidence = 'exact'"];
+        const setClauses = ['publication_date = $2', 'date_consensus_score = 6'];
         const values = [contentId, chronoPubDate];
         let idx = 3;
         if (eventDates.startDate) {
@@ -894,14 +729,14 @@ export async function fixDate(pool, contentType, contentId) {
         console.log(`[Moderation] Fix date via chrono-node: ${contentType} #${contentId} → pub=${chronoPubDate}, start=${eventDates.startDate}`);
       } else {
         await pool.query(
-          `UPDATE ${table} SET publication_date = $1, date_confidence = 'exact' WHERE id = $2`,
+          `UPDATE ${table} SET publication_date = $1, date_consensus_score = 6 WHERE id = $2`,
           [chronoPubDate, contentId]
         );
         console.log(`[Moderation] Fix date via chrono-node: ${contentType} #${contentId} → ${chronoPubDate}`);
       }
       logInfo(runId, 'moderation', null, item.title, `Fix Date: ${chronoPubDate} (chrono-node)`, { completed: true, publication_date: chronoPubDate });
       await flushJobLogs();
-      return { date_updated: true, publication_date: chronoPubDate, date_confidence: 'exact', reasoning: 'Extracted by chrono-node' };
+      return { date_updated: true, publication_date: chronoPubDate, date_consensus_score: 6, reasoning: 'Extracted by chrono-node' };
     }
   }
 
@@ -930,11 +765,9 @@ Look for:
 - References to specific dated events that pin down the timeframe${eventDateInstructions}
 
 Return ONLY valid JSON (no markdown, no code blocks):
-{"publication_date": "YYYY-MM-DD", "date_confidence": "exact", "reasoning": "Found date in..."${eventJsonFields}}
+{"publication_date": "YYYY-MM-DD", "reasoning": "Found date in..."${eventJsonFields}}
 
-If exact date found, use date_confidence "exact".
-If estimated from context, use "estimated".
-If truly impossible to determine, use "unknown" and set publication_date to null.`;
+If truly impossible to determine, set publication_date to null.`;
 
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
@@ -976,7 +809,7 @@ If truly impossible to determine, use "unknown" and set publication_date to null
   if (result.start_date) result.start_date = parseDate(result.start_date) || result.start_date;
   if (result.end_date) result.end_date = parseDate(result.end_date) || result.end_date;
 
-  const { publicationDate, dateConfidence } = extractDateFields(result);
+  const { publicationDate } = extractDateFields(result);
 
   // For events, also extract start_date/end_date with optional times
   let startDateStr = null;
@@ -997,11 +830,11 @@ If truly impossible to determine, use "unknown" and set publication_date to null
   const anyDateFound = publicationDate || startDateStr;
 
   if (anyDateFound) {
+    // AI fix-date sets score to 6 (equivalent of verified consensus)
     if (contentType === 'event' && (startDateStr || endDateStr)) {
-      // Update publication_date + event dates
-      const setClauses = ['date_confidence = $2'];
-      const values = [contentId, dateConfidence];
-      let idx = 3;
+      const setClauses = ['date_consensus_score = 6'];
+      const values = [contentId];
+      let idx = 2;
       if (publicationDate) {
         setClauses.push(`publication_date = $${idx}`);
         values.push(publicationDate);
@@ -1021,20 +854,20 @@ If truly impossible to determine, use "unknown" and set publication_date to null
         `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`,
         values
       );
-      console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: pub=${publicationDate}, start=${startDateStr}, end=${endDateStr} (${dateConfidence})`);
+      console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: pub=${publicationDate}, start=${startDateStr}, end=${endDateStr}`);
     } else {
       await pool.query(
-        `UPDATE ${table} SET publication_date = $1, date_confidence = $2 WHERE id = $3`,
-        [publicationDate, dateConfidence, contentId]
+        `UPDATE ${table} SET publication_date = $1, date_consensus_score = 6 WHERE id = $2`,
+        [publicationDate, contentId]
       );
-      console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: ${publicationDate} (${dateConfidence})`);
+      console.log(`[Moderation] Fix date updated ${contentType} #${contentId}: ${publicationDate}`);
     }
-    logInfo(runId, 'moderation', null, item.title, `Fix Date: ${publicationDate || 'no pub date'} (${dateConfidence}, via AI)`, { completed: true, publication_date: publicationDate, date_confidence: dateConfidence, start_date: startDateStr, end_date: endDateStr });
+    logInfo(runId, 'moderation', null, item.title, `Fix Date: ${publicationDate || 'no pub date'} (score=6, via AI)`, { completed: true, publication_date: publicationDate, date_consensus_score: 6, start_date: startDateStr, end_date: endDateStr });
     await flushJobLogs();
     return {
       date_updated: true,
       publication_date: publicationDate,
-      date_confidence: dateConfidence,
+      date_consensus_score: 6,
       start_date: startDateStr || null,
       end_date: endDateStr || null,
       reasoning: result.reasoning || null
@@ -1062,7 +895,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
     SELECT n.id, 'news' AS content_type, n.poi_id, n.title, n.summary AS description,
            n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues,
            n.submitted_by, n.moderated_by, n.moderated_at, n.collection_date AS created_at, n.source_url,
-           n.content_source, n.publication_date, n.date_confidence,
+           n.content_source, n.publication_date, n.date_consensus_score,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
            COUNT(u.id)::int AS additional_url_count,
            NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role
@@ -1074,7 +907,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
     SELECT e.id, 'event' AS content_type, e.poi_id, e.title, e.description,
            e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
            e.submitted_by, e.moderated_by, e.moderated_at, e.collection_date AS created_at, e.source_url,
-           e.content_source, e.publication_date, e.date_confidence,
+           e.content_source, e.publication_date, e.date_consensus_score,
            e.start_date, e.end_date,
            COUNT(u.id)::int AS additional_url_count,
            NULL::VARCHAR AS media_type, NULL::VARCHAR AS image_server_asset_id, NULL::VARCHAR AS role
@@ -1091,7 +924,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
            caption AS description,
            moderation_status, confidence_score, ai_reasoning, NULL AS ai_issues,
            submitted_by, moderated_by, moderated_at, created_at, youtube_url AS source_url,
-           NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR AS date_confidence,
+           NULL AS content_source, NULL::DATE AS publication_date, 0 AS date_consensus_score,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
            0 AS additional_url_count,
            media_type, image_server_asset_id, role

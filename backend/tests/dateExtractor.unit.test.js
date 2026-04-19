@@ -80,31 +80,28 @@ describe('normalizeDateSources', () => {
 });
 
 describe('scoreDateConsensus', () => {
-  it('returns unknown confidence when no sources provided', () => {
+  it('returns score 0 when no sources provided', () => {
     const result = scoreDateConsensus({});
     expect(result.date).toBeNull();
-    expect(result.confidence).toBe('unknown');
     expect(result.score).toBe(0);
   });
 
-  it('scores JSON-LD at 3 pts — reaches exact threshold alone with any other source', () => {
+  it('scores JSON-LD at 3 pts — reaches verified threshold alone with any other source', () => {
     const result = scoreDateConsensus({
       jsonLd: ['2024-03-15'],
       url: '2024-03-15'
     });
     expect(result.date).toBe('2024-03-15');
     expect(result.score).toBe(4);
-    expect(result.confidence).toBe('exact');
   });
 
-  it('scores JSON-LD alone as estimated (3 pts < 4 threshold)', () => {
+  it('scores JSON-LD alone at 3 pts (below 4 threshold)', () => {
     const result = scoreDateConsensus({ jsonLd: ['2024-05-20'] });
     expect(result.date).toBe('2024-05-20');
     expect(result.score).toBe(3);
-    expect(result.confidence).toBe('estimated');
   });
 
-  it('reaches exact threshold with LLM + meta + URL (2+1+1=4)', () => {
+  it('reaches verified threshold with LLM + meta + URL (2+1+1=4)', () => {
     const result = scoreDateConsensus({
       llm: '2024-06-01',
       meta: ['2024-06-01'],
@@ -112,7 +109,6 @@ describe('scoreDateConsensus', () => {
     });
     expect(result.date).toBe('2024-06-01');
     expect(result.score).toBe(4);
-    expect(result.confidence).toBe('exact');
   });
 
   it('breaks ties by choosing the oldest date', () => {
@@ -142,7 +138,6 @@ describe('scoreDateConsensus', () => {
     // 3 + 2 + 1 + 1 = 7
     expect(result.date).toBe('2024-08-10');
     expect(result.score).toBe(7);
-    expect(result.confidence).toBe('exact');
   });
 
   it('handles multiple JSON-LD dates — picks oldest on tie', () => {

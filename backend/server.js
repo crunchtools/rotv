@@ -777,7 +777,7 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS publication_date DATE`);
-    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS date_confidence VARCHAR(10) DEFAULT 'unknown'`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS date_consensus_score INTEGER DEFAULT 0`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_moderation ON poi_news(moderation_status)`);
 
     // Moderation columns on poi_events
@@ -790,7 +790,7 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS submitted_by INTEGER REFERENCES users(id)`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS weekly_newsletter BOOLEAN DEFAULT FALSE`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS publication_date DATE`);
-    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS date_confidence VARCHAR(10) DEFAULT 'unknown'`);
+    await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS date_consensus_score INTEGER DEFAULT 0`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_moderation ON poi_events(moderation_status)`);
 
     // Photo submissions table
@@ -821,19 +821,19 @@ async function initDatabase() {
         SELECT id, 'news' AS content_type, poi_id, title, summary AS description,
                moderation_status, confidence_score, ai_reasoning,
                submitted_by, moderated_by, moderated_at, collection_date AS created_at,
-               content_source, publication_date, date_confidence
+               content_source, publication_date, date_consensus_score
         FROM poi_news WHERE moderation_status = 'pending'
         UNION ALL
         SELECT id, 'event' AS content_type, poi_id, title, description,
                moderation_status, confidence_score, ai_reasoning,
                submitted_by, moderated_by, moderated_at, collection_date AS created_at,
-               content_source, publication_date, date_confidence
+               content_source, publication_date, date_consensus_score
         FROM poi_events WHERE moderation_status = 'pending'
         UNION ALL
         SELECT id, 'photo' AS content_type, poi_id, original_filename AS title, caption AS description,
                moderation_status, confidence_score, ai_reasoning,
                submitted_by, moderated_by, moderated_at, created_at,
-               NULL AS content_source, NULL::DATE AS publication_date, NULL::VARCHAR(10) AS date_confidence
+               NULL AS content_source, NULL::DATE AS publication_date, 0 AS date_consensus_score
         FROM photo_submissions WHERE moderation_status = 'pending'
         ORDER BY created_at DESC
     `);
@@ -1922,7 +1922,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
     const newsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.publication_date, n.date_confidence, n.collection_date,
+             n.publication_date, n.date_consensus_score, n.collection_date,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
@@ -2112,7 +2112,7 @@ app.get('/api/news/recent', async (req, res) => {
     const limit = parseInt(req.query.limit) || 500;
     const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.publication_date, n.date_confidence, n.collection_date,
+             n.publication_date, n.date_consensus_score, n.collection_date,
              p.id as poi_id, p.name as poi_name, p.poi_roles,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n

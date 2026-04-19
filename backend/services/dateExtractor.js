@@ -210,12 +210,11 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
  *   HTML <time datetime>                — 1 pt  (structural HTML, usually reliable)
  *   URL path /YYYY/MM/DD/               — 1 pt  (static, never wrong when present)
  *
- * A date that accumulates ≥ 4 pts is "verified" (stored as date_confidence='exact').
- * A date that accumulates 1-3 pts is "estimated" (date_confidence='estimated').
- * No date → date_confidence='unknown'.
+ * A date that accumulates ≥ 4 pts is considered verified (auto-approve eligible).
+ * A date that accumulates 1-3 pts needs human review.
+ * No date → score 0, needs human review.
  *
- * Expects pre-normalized sources from normalizeDateSources() — all values are
- * already valid YYYY-MM-DD strings. No re-parsing happens here.
+ * The raw score is stored as date_consensus_score in the database.
  *
  * @param {Object} sources - Normalized date strings by source (from normalizeDateSources)
  * @param {string[]} sources.jsonLd   - ISO dates from JSON-LD (weight 3 each)
@@ -223,52 +222,37 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
  * @param {string[]} sources.meta     - ISO dates from meta tags (weight 1 each)
  * @param {string[]} sources.timeTags - ISO dates from <time> elements (weight 1 each)
  * @param {string|null} sources.url   - ISO date from URL path (weight 1)
- * @returns {{ date: string|null, score: number, confidence: 'exact'|'estimated'|'unknown', sourceMap: Object }}
+ * @returns {{ date: string|null, score: number, sourceMap: Object }}
  */
 export function scoreDateConsensus(sources = {}) {
   const today = new Date().toISOString().substring(0, 10);
 
-  // Accumulate score per date
-  const scores = {}; // date → total score
-  const sourceMap = {}; // date → [source labels]
+  const scores = {};
+  const sourceMap = {};
 
   const add = (date, weight, label) => {
-    if (!date || date > today) return; // discard future dates (normalizeDateSources may pass them through)
+    if (!date || date > today) return;
     scores[date] = (scores[date] || 0) + weight;
     if (!sourceMap[date]) sourceMap[date] = [];
     sourceMap[date].push(label);
   };
 
-  // JSON-LD sources (3 pts each)
   for (const d of (sources.jsonLd || [])) add(d, 3, 'json-ld');
-
-  // LLM extraction (2 pts)
   add(sources.llm, 2, 'llm');
-
-  // Meta tag sources (1 pt each)
   for (const d of (sources.meta || [])) add(d, 1, 'meta');
-
-  // <time> tag sources (1 pt each)
   for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
-
-  // URL date pattern (1 pt)
   add(sources.url, 1, 'url');
 
   if (Object.keys(scores).length === 0) {
-    return { date: null, score: 0, confidence: 'unknown', sourceMap: {} };
+    return { date: null, score: 0, sourceMap: {} };
   }
 
-  // Pick the date with the highest score; break ties by choosing the oldest
-  // (publication date is almost always earlier than modification date)
   const bestDate = Object.keys(scores).reduce((a, b) => {
     if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
-    return a < b ? a : b; // prefer older date on tie
+    return a < b ? a : b;
   });
 
-  const bestScore = scores[bestDate];
-  const confidence = bestScore >= 4 ? 'exact' : 'estimated';
-
-  return { date: bestDate, score: bestScore, confidence, sourceMap };
+  return { date: bestDate, score: scores[bestDate], sourceMap };
 }
 
 /**
