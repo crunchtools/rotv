@@ -22,6 +22,19 @@ UPDATE poi_events SET date_consensus_score = CASE
   ELSE 0
 END WHERE date_consensus_score = 0 OR date_consensus_score IS NULL;
 
--- 3. Drop the vestigial date_confidence column
+-- 3. Add CHECK constraint for valid score range (0-8)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_news_date_score_range') THEN
+        ALTER TABLE poi_news ADD CONSTRAINT chk_news_date_score_range
+            CHECK (date_consensus_score >= 0 AND date_consensus_score <= 8);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'chk_events_date_score_range') THEN
+        ALTER TABLE poi_events ADD CONSTRAINT chk_events_date_score_range
+            CHECK (date_consensus_score >= 0 AND date_consensus_score <= 8);
+    END IF;
+END $$;
+
+-- 4. Drop the vestigial date_confidence column
 ALTER TABLE poi_news DROP COLUMN IF EXISTS date_confidence;
 ALTER TABLE poi_events DROP COLUMN IF EXISTS date_confidence;
