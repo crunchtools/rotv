@@ -71,17 +71,23 @@ export async function forceKill(reason = 'unknown') {
  */
 export async function healthCheck(timeoutMs = 1000) {
   if (!sharedBrowser || !sharedBrowser.isConnected()) return true;
-  let ctx;
-  try {
-    ctx = await sharedBrowser.newContext();
-    const page = await ctx.newPage();
-    await page.goto('data:text/html,<h1>ok</h1>', { timeout: timeoutMs });
-    return true;
-  } catch {
-    return false;
-  } finally {
-    if (ctx) await ctx.close().catch(() => {});
-  }
+
+  const check = (async () => {
+    let ctx;
+    try {
+      ctx = await sharedBrowser.newContext();
+      const page = await ctx.newPage();
+      await page.goto('data:text/html,<h1>ok</h1>', { timeout: timeoutMs });
+      return true;
+    } catch {
+      return false;
+    } finally {
+      if (ctx) await ctx.close().catch(() => {});
+    }
+  })();
+
+  const timeout = new Promise(resolve => setTimeout(() => resolve(false), timeoutMs));
+  return Promise.race([check, timeout]);
 }
 
 /**

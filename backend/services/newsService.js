@@ -597,8 +597,8 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
     const toProcess = urls.filter(url => !visited.has(url));
     toProcess.forEach(url => visited.add(url));
 
-    // Circuit breaker: verify browser is responsive before dispatching more renders
-    if (depth > 0) {
+    // Circuit breaker: verify browser is responsive before dispatching renders
+    if (toProcess.length > 0) {
       const healthy = await healthCheck(1000);
       if (!healthy) {
         logWarn(jobId, jobType, poi.id, poi.name, `${phase}: [CircuitBreaker] Browser unresponsive — killing and aborting crawl`);
