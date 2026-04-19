@@ -152,8 +152,11 @@ export function findPublicationDate(text, title, timezone = 'America/New_York') 
 }
 
 /**
- * Extract a date from a URL path using the pattern /YYYY/MM/DD/.
- * Common on WordPress and news sites (e.g. /2024/03/15/article-slug/).
+ * Extract a date from a URL path.
+ * Supports multiple patterns:
+ *   /YYYY/MM/DD/           — WordPress, news sites (e.g. /2024/03/15/article-slug/)
+ *   /YYYYMMDD-             — NPS (e.g. /news/20250929-prescribed-fires.htm)
+ *   /YYYY/MMDD             — ANPR (e.g. /release/2026/0109)
  * @param {string} url - The article URL
  * @returns {string|null} 'YYYY-MM-DD' or null
  */
@@ -161,16 +164,35 @@ export function extractUrlDate(url) {
   if (!url) return null;
   let path;
   try { path = new URL(url).pathname; } catch { path = url; }
-  // Match /YYYY/MM/DD/ (with trailing slash) or /YYYY/MM/DD at end of path
-  const match = path.match(/\/(\d{4})\/(\d{2})\/(\d{2})(?:\/|$)/);
-  if (!match) return null;
-  const [, y, m, d] = match;
-  // Sanity-check the values
-  const year = parseInt(y, 10);
-  const month = parseInt(m, 10);
-  const day = parseInt(d, 10);
-  if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
-  return `${y}-${m}-${d}`;
+
+  const validate = (y, m, d) => {
+    const year = parseInt(y, 10), month = parseInt(m, 10), day = parseInt(d, 10);
+    if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  };
+
+  // Pattern 1: /YYYY/MM/DD/ or /YYYY/MM/DD at end of path
+  const match1 = path.match(/\/(\d{4})\/(\d{2})\/(\d{2})(?:\/|$)/);
+  if (match1) {
+    const result = validate(match1[1], match1[2], match1[3]);
+    if (result) return result;
+  }
+
+  // Pattern 2: YYYYMMDD in path segment (e.g. /news/20250929-article-name)
+  const match2 = path.match(/\/(\d{4})(\d{2})(\d{2})[^\/\d]/);
+  if (match2) {
+    const result = validate(match2[1], match2[2], match2[3]);
+    if (result) return result;
+  }
+
+  // Pattern 3: /YYYY/MMDD (e.g. /release/2026/0109)
+  const match3 = path.match(/\/(\d{4})\/(\d{2})(\d{2})(?:\/|$)/);
+  if (match3) {
+    const result = validate(match3[1], match3[2], match3[3]);
+    if (result) return result;
+  }
+
+  return null;
 }
 
 /**
@@ -180,12 +202,11 @@ export function extractUrlDate(url) {
  *
  * @param {Object} rawSources - Raw extracted date strings by source
  * @param {string[]} rawSources.jsonLd   - Raw strings from JSON-LD
- * @param {string|null} rawSources.llm   - Raw string from LLM extraction
  * @param {string[]} rawSources.meta     - Raw strings from meta tags
  * @param {string[]} rawSources.timeTags - Raw strings from <time> elements
  * @param {string|null} rawSources.url   - Raw string from URL pattern
  * @param {string} [timezone]            - IANA timezone for chrono-node parsing
- * @returns {Object} Normalized sources with only valid YYYY-MM-DD strings
+ * @returns {Object} Normalized deterministic sources with only valid YYYY-MM-DD strings
  */
 export function normalizeDateSources(rawSources = {}, timezone = 'America/New_York') {
   const norm = (raw) => (raw ? parseDate(String(raw), timezone) : null);
@@ -193,7 +214,6 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
 
   return {
     jsonLd:   normList(rawSources.jsonLd),
-    llm:      norm(rawSources.llm),
     meta:     normList(rawSources.meta),
     timeTags: normList(rawSources.timeTags),
     url:      norm(rawSources.url)
@@ -201,30 +221,25 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
 }
 
 /**
- * Consensus date scoring across multiple extraction sources.
+ * Score deterministic date sources (everything except LLM).
  *
  * Weights:
  *   JSON-LD datePublished / startDate  — 3 pts (most authoritative structured data)
- *   LLM extraction                      — 2 pts (model reasoning over raw text)
  *   Meta tags (OG, Parsely, DC)         — 1 pt  (common but editable by CMS)
  *   HTML <time datetime>                — 1 pt  (structural HTML, usually reliable)
- *   URL path /YYYY/MM/DD/               — 1 pt  (static, never wrong when present)
+ *   URL path date                       — 1 pt  (static, never wrong when present)
  *
- * A date that accumulates ≥ 4 pts is considered verified (auto-approve eligible).
- * A date that accumulates 1-3 pts needs human review.
- * No date → score 0, needs human review.
- *
- * The raw score is stored as date_consensus_score in the database.
+ * LLM scoring is handled separately by scoreLlmConsensus() and added after.
  *
  * @param {Object} sources - Normalized date strings by source (from normalizeDateSources)
  * @param {string[]} sources.jsonLd   - ISO dates from JSON-LD (weight 3 each)
- * @param {string|null} sources.llm   - ISO date from LLM extraction (weight 2)
  * @param {string[]} sources.meta     - ISO dates from meta tags (weight 1 each)
  * @param {string[]} sources.timeTags - ISO dates from <time> elements (weight 1 each)
  * @param {string|null} sources.url   - ISO date from URL path (weight 1)
- * @returns {{ date: string|null, score: number, sourceMap: Object }}
+ * @returns {{ scores: Object, sourceMap: Object }} Raw per-date scores and source map
  */
-export function scoreDateConsensus(sources = {}) {
+export function scoreDeterministicSources(sources = {}) {
+  const today = new Date().toISOString().substring(0, 10);
   const scores = {};
   const sourceMap = {};
 
@@ -236,10 +251,80 @@ export function scoreDateConsensus(sources = {}) {
   };
 
   for (const d of (sources.jsonLd || [])) add(d, 3, 'json-ld');
-  add(sources.llm, 2, 'llm');
   for (const d of (sources.meta || [])) add(d, 1, 'meta');
   for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
   add(sources.url, 1, 'url');
+
+  return { scores, sourceMap };
+}
+
+/**
+ * Score LLM multi-vote consensus results.
+ * 5/5 unanimous → 4 pts (minus competing deterministic points)
+ * 3-4/5 majority → 1 pt
+ * No majority   → 0 pts
+ *
+ * @param {(string|null)[]} results - Array of extracted date strings from N LLM calls
+ * @param {number} competingDeterministicPoints - Sum of deterministic source points for dates != consensus date
+ * @returns {{ date: string|null, score: number, label: string, votes: Object }}
+ */
+export function scoreLlmConsensus(results, competingDeterministicPoints = 0) {
+  const votes = {};
+  for (const r of results) {
+    if (r && /^\d{4}-\d{2}-\d{2}$/.test(r)) {
+      votes[r] = (votes[r] || 0) + 1;
+    }
+  }
+
+  if (Object.keys(votes).length === 0) {
+    return { date: null, score: 0, label: 'no-date', votes };
+  }
+
+  const total = results.length;
+  const bestDate = Object.keys(votes).reduce((a, b) => votes[a] >= votes[b] ? a : b);
+  const bestCount = votes[bestDate];
+
+  if (bestCount === total) {
+    const score = Math.max(0, 4 - competingDeterministicPoints);
+    return { date: bestDate, score, label: 'llm-consensus', votes };
+  } else if (bestCount > total / 2) {
+    return { date: bestDate, score: 1, label: 'llm-majority', votes };
+  } else {
+    return { date: null, score: 0, label: 'llm-split', votes };
+  }
+}
+
+/**
+ * Combined consensus scoring: deterministic sources + LLM multi-vote.
+ * Replaces the old scoreDateConsensus that included a single LLM vote at 2 pts.
+ *
+ * @param {Object} deterministicSources - From normalizeDateSources (without llm field)
+ * @param {(string|null)[]} llmResults - Array of date strings from multi-vote LLM calls
+ * @returns {{ date: string|null, score: number, sourceMap: Object }}
+ */
+export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
+  const { scores, sourceMap } = scoreDeterministicSources(deterministicSources);
+
+  // Score LLM consensus with competing deterministic penalty
+  if (llmResults.length > 0) {
+    const prelimLlm = scoreLlmConsensus(llmResults, 0);
+
+    if (prelimLlm.date && prelimLlm.score > 0) {
+      // Sum deterministic points for dates that don't match the LLM consensus date
+      let competingPoints = 0;
+      for (const [date, pts] of Object.entries(scores)) {
+        if (date !== prelimLlm.date) competingPoints += pts;
+      }
+
+      const llmVote = scoreLlmConsensus(llmResults, competingPoints);
+      if (llmVote.date && llmVote.score > 0) {
+        const label = `${llmVote.label}(${Math.max(...Object.values(llmVote.votes))}/${llmResults.length})`;
+        scores[llmVote.date] = (scores[llmVote.date] || 0) + llmVote.score;
+        if (!sourceMap[llmVote.date]) sourceMap[llmVote.date] = [];
+        sourceMap[llmVote.date].push(label);
+      }
+    }
+  }
 
   if (Object.keys(scores).length === 0) {
     return { date: null, score: 0, sourceMap: {} };
