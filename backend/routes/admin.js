@@ -1821,6 +1821,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
+      if (imageServerAssetId) {
+        // Remove any existing primary media record and create new one atomically
+        await pool.query('BEGIN');
+        await pool.query(
+          `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
+          [id]
+        );
+
+        // Create poi_media record (auto-approved for admin uploads)
+        await pool.query(`
+          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_at)
+          VALUES ($1, 'image', $2, 'primary', 'auto_approved', CURRENT_TIMESTAMP)
+        `, [id, imageServerAssetId]);
+        await pool.query('COMMIT');
+      }
+
       await pool.query(
         'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
         [id]
@@ -1833,6 +1849,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         image_server_asset_id: imageServerAssetId
       });
     } catch (error) {
+      await pool.query('ROLLBACK').catch(() => {});
       console.error('Error uploading POI image:', error);
       if (error.message?.includes('Invalid file type')) {
         return res.status(400).json({ error: error.message });
@@ -1898,6 +1915,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
+      if (imageServerAssetId) {
+        // Remove any existing primary media record and create new one atomically
+        await pool.query('BEGIN');
+        await pool.query(
+          `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
+          [id]
+        );
+
+        // Create poi_media record (auto-approved for admin uploads)
+        await pool.query(`
+          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_at)
+          VALUES ($1, 'image', $2, 'primary', 'auto_approved', CURRENT_TIMESTAMP)
+        `, [id, imageServerAssetId]);
+        await pool.query('COMMIT');
+      }
+
       await pool.query(
         'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
         [id]
@@ -1910,6 +1943,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         image_server_asset_id: imageServerAssetId
       });
     } catch (error) {
+      await pool.query('ROLLBACK').catch(() => {});
       console.error('Error uploading POI image:', error);
       res.status(500).json({ error: 'Failed to upload image' });
     }
