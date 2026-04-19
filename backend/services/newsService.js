@@ -88,7 +88,19 @@ export async function scoreNewsDate(pool, { title, description, pageContent, ogD
     : [];
 
   const normalizedSources = normalizeDateSources(rawSources, timezone);
-  return scoreDateConsensus(normalizedSources, llmResults);
+  const consensus = scoreDateConsensus(normalizedSources, llmResults);
+
+  // Return raw signals alongside consensus so callers can save them for rescoring
+  return {
+    ...consensus,
+    rawSignals: {
+      jsonLd: normalizedSources.jsonLd || [],
+      meta: normalizedSources.meta || [],
+      timeTags: normalizedSources.timeTags || [],
+      url: normalizedSources.url || null,
+      llmVotes: llmResults
+    }
+  };
 }
 
 export function resetJobUsage() {
@@ -491,6 +503,7 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   let primaryDate = null;
   let dateScore = 0;
   let dateSourceMap = {};
+  let dateSignals = null;
   let eventStartDateTime = null;
   let eventStartScore = 0;
   let eventEndDateTime = null;
@@ -551,6 +564,12 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     dateScore = eventStartScore;
     dateSourceMap = startConsensus.sourceMap;
 
+    // Save raw event date signals for rescoring
+    dateSignals = {
+      start: { jsonLd: startSources.jsonLd, timeTags: startSources.timeTags, url: startSources.url, llm: startSources.llm },
+      end: { jsonLd: endSources.jsonLd, timeTags: endSources.timeTags, url: endSources.url, llm: endSources.llm }
+    };
+
     logInfo(jobId, jobType, poi.id, poi.name,
       `${phase}: [Dates] start=${eventStartDateTime || 'none'} (score=${eventStartScore}, sources=${JSON.stringify(startConsensus.sourceMap)}), end=${eventEndDateTime || 'none'} (score=${eventEndScore}) from ${url}`);
 
@@ -566,6 +585,7 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     primaryDate = consensus.date;
     dateScore = consensus.score;
     dateSourceMap = consensus.sourceMap;
+    dateSignals = consensus.rawSignals;
 
     logInfo(jobId, jobType, poi.id, poi.name,
       `${phase}: [Dates] ${primaryDate || 'none'} (score=${dateScore}, sources=${JSON.stringify(dateSourceMap)}) from ${url}`);
@@ -582,10 +602,14 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   // The crawler already resolved listings → detail pages before we get here.
   const result = parseGeminiResponse(aiResult.response);
 
+  const renderedContent = extracted.rawText || extracted.markdown || null;
+
   for (const item of (result.news || [])) {
     item.source_url = url;
     item.published_date = primaryDate;
     item.date_consensus_score = dateScore;
+    item.rendered_content = renderedContent;
+    item.date_signals = dateSignals;
   }
 
   for (const event of (result.events || [])) {
@@ -593,6 +617,8 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     event.start_date = eventStartDateTime || primaryDate;
     event.end_date = eventEndDateTime || null;
     event.date_consensus_score = eventStartScore || dateScore;
+    event.rendered_content = renderedContent;
+    event.date_signals = dateSignals;
   }
 
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events from ${url}`);
@@ -1279,8 +1305,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       const dateScore = item.date_consensus_score || 0;
       const status = autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved' : 'pending';
       await pool.query(`
-        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `, [
         poiId,
         item.title,
@@ -1290,7 +1316,9 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         item.news_type || 'general',
         item.published_date || null,
         dateScore,
-        status
+        status,
+        item.rendered_content || null,
+        item.date_signals ? JSON.stringify(item.date_signals) : null
       ]);
       savedCount++;
       if (log) log(`[Save] Saved (${status}): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
@@ -1387,8 +1415,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
       const dateScore = item.date_consensus_score || 0;
       const status = autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved' : 'pending';
       await pool.query(`
-        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `, [
         poiId,
         item.title,
@@ -1400,7 +1428,9 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         resolvedUrl,
         item.start_date || null,
         dateScore,
-        status
+        status,
+        item.rendered_content || null,
+        item.date_signals ? JSON.stringify(item.date_signals) : null
       ]);
       savedCount++;
       if (log) log(`[Save] Saved event (${status}): "${item.title}" (${item.start_date}, score=${dateScore}) → ${resolvedUrl}`);
