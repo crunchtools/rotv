@@ -253,6 +253,16 @@ export async function extractPageContent(url, options = {}) {
       releaseBrowser(acquisitionId);
 
       const dom = new JSDOM(html, { url });
+
+      // Extract raw body text before Readability strips date headings and page structure.
+      // Used by the event LLM date extractor which needs to see "April 22 @ 10:30 am".
+      const rawDom = new JSDOM(html, { url });
+      const rawBody = rawDom.window.document.body;
+      for (const tag of ['script', 'style', 'nav']) {
+        rawBody.querySelectorAll(tag).forEach(el => el.remove());
+      }
+      const rawText = rawBody.textContent.replace(/\s+/g, ' ').trim();
+
       const reader = new Readability(dom.window.document, {
         charThreshold: 100
       });
@@ -271,6 +281,7 @@ export async function extractPageContent(url, options = {}) {
           excerpt: fallbackText.slice(0, 200),
           reachable: true,
           ogDates,
+          rawText,
           ...(extractLinks && { links })
         };
       }
@@ -284,6 +295,7 @@ export async function extractPageContent(url, options = {}) {
         excerpt: article.excerpt || markdown.slice(0, 200),
         reachable: true,
         ogDates,
+        rawText,
         ...(extractLinks && { links })
       };
     })();
