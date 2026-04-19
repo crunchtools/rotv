@@ -73,10 +73,16 @@ function Mosaic({ media, allMedia, poiId, user, onMediaUpdate }) {
                 Pending Review
               </div>
             )}
-            {/* Show count overlay on last image if there are more */}
+            {/* Show count overlay on last visible image if there are more */}
             {index === 2 && lightboxMedia.length > 3 && (
               <div className="mosaic-more-overlay">
                 +{lightboxMedia.length - 3}
+              </div>
+            )}
+            {/* Mobile: show count on hero image since other mosaic items are hidden */}
+            {index === 0 && lightboxMedia.length > 1 && (
+              <div className="mosaic-more-overlay mosaic-more-mobile">
+                +{lightboxMedia.length - 1}
               </div>
             )}
           </div>

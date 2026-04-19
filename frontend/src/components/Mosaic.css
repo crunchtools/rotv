@@ -127,28 +127,35 @@
   pointer-events: none;
 }
 
+/* Mobile-only "+N" overlay — hidden on desktop, shown on mobile */
+.mosaic-more-mobile {
+  display: none;
+}
+
 /* Mobile Responsiveness */
 @media (max-width: 768px) {
-  /* Stack all images on mobile */
+  /* Show only hero image on mobile — tap to open lightbox for all media */
   .mosaic-2,
   .mosaic-3 {
     grid-template-columns: 1fr;
     grid-template-rows: auto;
   }
 
+  .mosaic-2 .mosaic-item-1,
+  .mosaic-3 .mosaic-item-1,
+  .mosaic-3 .mosaic-item-2 {
+    display: none;
+  }
+
   .mosaic-3 .mosaic-item-0 {
     grid-row: 1;
   }
 
-  .mosaic-3 .mosaic-item-1 {
-    grid-row: 2;
-  }
-
-  .mosaic-3 .mosaic-item-2 {
-    grid-row: 3;
-  }
-
   .mosaic-item {
     aspect-ratio: 16 / 9; /* Wider aspect ratio on mobile */
+  }
+
+  .mosaic-more-mobile {
+    display: flex;
   }
 }
