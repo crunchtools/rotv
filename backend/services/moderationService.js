@@ -8,7 +8,7 @@ import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL } from
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDate } from './dateExtractor.js';
+import { parseDate, scoreDateConsensus } from './dateExtractor.js';
 import { scoreNewsDate, normalizeRenderUrl } from './newsService.js';
 
 const TABLE_MAP = {
@@ -199,7 +199,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     const itemQuery = await pool.query(
       `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
-              t.date_consensus_score, p.name as poi_name${extraFields}
+              t.date_consensus_score, t.rendered_content, t.date_signals, p.name as poi_name${extraFields}
        FROM ${table} t
        LEFT JOIN pois p ON t.poi_id = p.id
        WHERE t.id = $1`, [contentId]
@@ -258,29 +258,41 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       let newScore = dateScore;
       let newDate = row.publication_date;
 
-      // Extract page content if URL is available
-      let pageContent = null;
-      let ogDates = {};
-      if (row.source_url && isSafePublicUrl(row.source_url)) {
-        try {
-          const renderUrl = normalizeRenderUrl(row.source_url);
-          const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
-          if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
-            pageContent = extracted.rawText || extracted.markdown;
-            ogDates = extracted.ogDates || {};
-          }
-        } catch (err) {
-          console.error(`[Moderation] ${contentType} #${contentId}: page extraction failed: ${err.message}`);
-          logError(itemRunId, 'moderation', null, row.title, `Page extraction failed: ${err.message}`);
-        }
-      }
-
-      // Score using shared function (same code path as collection, but with title+description)
       try {
-        const consensus = await scoreNewsDate(pool, {
-          title: row.title, description: row.description,
-          pageContent, ogDates, sourceUrl: row.source_url
-        });
+        let consensus;
+
+        if (row.date_signals) {
+          // Fast path: rescore from cached signals (no Playwright, no LLM calls)
+          const signals = row.date_signals;
+          const deterministicSources = {
+            jsonLd: signals.jsonLd || [],
+            meta: signals.meta || [],
+            timeTags: signals.timeTags || [],
+            url: signals.url || null
+          };
+          consensus = scoreDateConsensus(deterministicSources, signals.llmVotes || []);
+        } else {
+          // Slow path: no cached signals — render + LLM
+          let pageContent = null;
+          let ogDates = {};
+          if (row.source_url && isSafePublicUrl(row.source_url)) {
+            try {
+              const renderUrl = normalizeRenderUrl(row.source_url);
+              const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
+              if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
+                pageContent = extracted.rawText || extracted.markdown;
+                ogDates = extracted.ogDates || {};
+              }
+            } catch (err) {
+              console.error(`[Moderation] ${contentType} #${contentId}: page extraction failed: ${err.message}`);
+              logError(itemRunId, 'moderation', null, row.title, `Page extraction failed: ${err.message}`);
+            }
+          }
+          consensus = await scoreNewsDate(pool, {
+            title: row.title, description: row.description,
+            pageContent, ogDates, sourceUrl: row.source_url
+          });
+        }
 
         if (consensus.date) {
           newDate = consensus.date;
@@ -688,33 +700,49 @@ export async function fixDate(pool, contentType, contentId) {
   const descField = contentType === 'news' ? 'summary' : 'description';
 
   const itemQuery = await pool.query(
-    `SELECT t.id, t.title, t.${descField} AS description, t.source_url
+    `SELECT t.id, t.title, t.${descField} AS description, t.source_url,
+            t.rendered_content, t.date_signals
      FROM ${table} t WHERE t.id = $1`, [contentId]
   );
   if (!itemQuery.rows.length) throw new Error(`${contentType} #${contentId} not found`);
   const item = itemQuery.rows[0];
 
-  // Extract page content (same as collection)
-  let pageContent = null;
-  let ogDates = {};
-  if (item.source_url && isSafePublicUrl(item.source_url)) {
-    try {
-      const renderUrl = normalizeRenderUrl(item.source_url);
-      const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
-      if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
-        pageContent = extracted.rawText || extracted.markdown;
-        ogDates = extracted.ogDates || {};
-      }
-    } catch (err) {
-      console.error(`[Moderation] fixDate ${contentType} #${contentId}: page extraction failed: ${err.message}`);
-    }
-  }
+  let consensus;
 
-  // Score using the same shared function as collection
-  const consensus = await scoreNewsDate(pool, {
-    title: item.title, description: item.description,
-    pageContent, ogDates, sourceUrl: item.source_url
-  });
+  if (item.date_signals) {
+    // Fast path: rescore from cached signals (no Playwright, no LLM calls)
+    console.log(`[Moderation] fixDate ${contentType} #${contentId}: rescoring from cached date_signals`);
+    const signals = item.date_signals;
+    const deterministicSources = {
+      jsonLd: signals.jsonLd || [],
+      meta: signals.meta || [],
+      timeTags: signals.timeTags || [],
+      url: signals.url || null
+    };
+    consensus = scoreDateConsensus(deterministicSources, signals.llmVotes || []);
+  } else {
+    // Slow path: no cached signals (human-submitted or legacy) — render + LLM
+    console.log(`[Moderation] fixDate ${contentType} #${contentId}: no cached signals, running full extraction`);
+    let pageContent = null;
+    let ogDates = {};
+    if (item.source_url && isSafePublicUrl(item.source_url)) {
+      try {
+        const renderUrl = normalizeRenderUrl(item.source_url);
+        const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
+        if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
+          pageContent = extracted.rawText || extracted.markdown;
+          ogDates = extracted.ogDates || {};
+        }
+      } catch (err) {
+        console.error(`[Moderation] fixDate ${contentType} #${contentId}: page extraction failed: ${err.message}`);
+      }
+    }
+
+    consensus = await scoreNewsDate(pool, {
+      title: item.title, description: item.description,
+      pageContent, ogDates, sourceUrl: item.source_url
+    });
+  }
 
   // Update the item
   const newDate = consensus.date || null;
