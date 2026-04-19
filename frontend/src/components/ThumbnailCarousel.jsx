@@ -95,13 +95,8 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
     }
   };
 
-  // Get thumbnail image URL or default icon
-  const getThumbnailUrl = (poi) => {
-    if (poi.has_primary_image) {
-      return `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`;
-    }
-
-    // Default icons based on type
+  // Default icon based on POI type
+  const getDefaultThumbnail = (poi) => {
     if (poi._isVirtual) return '/icons/thumbnails/virtual.svg';
     if (poi._isLinear) {
       if (poi.feature_type === 'river') return '/icons/thumbnails/river.svg';
@@ -109,6 +104,14 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
       return '/icons/thumbnails/trail.svg';
     }
     return '/icons/thumbnails/destination.svg';
+  };
+
+  // Get thumbnail image URL or default icon
+  const getThumbnailUrl = (poi) => {
+    if (poi.has_primary_image) {
+      return `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`;
+    }
+    return getDefaultThumbnail(poi);
   };
 
   return (
@@ -131,7 +134,12 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
               aria-label={`Navigate to ${poi.name}`}
             >
               <div className="thumbnail-image">
-                <img src={getThumbnailUrl(poi)} alt={poi.name} loading="lazy" />
+                <img
+                  src={getThumbnailUrl(poi)}
+                  alt={poi.name}
+                  loading="lazy"
+                  onError={(e) => { e.target.src = getDefaultThumbnail(poi); }}
+                />
               </div>
             </div>
           );
