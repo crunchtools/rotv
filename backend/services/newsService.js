@@ -1217,14 +1217,6 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let duplicateCount = 0;
   const { skipDateFilter = false, log = null } = options;
 
-  const moderationRows = await pool.query(
-    "SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_news_date_threshold')"
-  );
-  const moderationSettings = Object.fromEntries(moderationRows.rows.map(r => [r.key, r.value]));
-  const autoApproveEnabled = moderationSettings.moderation_auto_approve_enabled !== 'false';
-  const parsedThreshold = parseInt(moderationSettings.moderation_news_date_threshold);
-  const newsDateThreshold = Number.isNaN(parsedThreshold) ? 4 : parsedThreshold;
-
   // Calculate date strings (YYYY-MM-DD) to avoid timezone issues
   const today = new Date();
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
@@ -1301,9 +1293,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         continue;
       }
 
-      // New item — auto-approve if date consensus score meets threshold and auto-approve is enabled
+      // All new items enter as pending — moderation sweep handles relevance voting + promotion
       const dateScore = item.date_consensus_score || 0;
-      const status = autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved' : 'pending';
       await pool.query(`
         INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -1316,12 +1307,12 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         item.news_type || 'general',
         item.published_date || null,
         dateScore,
-        status,
+        'pending',
         item.rendered_content || null,
         item.date_signals ? JSON.stringify(item.date_signals) : null
       ]);
       savedCount++;
-      if (log) log(`[Save] Saved (${status}): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
+      if (log) log(`[Save] Saved (pending): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
       if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
       console.error(`Error saving news item for POI ${poiId}:`, error.message);
@@ -1341,14 +1332,6 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
   const { log = null } = options;
-
-  const moderationRows = await pool.query(
-    "SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_news_date_threshold')"
-  );
-  const moderationSettings = Object.fromEntries(moderationRows.rows.map(r => [r.key, r.value]));
-  const autoApproveEnabled = moderationSettings.moderation_auto_approve_enabled !== 'false';
-  const parsedThreshold = parseInt(moderationSettings.moderation_news_date_threshold);
-  const newsDateThreshold = Number.isNaN(parsedThreshold) ? 4 : parsedThreshold;
 
   for (const item of eventItems) {
     try {
@@ -1411,9 +1394,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         continue;
       }
 
-      // New event — auto-approve if date consensus score meets threshold and auto-approve is enabled
+      // All new events enter as pending — moderation sweep handles relevance voting + promotion
       const dateScore = item.date_consensus_score || 0;
-      const status = autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved' : 'pending';
       await pool.query(`
         INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
@@ -1428,12 +1410,12 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         resolvedUrl,
         item.start_date || null,
         dateScore,
-        status,
+        'pending',
         item.rendered_content || null,
         item.date_signals ? JSON.stringify(item.date_signals) : null
       ]);
       savedCount++;
-      if (log) log(`[Save] Saved event (${status}): "${item.title}" (${item.start_date}, score=${dateScore}) → ${resolvedUrl}`);
+      if (log) log(`[Save] Saved event (pending): "${item.title}" (${item.start_date}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
       if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
       console.error(`Error saving event for POI ${poiId}:`, error.message);
