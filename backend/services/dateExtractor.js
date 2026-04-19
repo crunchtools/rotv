@@ -226,14 +226,12 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
  * @returns {{ date: string|null, score: number, confidence: 'exact'|'estimated'|'unknown', sourceMap: Object }}
  */
 export function scoreDateConsensus(sources = {}) {
-  const today = new Date().toISOString().substring(0, 10);
-
   // Accumulate score per date
   const scores = {}; // date → total score
   const sourceMap = {}; // date → [source labels]
 
   const add = (date, weight, label) => {
-    if (!date || date > today) return; // discard future dates (normalizeDateSources may pass them through)
+    if (!date) return;
     scores[date] = (scores[date] || 0) + weight;
     if (!sourceMap[date]) sourceMap[date] = [];
     sourceMap[date].push(label);
@@ -258,11 +256,11 @@ export function scoreDateConsensus(sources = {}) {
     return { date: null, score: 0, confidence: 'unknown', sourceMap: {} };
   }
 
-  // Pick the date with the highest score; break ties by choosing the oldest
-  // (publication date is almost always earlier than modification date)
+  // Pick the date with the highest score; break ties by choosing the newest
+  // (event startDate is newer than datePublished/dateModified in JSON-LD)
   const bestDate = Object.keys(scores).reduce((a, b) => {
     if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
-    return a < b ? a : b; // prefer older date on tie
+    return a > b ? a : b; // prefer newer date on tie
   });
 
   const bestScore = scores[bestDate];
