@@ -46,6 +46,45 @@ const LAUNCH_OPTIONS = {
 };
 
 /**
+ * Force-kill the shared browser, clearing all watchdog timers and resetting state.
+ * Used by the watchdog and the circuit breaker health check.
+ */
+export async function forceKill(reason = 'unknown') {
+  console.error(`[BrowserPool] Force-kill: ${reason} (refCount was ${browserRefCount})`);
+  const browser = sharedBrowser;
+  sharedBrowser = null;
+  browserRefCount = 0;
+  launchPromise = null;
+  if (browserCloseTimer) {
+    clearTimeout(browserCloseTimer);
+    browserCloseTimer = null;
+  }
+  for (const [, t] of watchdogTimers) clearTimeout(t);
+  watchdogTimers.clear();
+  if (browser) await browser.close().catch(() => {});
+}
+
+/**
+ * Health check: render a trivial data URI to test browser responsiveness.
+ * Returns true if the browser responds within timeoutMs, false if overloaded.
+ * If no browser is running, returns true (a fresh launch will be healthy).
+ */
+export async function healthCheck(timeoutMs = 1000) {
+  if (!sharedBrowser || !sharedBrowser.isConnected()) return true;
+  let ctx;
+  try {
+    ctx = await sharedBrowser.newContext();
+    const page = await ctx.newPage();
+    await page.goto('data:text/html,<h1>ok</h1>', { timeout: timeoutMs });
+    return true;
+  } catch {
+    return false;
+  } finally {
+    if (ctx) await ctx.close().catch(() => {});
+  }
+}
+
+/**
  * @returns {Promise<{browser: import('playwright').Browser, acquisitionId: number}>}
  */
 export async function acquireBrowser() {
@@ -69,19 +108,7 @@ export async function acquireBrowser() {
 
   const id = nextAcquisitionId++;
   const timer = setTimeout(async () => {
-    console.error(`[BrowserPool] Watchdog: acquisition ${id} held browser for >${WATCHDOG_TIMEOUT_MS / 1000}s without release — force-killing (refCount was ${browserRefCount})`);
-    watchdogTimers.delete(id);
-    const browser = sharedBrowser;
-    sharedBrowser = null;
-    browserRefCount = 0;
-    launchPromise = null;
-    if (browserCloseTimer) {
-      clearTimeout(browserCloseTimer);
-      browserCloseTimer = null;
-    }
-    for (const [, t] of watchdogTimers) clearTimeout(t);
-    watchdogTimers.clear();
-    if (browser) await browser.close().catch(() => {});
+    await forceKill(`Watchdog: acquisition ${id} held browser for >${WATCHDOG_TIMEOUT_MS / 1000}s without release`);
   }, WATCHDOG_TIMEOUT_MS);
   watchdogTimers.set(id, timer);
 
