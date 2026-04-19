@@ -406,6 +406,7 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
       const headingIdx = extracted.markdown.search(/^#{1,3}\s+\S/m);
       const contentStart = headingIdx >= 0 ? headingIdx : 0;
       const snippet = extracted.markdown.substring(contentStart, contentStart + 2000);
+      logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] LLM snippet (headingIdx=${headingIdx}, start=${contentStart}): ${snippet.substring(0, 300).replace(/\n/g, '\\n')}`);
       const datePrompt = `Extract the event start and end date/time from this page. The current year is ${new Date().getFullYear()}. If no year is shown, assume the current year. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${snippet}`;
       const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
       const raw = (llmResult.response || '').trim();
