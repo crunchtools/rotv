@@ -142,7 +142,7 @@ case "${1:-help}" in
 
         # Create environment file for systemd services
         mkdir -p ~/.rotv
-        cat > ~/.rotv/environment <<ENVFILE
+        cat > ~/.rotv/environment-dev <<ENVFILE
 NODE_ENV=test
 BYPASS_AUTH=true
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
@@ -175,7 +175,7 @@ ENVFILE
             -p 2525:25 \
             $MCP_PORT_MAP \
             --tmpfs /run \
-            -v ~/.rotv/environment:/etc/rotv/environment:ro,Z \
+            -v ~/.rotv/environment-dev:/etc/rotv/environment:ro,Z \
             $STORAGE_MOUNT \
             $SEED_MOUNT \
             "$IMAGE_NAME"
@@ -229,7 +229,7 @@ ENVFILE
 
         # Create environment file for systemd services (use main 'rotv' database like CI)
         mkdir -p ~/.rotv
-        cat > ~/.rotv/environment <<ENVFILE
+        cat > ~/.rotv/environment-test <<ENVFILE
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
 SESSION_SECRET=$SESSION_SECRET
@@ -251,7 +251,7 @@ ENVFILE
             -p 2525:25 \
             --tmpfs /run \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
-            -v ~/.rotv/environment:/etc/rotv/environment:ro,Z \
+            -v ~/.rotv/environment-test:/etc/rotv/environment:ro,Z \
             -v "$SEED_DATA_FILE:/tmp/seed-data.sql:ro" \
             "${IMAGE_NAME}:test" >/dev/null
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
-import { formatDateWithWeekday, EventTypeIcon } from './NewsEventsShared';
+import { EventCardBody } from './NewsEventsShared';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -292,50 +292,11 @@ END:VCALENDAR`;
           ) : (
           <div className="park-events-list">
             {filteredEvents.map(item => (
-          <div key={item.id} className={`park-event-item ${item.event_type || 'program'}`}>
-            <div className="park-event-header">
-              <EventTypeIcon type={item.event_type} />
-              <div className="park-event-title-section">
-                <span className="park-event-title">{item.title}</span>
-                <button
-                  className="park-event-poi-link"
-                  onClick={() => onSelectPoi && onSelectPoi(item.poi_id)}
-                  title={`View ${item.poi_name}`}
-                >
-                  {item.poi_name}
-                </button>
-              </div>
-            </div>
-
-            <div className="park-event-date">
-              {(() => {
-                const startStr = String(item.start_date || '');
-                const endStr = String(item.end_date || '');
-                const startDateOnly = startStr.substring(0, 10);
-                const endDateOnly = endStr.substring(0, 10);
-                const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
-                const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
-                const sameDay = endDateOnly === startDateOnly;
-                const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
-
-                if (sameDay && startHasTime) {
-                  return `${formatDateWithWeekday(startStr)}, ${fmtTime(startStr)}${endHasTime ? ` – ${fmtTime(endStr)}` : ''}`;
-                } else if (endStr && !sameDay) {
-                  return <>{formatDateWithWeekday(startStr)} – {formatDateWithWeekday(endStr)}</>;
-                }
-                return formatDateWithWeekday(startStr);
-              })()}
-            </div>
-
-            {item.description && <p className="park-event-description">{item.description}</p>}
-
-            {item.location_details && (
-              <div className="park-event-location">
-                <strong>Location:</strong> {item.location_details}
-              </div>
-            )}
-
-            <div className="park-event-actions">
+          <EventCardBody
+            key={item.id}
+            item={item}
+            onSelectPoi={onSelectPoi}
+            calendarButtons={
               <div className="calendar-buttons">
                 <a
                   href={generateCalendarUrl(item)}
@@ -354,30 +315,8 @@ END:VCALENDAR`;
                   + Download .ics
                 </button>
               </div>
-              {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
-                <span className="event-sources-group">
-                  <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="event-link">Source</a>
-                  {item.additional_urls.map((u, i) => (
-                    <a key={i} href={u.url} target="_blank" rel="noopener noreferrer" className="event-link">
-                      {u.source_name || `Source ${i + 2}`}
-                    </a>
-                  ))}
-                </span>
-              ) : item.source_url ? (
-                <a
-                  href={item.source_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="event-link"
-                >
-                  More info
-                </a>
-              ) : null}
-              {isAdmin && (
-                <span className="news-item-id" title="Event item ID">#{item.id}</span>
-              )}
-            </div>
-          </div>
+            }
+          />
             ))}
           </div>
           )}

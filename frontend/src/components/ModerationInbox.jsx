@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Lightbox from './Lightbox';
+import { NewsCardBody, EventCardBody, formatPublicationDate } from './NewsEventsShared';
 
 const FIELD_CONFIGS = {
   news: [
@@ -47,7 +48,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
   const [createFields, setCreateFields] = useState({});
   const [pois, setPois] = useState([]);
   const [sourceFilter, setSourceFilter] = useState(null);
-  const [researchingItem, setResearchingItem] = useState(null);
   const [fixingDateItem, setFixingDateItem] = useState(null);
   const [mergingItem, setMergingItem] = useState(null); // { type, id, poiId }
   const [mergeCandidates, setMergeCandidates] = useState([]);
@@ -297,30 +297,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
         notify('error', `Failed to delete ${type} #${id}`);
       }
     } catch (err) { notify('error', err.message); }
-  };
-
-  const handleResearch = async (type, id) => {
-    const itemKey = `${type}:${id}`;
-    setResearchingItem(itemKey);
-    try {
-      const response = await fetch('/api/admin/moderation/research', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ type, id })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        if (data.source_url_updated) {
-          notify('success', `${type} #${id} — URL fixed: ${data.new_url}`);
-        } else {
-          notify('success', `${type} #${id} — no better URL found, requeued`);
-        }
-        fetchQueue();
-      } else {
-        const err = await response.json();
-        notify('error', err.error || 'Research failed');
-      }
-    } catch (err) { notify('error', err.message); }
-    finally { setResearchingItem(null); }
   };
 
   const handleFixDate = async (type, id) => {
@@ -589,45 +565,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
     }
   };
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'published': return { label: 'Approved', color: '#4caf50' };
-      case 'auto_approved': return { label: 'Auto', color: '#2196f3' };
-      case 'rejected': return { label: 'Rejected', color: '#f44336' };
-      case 'pending': return { label: 'Pending', color: '#ff9800' };
-      default: return { label: status, color: '#757575' };
-    }
-  };
-
-  const getDateConfidenceBadge = (confidence) => {
-    switch (confidence) {
-      case 'exact': return { label: 'Exact', color: '#4caf50' };
-      case 'estimated': return { label: 'Est.', color: '#ff9800' };
-      case 'unknown': return { label: 'No Date', color: '#f44336' };
-      default: return null;
-    }
-  };
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
-  };
-
-  const formatEventDate = (dateStr) => {
-    if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
-  };
-
-  const formatPubDate = (dateStr) => {
-    if (!dateStr) return '';
-    const str = String(dateStr);
-    const d = str.includes('T') ? new Date(str) : new Date(str + 'T00:00:00Z');
-    if (isNaN(d.getTime())) return '';
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
-  };
-
   const isPending = statusFilter === 'pending';
   const totalPages = Math.ceil(total / LIMIT);
 
@@ -686,6 +623,11 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
   const btnStyle = (bg, color = 'white', border = 'none') => ({
     padding: '5px 12px', border, borderRadius: '6px',
     backgroundColor: bg, color, cursor: 'pointer', fontSize: '0.8rem', fontWeight: '500'
+  });
+
+  const badgeStyle = (bg) => ({
+    backgroundColor: bg, color: 'white', padding: '1px 8px', borderRadius: '10px',
+    fontSize: '0.72rem', fontWeight: 'bold', textTransform: 'uppercase'
   });
 
   const actionBtn = (disabled = false) => ({
@@ -890,346 +832,199 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
           {isPending ? 'No pending items.' : `No ${statusFilter} items found.`}
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+        <div className="park-news-list" style={{ gap: '6px' }}>
           {queue.map(item => {
             const itemKey = `${item.content_type}:${item.id}`;
-            const isExpanded = expandedItem === itemKey;
             const isEditing = editingItem === itemKey;
-            const statusBadge = getStatusBadge(item.moderation_status);
 
-            return (
-              <div key={itemKey} id={`moderation-item-${itemKey}`} style={{
-                border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px',
-                backgroundColor: selectedItems.has(itemKey) ? '#e3f2fd' : 'white',
-                transition: 'background 0.15s'
-              }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
-                    {isPending && (
-                      <input type="checkbox" checked={selectedItems.has(itemKey)}
-                        onChange={() => toggleSelect(item.content_type, item.id)}
-                        style={{ marginTop: '4px' }} />
+            // Moderation extras: badges, triage chips, edit form, and action buttons
+            // Rendered as children of the shared card component (below the card body, above nothing)
+            const moderationExtras = (
+              <>
+                {/* Moderation badge row */}
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', marginTop: '6px' }}>
+                  {/* Item ID badge */}
+                  <span style={badgeStyle('#757575')}>#{item.id}</span>
+
+                  {/* Content type badge */}
+                  <span style={badgeStyle(getTypeBadgeColor(item.content_type))}>
+                    {item.content_type}
+                  </span>
+
+                  {/* Source badge */}
+                  {item.content_source && getSourceBadge(item.content_source) && (
+                    <span style={badgeStyle(getSourceBadge(item.content_source).color)}>
+                      {getSourceBadge(item.content_source).label}
+                    </span>
+                  )}
+
+                  {/* Status badge (non-pending only) */}
+                  {!isPending && (
+                    <span style={badgeStyle(item.moderation_status === 'rejected' ? '#f44336' : '#4caf50')}>
+                      {item.moderation_status === 'rejected' ? 'Rejected' : 'Approved'}
+                    </span>
+                  )}
+
+                  {/* Additional URLs badge */}
+                  {item.additional_url_count > 0 && (
+                    <span style={badgeStyle('#1565c0')}>
+                      +{item.additional_url_count} URL{item.additional_url_count > 1 ? 's' : ''}
+                    </span>
+                  )}
+
+                  {/* Confidence score */}
+                  {item.confidence_score !== null && item.confidence_score !== undefined && (
+                    <span style={{
+                      color: getConfidenceColor(item.confidence_score),
+                      fontWeight: 'bold', fontSize: '0.78rem'
+                    }}>
+                      {(item.confidence_score * 100).toFixed(0)}%
+                    </span>
+                  )}
+
+                  {/* Collected / moderated timestamps */}
+                  <span style={{ fontSize: '0.72rem', color: '#aaa' }}>
+                    {formatPublicationDate(item.collection_date || item.created_at)}
+                    {item.moderated_at && ` · Mod: ${formatPublicationDate(item.moderated_at)}`}
+                  </span>
+                </div>
+
+                {/* Triage chips — No Date, No URL / Wrong URL, Other */}
+                {item.content_type !== 'photo' && (() => {
+                  const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
+                  const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
+                  const hasNoDate = item.content_type === 'event'
+                    ? !item.publication_date && !item.start_date
+                    : !item.publication_date || !item.date_consensus_score;
+                  const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
+                  const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
+                  const hasOther = issues.some(i => !urlIssueCodes.includes(i));
+                  if (!hasNoDate && !hasUrlIssue && !hasOther) return null;
+                  const chipStyle = (color) => ({
+                    padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem',
+                    fontWeight: 'bold', backgroundColor: color, color: 'white'
+                  });
+                  return (
+                    <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
+                      {hasNoDate && <span style={chipStyle('#e65100')}>No Date</span>}
+                      {hasUrlIssue && <span style={chipStyle('#e65100')}>{urlLabel}</span>}
+                      {hasOther && <span style={chipStyle('#b71c1c')}>Other</span>}
+                    </div>
+                  );
+                })()}
+
+                {/* Edit form */}
+                {isEditing && (
+                  <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px',
+                    padding: '12px', backgroundColor: '#fffbe6', borderRadius: '6px', border: '1px solid #ffe082' }}>
+                    <div style={{ padding: '8px', backgroundColor: '#fff8e1', borderRadius: '4px',
+                      fontSize: '0.8rem', color: '#555', lineHeight: '1.4', marginBottom: '4px' }}>
+                      {item.ai_reasoning && (<><strong>AI Analysis:</strong> {item.ai_reasoning}<br/></>)}
+                      <span style={{ fontSize: '0.75rem', color: '#888' }}>
+                        Status: {item.moderation_status === 'auto_approved' ? 'Auto-approved by AI' :
+                          item.moderation_status === 'published' ? 'Approved by human' :
+                          item.moderation_status}
+                        {item.confidence_score != null && ` · Score: ${(item.confidence_score * 100).toFixed(0)}%`}
+                      </span>
+                    </div>
+                    {(FIELD_CONFIGS[item.content_type] || []).map(fc => (
+                      <div key={fc.key}>
+                        <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
+                          {fc.label}
+                        </label>
+                        {renderFieldInput(fc, editFields, setEditFields)}
+                      </div>
+                    ))}
+                    {/* Additional URLs management */}
+                    {item.content_type !== 'photo' && (
+                      <div>
+                        <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
+                          Additional URLs
+                        </label>
+                        {(itemUrls[itemKey] || []).map(u => (
+                          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px',
+                            padding: '4px 8px', backgroundColor: 'white', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
+                            <a href={u.url} target="_blank" rel="noopener noreferrer"
+                              style={{ color: '#1976d2', flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {u.url}
+                            </a>
+                            {u.source_name && <span style={{ color: '#888', fontSize: '0.7rem', flexShrink: 0 }}>({u.source_name})</span>}
+                            <button onClick={() => handleRemoveUrl(item.content_type, item.id, u.id)}
+                              style={{ background: 'none', border: 'none', color: '#f44336', cursor: 'pointer',
+                                padding: '0 4px', fontSize: '0.85rem', flexShrink: 0, lineHeight: 1 }}
+                              title="Remove URL">x</button>
+                          </div>
+                        ))}
+                        <div style={{ display: 'flex', gap: '4px' }}>
+                          <input type="text" value={newUrlInput} onChange={e => setNewUrlInput(e.target.value)}
+                            placeholder="Add another source URL..."
+                            onKeyDown={e => e.key === 'Enter' && handleAddUrl(item.content_type, item.id)}
+                            style={{ flex: 1, padding: '5px 8px', fontSize: '0.78rem', border: '1px solid #ccc', borderRadius: '4px' }} />
+                          <button onClick={() => handleAddUrl(item.content_type, item.id)} disabled={addingUrl || !newUrlInput.trim()}
+                            style={btnStyle(addingUrl || !newUrlInput.trim() ? '#ccc' : '#1976d2')}>
+                            {addingUrl ? 'Adding...' : 'Add URL'}
+                          </button>
+                        </div>
+                      </div>
                     )}
-
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* Header row: badges + title + score */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '3px', flexWrap: 'wrap' }}>
-                        <span style={{
-                          backgroundColor: getTypeBadgeColor(item.content_type),
-                          color: 'white', padding: '1px 8px', borderRadius: '10px',
-                          fontSize: '0.72rem', fontWeight: 'bold', textTransform: 'uppercase'
-                        }}>
-                          {item.content_type}
-                        </span>
-
-                        {item.content_source && getSourceBadge(item.content_source) && (
-                          <span style={{
-                            backgroundColor: getSourceBadge(item.content_source).color,
-                            color: 'white', padding: '1px 8px', borderRadius: '10px',
-                            fontSize: '0.72rem', fontWeight: 'bold'
-                          }}>
-                            {getSourceBadge(item.content_source).label}
-                          </span>
-                        )}
-
-                        {!isPending && (
-                          <span style={{
-                            backgroundColor: item.moderation_status === 'rejected' ? '#f44336' : '#4caf50',
-                            color: 'white', padding: '1px 8px', borderRadius: '10px',
-                            fontSize: '0.72rem', fontWeight: 'bold'
-                          }}>
-                            {item.moderation_status === 'rejected' ? 'Rejected' : 'Approved'}
-                          </span>
-                        )}
-
-                        {item.additional_url_count > 0 && (
-                          <span style={{
-                            backgroundColor: '#1565c0', color: 'white',
-                            padding: '1px 8px', borderRadius: '10px',
-                            fontSize: '0.72rem', fontWeight: 'bold'
-                          }}>
-                            +{item.additional_url_count} URL{item.additional_url_count > 1 ? 's' : ''}
-                          </span>
-                        )}
-
-                        <span style={{ fontWeight: 'bold', fontSize: '0.92rem', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: isExpanded ? 'normal' : 'nowrap' }}>
-                          {item.title || '(untitled)'}
-                        </span>
-
-                        {item.confidence_score !== null && item.confidence_score !== undefined && (
-                          <span style={{
-                            color: getConfidenceColor(item.confidence_score),
-                            fontWeight: 'bold', fontSize: '0.82rem', flexShrink: 0
-                          }}>
-                            {(item.confidence_score * 100).toFixed(0)}%
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Thumbnail for media items */}
-                      {item.content_type === 'photo' && getThumbnailUrl(item) && (
-                        <div
-                          onClick={() => handleOpenLightbox(item)}
-                          style={{
-                            width: '120px',
-                            height: '90px',
-                            borderRadius: '6px',
-                            overflow: 'hidden',
-                            cursor: 'pointer',
-                            margin: '6px 0',
-                            border: '1px solid #e0e0e0',
-                            position: 'relative',
-                            flexShrink: 0
-                          }}
-                        >
-                          <img
-                            src={getThumbnailUrl(item)}
-                            alt={item.title || 'Media'}
-                            style={{
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover'
-                            }}
-                          />
-                          {item.media_type === 'video' && (
-                            <div style={{
-                              position: 'absolute',
-                              top: '50%',
-                              left: '50%',
-                              transform: 'translate(-50%, -50%)',
-                              fontSize: '2rem',
-                              color: 'white',
-                              textShadow: '0 0 4px rgba(0,0,0,0.8)',
-                              pointerEvents: 'none'
-                            }}>
-                              ▶
-                            </div>
-                          )}
-                          {item.media_type === 'youtube' && (
-                            <div style={{
-                              position: 'absolute',
-                              bottom: '4px',
-                              right: '4px',
-                              backgroundColor: 'rgba(255,0,0,0.9)',
-                              color: 'white',
-                              padding: '2px 6px',
-                              borderRadius: '3px',
-                              fontSize: '0.7rem',
-                              fontWeight: 'bold',
-                              pointerEvents: 'none'
-                            }}>
-                              YT
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Event dates */}
-                      {item.content_type === 'event' && (item.start_date || item.end_date) && (
-                        <div style={{ fontSize: '0.78rem', color: '#7b1fa2', fontWeight: '500', margin: '2px 0' }}>
-                          {(() => {
-                            const startStr = String(item.start_date || '');
-                            const endStr = String(item.end_date || '');
-                            const startDateOnly = startStr.substring(0, 10);
-                            const endDateOnly = endStr.substring(0, 10);
-                            const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
-                            const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
-                            const sameDay = endDateOnly === startDateOnly;
-                            const fmtDate = (s) => new Date(s).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
-                            const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
-
-                            if (sameDay && startHasTime) {
-                              return `${fmtDate(startStr)}, ${fmtTime(startStr)}${endHasTime ? ` – ${fmtTime(endStr)}` : ''}`;
-                            } else if (endStr && !sameDay) {
-                              return `${fmtDate(startStr)} – ${fmtDate(endStr)}`;
-                            }
-                            return fmtDate(startStr);
-                          })()}
-                        </div>
-                      )}
-
-                      {/* Description */}
-                      {item.description && (
-                        <p style={{
-                          margin: '2px 0', fontSize: '0.83rem', color: '#555',
-                          overflow: 'hidden', textOverflow: 'ellipsis',
-                          display: '-webkit-box', WebkitLineClamp: isExpanded ? 'unset' : 3,
-                          WebkitBoxOrient: 'vertical'
-                        }}>
-                          {item.description}
-                        </p>
-                      )}
-                      {item.description && item.description.length > 200 && (
-                        <a onClick={() => setExpandedItem(isExpanded ? null : itemKey)}
-                          style={{ color: '#4a7c23', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'none', fontWeight: 500 }}>
-                          {isExpanded ? 'Show less' : 'Show more'}
-                        </a>
-                      )}
-
-                      {/* Source URL (always visible) */}
-                      {item.source_url && (
-                        <div style={{ margin: '4px 0', fontSize: '0.78rem' }}>
-                          <a href={item.source_url} target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2' }}>
-                            {item.source_url}
-                          </a>
-                          {item.additional_url_count > 0 && (
-                            <span style={{ color: '#888', fontSize: '0.72rem', marginLeft: '6px' }}>
-                              (+{item.additional_url_count} more — click Edit to manage)
-                            </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Timestamp + Publication Date */}
-                      <div style={{ fontSize: '0.73rem', color: '#aaa', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '4px', flexWrap: 'wrap' }}>
-                        <span>{formatDate(item.collection_date || item.created_at)}</span>
-                        {item.moderated_at && <span>&middot; Moderated {formatDate(item.moderated_at)}</span>}
-                        {item.content_type !== 'photo' && item.publication_date && (
-                          <span>&middot; Pub: {formatPubDate(item.publication_date)}</span>
-                        )}
-                      </div>
-
-                      {/* Triage chips — No Date, No URL / Wrong URL, Other */}
-                      {item.content_type !== 'photo' && (() => {
-                        const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
-                        const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
-                        const hasNoDate = item.content_type === 'event'
-                          ? !item.publication_date && !item.start_date
-                          : !item.publication_date || !item.date_consensus_score;
-                        const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
-                        const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
-                        const hasOther = issues.some(i => !urlIssueCodes.includes(i));
-                        if (!hasNoDate && !hasUrlIssue && !hasOther) return null;
-                        const chipStyle = (color) => ({
-                          padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem',
-                          fontWeight: 'bold', backgroundColor: color, color: 'white'
-                        });
-                        return (
-                          <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
-                            {hasNoDate && <span style={chipStyle('#e65100')}>No Date</span>}
-                            {hasUrlIssue && <span style={chipStyle('#e65100')}>{urlLabel}</span>}
-                            {hasOther && <span style={chipStyle('#b71c1c')}>Other</span>}
-                          </div>
-                        );
-                      })()}
-
-                      {/* Edit form (expanded, all fields) */}
-                      {isEditing && (
-                        <div style={{ marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '8px',
-                          padding: '12px', backgroundColor: '#fffbe6', borderRadius: '6px', border: '1px solid #ffe082' }}>
-                          <div style={{ padding: '8px', backgroundColor: '#fff8e1', borderRadius: '4px',
-                            fontSize: '0.8rem', color: '#555', lineHeight: '1.4', marginBottom: '4px' }}>
-                            {item.ai_reasoning && (<><strong>AI Analysis:</strong> {item.ai_reasoning}<br/></>)}
-                            <span style={{ fontSize: '0.75rem', color: '#888' }}>
-                              Status: {item.moderation_status === 'auto_approved' ? 'Auto-approved by AI' :
-                                item.moderation_status === 'published' ? 'Approved by human' :
-                                item.moderation_status}
-                              {item.confidence_score != null && ` · Score: ${(item.confidence_score * 100).toFixed(0)}%`}
-                            </span>
-                          </div>
-                          {(FIELD_CONFIGS[item.content_type] || []).map(fc => (
-                            <div key={fc.key}>
-                              <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
-                                {fc.label}
-                              </label>
-                              {renderFieldInput(fc, editFields, setEditFields)}
-                            </div>
-                          ))}
-                          {/* Additional URLs management */}
-                          {item.content_type !== 'photo' && (
-                            <div>
-                              <label style={{ fontSize: '0.78rem', color: '#666', fontWeight: '500', marginBottom: '2px', display: 'block' }}>
-                                Additional URLs
-                              </label>
-                              {(itemUrls[itemKey] || []).map(u => (
-                                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', marginBottom: '3px',
-                                  padding: '4px 8px', backgroundColor: 'white', borderRadius: '4px', border: '1px solid #e0e0e0' }}>
-                                  <a href={u.url} target="_blank" rel="noopener noreferrer"
-                                    style={{ color: '#1976d2', flex: 1, fontSize: '0.75rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                    {u.url}
-                                  </a>
-                                  {u.source_name && <span style={{ color: '#888', fontSize: '0.7rem', flexShrink: 0 }}>({u.source_name})</span>}
-                                  <button onClick={() => handleRemoveUrl(item.content_type, item.id, u.id)}
-                                    style={{ background: 'none', border: 'none', color: '#f44336', cursor: 'pointer',
-                                      padding: '0 4px', fontSize: '0.85rem', flexShrink: 0, lineHeight: 1 }}
-                                    title="Remove URL">x</button>
-                                </div>
-                              ))}
-                              <div style={{ display: 'flex', gap: '4px' }}>
-                                <input type="text" value={newUrlInput} onChange={e => setNewUrlInput(e.target.value)}
-                                  placeholder="Add another source URL..."
-                                  onKeyDown={e => e.key === 'Enter' && handleAddUrl(item.content_type, item.id)}
-                                  style={{ flex: 1, padding: '5px 8px', fontSize: '0.78rem', border: '1px solid #ccc', borderRadius: '4px' }} />
-                                <button onClick={() => handleAddUrl(item.content_type, item.id)} disabled={addingUrl || !newUrlInput.trim()}
-                                  style={btnStyle(addingUrl || !newUrlInput.trim() ? '#ccc' : '#1976d2')}>
-                                  {addingUrl ? 'Adding...' : 'Add URL'}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
-                            <button onClick={() => handleSave(item.content_type, item.id)}
-                              style={btnStyle('#4caf50')}>Save</button>
-                            <button onClick={() => { setEditingItem(null); setEditFields({}); }}
-                              style={btnStyle('transparent', '#666', '1px solid #ccc')}>Cancel</button>
-                          </div>
-                        </div>
-                      )}
+                    <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
+                      <button onClick={() => handleSave(item.content_type, item.id)}
+                        style={btnStyle('#4caf50')}>Save</button>
+                      <button onClick={() => { setEditingItem(null); setEditFields({}); }}
+                        style={btnStyle('transparent', '#666', '1px solid #ccc')}>Cancel</button>
                     </div>
                   </div>
+                )}
 
-                  {/* Action buttons — horizontal row below content */}
-                  <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', paddingLeft: isPending ? '26px' : '0' }}>
-                    <button onClick={() => startEditing(item)}
-                      style={actionBtn()}>Edit</button>
-                    {item.content_type !== 'photo' && (
-                      <button onClick={() => startMerge(item)}
-                        style={actionBtn()}>Merge</button>
-                    )}
-                    {isPending && (
+                {/* Action buttons */}
+                <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '6px' }}>
+                  {isPending && (
+                    <input type="checkbox" checked={selectedItems.has(itemKey)}
+                      onChange={() => toggleSelect(item.content_type, item.id)}
+                      style={{ marginRight: '4px' }} />
+                  )}
+                  <button onClick={() => startEditing(item)}
+                    style={actionBtn()}>Edit</button>
+                  {item.content_type !== 'photo' && (
+                    <button onClick={() => startMerge(item)}
+                      style={actionBtn()}>Merge</button>
+                  )}
+                  {isPending && (
+                    <>
+                      <button onClick={() => handleApprove(item.content_type, item.id)}
+                        style={actionBtn()}>Approve</button>
+                      <button onClick={() => handleReject(item.content_type, item.id)}
+                        style={actionBtn()}>Reject</button>
+                    </>
+                  )}
+                  {!isPending && (
+                    <button onClick={() => handleRequeue(item.content_type, item.id)}
+                      style={actionBtn()}>Requeue</button>
+                  )}
+                  {item.content_type !== 'photo' && (
+                    <button onClick={() => handleFixDate(item.content_type, item.id)}
+                      disabled={fixingDateItem === itemKey}
+                      style={actionBtn(fixingDateItem === itemKey)}>
+                      {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
+                    </button>
+                  )}
+                  {item.content_type !== 'photo' && (
+                    confirmDelete === itemKey ? (
                       <>
-                        <button onClick={() => handleApprove(item.content_type, item.id)}
-                          style={actionBtn()}>Approve</button>
-                        <button onClick={() => handleReject(item.content_type, item.id)}
-                          style={actionBtn()}>Reject</button>
+                        <button onClick={() => handleDelete(item.content_type, item.id)}
+                          style={{ ...actionBtn(), backgroundColor: '#ffebee', color: '#c62828', borderColor: '#ef9a9a', width: 'auto', padding: '4px 8px' }}>
+                          Confirm Delete
+                        </button>
+                        <button onClick={() => setConfirmDelete(null)}
+                          style={actionBtn()}>Cancel</button>
                       </>
-                    )}
-                    {!isPending && (
-                      <button onClick={() => handleRequeue(item.content_type, item.id)}
-                        style={actionBtn()}>Requeue</button>
-                    )}
-                    {item.content_type !== 'photo' && (
-                      <>
-                        <button onClick={() => handleFixDate(item.content_type, item.id)}
-                          disabled={fixingDateItem === itemKey}
-                          style={actionBtn(fixingDateItem === itemKey)}>
-                          {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
-                        </button>
-                        <button onClick={() => handleResearch(item.content_type, item.id)}
-                          disabled={researchingItem === itemKey}
-                          style={actionBtn(researchingItem === itemKey)}>
-                          {researchingItem === itemKey ? 'Fixing...' : 'Fix URL'}
-                        </button>
-                      </>
-                    )}
-                    {item.content_type !== 'photo' && (
-                      confirmDelete === itemKey ? (
-                        <>
-                          <button onClick={() => handleDelete(item.content_type, item.id)}
-                            style={{ ...actionBtn(), backgroundColor: '#ffebee', color: '#c62828', borderColor: '#ef9a9a', width: 'auto', padding: '4px 8px' }}>
-                            Confirm Delete
-                          </button>
-                          <button onClick={() => setConfirmDelete(null)}
-                            style={actionBtn()}>Cancel</button>
-                        </>
-                      ) : (
-                        <button onClick={() => setConfirmDelete(itemKey)}
-                          style={{ ...actionBtn(), backgroundColor: '#ffebee', color: '#c62828', borderColor: '#ef9a9a' }}>
-                          Delete
-                        </button>
-                      )
-                    )}
-                  </div>
+                    ) : (
+                      <button onClick={() => setConfirmDelete(itemKey)}
+                        style={{ ...actionBtn(), backgroundColor: '#ffebee', color: '#c62828', borderColor: '#ef9a9a' }}>
+                        Delete
+                      </button>
+                    )
+                  )}
                 </div>
 
                 {/* Merge candidate selection */}
@@ -1278,8 +1073,62 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
                       style={{ ...actionBtn(), marginTop: '6px', fontSize: '0.72rem' }}>Cancel</button>
                   </div>
                 )}
-              </div>
+              </>
             );
+
+            // Render using shared card components based on content type
+            if (item.content_type === 'news') {
+              return (
+                <NewsCardBody key={itemKey} item={{ ...item, summary: item.description }}
+                  id={`moderation-item-${itemKey}`}>
+                  {moderationExtras}
+                </NewsCardBody>
+              );
+            } else if (item.content_type === 'event') {
+              return (
+                <EventCardBody key={itemKey} item={item}
+                  id={`moderation-item-${itemKey}`}>
+                  {moderationExtras}
+                </EventCardBody>
+              );
+            } else {
+              // Photo — keep simple inline rendering
+              return (
+                <div key={itemKey} id={`moderation-item-${itemKey}`} style={{
+                  border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px',
+                  backgroundColor: 'white'
+                }}>
+                  <div style={{ fontWeight: 'bold', fontSize: '0.92rem', marginBottom: '4px' }}>
+                    {item.title || '(untitled)'}
+                  </div>
+                  {getThumbnailUrl(item) && (
+                    <div
+                      onClick={() => handleOpenLightbox(item)}
+                      style={{
+                        width: '120px', height: '90px', borderRadius: '6px',
+                        overflow: 'hidden', cursor: 'pointer', margin: '6px 0',
+                        border: '1px solid #e0e0e0', position: 'relative', flexShrink: 0
+                      }}
+                    >
+                      <img src={getThumbnailUrl(item)} alt={item.title || 'Media'}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      {item.media_type === 'video' && (
+                        <div style={{ position: 'absolute', top: '50%', left: '50%',
+                          transform: 'translate(-50%, -50%)', fontSize: '2rem', color: 'white',
+                          textShadow: '0 0 4px rgba(0,0,0,0.8)', pointerEvents: 'none' }}>▶</div>
+                      )}
+                      {item.media_type === 'youtube' && (
+                        <div style={{ position: 'absolute', bottom: '4px', right: '4px',
+                          backgroundColor: 'rgba(255,0,0,0.9)', color: 'white', padding: '2px 6px',
+                          borderRadius: '3px', fontSize: '0.7rem', fontWeight: 'bold', pointerEvents: 'none' }}>YT</div>
+                      )}
+                    </div>
+                  )}
+                  {item.description && <p style={{ margin: '4px 0', fontSize: '0.83rem', color: '#555' }}>{item.description}</p>}
+                  {moderationExtras}
+                </div>
+              );
+            }
           })}
         </div>
       )}
