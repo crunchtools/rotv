@@ -443,20 +443,6 @@ IMPORTANT:
 }
 
 /**
- * Process a single URL through the complete pipeline:
- * Render → Dates → Summarize → force source_url
- *
- * Every item returned has source_url = the URL that was rendered.
- * No batching, no concatenation, no cross-page anything.
- *
- * @param {Pool} pool - Database connection pool
- * @param {string} url - URL to process
- * @param {Object} poi - POI object
- * @param {string} contentType - 'event' or 'news'
- * @param {Object} options - { phase, jobId, timezone, confidence }
- * @returns {Object} - { news: [], events: [] }
- */
-/**
  * Run up to `limit` async tasks concurrently.
  * Each task is a zero-arg function returning a Promise.
  * Results are returned in original order; individual errors are caught and re-thrown per-task.
@@ -493,132 +479,6 @@ async function runConcurrent(tasks, limit = 10, delayMs = 0) {
   return results;
 }
 
-async function processOneUrl(pool, url, poi, contentType, options = {}) {
-  const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', confidence = '75%', jobType = 'news' } = options;
-
-  // [Render] — normalize social media URLs for better metadata extraction
-  const renderUrl = normalizeRenderUrl(url);
-  updateProgress(poi.id, { phase: 'render', message: url });
-  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url}`);
-  const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
-  if (!extracted.reachable || !extracted.markdown || extracted.markdown.length < 200) {
-    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'too short'} (${extracted.markdown?.length || 0} chars)`);
-    return { news: [], events: [] };
-  }
-
-  // [Dates] — Consensus scoring across deterministic sources + LLM multi-vote.
-  //   JSON-LD datePublished/startDate : 3 pts each
-  //   LLM 5-vote unanimous           : 4 pts (minus competing deterministic)
-  //   LLM 3-4/5 majority             : 1 pt
-  //   Meta tags (OG, Parsely, DC)     : 1 pt each
-  //   HTML <time datetime>            : 1 pt each
-  //   URL path date                   : 1 pt
-  updateProgress(poi.id, { phase: 'dates', message: url });
-
-  const od = extracted.ogDates || {};
-  let primaryDate = null;
-  let dateScore = 0;
-  let dateSourceMap = {};
-  let dateSignals = null;
-  let eventStartDateTime = null;
-  let eventStartScore = 0;
-  let eventEndDateTime = null;
-  let eventEndScore = 0;
-
-  if (contentType === 'event') {
-    const pageText = extracted.rawText || extracted.markdown;
-    const snippet = (pageText || '').substring(0, 2000);
-    const { startVotes, endVotes } = snippet.length >= 20
-      ? await runLlmDateVotes(pool, snippet, LLM_DATE_VOTES, 'datetime')
-      : { startVotes: [], endVotes: [] };
-
-    const startResult = await scoreDate(pool, {
-      title: null, description: null, pageContent: pageText,
-      sources: {
-        jsonLd: od.eventStartDate ? [od.eventStartDate] : [],
-        meta: [], timeTags: od.timeDates?.length > 0 ? [od.timeDates[0]] : [],
-        url: extractUrlDate(url)
-      },
-      timezone, mode: 'datetime', llmVotes: startVotes
-    });
-    const endResult = await scoreDate(pool, {
-      title: null, description: null, pageContent: pageText,
-      sources: {
-        jsonLd: od.eventEndDate ? [od.eventEndDate] : [],
-        meta: [], timeTags: od.timeDates?.length > 1 ? [od.timeDates[1]] : [],
-        url: null
-      },
-      timezone, mode: 'datetime', llmVotes: endVotes
-    });
-
-    eventStartDateTime = startResult.date;
-    eventStartScore = startResult.score;
-    eventEndDateTime = endResult.date;
-    eventEndScore = endResult.score;
-    primaryDate = eventStartDateTime?.substring(0, 10) || null;
-    dateScore = eventStartScore;
-    dateSourceMap = startResult.sourceMap;
-    dateSignals = { start: startResult.rawSignals, end: endResult.rawSignals };
-
-    logInfo(jobId, jobType, poi.id, poi.name,
-      `${phase}: [Dates] start=${eventStartDateTime || 'none'} (score=${eventStartScore}, sources=${JSON.stringify(dateSourceMap)}), end=${eventEndDateTime || 'none'} (score=${eventEndScore}) from ${url}`);
-
-  } else {
-    const consensus = await scoreDate(pool, {
-      title: null, description: null,
-      pageContent: extracted.rawText || extracted.markdown,
-      sources: {
-        jsonLd: od.jsonLdDates || [],
-        meta: [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
-        timeTags: od.timeDates || [],
-        url: extractUrlDate(url)
-      },
-      timezone
-    });
-
-    primaryDate = consensus.date;
-    dateScore = consensus.score;
-    dateSourceMap = consensus.sourceMap;
-    dateSignals = consensus.rawSignals;
-
-    logInfo(jobId, jobType, poi.id, poi.name,
-      `${phase}: [Dates] ${primaryDate || 'none'} (score=${dateScore}, sources=${JSON.stringify(dateSourceMap)}) from ${url}`);
-  }
-
-  // [Summarize]
-  updateProgress(poi.id, { phase: 'summarize', message: url });
-  const prompt = buildSummarizePrompt(poi, url, extracted.markdown, contentType, confidence);
-  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${url}`);
-  const aiResult = await generateTextWithCustomPrompt(pool, prompt);
-
-  // Parse Gemini response, then apply dates and force source_url.
-  // Every URL that reaches processOneUrl is a DETAIL page (one article or one event).
-  // The crawler already resolved listings → detail pages before we get here.
-  const result = parseGeminiResponse(aiResult.response);
-
-  const renderedContent = extracted.rawText || extracted.markdown || null;
-
-  for (const item of (result.news || [])) {
-    item.source_url = url;
-    item.published_date = primaryDate;
-    item.date_consensus_score = dateScore;
-    item.rendered_content = renderedContent;
-    item.date_signals = dateSignals;
-  }
-
-  for (const event of (result.events || [])) {
-    event.source_url = url;
-    event.start_date = eventStartDateTime || primaryDate;
-    event.end_date = eventEndDateTime || null;
-    event.date_consensus_score = eventStartScore || dateScore;
-    event.rendered_content = renderedContent;
-    event.date_signals = dateSignals;
-  }
-
-  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events from ${url}`);
-  return result;
-}
-
 /**
  * Process a pre-rendered page through dates + summarize (NO Playwright render).
  * Accepts a page object from crawlWithClassification that already has markdown, rawText, ogDates.
@@ -634,7 +494,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
   const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', confidence = '75%', jobType = 'news' } = options;
   const url = page.url;
 
-  // Skip pages with insufficient content (same threshold as processOneUrl)
+  // Skip pages with insufficient content
   if (!page.markdown || page.markdown.length < 200) {
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ProcessPage] Skip — too short (${page.markdown?.length || 0} chars) ${url}`);
     return { news: [], events: [] };
@@ -1363,7 +1223,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       // Normalize dates via chrono-node — handles natural language, European format, partial dates
       item.published_date = parseDate(item.published_date) || null;
 
-      // Defense-in-depth: cap future news dates at today (primary cap is in processOneUrl,
+      // Defense-in-depth: cap future news dates at today (primary cap is in processPage,
       // but this catches any case where a future date slips through to saveNewsItems)
       if (item.published_date && item.published_date > todayStr) {
         if (log) log(`[Save] Capping future date ${item.published_date} → ${todayStr} for "${item.title}"`);

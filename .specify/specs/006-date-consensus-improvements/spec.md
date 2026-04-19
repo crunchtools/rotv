@@ -51,7 +51,7 @@ const candidates = [
 
 ### Fix 2: LLM Multi-Vote Consensus (replaces single LLM call)
 
-**Files:** `backend/services/newsService.js` (processOneUrl), `backend/services/dateExtractor.js` (new scoring function)
+**Files:** `backend/services/newsService.js` (processPage), `backend/services/dateExtractor.js` (new scoring function)
 
 **Problem:** A single LLM call at 2 pts is unreliable (hallucinated 1996, 2008, 2024 in production data) and insufficient to auto-approve items that lack structural metadata.
 
@@ -127,7 +127,7 @@ export function scoreLlmConsensus(results, deterministicCompetingPoints = 0) {
 }
 ```
 
-**Integration in processOneUrl:**
+**Integration in processPage:**
 
 Replace the single LLM call block with:
 
@@ -322,7 +322,7 @@ Unchanged at **4 pts**.
 
 | Path | When | How | Score |
 |------|------|-----|-------|
-| `processOneUrl` (collection) | News/event first collected | Full consensus pipeline | Computed |
+| `processPage` (collection) | News/event first collected | Full consensus pipeline | Computed |
 | `processItem` (moderation sweep) | Sweep picks up unprocessed items | Reads existing score, applies threshold | Passthrough |
 | `fixDate` (admin action) | Admin clicks "Fix Date" | chrono-node → single Gemini call | Hardcoded 6 |
 
@@ -348,7 +348,7 @@ Unchanged at **4 pts**.
 
 **Cost tradeoff:** `processItem` now renders pages (Playwright) and makes 5 LLM calls per item. This is heavier than the old passthrough, but the moderation sweep is rate-limited to 20 items per run and runs every 15 minutes. At ~30 seconds per item (render + 5 parallel LLM calls), a batch of 20 takes ~10 minutes. Acceptable.
 
-**Relationship to collection pipeline:** `processOneUrl` in `newsService.js` continues to score dates during collection (it already has the rendered page content — no point re-rendering). Both `processOneUrl` and `processItem` call the same shared scoring functions (`scoreDateConsensus`, `scoreLlmConsensus`, `extractUrlDate`, etc.) from `dateExtractor.js`. The architecture:
+**Relationship to collection pipeline:** `processPage` in `newsService.js` continues to score dates during collection (it already has the rendered page content — no point re-rendering). Both `processPage` and `processItem` call the same shared scoring functions (`scoreDateConsensus`, `scoreLlmConsensus`, `extractUrlDate`, etc.) from `dateExtractor.js`. The architecture:
 
 ```
 Shared scoring functions (dateExtractor.js)
@@ -357,7 +357,7 @@ Shared scoring functions (dateExtractor.js)
   ├── extractUrlDate()          — URL pattern extraction (UPDATED)
   └── normalizeDateSources()    — source normalization
 
-Collection path (newsService.js → processOneUrl)
+Collection path (newsService.js → processPage)
   → extractPageContent() → extract sources → score → save with score
   → processItem() just applies threshold (item already scored)
 

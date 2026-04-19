@@ -1,7 +1,7 @@
 /**
  * North Fork Trail Regression Tests
  *
- * Bug 1: collectNewsForPoi returns { news: [], events: [] } without metadata
+ * Bug 1: collectPoi returns { news: [], events: [] } without metadata
  *        when AI response contains no JSON. The caller destructures metadata
  *        and reads metadata.usedDedicatedNewsUrl, causing TypeError.
  *
