@@ -404,10 +404,10 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     // [2] LLM extraction — ask Gemini for start AND end datetime
     // Skip nav menus by finding the first markdown heading (# Title), then send content from there
     try {
-      const headingIdx = extracted.markdown.search(/^#{1,3}\s+\S/m);
-      const contentStart = headingIdx >= 0 ? headingIdx : 0;
-      const snippet = extracted.markdown.substring(contentStart, contentStart + 2000);
-      logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Dates] LLM snippet (headingIdx=${headingIdx}, start=${contentStart}): ${snippet.substring(0, 300).replace(/\n/g, '\\n')}`);
+      // Use rawText (pre-Readability) so the LLM sees date headings like "April 22 @ 10:30 am"
+      // that Readability strips from the markdown as "page structure"
+      const dateText = extracted.rawText || extracted.markdown;
+      const snippet = dateText.substring(0, 3000);
       const datePrompt = `Extract the event start and end date/time from this page. The current year is ${new Date().getFullYear()}. If no year is shown, assume the current year. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${snippet}`;
       const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
       const raw = (llmResult.response || '').trim();
@@ -458,7 +458,8 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
     };
 
     try {
-      const datePrompt = `Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${extracted.markdown.substring(0, 1000)}`;
+      const dateText = extracted.rawText || extracted.markdown;
+      const datePrompt = `Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${dateText.substring(0, 2000)}`;
       const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
       const raw = (llmResult.response || '').trim().replace(/^["']|["']$/g, '');
       if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) rawSources.llm = raw;
