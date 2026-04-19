@@ -146,6 +146,8 @@ export async function extractPageContent(url, options = {}) {
 
         // JSON-LD: parse all ld+json blocks, collect date fields from any schema type
         const jsonLdDates = [];
+        let eventStartDate = null;
+        let eventEndDate = null;
         document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
           try {
             const data = JSON.parse(script.textContent);
@@ -158,6 +160,18 @@ export async function extractPageContent(url, options = {}) {
                 item['@graph']?.map?.(n => n.datePublished || n.startDate)
               ].flat().filter(Boolean);
               jsonLdDates.push(...candidates);
+
+              // Event-specific: extract startDate/endDate with full datetime precision
+              if (!eventStartDate) {
+                eventStartDate = item.startDate
+                  || item['@graph']?.find?.(n => n.startDate)?.startDate
+                  || null;
+              }
+              if (!eventEndDate) {
+                eventEndDate = item.endDate
+                  || item['@graph']?.find?.(n => n.endDate)?.endDate
+                  || null;
+              }
             }
           } catch { /* ignore malformed JSON-LD */ }
         });
@@ -175,7 +189,9 @@ export async function extractPageContent(url, options = {}) {
           parselyPubDate: getMetaName('parsely-pub-date'),
           dcDate: getMetaName('dc.date'),
           jsonLdDates,
-          timeDates
+          timeDates,
+          eventStartDate,
+          eventEndDate
         };
       });
 
