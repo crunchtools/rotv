@@ -180,11 +180,12 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_enabled', 'moderation_auto_approve_threshold', 'moderation_news_date_threshold')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const autoApproveEnabled = settings.moderation_auto_approve_enabled !== 'false';
-  const threshold = parseFloat(settings.moderation_auto_approve_threshold) || 0.9;
+  const newsDateThreshold = parseInt(settings.moderation_news_date_threshold) || 4;
+  const photoThreshold = parseFloat(settings.moderation_auto_approve_threshold) || 0.9;
 
   let scoring;
 
@@ -228,7 +229,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // Auto-approve based on date consensus score (no re-render needed)
     const dateScore = row.date_consensus_score || 0;
     const resolvedStatus = forceStatus ? forceStatus
-      : dateScore >= 4 ? 'auto_approved'
+      : autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved'
       : 'pending';
 
     scoring = { confidence_score: dateScore / 8.0, reasoning: `Date consensus score: ${dateScore}/8` };
@@ -278,7 +279,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // Auto-approve based on date consensus score (no re-render needed)
     const dateScore = row.date_consensus_score || 0;
     const resolvedStatus = forceStatus ? forceStatus
-      : dateScore >= 4 ? 'auto_approved'
+      : autoApproveEnabled && dateScore >= newsDateThreshold ? 'auto_approved'
       : 'pending';
 
     scoring = { confidence_score: dateScore / 8.0, reasoning: `Date consensus score: ${dateScore}/8` };
@@ -307,7 +308,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     });
 
     const resolvedStatus = forceStatus ? forceStatus
-      : autoApproveEnabled && scoring.confidence_score >= threshold
+      : autoApproveEnabled && scoring.confidence_score >= photoThreshold
       ? 'auto_approved' : 'pending';
 
     await pool.query(
@@ -316,8 +317,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
   }
 
-  const decision = scoring?.confidence_score >= threshold ? 'auto_approved'
-    : scoring?.confidence_score < rejectFloor ? 'rejected' : 'pending';
+  const decision = contentType === 'photo'
+    ? (scoring?.confidence_score >= photoThreshold ? 'auto_approved' : 'pending')
+    : (scoring?.confidence_score >= (newsDateThreshold / 8.0) ? 'auto_approved' : 'pending');
   console.log(`[Moderation] ${contentType} #${contentId}: score=${scoring?.confidence_score}`);
   logInfo(itemRunId || 0, 'moderation', null, null,
     `Score ${contentType} #${contentId}: ${scoring?.confidence_score?.toFixed(2)} → ${decision}`,
