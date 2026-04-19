@@ -9,7 +9,7 @@
  */
 
 import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
-import { parseDate, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
+import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus, normalizeEventDateSources, scoreEventDateTimeConsensus } from './dateExtractor.js';
 
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
@@ -372,39 +372,96 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   //   URL path /YYYY/MM/DD/             : 1 pt
   updateProgress(poi.id, { phase: 'dates', message: url });
 
-  // --- [1] Collect raw date strings from all extraction sources ---
   const od = extracted.ogDates || {};
-  const rawSources = {
-    jsonLd:   od.jsonLdDates || [],
-    meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
-    timeTags: od.timeDates || [],
-    url:      extractUrlDate(url),
-    llm:      null  // filled below
-  };
+  let primaryDate = null;
+  let dateScore = 0;
+  let dateSourceMap = {};
+  let eventStartDateTime = null;
+  let eventStartScore = 0;
+  let eventEndDateTime = null;
+  let eventEndScore = 0;
 
-  // --- [2] LLM date extraction (lightweight Gemini call on first 1000 chars) ---
-  try {
-    const datePrompt = `Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${extracted.markdown.substring(0, 1000)}`;
-    const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
-    const raw = (llmResult.response || '').trim().replace(/^["']|["']$/g, '');
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) rawSources.llm = raw;
-  } catch { /* LLM date extraction is best-effort */ }
+  if (contentType === 'event') {
+    // --- Event datetime consensus: separate start and end pipelines ---
 
-  // --- [3] Normalize: convert all raw strings to ISO 8601, discard unparseable ---
-  const normalizedSources = normalizeDateSources(rawSources, timezone);
+    // [1] Collect raw datetime sources for start and end
+    const startSources = {
+      jsonLd:   od.eventStartDate ? [od.eventStartDate] : [],
+      meta:     [],
+      timeTags: od.timeDates?.length > 0 ? [od.timeDates[0]] : [],
+      url:      extractUrlDate(url),
+      llm:      null
+    };
+    const endSources = {
+      jsonLd:   od.eventEndDate ? [od.eventEndDate] : [],
+      meta:     [],
+      timeTags: od.timeDates?.length > 1 ? [od.timeDates[1]] : [],
+      url:      null,
+      llm:      null
+    };
 
-  // --- [4] Score: consensus across normalized sources ---
-  const consensus = scoreDateConsensus(normalizedSources);
+    // [2] LLM extraction — ask Gemini for start AND end datetime
+    try {
+      const datePrompt = `Extract the event start and end date/time from this page snippet. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${extracted.markdown.substring(0, 1500)}`;
+      const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
+      const raw = (llmResult.response || '').trim();
+      try {
+        const cleaned = raw.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        const parsed = JSON.parse(cleaned);
+        if (parsed.start && typeof parsed.start === 'string') startSources.llm = parsed.start;
+        if (parsed.end && typeof parsed.end === 'string') endSources.llm = parsed.end;
+      } catch { /* LLM returned non-JSON — skip */ }
+    } catch { /* LLM extraction is best-effort */ }
 
-  const primaryDate = consensus.date;
+    // [3] Normalize to YYYY-MM-DDTHH:MM:SS
+    const normStart = normalizeEventDateSources(startSources, timezone);
+    const normEnd = normalizeEventDateSources(endSources, timezone);
 
-  // chrono-node scan of article body — used only for event end_date fallback,
-  // NOT as a scored consensus source (too noisy for publication dates).
-  const dateHints = extractDatesFromText(extracted.markdown, timezone);
-  const secondDate = dateHints.length > 1 ? dateHints[1].start?.substring(0, 10) : null;
+    // [4] Score
+    const startConsensus = scoreEventDateTimeConsensus(normStart);
+    const endConsensus = scoreEventDateTimeConsensus(normEnd);
 
-  logInfo(jobId, jobType, poi.id, poi.name,
-    `${phase}: [Dates] ${primaryDate || 'none'} (score=${consensus.score}, sources=${JSON.stringify(consensus.sourceMap)}) from ${url}`);
+    eventStartDateTime = startConsensus.datetime;
+    eventStartScore = startConsensus.score;
+    eventEndDateTime = endConsensus.datetime;
+    eventEndScore = endConsensus.score;
+
+    // primaryDate and dateScore used for logging and fallback
+    primaryDate = eventStartDateTime?.substring(0, 10) || null;
+    dateScore = eventStartScore;
+    dateSourceMap = startConsensus.sourceMap;
+
+    logInfo(jobId, jobType, poi.id, poi.name,
+      `${phase}: [Dates] start=${eventStartDateTime || 'none'} (score=${eventStartScore}, sources=${JSON.stringify(startConsensus.sourceMap)}), end=${eventEndDateTime || 'none'} (score=${eventEndScore}) from ${url}`);
+
+  } else {
+    // --- News date consensus: existing pipeline (date-only) ---
+
+    const rawSources = {
+      jsonLd:   od.jsonLdDates || [],
+      meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
+      timeTags: od.timeDates || [],
+      url:      extractUrlDate(url),
+      llm:      null
+    };
+
+    try {
+      const datePrompt = `Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${extracted.markdown.substring(0, 1000)}`;
+      const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
+      const raw = (llmResult.response || '').trim().replace(/^["']|["']$/g, '');
+      if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) rawSources.llm = raw;
+    } catch { /* LLM date extraction is best-effort */ }
+
+    const normalizedSources = normalizeDateSources(rawSources, timezone);
+    const consensus = scoreDateConsensus(normalizedSources);
+
+    primaryDate = consensus.date;
+    dateScore = consensus.score;
+    dateSourceMap = consensus.sourceMap;
+
+    logInfo(jobId, jobType, poi.id, poi.name,
+      `${phase}: [Dates] ${primaryDate || 'none'} (score=${dateScore}, sources=${JSON.stringify(dateSourceMap)}) from ${url}`);
+  }
 
   // [Summarize]
   updateProgress(poi.id, { phase: 'summarize', message: url });
@@ -420,14 +477,14 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   for (const item of (result.news || [])) {
     item.source_url = url;
     item.published_date = primaryDate;
-    item.date_consensus_score = consensus.score;
+    item.date_consensus_score = dateScore;
   }
 
   for (const event of (result.events || [])) {
     event.source_url = url;
-    event.start_date = primaryDate;
-    event.end_date = secondDate || null;
-    event.date_consensus_score = consensus.score;
+    event.start_date = eventStartDateTime || primaryDate;
+    event.end_date = eventEndDateTime || null;
+    event.date_consensus_score = eventStartScore || dateScore;
   }
 
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${result.news?.length || 0} news, ${result.events?.length || 0} events from ${url}`);
@@ -1149,11 +1206,19 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
 
   for (const item of eventItems) {
     try {
-      // Normalize event dates via chrono-node
-      item.start_date = parseDate(item.start_date) || item.start_date;
-      item.end_date = parseDate(item.end_date) || null;
+      // Normalize event dates — preserve datetimes if present, fall back to date-only
+      item.start_date = parseDateTime(item.start_date) || parseDate(item.start_date) || item.start_date;
+      item.end_date = parseDateTime(item.end_date) || parseDate(item.end_date) || null;
 
-      // Save all events regardless of date — past events provide historical value
+      // Default end time: if start has a time component but end is NULL, assume 60 minutes
+      if (item.start_date && !item.end_date && item.start_date.includes('T')) {
+        const startMs = new Date(item.start_date).getTime();
+        if (!isNaN(startMs)) {
+          const endDate = new Date(startMs + 60 * 60 * 1000);
+          const pad = (n) => String(n).padStart(2, '0');
+          item.end_date = `${endDate.getUTCFullYear()}-${pad(endDate.getUTCMonth() + 1)}-${pad(endDate.getUTCDate())}T${pad(endDate.getUTCHours())}:${pad(endDate.getUTCMinutes())}:${pad(endDate.getUTCSeconds())}`;
+        }
+      }
 
       // Resolve redirect URLs to final destination URLs
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;

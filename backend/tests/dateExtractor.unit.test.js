@@ -4,7 +4,7 @@
  *   extractUrlDate → normalizeDateSources → scoreDateConsensus
  */
 import { describe, it, expect } from 'vitest';
-import { extractUrlDate, normalizeDateSources, scoreDateConsensus } from '../services/dateExtractor.js';
+import { extractUrlDate, normalizeDateSources, scoreDateConsensus, normalizeEventDateSources, scoreEventDateTimeConsensus } from '../services/dateExtractor.js';
 
 describe('extractUrlDate', () => {
   it('extracts /YYYY/MM/DD/ from a WordPress-style URL', () => {
@@ -155,5 +155,96 @@ describe('scoreDateConsensus', () => {
     });
     expect(result.sourceMap['2024-03-15']).toContain('json-ld');
     expect(result.sourceMap['2024-03-15']).toContain('url');
+  });
+});
+
+describe('normalizeEventDateSources', () => {
+  it('preserves time components from ISO datetime strings', () => {
+    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30:00'] });
+    expect(result.jsonLd).toContain('2026-04-22T10:30:00');
+  });
+
+  it('parses datetime strings with timezone offsets', () => {
+    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30:00-04:00'] });
+    expect(result.jsonLd.length).toBe(1);
+    expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+  });
+
+  it('handles date-only strings by adding T00:00:00', () => {
+    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22'] });
+    expect(result.jsonLd.length).toBe(1);
+    expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+  });
+
+  it('discards unparseable strings', () => {
+    const result = normalizeEventDateSources({ jsonLd: ['not-a-date', '2026-04-22T10:30:00'] });
+    expect(result.jsonLd).not.toContain('not-a-date');
+    expect(result.jsonLd.length).toBe(1);
+  });
+
+  it('handles null/missing sources gracefully', () => {
+    const result = normalizeEventDateSources({ llm: null, url: null });
+    expect(result.llm).toBeNull();
+    expect(result.url).toBeNull();
+    expect(result.jsonLd).toEqual([]);
+  });
+});
+
+describe('scoreEventDateTimeConsensus', () => {
+  it('returns score 0 when no sources provided', () => {
+    const result = scoreEventDateTimeConsensus({});
+    expect(result.datetime).toBeNull();
+    expect(result.score).toBe(0);
+  });
+
+  it('scores JSON-LD datetime at 3 pts', () => {
+    const result = scoreEventDateTimeConsensus({ jsonLd: ['2026-04-22T10:30:00'] });
+    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    expect(result.score).toBe(3);
+  });
+
+  it('reaches threshold with JSON-LD + time tag (3+1=4)', () => {
+    const result = scoreEventDateTimeConsensus({
+      jsonLd: ['2026-04-22T10:30:00'],
+      timeTags: ['2026-04-22T10:30:00']
+    });
+    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    expect(result.score).toBe(4);
+  });
+
+  it('accumulates score across matching datetimes', () => {
+    const result = scoreEventDateTimeConsensus({
+      jsonLd: ['2026-04-22T10:30:00'],
+      llm: '2026-04-22T10:30:00',
+      timeTags: ['2026-04-22T10:30:00']
+    });
+    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    expect(result.score).toBe(6);
+  });
+
+  it('picks highest-scoring datetime when sources disagree', () => {
+    const result = scoreEventDateTimeConsensus({
+      jsonLd: ['2026-04-22T10:30:00'],
+      llm: '2026-04-22T11:00:00'
+    });
+    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    expect(result.score).toBe(3);
+  });
+
+  it('breaks ties by choosing newest datetime', () => {
+    const result = scoreEventDateTimeConsensus({
+      timeTags: ['2026-04-22T10:30:00'],
+      url: '2026-04-22T14:00:00'
+    });
+    expect(result.datetime).toBe('2026-04-22T14:00:00');
+  });
+
+  it('includes sourceMap in result', () => {
+    const result = scoreEventDateTimeConsensus({
+      jsonLd: ['2026-04-22T10:30:00'],
+      llm: '2026-04-22T10:30:00'
+    });
+    expect(result.sourceMap['2026-04-22T10:30:00']).toContain('json-ld');
+    expect(result.sourceMap['2026-04-22T10:30:00']).toContain('llm');
   });
 });

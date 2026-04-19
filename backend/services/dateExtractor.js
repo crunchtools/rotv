@@ -255,6 +255,64 @@ export function scoreDateConsensus(sources = {}) {
 }
 
 /**
+ * Normalize raw datetime strings from event extraction sources to ISO 8601
+ * (YYYY-MM-DDTHH:MM:SS). Same shape as normalizeDateSources but preserves times.
+ *
+ * @param {Object} rawSources - Raw extracted datetime strings by source
+ * @param {string} [timezone] - IANA timezone for chrono-node parsing
+ * @returns {Object} Normalized sources with valid YYYY-MM-DDTHH:MM:SS strings
+ */
+export function normalizeEventDateSources(rawSources = {}, timezone = 'America/New_York') {
+  const norm = (raw) => (raw ? parseDateTime(String(raw), timezone) : null);
+  const normList = (arr) => (arr || []).map(norm).filter(Boolean);
+
+  return {
+    jsonLd:   normList(rawSources.jsonLd),
+    llm:      norm(rawSources.llm),
+    meta:     normList(rawSources.meta),
+    timeTags: normList(rawSources.timeTags),
+    url:      norm(rawSources.url)
+  };
+}
+
+/**
+ * Consensus datetime scoring for events. Same algorithm as scoreDateConsensus
+ * but operates on full datetime strings (YYYY-MM-DDTHH:MM:SS).
+ *
+ * @param {Object} sources - Normalized datetime strings by source (from normalizeEventDateSources)
+ * @returns {{ datetime: string|null, score: number, sourceMap: Object }}
+ */
+export function scoreEventDateTimeConsensus(sources = {}) {
+  const scores = {};
+  const sourceMap = {};
+
+  const add = (datetime, weight, label) => {
+    if (!datetime) return;
+    scores[datetime] = (scores[datetime] || 0) + weight;
+    if (!sourceMap[datetime]) sourceMap[datetime] = [];
+    sourceMap[datetime].push(label);
+  };
+
+  for (const d of (sources.jsonLd || [])) add(d, 3, 'json-ld');
+  add(sources.llm, 2, 'llm');
+  for (const d of (sources.meta || [])) add(d, 1, 'meta');
+  for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
+  add(sources.url, 1, 'url');
+
+  if (Object.keys(scores).length === 0) {
+    return { datetime: null, score: 0, sourceMap: {} };
+  }
+
+  // Pick highest score; break ties by choosing newest
+  const bestDatetime = Object.keys(scores).reduce((a, b) => {
+    if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
+    return a > b ? a : b;
+  });
+
+  return { datetime: bestDatetime, score: scores[bestDatetime], sourceMap };
+}
+
+/**
  * Find start/end dates and times for an event from rendered page text.
  * @param {string} text - Rendered page content
  * @param {string} title - Event title
