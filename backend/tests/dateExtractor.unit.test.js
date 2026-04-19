@@ -111,21 +111,21 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(4);
   });
 
-  it('breaks ties by choosing the oldest date', () => {
+  it('breaks ties by choosing the newest date', () => {
     const result = scoreDateConsensus({
       meta: ['2024-03-10'],
       url: '2024-03-12'
     });
-    expect(result.date).toBe('2024-03-10');
+    expect(result.date).toBe('2024-03-12');
   });
 
-  it('discards future dates', () => {
+  it('scores future dates normally (needed for events)', () => {
     const result = scoreDateConsensus({
       jsonLd: ['2099-12-31'],
       url: '2024-01-15'
     });
-    expect(result.date).toBe('2024-01-15');
-    expect(result.score).toBe(1);
+    expect(result.date).toBe('2099-12-31');
+    expect(result.score).toBe(3);
   });
 
   it('accumulates score across matching dates from different sources', () => {
@@ -140,11 +140,11 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(7);
   });
 
-  it('handles multiple JSON-LD dates — picks oldest on tie', () => {
+  it('handles multiple JSON-LD dates — picks newest on tie', () => {
     const result = scoreDateConsensus({
       jsonLd: ['2024-05-01', '2024-06-15'],
     });
-    expect(result.date).toBe('2024-05-01');
+    expect(result.date).toBe('2024-06-15');
     expect(result.score).toBe(3);
   });
 
