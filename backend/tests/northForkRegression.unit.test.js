@@ -18,19 +18,19 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('North Fork Trail Regression Tests', () => {
 
-  describe('Bug 1: collectNewsForPoi metadata contract', () => {
-    it('should include metadata in all return paths of collectNewsForPoi', () => {
-      // Read the source file and find all return statements within collectNewsForPoi
+  describe('Bug 1: collectPoi metadata contract', () => {
+    it('should include metadata in all return paths of collectPoi', () => {
+      // Read the source file and find all return statements within collectPoi
       const source = readFileSync(
         join(__dirname, '..', 'services', 'newsService.js'),
         'utf-8'
       );
 
       // Find the function boundaries
-      const fnStart = source.indexOf('export async function collectNewsForPoi(');
+      const fnStart = source.indexOf('export async function collectPoi(');
       expect(fnStart).toBeGreaterThan(-1);
 
-      // Find the next export function after collectNewsForPoi to bound the search
+      // Find the next export function after collectPoi to bound the search
       const fnBody = source.slice(fnStart);
       const nextExport = fnBody.indexOf('\nexport ', 1);
       const fnText = nextExport > 0 ? fnBody.slice(0, nextExport) : fnBody;

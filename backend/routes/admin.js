@@ -480,7 +480,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'buttondown_api_key',
       'buttondown_from_email',
       'max_concurrency',
-      'max_search_urls'
+      'max_search_urls',
+      'page_concurrency',
+      'page_delay_ms'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
