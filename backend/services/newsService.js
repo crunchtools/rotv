@@ -54,6 +54,43 @@ export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES) 
   return results;
 }
 
+/**
+ * Score a news item's publication date using deterministic sources + LLM multi-vote.
+ * Single source of truth — used by both collection (newsService) and moderation (moderationService).
+ *
+ * @param {Pool} pool - Database connection pool
+ * @param {Object} params
+ * @param {string} params.title - Item title
+ * @param {string} params.description - Item summary/description
+ * @param {string} params.pageContent - Extracted page text (rawText or markdown)
+ * @param {Object} params.ogDates - OG/meta date objects from page extraction
+ * @param {string} params.sourceUrl - Source URL for URL-based date extraction
+ * @param {string} [params.timezone] - IANA timezone for normalization
+ * @returns {Object} { date, score, sourceMap }
+ */
+export async function scoreNewsDate(pool, { title, description, pageContent, ogDates, sourceUrl, timezone }) {
+  const od = ogDates || {};
+  const rawSources = {
+    jsonLd:   od.jsonLdDates || [],
+    meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
+    timeTags: od.timeDates || [],
+    url:      extractUrlDate(sourceUrl)
+  };
+
+  // Build LLM input: title + description first, then page content, capped at 2000 chars
+  const itemContext = `${title || ''}\n${description || ''}`.trim();
+  const dateText = itemContext
+    ? `${itemContext}\n\n${pageContent || ''}`.substring(0, 2000)
+    : (pageContent || '').substring(0, 2000);
+
+  const llmResults = dateText.length >= 20
+    ? await runLlmDateVotes(pool, dateText)
+    : [];
+
+  const normalizedSources = normalizeDateSources(rawSources, timezone);
+  return scoreDateConsensus(normalizedSources, llmResults);
+}
+
 export function resetJobUsage() {
   geminiCallCount = 0;
 }
@@ -519,20 +556,12 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
 
   } else {
     // --- News date consensus: deterministic sources + LLM multi-vote ---
-
-    const rawSources = {
-      jsonLd:   od.jsonLdDates || [],
-      meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
-      timeTags: od.timeDates || [],
-      url:      extractUrlDate(url)
-    };
-
-    // LLM multi-vote date extraction (5 parallel calls with date seeding)
-    const dateText = extracted.rawText || extracted.markdown;
-    const llmResults = await runLlmDateVotes(pool, dateText.substring(0, 2000));
-
-    const normalizedSources = normalizeDateSources(rawSources, timezone);
-    const consensus = scoreDateConsensus(normalizedSources, llmResults);
+    // Uses shared scoreNewsDate (no title/description available yet — item hasn't been summarized)
+    const consensus = await scoreNewsDate(pool, {
+      title: null, description: null,
+      pageContent: extracted.rawText || extracted.markdown,
+      ogDates: od, sourceUrl: url, timezone
+    });
 
     primaryDate = consensus.date;
     dateScore = consensus.score;

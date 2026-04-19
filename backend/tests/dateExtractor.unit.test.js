@@ -184,19 +184,19 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(0);
   });
 
-  it('scores JSON-LD alone at 3 pts (deterministic only)', () => {
+  it('scores JSON-LD alone at 4 pts (deterministic only)', () => {
     const result = scoreDateConsensus({ jsonLd: ['2024-05-20'] }, []);
     expect(result.date).toBe('2024-05-20');
-    expect(result.score).toBe(3);
+    expect(result.score).toBe(4);
   });
 
-  it('scores JSON-LD + URL at 4 pts', () => {
+  it('scores JSON-LD + URL at 5 pts', () => {
     const result = scoreDateConsensus({
       jsonLd: ['2024-03-15'],
       url: '2024-03-15'
     }, []);
     expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(4);
+    expect(result.score).toBe(5);
   });
 
   it('LLM consensus alone scores 4 pts (no deterministic sources)', () => {
@@ -208,13 +208,13 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(4);
   });
 
-  it('LLM consensus + agreeing JSON-LD scores 7 pts', () => {
+  it('LLM consensus + agreeing JSON-LD scores 8 pts', () => {
     const result = scoreDateConsensus(
       { jsonLd: ['2024-06-01'] },
       ['2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01']
     );
     expect(result.date).toBe('2024-06-01');
-    expect(result.score).toBe(7);  // 3 (json-ld) + 4 (llm-consensus, no competing)
+    expect(result.score).toBe(8);  // 4 (json-ld) + 4 (llm-consensus, no competing)
   });
 
   it('LLM consensus penalized when disagreeing with time-tags', () => {
@@ -332,19 +332,19 @@ describe('scoreEventDateTimeConsensus', () => {
     expect(result.score).toBe(0);
   });
 
-  it('scores JSON-LD datetime at 3 pts', () => {
+  it('scores JSON-LD datetime at 4 pts', () => {
     const result = scoreEventDateTimeConsensus({ jsonLd: ['2026-04-22T10:30'] });
     expect(result.datetime).toBe('2026-04-22T10:30');
-    expect(result.score).toBe(3);
+    expect(result.score).toBe(4);
   });
 
-  it('reaches threshold with JSON-LD + time tag (3+1=4)', () => {
+  it('reaches threshold with JSON-LD + time tag (4+1=5)', () => {
     const result = scoreEventDateTimeConsensus({
       jsonLd: ['2026-04-22T10:30'],
       timeTags: ['2026-04-22T10:30']
     });
     expect(result.datetime).toBe('2026-04-22T10:30');
-    expect(result.score).toBe(4);
+    expect(result.score).toBe(5);
   });
 
   it('accumulates score across matching datetimes', () => {
@@ -354,7 +354,7 @@ describe('scoreEventDateTimeConsensus', () => {
       timeTags: ['2026-04-22T10:30']
     });
     expect(result.datetime).toBe('2026-04-22T10:30');
-    expect(result.score).toBe(6);
+    expect(result.score).toBe(7);
   });
 
   it('picks highest-scoring datetime when sources disagree', () => {
@@ -363,7 +363,7 @@ describe('scoreEventDateTimeConsensus', () => {
       llm: '2026-04-22T11:00'
     });
     expect(result.datetime).toBe('2026-04-22T10:30');
-    expect(result.score).toBe(3);
+    expect(result.score).toBe(4);
   });
 
   it('breaks ties by choosing newest datetime', () => {

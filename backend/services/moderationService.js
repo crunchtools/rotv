@@ -8,8 +8,8 @@ import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL } from
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDate, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
-import { runLlmDateVotes, normalizeRenderUrl } from './newsService.js';
+import { parseDate } from './dateExtractor.js';
+import { scoreNewsDate, normalizeRenderUrl } from './newsService.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -258,41 +258,40 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       let newScore = dateScore;
       let newDate = row.publication_date;
 
+      // Extract page content if URL is available
+      let pageContent = null;
+      let ogDates = {};
       if (row.source_url && isSafePublicUrl(row.source_url)) {
         try {
           const renderUrl = normalizeRenderUrl(row.source_url);
           const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
-
           if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
-            // Collect deterministic sources
-            const od = extracted.ogDates || {};
-            const rawSources = {
-              jsonLd:   od.jsonLdDates || [],
-              meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
-              timeTags: od.timeDates || [],
-              url:      extractUrlDate(row.source_url)
-            };
-
-            // LLM multi-vote
-            const dateText = extracted.rawText || extracted.markdown;
-            const llmResults = await runLlmDateVotes(pool, dateText.substring(0, 2000));
-
-            // Score
-            const normalizedSources = normalizeDateSources(rawSources);
-            const consensus = scoreDateConsensus(normalizedSources, llmResults);
-
-            if (consensus.date) {
-              newDate = consensus.date;
-              newScore = consensus.score;
-            }
-
-            logInfo(itemRunId, 'moderation', null, row.title,
-              `Rescored ${contentType} #${contentId}: ${newDate || 'none'} (score=${newScore}, sources=${JSON.stringify(consensus.sourceMap)})`);
+            pageContent = extracted.rawText || extracted.markdown;
+            ogDates = extracted.ogDates || {};
           }
         } catch (err) {
-          console.error(`[Moderation] ${contentType} #${contentId}: rescore failed: ${err.message}`);
-          logError(itemRunId, 'moderation', null, row.title, `Rescore failed: ${err.message}`);
+          console.error(`[Moderation] ${contentType} #${contentId}: page extraction failed: ${err.message}`);
+          logError(itemRunId, 'moderation', null, row.title, `Page extraction failed: ${err.message}`);
         }
+      }
+
+      // Score using shared function (same code path as collection, but with title+description)
+      try {
+        const consensus = await scoreNewsDate(pool, {
+          title: row.title, description: row.description,
+          pageContent, ogDates, sourceUrl: row.source_url
+        });
+
+        if (consensus.date) {
+          newDate = consensus.date;
+          newScore = consensus.score;
+        }
+
+        logInfo(itemRunId, 'moderation', null, row.title,
+          `Rescored ${contentType} #${contentId}: ${newDate || 'none'} (score=${newScore}, sources=${JSON.stringify(consensus.sourceMap)})`);
+      } catch (err) {
+        console.error(`[Moderation] ${contentType} #${contentId}: date scoring failed: ${err.message}`);
+        logError(itemRunId, 'moderation', null, row.title, `Date scoring failed: ${err.message}`);
       }
 
       const resolvedStatus = forceStatus ? forceStatus
@@ -686,27 +685,50 @@ export async function fixDate(pool, contentType, contentId) {
   }
 
   const table = TABLE_MAP[contentType];
+  const descField = contentType === 'news' ? 'summary' : 'description';
 
-  // Reset score to force processItem to re-render and rescore
+  const itemQuery = await pool.query(
+    `SELECT t.id, t.title, t.${descField} AS description, t.source_url
+     FROM ${table} t WHERE t.id = $1`, [contentId]
+  );
+  if (!itemQuery.rows.length) throw new Error(`${contentType} #${contentId} not found`);
+  const item = itemQuery.rows[0];
+
+  // Extract page content (same as collection)
+  let pageContent = null;
+  let ogDates = {};
+  if (item.source_url && isSafePublicUrl(item.source_url)) {
+    try {
+      const renderUrl = normalizeRenderUrl(item.source_url);
+      const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
+      if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
+        pageContent = extracted.rawText || extracted.markdown;
+        ogDates = extracted.ogDates || {};
+      }
+    } catch (err) {
+      console.error(`[Moderation] fixDate ${contentType} #${contentId}: page extraction failed: ${err.message}`);
+    }
+  }
+
+  // Score using the same shared function as collection
+  const consensus = await scoreNewsDate(pool, {
+    title: item.title, description: item.description,
+    pageContent, ogDates, sourceUrl: item.source_url
+  });
+
+  // Update the item
+  const newDate = consensus.date || null;
+  const newScore = consensus.score || 0;
   await pool.query(
-    `UPDATE ${table} SET date_consensus_score = 0, moderation_processed = false WHERE id = $1`,
-    [contentId]
+    `UPDATE ${table} SET publication_date = $1, date_consensus_score = $2, moderation_processed = true WHERE id = $3`,
+    [newDate, newScore, contentId]
   );
 
-  // Run through the full consensus pipeline
-  await processItem(pool, contentType, contentId);
-
-  // Return the updated state
-  const updated = await pool.query(
-    `SELECT publication_date, date_consensus_score FROM ${table} WHERE id = $1`,
-    [contentId]
-  );
-  const row = updated.rows[0];
   return {
-    date_updated: !!row.publication_date,
-    publication_date: row.publication_date,
-    date_consensus_score: row.date_consensus_score,
-    reasoning: `Rescored via consensus pipeline (score=${row.date_consensus_score})`
+    date_updated: !!newDate,
+    publication_date: newDate,
+    date_consensus_score: newScore,
+    reasoning: `Rescored via scoreNewsDate (score=${newScore})`
   };
 }
 

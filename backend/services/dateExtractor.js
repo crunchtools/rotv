@@ -224,7 +224,7 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
  * Score deterministic date sources (everything except LLM).
  *
  * Weights:
- *   JSON-LD datePublished / startDate  — 3 pts (most authoritative structured data)
+ *   JSON-LD datePublished / startDate  — 4 pts (most authoritative structured data)
  *   Meta tags (OG, Parsely, DC)         — 1 pt  (common but editable by CMS)
  *   HTML <time datetime>                — 1 pt  (structural HTML, usually reliable)
  *   URL path date                       — 1 pt  (static, never wrong when present)
@@ -232,7 +232,7 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
  * LLM scoring is handled separately by scoreLlmConsensus() and added after.
  *
  * @param {Object} sources - Normalized date strings by source (from normalizeDateSources)
- * @param {string[]} sources.jsonLd   - ISO dates from JSON-LD (weight 3 each)
+ * @param {string[]} sources.jsonLd   - ISO dates from JSON-LD (weight 4 each)
  * @param {string[]} sources.meta     - ISO dates from meta tags (weight 1 each)
  * @param {string[]} sources.timeTags - ISO dates from <time> elements (weight 1 each)
  * @param {string|null} sources.url   - ISO date from URL path (weight 1)
@@ -250,7 +250,7 @@ export function scoreDeterministicSources(sources = {}) {
     sourceMap[date].push(label);
   };
 
-  for (const d of (sources.jsonLd || [])) add(d, 3, 'json-ld');
+  for (const d of (sources.jsonLd || [])) add(d, 4, 'json-ld');
   for (const d of (sources.meta || [])) add(d, 1, 'meta');
   for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
   add(sources.url, 1, 'url');
@@ -382,7 +382,7 @@ export function scoreEventDateTimeConsensus(sources = {}) {
     sourceMap[datetime].push(label);
   };
 
-  for (const d of (sources.jsonLd || [])) add(d, 3, 'json-ld');
+  for (const d of (sources.jsonLd || [])) add(d, 4, 'json-ld');
   add(sources.llm, 2, 'llm');
   for (const d of (sources.meta || [])) add(d, 1, 'meta');
   for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');

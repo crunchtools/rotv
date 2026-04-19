@@ -140,9 +140,12 @@ case "${1:-help}" in
             SEED_MOUNT="-v $SEED_DATA_FILE:/tmp/seed-data.sql:ro"
         fi
 
-        # Create environment file for systemd services
+        # Create environment file for systemd services (only if it doesn't exist)
+        # This file is a long-lived artifact — edit it directly to add API keys
         mkdir -p ~/.rotv
-        cat > ~/.rotv/environment-dev <<ENVFILE
+        if [ ! -f ~/.rotv/environment-dev ]; then
+            echo "Creating ~/.rotv/environment-dev (edit this file to add API keys)"
+            cat > ~/.rotv/environment-dev <<ENVFILE
 NODE_ENV=test
 BYPASS_AUTH=true
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
@@ -162,6 +165,7 @@ PGUSER=${PGUSER:-postgres}
 PGPASSWORD=${PGPASSWORD:-rotv}
 PGDATABASE=${PGDATABASE:-rotv}
 ENVFILE
+        fi
 
         # Build MCP port mapping if token is configured
         MCP_PORT_MAP=""
