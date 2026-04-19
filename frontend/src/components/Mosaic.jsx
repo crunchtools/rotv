@@ -7,7 +7,7 @@ import './Mosaic.css';
  * Displays 1-3 images in a Facebook-style mosaic layout
  * Click opens lightbox with all media
  */
-function Mosaic({ media, poiId, user, onMediaUpdate }) {
+function Mosaic({ media, allMedia, poiId, user, onMediaUpdate }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
 
@@ -24,6 +24,8 @@ function Mosaic({ media, poiId, user, onMediaUpdate }) {
     setLightboxOpen(false);
   };
 
+  // Use media for mosaic display (already curated by API), allMedia for lightbox browsing
+  const lightboxMedia = allMedia || media;
   const mosaicImages = media.slice(0, 3);
 
   return (
@@ -72,9 +74,9 @@ function Mosaic({ media, poiId, user, onMediaUpdate }) {
               </div>
             )}
             {/* Show count overlay on last image if there are more */}
-            {index === 2 && media.length > 3 && (
+            {index === 2 && lightboxMedia.length > 3 && (
               <div className="mosaic-more-overlay">
-                +{media.length - 3}
+                +{lightboxMedia.length - 3}
               </div>
             )}
           </div>
@@ -83,7 +85,7 @@ function Mosaic({ media, poiId, user, onMediaUpdate }) {
 
       {lightboxOpen && (
         <Lightbox
-          media={media}
+          media={lightboxMedia}
           initialIndex={lightboxIndex}
           onClose={handleCloseLightbox}
           poiId={poiId}

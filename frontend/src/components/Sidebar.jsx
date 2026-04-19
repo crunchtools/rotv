@@ -423,19 +423,17 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
     }
 
     try {
-      const apiEndpoint = isLinearFeature ? 'linear-features' : 'destinations';
-
       // Handle pending image if exists
       if (pendingImage) {
         if (pendingImage.deleted) {
           // Delete the image
-          await fetch(`/api/admin/${apiEndpoint}/${destination.id}/image`, {
+          await fetch(`/api/admin/pois/${destination.id}/image`, {
             method: 'DELETE',
             credentials: 'include'
           });
         } else if (pendingImage.data) {
           // Upload new image - always use base64 endpoint for simplicity
-          const endpoint = `/api/admin/${apiEndpoint}/${destination.id}/image-base64`;
+          const endpoint = `/api/admin/pois/${destination.id}/image-base64`;
           await fetch(endpoint, {
             method: 'POST',
             credentials: 'include',
@@ -2549,6 +2547,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
   // Media state for top-level image/mosaic display
   const [media, setMedia] = useState([]);
+  const [allMedia, setAllMedia] = useState([]);
   const [mediaLoading, setMediaLoading] = useState(false);
 
   // Fetch media for destination/linear feature
@@ -2558,14 +2557,16 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
     setMediaLoading(true);
     fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
-      .then(res => res.ok ? res.json() : { all_media: [] })
+      .then(res => res.ok ? res.json() : { mosaic: [], all_media: [] })
       .then(data => {
-        setMedia(data.all_media || []);
+        setMedia(data.mosaic || []);
+        setAllMedia(data.all_media || []);
         setMediaLoading(false);
       })
       .catch(err => {
         console.error('Failed to load media:', err);
         setMedia([]);
+        setAllMedia([]);
         setMediaLoading(false);
       });
   }, [destination?.id, linearFeature?.id]);
@@ -2581,7 +2582,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         // Refresh media list
         fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
           .then(res => res.json())
-          .then(data => setMedia(data.all_media || []))
+          .then(data => {
+            setMedia(data.mosaic || []);
+            setAllMedia(data.all_media || []);
+          })
           .catch(err => console.error('[Sidebar] Failed to refresh media:', err));
 
         // Refresh POI data to update has_primary_image flag
@@ -2609,7 +2613,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     // Refresh media list
     fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
       .then(res => res.json())
-      .then(data => setMedia(data.all_media || []))
+      .then(data => {
+        setMedia(data.mosaic || []);
+        setAllMedia(data.all_media || []);
+      })
       .catch(err => console.error('Failed to refresh media:', err));
 
     // Refresh POI data to update has_primary_image flag
@@ -3221,7 +3228,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               onMediaUpdate={handleMediaUpdate}
             />
           ) : media.length > 0 ? (
-            <Mosaic media={media} poiId={linearFeature?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+            <Mosaic media={media} allMedia={allMedia} poiId={linearFeature?.id} user={user} onMediaUpdate={handleMediaUpdate} />
           ) : !mediaLoading && linearFeature?.has_primary_image ? (
             <div className="sidebar-image">
               <img
@@ -3560,7 +3567,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             onMediaUpdate={handleMediaUpdate}
           />
         ) : media.length > 0 ? (
-          <Mosaic media={media} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+          <Mosaic media={media} allMedia={allMedia} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
         ) : !mediaLoading && destination?.has_primary_image ? (
           <div className={`sidebar-image ${destination?.poi_roles?.includes('organization') ? 'virtual-thumbnail' : ''}`}>
             <img

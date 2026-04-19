@@ -10,6 +10,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
+import { Readable } from 'node:stream';
 import { configurePassport } from './config/passport.js';
 import authRoutes from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
@@ -999,11 +1000,20 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
       LIMIT 1
     `, [id]);
 
-    if (result.rows.length === 0) {
+    let assetId;
+    if (result.rows.length > 0) {
+      assetId = result.rows[0].image_server_asset_id;
+    } else if (imageServerClient.initialized) {
+      // Fallback: query image server directly for POIs without poi_media records
+      const asset = await imageServerClient.getPrimaryAsset(id);
+      if (asset) {
+        assetId = asset.id;
+      } else {
+        return res.status(404).json({ error: 'Image not found' });
+      }
+    } else {
       return res.status(404).json({ error: 'Image not found' });
     }
-
-    const assetId = result.rows[0].image_server_asset_id;
 
     if (!imageServerClient.initialized) {
       // Development fallback: proxy from production asset endpoint when IMAGE_SERVER_URL not configured
@@ -1024,7 +1034,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
           res.setHeader('Access-Control-Allow-Origin', '*');
 
           // Stream response to avoid memory exhaustion (DoS prevention)
-          return productionResponse.body.pipe(res);
+          return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
           console.error(`[Thumbnail] Production fallback failed for POI ${id}, asset ${assetId}:`, fallbackError.message);
           return res.status(404).json({ error: 'Image not found' });
@@ -1129,8 +1139,18 @@ app.get('/api/pois/:id/media', async (req, res) => {
       allMedia.push(item);
     }
 
-    // Mosaic = first 3 items (already sorted: primary + most liked + recent)
-    const mosaic = allMedia.slice(0, 3);
+    // Mosaic: primary image as hero, plus gallery items if there are enough to form a mosaic
+    // If only 1 gallery item exists alongside primary, it's likely a migration duplicate — show hero only
+    const primaryItems = allMedia.filter(m => m.role === 'primary');
+    const galleryItems = allMedia.filter(m => m.role !== 'primary');
+    let mosaic;
+    if (primaryItems.length > 0 && galleryItems.length <= 1) {
+      // Single hero — show primary only (gallery items available in lightbox)
+      mosaic = primaryItems.slice(0, 1);
+    } else {
+      // Enough items for a real mosaic
+      mosaic = allMedia.slice(0, 3);
+    }
 
     const response = {
       mosaic,
@@ -1489,7 +1509,7 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
           res.setHeader('Access-Control-Allow-Origin', '*');
 
           // Stream response to avoid memory exhaustion (DoS prevention)
-          return productionResponse.body.pipe(res);
+          return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
           console.error(`[Asset Thumbnail] Production fallback failed for asset ${assetId}:`, fallbackError.message);
           return res.status(503).json({ error: 'Image service unavailable' });
@@ -1555,7 +1575,7 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
           res.setHeader('Access-Control-Allow-Origin', '*');
 
           // Stream response to avoid memory exhaustion (DoS prevention)
-          return productionResponse.body.pipe(res);
+          return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
           console.error(`[Asset Original] Production fallback failed for asset ${assetId}:`, fallbackError.message);
           return res.status(503).json({ error: 'Image service unavailable' });
@@ -1794,6 +1814,7 @@ app.get('/api/linear-features', async (req, res) => {
   try {
     const linearFeaturesQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_roles, p.geometry,
+             p.poi_roles[1] as feature_type,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -1818,6 +1839,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
   try {
     const linearFeatureQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_roles, p.geometry,
+             p.poi_roles[1] as feature_type,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
