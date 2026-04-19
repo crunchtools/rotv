@@ -184,10 +184,38 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
         )}
       </div>
       <div className="item-card-date-row">
-        {formatPublicationDate(item.start_date)}
-        {item.end_date && item.end_date !== item.start_date && (
-          <> - {formatPublicationDate(item.end_date)}</>
-        )}
+        {(() => {
+          const startStr = String(item.start_date || '');
+          const endStr = String(item.end_date || '');
+          const startDateOnly = startStr.substring(0, 10);
+          const endDateOnly = endStr.substring(0, 10);
+          const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
+          const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
+          const sameDay = endDateOnly === startDateOnly;
+
+          if (sameDay && startHasTime) {
+            // Same-day event with times: "Sun, Apr 19, 2026, 10:30 AM – 12:00 PM"
+            const startDate = new Date(startStr);
+            const dateLabel = startDate.toLocaleDateString('en-US', {
+              weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
+            });
+            const startTime = startDate.toLocaleTimeString('en-US', {
+              hour: 'numeric', minute: '2-digit', timeZone: 'UTC'
+            });
+            if (endHasTime) {
+              const endTime = new Date(endStr).toLocaleTimeString('en-US', {
+                hour: 'numeric', minute: '2-digit', timeZone: 'UTC'
+              });
+              return `${dateLabel}, ${startTime} – ${endTime}`;
+            }
+            return `${dateLabel}, ${startTime}`;
+          } else if (endStr && !sameDay) {
+            // Multi-day event: "Apr 5 – Apr 26, 2026"
+            return <>{formatPublicationDate(startStr)} – {formatPublicationDate(endStr)}</>;
+          }
+          // Date only or no end date
+          return formatPublicationDate(startStr);
+        })()}
       </div>
       {item.description && <p className="item-card-summary">{item.description}</p>}
       <div className="item-card-meta">

@@ -146,6 +146,8 @@ export async function extractPageContent(url, options = {}) {
 
         // JSON-LD: parse all ld+json blocks, collect date fields from any schema type
         const jsonLdDates = [];
+        let eventStartDate = null;
+        let eventEndDate = null;
         document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
           try {
             const data = JSON.parse(script.textContent);
@@ -157,6 +159,18 @@ export async function extractPageContent(url, options = {}) {
                 item['@graph']?.map?.(n => n.datePublished || n.startDate)
               ].flat().filter(Boolean);
               jsonLdDates.push(...candidates);
+
+              // Event-specific: extract startDate/endDate with full datetime precision
+              if (!eventStartDate) {
+                eventStartDate = item.startDate
+                  || item['@graph']?.find?.(n => n.startDate)?.startDate
+                  || null;
+              }
+              if (!eventEndDate) {
+                eventEndDate = item.endDate
+                  || item['@graph']?.find?.(n => n.endDate)?.endDate
+                  || null;
+              }
             }
           } catch { /* ignore malformed JSON-LD */ }
         });
@@ -174,7 +188,9 @@ export async function extractPageContent(url, options = {}) {
           parselyPubDate: getMetaName('parsely-pub-date'),
           dcDate: getMetaName('dc.date'),
           jsonLdDates,
-          timeDates
+          timeDates,
+          eventStartDate,
+          eventEndDate
         };
       });
 
@@ -236,6 +252,16 @@ export async function extractPageContent(url, options = {}) {
       releaseBrowser(acquisitionId);
 
       const dom = new JSDOM(html, { url });
+
+      // Extract raw body text before Readability strips date headings and page structure.
+      // Used by the event LLM date extractor which needs to see "April 22 @ 10:30 am".
+      const rawDom = new JSDOM(html, { url });
+      const rawBody = rawDom.window.document.body;
+      for (const tag of ['script', 'style', 'nav']) {
+        rawBody.querySelectorAll(tag).forEach(el => el.remove());
+      }
+      const rawText = rawBody.textContent.replace(/\s+/g, ' ').trim();
+
       const reader = new Readability(dom.window.document, {
         charThreshold: 100
       });
@@ -254,6 +280,7 @@ export async function extractPageContent(url, options = {}) {
           excerpt: fallbackText.slice(0, 200),
           reachable: true,
           ogDates,
+          rawText,
           ...(extractLinks && { links })
         };
       }
@@ -267,6 +294,7 @@ export async function extractPageContent(url, options = {}) {
         excerpt: article.excerpt || markdown.slice(0, 200),
         reachable: true,
         ogDates,
+        rawText,
         ...(extractLinks && { links })
       };
     })();

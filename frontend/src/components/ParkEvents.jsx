@@ -308,10 +308,23 @@ END:VCALENDAR`;
             </div>
 
             <div className="park-event-date">
-              {formatDateWithWeekday(item.start_date)}
-              {item.end_date && item.end_date !== item.start_date && (
-                <> - {formatDateWithWeekday(item.end_date)}</>
-              )}
+              {(() => {
+                const startStr = String(item.start_date || '');
+                const endStr = String(item.end_date || '');
+                const startDateOnly = startStr.substring(0, 10);
+                const endDateOnly = endStr.substring(0, 10);
+                const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
+                const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
+                const sameDay = endDateOnly === startDateOnly;
+                const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+
+                if (sameDay && startHasTime) {
+                  return `${formatDateWithWeekday(startStr)}, ${fmtTime(startStr)}${endHasTime ? ` – ${fmtTime(endStr)}` : ''}`;
+                } else if (endStr && !sameDay) {
+                  return <>{formatDateWithWeekday(startStr)} – {formatDateWithWeekday(endStr)}</>;
+                }
+                return formatDateWithWeekday(startStr);
+              })()}
             </div>
 
             {item.description && <p className="park-event-description">{item.description}</p>}
