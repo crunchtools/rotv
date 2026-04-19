@@ -208,8 +208,14 @@ export function extractUrlDate(url) {
  * @param {string} [timezone]            - IANA timezone for chrono-node parsing
  * @returns {Object} Normalized deterministic sources with only valid YYYY-MM-DD strings
  */
-export function normalizeDateSources(rawSources = {}, timezone = 'America/New_York') {
-  const norm = (raw) => (raw ? parseDate(String(raw), timezone) : null);
+export function normalizeDateSources(rawSources = {}, timezone = 'America/New_York', mode = 'date') {
+  const parser = mode === 'datetime' ? parseDateTime : parseDate;
+  const norm = (raw) => {
+    const result = raw ? parser(String(raw), timezone) : null;
+    // Truncate to consistent precision: YYYY-MM-DD for dates, YYYY-MM-DDTHH:MM for datetimes
+    if (result && mode === 'datetime') return result.substring(0, 16);
+    return result;
+  };
   const normList = (arr) => (arr || []).map(norm).filter(Boolean);
 
   return {
@@ -271,7 +277,8 @@ export function scoreDeterministicSources(sources = {}) {
 export function scoreLlmConsensus(results, competingDeterministicPoints = 0) {
   const votes = {};
   for (const r of results) {
-    if (r && /^\d{4}-\d{2}-\d{2}$/.test(r)) {
+    // Accept both date (YYYY-MM-DD) and datetime (YYYY-MM-DDTHH:MM) formats
+    if (r && /^\d{4}-\d{2}-\d{2}/.test(r)) {
       votes[r] = (votes[r] || 0) + 1;
     }
   }
@@ -337,68 +344,6 @@ export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
   });
 
   return { date: bestDate, score: scores[bestDate], sourceMap };
-}
-
-/**
- * Normalize raw datetime strings from event extraction sources to ISO 8601
- * at minute precision (YYYY-MM-DDTHH:MM). Seconds are dropped so that sources
- * returning "10:30" and "10:30:00" match during consensus scoring.
- *
- * @param {Object} rawSources - Raw extracted datetime strings by source
- * @param {string} [timezone] - IANA timezone for chrono-node parsing
- * @returns {Object} Normalized sources with valid YYYY-MM-DDTHH:MM strings
- */
-export function normalizeEventDateSources(rawSources = {}, timezone = 'America/New_York') {
-  const norm = (raw) => {
-    const dt = raw ? parseDateTime(String(raw), timezone) : null;
-    return dt ? dt.substring(0, 16) : null;  // YYYY-MM-DDTHH:MM (drop seconds)
-  };
-  const normList = (arr) => (arr || []).map(norm).filter(Boolean);
-
-  return {
-    jsonLd:   normList(rawSources.jsonLd),
-    llm:      norm(rawSources.llm),
-    meta:     normList(rawSources.meta),
-    timeTags: normList(rawSources.timeTags),
-    url:      norm(rawSources.url)
-  };
-}
-
-/**
- * Consensus datetime scoring for events. Same algorithm as scoreDateConsensus
- * but operates on full datetime strings (YYYY-MM-DDTHH:MM:SS).
- *
- * @param {Object} sources - Normalized datetime strings by source (from normalizeEventDateSources)
- * @returns {{ datetime: string|null, score: number, sourceMap: Object }}
- */
-export function scoreEventDateTimeConsensus(sources = {}) {
-  const scores = {};
-  const sourceMap = {};
-
-  const add = (datetime, weight, label) => {
-    if (!datetime) return;
-    scores[datetime] = (scores[datetime] || 0) + weight;
-    if (!sourceMap[datetime]) sourceMap[datetime] = [];
-    sourceMap[datetime].push(label);
-  };
-
-  for (const d of (sources.jsonLd || [])) add(d, 4, 'json-ld');
-  add(sources.llm, 2, 'llm');
-  for (const d of (sources.meta || [])) add(d, 1, 'meta');
-  for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
-  add(sources.url, 1, 'url');
-
-  if (Object.keys(scores).length === 0) {
-    return { datetime: null, score: 0, sourceMap: {} };
-  }
-
-  // Pick highest score; break ties by choosing newest
-  const bestDatetime = Object.keys(scores).reduce((a, b) => {
-    if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
-    return a > b ? a : b;
-  });
-
-  return { datetime: bestDatetime, score: scores[bestDatetime], sourceMap };
 }
 
 /**

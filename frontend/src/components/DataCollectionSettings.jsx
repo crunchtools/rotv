@@ -74,6 +74,14 @@ function DataCollectionSettings() {
   const [maxSearchUrlsLoading, setMaxSearchUrlsLoading] = useState(true);
   const [maxSearchUrlsSaving, setMaxSearchUrlsSaving] = useState(false);
 
+  // Page pipeline settings state
+  const [pageConcurrency, setPageConcurrency] = useState(3);
+  const [pageConcurrencyLoading, setPageConcurrencyLoading] = useState(true);
+  const [pageConcurrencySaving, setPageConcurrencySaving] = useState(false);
+  const [pageDelayMs, setPageDelayMs] = useState(2000);
+  const [pageDelayMsLoading, setPageDelayMsLoading] = useState(true);
+  const [pageDelayMsSaving, setPageDelayMsSaving] = useState(false);
+
   // Results Sub-tabs state
   const [subtabs, setSubtabs] = useState([]);
   const [subtabsLoading, setSubtabsLoading] = useState(true);
@@ -121,6 +129,8 @@ function DataCollectionSettings() {
     fetchExcludedPois();
     fetchMaxConcurrency();
     fetchMaxSearchUrls();
+    fetchPageConcurrency();
+    fetchPageDelayMs();
     fetchSubtabs();
   }, []);
 
@@ -545,6 +555,56 @@ function DataCollectionSettings() {
       setResult({ type: 'success', message: 'Max Serper URLs saved' });
     } catch (err) { setResult({ type: 'error', message: `Failed to save max Serper URLs: ${err.message}` }); }
     finally { setMaxSearchUrlsSaving(false); }
+  };
+
+  const fetchPageConcurrency = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) {
+        const settings = await response.json();
+        const val = parseInt(settings.page_concurrency?.value, 10);
+        setPageConcurrency(Number.isFinite(val) && val >= 1 ? val : 3);
+      }
+    } catch (err) { console.error('Error fetching page concurrency:', err); }
+    finally { setPageConcurrencyLoading(false); }
+  };
+
+  const handleSavePageConcurrency = async () => {
+    setPageConcurrencySaving(true); setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/page_concurrency', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: String(pageConcurrency) })
+      });
+      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
+      setResult({ type: 'success', message: 'Page concurrency saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save page concurrency: ${err.message}` }); }
+    finally { setPageConcurrencySaving(false); }
+  };
+
+  const fetchPageDelayMs = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) {
+        const settings = await response.json();
+        const val = parseInt(settings.page_delay_ms?.value, 10);
+        setPageDelayMs(Number.isFinite(val) && val >= 0 ? val : 2000);
+      }
+    } catch (err) { console.error('Error fetching page delay:', err); }
+    finally { setPageDelayMsLoading(false); }
+  };
+
+  const handleSavePageDelayMs = async () => {
+    setPageDelayMsSaving(true); setResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/page_delay_ms', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: String(pageDelayMs) })
+      });
+      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
+      setResult({ type: 'success', message: 'Page delay saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save page delay: ${err.message}` }); }
+    finally { setPageDelayMsSaving(false); }
   };
 
   const handleTestPlaywright = async () => {
@@ -1064,6 +1124,59 @@ function DataCollectionSettings() {
             </div>
             <button className="action-btn primary" onClick={handleSaveMaxSearchUrls} disabled={maxSearchUrlsSaving}>
               {maxSearchUrlsSaving ? 'Saving...' : 'Save'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Page Concurrency */}
+      <div className="ai-config-section">
+        <h4>PAGE_CONCURRENCY — Per-POI Page Processing</h4>
+        <p className="settings-description">How many detail pages are processed concurrently within a single POI crawl (dates + summarize). Lower values reduce browser memory pressure. Range: 1–20, default: 3.</p>
+        {pageConcurrencyLoading ? <p>Loading...</p> : (
+          <>
+            <div className="config-row">
+              <label>PAGE_CONCURRENCY</label>
+              <input
+                type="number"
+                min="1"
+                max="20"
+                value={pageConcurrency}
+                onChange={e => setPageConcurrency(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
+                disabled={pageConcurrencySaving}
+              />
+              <span className="config-hint">Range: 1–20 (default: 3)</span>
+            </div>
+            <button className="action-btn primary" onClick={handleSavePageConcurrency} disabled={pageConcurrencySaving}>
+              {pageConcurrencySaving ? 'Saving...' : 'Save'}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Page Delay */}
+      <div className="ai-config-section">
+        <h4>PAGE_DELAY_MS — Stagger Between Pages</h4>
+        <p className="settings-description">Milliseconds to wait between dispatching each page for processing. Prevents rate-limiting from external sites and reduces browser contention. Range: 0–10000, default: 2000.</p>
+        {pageDelayMsLoading ? <p>Loading...</p> : (
+          <>
+            <div className="config-row">
+              <label>PAGE_DELAY_MS</label>
+              <input
+                type="number"
+                min="0"
+                max="10000"
+                step="100"
+                value={pageDelayMs}
+                onChange={e => setPageDelayMs(Math.max(0, Math.min(10000, parseInt(e.target.value, 10) || 0)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
+                disabled={pageDelayMsSaving}
+              />
+              <span className="config-hint">Range: 0–10000ms (default: 2000)</span>
+            </div>
+            <button className="action-btn primary" onClick={handleSavePageDelayMs} disabled={pageDelayMsSaving}>
+              {pageDelayMsSaving ? 'Saving...' : 'Save'}
             </button>
           </>
         )}

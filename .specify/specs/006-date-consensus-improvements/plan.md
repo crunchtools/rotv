@@ -30,7 +30,7 @@ Five fixes to the date consensus scoring pipeline, unified under a single scorin
               │                │                │
               ▼                ▼                ▼
     ┌──────────────┐  ┌──────────────┐  ┌──────────────┐
-    │ processOneUrl│  │ processItem  │  │   fixDate    │
+    │ processPage│  │ processItem  │  │   fixDate    │
     │ (collection) │  │ (mod sweep)  │  │ (admin btn)  │
     │              │  │              │  │              │
     │ Has rendered │  │ Re-renders   │  │ Requeues →   │
@@ -85,10 +85,10 @@ Page content (2000 chars) + "Today's date is YYYY-MM-DD"
 
 - [ ] 2.2 Add Instagram URL normalization
   - New function `normalizeSourceUrl()` — `/reel/ID` and `/reels/ID` → `/p/ID`
-  - Apply before `extractPageContent()` in `processOneUrl`
+  - Apply before `extractPageContent()` in `processPage`
   - Store original URL as `source_url` (normalize for rendering only)
 
-- [ ] 2.3 Replace single LLM date call with multi-vote in `processOneUrl`
+- [ ] 2.3 Replace single LLM date call with multi-vote in `processPage`
   - Replace the single `generateTextWithCustomPrompt` date call (current lines ~385-391)
   - Call `runLlmDateVotes(pool, snippet, 5)`
   - Compute competing deterministic points from other sources
@@ -183,7 +183,7 @@ Page content (2000 chars) + "Today's date is YYYY-MM-DD"
 |------|---------|
 | `backend/services/dateExtractor.js` | Add `scoreLlmConsensus()`, add `runLlmDateVotes()`, update `extractUrlDate()` with 2 new patterns |
 | `backend/services/contentExtractor.js` | Remove `item.dateModified` from JSON-LD candidates (line 156) |
-| `backend/services/newsService.js` | Replace single LLM date call with multi-vote consensus in `processOneUrl`, add Instagram URL normalization, update date seeding |
+| `backend/services/newsService.js` | Replace single LLM date call with multi-vote consensus in `processPage`, add Instagram URL normalization, update date seeding |
 | `backend/services/moderationService.js` | Rewrite `processItem` news/event path to run full consensus pipeline when score < threshold. Simplify `fixDate` to requeue + processItem |
 
 ### No New Files

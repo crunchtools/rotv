@@ -9,7 +9,7 @@
  */
 
 import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
-import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus, normalizeEventDateSources, scoreEventDateTimeConsensus } from './dateExtractor.js';
+import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus } from './dateExtractor.js';
 
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
@@ -37,10 +37,31 @@ export function normalizeRenderUrl(url) {
  * Run LLM date extraction N times in parallel with today's date seeded.
  * Returns array of parsed date strings (YYYY-MM-DD or null).
  */
-export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES) {
+export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES, mode = 'date') {
   const today = new Date().toISOString().substring(0, 10);
-  const datePrompt = `Today's date is ${today}. Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${snippet}`;
 
+  if (mode === 'datetime') {
+    // Datetime mode: returns { startVotes, endVotes } for event start/end
+    const datePrompt = `Today's date is ${today}. Extract the event start and end date/time from this page. If no year is shown, assume the current year. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${snippet}`;
+    const results = await Promise.all(
+      Array.from({ length: numVotes }, () =>
+        generateTextWithCustomPrompt(pool, datePrompt)
+          .then(r => {
+            const raw = (r.response || '').trim();
+            try {
+              const cleaned = raw.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+              const parsed = JSON.parse(cleaned);
+              return { start: parsed.start || null, end: parsed.end || null };
+            } catch { return { start: null, end: null }; }
+          })
+          .catch(() => ({ start: null, end: null }))
+      )
+    );
+    return { startVotes: results.map(v => v.start), endVotes: results.map(v => v.end) };
+  }
+
+  // Date mode: returns flat array of YYYY-MM-DD strings
+  const datePrompt = `Today's date is ${today}. Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${snippet}`;
   const results = await Promise.all(
     Array.from({ length: numVotes }, () =>
       generateTextWithCustomPrompt(pool, datePrompt)
@@ -55,42 +76,36 @@ export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES) 
 }
 
 /**
- * Score a news item's publication date using deterministic sources + LLM multi-vote.
- * Single source of truth — used by both collection (newsService) and moderation (moderationService).
+ * Score a date using deterministic sources + LLM multi-vote consensus.
+ * Single function for both news (date-only) and events (datetime).
+ * Events call this twice — once for start, once for end.
  *
  * @param {Pool} pool - Database connection pool
  * @param {Object} params
- * @param {string} params.title - Item title
+ * @param {string} params.title - Item title (prepended to LLM snippet)
  * @param {string} params.description - Item summary/description
  * @param {string} params.pageContent - Extracted page text (rawText or markdown)
- * @param {Object} params.ogDates - OG/meta date objects from page extraction
- * @param {string} params.sourceUrl - Source URL for URL-based date extraction
+ * @param {Object} params.sources - Raw date sources { jsonLd: [], meta: [], timeTags: [], url: string }
  * @param {string} [params.timezone] - IANA timezone for normalization
- * @returns {Object} { date, score, sourceMap }
+ * @param {string} [params.mode] - 'date' (YYYY-MM-DD) or 'datetime' (YYYY-MM-DDTHH:MM)
+ * @param {string[]} [params.llmVotes] - Pre-computed LLM votes (skips LLM calls if provided)
+ * @returns {Object} { date, score, sourceMap, rawSignals }
  */
-export async function scoreNewsDate(pool, { title, description, pageContent, ogDates, sourceUrl, timezone }) {
-  const od = ogDates || {};
-  const rawSources = {
-    jsonLd:   od.jsonLdDates || [],
-    meta:     [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
-    timeTags: od.timeDates || [],
-    url:      extractUrlDate(sourceUrl)
-  };
-
-  // Build LLM input: title + description first, then page content, capped at 2000 chars
+export async function scoreDate(pool, { title, description, pageContent, sources, timezone, mode = 'date', llmVotes }) {
+  // Build LLM input: title + description first, then page content
   const itemContext = `${title || ''}\n${description || ''}`.trim();
   const dateText = itemContext
     ? `${itemContext}\n\n${pageContent || ''}`.substring(0, 2000)
     : (pageContent || '').substring(0, 2000);
 
-  const llmResults = dateText.length >= 20
-    ? await runLlmDateVotes(pool, dateText)
-    : [];
+  // Use provided votes or run LLM voting
+  const votes = llmVotes || (dateText.length >= 20
+    ? await runLlmDateVotes(pool, dateText, LLM_DATE_VOTES, mode)
+    : []);
 
-  const normalizedSources = normalizeDateSources(rawSources, timezone);
-  const consensus = scoreDateConsensus(normalizedSources, llmResults);
+  const normalizedSources = normalizeDateSources(sources, timezone, mode);
+  const consensus = scoreDateConsensus(normalizedSources, votes);
 
-  // Return raw signals alongside consensus so callers can save them for rescoring
   return {
     ...consensus,
     rawSignals: {
@@ -98,10 +113,11 @@ export async function scoreNewsDate(pool, { title, description, pageContent, ogD
       meta: normalizedSources.meta || [],
       timeTags: normalizedSources.timeTags || [],
       url: normalizedSources.url || null,
-      llmVotes: llmResults
+      llmVotes: votes
     }
   };
 }
+
 
 export function resetJobUsage() {
   geminiCallCount = 0;
@@ -352,7 +368,7 @@ function parseGeminiResponse(responseText) {
  * @param {string} confidence - '75%' for Phase I, '95%' for Phase II
  * @returns {string} - Complete prompt
  */
-function buildSinglePagePrompt(poi, url, markdown, contentType, confidence) {
+function buildSummarizePrompt(poi, url, markdown, contentType, confidence) {
   const activities = poi.primary_activities || 'None specified';
 
   // Gemini identifies items and writes summaries. It does NOT extract dates.
@@ -427,20 +443,6 @@ IMPORTANT:
 }
 
 /**
- * Process a single URL through the complete pipeline:
- * Render → Dates → Summarize → force source_url
- *
- * Every item returned has source_url = the URL that was rendered.
- * No batching, no concatenation, no cross-page anything.
- *
- * @param {Pool} pool - Database connection pool
- * @param {string} url - URL to process
- * @param {Object} poi - POI object
- * @param {string} contentType - 'event' or 'news'
- * @param {Object} options - { phase, jobId, timezone, confidence }
- * @returns {Object} - { news: [], events: [] }
- */
-/**
  * Run up to `limit` async tasks concurrently.
  * Each task is a zero-arg function returning a Promise.
  * Results are returned in original order; individual errors are caught and re-thrown per-task.
@@ -477,29 +479,31 @@ async function runConcurrent(tasks, limit = 10, delayMs = 0) {
   return results;
 }
 
-async function processOneUrl(pool, url, poi, contentType, options = {}) {
+/**
+ * Process a pre-rendered page through dates + summarize (NO Playwright render).
+ * Accepts a page object from crawlWithClassification that already has markdown, rawText, ogDates.
+ *
+ * @param {Pool} pool - Database connection pool
+ * @param {Object} page - Pre-extracted page { url, markdown, rawText, ogDates, title }
+ * @param {Object} poi - POI object
+ * @param {string} contentType - 'event' or 'news'
+ * @param {Object} options - { phase, jobId, timezone, confidence, jobType }
+ * @returns {Object} - { news: [], events: [] }
+ */
+async function processPage(pool, page, poi, contentType, options = {}) {
   const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', confidence = '75%', jobType = 'news' } = options;
+  const url = page.url;
 
-  // [Render] — normalize social media URLs for better metadata extraction
-  const renderUrl = normalizeRenderUrl(url);
-  updateProgress(poi.id, { phase: 'render', message: url });
-  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url}`);
-  const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
-  if (!extracted.reachable || !extracted.markdown || extracted.markdown.length < 200) {
-    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'too short'} (${extracted.markdown?.length || 0} chars)`);
+  // Skip pages with insufficient content
+  if (!page.markdown || page.markdown.length < 200) {
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ProcessPage] Skip — too short (${page.markdown?.length || 0} chars) ${url}`);
     return { news: [], events: [] };
   }
 
-  // [Dates] — Consensus scoring across deterministic sources + LLM multi-vote.
-  //   JSON-LD datePublished/startDate : 3 pts each
-  //   LLM 5-vote unanimous           : 4 pts (minus competing deterministic)
-  //   LLM 3-4/5 majority             : 1 pt
-  //   Meta tags (OG, Parsely, DC)     : 1 pt each
-  //   HTML <time datetime>            : 1 pt each
-  //   URL path date                   : 1 pt
+  // [Dates] — Consensus scoring from pre-extracted ogDates + LLM multi-vote (no render needed)
   updateProgress(poi.id, { phase: 'dates', message: url });
 
-  const od = extracted.ogDates || {};
+  const od = page.ogDates || {};
   let primaryDate = null;
   let dateScore = 0;
   let dateSourceMap = {};
@@ -510,78 +514,56 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
   let eventEndScore = 0;
 
   if (contentType === 'event') {
-    // --- Event datetime consensus: separate start and end pipelines ---
-    // (Event dates use a single LLM call for start/end datetime extraction,
-    //  not the multi-vote system — event prompts return JSON with start+end.)
+    // 5-vote LLM for start+end datetimes in one batch
+    const pageText = page.rawText || page.markdown;
+    const snippet = (pageText || '').substring(0, 2000);
+    const { startVotes, endVotes } = snippet.length >= 20
+      ? await runLlmDateVotes(pool, snippet, LLM_DATE_VOTES, 'datetime')
+      : { startVotes: [], endVotes: [] };
 
-    // [1] Collect raw datetime sources for start and end
-    const startSources = {
-      jsonLd:   od.eventStartDate ? [od.eventStartDate] : [],
-      meta:     [],
-      timeTags: od.timeDates?.length > 0 ? [od.timeDates[0]] : [],
-      url:      extractUrlDate(url),
-      llm:      null
-    };
-    const endSources = {
-      jsonLd:   od.eventEndDate ? [od.eventEndDate] : [],
-      meta:     [],
-      timeTags: od.timeDates?.length > 1 ? [od.timeDates[1]] : [],
-      url:      null,
-      llm:      null
-    };
-
-    // [2] LLM extraction — ask Gemini for start AND end datetime
-    try {
-      const dateText = extracted.rawText || extracted.markdown;
-      const snippet = dateText.substring(0, 3000);
-      const today = new Date().toISOString().substring(0, 10);
-      const datePrompt = `Today's date is ${today}. Extract the event start and end date/time from this page. If no year is shown, assume the current year. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${snippet}`;
-      const llmResult = await generateTextWithCustomPrompt(pool, datePrompt);
-      const raw = (llmResult.response || '').trim();
-      try {
-        const cleaned = raw.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        const parsed = JSON.parse(cleaned);
-        if (parsed.start && typeof parsed.start === 'string') startSources.llm = parsed.start;
-        if (parsed.end && typeof parsed.end === 'string') endSources.llm = parsed.end;
-      } catch { /* LLM returned non-JSON — skip */ }
-    } catch { /* LLM extraction is best-effort */ }
-
-    // [3] Normalize to YYYY-MM-DDTHH:MM:SS
-    const normStart = normalizeEventDateSources(startSources, timezone);
-    const normEnd = normalizeEventDateSources(endSources, timezone);
-
-    // [4] Score
-    const startConsensus = scoreEventDateTimeConsensus(normStart);
-    const endConsensus = scoreEventDateTimeConsensus(normEnd);
-
-    eventStartDateTime = startConsensus.datetime;
-    eventStartScore = startConsensus.score;
-    eventEndDateTime = endConsensus.datetime;
-    eventEndScore = endConsensus.score;
-
-    // primaryDate and dateScore used for logging and fallback
-    primaryDate = eventStartDateTime?.substring(0, 10) || null;
-    dateScore = eventStartScore;
-    dateSourceMap = startConsensus.sourceMap;
-
-    // Save raw event date signals for rescoring
-    dateSignals = {
-      start: { jsonLd: startSources.jsonLd, timeTags: startSources.timeTags, url: startSources.url, llm: startSources.llm },
-      end: { jsonLd: endSources.jsonLd, timeTags: endSources.timeTags, url: endSources.url, llm: endSources.llm }
-    };
-
-    logInfo(jobId, jobType, poi.id, poi.name,
-      `${phase}: [Dates] start=${eventStartDateTime || 'none'} (score=${eventStartScore}, sources=${JSON.stringify(startConsensus.sourceMap)}), end=${eventEndDateTime || 'none'} (score=${eventEndScore}) from ${url}`);
-
-  } else {
-    // --- News date consensus: deterministic sources + LLM multi-vote ---
-    // Uses shared scoreNewsDate (no title/description available yet — item hasn't been summarized)
-    const consensus = await scoreNewsDate(pool, {
-      title: null, description: null,
-      pageContent: extracted.rawText || extracted.markdown,
-      ogDates: od, sourceUrl: url, timezone
+    // Score start and end independently — same scoreDate, called twice
+    const startResult = await scoreDate(pool, {
+      title: page.title || null, description: null, pageContent: pageText,
+      sources: {
+        jsonLd: od.eventStartDate ? [od.eventStartDate] : [],
+        meta: [], timeTags: od.timeDates?.length > 0 ? [od.timeDates[0]] : [],
+        url: extractUrlDate(url)
+      },
+      timezone, mode: 'datetime', llmVotes: startVotes
+    });
+    const endResult = await scoreDate(pool, {
+      title: null, description: null, pageContent: pageText,
+      sources: {
+        jsonLd: od.eventEndDate ? [od.eventEndDate] : [],
+        meta: [], timeTags: od.timeDates?.length > 1 ? [od.timeDates[1]] : [],
+        url: null
+      },
+      timezone, mode: 'datetime', llmVotes: endVotes
     });
 
+    eventStartDateTime = startResult.date;
+    eventStartScore = startResult.score;
+    eventEndDateTime = endResult.date;
+    eventEndScore = endResult.score;
+    primaryDate = eventStartDateTime?.substring(0, 10) || null;
+    dateScore = eventStartScore;
+    dateSourceMap = startResult.sourceMap;
+    dateSignals = { start: startResult.rawSignals, end: endResult.rawSignals };
+
+    logInfo(jobId, jobType, poi.id, poi.name,
+      `${phase}: [Dates] start=${eventStartDateTime || 'none'} (score=${eventStartScore}, sources=${JSON.stringify(dateSourceMap)}), end=${eventEndDateTime || 'none'} (score=${eventEndScore}) from ${url}`);
+  } else {
+    const consensus = await scoreDate(pool, {
+      title: page.title || null, description: null,
+      pageContent: page.rawText || page.markdown,
+      sources: {
+        jsonLd: od.jsonLdDates || [],
+        meta: [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
+        timeTags: od.timeDates || [],
+        url: extractUrlDate(url)
+      },
+      timezone
+    });
     primaryDate = consensus.date;
     dateScore = consensus.score;
     dateSourceMap = consensus.sourceMap;
@@ -591,18 +573,14 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
       `${phase}: [Dates] ${primaryDate || 'none'} (score=${dateScore}, sources=${JSON.stringify(dateSourceMap)}) from ${url}`);
   }
 
-  // [Summarize]
+  // [Summarize] — from saved markdown, no render needed
   updateProgress(poi.id, { phase: 'summarize', message: url });
-  const prompt = buildSinglePagePrompt(poi, url, extracted.markdown, contentType, confidence);
+  const prompt = buildSummarizePrompt(poi, url, page.markdown, contentType, confidence);
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${url}`);
   const aiResult = await generateTextWithCustomPrompt(pool, prompt);
 
-  // Parse Gemini response, then apply dates and force source_url.
-  // Every URL that reaches processOneUrl is a DETAIL page (one article or one event).
-  // The crawler already resolved listings → detail pages before we get here.
   const result = parseGeminiResponse(aiResult.response);
-
-  const renderedContent = extracted.rawText || extracted.markdown || null;
+  const renderedContent = page.rawText || page.markdown || null;
 
   for (const item of (result.news || [])) {
     item.source_url = url;
@@ -637,13 +615,13 @@ async function processOneUrl(pool, url, poi, contentType, options = {}) {
  * @param {Object} sheets - Optional sheets client
  * @param {Function} checkCancellation - Cancellation checker
  * @param {Object} options - Optional overrides
- * @returns {Object} - { pages: [{url, markdown, title}], totalPagesRendered, totalDetailPages }
+ * @returns {Object} - { pages: [{url, markdown, rawText, ogDates, title}], totalPagesRendered, totalDetailPages }
  */
 async function crawlWithClassification(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
   const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, extractor = extractPageContent, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
   const visited = new Set();
   let totalPagesRendered = 0;
-  const collectedPages = []; // { url, markdown, title }
+  const collectedPages = []; // { url, markdown, rawText, ogDates, title }
 
   async function processLevel(urls, depth) {
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
@@ -680,14 +658,14 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
       logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
 
       if (classification.pageType === 'detail') {
-        collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
+        collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title });
       } else if (classification.pageType === 'listing') {
         const validLinks = filterDetailLinks(classification.detailLinks, url);
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
       } else if (classification.pageType === 'hybrid') {
-        collectedPages.push({ url, markdown: extracted.markdown, title: extracted.title });
+        collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title });
         const validLinks = filterDetailLinks(classification.detailLinks, url);
         if (validLinks.length > 0) {
           updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from hybrid ${url}` });
@@ -711,7 +689,7 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
  * @param {string} collectionType - 'news', 'events', or 'both' to indicate what's being collected
  * @returns {Object} - { news: [], events: [] }
  */
-export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null) {
+export async function collectPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null) {
   // Only collect news/events for POIs with roles: point, organization, or river
   const collectibleRoles = ['point', 'organization', 'river'];
   const poiRoles = poi.poi_roles || [];
@@ -788,6 +766,22 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
   const MAX_PHASE1_PAGES = 10;
   const MAX_PHASE2_PAGES = 5;
 
+  // Read pipeline settings once — used by all phases
+  const [concurrencyRow, delayRow] = await Promise.all([
+    pool.query("SELECT value FROM admin_settings WHERE key = 'page_concurrency'"),
+    pool.query("SELECT value FROM admin_settings WHERE key = 'page_delay_ms'")
+  ]);
+  const pageConcurrency = (() => {
+    if (!concurrencyRow.rows.length) return 3;
+    const val = parseInt(concurrencyRow.rows[0].value, 10);
+    return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : 3;
+  })();
+  const pageDelayMs = (() => {
+    if (!delayRow.rows.length) return 2000;
+    const val = parseInt(delayRow.rows[0].value, 10);
+    return Number.isFinite(val) ? Math.min(10000, Math.max(0, val)) : 2000;
+  })();
+
   // PHASE I EVENTS: Classify → Crawl → per-URL pipeline
   if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page') {
     try {
@@ -808,8 +802,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
 
       const eventResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
-        return processOneUrl(pool, page.url, poi, 'event', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
-      }), 10);
+        return processPage(pool, page, poi, 'event', { phase: 'Phase I', jobId, jobType: 'collectionPhaseOne', timezone, confidence: '75%' });
+      }), pageConcurrency, pageDelayMs);
       for (const items of eventResults) {
         if (items && !(items instanceof Error)) allEvents.push(...(items.events || []));
       }
@@ -842,8 +836,8 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
 
       const newsResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
-        return processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone, confidence: '75%' });
-      }), 10);
+        return processPage(pool, page, poi, 'news', { phase: 'Phase I', jobId, jobType: 'collectionPhaseOne', timezone, confidence: '75%' });
+      }), pageConcurrency, pageDelayMs);
       for (const items of newsResults) {
         if (items && !(items instanceof Error)) allNews.push(...(items.news || []));
       }
@@ -958,12 +952,12 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
             for (const page of crawlResult.pages) {
               checkCancellation();
               if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
-              const items = await processOneUrl(pool, page.url, poi, 'news', { phase: 'Phase II', jobId, jobType, timezone, confidence: '95%' });
+              const items = await processPage(pool, page, poi, 'news', { phase: 'Phase II', jobId, jobType: 'collectionPhaseTwo', timezone, confidence: '95%' });
               pageItems.push(...(items.news || []));
               phase2PagesCollected++;
             }
             return pageItems;
-          }), 10);
+          }), pageConcurrency, pageDelayMs);
 
           // Merge results, deduplicating by title
           for (const itemsOrError of phase2Results) {
@@ -1045,12 +1039,12 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
             for (const page of crawlResult.pages) {
               checkCancellation();
               if (phase2EventPagesCollected >= MAX_PHASE2_PAGES) break;
-              const items = await processOneUrl(pool, page.url, poi, 'event', { phase: 'Phase II Events', jobId, jobType, timezone, confidence: '95%' });
+              const items = await processPage(pool, page, poi, 'event', { phase: 'Phase II Events', jobId, jobType: 'collectionPhaseTwo', timezone, confidence: '95%' });
               pageItems.push(...(items.events || []));
               phase2EventPagesCollected++;
             }
             return pageItems;
-          }), 3);
+          }), pageConcurrency, pageDelayMs);
 
           for (const itemsOrError of phase2EventResults) {
             if (!itemsOrError || itemsOrError instanceof Error) continue;
@@ -1122,6 +1116,7 @@ export async function collectNewsForPoi(pool, poi, sheets = null, timezone = 'Am
     return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false, provider: 'gemini' } };
   }
 }
+
 
 /**
  * Resolve redirect URLs to their final destination
@@ -1228,7 +1223,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       // Normalize dates via chrono-node — handles natural language, European format, partial dates
       item.published_date = parseDate(item.published_date) || null;
 
-      // Defense-in-depth: cap future news dates at today (primary cap is in processOneUrl,
+      // Defense-in-depth: cap future news dates at today (primary cap is in processPage,
       // but this catches any case where a future date slips through to saveNewsItems)
       if (item.published_date && item.published_date > todayStr) {
         if (log) log(`[Save] Capping future date ${item.published_date} → ${todayStr} for "${item.title}"`);
@@ -1458,7 +1453,7 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
 
     try {
       console.log(`[${index + 1}/${pois.length}] Starting: ${poi.name} (${inFlight} in flight)`);
-      const { news, events, metadata } = await collectNewsForPoi(pool, poi, sheets, timezone);
+      const { news, events, metadata } = await collectPoi(pool, poi, sheets, timezone);
       const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
       const savedEvents = await saveEventItems(pool, poi.id, events);
       console.log(`[${index + 1}/${pois.length}] ✓ ${poi.name}: ${savedNews} news, ${savedEvents} events`);
@@ -1661,7 +1656,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       },
 
       collectFn: async (poi, { index, total }) => {
-        const { news, events, metadata } = await collectNewsForPoi(pool, poi, sheets, 'America/New_York');
+        const { news, events, metadata } = await collectPoi(pool, poi, sheets, 'America/New_York');
         tracker.updateProgress(poi.id, { phase: 'save', message: `${news.length} news, ${events.length} events` });
         const saveLog = (msg) => { logInfo(jobId, 'news', poi.id, poi.name, msg); };
         const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl, log: saveLog });

@@ -8,8 +8,8 @@ import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL, gener
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDate, scoreDateConsensus } from './dateExtractor.js';
-import { scoreNewsDate, normalizeRenderUrl } from './newsService.js';
+import { parseDate, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
+import { scoreDate, normalizeRenderUrl } from './newsService.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -310,9 +310,15 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
               logError(itemRunId, 'moderation', null, row.title, `Page extraction failed: ${err.message}`);
             }
           }
-          consensus = await scoreNewsDate(pool, {
+          consensus = await scoreDate(pool, {
             title: row.title, description: row.description,
-            pageContent, ogDates, sourceUrl: row.source_url
+            pageContent,
+            sources: {
+              jsonLd: ogDates.jsonLdDates || [],
+              meta: [ogDates.publishedTime, ogDates.parselyPubDate, ogDates.dcDate].filter(Boolean),
+              timeTags: ogDates.timeDates || [],
+              url: extractUrlDate(row.source_url)
+            }
           });
         }
 
@@ -799,9 +805,15 @@ export async function fixDate(pool, contentType, contentId) {
       }
     }
 
-    consensus = await scoreNewsDate(pool, {
+    consensus = await scoreDate(pool, {
       title: item.title, description: item.description,
-      pageContent, ogDates, sourceUrl: item.source_url
+      pageContent,
+      sources: {
+        jsonLd: ogDates.jsonLdDates || [],
+        meta: [ogDates.publishedTime, ogDates.parselyPubDate, ogDates.dcDate].filter(Boolean),
+        timeTags: ogDates.timeDates || [],
+        url: extractUrlDate(item.source_url)
+      }
     });
   }
 
@@ -817,7 +829,7 @@ export async function fixDate(pool, contentType, contentId) {
     date_updated: !!newDate,
     publication_date: newDate,
     date_consensus_score: newScore,
-    reasoning: `Rescored via scoreNewsDate (score=${newScore})`
+    reasoning: `Rescored via scoreDate (score=${newScore})`
   };
 }
 

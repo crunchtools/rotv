@@ -4,7 +4,7 @@
  *   extractUrlDate → normalizeDateSources → scoreDateConsensus (with LLM multi-vote)
  */
 import { describe, it, expect } from 'vitest';
-import { extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus, scoreDeterministicSources, normalizeEventDateSources, scoreEventDateTimeConsensus } from '../services/dateExtractor.js';
+import { extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus, scoreDeterministicSources } from '../services/dateExtractor.js';
 
 // --- extractUrlDate ---
 
@@ -285,101 +285,99 @@ describe('normalizeRenderUrl', () => {
   });
 });
 
-describe('normalizeEventDateSources', () => {
+describe('normalizeDateSources datetime mode', () => {
   it('normalizes to minute precision (drops seconds)', () => {
-    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30'] });
+    const result = normalizeDateSources({ jsonLd: ['2026-04-22T10:30'] }, 'America/New_York', 'datetime');
     expect(result.jsonLd).toContain('2026-04-22T10:30');
   });
 
   it('parses datetime strings with timezone offsets to minute precision', () => {
-    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30-04:00'] });
+    const result = normalizeDateSources({ jsonLd: ['2026-04-22T10:30-04:00'] }, 'America/New_York', 'datetime');
     expect(result.jsonLd.length).toBe(1);
     expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 
   it('handles date-only strings by adding T00:00', () => {
-    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22'] });
+    const result = normalizeDateSources({ jsonLd: ['2026-04-22'] }, 'America/New_York', 'datetime');
     expect(result.jsonLd.length).toBe(1);
     expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 
   it('makes "10:30" and "10:30:00" match after normalization', () => {
-    const a = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30'] });
-    const b = normalizeEventDateSources({ llm: '2026-04-22T10:30' });
+    const a = normalizeDateSources({ jsonLd: ['2026-04-22T10:30'] }, 'America/New_York', 'datetime');
+    const b = normalizeDateSources({ jsonLd: ['2026-04-22T10:30:00'] }, 'America/New_York', 'datetime');
     expect(a.jsonLd[0]).toBe('2026-04-22T10:30');
-    expect(b.llm).toBe('2026-04-22T10:30');
-    expect(a.jsonLd[0]).toBe(b.llm);
+    expect(b.jsonLd[0]).toBe('2026-04-22T10:30');
   });
 
   it('discards unparseable strings', () => {
-    const result = normalizeEventDateSources({ jsonLd: ['not-a-date', '2026-04-22T10:30'] });
+    const result = normalizeDateSources({ jsonLd: ['not-a-date', '2026-04-22T10:30'] }, 'America/New_York', 'datetime');
     expect(result.jsonLd).not.toContain('not-a-date');
     expect(result.jsonLd.length).toBe(1);
   });
 
   it('handles null/missing sources gracefully', () => {
-    const result = normalizeEventDateSources({ llm: null, url: null });
-    expect(result.llm).toBeNull();
+    const result = normalizeDateSources({ url: null }, 'America/New_York', 'datetime');
     expect(result.url).toBeNull();
     expect(result.jsonLd).toEqual([]);
   });
 });
 
-describe('scoreEventDateTimeConsensus', () => {
+describe('scoreDateConsensus with datetime strings', () => {
   it('returns score 0 when no sources provided', () => {
-    const result = scoreEventDateTimeConsensus({});
-    expect(result.datetime).toBeNull();
+    const result = scoreDateConsensus({});
+    expect(result.date).toBeNull();
     expect(result.score).toBe(0);
   });
 
   it('scores JSON-LD datetime at 4 pts', () => {
-    const result = scoreEventDateTimeConsensus({ jsonLd: ['2026-04-22T10:30'] });
-    expect(result.datetime).toBe('2026-04-22T10:30');
+    const result = scoreDateConsensus({ jsonLd: ['2026-04-22T10:30'] });
+    expect(result.date).toBe('2026-04-22T10:30');
     expect(result.score).toBe(4);
   });
 
   it('reaches threshold with JSON-LD + time tag (4+1=5)', () => {
-    const result = scoreEventDateTimeConsensus({
+    const result = scoreDateConsensus({
       jsonLd: ['2026-04-22T10:30'],
       timeTags: ['2026-04-22T10:30']
     });
-    expect(result.datetime).toBe('2026-04-22T10:30');
+    expect(result.date).toBe('2026-04-22T10:30');
     expect(result.score).toBe(5);
   });
 
-  it('accumulates score across matching datetimes', () => {
-    const result = scoreEventDateTimeConsensus({
+  it('accumulates score with unanimous LLM votes (JSON-LD 4 + time-tag 1 + LLM 4 = 9)', () => {
+    const votes = Array(5).fill('2026-04-22T10:30');
+    const result = scoreDateConsensus({
       jsonLd: ['2026-04-22T10:30'],
-      llm: '2026-04-22T10:30',
       timeTags: ['2026-04-22T10:30']
-    });
-    expect(result.datetime).toBe('2026-04-22T10:30');
-    expect(result.score).toBe(7);
+    }, votes);
+    expect(result.date).toBe('2026-04-22T10:30');
+    expect(result.score).toBe(9);
   });
 
-  it('picks highest-scoring datetime when sources disagree', () => {
-    const result = scoreEventDateTimeConsensus({
-      jsonLd: ['2026-04-22T10:30'],
-      llm: '2026-04-22T11:00'
-    });
-    expect(result.datetime).toBe('2026-04-22T10:30');
+  it('picks highest-scoring datetime when LLM disagrees with JSON-LD', () => {
+    const votes = Array(5).fill('2026-04-22T11:00');
+    const result = scoreDateConsensus({
+      jsonLd: ['2026-04-22T10:30']
+    }, votes);
+    expect(result.date).toBe('2026-04-22T10:30');
     expect(result.score).toBe(4);
   });
 
   it('breaks ties by choosing newest datetime', () => {
-    const result = scoreEventDateTimeConsensus({
+    const result = scoreDateConsensus({
       timeTags: ['2026-04-22T10:30'],
       url: '2026-04-22T14:00'
     });
-    expect(result.datetime).toBe('2026-04-22T14:00');
+    expect(result.date).toBe('2026-04-22T14:00');
   });
 
-  it('includes sourceMap in result', () => {
-    const result = scoreEventDateTimeConsensus({
-      jsonLd: ['2026-04-22T10:30'],
-      llm: '2026-04-22T10:30'
-    });
+  it('includes sourceMap with LLM consensus label', () => {
+    const votes = Array(5).fill('2026-04-22T10:30');
+    const result = scoreDateConsensus({
+      jsonLd: ['2026-04-22T10:30']
+    }, votes);
     expect(result.sourceMap['2026-04-22T10:30']).toContain('json-ld');
-    expect(result.sourceMap['2026-04-22T10:30']).toContain('llm');
+    expect(result.sourceMap['2026-04-22T10:30'].some(s => s.includes('llm-consensus'))).toBe(true);
   });
 });

@@ -33,7 +33,7 @@ import {
   getJobStatus,
   cleanupOldNews,
   cleanupPastEvents,
-  collectNewsForPoi,
+  collectPoi,
   saveNewsItems,
   saveEventItems,
   getCollectionProgress,
@@ -480,7 +480,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'buttondown_api_key',
       'buttondown_from_email',
       'max_concurrency',
-      'max_search_urls'
+      'max_search_urls',
+      'page_concurrency',
+      'page_delay_ms'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
@@ -2818,7 +2820,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       // Generate a unique run ID so each collection attempt is a separate entry in history
       const runIdResult = await pool.query("SELECT nextval('single_poi_run_id_seq')");
       const runId = parseInt(runIdResult.rows[0].nextval);
-      // Store runId + jobType in progress so collectNewsForPoi picks them up for logInfo
+      // Store runId + jobType in progress so collectPoi picks them up for logInfo
       updateProgress(poi.id, { runId, jobId: runId, jobType: 'news_single' });
 
       const urls = [
@@ -2847,7 +2849,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       };
 
       try {
-        const { news, events, metadata } = await collectNewsForPoi(pool, poi, null, timezone, 'news', onProgress);
+        const { news, events, metadata } = await collectPoi(pool, poi, null, timezone, 'news', onProgress);
 
         logInfo(runId, 'news_single', poi.id, poi.name, `Saving ${news.length} news items to database...`);
         await flushJobLogs();
@@ -2953,7 +2955,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       };
 
       try {
-        const { news, events, metadata } = await collectNewsForPoi(pool, poi, null, timezone, 'events', onProgress);
+        const { news, events, metadata } = await collectPoi(pool, poi, null, timezone, 'events', onProgress);
 
         logInfo(runId, 'events_single', poi.id, poi.name, `Saving ${events.length} event items to database...`);
         await flushJobLogs();

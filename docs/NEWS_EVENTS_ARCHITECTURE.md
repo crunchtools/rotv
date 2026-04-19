@@ -17,22 +17,23 @@ URL  →  [Render]  →  [Dates]  →  [Summarize]  →  [Save]
 
 Every item produced by `[Summarize]` has `source_url` set to the URL that was rendered. This is deterministic — no guessing, no cross-page attribution.
 
-### The Core Function: `processOneUrl`
+### The Core Function: `processPage`
 
-~30 lines. Does one thing: takes a URL, renders it, extracts dates, sends the single page to Gemini, forces `source_url` on every returned item.
+Takes a pre-rendered page object (from `crawlWithClassification`), extracts dates, sends the content to Gemini, forces `source_url` on every returned item. No Playwright call — works entirely from saved content.
 
 ```
-processOneUrl(pool, url, poi, contentType, options)
+processPage(pool, page, poi, contentType, options)
+  page = { url, markdown, rawText, ogDates, title }
   → { news: [], events: [] }
 ```
 
 ### Discovery vs. Processing
 
-Discovery (finding which URLs to process) is separate from processing (the per-URL pipeline above):
+Discovery (finding and rendering URLs) is separate from processing (dates + summarization):
 
-- **Phase I Discovery**: `crawlWithClassification` walks the POI's dedicated pages, classifying each as listing/detail/hybrid and following links. Returns a list of detail page URLs.
-- **Phase II Discovery**: Serper API returns search result URLs. Each is processed directly as a detail page.
-- **Processing**: Every discovered URL goes through `processOneUrl` independently.
+- **Phase I Discovery**: `crawlWithClassification` walks the POI's dedicated pages, classifying each as listing/detail/hybrid and following links. Returns fully-extracted page objects.
+- **Phase II Discovery**: Serper API returns search result URLs. Each is crawled via `crawlWithClassification` and returned as a page object.
+- **Processing**: Every discovered page goes through `processPage` — no re-rendering needed.
 
 ### The Stages
 
@@ -60,7 +61,7 @@ Discovery (finding which URLs to process) is separate from processing (the per-U
 Gemini is used for three distinct tasks, each with a clear boundary:
 
 1. **Classification** — "Is this page a listing, detail, or hybrid?" Called per-page during discovery. Returns a page type and links to follow.
-2. **Summarization** — "What news/events are on this page?" Called once per URL via `processOneUrl`. Returns structured JSON with items from that single page.
+2. **Summarization** — "What news/events are on this page?" Called once per page via `processPage`. Returns structured JSON with items from that single page.
 3. **Moderation** — "Is this item relevant and high-quality?" Called per-item during the separate moderation sweep. Returns a quality score.
 
 ## Two-Phase Collection
@@ -71,10 +72,10 @@ Content collection happens in two phases per POI. Logs always show `Phase I:` or
 
 If a POI has dedicated `events_url` or `news_url` configured:
 
-1. **Classify & Crawl** the dedicated page using `crawlWithClassification` — renders it, classifies as listing/detail/hybrid, follows links to detail pages
-2. If classifier finds detail pages, each gets `processOneUrl` with 75% confidence
-3. If classifier finds no detail pages, the listing URL itself gets `processOneUrl` (fallback)
-4. Each `processOneUrl` call: Render → Dates → Summarize → force source_url
+1. **Classify & Crawl** the dedicated page using `crawlWithClassification` — renders it, classifies as listing/detail/hybrid, follows links to detail pages. Each page is rendered once and the full extraction `{ url, markdown, rawText, ogDates, title }` is saved.
+2. If classifier finds detail pages, each gets `processPage` with 75% confidence — no re-rendering
+3. If classifier finds no detail pages, the listing URL itself gets `processPage` (fallback)
+4. Each `processPage` call: Dates → Summarize → force source_url (render already done)
 
 Phase I uses relaxed confidence thresholds (75%) because content on an organization's own events/news page is inherently relevant to that POI.
 
@@ -85,7 +86,7 @@ POIs without dedicated URLs skip Phase I entirely and go straight to Phase II.
 After Phase I, the system searches for external news coverage:
 
 1. **Search** via Serper API for news about the POI
-2. For each Serper URL: `processOneUrl` with 95% confidence
+2. For each Serper URL: crawl via `crawlWithClassification`, then `processPage` with 95% confidence
 3. **Merge** with Phase I results, deduplicating by normalized title
 
 Phase II uses strict confidence thresholds (95%) because external sources may mention a POI tangentially without being truly relevant.
@@ -194,7 +195,7 @@ When a duplicate is detected with a different URL, the new URL is merged into th
 
 | File | Stage | Purpose |
 |------|-------|---------|
-| `backend/services/newsService.js` | All stages | Main collection orchestrator, `processOneUrl`, `buildSinglePagePrompt` |
+| `backend/services/newsService.js` | All stages | Main collection orchestrator, `processPage`, `buildSummarizePrompt` |
 | `backend/services/dateExtractor.js` | Dates | chrono-node wrapper utilities |
 | `backend/services/geminiService.js` | Summarize, Moderation | Gemini API integration and prompts |
 | `backend/services/moderationService.js` | Moderation | Quality scoring, Fix Date, auto-approval |
