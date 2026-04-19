@@ -159,25 +159,33 @@ describe('scoreDateConsensus', () => {
 });
 
 describe('normalizeEventDateSources', () => {
-  it('preserves time components from ISO datetime strings', () => {
-    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30:00'] });
-    expect(result.jsonLd).toContain('2026-04-22T10:30:00');
+  it('normalizes to minute precision (drops seconds)', () => {
+    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30'] });
+    expect(result.jsonLd).toContain('2026-04-22T10:30');
   });
 
-  it('parses datetime strings with timezone offsets', () => {
-    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30:00-04:00'] });
+  it('parses datetime strings with timezone offsets to minute precision', () => {
+    const result = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30-04:00'] });
     expect(result.jsonLd.length).toBe(1);
-    expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+    expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 
-  it('handles date-only strings by adding T00:00:00', () => {
+  it('handles date-only strings by adding T00:00', () => {
     const result = normalizeEventDateSources({ jsonLd: ['2026-04-22'] });
     expect(result.jsonLd.length).toBe(1);
-    expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
+    expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+  });
+
+  it('makes "10:30" and "10:30:00" match after normalization', () => {
+    const a = normalizeEventDateSources({ jsonLd: ['2026-04-22T10:30'] });
+    const b = normalizeEventDateSources({ llm: '2026-04-22T10:30' });
+    expect(a.jsonLd[0]).toBe('2026-04-22T10:30');
+    expect(b.llm).toBe('2026-04-22T10:30');
+    expect(a.jsonLd[0]).toBe(b.llm);
   });
 
   it('discards unparseable strings', () => {
-    const result = normalizeEventDateSources({ jsonLd: ['not-a-date', '2026-04-22T10:30:00'] });
+    const result = normalizeEventDateSources({ jsonLd: ['not-a-date', '2026-04-22T10:30'] });
     expect(result.jsonLd).not.toContain('not-a-date');
     expect(result.jsonLd.length).toBe(1);
   });
@@ -198,53 +206,53 @@ describe('scoreEventDateTimeConsensus', () => {
   });
 
   it('scores JSON-LD datetime at 3 pts', () => {
-    const result = scoreEventDateTimeConsensus({ jsonLd: ['2026-04-22T10:30:00'] });
-    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    const result = scoreEventDateTimeConsensus({ jsonLd: ['2026-04-22T10:30'] });
+    expect(result.datetime).toBe('2026-04-22T10:30');
     expect(result.score).toBe(3);
   });
 
   it('reaches threshold with JSON-LD + time tag (3+1=4)', () => {
     const result = scoreEventDateTimeConsensus({
-      jsonLd: ['2026-04-22T10:30:00'],
-      timeTags: ['2026-04-22T10:30:00']
+      jsonLd: ['2026-04-22T10:30'],
+      timeTags: ['2026-04-22T10:30']
     });
-    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    expect(result.datetime).toBe('2026-04-22T10:30');
     expect(result.score).toBe(4);
   });
 
   it('accumulates score across matching datetimes', () => {
     const result = scoreEventDateTimeConsensus({
-      jsonLd: ['2026-04-22T10:30:00'],
-      llm: '2026-04-22T10:30:00',
-      timeTags: ['2026-04-22T10:30:00']
+      jsonLd: ['2026-04-22T10:30'],
+      llm: '2026-04-22T10:30',
+      timeTags: ['2026-04-22T10:30']
     });
-    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    expect(result.datetime).toBe('2026-04-22T10:30');
     expect(result.score).toBe(6);
   });
 
   it('picks highest-scoring datetime when sources disagree', () => {
     const result = scoreEventDateTimeConsensus({
-      jsonLd: ['2026-04-22T10:30:00'],
-      llm: '2026-04-22T11:00:00'
+      jsonLd: ['2026-04-22T10:30'],
+      llm: '2026-04-22T11:00'
     });
-    expect(result.datetime).toBe('2026-04-22T10:30:00');
+    expect(result.datetime).toBe('2026-04-22T10:30');
     expect(result.score).toBe(3);
   });
 
   it('breaks ties by choosing newest datetime', () => {
     const result = scoreEventDateTimeConsensus({
-      timeTags: ['2026-04-22T10:30:00'],
-      url: '2026-04-22T14:00:00'
+      timeTags: ['2026-04-22T10:30'],
+      url: '2026-04-22T14:00'
     });
-    expect(result.datetime).toBe('2026-04-22T14:00:00');
+    expect(result.datetime).toBe('2026-04-22T14:00');
   });
 
   it('includes sourceMap in result', () => {
     const result = scoreEventDateTimeConsensus({
-      jsonLd: ['2026-04-22T10:30:00'],
-      llm: '2026-04-22T10:30:00'
+      jsonLd: ['2026-04-22T10:30'],
+      llm: '2026-04-22T10:30'
     });
-    expect(result.sourceMap['2026-04-22T10:30:00']).toContain('json-ld');
-    expect(result.sourceMap['2026-04-22T10:30:00']).toContain('llm');
+    expect(result.sourceMap['2026-04-22T10:30']).toContain('json-ld');
+    expect(result.sourceMap['2026-04-22T10:30']).toContain('llm');
   });
 });
