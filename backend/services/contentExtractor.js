@@ -155,8 +155,9 @@ export async function extractPageContent(url, options = {}) {
             for (const item of items) {
               const candidates = [
                 item.datePublished,
+                item.uploadDate,
                 item.startDate,
-                item['@graph']?.map?.(n => n.datePublished || n.startDate)
+                item['@graph']?.map?.(n => n.datePublished || n.uploadDate || n.startDate)
               ].flat().filter(Boolean);
               jsonLdDates.push(...candidates);
 

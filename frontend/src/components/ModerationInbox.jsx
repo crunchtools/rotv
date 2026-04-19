@@ -29,7 +29,7 @@ const FIELD_CONFIGS = {
   ]
 };
 
-function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
+function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectPoi }) {
   const [queue, setQueue] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -841,8 +841,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
             // Rendered as children of the shared card component (below the card body, above nothing)
             const moderationExtras = (
               <>
-                {/* Moderation badge row */}
-                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', marginTop: '6px' }}>
+                {/* Moderation badges — all on one line, wrapping when needed */}
+                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', margin: '10px 0 8px' }}>
                   {/* Item ID badge */}
                   <span style={badgeStyle('#757575')}>#{item.id}</span>
 
@@ -872,6 +872,25 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
                     </span>
                   )}
 
+                  {/* Triage chips — inline with other badges */}
+                  {item.content_type !== 'photo' && (() => {
+                    const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
+                    const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
+                    const hasNoDate = item.content_type === 'event'
+                      ? !item.publication_date && !item.start_date
+                      : !item.publication_date || !item.date_consensus_score;
+                    const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
+                    const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
+                    const hasOther = issues.some(i => !urlIssueCodes.includes(i));
+                    return (
+                      <>
+                        {hasNoDate && <span style={badgeStyle('#e65100')}>No Date</span>}
+                        {hasUrlIssue && <span style={badgeStyle('#e65100')}>{urlLabel}</span>}
+                        {hasOther && <span style={badgeStyle('#b71c1c')}>Other</span>}
+                      </>
+                    );
+                  })()}
+
                   {/* Confidence score */}
                   {item.confidence_score !== null && item.confidence_score !== undefined && (
                     <span style={{
@@ -888,30 +907,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
                     {item.moderated_at && ` · Mod: ${formatPublicationDate(item.moderated_at)}`}
                   </span>
                 </div>
-
-                {/* Triage chips — No Date, No URL / Wrong URL, Other */}
-                {item.content_type !== 'photo' && (() => {
-                  const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
-                  const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
-                  const hasNoDate = item.content_type === 'event'
-                    ? !item.publication_date && !item.start_date
-                    : !item.publication_date || !item.date_consensus_score;
-                  const hasUrlIssue = issues.some(i => urlIssueCodes.includes(i)) || (!item.source_url && item.content_type !== 'photo');
-                  const urlLabel = !item.source_url ? 'No URL' : 'Wrong URL';
-                  const hasOther = issues.some(i => !urlIssueCodes.includes(i));
-                  if (!hasNoDate && !hasUrlIssue && !hasOther) return null;
-                  const chipStyle = (color) => ({
-                    padding: '1px 8px', borderRadius: '8px', fontSize: '0.68rem',
-                    fontWeight: 'bold', backgroundColor: color, color: 'white'
-                  });
-                  return (
-                    <div style={{ display: 'flex', gap: '4px', marginTop: '3px' }}>
-                      {hasNoDate && <span style={chipStyle('#e65100')}>No Date</span>}
-                      {hasUrlIssue && <span style={chipStyle('#e65100')}>{urlLabel}</span>}
-                      {hasOther && <span style={chipStyle('#b71c1c')}>Other</span>}
-                    </div>
-                  );
-                })()}
 
                 {/* Edit form */}
                 {isEditing && (
@@ -1080,14 +1075,14 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle }) {
             if (item.content_type === 'news') {
               return (
                 <NewsCardBody key={itemKey} item={{ ...item, summary: item.description }}
-                  id={`moderation-item-${itemKey}`}>
+                  id={`moderation-item-${itemKey}`} onSelectPoi={onSelectPoi}>
                   {moderationExtras}
                 </NewsCardBody>
               );
             } else if (item.content_type === 'event') {
               return (
                 <EventCardBody key={itemKey} item={item}
-                  id={`moderation-item-${itemKey}`}>
+                  id={`moderation-item-${itemKey}`} onSelectPoi={onSelectPoi}>
                   {moderationExtras}
                 </EventCardBody>
               );

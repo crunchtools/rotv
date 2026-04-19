@@ -1788,7 +1788,13 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
-              {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} focusItemId={moderationFocusId} focusItemTitle={moderationFocusTitle} />}
+              {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} focusItemId={moderationFocusId} focusItemTitle={moderationFocusTitle} onSelectPoi={(poiId) => {
+                const poi = destinations.find(d => d.id === poiId);
+                if (poi) {
+                  setSelectedDestination(poi);
+                  setActiveTab('view');
+                }
+              }} />}
               {settingsTab === 'jobs' && <JobsDashboard expandTarget={jobsExpandTarget} onExpandTargetConsumed={() => setJobsExpandTarget(null)} />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
