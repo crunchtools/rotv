@@ -627,14 +627,6 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
-      } else if (classification.pageType === 'hybrid') {
-        collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title });
-        const validLinks = filterDetailLinks(classification.detailLinks, url);
-        if (validLinks.length > 0) {
-          updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from hybrid ${url}` });
-          logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from hybrid page ${url}`);
-          await processLevel(validLinks, depth + 1);
-        }
       }
     }), 3, 2000);
   }

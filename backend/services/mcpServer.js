@@ -20,7 +20,6 @@ import {
   approveItem,
   rejectItem,
   requeueItem,
-  researchItem,
   fixDate,
   bulkApprove,
   createItem,
@@ -323,26 +322,6 @@ function registerTools(server, pool, boss) {
     async ({ content_type, id }) => {
       await requeueItem(pool, content_type, id);
       return { content: [{ type: 'text', text: `Requeued ${content_type} #${id} for re-moderation` }] };
-    }
-  );
-
-  server.tool(
-    'queue_research',
-    'Fix source URL via AI web search',
-    {
-      content_type: z.enum(['news', 'event']).describe('Content type (photos not supported)'),
-      id: z.number().describe('Content item ID')
-    },
-    async ({ content_type, id }) => {
-      const result = await researchItem(pool, content_type, id);
-      let msg = `Researched ${content_type} #${id}. `;
-      if (result.source_url_updated) {
-        msg += `URL updated: ${result.old_url || '(none)'} → ${result.new_url}. `;
-      } else {
-        msg += `No URL change. `;
-      }
-      if (result.ai_notes) msg += `Notes: ${result.ai_notes}`;
-      return { content: [{ type: 'text', text: msg }] };
     }
   );
 

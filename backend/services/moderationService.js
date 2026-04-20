@@ -4,7 +4,7 @@
  * Processes pending items via pg-boss queue, auto-approves high-confidence content.
  */
 
-import { moderateContent, moderatePhoto, createGeminiClient, GEMINI_MODEL, generateTextWithCustomPrompt } from './geminiService.js';
+import { moderateContent, moderatePhoto, generateTextWithCustomPrompt } from './geminiService.js';
 import { extractPageContent } from './contentExtractor.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
@@ -647,111 +647,6 @@ export async function requeueItem(pool, contentType, contentId) {
   );
 }
 
-/**
- * Fix the source URL for a news/event item via Gemini.
- * Analyzes the item to find the correct URL, updates the item, then requeues for moderation.
- */
-export async function researchItem(pool, contentType, contentId) {
-  if (contentType !== 'news' && contentType !== 'event') {
-    throw new Error('Fix URL is only available for news and event items (not photos)');
-  }
-
-  const table = TABLE_MAP[contentType];
-  const descField = contentType === 'news' ? 'summary' : 'description';
-
-  const itemQuery = await pool.query(
-    `SELECT t.id, t.title, t.${descField} AS description, t.source_url, p.name AS poi_name
-     FROM ${table} t
-     LEFT JOIN pois p ON t.poi_id = p.id
-     WHERE t.id = $1`,
-    [contentId]
-  );
-  if (!itemQuery.rows.length) {
-    throw new Error(`${contentType} #${contentId} not found`);
-  }
-  const item = itemQuery.rows[0];
-  const oldUrl = item.source_url || null;
-  const runId = Math.floor(Date.now() / 1000);
-
-  const typeLabel = contentType === 'news' ? 'news article' : 'event';
-  const prompt = `Search the web for this ${typeLabel} and tell me what you find:
-
-Title: "${item.title}"
-${item.description ? `Description: "${item.description}"` : ''}
-${item.poi_name ? `Location/Organization: ${item.poi_name}` : ''}
-
-Tell me: Did you find this specific ${typeLabel}? What website is it on? Is it still available?
-Summarize what you found in 1-2 sentences.`;
-
-  console.log(`[Moderation] Fixing URL for ${contentType} #${contentId}: "${item.title}"`);
-  logInfo(runId, 'moderation', null, item.title, `Fix URL: searching for ${contentType} #${contentId}`);
-
-  const genAI = await createGeminiClient(pool);
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig: { temperature: 0 }
-  });
-
-  const generation = await model.generateContent(prompt);
-  const response = generation.response;
-  const aiNotes = response.text();
-
-  const candidates = response.candidates || [];
-  const groundingChunks = candidates[0]?.groundingMetadata?.groundingChunks || [];
-
-  const candidateUrls = [];
-  for (const chunk of groundingChunks) {
-    let uri = chunk?.web?.uri;
-    if (!uri) continue;
-    // Vertex AI wraps results in redirect URLs — resolve to actual destination
-    if (uri.includes('vertexaisearch.cloud.google.com/grounding-api-redirect')) {
-      try {
-        const res = await fetch(uri, { method: 'HEAD', redirect: 'manual' });
-        uri = res.headers.get('location') || uri;
-      } catch (e) {
-        console.warn(`[Moderation] Failed to resolve grounding redirect for ${contentType} #${contentId}:`, e.message);
-      }
-    }
-    // SSRF protection: only allow public http/https URLs
-    if (!isSafePublicUrl(uri)) {
-      console.warn(`[Moderation] Blocked non-public URL from grounding: ${uri}`);
-      continue;
-    }
-    if (uri !== oldUrl) {
-      candidateUrls.push(uri);
-    }
-  }
-
-  console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: found ${candidateUrls.length} candidate URLs from grounding`);
-  if (candidateUrls.length > 0) {
-    console.log(`[Moderation]   Candidates: ${candidateUrls.join(', ')}`);
-  }
-
-  let sourceUrlUpdated = false;
-  let newUrl = candidateUrls.length > 0 ? candidateUrls[0] : null;
-
-  if (newUrl && newUrl !== oldUrl) {
-    await pool.query(
-      `UPDATE ${table} SET source_url = $1 WHERE id = $2`,
-      [newUrl, contentId]
-    );
-    sourceUrlUpdated = true;
-    console.log(`[Moderation] Fix URL updated ${contentType} #${contentId}: ${oldUrl || '(none)'} -> ${newUrl}`);
-    logInfo(runId, 'moderation', null, item.title, `Fix URL: updated ${contentType} #${contentId}`, { completed: true, old_url: oldUrl, new_url: newUrl });
-  } else {
-    console.log(`[Moderation] Fix URL for ${contentType} #${contentId}: no new URL found`);
-    logInfo(runId, 'moderation', null, item.title, `Fix URL: no new URL found for ${contentType} #${contentId}`, { completed: true });
-  }
-  await flushJobLogs();
-
-  return {
-    researched: true,
-    source_url_updated: sourceUrlUpdated,
-    old_url: oldUrl,
-    new_url: newUrl,
-    ai_notes: aiNotes || null
-  };
-}
 
 /**
  * Fix the publication date for a news/event item.
