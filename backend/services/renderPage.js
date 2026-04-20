@@ -37,7 +37,7 @@ export async function renderPage(pool, url, options = {}) {
       'SELECT * FROM rendered_page_cache WHERE url = $1',
       [url]
     );
-    if (cached.rows.length > 0 && isCacheFresh(cached.rows[0])) {
+    if (cached.rows.length > 0 && isCacheFresh(cached.rows[0]) && cached.rows[0].markdown) {
       const row = cached.rows[0];
       return {
         markdown: row.markdown,
