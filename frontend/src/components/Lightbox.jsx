@@ -270,7 +270,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
         {/* Bottom action bar */}
         {user && (
           <div className="lightbox-bottom-bar">
-            {(currentMedia.uploaded_by_user || user.role === 'admin' || user.role === 'media_admin') ? (
+            {(currentMedia.uploaded_by_user || user.role === 'admin' || user.role === 'media_admin') && (
               <button
                 className="lightbox-delete-media"
                 onClick={(e) => {
@@ -282,8 +282,8 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
               >
                 {deleting ? 'Deleting...' : 'Delete'}
               </button>
-            ) : <div />}
-            {user && (user.role === 'admin' || user.role === 'media_admin') &&
+            )}
+            {(user.role === 'admin' || user.role === 'media_admin') &&
              currentMedia.role !== 'primary' &&
              ['published', 'auto_approved'].includes(currentMedia.moderation_status) && (
               <button
