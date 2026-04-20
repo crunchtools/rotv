@@ -374,12 +374,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
 function EditView({ destination, editedData, setEditedData, onSave, onCancel, onDelete, saving, deleting, onPreviewCoordsChange, isNewPOI, isNewOrganization, _onImageUpdate, isLinearFeature, showImage }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [aiError, setAiError] = useState(null);
-  // Prompt editor modal state
-  const [showPromptEditor, setShowPromptEditor] = useState(false);
-  const [promptType, setPromptType] = useState(null); // 'brief' or 'historical'
-  const [editablePrompt, setEditablePrompt] = useState('');
-  const [loadingPrompt] = useState(false);
-  const [generating, setGenerating] = useState(false);
 
   // Research state
   const [researching, setResearching] = useState(false);
@@ -388,11 +382,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   const [researchDraft, setResearchDraft] = useState(null);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [draftFieldStates, setDraftFieldStates] = useState({});
-
-  // Hero image modal state
-  const [heroImageDraft, setHeroImageDraft] = useState(null);
-  const [generatingHeroImage, setGeneratingHeroImage] = useState(false);
-  const [acceptingHeroImage, setAcceptingHeroImage] = useState(false);
 
   // Pending image state (staging area for image uploads until save)
   const [pendingImage, setPendingImage] = useState(null);
@@ -593,26 +582,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       setDraftFieldStates(initialStates);
       setShowDraftModal(true);
 
-      // Auto-start hero image generation only if POI has no primary image
-      if (destination?.id && !editedData.has_primary_image) {
-        setGeneratingHeroImage(true);
-        fetch('/api/admin/ai/generate-hero-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            poiId: destination.id,
-            poiName: editedData.name,
-            briefDescription: result.data.brief_description || editedData.brief_description,
-            historicalDescription: result.data.historical_description || editedData.historical_description,
-            era: result.data.era || editedData.era_name || ''
-          })
-        })
-          .then(res => res.ok ? res.json() : res.json().then(e => Promise.reject(new Error(e.error || 'Image generation failed'))))
-          .then(img => setHeroImageDraft(img))
-          .catch(err => setAiError(`Hero image: ${err.message}`))
-          .finally(() => setGeneratingHeroImage(false));
-      }
     } catch (err) {
       setAiError(err.message);
     } finally {
@@ -633,114 +602,8 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
     setEditedData(prev => ({ ...prev, ...updates }));
 
-    // Save hero image if one was generated
-    if (heroImageDraft && destination?.id) {
-      try {
-        setAcceptingHeroImage(true);
-        const response = await fetch('/api/admin/ai/accept-hero-image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({
-            poiId: destination.id,
-            imageData: heroImageDraft.imageData,
-            mimeType: heroImageDraft.mimeType
-          })
-        });
-
-        if (!response.ok) {
-          const error = await response.json();
-          setAiError(`Hero image save failed: ${error.error}`);
-        } else {
-          // Update local state so the edit page shows the new image
-          const now = new Date().toISOString();
-          setEditedData(prev => ({ ...prev, has_primary_image: true, updated_at: now }));
-        }
-      } catch (err) {
-        setAiError(`Hero image save failed: ${err.message}`);
-      } finally {
-        setAcceptingHeroImage(false);
-      }
-    }
-
     setShowDraftModal(false);
     setResearchDraft(null);
-    setHeroImageDraft(null);
-  };
-
-  // Generate hero image
-  const handleGenerateHeroImage = async () => {
-    setGeneratingHeroImage(true);
-    try {
-      const response = await fetch('/api/admin/ai/generate-hero-image', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          poiId: destination?.id,
-          poiName: editedData.name,
-          briefDescription: editedData.brief_description,
-          historicalDescription: editedData.historical_description,
-          era: editedData.era_name || researchDraft?.era || ''
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Image generation failed');
-      }
-
-      const result = await response.json();
-      setHeroImageDraft(result);
-    } catch (err) {
-      setAiError(err.message);
-    } finally {
-      setGeneratingHeroImage(false);
-    }
-  };
-
-  // Generate with the customized prompt
-  const handleGenerate = async () => {
-    setGenerating(true);
-    setAiError(null);
-
-    try {
-      const response = await fetch('/api/admin/ai/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          customPrompt: editablePrompt,
-          destination: editedData
-        })
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Generation failed');
-      }
-
-      const result = await response.json();
-
-      // Update the appropriate field based on prompt type
-      if (promptType === 'brief') {
-        setEditedData(prev => ({ ...prev, brief_description: result.generated_text }));
-      } else {
-        setEditedData(prev => ({ ...prev, historical_description: result.generated_text }));
-      }
-
-      setShowPromptEditor(false);
-    } catch (err) {
-      setAiError(err.message);
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleClosePromptEditor = () => {
-    setShowPromptEditor(false);
-    setEditablePrompt('');
-    setPromptType(null);
   };
 
   const handleChange = (field, value) => {
@@ -838,29 +701,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       </div>
 
       <div className="edit-section">
-        <label>
-          Brief Description
-          <button
-            className="prompt-edit-icon"
-            title="Edit & generate with AI prompt"
-            onClick={async () => {
-              try {
-                const resp = await fetch('/api/admin/ai/prompt-preview', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  credentials: 'include',
-                  body: JSON.stringify({ promptKey: 'gemini_prompt_brief', destination: editedData })
-                });
-                if (resp.ok) {
-                  const { interpolated } = await resp.json();
-                  setEditablePrompt(interpolated);
-                }
-              } catch { /* ignore */ }
-              setPromptType('brief');
-              setShowPromptEditor(true);
-            }}
-          >&#9998;</button>
-        </label>
+        <label>Overview</label>
         <textarea
           value={editedData.brief_description || ''}
           onChange={(e) => {
@@ -1208,43 +1049,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             </div>
             <p className="prompt-editor-hint">Review AI research results. Toggle fields to accept or skip.</p>
 
-            {destination?.id && (
-              <div className="draft-hero-section">
-                {generatingHeroImage && !heroImageDraft ? (
-                  <div className="draft-hero-generating">
-                    <div className="hero-generating-indicator">
-                      <div className="hero-spinner"></div>
-                      <span>Generating hero image...</span>
-                    </div>
-                  </div>
-                ) : heroImageDraft ? (
-                  <div className="draft-hero-preview">
-                    <div className="hero-image-preview">
-                      <img
-                        src={`data:${heroImageDraft.mimeType};base64,${heroImageDraft.imageData}`}
-                        alt="Generated hero image"
-                      />
-                    </div>
-                    <div className="draft-hero-actions">
-                      <button
-                        className="research-btn"
-                        onClick={() => { setHeroImageDraft(null); handleGenerateHeroImage(); }}
-                        disabled={generatingHeroImage}
-                      >
-                        {generatingHeroImage ? 'Generating...' : 'Regenerate'}
-                      </button>
-                      <button
-                        className="reject-btn"
-                        onClick={() => setHeroImageDraft(null)}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
             <div className="draft-fields">
               {[
                 { key: 'era_id', label: 'Era', display: researchDraft.era, short: true },
@@ -1289,11 +1093,11 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             </div>
 
             <div className="prompt-editor-buttons">
-              <button className="reject-btn" onClick={() => { setShowDraftModal(false); setResearchDraft(null); setHeroImageDraft(null); }}>
+              <button className="reject-btn" onClick={() => { setShowDraftModal(false); setResearchDraft(null); }}>
                 Reject
               </button>
-              <button className="research-btn" onClick={handleAcceptDraft} disabled={generatingHeroImage}>
-                {generatingHeroImage ? 'Waiting for image...' : 'Accept'}
+              <button className="research-btn" onClick={handleAcceptDraft}>
+                Accept
               </button>
             </div>
 
@@ -1315,57 +1119,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </div>
       )}
 
-      {showPromptEditor && (
-        <div className="prompt-editor-overlay" onClick={handleClosePromptEditor}>
-          <div className="prompt-editor-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="prompt-editor-header">
-              <h3>
-                {promptType === 'brief' ? 'Generate Brief Description' : 'Generate Historical Description'}
-              </h3>
-              <button className="close-btn" onClick={handleClosePromptEditor}>&times;</button>
-            </div>
-
-            <p className="prompt-editor-hint">
-              Review and customize the prompt below, then click Generate.
-            </p>
-
-            {loadingPrompt ? (
-              <div className="prompt-loading">Loading prompt template...</div>
-            ) : (
-              <>
-                <textarea
-                  className="prompt-editor-textarea"
-                  value={editablePrompt}
-                  onChange={(e) => setEditablePrompt(e.target.value)}
-                  rows={12}
-                  disabled={generating}
-                />
-
-                {aiError && (
-                  <div className="ai-error-inline">{aiError}</div>
-                )}
-
-                <div className="prompt-editor-buttons">
-                  <button
-                    className="cancel-btn"
-                    onClick={handleClosePromptEditor}
-                    disabled={generating}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="ai-generate-btn-large"
-                    onClick={handleGenerate}
-                    disabled={generating || !editablePrompt.trim()}
-                  >
-                    {generating ? 'Generating...' : 'Generate'}
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -3368,28 +3121,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             <div className="history-tab-content">
               {isEditing ? (
                 <div className="edit-section">
-                  <label>
-                    Historical Description
-                    <button
-                      className="prompt-edit-icon"
-                      title="Edit & generate with AI prompt"
-                      onClick={async () => {
-                        try {
-                          const resp = await fetch('/api/admin/ai/prompt-preview', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            credentials: 'include',
-                            body: JSON.stringify({ promptKey: 'gemini_prompt_historical', destination: editedData })
-                          });
-                          if (resp.ok) {
-                            const { interpolated } = await resp.json();
-                            setEditablePrompt(interpolated);
-                          }
-                        } catch { /* ignore */ }
-                        setPromptType('historical');
-                        setShowPromptEditor(true);
-                      }}
-                    >&#9998;</button>
+                  <label>Historical Description
                   </label>
                   <textarea
                     value={editedData.historical_description || ''}
@@ -3697,29 +3429,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           <div className="history-tab-content">
             {isEditing ? (
               <div className="edit-section">
-                <label>
-                  Historical Description
-                  <button
-                    className="prompt-edit-icon"
-                    title="Edit & generate with AI prompt"
-                    onClick={async () => {
-                      try {
-                        const resp = await fetch('/api/admin/ai/prompt-preview', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          credentials: 'include',
-                          body: JSON.stringify({ promptKey: 'gemini_prompt_historical', destination: editedData })
-                        });
-                        if (resp.ok) {
-                          const { interpolated } = await resp.json();
-                          setEditablePrompt(interpolated);
-                        }
-                      } catch { /* ignore */ }
-                      setPromptType('historical');
-                      setShowPromptEditor(true);
-                    }}
-                  >&#9998;</button>
-                </label>
+                <label>Historical Description</label>
                 <textarea
                   value={editedData.historical_description || ''}
                   onChange={(e) => {

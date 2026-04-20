@@ -4,7 +4,7 @@
  * when the initial URL is a homepage or index page.
  */
 
-import { extractPageContent } from './contentExtractor.js';
+import { renderPage } from './renderPage.js';
 import { calculateSimilarity, contentMatchesItem } from './textUtils.js';
 
 /**
@@ -45,19 +45,19 @@ export function isGenericUrl(url) {
  * @param {number} options.maxPages - Hard cap on Playwright renders (default 5)
  * @param {boolean} options.sameOriginOnly - Only follow same-origin links (default true)
  * @param {number} options.timeoutMs - Overall timeout in ms (default 60000)
- * @param {Function} options.extractor - Content extraction function (default: extractPageContent). Accepts (url, opts).
+ * @param {Function} options.extractor - Content extraction function (default: renderPage). Accepts (url, opts).
  * @param {Object} options.prefetched - Pre-rendered listing page data to skip Level 0 render
  * @param {string} options.prefetched.markdown - Page content as markdown
  * @param {Array} options.prefetched.links - Extracted links from the page
  * @returns {Promise<{foundUrl: string|null, foundContent: string|null, pagesChecked: number}>}
  */
-export async function deepCrawlForArticle(sourceUrl, item, options = {}) {
+export async function deepCrawlForArticle(pool, sourceUrl, item, options = {}) {
   const {
     maxDepth = 2,
     maxPages = 5,
     sameOriginOnly = true,
     timeoutMs = 60000,
-    extractor = extractPageContent,
+    extractor = (url, opts) => renderPage(pool, url, opts),
     prefetched = null
   } = options;
 

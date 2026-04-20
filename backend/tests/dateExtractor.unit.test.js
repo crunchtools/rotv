@@ -4,9 +4,7 @@
  *   extractUrlDate → normalizeDateSources → scoreDateConsensus (with LLM multi-vote)
  */
 import { describe, it, expect } from 'vitest';
-import { extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus, scoreDeterministicSources } from '../services/dateExtractor.js';
-
-// --- extractUrlDate ---
+import { extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus } from '../services/dateExtractor.js';
 
 describe('extractUrlDate', () => {
   it('extracts /YYYY/MM/DD/ from a WordPress-style URL', () => {
@@ -61,8 +59,6 @@ describe('extractUrlDate', () => {
   });
 });
 
-// --- normalizeDateSources ---
-
 describe('normalizeDateSources', () => {
   it('converts ISO strings unchanged', () => {
     const result = normalizeDateSources({ jsonLd: ['2024-03-15'], url: '2024-06-01' });
@@ -94,8 +90,6 @@ describe('normalizeDateSources', () => {
     expect(result).not.toHaveProperty('llm');
   });
 });
-
-// --- scoreLlmConsensus ---
 
 describe('scoreLlmConsensus', () => {
   it('scores 5/5 unanimous at 4 pts with no competing deterministic', () => {
@@ -175,8 +169,6 @@ describe('scoreLlmConsensus', () => {
   });
 });
 
-// --- scoreDateConsensus (combined) ---
-
 describe('scoreDateConsensus', () => {
   it('returns score 0 when no sources and no LLM', () => {
     const result = scoreDateConsensus({}, []);
@@ -222,9 +214,6 @@ describe('scoreDateConsensus', () => {
       { timeTags: ['2024-03-31', '2024-03-31', '2024-03-31'] },
       ['2024-04-05', '2024-04-05', '2024-04-05', '2024-04-05', '2024-04-05']
     );
-    // time-tags: 3 pts for 2024-03-31
-    // LLM unanimous for 2024-04-05 but competing = 3, so LLM score = 4-3 = 1
-    // 2024-03-31: 3 pts, 2024-04-05: 1 pt → 2024-03-31 wins
     expect(result.date).toBe('2024-03-31');
     expect(result.score).toBe(3);
   });
@@ -234,8 +223,6 @@ describe('scoreDateConsensus', () => {
       { timeTags: ['2024-03-15'] },
       ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-16', '2024-03-16']
     );
-    // time-tag: 1 pt for 2024-03-15
-    // LLM 3/5 majority for 2024-03-15: 1 pt
     expect(result.date).toBe('2024-03-15');
     expect(result.score).toBe(2);
   });
@@ -251,21 +238,16 @@ describe('scoreDateConsensus', () => {
   });
 });
 
-// --- Instagram URL normalization (tested via import from newsService) ---
-
 describe('normalizeRenderUrl', () => {
-  // Import dynamically to avoid pulling in all newsService dependencies
   let normalizeRenderUrl;
 
   it('loads normalizeRenderUrl', async () => {
-    // This is a pure function, safe to import directly
     const mod = await import('../services/newsService.js').catch(() => null);
     if (mod) normalizeRenderUrl = mod.normalizeRenderUrl;
-    // If import fails (due to deps), skip remaining tests
   });
 
   it('converts /reel/ to /p/', () => {
-    if (!normalizeRenderUrl) return; // skip if import failed
+    if (!normalizeRenderUrl) return;
     expect(normalizeRenderUrl('https://www.instagram.com/reel/DWkModtDZNH/')).toBe('https://www.instagram.com/p/DWkModtDZNH/');
   });
 

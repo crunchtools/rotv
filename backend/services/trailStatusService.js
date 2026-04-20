@@ -7,7 +7,7 @@
  */
 
 import { generateTextWithCustomPrompt } from './geminiService.js';
-import { extractPageContent } from './contentExtractor.js';
+import { renderPage } from './renderPage.js';
 import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
@@ -189,7 +189,8 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
         message: 'Rendering status page...',
         steps: ['Initialized', 'Rendering page']
       });
-      rendered = await extractPageContent(statusUrl, {
+      rendered = await renderPage(pool, statusUrl, {
+        pageType: 'trail_status',
         maxLength: 15000,
         dynamicContentWait: isTwitterUrl(statusUrl) ? 8000 : 3000,
         cookies

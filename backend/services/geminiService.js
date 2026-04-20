@@ -14,7 +14,6 @@ import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
 // Image generation model — separate because it requires image output modality support
-export const GEMINI_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image';
 
 // Default prompt templates - designed to avoid generic AI slop
 const DEFAULT_PROMPTS = {
@@ -615,92 +614,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   await flushJobLogs();
 
   return mergedResearch;
-}
-
-// ============================================================
-// Hero Image Generation (Issue #99)
-// ============================================================
-
-/**
- * Generate a hero image for a POI using Gemini image generation
- * @param {object} pool - Database pool
- * @param {object} poiData - { name, briefDescription, historicalDescription, era }
- * @returns {{ base64: string, mimeType: string, promptUsed: string }}
- */
-export async function generateHeroImage(pool, poiData) {
-  // Get API key
-  let apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    const apiKeyQuery = await pool.query(
-      "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
-    );
-    if (!apiKeyQuery.rows.length || !apiKeyQuery.rows[0].value) {
-      throw new Error('Gemini API key not configured.');
-    }
-    apiKey = apiKeyQuery.rows[0].value;
-  }
-
-  const prompt = `Generate a historical photograph of ${poiData.name} in the style of 1800s photography.
-
-CONTEXT:
-- Era: ${poiData.era || 'historical'}
-- Description: ${poiData.briefDescription || ''}
-- History: ${(poiData.historicalDescription || '').substring(0, 500)}
-
-STYLE REQUIREMENTS:
-- Sepia-toned or black-and-white photograph from the 1800s
-- Arcadia Publishing "Images of America" aesthetic
-- Period-appropriate architecture, vegetation, and atmosphere
-- Realistic photographic quality, not illustration
-- NO text, watermarks, or labels in the image
-- NO modern elements (cars, power lines, modern buildings)
-- Landscape orientation showing the location in its historical context`;
-
-  // Use REST API directly for image generation (SDK may not support image output modality)
-  // Fix: use x-goog-api-key header instead of URL query param to avoid key leakage in logs (PR #173 review)
-  const modelName = GEMINI_IMAGE_MODEL;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent`;
-
-  const abortController = new AbortController();
-  const timeoutId = setTimeout(() => abortController.abort(), 120000);
-
-  let response;
-  try {
-    response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      signal: abortController.signal,
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ['TEXT', 'IMAGE']
-        }
-      })
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('[Hero Image] Gemini API error:', errorText);
-    throw new Error(`Image generation failed: ${response.status}`);
-  }
-
-  const geminiResponse = await response.json();
-
-  const parts = geminiResponse.candidates?.[0]?.content?.parts || [];
-  const imagePart = parts.find(p => p.inlineData);
-
-  if (!imagePart) {
-    throw new Error('No image generated. The model may have refused the request.');
-  }
-
-  return {
-    base64: imagePart.inlineData.data,
-    mimeType: imagePart.inlineData.mimeType || 'image/png',
-    promptUsed: prompt
-  };
 }
 
 /**

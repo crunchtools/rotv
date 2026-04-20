@@ -136,22 +136,17 @@ export async function extractPageContent(url, options = {}) {
       const html = await page.content();
       const pageTitle = await page.title();
 
-      // Extract structured date metadata before Readability strips it.
-      // Collects from JSON-LD, OG/meta tags, and <time> elements — all inputs
-      // for the consensus date scoring pipeline in dateExtractor.js.
       const ogDates = await page.evaluate(() => {
-        // Meta tag helpers
         const getMeta = (prop) => document.querySelector(`meta[property="${prop}"]`)?.content || null;
         const getMetaName = (name) => document.querySelector(`meta[name="${name}"]`)?.content || null;
 
-        // JSON-LD: parse all ld+json blocks, collect date fields from any schema type
         const jsonLdDates = [];
         let eventStartDate = null;
         let eventEndDate = null;
         document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
           try {
-            const data = JSON.parse(script.textContent);
-            const items = Array.isArray(data) ? data : [data];
+            const jsonLd = JSON.parse(script.textContent);
+            const items = Array.isArray(jsonLd) ? jsonLd : [jsonLd];
             for (const item of items) {
               const candidates = [
                 item.datePublished,
@@ -161,7 +156,6 @@ export async function extractPageContent(url, options = {}) {
               ].flat().filter(Boolean);
               jsonLdDates.push(...candidates);
 
-              // Event-specific: extract startDate/endDate with full datetime precision
               if (!eventStartDate) {
                 eventStartDate = item.startDate
                   || item['@graph']?.find?.(n => n.startDate)?.startDate
@@ -176,7 +170,6 @@ export async function extractPageContent(url, options = {}) {
           } catch { /* ignore malformed JSON-LD */ }
         });
 
-        // <time> tags with datetime attribute
         const timeDates = [];
         document.querySelectorAll('time[datetime]').forEach(el => {
           const dt = el.getAttribute('datetime');
@@ -254,8 +247,6 @@ export async function extractPageContent(url, options = {}) {
 
       const dom = new JSDOM(html, { url });
 
-      // Extract raw body text before Readability strips date headings and page structure.
-      // Used by the event LLM date extractor which needs to see "April 22 @ 10:30 am".
       const rawDom = new JSDOM(html, { url });
       const rawBody = rawDom.window.document.body;
       for (const tag of ['script', 'style', 'nav']) {

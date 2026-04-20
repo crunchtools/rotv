@@ -24,7 +24,6 @@ function Mosaic({ media, allMedia, poiId, user, onMediaUpdate }) {
     setLightboxOpen(false);
   };
 
-  // Use media for mosaic display (already curated by API), allMedia for lightbox browsing
   const lightboxMedia = allMedia || media;
   const mosaicImages = media.slice(0, 3);
 

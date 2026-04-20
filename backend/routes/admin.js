@@ -53,7 +53,6 @@ import {
   bulkReject,
   editAndPublish,
   requeueItem,
-  researchItem,
   fixDate,
   createItem,
   purgeRejected,
@@ -688,80 +687,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: error.message });
       }
       res.status(500).json({ error: error.message || 'Failed to research location. Please try again.' });
-    }
-  });
-
-  // Generate hero image for a POI (Issue #99)
-  router.post('/ai/generate-hero-image', isAdmin, async (req, res) => {
-    const { poiId, poiName, briefDescription, historicalDescription, era } = req.body;
-
-    if (!poiName) {
-      return res.status(400).json({ error: 'POI name is required' });
-    }
-
-    try {
-      const { generateHeroImage } = await import('../services/geminiService.js');
-      const result = await generateHeroImage(pool, {
-        name: poiName,
-        briefDescription,
-        historicalDescription,
-        era
-      });
-
-      console.log(`Admin ${req.user.email} generated hero image for: ${poiName}`);
-      res.json({
-        imageData: result.base64,
-        mimeType: result.mimeType,
-        promptUsed: result.promptUsed
-      });
-    } catch (error) {
-      console.error('Error generating hero image:', error);
-      res.status(500).json({ error: error.message || 'Failed to generate hero image.' });
-    }
-  });
-
-  // Accept and save a generated hero image
-  router.post('/ai/accept-hero-image', isAdmin, async (req, res) => {
-    const { poiId, imageData, mimeType } = req.body;
-
-    // Fix: sanitize poiId to numeric to prevent path traversal (PR #173 review)
-    const sanitizedPoiId = parseInt(poiId, 10);
-    if (!sanitizedPoiId || !imageData) {
-      return res.status(400).json({ error: 'Valid numeric POI ID and image data are required' });
-    }
-
-    try {
-      const imageBuffer = Buffer.from(imageData, 'base64');
-      const mimeMap = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
-      const extension = mimeMap[mimeType] || 'png';
-      const filename = `hero-${sanitizedPoiId}-${Date.now()}.${extension}`;
-
-      // Delete existing primary asset before uploading (unique constraint on poi_id+role)
-      const existingPrimary = await imageServerClient.getPrimaryAsset(sanitizedPoiId);
-      if (existingPrimary) {
-        await imageServerClient.deleteAsset(existingPrimary.id);
-        console.log(`[Hero Image] Deleted old primary asset ${existingPrimary.id} for POI ${sanitizedPoiId}`);
-      }
-
-      const uploadResult = await imageServerClient.uploadImage(
-        imageBuffer, sanitizedPoiId, 'primary', filename, mimeType
-      );
-
-      if (!uploadResult.success) {
-        throw new Error(uploadResult.error || 'Upload failed');
-      }
-
-      // Flag that this POI has a primary image
-      await pool.query(
-        "UPDATE pois SET has_primary_image = TRUE, updated_at = NOW() WHERE id = $1",
-        [sanitizedPoiId]
-      );
-
-      console.log(`Admin ${req.user.email} accepted hero image for POI ${sanitizedPoiId}: asset ${uploadResult.assetId}`);
-      res.json({ success: true, assetId: uploadResult.assetId });
-    } catch (error) {
-      console.error('Error accepting hero image:', error);
-      res.status(500).json({ error: error.message || 'Failed to save hero image.' });
     }
   });
 
@@ -2855,7 +2780,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         await flushJobLogs();
 
         const saveLog = (msg) => { logInfo(runId, 'news_single', poi.id, poi.name, msg); };
-        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl, log: saveLog });
+        const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog });
         await flushJobLogs();
 
         updateProgress(poi.id, {
@@ -4102,24 +4027,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('Error requeuing item:', error);
       res.status(500).json({ error: 'Failed to requeue item' });
-    }
-  });
-
-  // Fix URL via AI web search, then requeue for moderation
-  router.post('/moderation/research', isAdmin, async (req, res) => {
-    try {
-      const { type, id } = req.body;
-      if (!type || !id) {
-        return res.status(400).json({ error: 'type and id are required' });
-      }
-      if (type === 'photo') {
-        return res.status(400).json({ error: 'Fix URL is not available for photos' });
-      }
-      const result = await researchItem(pool, type, id);
-      res.json({ success: true, ...result });
-    } catch (error) {
-      console.error('Error fixing URL:', error);
-      res.status(500).json({ error: error.message || 'Failed to fix URL' });
     }
   });
 

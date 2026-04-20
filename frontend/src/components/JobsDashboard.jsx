@@ -90,9 +90,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const [scheduleSaving, setScheduleSaving] = useState(false);
   const [triggeringJob, setTriggeringJob] = useState(null);
 
-  const [editingPrompt, setEditingPrompt] = useState(null);
-  const [promptInput, setPromptInput] = useState('');
-  const [promptSaving, setPromptSaving] = useState(false);
 
   const [jobHistory, setJobHistory] = useState({});
   const [jobHistoryLoading, setJobHistoryLoading] = useState({});
@@ -471,29 +468,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     finally { setCancellingJob(null); }
   };
 
-  const handleSavePrompt = async (key) => {
-    setPromptSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/prompts/${key}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: promptInput })
-      });
-      if (res.ok) { setEditingPrompt(null); await fetchScheduledJobs(); }
-    } catch (err) { console.error('Failed to save prompt:', err); }
-    finally { setPromptSaving(false); }
-  };
-
-  const handleResetPrompt = async (key) => {
-    setPromptSaving(true);
-    try {
-      const res = await fetch(`${API_BASE}/api/admin/prompts/${key}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ reset: true })
-      });
-      if (res.ok) { setEditingPrompt(null); await fetchScheduledJobs(); }
-    } catch (err) { console.error('Failed to reset prompt:', err); }
-    finally { setPromptSaving(false); }
-  };
 
   const renderLogDetails = (entry) => {
     if (!entry.details) return null;
@@ -748,46 +722,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                         style={{ marginTop: '8px', padding: '4px 12px', fontSize: '0.85rem' }}>
                         {triggeringJob === job.id ? 'Starting...' : 'Run Now'}
                       </button>
-                    )}
-
-                    {/* Prompt Template Editor */}
-                    {job.hasPrompt && job.prompts && job.prompts.length > 0 && (
-                      <div className="prompt-section">
-                        {job.prompts.map(p => (
-                          <div key={p.key} className="prompt-editor">
-                            <div className="prompt-header">
-                              <label>
-                                {p.label}
-                                <span style={{ marginLeft: '8px', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px',
-                                  backgroundColor: p.isCustomized ? '#fff3e0' : '#e8f5e9', color: p.isCustomized ? '#e65100' : '#2e7d32' }}>
-                                  {p.isCustomized ? 'Customized' : 'Using default'}
-                                </span>
-                              </label>
-                              <div className="prompt-actions">
-                                {editingPrompt === p.key ? (
-                                  <>
-                                    <button className="sync-btn-small" onClick={() => handleSavePrompt(p.key)} disabled={promptSaving}>Save</button>
-                                    <button className="sync-btn-small" onClick={() => setEditingPrompt(null)}>Cancel</button>
-                                    {p.isCustomized && <button className="sync-btn-small" onClick={() => handleResetPrompt(p.key)} disabled={promptSaving}>Reset to Default</button>}
-                                  </>
-                                ) : (
-                                  <>
-                                    <button className="sync-btn-small" onClick={() => { setEditingPrompt(p.key); setPromptInput(p.currentValue); }}>Edit</button>
-                                    {p.isCustomized && <button className="sync-btn-small" onClick={() => handleResetPrompt(p.key)} disabled={promptSaving}>Reset to Default</button>}
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            <textarea value={editingPrompt === p.key ? promptInput : p.currentValue} onChange={(e) => setPromptInput(e.target.value)}
-                              disabled={editingPrompt !== p.key} rows={8} className="prompt-textarea" />
-                            {p.placeholders && p.placeholders.length > 0 && (
-                              <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
-                                {p.placeholders.map(ph => <code key={ph} style={{ fontSize: '0.75rem', padding: '2px 6px', backgroundColor: '#f5f5f5', borderRadius: '3px', color: '#555' }}>{ph}</code>)}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
                     )}
 
                     {/* Recent Runs */}
