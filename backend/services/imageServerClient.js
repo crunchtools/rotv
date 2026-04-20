@@ -168,13 +168,14 @@ class ImageServerClient {
   /**
    * Fetch thumbnail data (for proxying to frontend)
    */
-  async fetchThumbnailData(assetId) {
+  async fetchThumbnailData(assetId, size) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
     }
 
     try {
-      const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/thumbnail`);
+      const sizeParam = size && ['small', 'medium', 'large'].includes(size) ? `?size=${size}` : '';
+      const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/thumbnail${sizeParam}`);
 
       if (!response.ok) {
         // Fix: Return detailed error status for better error handling (Gemini review)

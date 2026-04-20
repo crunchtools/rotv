@@ -987,6 +987,7 @@ app.get('/api/pois/:id/image', async (req, res) => {
 app.get('/api/pois/:id/thumbnail', async (req, res) => {
   try {
     const { id } = req.params;
+    const size = req.query.size; // small, medium, large — passed through to image server
 
     // Fix: Query poi_media table for primary image (Gatehouse finding)
     const result = await pool.query(`
@@ -1015,11 +1016,13 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
       return res.status(404).json({ error: 'Image not found' });
     }
 
+    const sizeParam = size && ['small', 'medium', 'large'].includes(size) ? `?size=${size}` : '';
+
     if (!imageServerClient.initialized) {
       // Development fallback: proxy from production asset endpoint when IMAGE_SERVER_URL not configured
       if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
         try {
-          const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail`;
+          const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail${sizeParam}`;
           const productionResponse = await fetch(productionUrl);
 
           if (!productionResponse.ok) {
@@ -1043,7 +1046,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const thumbnailResult = await imageServerClient.fetchThumbnailData(assetId);
+    const thumbnailResult = await imageServerClient.fetchThumbnailData(assetId, size);
     if (!thumbnailResult.success) {
       console.error(`[Thumbnail] Fetch failed for POI ${id}:`, thumbnailResult.error);
       return res.status(404).json({ error: 'Image not found' });
@@ -1132,7 +1135,8 @@ app.get('/api/pois/:id/media', async (req, res) => {
       } else {
         // Image or video from image server
         item.asset_id = media.image_server_asset_id;
-        item.thumbnail_url = `/api/assets/${media.image_server_asset_id}/thumbnail`;
+        item.thumbnail_url = `/api/assets/${media.image_server_asset_id}/thumbnail?size=small`;
+        item.medium_url = `/api/assets/${media.image_server_asset_id}/thumbnail?size=medium`;
         item.full_url = `/api/assets/${media.image_server_asset_id}/original`;
       }
 
@@ -1480,6 +1484,8 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
 app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) => {
   try {
     const { assetId } = req.params;
+    const size = req.query.size; // small, medium, large — passed through to image server
+    const sizeParam = size && ['small', 'medium', 'large'].includes(size) ? `?size=${size}` : '';
 
     // Fix: Validate assetId format to prevent SSRF (Gatehouse finding)
     if (!/^[a-zA-Z0-9_-]{1,100}$/.test(assetId)) {
@@ -1490,7 +1496,7 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
       // Development fallback: proxy from production when IMAGE_SERVER_URL not configured
       if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
         try {
-          const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail`;
+          const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail${sizeParam}`;
           const productionResponse = await fetch(productionUrl);
 
           if (!productionResponse.ok) {
@@ -1518,7 +1524,7 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
       return res.status(503).json({ error: 'Image service unavailable' });
     }
 
-    const result = await imageServerClient.fetchThumbnailData(assetId);
+    const result = await imageServerClient.fetchThumbnailData(assetId, size);
     if (!result.success) {
       // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
       // 404 = asset doesn't exist, 502/503 = image server down

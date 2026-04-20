@@ -201,9 +201,63 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
           </>
         )}
 
-        {/* Main Media */}
+        {/* Top bar: counter + thumbnail strip */}
+        <div className="lightbox-top-bar">
+          <div className="lightbox-counter">
+            {currentIndex + 1} / {media.length}
+          </div>
+          {media.length > 1 && (
+            <div className="lightbox-thumbnails">
+              {media.map((item, index) => (
+                <div
+                  key={item.id}
+                  className={`lightbox-thumbnail ${
+                    index === currentIndex ? 'active' : ''
+                  }`}
+                  onClick={() => setCurrentIndex(index)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setCurrentIndex(index);
+                    }
+                  }}
+                >
+                  <img
+                    src={item.thumbnail_url}
+                    alt={item.caption || `Thumbnail ${index + 1}`}
+                  />
+                  {item.media_type === 'video' && (
+                    <div className="thumbnail-video-indicator">▶</div>
+                  )}
+                  {item.media_type === 'youtube' && (
+                    <div className="thumbnail-youtube-indicator">YT</div>
+                  )}
+                  {item.moderation_status === 'pending' && (
+                    <div className="thumbnail-pending-indicator">⏱</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Main Media with badges overlaid */}
         <div className="lightbox-main">
           {renderMedia()}
+
+          {/* Badges positioned over the image */}
+          {currentMedia.moderation_status === 'pending' && (
+            <div className="lightbox-pending-badge">
+              ⏱ Pending Review
+            </div>
+          )}
+          {currentMedia.role === 'primary' && (
+            <div className="lightbox-primary-badge">
+              ⭐ Primary
+            </div>
+          )}
+
         </div>
 
         {/* Caption */}
@@ -213,105 +267,48 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
           </div>
         )}
 
-        {/* Pending indicator for user's own uploads */}
-        {currentMedia.moderation_status === 'pending' && (
-          <div className="lightbox-pending-badge">
-            ⏱ Pending Review
-          </div>
-        )}
-
-        {/* Primary image indicator */}
-        {currentMedia.role === 'primary' && (
-          <div className="lightbox-primary-badge">
-            ⭐ Primary Image
-          </div>
-        )}
-
-        {/* Counter */}
-        <div className="lightbox-counter">
-          {currentIndex + 1} / {media.length}
-        </div>
-
-        {/* Thumbnail Strip */}
-        {media.length > 1 && (
-          <div className="lightbox-thumbnails">
-            {media.map((item, index) => (
-              <div
-                key={item.id}
-                className={`lightbox-thumbnail ${
-                  index === currentIndex ? 'active' : ''
-                }`}
-                onClick={() => setCurrentIndex(index)}
-                role="button"
-                tabIndex={0}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    setCurrentIndex(index);
-                  }
-                }}
-              >
-                <img
-                  src={item.thumbnail_url}
-                  alt={item.caption || `Thumbnail ${index + 1}`}
-                />
-                {item.media_type === 'video' && (
-                  <div className="thumbnail-video-indicator">▶</div>
-                )}
-                {item.media_type === 'youtube' && (
-                  <div className="thumbnail-youtube-indicator">YT</div>
-                )}
-                {item.moderation_status === 'pending' && (
-                  <div className="thumbnail-pending-indicator">⏱</div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Set as Primary button for admins on non-primary published images */}
-        {user && (user.role === 'admin' || user.role === 'media_admin') &&
-         currentMedia.role !== 'primary' &&
-         ['published', 'auto_approved'].includes(currentMedia.moderation_status) && (
-          <button
-            className="lightbox-set-primary"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleSetPrimary();
-            }}
-            disabled={settingPrimary}
-            aria-label="Set as primary image"
-          >
-            {settingPrimary ? 'Setting...' : '⭐ Set as Primary'}
-          </button>
-        )}
-
-        {/* Delete button for user's own uploads or admins */}
-        {user && (currentMedia.uploaded_by_user || user.role === 'admin' || user.role === 'media_admin') && (
-          <button
-            className="lightbox-delete-media"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDelete();
-            }}
-            disabled={deleting}
-            aria-label="Delete this image"
-          >
-            {deleting ? 'Deleting...' : '🗑 Delete'}
-          </button>
-        )}
-
-        {/* Add Photo/Video button for authenticated users */}
+        {/* Bottom action bar */}
         {user && (
-          <button
-            className="lightbox-add-media"
-            onClick={(e) => {
-              e.stopPropagation();
-              setUploadModalOpen(true);
-            }}
-            aria-label="Add photo or video"
-          >
-            + Add Photo/Video
-          </button>
+          <div className="lightbox-bottom-bar">
+            {(currentMedia.uploaded_by_user || user.role === 'admin' || user.role === 'media_admin') && (
+              <button
+                className="lightbox-delete-media"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDelete();
+                }}
+                disabled={deleting}
+                aria-label="Delete this image"
+              >
+                {deleting ? 'Deleting...' : 'Delete'}
+              </button>
+            )}
+            {(user.role === 'admin' || user.role === 'media_admin') &&
+             currentMedia.role !== 'primary' &&
+             ['published', 'auto_approved'].includes(currentMedia.moderation_status) && (
+              <button
+                className="lightbox-set-primary"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSetPrimary();
+                }}
+                disabled={settingPrimary}
+                aria-label="Set as primary image"
+              >
+                {settingPrimary ? 'Setting...' : 'Set Primary'}
+              </button>
+            )}
+            <button
+              className="lightbox-add-media"
+              onClick={(e) => {
+                e.stopPropagation();
+                setUploadModalOpen(true);
+              }}
+              aria-label="Add photo or video"
+            >
+              Add Media
+            </button>
+          </div>
         )}
       </div>
 
