@@ -2780,7 +2780,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         await flushJobLogs();
 
         const saveLog = (msg) => { logInfo(runId, 'news_single', poi.id, poi.name, msg); };
-        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl, log: saveLog });
+        const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog });
         await flushJobLogs();
 
         updateProgress(poi.id, {

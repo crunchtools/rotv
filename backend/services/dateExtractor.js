@@ -312,16 +312,22 @@ export function scoreLlmConsensus(results, competingDeterministicPoints = 0) {
 export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
   const { scores, sourceMap } = scoreDeterministicSources(deterministicSources);
 
-  // Score LLM consensus with competing deterministic penalty
+  // Score LLM consensus with competing deterministic penalty.
+  // Only penalize when deterministic sources agree on a SINGLE competing date —
+  // if deterministic sources disagree with each other, the LLM breaks the tie.
   if (llmResults.length > 0) {
     const prelimLlm = scoreLlmConsensus(llmResults, 0);
 
     if (prelimLlm.date && prelimLlm.score > 0) {
-      // Sum deterministic points for dates that don't match the LLM consensus date
-      let competingPoints = 0;
+      // Net competing penalty: opposing deterministic points minus supporting ones.
+      // When the LLM corroborates a deterministic source, the support cancels out
+      // the opposition — the LLM breaks ties rather than getting silenced by them.
+      const supportingPoints = scores[prelimLlm.date] || 0;
+      let opposingPoints = 0;
       for (const [date, pts] of Object.entries(scores)) {
-        if (date !== prelimLlm.date) competingPoints += pts;
+        if (date !== prelimLlm.date) opposingPoints += pts;
       }
+      const competingPoints = Math.max(0, opposingPoints - supportingPoints);
 
       const llmVote = scoreLlmConsensus(llmResults, competingPoints);
       if (llmVote.date && llmVote.score > 0) {
@@ -337,9 +343,13 @@ export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
     return { date: null, score: 0, sourceMap: {} };
   }
 
-  // Pick highest score; break ties by choosing newest (event startDate > datePublished)
+  // Pick highest score; break ties by preferring LLM-supported date, then newest
   const bestDate = Object.keys(scores).reduce((a, b) => {
     if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
+    // Tie-break: prefer the date that has LLM support
+    const aHasLlm = (sourceMap[a] || []).some(s => s.startsWith('llm-'));
+    const bHasLlm = (sourceMap[b] || []).some(s => s.startsWith('llm-'));
+    if (aHasLlm !== bHasLlm) return aHasLlm ? a : b;
     return a > b ? a : b;
   });
 

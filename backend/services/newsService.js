@@ -1161,38 +1161,16 @@ function normalizeUrl(url) {
  * @param {number} poiId - POI ID
  * @param {Array} newsItems - Array of news items from AI summarization
  * @param {Object} options - Optional settings
- * @param {boolean} options.skipDateFilter - If true, allow news items older than 365 days
  */
 export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
-  const { skipDateFilter = false, log = null } = options;
-
-  // Calculate date strings (YYYY-MM-DD) to avoid timezone issues
-  const today = new Date();
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-  const oneYearAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 365);
-  const oneYearAgoStr = `${oneYearAgo.getFullYear()}-${String(oneYearAgo.getMonth() + 1).padStart(2, '0')}-${String(oneYearAgo.getDate()).padStart(2, '0')}`;
+  const { log = null } = options;
 
   for (const item of newsItems) {
     try {
       // Normalize dates via chrono-node — handles natural language, European format, partial dates
       item.published_date = parseDate(item.published_date) || null;
-
-      // Defense-in-depth: cap future news dates at today (primary cap is in processPage,
-      // but this catches any case where a future date slips through to saveNewsItems)
-      if (item.published_date && item.published_date > todayStr) {
-        if (log) log(`[Save] Capping future date ${item.published_date} → ${todayStr} for "${item.title}"`);
-        item.published_date = todayStr;
-      }
-
-      // Skip news older than 365 days (unless skipDateFilter is true)
-      if (!skipDateFilter && item.published_date && /^\d{4}-\d{2}-\d{2}$/.test(item.published_date)) {
-        if (item.published_date < oneYearAgoStr) {
-          if (log) log(`[Save] Skip old: "${item.title}" (${item.published_date} < ${oneYearAgoStr})`);
-          continue;
-        }
-      }
 
       // Resolve redirect URLs to final destination URLs
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;
@@ -1410,7 +1388,7 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
     try {
       console.log(`[${index + 1}/${pois.length}] Starting: ${poi.name} (${inFlight} in flight)`);
       const { news, events, metadata } = await collectPoi(pool, poi, sheets, timezone);
-      const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl });
+      const savedNews = await saveNewsItems(pool, poi.id, news);
       const savedEvents = await saveEventItems(pool, poi.id, events);
       console.log(`[${index + 1}/${pois.length}] ✓ ${poi.name}: ${savedNews} news, ${savedEvents} events`);
       results.push({ newsFound: savedNews, eventsFound: savedEvents, success: true, poiName: poi.name });
@@ -1615,7 +1593,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         const { news, events, metadata } = await collectPoi(pool, poi, sheets, 'America/New_York');
         tracker.updateProgress(poi.id, { phase: 'save', message: `${news.length} news, ${events.length} events` });
         const saveLog = (msg) => { logInfo(jobId, 'news', poi.id, poi.name, msg); };
-        const savedNews = await saveNewsItems(pool, poi.id, news, { skipDateFilter: metadata.usedDedicatedNewsUrl, log: saveLog });
+        const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog });
         const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog });
         logInfo(jobId, 'news', poi.id, poi.name, `[${index + 1}/${total}] ${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents });
 
