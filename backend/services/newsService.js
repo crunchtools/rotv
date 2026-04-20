@@ -718,8 +718,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
   const allNews = [];
   let usedDedicatedNewsUrl = false;
 
-  // Per-URL caps — each page gets its own Gemini call
-  const MAX_PHASE1_PAGES = 10;
   const MAX_PHASE2_PAGES = 5;
 
   // Read pipeline settings once — used by all phases
@@ -751,10 +749,10 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       });
       const crawlResult = await crawlPage(pool, eventsUrl, 'event', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
 
-      const pages = crawlResult.pages.slice(0, MAX_PHASE1_PAGES);
+      const pages = crawlResult.pages;
 
-      reportProgress(`Phase I: [Classify] ${crawlResult.pages.length} event pages found (${crawlResult.totalPagesRendered} rendered)`);
-      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${crawlResult.pages.length} event pages (${crawlResult.totalPagesRendered} rendered), processing ${pages.length} URLs`);
+      reportProgress(`Phase I: [Classify] ${pages.length} event pages found (${crawlResult.totalPagesRendered} rendered)`);
+      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${pages.length} event pages (${crawlResult.totalPagesRendered} rendered)`);
 
       const eventResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
@@ -783,12 +781,12 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       });
       const crawlResult = await crawlPage(pool, newsUrl, 'news', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
 
-      const pages = crawlResult.pages.slice(0, MAX_PHASE1_PAGES);
+      const pages = crawlResult.pages;
 
       if (pages.length > 0) usedDedicatedNewsUrl = true;
 
-      reportProgress(`Phase I: [Classify] ${crawlResult.pages.length} news pages found (${crawlResult.totalPagesRendered} rendered)`);
-      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${crawlResult.pages.length} news pages (${crawlResult.totalPagesRendered} rendered), processing ${pages.length} URLs`);
+      reportProgress(`Phase I: [Classify] ${pages.length} news pages found (${crawlResult.totalPagesRendered} rendered)`);
+      logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${pages.length} news pages (${crawlResult.totalPagesRendered} rendered)`);
 
       const newsResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
