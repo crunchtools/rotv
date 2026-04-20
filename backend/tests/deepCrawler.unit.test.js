@@ -102,6 +102,7 @@ describe('deepCrawlForArticle', () => {
     });
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com/news',
       { title: 'Brandywine Falls Trail Closure This Weekend' },
       { extractor }
@@ -129,6 +130,7 @@ describe('deepCrawlForArticle', () => {
     });
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com',
       { title: 'Brandywine Falls Trail Closure This Weekend' },
       { maxDepth: 1, maxPages: 3, extractor }
@@ -155,6 +157,7 @@ describe('deepCrawlForArticle', () => {
     });
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com',
       { title: 'Brandywine Falls Trail Closure' },
       { maxDepth: 1, maxPages: 3, extractor }
@@ -176,6 +179,7 @@ describe('deepCrawlForArticle', () => {
     });
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com',
       { title: 'Brandywine Falls Trail Closure' },
       { maxDepth: 1, maxPages: 3, sameOriginOnly: true, extractor }
@@ -204,6 +208,7 @@ describe('deepCrawlForArticle', () => {
     });
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com',
       { title: 'Brandywine Falls Trail Closure' },
       { maxDepth: 2, maxPages: 5, extractor }
@@ -228,6 +233,7 @@ describe('deepCrawlForArticle', () => {
     };
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com',
       { title: 'Brandywine Falls Trail Closure' },
       { maxDepth: 2, maxPages: 3, extractor }
@@ -249,6 +255,7 @@ describe('deepCrawlForArticle', () => {
     });
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com',
       { title: 'Brandywine Falls Trail Closure' },
       { maxDepth: 1, maxPages: 3, extractor }
@@ -260,6 +267,7 @@ describe('deepCrawlForArticle', () => {
 
   it('should handle invalid source URL', async () => {
     const result = await deepCrawlForArticle(
+      null,
       'not-a-url',
       { title: 'Test' }
     );
@@ -283,6 +291,7 @@ describe('deepCrawlForArticle', () => {
     };
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com',
       { title: 'Brandywine Falls Trail Closure This Weekend' },
       {
@@ -311,6 +320,7 @@ describe('deepCrawlForArticle', () => {
     };
 
     const result = await deepCrawlForArticle(
+      null,
       'https://example.com/article',
       { title: 'Brandywine Falls Trail Closure This Weekend' },
       {

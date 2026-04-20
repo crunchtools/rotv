@@ -5,7 +5,7 @@
  */
 
 import { moderateContent, moderatePhoto, generateTextWithCustomPrompt } from './geminiService.js';
-import { extractPageContent } from './contentExtractor.js';
+import { renderPage } from './renderPage.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
@@ -139,6 +139,7 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
   console.log(`[Moderation] ${contentType} #${contentId}: content not on source page, attempting deep crawl...`);
   try {
     const crawlResult = await deepCrawlForArticle(
+      pool,
       row.source_url,
       { title: row.title, summary },
       { maxDepth: 2, maxPages: 5, timeoutMs: 60000 }
@@ -300,7 +301,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
           if (row.source_url && isSafePublicUrl(row.source_url)) {
             try {
               const renderUrl = normalizeRenderUrl(row.source_url);
-              const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
+              const extracted = await renderPage(pool, renderUrl, { timeout: 30000, hardTimeout: 60000 });
               if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
                 pageContent = extracted.rawText || extracted.markdown;
                 ogDates = extracted.ogDates || {};
@@ -690,7 +691,7 @@ export async function fixDate(pool, contentType, contentId) {
     if (item.source_url && isSafePublicUrl(item.source_url)) {
       try {
         const renderUrl = normalizeRenderUrl(item.source_url);
-        const extracted = await extractPageContent(renderUrl, { timeout: 30000, hardTimeout: 60000 });
+        const extracted = await renderPage(pool, renderUrl, { timeout: 30000, hardTimeout: 60000 });
         if (extracted.reachable && extracted.markdown && extracted.markdown.length >= 200) {
           pageContent = extracted.rawText || extracted.markdown;
           ogDates = extracted.ogDates || {};

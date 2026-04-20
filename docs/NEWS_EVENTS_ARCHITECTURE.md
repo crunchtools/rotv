@@ -19,7 +19,7 @@ Every item produced by `[Summarize]` has `source_url` set to the URL that was re
 
 ### The Core Function: `processPage`
 
-Takes a pre-rendered page object (from `crawlWithClassification`), extracts dates, sends the content to Gemini, forces `source_url` on every returned item. No Playwright call — works entirely from saved content.
+Takes a pre-rendered page object (from `crawlPage`), extracts dates, sends the content to Gemini, forces `source_url` on every returned item. No Playwright call — works entirely from saved content.
 
 ```
 processPage(pool, page, poi, contentType, options)
@@ -31,8 +31,8 @@ processPage(pool, page, poi, contentType, options)
 
 Discovery (finding and rendering URLs) is separate from processing (dates + summarization):
 
-- **Phase I Discovery**: `crawlWithClassification` walks the POI's dedicated pages, classifying each as listing/detail/hybrid and following links. Returns fully-extracted page objects.
-- **Phase II Discovery**: Serper API returns search result URLs. Each is crawled via `crawlWithClassification` and returned as a page object.
+- **Phase I Discovery**: `crawlPage` walks the POI's dedicated pages, classifying each as listing/detail/hybrid and following links. Returns fully-extracted page objects.
+- **Phase II Discovery**: Serper API returns search result URLs. Each is crawled via `crawlPage` and returned as a page object.
 - **Processing**: Every discovered page goes through `processPage` — no re-rendering needed.
 
 ### The Stages
@@ -72,7 +72,7 @@ Content collection happens in two phases per POI. Logs always show `Phase I:` or
 
 If a POI has dedicated `events_url` or `news_url` configured:
 
-1. **Classify & Crawl** the dedicated page using `crawlWithClassification` — renders it, classifies as listing/detail/hybrid, follows links to detail pages. Each page is rendered once and the full extraction `{ url, markdown, rawText, ogDates, title }` is saved.
+1. **Classify & Crawl** the dedicated page using `crawlPage` — renders it, classifies as listing/detail/hybrid, follows links to detail pages. Each page is rendered once and the full extraction `{ url, markdown, rawText, ogDates, title }` is saved.
 2. If classifier finds detail pages, each gets `processPage` with 75% confidence — no re-rendering
 3. If classifier finds no detail pages, the listing URL itself gets `processPage` (fallback)
 4. Each `processPage` call: Dates → Summarize → force source_url (render already done)
@@ -86,7 +86,7 @@ POIs without dedicated URLs skip Phase I entirely and go straight to Phase II.
 After Phase I, the system searches for external news coverage:
 
 1. **Search** via Serper API for news about the POI
-2. For each Serper URL: crawl via `crawlWithClassification`, then `processPage` with 95% confidence
+2. For each Serper URL: crawl via `crawlPage`, then `processPage` with 95% confidence
 3. **Merge** with Phase I results, deduplicating by normalized title
 
 Phase II uses strict confidence thresholds (95%) because external sources may mention a POI tangentially without being truly relevant.

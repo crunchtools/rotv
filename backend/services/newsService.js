@@ -143,7 +143,7 @@ async function generateTextWithCustomPrompt(pool, prompt) {
   const text = await geminiGenerateText(pool, prompt);
   return { response: text, provider: 'gemini' };
 }
-import { extractPageContent } from './contentExtractor.js';
+import { renderPage, setCachePageType } from './renderPage.js';
 import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
@@ -456,7 +456,7 @@ async function runConcurrent(tasks, limit = 10, delayMs = 0) {
 
 /**
  * Process a pre-rendered page through dates + summarize (NO Playwright render).
- * Accepts a page object from crawlWithClassification that already has markdown, rawText, ogDates.
+ * Accepts a page object from crawlPage that already has markdown, rawText, ogDates.
  *
  * @param {Pool} pool - Database connection pool
  * @param {Object} page - Pre-extracted page { url, markdown, rawText, ogDates, title }
@@ -580,8 +580,8 @@ async function processPage(pool, page, poi, contentType, options = {}) {
  * @param {Object} options - Optional overrides
  * @returns {Object} - { pages: [{url, markdown, rawText, ogDates, title}], totalPagesRendered, totalDetailPages }
  */
-async function crawlWithClassification(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
-  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, extractor = extractPageContent, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
+async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
+  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
   const visited = new Set();
   let totalPagesRendered = 0;
   const collectedPages = []; // { url, markdown, rawText, ogDates, title }
@@ -610,15 +610,17 @@ async function crawlWithClassification(pool, startUrl, contentType, poi, sheets,
 
       updateProgress(poi.id, { phase: 'render', message: url });
       logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url} (depth=${depth}, page=${totalPagesRendered})`);
-      const extracted = await extractor(url, { timeout: 30000, hardTimeout: 60000, extractLinks: true });
+      const extracted = await renderPage(pool, url, { timeout: 30000, hardTimeout: 60000, extractLinks: true });
       if (!extracted.reachable || !extracted.markdown) {
-        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'no content'}`);
+        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'no content'}${extracted.cached ? ' (cached)' : ''}`);
         return;
       }
+      if (extracted.cached) logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Cache] Hit for ${url}`);
 
       updateProgress(poi.id, { phase: 'classify', message: url });
       const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets);
       logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
+      await setCachePageType(pool, url, classification.pageType);
 
       if (classification.pageType === 'detail') {
         collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title });
@@ -748,7 +750,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
         message: 'Analyzing events pages...',
         steps: ['Initialized', 'Classifying events pages']
       });
-      const crawlResult = await crawlWithClassification(pool, eventsUrl, 'event', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
+      const crawlResult = await crawlPage(pool, eventsUrl, 'event', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
 
       const pages = crawlResult.pages.slice(0, MAX_PHASE1_PAGES);
 
@@ -780,7 +782,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
         message: 'Analyzing news pages...',
         steps: ['Initialized', 'Classifying news pages']
       });
-      const crawlResult = await crawlWithClassification(pool, newsUrl, 'news', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
+      const crawlResult = await crawlPage(pool, newsUrl, 'news', poi, sheets, checkCancellation, { phase: 'Phase I', jobId, jobType });
 
       const pages = crawlResult.pages.slice(0, MAX_PHASE1_PAGES);
 
@@ -893,7 +895,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             // Classify each Serper URL — articles pass through as DETAIL (1 render),
             // listing pages get 1-level-deep link-following with tight caps
             reportProgress(`Phase II: [Classify] ${urlData.url}`);
-            const crawlResult = await crawlWithClassification(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
+            const crawlResult = await crawlPage(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
               maxDepth: 1,
               maxPages: 6,
               maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2PagesCollected),
@@ -980,7 +982,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             if (phase2EventPagesCollected >= MAX_PHASE2_PAGES) return [];
 
             reportProgress(`Phase II Events: [Classify] ${urlData.url}`);
-            const crawlResult = await crawlWithClassification(pool, urlData.url, 'event', poi, sheets, checkCancellation, {
+            const crawlResult = await crawlPage(pool, urlData.url, 'event', poi, sheets, checkCancellation, {
               maxDepth: 1,
               maxPages: 6,
               maxDetailPages: Math.min(5, MAX_PHASE2_PAGES - phase2EventPagesCollected),
