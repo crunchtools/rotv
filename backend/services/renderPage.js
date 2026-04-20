@@ -51,7 +51,7 @@ export async function renderPage(pool, url, options = {}) {
         cached: true
       };
     }
-  } catch { /* cache read failure — fall through to render */ }
+  } catch (err) { console.error('[Cache] Read failure:', err.message); }
 
   // Cache miss or stale — render with Playwright
   const result = await extractPageContent(url, extractOptions);
@@ -79,7 +79,7 @@ export async function renderPage(pool, url, options = {}) {
         JSON.stringify(result.links || []),
         pageType || null
       ]);
-    } catch { /* cache write failure — non-fatal */ }
+    } catch (err) { console.error('[Cache] Write failure:', err.message); }
   }
 
   return result;

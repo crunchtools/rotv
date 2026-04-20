@@ -288,7 +288,7 @@ B) DETAIL — describes a single ${contentType} with dates/descriptions/details
 
 PAGE URL: ${url}
 CONTENT (first 3000 chars):
-${markdown.substring(0, 3000)}
+${markdown.substring(0, 5000)}
 
 LINKS (${rankedLinks.length} most relevant, content links first):
 ${rankedLinks.map(l => `- "${(l.text || '').substring(0, 60)}" → ${l.url}`).join('\n')}
@@ -352,7 +352,7 @@ async function itemCount(pool, markdown, contentType) {
 For events, count recurring instances on different dates as separate events.
 
 PAGE CONTENT:
-${markdown.substring(0, 3000)}
+${markdown.substring(0, 5000)}
 
 Return ONLY: {"count": N}`;
 
@@ -469,7 +469,6 @@ async function processPage(pool, page, poi, contentType, options = {}) {
   const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', jobType = 'news' } = options;
   const url = page.url;
   const isEvent = contentType === 'event';
-  const dateMode = isEvent ? 'datetime' : 'date';
 
   // Skip pages with insufficient content
   if (!page.markdown || page.markdown.length < 200) {
