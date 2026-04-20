@@ -179,7 +179,7 @@ ENVFILE
             -p 2525:25 \
             $MCP_PORT_MAP \
             --tmpfs /run \
-            -v ~/.rotv/environment-dev:/etc/rotv/environment:ro,Z \
+            -v ~/.rotv/environment-dev:/etc/rotv/environment:ro \
             $STORAGE_MOUNT \
             $SEED_MOUNT \
             "$IMAGE_NAME"

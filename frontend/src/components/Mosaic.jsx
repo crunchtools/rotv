@@ -45,7 +45,7 @@ function Mosaic({ media, allMedia, poiId, user, onMediaUpdate }) {
             }}
           >
             <img
-              src={item.full_url || item.thumbnail_url}
+              src={item.medium_url || item.thumbnail_url}
               alt={item.caption || `POI image ${index + 1}`}
               className="mosaic-image"
             />

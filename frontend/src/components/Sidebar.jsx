@@ -3229,17 +3229,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             />
           ) : media.length > 0 ? (
             <Mosaic media={media} allMedia={allMedia} poiId={linearFeature?.id} user={user} onMediaUpdate={handleMediaUpdate} />
-          ) : !mediaLoading && linearFeature?.has_primary_image ? (
-            <div className="sidebar-image">
-              <img
-                src={`/api/pois/${linearFeature.id}/thumbnail?size=medium&v=${linearFeature.updated_at || Date.now()}`}
-                alt={linearFeature?.name}
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.parentElement.style.display = 'none';
-                }}
-              />
-            </div>
           ) : user && linearFeature?.id && !mediaLoading ? (
             <div className="sidebar-no-media">
               <button
@@ -3251,8 +3240,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             </div>
           ) : null}
 
-          {/* Navigation chevrons on image - mobile only */}
-          {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && (
+          {/* Navigation chevrons on image - mobile only, only when image is visible */}
+          {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
             <>
               {currentIndex > 0 && (
                 <button
@@ -3568,18 +3557,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           />
         ) : media.length > 0 ? (
           <Mosaic media={media} allMedia={allMedia} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
-        ) : !mediaLoading && destination?.has_primary_image ? (
-          <div className={`sidebar-image ${destination?.poi_roles?.includes('organization') ? 'virtual-thumbnail' : ''}`}>
-            <img
-              src={`/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`}
-              alt={destination?.name}
-              className={destination?.poi_roles?.includes('organization') ? 'logo-image' : ''}
-              onError={(e) => {
-                e.target.style.display = 'none';
-                e.target.parentElement.style.display = 'none';
-              }}
-            />
-          </div>
         ) : user && destination?.id && !mediaLoading ? (
           <div className="sidebar-no-media">
             <button
@@ -3591,8 +3568,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           </div>
         ) : null}
 
-        {/* Navigation chevrons on image - mobile only */}
-        {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && (
+        {/* Navigation chevrons on image - mobile only, only when image is visible */}
+        {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
           <>
             {currentIndex > 0 && (
               <button
