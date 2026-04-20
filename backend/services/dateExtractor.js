@@ -165,31 +165,28 @@ export function extractUrlDate(url) {
   let path;
   try { path = new URL(url).pathname; } catch { path = url; }
 
-  const validate = (y, m, d) => {
+  const validateDateParts = (y, m, d) => {
     const year = parseInt(y, 10), month = parseInt(m, 10), day = parseInt(d, 10);
     if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
     return `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
-  // Pattern 1: /YYYY/MM/DD/ or /YYYY/MM/DD at end of path
-  const match1 = path.match(/\/(\d{4})\/(\d{2})\/(\d{2})(?:\/|$)/);
-  if (match1) {
-    const result = validate(match1[1], match1[2], match1[3]);
-    if (result) return result;
+  const wpMatch = path.match(/\/(\d{4})\/(\d{2})\/(\d{2})(?:\/|$)/);
+  if (wpMatch) {
+    const isoDate = validateDateParts(wpMatch[1], wpMatch[2], wpMatch[3]);
+    if (isoDate) return isoDate;
   }
 
-  // Pattern 2: YYYYMMDD in path segment (e.g. /news/20250929-article-name)
-  const match2 = path.match(/\/(\d{4})(\d{2})(\d{2})[^\/\d]/);
-  if (match2) {
-    const result = validate(match2[1], match2[2], match2[3]);
-    if (result) return result;
+  const compactMatch = path.match(/\/(\d{4})(\d{2})(\d{2})[^\/\d]/);
+  if (compactMatch) {
+    const isoDate = validateDateParts(compactMatch[1], compactMatch[2], compactMatch[3]);
+    if (isoDate) return isoDate;
   }
 
-  // Pattern 3: /YYYY/MMDD (e.g. /release/2026/0109)
-  const match3 = path.match(/\/(\d{4})\/(\d{2})(\d{2})(?:\/|$)/);
-  if (match3) {
-    const result = validate(match3[1], match3[2], match3[3]);
-    if (result) return result;
+  const anprMatch = path.match(/\/(\d{4})\/(\d{2})(\d{2})(?:\/|$)/);
+  if (anprMatch) {
+    const isoDate = validateDateParts(anprMatch[1], anprMatch[2], anprMatch[3]);
+    if (isoDate) return isoDate;
   }
 
   return null;
@@ -211,10 +208,9 @@ export function extractUrlDate(url) {
 export function normalizeDateSources(rawSources = {}, timezone = 'America/New_York', mode = 'date') {
   const parser = mode === 'datetime' ? parseDateTime : parseDate;
   const norm = (raw) => {
-    const result = raw ? parser(String(raw), timezone) : null;
-    // Truncate to consistent precision: YYYY-MM-DD for dates, YYYY-MM-DDTHH:MM for datetimes
-    if (result && mode === 'datetime') return result.substring(0, 16);
-    return result;
+    const parsed = raw ? parser(String(raw), timezone) : null;
+    if (parsed && mode === 'datetime') return parsed.substring(0, 16);
+    return parsed;
   };
   const normList = (arr) => (arr || []).map(norm).filter(Boolean);
 
@@ -277,7 +273,6 @@ export function scoreDeterministicSources(sources = {}) {
 export function scoreLlmConsensus(results, competingDeterministicPoints = 0) {
   const votes = {};
   for (const r of results) {
-    // Accept both date (YYYY-MM-DD) and datetime (YYYY-MM-DDTHH:MM) formats
     if (r && /^\d{4}-\d{2}-\d{2}/.test(r)) {
       votes[r] = (votes[r] || 0) + 1;
     }
@@ -312,16 +307,11 @@ export function scoreLlmConsensus(results, competingDeterministicPoints = 0) {
 export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
   const { scores, sourceMap } = scoreDeterministicSources(deterministicSources);
 
-  // Score LLM consensus with competing deterministic penalty.
-  // Only penalize when deterministic sources agree on a SINGLE competing date —
-  // if deterministic sources disagree with each other, the LLM breaks the tie.
   if (llmResults.length > 0) {
     const prelimLlm = scoreLlmConsensus(llmResults, 0);
 
     if (prelimLlm.date && prelimLlm.score > 0) {
-      // Net competing penalty: opposing deterministic points minus supporting ones.
-      // When the LLM corroborates a deterministic source, the support cancels out
-      // the opposition — the LLM breaks ties rather than getting silenced by them.
+      // Net penalty: opposing minus supporting, so LLM breaks deterministic ties
       const supportingPoints = scores[prelimLlm.date] || 0;
       let opposingPoints = 0;
       for (const [date, pts] of Object.entries(scores)) {
@@ -343,10 +333,8 @@ export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
     return { date: null, score: 0, sourceMap: {} };
   }
 
-  // Pick highest score; break ties by preferring LLM-supported date, then newest
   const bestDate = Object.keys(scores).reduce((a, b) => {
     if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
-    // Tie-break: prefer the date that has LLM support
     const aHasLlm = (sourceMap[a] || []).some(s => s.startsWith('llm-'));
     const bHasLlm = (sourceMap[b] || []).some(s => s.startsWith('llm-'));
     if (aHasLlm !== bHasLlm) return aHasLlm ? a : b;

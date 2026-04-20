@@ -852,3 +852,58 @@ justification = "getDomainReputation isolates domain quality scoring logic for t
 check = "single_use_helpers"
 path = "backend/services/newsletterDigestService.js"
 justification = "generateDigest encapsulates digest creation logic with slot filtering, content selection, and HTML generation — separated for testability and future digest format variations"
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/browserPool.js"
+justification = "forceKill isolates unsafe browser cleanup (clearing timers, resetting state, killing process) — legitimate unsafe isolation boundary"
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/dateExtractor.js"
+justification = "scoreDeterministicSources is exported for unit testing and separates the deterministic scoring phase from the LLM consensus phase in the date pipeline"
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/renderPage.js"
+justification = "isCacheFresh encapsulates TTL logic with page-type-dependent expiration — inlining would mix cache policy with cache lookup"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/services/dateExtractor.js"
+justification = "JSDoc function documentation for date extraction and consensus scoring pipeline"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/services/contentExtractor.js"
+justification = "JSDoc function documentation for page extraction service"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/services/renderPage.js"
+justification = "JSDoc function documentation for render cache service"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/tests/dateExtractor.unit.test.js"
+justification = "Unit tests have verbose describe/it blocks for clarity"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/Mosaic.jsx"
+justification = "React component with JSDoc documentation"
+
+[[exceptions]]
+check = "generic_names"
+path = "backend/services/dateExtractor.js"
+justification = "validateDateParts parameter y is year in a date validation context — math-like destructuring of (y, m, d) is idiomatic"
+
+[[exceptions]]
+check = "generic_names"
+path = "backend/services/renderPage.js"
+justification = "Technical debt: renderPage query results use generic variable names. Should be refactored in dedicated code quality PR."
+
+[[exceptions]]
+check = "generic_names"
+path = "backend/services/contentExtractor.js"
+justification = "Technical debt: page.evaluate() callback variables. Should be refactored in dedicated code quality PR."

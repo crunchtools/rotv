@@ -32,7 +32,6 @@ function isCacheFresh(row) {
 export async function renderPage(pool, url, options = {}) {
   const { pageType, ...extractOptions } = options;
 
-  // Check cache
   try {
     const cached = await pool.query(
       'SELECT * FROM rendered_page_cache WHERE url = $1',
@@ -53,11 +52,9 @@ export async function renderPage(pool, url, options = {}) {
     }
   } catch (err) { console.error('[Cache] Read failure:', err.message); }
 
-  // Cache miss or stale — render with Playwright
-  const result = await extractPageContent(url, extractOptions);
+  const rendered = await extractPageContent(url, extractOptions);
 
-  // Save to cache if the page was reachable
-  if (result.reachable && result.markdown) {
+  if (rendered.reachable && rendered.markdown) {
     try {
       await pool.query(`
         INSERT INTO rendered_page_cache (url, markdown, raw_text, og_dates, title, links, page_type, rendered_at)
@@ -72,17 +69,17 @@ export async function renderPage(pool, url, options = {}) {
           rendered_at = NOW()
       `, [
         url,
-        result.markdown,
-        result.rawText || null,
-        JSON.stringify(result.ogDates || {}),
-        result.title || null,
-        JSON.stringify(result.links || []),
+        rendered.markdown,
+        rendered.rawText || null,
+        JSON.stringify(rendered.ogDates || {}),
+        rendered.title || null,
+        JSON.stringify(rendered.links || []),
         pageType || null
       ]);
     } catch (err) { console.error('[Cache] Write failure:', err.message); }
   }
 
-  return result;
+  return rendered;
 }
 
 /**
