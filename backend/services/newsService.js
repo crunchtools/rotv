@@ -355,21 +355,29 @@ For events, count recurring instances on different dates as separate events.
 PAGE CONTENT:
 ${markdown.substring(0, 5000)}
 
-Return ONLY: {"count": N}`;
+Respond with ONLY this JSON object, nothing else: {"count": N}`;
 
   const result = await generateTextWithCustomPrompt(pool, prompt);
   const text = (result.response || result || '').trim();
   logInfo(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Gemini response: ${text}`);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    logWarn(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] No JSON in response, defaulting to 1`);
-    return 1;
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const n = parseInt(parsed.count, 10);
+      if (Number.isFinite(n) && n >= 0) return n;
+    } catch { /* fall through to bare number check */ }
   }
-  try {
-    const parsed = JSON.parse(jsonMatch[0]);
-    const n = parseInt(parsed.count, 10);
-    return Number.isFinite(n) && n >= 0 ? n : 1;
-  } catch { return 1; }
+  const bareNumber = text.match(/\b(\d+)\b/);
+  if (bareNumber) {
+    const n = parseInt(bareNumber[1], 10);
+    if (Number.isFinite(n) && n > 0) {
+      logWarn(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Parsed bare number ${n} from non-JSON response`);
+      return n;
+    }
+  }
+  logWarn(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Could not parse count, defaulting to 1`);
+  return 1;
 }
 
 /**
@@ -761,7 +769,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
       const eventResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
-        return processPage(pool, page, poi, 'event', { phase: 'Phase I', jobId, jobType: 'collectionPhaseOne', timezone });
+        return processPage(pool, page, poi, 'event', { phase: 'Phase I', jobId, jobType, timezone });
       }), pageConcurrency, pageDelayMs);
       for (const items of eventResults) {
         if (items && !(items instanceof Error)) allEvents.push(...(items.events || []));
@@ -795,7 +803,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
       const newsResults = await runConcurrent(pages.map(page => () => {
         checkCancellation();
-        return processPage(pool, page, poi, 'news', { phase: 'Phase I', jobId, jobType: 'collectionPhaseOne', timezone });
+        return processPage(pool, page, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone });
       }), pageConcurrency, pageDelayMs);
       for (const items of newsResults) {
         if (items && !(items instanceof Error)) allNews.push(...(items.news || []));
