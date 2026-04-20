@@ -346,7 +346,8 @@ function filterDetailLinks(detailLinks, sourceUrl) {
  * @param {string} contentType - 'event' or 'news'
  * @returns {number} - Number of distinct items (0 if none found)
  */
-async function itemCount(pool, markdown, contentType) {
+async function itemCount(pool, markdown, contentType, logContext = {}) {
+  const { jobId = 0, jobType = 'news', poiId = null, poiName = '', phase = '' } = logContext;
   const typeLabel = contentType === 'event' ? 'events' : 'news articles';
   const prompt = `How many distinct ${typeLabel} are described on this page?
 For events, count recurring instances on different dates as separate events.
@@ -358,8 +359,12 @@ Return ONLY: {"count": N}`;
 
   const result = await generateTextWithCustomPrompt(pool, prompt);
   const text = (result.response || result || '').trim();
+  logInfo(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Gemini response: ${text}`);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return 1;
+  if (!jsonMatch) {
+    logWarn(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] No JSON in response, defaulting to 1`);
+    return 1;
+  }
   try {
     const parsed = JSON.parse(jsonMatch[0]);
     const n = parseInt(parsed.count, 10);
@@ -477,7 +482,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
   }
 
   // Count items on the page
-  const count = await itemCount(pool, page.markdown, contentType);
+  const count = await itemCount(pool, page.markdown, contentType, { jobId, jobType, poiId: poi.id, poiName: poi.name, phase });
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ItemCount] ${count} ${contentType}(s) on ${url}`);
   if (count === 0) return { news: [], events: [] };
 
