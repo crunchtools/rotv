@@ -993,8 +993,12 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
                     </>
                   )}
                   {!isPending && (
-                    <button onClick={() => handleRequeue(item.content_type, item.id)}
-                      style={actionBtn()}>Requeue</button>
+                    <>
+                      <button onClick={() => handleReject(item.content_type, item.id)}
+                        style={actionBtn()}>Reject</button>
+                      <button onClick={() => handleRequeue(item.content_type, item.id)}
+                        style={actionBtn()}>Requeue</button>
+                    </>
                   )}
                   {item.content_type !== 'photo' && (
                     <button onClick={() => handleFixDate(item.content_type, item.id)}
