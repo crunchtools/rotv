@@ -4,7 +4,7 @@
  *   extractUrlDate → normalizeDateSources → scoreDateConsensus (with LLM multi-vote)
  */
 import { describe, it, expect } from 'vitest';
-import { extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus } from '../services/dateExtractor.js';
+import { extractUrlDate, normalizeDateSources, scoreDateConsensus } from '../services/dateExtractor.js';
 
 describe('extractUrlDate', () => {
   it('extracts /YYYY/MM/DD/ from a WordPress-style URL', () => {
@@ -91,98 +91,20 @@ describe('normalizeDateSources', () => {
   });
 });
 
-describe('scoreLlmConsensus', () => {
-  it('scores 5/5 unanimous at 4 pts with no competing deterministic', () => {
-    const result = scoreLlmConsensus(
-      ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15'],
-      0
-    );
-    expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(4);
-    expect(result.label).toBe('llm-consensus');
-  });
-
-  it('subtracts competing deterministic points from unanimous score', () => {
-    const result = scoreLlmConsensus(
-      ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15'],
-      3  // e.g., 3 time-tags for a different date
-    );
-    expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(1);  // 4 - 3 = 1
-  });
-
-  it('floors at 0 when competing deterministic exceeds 4', () => {
-    const result = scoreLlmConsensus(
-      ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15'],
-      5
-    );
-    expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(0);
-  });
-
-  it('scores 4/5 majority at 1 pt', () => {
-    const result = scoreLlmConsensus(
-      ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15', '2024-03-16'],
-      0
-    );
-    expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(1);
-    expect(result.label).toBe('llm-majority');
-  });
-
-  it('scores 3/5 majority at 1 pt', () => {
-    const result = scoreLlmConsensus(
-      ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-16', '2024-03-17'],
-      0
-    );
-    expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(1);
-    expect(result.label).toBe('llm-majority');
-  });
-
-  it('scores 2/5 split at 0', () => {
-    const result = scoreLlmConsensus(
-      ['2024-03-15', '2024-03-15', '2024-03-16', '2024-03-16', '2024-03-17'],
-      0
-    );
-    expect(result.date).toBeNull();
-    expect(result.score).toBe(0);
-    expect(result.label).toBe('llm-split');
-  });
-
-  it('returns no-date when all results are null', () => {
-    const result = scoreLlmConsensus([null, null, null, null, null], 0);
-    expect(result.date).toBeNull();
-    expect(result.score).toBe(0);
-    expect(result.label).toBe('no-date');
-  });
-
-  it('handles mix of nulls and valid dates', () => {
-    const result = scoreLlmConsensus(
-      ['2024-03-15', null, '2024-03-15', null, '2024-03-15'],
-      0
-    );
-    // 3 out of 5 total, but 3/5 is majority
-    expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(1);
-    expect(result.label).toBe('llm-majority');
-  });
-});
-
 describe('scoreDateConsensus', () => {
-  it('returns score 0 when no sources and no LLM', () => {
+  it('returns null and score 0 when no sources and no LLM', () => {
     const result = scoreDateConsensus({}, []);
     expect(result.date).toBeNull();
     expect(result.score).toBe(0);
   });
 
-  it('scores JSON-LD alone at 4 pts (deterministic only)', () => {
+  it('scores JSON-LD alone at 4 pts', () => {
     const result = scoreDateConsensus({ jsonLd: ['2024-05-20'] }, []);
     expect(result.date).toBe('2024-05-20');
     expect(result.score).toBe(4);
   });
 
-  it('scores JSON-LD + URL at 5 pts', () => {
+  it('scores JSON-LD + matching URL at 5 pts', () => {
     const result = scoreDateConsensus({
       jsonLd: ['2024-03-15'],
       url: '2024-03-15'
@@ -191,50 +113,74 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(5);
   });
 
-  it('LLM consensus alone scores 4 pts (no deterministic sources)', () => {
+  it('5 unanimous LLM votes score 5 pts', () => {
     const result = scoreDateConsensus(
       {},
       ['2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01']
     );
     expect(result.date).toBe('2024-06-01');
-    expect(result.score).toBe(4);
+    expect(result.score).toBe(5);
   });
 
-  it('LLM consensus + agreeing JSON-LD scores 8 pts', () => {
+  it('LLM votes + agreeing JSON-LD scores 9 pts', () => {
     const result = scoreDateConsensus(
       { jsonLd: ['2024-06-01'] },
       ['2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01']
     );
     expect(result.date).toBe('2024-06-01');
-    expect(result.score).toBe(8);  // 4 (json-ld) + 4 (llm-consensus, no competing)
+    expect(result.score).toBe(9);  // 4 (json-ld) + 5 (llm votes)
   });
 
-  it('LLM consensus penalized when disagreeing with time-tags', () => {
+  it('LLM votes beat disagreeing time-tags when they have more points', () => {
     const result = scoreDateConsensus(
       { timeTags: ['2024-03-31', '2024-03-31', '2024-03-31'] },
       ['2024-04-05', '2024-04-05', '2024-04-05', '2024-04-05', '2024-04-05']
     );
-    expect(result.date).toBe('2024-03-31');
-    expect(result.score).toBe(3);
+    expect(result.date).toBe('2024-04-05');
+    expect(result.score).toBe(5);  // 5 LLM votes > 3 time-tags
   });
 
-  it('LLM majority adds 1 pt to matching date', () => {
+  it('LLM votes add to matching deterministic source', () => {
     const result = scoreDateConsensus(
       { timeTags: ['2024-03-15'] },
       ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-16', '2024-03-16']
     );
     expect(result.date).toBe('2024-03-15');
-    expect(result.score).toBe(2);
+    expect(result.score).toBe(4);  // 1 (time-tag) + 3 (llm votes)
   });
 
-  it('includes sourceMap with LLM consensus label', () => {
+  it('includes llm-vote in sourceMap', () => {
     const result = scoreDateConsensus(
       { jsonLd: ['2024-03-15'] },
       ['2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15', '2024-03-15']
     );
     expect(result.sourceMap['2024-03-15']).toContain('json-ld');
-    const llmLabel = result.sourceMap['2024-03-15'].find(l => l.startsWith('llm-consensus'));
-    expect(llmLabel).toBeTruthy();
+    expect(result.sourceMap['2024-03-15']).toContain('llm-vote');
+  });
+
+  it('ties return score 0 for moderation', () => {
+    const result = scoreDateConsensus({
+      jsonLd: ['2024-03-15', '2024-04-17']
+    }, []);
+    expect(result.score).toBe(0);  // 4 vs 4 — tie
+  });
+
+  it('LLM votes break JSON-LD ties', () => {
+    const result = scoreDateConsensus(
+      { jsonLd: ['2024-01-14', '2024-01-15', '2024-04-13', '2024-04-17'] },
+      ['2024-01-14', '2024-01-14', '2024-01-14', '2024-01-14', '2024-01-14']
+    );
+    expect(result.date).toBe('2024-01-14');
+    expect(result.score).toBe(9);  // 4 (json-ld) + 5 (llm votes)
+  });
+
+  it('handles all null LLM votes gracefully', () => {
+    const result = scoreDateConsensus(
+      { jsonLd: ['2024-05-20'] },
+      [null, null, null, null, null]
+    );
+    expect(result.date).toBe('2024-05-20');
+    expect(result.score).toBe(4);
   });
 });
 
@@ -318,7 +264,7 @@ describe('scoreDateConsensus with datetime strings', () => {
     expect(result.score).toBe(4);
   });
 
-  it('reaches threshold with JSON-LD + time tag (4+1=5)', () => {
+  it('JSON-LD + time tag scores 5 pts', () => {
     const result = scoreDateConsensus({
       jsonLd: ['2026-04-22T10:30'],
       timeTags: ['2026-04-22T10:30']
@@ -327,39 +273,39 @@ describe('scoreDateConsensus with datetime strings', () => {
     expect(result.score).toBe(5);
   });
 
-  it('accumulates score with unanimous LLM votes (JSON-LD 4 + time-tag 1 + LLM 4 = 9)', () => {
+  it('accumulates all sources (JSON-LD 4 + time-tag 1 + 5 LLM = 10)', () => {
     const votes = Array(5).fill('2026-04-22T10:30');
     const result = scoreDateConsensus({
       jsonLd: ['2026-04-22T10:30'],
       timeTags: ['2026-04-22T10:30']
     }, votes);
     expect(result.date).toBe('2026-04-22T10:30');
-    expect(result.score).toBe(9);
+    expect(result.score).toBe(10);
   });
 
-  it('picks highest-scoring datetime when LLM disagrees with JSON-LD', () => {
+  it('LLM votes beat single JSON-LD when they outnumber it', () => {
     const votes = Array(5).fill('2026-04-22T11:00');
     const result = scoreDateConsensus({
       jsonLd: ['2026-04-22T10:30']
     }, votes);
-    expect(result.date).toBe('2026-04-22T10:30');
-    expect(result.score).toBe(4);
+    expect(result.date).toBe('2026-04-22T11:00');
+    expect(result.score).toBe(5);
   });
 
-  it('breaks ties by choosing newest datetime', () => {
+  it('ties return score 0 for moderation', () => {
     const result = scoreDateConsensus({
       timeTags: ['2026-04-22T10:30'],
       url: '2026-04-22T14:00'
     });
-    expect(result.date).toBe('2026-04-22T14:00');
+    expect(result.score).toBe(0);  // 1 vs 1 — tie
   });
 
-  it('includes sourceMap with LLM consensus label', () => {
+  it('includes llm-vote in sourceMap', () => {
     const votes = Array(5).fill('2026-04-22T10:30');
     const result = scoreDateConsensus({
       jsonLd: ['2026-04-22T10:30']
     }, votes);
     expect(result.sourceMap['2026-04-22T10:30']).toContain('json-ld');
-    expect(result.sourceMap['2026-04-22T10:30'].some(s => s.includes('llm-consensus'))).toBe(true);
+    expect(result.sourceMap['2026-04-22T10:30']).toContain('llm-vote');
   });
 });

@@ -9,7 +9,7 @@
  */
 
 import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
-import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus, scoreLlmConsensus } from './dateExtractor.js';
+import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
 
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
