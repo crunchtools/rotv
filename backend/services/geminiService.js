@@ -248,9 +248,13 @@ export async function generateText(pool, promptKey, destination) {
 export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {
   const genAI = await createGeminiClient(pool);
 
+  const generationConfig = { temperature: 0.3 };
+  if (options.maxOutputTokens) generationConfig.maxOutputTokens = options.maxOutputTokens;
+  if (options.thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudget };
+
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL,
-    generationConfig: { temperature: 0.3 }
+    generationConfig
   });
 
   console.log(`Generating with custom prompt (${customPrompt.length} chars)`);

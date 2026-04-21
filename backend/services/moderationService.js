@@ -192,7 +192,7 @@ Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
 
   const results = await Promise.all(
     Array.from({ length: numVotes }, () =>
-      generateTextWithCustomPrompt(pool, prompt)
+      generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 128, thinkingBudget: 0 })
         .then(r => {
           const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
           try {

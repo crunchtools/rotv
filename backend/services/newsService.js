@@ -45,7 +45,7 @@ export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES, 
     const datePrompt = `Today's date is ${today}. Extract the event start and end date/time from this page. If no year is shown, assume the current year. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${snippet}`;
     const results = await Promise.all(
       Array.from({ length: numVotes }, () =>
-        generateTextWithCustomPrompt(pool, datePrompt)
+        generateTextWithCustomPrompt(pool, datePrompt, { maxOutputTokens: 128, thinkingBudget: 0 })
           .then(r => {
             const raw = (r.response || '').trim();
             try {
@@ -64,7 +64,7 @@ export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES, 
   const datePrompt = `Today's date is ${today}. Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${snippet}`;
   const results = await Promise.all(
     Array.from({ length: numVotes }, () =>
-      generateTextWithCustomPrompt(pool, datePrompt)
+      generateTextWithCustomPrompt(pool, datePrompt, { maxOutputTokens: 64, thinkingBudget: 0 })
         .then(r => {
           const raw = (r.response || '').trim().replace(/^["']|["']$/g, '');
           return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
@@ -138,9 +138,9 @@ export function getJobStats() {
 /**
  * Wrapper around geminiService that tracks usage and returns { response, provider }
  */
-async function generateTextWithCustomPrompt(pool, prompt) {
+async function generateTextWithCustomPrompt(pool, prompt, options = {}) {
   geminiCallCount++;
-  const text = await geminiGenerateText(pool, prompt);
+  const text = await geminiGenerateText(pool, prompt, options);
   return { response: text, provider: 'gemini' };
 }
 import { renderPage, setCachePageType } from './renderPage.js';
@@ -298,7 +298,7 @@ Return ONLY valid JSON:
 For LISTING: populate detail_links with URLs to individual ${contentType} pages (max 15).
 For DETAIL: detail_links should be empty.`;
 
-  const result = await generateTextWithCustomPrompt(pool, prompt);
+  const result = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 1024, thinkingBudget: 0 });
 
   // Parse JSON from response (handle markdown code blocks)
   const text = result.response || result;
@@ -357,7 +357,7 @@ ${markdown.substring(0, 5000)}
 
 Respond with ONLY this JSON object, nothing else: {"count": N}`;
 
-  const result = await generateTextWithCustomPrompt(pool, prompt);
+  const result = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 64, thinkingBudget: 0 });
   const text = (result.response || result || '').trim();
   logInfo(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Gemini response: ${text}`);
   const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -527,7 +527,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
       ? buildEventPrompt(poi, page.markdown, i, count)
       : buildNewsPrompt(poi, page.markdown);
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${contentType} ${i}/${count} from ${url}`);
-    const aiResult = await generateTextWithCustomPrompt(pool, prompt);
+    const aiResult = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 512, thinkingBudget: 0 });
     const text = (aiResult.response || aiResult || '').trim();
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (!jsonMatch) continue;
