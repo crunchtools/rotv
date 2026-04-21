@@ -231,7 +231,7 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
  *   HTML <time datetime>                — 1 pt  (structural HTML, usually reliable)
  *   URL path date                       — 1 pt  (static, never wrong when present)
  *
- * LLM scoring is handled separately by scoreLlmConsensus() and added after.
+ * LLM votes are tallied separately in scoreDateConsensus().
  *
  * @param {Object} sources - Normalized date strings by source (from normalizeDateSources)
  * @param {string[]} sources.jsonLd   - ISO dates from JSON-LD (weight 4 each)
@@ -261,44 +261,16 @@ export function scoreDeterministicSources(sources = {}) {
 }
 
 /**
- * Score LLM multi-vote consensus results.
- * 5/5 unanimous → 4 pts (minus competing deterministic points)
- * 3-4/5 majority → 1 pt
- * No majority   → 0 pts
+ * Combined consensus scoring: deterministic sources + LLM votes.
+ * Simple tally — each source adds points to a date, highest total wins.
+ * Ties return score 0 (routes to moderation).
  *
- * @param {(string|null)[]} results - Array of extracted date strings from N LLM calls
- * @param {number} competingDeterministicPoints - Sum of deterministic source points for dates != consensus date
- * @returns {{ date: string|null, score: number, label: string, votes: Object }}
- */
-export function scoreLlmConsensus(results, competingDeterministicPoints = 0) {
-  const votes = {};
-  for (const r of results) {
-    if (r && /^\d{4}-\d{2}-\d{2}/.test(r)) {
-      votes[r] = (votes[r] || 0) + 1;
-    }
-  }
-
-  if (Object.keys(votes).length === 0) {
-    return { date: null, score: 0, label: 'no-date', votes };
-  }
-
-  const total = results.length;
-  const bestDate = Object.keys(votes).reduce((a, b) => votes[a] >= votes[b] ? a : b);
-  const bestCount = votes[bestDate];
-
-  if (bestCount === total) {
-    const score = Math.max(0, 4 - competingDeterministicPoints);
-    return { date: bestDate, score, label: 'llm-consensus', votes };
-  } else if (bestCount > total / 2) {
-    return { date: bestDate, score: 1, label: 'llm-majority', votes };
-  } else {
-    return { date: null, score: 0, label: 'llm-split', votes };
-  }
-}
-
-/**
- * Combined consensus scoring: deterministic sources + LLM multi-vote.
- * Replaces the old scoreDateConsensus that included a single LLM vote at 2 pts.
+ * Points per source:
+ *   JSON-LD: 4 per occurrence
+ *   Meta tag: 1 per occurrence
+ *   Time tag: 1 per occurrence
+ *   URL date: 1
+ *   LLM vote: 1 per vote
  *
  * @param {Object} deterministicSources - From normalizeDateSources (without llm field)
  * @param {(string|null)[]} llmResults - Array of date strings from multi-vote LLM calls
@@ -307,25 +279,11 @@ export function scoreLlmConsensus(results, competingDeterministicPoints = 0) {
 export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
   const { scores, sourceMap } = scoreDeterministicSources(deterministicSources);
 
-  if (llmResults.length > 0) {
-    const prelimLlm = scoreLlmConsensus(llmResults, 0);
-
-    if (prelimLlm.date && prelimLlm.score > 0) {
-      // Net penalty: opposing minus supporting, so LLM breaks deterministic ties
-      const supportingPoints = scores[prelimLlm.date] || 0;
-      let opposingPoints = 0;
-      for (const [date, pts] of Object.entries(scores)) {
-        if (date !== prelimLlm.date) opposingPoints += pts;
-      }
-      const competingPoints = Math.max(0, opposingPoints - supportingPoints);
-
-      const llmVote = scoreLlmConsensus(llmResults, competingPoints);
-      if (llmVote.date && llmVote.score > 0) {
-        const label = `${llmVote.label}(${Math.max(...Object.values(llmVote.votes))}/${llmResults.length})`;
-        scores[llmVote.date] = (scores[llmVote.date] || 0) + llmVote.score;
-        if (!sourceMap[llmVote.date]) sourceMap[llmVote.date] = [];
-        sourceMap[llmVote.date].push(label);
-      }
+  for (const r of llmResults) {
+    if (r && /^\d{4}-\d{2}-\d{2}/.test(r)) {
+      scores[r] = (scores[r] || 0) + 1;
+      if (!sourceMap[r]) sourceMap[r] = [];
+      sourceMap[r].push('llm-vote');
     }
   }
 
@@ -333,15 +291,14 @@ export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
     return { date: null, score: 0, sourceMap: {} };
   }
 
-  const bestDate = Object.keys(scores).reduce((a, b) => {
-    if (scores[a] !== scores[b]) return scores[a] > scores[b] ? a : b;
-    const aHasLlm = (sourceMap[a] || []).some(s => s.startsWith('llm-'));
-    const bHasLlm = (sourceMap[b] || []).some(s => s.startsWith('llm-'));
-    if (aHasLlm !== bHasLlm) return aHasLlm ? a : b;
-    return a > b ? a : b;
-  });
+  const sorted = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+  const isTied = sorted.length > 1 && sorted[0][1] === sorted[1][1];
 
-  return { date: bestDate, score: scores[bestDate], sourceMap };
+  if (isTied) {
+    return { date: sorted[0][0], score: 0, sourceMap };
+  }
+
+  return { date: sorted[0][0], score: sorted[0][1], sourceMap };
 }
 
 /**
