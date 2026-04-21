@@ -360,12 +360,21 @@ Respond with ONLY this JSON object, nothing else: {"count": N}`;
   const result = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 64, thinkingBudget: 0 });
   const text = (result.response || result || '').trim();
   logInfo(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Gemini response: ${text}`);
+  const MAX_ITEM_COUNT = 20;
+  const clamp = (n) => {
+    if (n > MAX_ITEM_COUNT) {
+      logWarn(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Clamped ${n} to ${MAX_ITEM_COUNT}`);
+      return MAX_ITEM_COUNT;
+    }
+    return n;
+  };
+
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     try {
       const parsed = JSON.parse(jsonMatch[0]);
       const n = parseInt(parsed.count, 10);
-      if (Number.isFinite(n) && n >= 0) return n;
+      if (Number.isFinite(n) && n >= 0) return clamp(n);
     } catch { /* fall through to bare number check */ }
   }
   const bareNumber = text.match(/\b(\d+)\b/);
@@ -373,7 +382,7 @@ Respond with ONLY this JSON object, nothing else: {"count": N}`;
     const n = parseInt(bareNumber[1], 10);
     if (Number.isFinite(n) && n > 0) {
       logWarn(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Parsed bare number ${n} from non-JSON response`);
-      return n;
+      return clamp(n);
     }
   }
   logWarn(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Could not parse count, defaulting to 1`);
