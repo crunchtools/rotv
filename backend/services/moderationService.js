@@ -232,7 +232,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   if (contentType === 'news' || contentType === 'event') {
     const table = contentType === 'news' ? 'poi_news' : 'poi_events';
     const descField = contentType === 'news' ? 'summary' : 'description';
-    const extraFields = contentType === 'event' ? ', t.start_date, t.content_source' : '';
+    const extraFields = contentType === 'event' ? ', t.start_date, t.end_date, t.content_source' : '';
 
     const itemQuery = await pool.query(
       `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
@@ -363,6 +363,11 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // Reject news with future publication dates
     const isFutureDate = contentType === 'news' && newDate && new Date(newDate) > new Date();
 
+    // Reject events that have already ended (or started if no end_date)
+    const now = new Date();
+    const eventEndDate = contentType === 'event' && (row.end_date || row.start_date);
+    const isEventPast = contentType === 'event' && eventEndDate && new Date(eventEndDate) < now;
+
     let resolvedStatus;
     let reasoning;
     if (forceStatus) {
@@ -371,6 +376,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     } else if (isFutureDate) {
       resolvedStatus = 'rejected';
       reasoning = `Rejected: future publication date ${newDate}`;
+    } else if (isEventPast) {
+      resolvedStatus = 'rejected';
+      reasoning = `Rejected: event date ${eventEndDate} is in the past`;
     } else if (unanimousNo) {
       resolvedStatus = 'rejected';
       reasoning = `Rejected: relevance vote unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})`;
