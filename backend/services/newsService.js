@@ -898,10 +898,26 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             } catch { return false; }
           });
 
-          const urlsToProcess = externalUrls.slice(0, MAX_SEARCH_URLS);
+          const urlsToProcessRaw = externalUrls.slice(0, MAX_SEARCH_URLS);
           if (externalUrls.length > MAX_SEARCH_URLS) {
             logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
           }
+
+          // Skip URLs already present in poi_news (any POI) — avoid re-analyzing known content
+          const newsUrlCheck = await pool.query(
+            `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM poi_news
+             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)`,
+            [urlsToProcessRaw.map(u => u.url.toLowerCase().replace(/\/+$/, ''))]
+          );
+          const knownNewsUrls = new Set(newsUrlCheck.rows.map(r => r.url));
+          const urlsToProcess = urlsToProcessRaw.filter(u => {
+            const norm = u.url.toLowerCase().replace(/\/+$/, '');
+            if (knownNewsUrls.has(norm)) {
+              logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Skip] Already in DB: ${u.url}`);
+              return false;
+            }
+            return true;
+          });
 
           let renderedCount = 0;
           let phase2PagesCollected = 0;
@@ -991,7 +1007,23 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             } catch { return false; }
           });
 
-          const eventUrlsToProcess = externalEventUrls.slice(0, MAX_SEARCH_URLS);
+          const eventUrlsToProcessRaw = externalEventUrls.slice(0, MAX_SEARCH_URLS);
+
+          // Skip URLs already present in poi_events (any POI) — avoid re-analyzing known content
+          const eventUrlCheck = await pool.query(
+            `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM poi_events
+             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)`,
+            [eventUrlsToProcessRaw.map(u => u.url.toLowerCase().replace(/\/+$/, ''))]
+          );
+          const knownEventUrls = new Set(eventUrlCheck.rows.map(r => r.url));
+          const eventUrlsToProcess = eventUrlsToProcessRaw.filter(u => {
+            const norm = u.url.toLowerCase().replace(/\/+$/, '');
+            if (knownEventUrls.has(norm)) {
+              logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: [Skip] Already in DB: ${u.url}`);
+              return false;
+            }
+            return true;
+          });
 
           let renderedEventCount = 0;
           let phase2EventPagesCollected = 0;
@@ -1761,11 +1793,12 @@ export async function getAllPoisForCollection(pool) {
   const result = await pool.query(
     `SELECT id FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
+       AND poi_roles && ARRAY['point','organization','river']::text[]
        ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
      ORDER BY
        CASE
          WHEN 'point' = ANY(poi_roles) THEN 1
-         WHEN 'boundary' = ANY(poi_roles) THEN 2
+         WHEN 'organization' = ANY(poi_roles) THEN 2
          ELSE 3
        END,
        name`,
