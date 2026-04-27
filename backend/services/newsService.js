@@ -1761,11 +1761,12 @@ export async function getAllPoisForCollection(pool) {
   const result = await pool.query(
     `SELECT id FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
+       AND poi_roles && ARRAY['point','organization','river']::text[]
        ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
      ORDER BY
        CASE
          WHEN 'point' = ANY(poi_roles) THEN 1
-         WHEN 'boundary' = ANY(poi_roles) THEN 2
+         WHEN 'organization' = ANY(poi_roles) THEN 2
          ELSE 3
        END,
        name`,
