@@ -25,6 +25,7 @@ import {
   runNewsCollection,
   runBatchNewsCollection,
   createNewsCollectionJob,
+  getAllPoisForCollection,
   getNewsForPoi,
   getEventsForPoi,
   getRecentNews,
@@ -2574,20 +2575,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Get collectible POI IDs — same filter as scheduled collection
-      const poisResult = await pool.query(`
-        SELECT id FROM pois
-        WHERE (deleted IS NULL OR deleted = FALSE)
-          AND poi_roles && ARRAY['point','organization','river']::text[]
-        ORDER BY
-          CASE
-            WHEN 'point' = ANY(poi_roles) THEN 1
-            WHEN 'organization' = ANY(poi_roles) THEN 2
-            ELSE 3
-          END,
-          name
-      `);
-      const poiIds = poisResult.rows.map(p => p.id);
+      // Use the same function as the scheduled collection so filters stay in sync
+      const poiIds = await getAllPoisForCollection(pool);
 
       if (poiIds.length === 0) {
         return res.status(400).json({ error: 'No POIs found to process' });
