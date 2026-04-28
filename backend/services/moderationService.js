@@ -20,18 +20,24 @@ const TABLE_MAP = {
 const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
 
 /**
- * Determine domain reputation for quality filtering.
+ * Determine URL reputation for quality filtering.
+ * blocklistSet entries are URL prefixes (domain or domain+path), matched as startsWith.
+ * trustedSet entries are hostnames only.
  * @param {string} url - URL to check
- * @param {Set<string>} trustedSet - Set of trusted domains (lowercase)
- * @param {Set<string>} competitorSet - Set of competitor/scam domains (lowercase)
- * @returns {'trusted'|'competitor'|'unknown'}
+ * @param {Set<string>} trustedSet - Set of trusted domains (lowercase, hostname only)
+ * @param {Set<string>} blocklistSet - Set of blocklisted URL prefixes (lowercase)
+ * @returns {'trusted'|'blocklisted'|'unknown'}
  */
-export function getDomainReputation(url, trustedSet = new Set(), competitorSet = new Set()) {
+export function getDomainReputation(url, trustedSet = new Set(), blocklistSet = new Set()) {
   if (!url) return 'unknown';
   try {
-    const hostname = new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    const normalizedUrl = (hostname + parsed.pathname).toLowerCase().replace(/\/+$/, '');
     if (trustedSet.has(hostname)) return 'trusted';
-    if (competitorSet.has(hostname)) return 'competitor';
+    for (const entry of blocklistSet) {
+      if (normalizedUrl.startsWith(entry.replace(/^www\./, ''))) return 'blocklisted';
+    }
     return 'unknown';
   } catch {
     return 'unknown';
@@ -90,19 +96,19 @@ function extractDateFields(scoring) {
  * @param {string} sourceUrl - Source URL to validate
  * @param {Object} dateInfo - { publicationDate, dateConfidence }
  * @param {Set<string>} trustedSet - Set of trusted domains (lowercase)
- * @param {Set<string>} competitorSet - Set of competitor/scam domains (lowercase)
+ * @param {Set<string>} blocklistSet - Set of blocklisted domains/URLs (lowercase)
  * @returns {Object} Modified scoring object
  */
-export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = new Set(), competitorSet = new Set()) {
+export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = new Set(), blocklistSet = new Set()) {
   const { publicationDate, dateConfidence } = dateInfo;
 
   // Filter 1: Domain reputation
-  const reputation = getDomainReputation(sourceUrl, trustedSet, competitorSet);
-  if (reputation === 'competitor') {
+  const reputation = getDomainReputation(sourceUrl, trustedSet, blocklistSet);
+  if (reputation === 'blocklisted') {
     scoring.confidence_score *= 0.3;
-    scoring.reasoning += ' Source is a competitor aggregator site.';
+    scoring.reasoning += ' Source is on the blocklist.';
     if (!scoring.issues) scoring.issues = [];
-    scoring.issues.push('competitor_domain');
+    scoring.issues.push('blocklisted_domain');
   } else if (reputation === 'unknown') {
     scoring.confidence_score *= 0.9;
   }

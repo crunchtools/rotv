@@ -14,6 +14,7 @@ import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normali
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
 
+
 const LLM_DATE_VOTES = 5;
 
 /**
@@ -159,6 +160,7 @@ export class BrowserOverloadError extends Error {
   }
 }
 import { searchNewsUrls } from './serperService.js';
+import { getDomainReputation } from './moderationService.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -502,6 +504,11 @@ async function processPage(pool, page, poi, contentType, options = {}) {
   const count = await itemCount(pool, page.markdown, contentType, { jobId, jobType, poiId: poi.id, poiName: poi.name, phase });
   logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ItemCount] ${count} ${contentType}(s) on ${url}`);
   if (count === 0) return { news: [], events: [] };
+  // Absurd counts (>500) indicate a paginated listing total, not actual page items — skip entirely
+  if (count > 500) {
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ItemCount] Skip — absurd count (${count}) suggests pagination artifact: ${url}`);
+    return { news: [], events: [] };
+  }
 
   const od = page.ogDates || {};
   const pageText = page.rawText || page.markdown;
@@ -743,10 +750,16 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
   const MAX_PHASE2_PAGES = 5;
 
   // Read pipeline settings once — used by all phases
-  const [concurrencyRow, delayRow] = await Promise.all([
+  const [concurrencyRow, delayRow, blocklistRow] = await Promise.all([
     pool.query("SELECT value FROM admin_settings WHERE key = 'page_concurrency'"),
-    pool.query("SELECT value FROM admin_settings WHERE key = 'page_delay_ms'")
+    pool.query("SELECT value FROM admin_settings WHERE key = 'page_delay_ms'"),
+    pool.query("SELECT value FROM admin_settings WHERE key = 'blocklist_urls'")
   ]);
+  const blocklistSet = new Set(
+    blocklistRow.rows.length
+      ? (JSON.parse(blocklistRow.rows[0].value || '[]')).map(e => e.toLowerCase().replace(/^www\./, ''))
+      : []
+  );
   const pageConcurrency = (() => {
     if (!concurrencyRow.rows.length) return 3;
     const val = parseInt(concurrencyRow.rows[0].value, 10);
@@ -894,6 +907,10 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
                 logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Skip same-origin URL: ${urlData.url}`);
                 return false;
               }
+              if (getDomainReputation(urlData.url, new Set(), blocklistSet) === 'blocklisted') {
+                logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Blocklist] Skip: ${urlData.url}`);
+                return false;
+              }
               return true;
             } catch { return false; }
           });
@@ -903,16 +920,21 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
           }
 
-          // Skip URLs already present in poi_news (any POI) — avoid re-analyzing known content
+          // Skip URLs already present in poi_news (any POI) — avoid re-analyzing known content.
+          // Check both full URL and path-only (no query string) to catch rotating tokens/session params.
+          const normNewsUrl = u => u.url.toLowerCase().replace(/\/+$/, '');
+          const normNewsPath = u => { try { const p = new URL(u.url); return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, ''); } catch { return normNewsUrl(u); } };
           const newsUrlCheck = await pool.query(
             `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM poi_news
-             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)`,
-            [urlsToProcessRaw.map(u => u.url.toLowerCase().replace(/\/+$/, ''))]
+             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
+                OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`,
+            [urlsToProcessRaw.map(normNewsUrl), urlsToProcessRaw.map(normNewsPath)]
           );
           const knownNewsUrls = new Set(newsUrlCheck.rows.map(r => r.url));
           const urlsToProcess = urlsToProcessRaw.filter(u => {
-            const norm = u.url.toLowerCase().replace(/\/+$/, '');
-            if (knownNewsUrls.has(norm)) {
+            const norm = normNewsUrl(u);
+            const path = normNewsPath(u);
+            if (knownNewsUrls.has(norm) || knownNewsUrls.has(path)) {
               logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Skip] Already in DB: ${u.url}`);
               return false;
             }
@@ -1003,22 +1025,31 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
                 logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: Skip same-origin URL: ${urlData.url}`);
                 return false;
               }
+              if (getDomainReputation(urlData.url, new Set(), blocklistSet) === 'blocklisted') {
+                logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: [Blocklist] Skip: ${urlData.url}`);
+                return false;
+              }
               return true;
             } catch { return false; }
           });
 
           const eventUrlsToProcessRaw = externalEventUrls.slice(0, MAX_SEARCH_URLS);
 
-          // Skip URLs already present in poi_events (any POI) — avoid re-analyzing known content
+          // Skip URLs already present in poi_events (any POI) — avoid re-analyzing known content.
+          // Check both full URL and path-only (no query string) to catch rotating tokens/session params.
+          const normEventUrl = u => u.url.toLowerCase().replace(/\/+$/, '');
+          const normEventPath = u => { try { const p = new URL(u.url); return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, ''); } catch { return normEventUrl(u); } };
           const eventUrlCheck = await pool.query(
             `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM poi_events
-             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)`,
-            [eventUrlsToProcessRaw.map(u => u.url.toLowerCase().replace(/\/+$/, ''))]
+             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
+                OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`,
+            [eventUrlsToProcessRaw.map(normEventUrl), eventUrlsToProcessRaw.map(normEventPath)]
           );
           const knownEventUrls = new Set(eventUrlCheck.rows.map(r => r.url));
           const eventUrlsToProcess = eventUrlsToProcessRaw.filter(u => {
-            const norm = u.url.toLowerCase().replace(/\/+$/, '');
-            if (knownEventUrls.has(norm)) {
+            const norm = normEventUrl(u);
+            const path = normEventPath(u);
+            if (knownEventUrls.has(norm) || knownEventUrls.has(path)) {
               logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: [Skip] Already in DB: ${u.url}`);
               return false;
             }
