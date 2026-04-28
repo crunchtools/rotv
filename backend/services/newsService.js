@@ -188,7 +188,7 @@ export const updateProgress = (poiId, updates) => tracker.updateProgress(poiId, 
 export const getCollectionProgress = (poiId) => tracker.getCollectionProgress(poiId);
 export const clearProgress = (poiId) => tracker.clearProgress(poiId);
 export const getAllActiveProgress = () => tracker.getAllActiveProgress();
-export const initializeSlots = (jobId) => tracker.initializeSlots(jobId);
+export const initializeSlots = (jobId, count) => tracker.initializeSlots(jobId, count);
 export const getDisplaySlots = (jobId) => tracker.getDisplaySlots(jobId);
 export const requestCancellation = (poiId) => tracker.requestCancellation(poiId);
 export const isCancellationRequested = (poiId) => tracker.isCancellationRequested(poiId);
@@ -1406,6 +1406,13 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         continue;
       }
 
+      // start_date is NOT NULL in DB — skip events with no date (e.g. Wordfence block pages)
+      if (!item.start_date) {
+        if (log) log(`[Save] Skip event "${item.title}" — no start_date`);
+        duplicateCount++;
+        continue;
+      }
+
       // All new events enter as pending — moderation sweep handles relevance voting + promotion
       const dateScore = item.date_consensus_score || 0;
       await pool.query(`
@@ -1612,8 +1619,8 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   // Reset AI provider usage tracking for this job
   resetJobUsage();
 
-  // Initialize display slots for this job
-  initializeSlots(jobId);
+  // Initialize display slots for this job — match slot count to concurrency
+  initializeSlots(jobId, maxConcurrency);
 
   logInfo(jobId, 'news', null, null, `Job started: ${remainingPoiIds.length} POIs remaining`, { total: allPoiIds.length, already_done: processedPoiIds.length });
 
@@ -1669,7 +1676,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
           jobId: jid,
           completed: false
         });
-        logInfo(jobId, jobType, poi.id, poi.name, `Starting collection`, { slot: slotId });
+        logInfo(jobId, 'news', poi.id, poi.name, `Starting collection`, { slot: slotId });
       },
 
       collectFn: async (poi, { index, total }) => {

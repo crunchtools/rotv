@@ -41,6 +41,7 @@ import {
   clearProgress,
   updateProgress,
   requestCancellation,
+  getAllActiveProgress,
   getDisplaySlots as getNewsDisplaySlots
 } from '../services/newsService.js';
 import { submitBatchNewsJob, queueModerationJob, getJobScheduler, JOB_NAMES, updateSchedule } from '../services/jobScheduler.js';
@@ -2987,8 +2988,17 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       `, [jobId, JSON.stringify(currentUsage)]);
 
       if (result.rows.length > 0) {
-        console.log(`Admin ${req.user.email} cancelled batch job ${jobId}`);
-        res.json({ success: true, message: 'Job cancelled' });
+        // Signal cancellation to all in-flight POIs for this job
+        const active = getAllActiveProgress();
+        let signalled = 0;
+        for (const entry of active) {
+          if (entry.jobId === jobId) {
+            requestCancellation(entry.poiId);
+            signalled++;
+          }
+        }
+        console.log(`Admin ${req.user.email} cancelled batch job ${jobId} (signalled ${signalled} active POIs)`);
+        res.json({ success: true, message: `Job cancelled (${signalled} active POIs signalled)` });
       } else {
         res.json({ success: false, message: 'Job not found or not running' });
       }

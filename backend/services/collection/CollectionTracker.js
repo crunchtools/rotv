@@ -84,10 +84,10 @@ export class CollectionTracker {
   }
 
   /**
-   * Initialize 10 display slots for a job
+   * Initialize display slots for a job — count matches max concurrency
    */
-  initializeSlots(jobId) {
-    const slots = Array(10).fill(null).map((_, i) => ({
+  initializeSlots(jobId, count = 10) {
+    const slots = Array(count).fill(null).map((_, i) => ({
       slotId: i,
       poiId: null,
       poiName: null,
@@ -96,7 +96,7 @@ export class CollectionTracker {
       status: null
     }));
     this.jobDisplaySlots.set(jobId, slots);
-    console.log(`[${this.label} Job ${jobId}] Initialized 10 display slots`);
+    console.log(`[${this.label} Job ${jobId}] Initialized ${count} display slots`);
   }
 
   /**
@@ -156,19 +156,11 @@ export class CollectionTracker {
 
   /**
    * Get current display slots for a job
-   * Returns exactly 10 slots enriched with latest progress data
    */
   getDisplaySlots(jobId) {
     const slots = this.jobDisplaySlots.get(jobId);
     if (!slots) {
-      return Array(10).fill(null).map((_, i) => ({
-        slotId: i,
-        poiId: null,
-        poiName: null,
-        phase: null,
-        provider: null,
-        status: null
-      }));
+      return [];
     }
 
     return slots.map(slot => {
