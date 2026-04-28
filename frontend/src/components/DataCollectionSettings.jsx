@@ -414,11 +414,11 @@ function DataCollectionSettings() {
 
   const handleAddTrustedDomain = () => {
     const domain = newTrustedDomain.trim().toLowerCase();
-    // Basic domain validation: alphanumeric + dots + hyphens
-    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+    // URL prefix validation: domain optionally followed by a path (e.g., example.com or example.com/path/sub)
+    const urlPrefixRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(\/[a-z0-9._~:@!$&'()*+,;=%-]*)*$/;
     if (!domain) return;
-    if (!domainRegex.test(domain)) {
-      setResult({ type: 'error', message: 'Invalid domain format (e.g., example.com)' });
+    if (!urlPrefixRegex.test(domain)) {
+      setResult({ type: 'error', message: 'Invalid format (e.g., example.com or example.com/path)' });
       return;
     }
     if (!domainLists.trusted.includes(domain)) {
@@ -432,12 +432,12 @@ function DataCollectionSettings() {
   };
 
   const handleAddCompetitorDomain = () => {
-    const domain = newCompetitorDomain.trim().toLowerCase();
-    // Basic domain validation: alphanumeric + dots + hyphens
-    const domainRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
+    const domain = newCompetitorDomain.trim().toLowerCase().replace(/^https?:\/\//, '');
+    // URL prefix validation: domain optionally followed by a path (e.g., example.com or example.com/path/sub)
+    const urlPrefixRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(\/[a-z0-9._~:@!$&'()*+,;=%-]*)*$/;
     if (!domain) return;
-    if (!domainRegex.test(domain)) {
-      setResult({ type: 'error', message: 'Invalid domain format (e.g., example.com)' });
+    if (!urlPrefixRegex.test(domain)) {
+      setResult({ type: 'error', message: 'Invalid format (e.g., example.com or example.com/path)' });
       return;
     }
     if (!domainLists.competitor.includes(domain)) {
