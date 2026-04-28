@@ -824,7 +824,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
   const orderBy = status === 'approved'
-    ? 'ORDER BY COALESCE(publication_date, created_at::date) DESC, created_at DESC'
+    ? 'ORDER BY COALESCE(publication_date, created_at) DESC, created_at DESC'
     : 'ORDER BY created_at DESC';
   const wrappedQuery = `SELECT * FROM (${baseQuery}) AS q ${whereClause} ${orderBy} LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
   const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q ${whereClause}`;

@@ -579,6 +579,16 @@ async function processPage(pool, page, poi, contentType, options = {}) {
         sources: dateSources, timezone, llmVotes
       });
       item.published_date = consensus.date;
+      // If an OG tag provided a full UTC timestamp whose date matches consensus, preserve it
+      // so the frontend can display the correct local time instead of just a calendar date.
+      if (od.publishedTime && od.publishedTime.includes('T') && consensus.date) {
+        try {
+          const ogTs = new Date(od.publishedTime);
+          if (!isNaN(ogTs) && ogTs.toISOString().startsWith(consensus.date)) {
+            item.published_date = ogTs.toISOString();
+          }
+        } catch { /* keep consensus date */ }
+      }
       item.date_consensus_score = consensus.score;
       item.date_signals = consensus.rawSignals;
       logInfo(jobId, jobType, poi.id, poi.name,
@@ -1252,8 +1262,16 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 
   for (const item of newsItems) {
     try {
-      // Normalize dates via chrono-node — handles natural language, European format, partial dates
-      item.published_date = parseDate(item.published_date) || null;
+      // Normalize dates. Full ISO timestamps are preserved; bare dates are promoted to
+      // noon UTC (YYYY-MM-DDT12:00:00Z) so timezone conversion never shifts the calendar date.
+      if (item.published_date && item.published_date.includes('T')) {
+        // Already a full timestamp — keep as-is (validated below)
+        const ts = new Date(item.published_date);
+        item.published_date = isNaN(ts) ? null : ts.toISOString();
+      } else {
+        const d = parseDate(item.published_date);
+        item.published_date = d ? `${d}T12:00:00Z` : null;
+      }
 
       // Resolve redirect URLs to final destination URLs
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;
@@ -1894,7 +1912,7 @@ export async function getNewsForPoi(pool, poiId, limit = 10) {
     FROM poi_news
     WHERE poi_id = $1
       AND moderation_status IN ('published', 'auto_approved')
-    ORDER BY COALESCE(publication_date, collection_date::date) DESC
+    ORDER BY COALESCE(publication_date, collection_date) DESC
     LIMIT $2
   `, [poiId, limit]);
 
@@ -1937,7 +1955,7 @@ export async function getRecentNews(pool, limit = 20) {
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
-    ORDER BY COALESCE(n.publication_date, n.collection_date::date) DESC
+    ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
     LIMIT $1
   `, [limit]);
 

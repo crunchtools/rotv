@@ -1237,9 +1237,11 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
               </button>
             )}
           </div>
-          {item.publication_date && (
+          {(item.publication_date || item.collection_date) && (
             <div className="poi-event-date">
-              {formatPublicationDate(item.publication_date)}
+              {item.publication_date
+                ? formatPublicationDate(item.publication_date)
+                : new Date(item.collection_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}
             </div>
           )}
           {item.summary && <p className="poi-news-summary">{item.summary}</p>}
