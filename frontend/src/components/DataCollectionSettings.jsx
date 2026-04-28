@@ -372,15 +372,15 @@ function DataCollectionSettings() {
       if (response.ok) {
         const settings = await response.json();
         const trusted = settings.moderation_trusted_domains?.value || '[]';
-        const competitor = settings.moderation_competitor_domains?.value || '[]';
+        const blocklist = settings.blocklist_urls?.value || '[]';
         try {
           const parsedTrusted = JSON.parse(trusted);
-          const parsedCompetitor = JSON.parse(competitor);
+          const parsedBlocklist = JSON.parse(blocklist);
           setDomainLists({
             trusted: Array.isArray(parsedTrusted) ? parsedTrusted.filter(d => typeof d === 'string') : [],
-            competitor: Array.isArray(parsedCompetitor) ? parsedCompetitor.filter(d => typeof d === 'string') : []
+            competitor: Array.isArray(parsedBlocklist) ? parsedBlocklist.filter(d => typeof d === 'string') : []
           });
-          if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedCompetitor)) {
+          if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedBlocklist)) {
             setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
           }
         } catch (e) {
@@ -397,7 +397,7 @@ function DataCollectionSettings() {
     try {
       const settings = [
         { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
-        { key: 'moderation_competitor_domains', value: JSON.stringify(domainLists.competitor) }
+        { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) }
       ];
       // Note: N+1 pattern - acceptable for 2 settings, batch endpoint would be better for scale
       for (const setting of settings) {
@@ -932,7 +932,7 @@ function DataCollectionSettings() {
       {/* Quality Filter Domain Lists */}
       <div className="ai-config-section">
         <h4>Quality Filter Domain Lists</h4>
-        <p className="settings-description">Manage trusted and competitor domains for quality filtering in moderation.</p>
+        <p className="settings-description">Manage trusted domains and blocklist URLs for quality filtering in moderation and phase 2 collection.</p>
         {domainListsLoading ? <p>Loading domain lists...</p> : (
           <>
             <div style={{ marginBottom: '1.5rem' }}>
@@ -979,7 +979,7 @@ function DataCollectionSettings() {
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
-              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#dc3545' }}>Competitor/Scam Domains</h5>
+              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#dc3545' }}>Blocklist URLs</h5>
               <p className="config-hint" style={{ marginBottom: '0.75rem' }}>These domains receive a severe penalty (×0.3 confidence score).</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 {domainLists.competitor.map(domain => (

@@ -482,7 +482,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'max_search_urls',
       'page_concurrency',
       'page_delay_ms',
-      'news_collection_excluded_pois'
+      'news_collection_excluded_pois',
+      'blocklist_urls',
+      'moderation_trusted_domains'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });

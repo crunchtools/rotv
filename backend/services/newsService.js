@@ -14,16 +14,6 @@ import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normali
 // Gemini call counter for job usage stats
 let geminiCallCount = 0;
 
-// URL blocklist — domains/paths that Serper returns frequently but never produce useful content.
-// Checked before any Gemini calls fire in phase 2.
-const PHASE2_URL_BLOCKLIST = [
-  /nps\.gov\/[a-z]+\/planyourvisit\/(safety|weather|accessibility|fees|permits|directions|maps)/i,
-  /myvscloud\.com\/webtrac\//i,  // Cleveland Metroparks registration/activity portal (CSRF tokens, no useful content)
-];
-
-function isBlocklistedUrl(url) {
-  return PHASE2_URL_BLOCKLIST.some(pattern => pattern.test(url));
-}
 
 const LLM_DATE_VOTES = 5;
 
@@ -170,6 +160,7 @@ export class BrowserOverloadError extends Error {
   }
 }
 import { searchNewsUrls } from './serperService.js';
+import { getDomainReputation } from './moderationService.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -759,10 +750,16 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
   const MAX_PHASE2_PAGES = 5;
 
   // Read pipeline settings once — used by all phases
-  const [concurrencyRow, delayRow] = await Promise.all([
+  const [concurrencyRow, delayRow, blocklistRow] = await Promise.all([
     pool.query("SELECT value FROM admin_settings WHERE key = 'page_concurrency'"),
-    pool.query("SELECT value FROM admin_settings WHERE key = 'page_delay_ms'")
+    pool.query("SELECT value FROM admin_settings WHERE key = 'page_delay_ms'"),
+    pool.query("SELECT value FROM admin_settings WHERE key = 'blocklist_urls'")
   ]);
+  const blocklistSet = new Set(
+    blocklistRow.rows.length
+      ? (JSON.parse(blocklistRow.rows[0].value || '[]')).map(e => e.toLowerCase().replace(/^www\./, ''))
+      : []
+  );
   const pageConcurrency = (() => {
     if (!concurrencyRow.rows.length) return 3;
     const val = parseInt(concurrencyRow.rows[0].value, 10);
@@ -910,7 +907,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
                 logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Skip same-origin URL: ${urlData.url}`);
                 return false;
               }
-              if (isBlocklistedUrl(urlData.url)) {
+              if (getDomainReputation(urlData.url, new Set(), blocklistSet) === 'blocklisted') {
                 logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Blocklist] Skip: ${urlData.url}`);
                 return false;
               }
@@ -1028,7 +1025,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
                 logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: Skip same-origin URL: ${urlData.url}`);
                 return false;
               }
-              if (isBlocklistedUrl(urlData.url)) {
+              if (getDomainReputation(urlData.url, new Set(), blocklistSet) === 'blocklisted') {
                 logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: [Blocklist] Skip: ${urlData.url}`);
                 return false;
               }
