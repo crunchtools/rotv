@@ -1619,9 +1619,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   // Reset AI provider usage tracking for this job
   resetJobUsage();
 
-  // Initialize display slots for this job — match slot count to concurrency
-  initializeSlots(jobId, maxConcurrency);
-
   logInfo(jobId, 'news', null, null, `Job started: ${remainingPoiIds.length} POIs remaining`, { total: allPoiIds.length, already_done: processedPoiIds.length });
 
   // Get POI details for remaining POIs
@@ -1646,6 +1643,9 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     const val = parseInt(concurrencyResult.rows[0].value, 10);
     return Number.isFinite(val) ? Math.min(50, Math.max(1, val)) : MAX_CONCURRENCY;
   })();
+
+  // Initialize display slots — must be after maxConcurrency is resolved
+  initializeSlots(jobId, maxConcurrency);
 
   try {
     const { results: batchResults, cancelled: jobCancelled } = await runBatch({
