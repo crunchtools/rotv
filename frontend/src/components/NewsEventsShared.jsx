@@ -37,19 +37,21 @@ export function formatDateWithWeekday(dateString) {
 }
 
 /**
- * Format a date-only string (YYYY-MM-DD) for display, avoiding timezone shift.
- * Uses UTC to prevent off-by-one day for users west of UTC.
- * @param {string} dateString - YYYY-MM-DD date string
+ * Format a publication date for display in Eastern time.
+ * Date-only values are stored as noon UTC so Eastern conversion never shifts the date.
+ * Full UTC timestamps (e.g., from Facebook OG tags) display the correct local date.
+ * @param {string} dateString - ISO timestamp or YYYY-MM-DD
  * @returns {string} - Formatted date (e.g., "Mar 15, 2025")
  */
 export function formatPublicationDate(dateString) {
   if (!dateString) return '';
-  // Handle both YYYY-MM-DD and full ISO timestamps (e.g., 2026-03-27T00:00:00.000Z)
-  const str = String(dateString);
-  const date = str.includes('T') ? new Date(str) : new Date(str + 'T00:00:00Z');
+  const str = String(dateString).trim();
+  // Full datetime: contains 'T' or a space after the date part (PostgreSQL format)
+  const isFullTimestamp = str.includes('T') || /^\d{4}-\d{2}-\d{2} /.test(str);
+  const date = isFullTimestamp ? new Date(str) : new Date(str + 'T12:00:00Z');
   if (isNaN(date.getTime())) return '';
   return date.toLocaleDateString('en-US', {
-    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
+    year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York'
   });
 }
 
@@ -147,7 +149,13 @@ export function NewsItemCard({ item, onDelete, deleting, isAdmin }) {
       <div className="item-card-meta">
         {item.poi_name && <span className="item-card-poi">{item.poi_name}</span>}
         {item.source_name && <span className="item-card-source">{item.source_name}</span>}
-        {item.publication_date && <span className="item-card-date">{formatPublicationDate(item.publication_date)}</span>}
+        {(item.publication_date || item.collection_date) && (
+          <span className="item-card-date">
+            {item.publication_date
+              ? formatPublicationDate(item.publication_date)
+              : new Date(item.collection_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}
+          </span>
+        )}
         {item.source_url && (
           <a
             href={item.source_url}
@@ -197,14 +205,14 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
             // Same-day event with times: "Sun, Apr 19, 2026, 10:30 AM – 12:00 PM"
             const startDate = new Date(startStr);
             const dateLabel = startDate.toLocaleDateString('en-US', {
-              weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC'
+              weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York'
             });
             const startTime = startDate.toLocaleTimeString('en-US', {
-              hour: 'numeric', minute: '2-digit', timeZone: 'UTC'
+              hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
             });
             if (endHasTime) {
               const endTime = new Date(endStr).toLocaleTimeString('en-US', {
-                hour: 'numeric', minute: '2-digit', timeZone: 'UTC'
+                hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
               });
               return `${dateLabel}, ${startTime} – ${endTime}`;
             }
@@ -249,11 +257,11 @@ export function formatEventDateRange(startDate, endDate) {
   const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
   const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
   const sameDay = endDateOnly === startDateOnly;
-  const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });
+  const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
 
   if (sameDay && startHasTime) {
     const d = new Date(startStr);
-    const dateLabel = d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const dateLabel = d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
     const startTime = fmtTime(startStr);
     if (endHasTime) return `${dateLabel}, ${startTime} – ${fmtTime(endStr)}`;
     return `${dateLabel}, ${startTime}`;
@@ -298,7 +306,13 @@ export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
       {summary && <p className="park-news-summary">{summary}</p>}
       <div className="park-news-meta">
         {item.source_name && <span className="news-source">{item.source_name}</span>}
-        {item.publication_date && <span className="news-date">{formatPublicationDate(item.publication_date)}</span>}
+        {(item.publication_date || item.collection_date) && (
+          <span className="news-date">
+            {item.publication_date
+              ? formatPublicationDate(item.publication_date)
+              : new Date(item.collection_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}
+          </span>
+        )}
         {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
           <span className="news-sources-group">
             <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">Source</a>

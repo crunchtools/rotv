@@ -1961,7 +1961,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
         AND n.moderation_status IN ('published', 'auto_approved')
       GROUP BY n.id
       ORDER BY
-        COALESCE(n.publication_date, n.collection_date::date) DESC,
+        COALESCE(n.publication_date, n.collection_date) DESC,
         n.collection_date DESC
       LIMIT $2
     `, [id, limit]);
@@ -2152,7 +2152,7 @@ app.get('/api/news/recent', async (req, res) => {
       WHERE n.moderation_status IN ('published', 'auto_approved')
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY n.id, p.id, p.name, p.poi_roles
-      ORDER BY COALESCE(n.publication_date, n.collection_date::date) DESC, n.collection_date DESC
+      ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.collection_date DESC
       LIMIT $1
     `, [limit]);
     res.json(recentNewsQuery.rows);

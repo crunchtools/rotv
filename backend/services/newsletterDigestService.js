@@ -26,8 +26,8 @@ export async function generateDigest(pool) {
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
-      AND COALESCE(n.publication_date, n.collection_date::date) > NOW() - INTERVAL '7 days'
-    ORDER BY COALESCE(n.publication_date, n.collection_date::date) DESC
+      AND COALESCE(n.publication_date, n.collection_date) > NOW() - INTERVAL '7 days'
+    ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
     LIMIT 5
   `;
 
