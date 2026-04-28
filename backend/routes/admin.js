@@ -2574,14 +2574,15 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Get all active POI IDs
+      // Get collectible POI IDs — same filter as scheduled collection
       const poisResult = await pool.query(`
         SELECT id FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
+          AND poi_roles && ARRAY['point','organization','river']::text[]
         ORDER BY
           CASE
             WHEN 'point' = ANY(poi_roles) THEN 1
-            WHEN 'boundary' = ANY(poi_roles) THEN 2
+            WHEN 'organization' = ANY(poi_roles) THEN 2
             ELSE 3
           END,
           name
