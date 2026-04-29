@@ -105,7 +105,12 @@ export async function scoreDate(pool, { title, description, pageContent, sources
     : []);
 
   const normalizedSources = normalizeDateSources(sources, timezone, mode);
-  const consensus = scoreDateConsensus(normalizedSources, votes);
+  // For datetime mode, normalize LLM votes to UTC so they match normalized sources.
+  // In date mode, votes are already YYYY-MM-DD strings with no timezone concern.
+  const normalizedVotes = (mode === 'datetime')
+    ? votes.map(v => v ? parseDateTime(v, timezone)?.substring(0, 16) : null).filter(Boolean)
+    : votes;
+  const consensus = scoreDateConsensus(normalizedSources, normalizedVotes);
 
   return {
     ...consensus,
@@ -114,7 +119,7 @@ export async function scoreDate(pool, { title, description, pageContent, sources
       meta: normalizedSources.meta || [],
       timeTags: normalizedSources.timeTags || [],
       url: normalizedSources.url || null,
-      llmVotes: votes
+      llmVotes: normalizedVotes
     }
   };
 }
@@ -1262,12 +1267,12 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 
   for (const item of newsItems) {
     try {
-      // Normalize dates. Full ISO timestamps are preserved; bare dates are promoted to
-      // noon UTC (YYYY-MM-DDT12:00:00Z) so timezone conversion never shifts the calendar date.
+      // Normalize dates. Full ISO timestamps are converted to UTC via parseDateTime
+      // (bare strings assumed Eastern; explicit offsets honored). Bare dates are promoted
+      // to noon UTC (YYYY-MM-DDT12:00:00Z) so timezone conversion never shifts the calendar date.
       if (item.published_date && item.published_date.includes('T')) {
-        // Already a full timestamp — keep as-is (validated below)
-        const ts = new Date(item.published_date);
-        item.published_date = isNaN(ts) ? null : ts.toISOString();
+        const normalized = parseDateTime(item.published_date, 'America/New_York');
+        item.published_date = normalized ? normalized + 'Z' : null;
       } else {
         const d = parseDate(item.published_date);
         item.published_date = d ? `${d}T12:00:00Z` : null;
