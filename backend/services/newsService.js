@@ -623,6 +623,49 @@ async function processPage(pool, page, poi, contentType, options = {}) {
  * @param {Object} options - Optional overrides
  * @returns {Object} - { pages: [{url, markdown, rawText, ogDates, title}], totalPagesRendered, totalDetailPages }
  */
+
+/**
+ * Filter crawled pages, removing any whose URL already exists in poi_news or poi_events.
+ * Enforces the invariant: no processPage call (Gemini) for content already in the DB.
+ * Normalizes URLs by stripping trailing slashes and query strings for robust matching.
+ *
+ * @param {Pool} pool
+ * @param {Array<{url: string}>} pages - from crawlPage() or a Serper URL list
+ * @param {'news'|'event'} contentType
+ * @param {Object} opts - { jobId, jobType, poiId, poiName, phase }
+ * @returns {Array<{url: string}>} pages not already in the DB
+ */
+async function filterKnownPages(pool, pages, contentType, opts = {}) {
+  if (pages.length === 0) return pages;
+  const { jobId = 0, jobType = 'news', poiId, poiName, phase = '' } = opts;
+
+  const normFull = url => url.toLowerCase().replace(/\/+$/, '');
+  const normPath = url => {
+    try { const p = new URL(url); return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, ''); }
+    catch { return normFull(url); }
+  };
+
+  const table = contentType === 'event' ? 'poi_events' : 'poi_news';
+  const fullUrls = pages.map(p => normFull(p.url));
+  const pathUrls = pages.map(p => normPath(p.url));
+
+  const result = await pool.query(
+    `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM ${table}
+     WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
+        OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`,
+    [fullUrls, pathUrls]
+  );
+  const known = new Set(result.rows.map(r => r.url));
+
+  return pages.filter(p => {
+    if (known.has(normFull(p.url)) || known.has(normPath(p.url))) {
+      logInfo(jobId, jobType, poiId, poiName, `${phase}: [Skip] Already in DB: ${p.url}`);
+      return false;
+    }
+    return true;
+  });
+}
+
 async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
   const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
   const visited = new Set();
@@ -804,7 +847,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       reportProgress(`Phase I: [Classify] ${pages.length} event pages found (${crawlResult.totalPagesRendered} rendered)`);
       logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${pages.length} event pages (${crawlResult.totalPagesRendered} rendered)`);
 
-      const eventResults = await runConcurrent(pages.map(page => () => {
+      const freshEventPages = await filterKnownPages(pool, pages, 'event',
+        { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase I' });
+      const eventResults = await runConcurrent(freshEventPages.map(page => () => {
         checkCancellation();
         return processPage(pool, page, poi, 'event', { phase: 'Phase I', jobId, jobType, timezone });
       }), pageConcurrency, pageDelayMs);
@@ -838,7 +883,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       reportProgress(`Phase I: [Classify] ${pages.length} news pages found (${crawlResult.totalPagesRendered} rendered)`);
       logInfo(jobId, jobType, poi.id, poi.name, `Phase I: [Classify] ${pages.length} news pages (${crawlResult.totalPagesRendered} rendered)`);
 
-      const newsResults = await runConcurrent(pages.map(page => () => {
+      const freshNewsPages = await filterKnownPages(pool, pages, 'news',
+        { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase I' });
+      const newsResults = await runConcurrent(freshNewsPages.map(page => () => {
         checkCancellation();
         return processPage(pool, page, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone });
       }), pageConcurrency, pageDelayMs);
@@ -935,26 +982,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
           }
 
-          // Skip URLs already present in poi_news (any POI) — avoid re-analyzing known content.
-          // Check both full URL and path-only (no query string) to catch rotating tokens/session params.
-          const normNewsUrl = u => u.url.toLowerCase().replace(/\/+$/, '');
-          const normNewsPath = u => { try { const p = new URL(u.url); return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, ''); } catch { return normNewsUrl(u); } };
-          const newsUrlCheck = await pool.query(
-            `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM poi_news
-             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
-                OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`,
-            [urlsToProcessRaw.map(normNewsUrl), urlsToProcessRaw.map(normNewsPath)]
-          );
-          const knownNewsUrls = new Set(newsUrlCheck.rows.map(r => r.url));
-          const urlsToProcess = urlsToProcessRaw.filter(u => {
-            const norm = normNewsUrl(u);
-            const path = normNewsPath(u);
-            if (knownNewsUrls.has(norm) || knownNewsUrls.has(path)) {
-              logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Skip] Already in DB: ${u.url}`);
-              return false;
-            }
-            return true;
-          });
+          // Skip URLs already present in poi_news — avoid re-analyzing known content.
+          const urlsToProcess = await filterKnownPages(pool, urlsToProcessRaw, 'news',
+            { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II' });
 
           let renderedCount = 0;
           let phase2PagesCollected = 0;
@@ -977,8 +1007,10 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             });
 
             renderedCount++;
+            const freshPages = await filterKnownPages(pool, crawlResult.pages, 'news',
+              { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II' });
             const pageItems = [];
-            for (const page of crawlResult.pages) {
+            for (const page of freshPages) {
               checkCancellation();
               if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
               const items = await processPage(pool, page, poi, 'news', { phase: 'Phase II', jobId, jobType: 'collectionPhaseTwo', timezone });
@@ -1050,26 +1082,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
           const eventUrlsToProcessRaw = externalEventUrls.slice(0, MAX_SEARCH_URLS);
 
-          // Skip URLs already present in poi_events (any POI) — avoid re-analyzing known content.
-          // Check both full URL and path-only (no query string) to catch rotating tokens/session params.
-          const normEventUrl = u => u.url.toLowerCase().replace(/\/+$/, '');
-          const normEventPath = u => { try { const p = new URL(u.url); return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, ''); } catch { return normEventUrl(u); } };
-          const eventUrlCheck = await pool.query(
-            `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM poi_events
-             WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
-                OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`,
-            [eventUrlsToProcessRaw.map(normEventUrl), eventUrlsToProcessRaw.map(normEventPath)]
-          );
-          const knownEventUrls = new Set(eventUrlCheck.rows.map(r => r.url));
-          const eventUrlsToProcess = eventUrlsToProcessRaw.filter(u => {
-            const norm = normEventUrl(u);
-            const path = normEventPath(u);
-            if (knownEventUrls.has(norm) || knownEventUrls.has(path)) {
-              logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: [Skip] Already in DB: ${u.url}`);
-              return false;
-            }
-            return true;
-          });
+          // Skip URLs already present in poi_events — avoid re-analyzing known content.
+          const eventUrlsToProcess = await filterKnownPages(pool, eventUrlsToProcessRaw, 'event',
+            { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II Events' });
 
           let renderedEventCount = 0;
           let phase2EventPagesCollected = 0;
@@ -1089,8 +1104,10 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             });
 
             renderedEventCount++;
+            const freshEventPages = await filterKnownPages(pool, crawlResult.pages, 'event',
+              { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II Events' });
             const pageItems = [];
-            for (const page of crawlResult.pages) {
+            for (const page of freshEventPages) {
               checkCancellation();
               if (phase2EventPagesCollected >= MAX_PHASE2_PAGES) break;
               const items = await processPage(pool, page, poi, 'event', { phase: 'Phase II Events', jobId, jobType: 'collectionPhaseTwo', timezone });
