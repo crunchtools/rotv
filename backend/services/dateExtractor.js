@@ -40,36 +40,30 @@ export function parseDate(raw, timezone = 'America/New_York') {
 }
 
 /**
- * Normalize a datetime string to YYYY-MM-DDTHH:MM:SS.
+ * Normalize a datetime string to a UTC ISO string (YYYY-MM-DDTHH:MM:SS).
+ * Bare strings (no explicit offset) are interpreted in `timezone` (default: Eastern).
+ * Strings with explicit offsets (Z, +HH:MM, -HH:MM) are honored as-is.
  * @param {string|null} raw - Raw datetime string
- * @param {string} timezone - IANA timezone
- * @returns {string|null} 'YYYY-MM-DDTHH:MM:SS' or null
+ * @param {string} timezone - IANA timezone for bare strings (default: America/New_York)
+ * @returns {string|null} 'YYYY-MM-DDTHH:MM:SS' in UTC, or null
  */
 export function parseDateTime(raw, timezone = 'America/New_York') {
   if (!raw || typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
-  const isoMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2})?)$/);
-  if (isoMatch) return `${isoMatch[1]}T${isoMatch[2].length === 5 ? isoMatch[2] + ':00' : isoMatch[2]}`;
-
+  // chrono-node handles both cases:
+  //   - Bare strings ("2026-04-28T18:00", "April 28 at 6pm") → interpreted in `timezone`
+  //   - Explicit offsets ("2026-04-28T18:00:00-04:00", "...Z") → offset honored as-is
+  // start.date() returns a UTC-correct JS Date in both cases.
   let parsedDates;
   try {
     parsedDates = chrono.parse(trimmed, { instant: new Date(), timezone });
   } catch { return null; }
   if (parsedDates.length === 0) return null;
 
-  const d = parsedDates[0].start;
-  const year = d.get('year');
-  const month = d.get('month');
-  const day = d.get('day');
-  if (!year || !month || !day) return null;
-
-  const hour = d.get('hour') ?? 0;
-  const minute = d.get('minute') ?? 0;
-  const second = d.get('second') ?? 0;
-
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
+  const d = parsedDates[0].start.date(); // UTC-correct JS Date
+  return d.toISOString().substring(0, 19); // "YYYY-MM-DDTHH:MM:SS" in UTC
 }
 
 /**
