@@ -292,7 +292,15 @@ export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
     return { date: sorted[0][0], score: 0, sourceMap };
   }
 
-  return { date: sorted[0][0], score: sorted[0][1], sourceMap };
+  // Penalise purely LLM-voted dates: no structured source (JSON-LD, meta, time tag, URL)
+  // means the LLM had nothing to anchor against and may have defaulted to today's date.
+  // Subtract 2 so LLM-only scores can never reach the auto-approval threshold (4).
+  const hasDeterministicSource =
+    (deterministicSources.jsonLd?.length > 0) || (deterministicSources.meta?.length > 0) ||
+    (deterministicSources.timeTags?.length > 0) || !!deterministicSources.url;
+  const finalScore = hasDeterministicSource ? sorted[0][1] : Math.max(0, sorted[0][1] - 2);
+
+  return { date: sorted[0][0], score: finalScore, sourceMap };
 }
 
 /**

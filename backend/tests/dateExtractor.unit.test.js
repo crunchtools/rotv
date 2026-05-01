@@ -113,13 +113,13 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(5);
   });
 
-  it('5 unanimous LLM votes score 5 pts', () => {
+  it('5 unanimous LLM votes score 3 pts (penalised -2 for no structured source)', () => {
     const result = scoreDateConsensus(
       {},
       ['2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01']
     );
     expect(result.date).toBe('2024-06-01');
-    expect(result.score).toBe(5);
+    expect(result.score).toBe(3); // 5 LLM votes - 2 penalty = 3 (below auto-approve threshold)
   });
 
   it('LLM votes + agreeing JSON-LD scores 9 pts', () => {
