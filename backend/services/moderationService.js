@@ -286,7 +286,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     let dateScore = row.date_consensus_score || 0;
     let newScore = dateScore;
-    let newDate = row.publication_date;
+    let newDate = null;        // only set if a rescore actually produces a date
+    let rescoredDate = false;  // track whether we ran a rescore
 
     // --- Step 1: Date scoring (rescore from cached signals or full extraction) ---
     if (dateScore < newsDateThreshold || forceStatus) {
@@ -332,6 +333,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         if (consensus.date) {
           newDate = consensus.date;
           newScore = consensus.score;
+          rescoredDate = true;
         }
 
         logInfo(itemRunId, 'moderation', null, row.title,
@@ -366,8 +368,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
     const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
 
-    // Reject news with future publication dates
-    const isFutureDate = contentType === 'news' && newDate && new Date(newDate) > new Date();
+    // Reject news with future publication dates (only applies when we rescored)
+    const isFutureDate = contentType === 'news' && rescoredDate && newDate && new Date(newDate) > new Date();
 
     let resolvedStatus;
     let reasoning;
@@ -389,15 +391,29 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
-    await pool.query(
-      `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
-              publication_date = $2, date_consensus_score = $3,
-              ai_reasoning = $4, relevance_signals = $5
-       WHERE id = $6`,
-      [resolvedStatus, newDate, newScore, reasoning,
-       relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
-       contentId]
-    );
+    // Only update publication_date if a rescore actually produced a new date —
+    // writing back the existing value unchanged can silently corrupt it.
+    if (rescoredDate) {
+      await pool.query(
+        `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
+                publication_date = $2, date_consensus_score = $3,
+                ai_reasoning = $4, relevance_signals = $5, moderation_date = CURRENT_TIMESTAMP
+         WHERE id = $6`,
+        [resolvedStatus, newDate, newScore, reasoning,
+         relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
+         contentId]
+      );
+    } else {
+      await pool.query(
+        `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
+                date_consensus_score = $2,
+                ai_reasoning = $3, relevance_signals = $4, moderation_date = CURRENT_TIMESTAMP
+         WHERE id = $5`,
+        [resolvedStatus, newScore, reasoning,
+         relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
+         contentId]
+      );
+    }
 
   } else if (contentType === 'photo') {
     const photoQuery = await pool.query(
