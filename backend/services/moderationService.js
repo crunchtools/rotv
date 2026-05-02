@@ -397,7 +397,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
                 publication_date = $2, date_consensus_score = $3,
-                ai_reasoning = $4, relevance_signals = $5
+                ai_reasoning = $4, relevance_signals = $5, moderation_date = CURRENT_TIMESTAMP
          WHERE id = $6`,
         [resolvedStatus, newDate, newScore, reasoning,
          relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
@@ -407,7 +407,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
                 date_consensus_score = $2,
-                ai_reasoning = $3, relevance_signals = $4
+                ai_reasoning = $3, relevance_signals = $4, moderation_date = CURRENT_TIMESTAMP
          WHERE id = $5`,
         [resolvedStatus, newScore, reasoning,
          relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
