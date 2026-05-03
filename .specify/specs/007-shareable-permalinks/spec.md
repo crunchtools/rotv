@@ -122,10 +122,10 @@ A slug generation utility derives the slug from the title at render time (no sto
 
 ---
 
-## Open Questions
+## Resolved Questions
 
-1. Should permalink pages include a thumbnail/hero image? If so, what's the source — POI image, or the source article's OG image?
-2. Should we add `twitter:card` meta tags in addition to OG tags for better X previews?
+1. **Hero image source:** Use the source article's OG image (fetched and cached during news collection). Fall back to POI image if no source OG image is available.
+2. **Twitter card tags:** Yes, include `twitter:card`, `twitter:title`, `twitter:description`, `twitter:image` alongside OG tags for better X previews.
 
 ---
 
