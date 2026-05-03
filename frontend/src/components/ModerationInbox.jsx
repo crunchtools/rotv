@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Lightbox from './Lightbox';
+import PoiSearchSelect from './PoiSearchSelect';
 import { NewsCardBody, EventCardBody, formatPublicationDate } from './NewsEventsShared';
 
 // Eastern timezone abbreviation (EST or EDT) for datetime labels
@@ -607,10 +608,12 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     }
     if (fc.type === 'poi') {
       return (
-        <select value={val} onChange={e => onChange(parseInt(e.target.value) || '')} style={inputStyle}>
-          <option value="">-- Select POI --</option>
-          {pois.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <PoiSearchSelect
+          pois={pois}
+          value={val}
+          onChange={(id) => onChange(id || '')}
+          placeholder="Search POIs..."
+        />
       );
     }
     // lang="en-US" forces MM/DD/YYYY display regardless of browser language locale
