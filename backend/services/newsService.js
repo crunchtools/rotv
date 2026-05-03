@@ -149,7 +149,7 @@ async function generateTextWithCustomPrompt(pool, prompt, options = {}) {
   const text = await geminiGenerateText(pool, prompt, options);
   return { response: text, provider: 'gemini' };
 }
-import { renderPage, setCachePageType } from './renderPage.js';
+import { renderPage, setCachePageType, setCacheItemCount } from './renderPage.js';
 import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
@@ -505,9 +505,17 @@ async function processPage(pool, page, poi, contentType, options = {}) {
     return { news: [], events: [] };
   }
 
-  // Count items on the page
-  const count = await itemCount(pool, page.markdown, contentType, { jobId, jobType, poiId: poi.id, poiName: poi.name, phase });
-  logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ItemCount] ${count} ${contentType}(s) on ${url}`);
+  // Count items on the page (use cache if available)
+  const cachedCount = isEvent ? page.itemCountEvents : page.itemCountNews;
+  let count;
+  if (cachedCount != null) {
+    count = cachedCount;
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ItemCount] ${count} ${contentType}(s) on ${url} (cached)`);
+  } else {
+    count = await itemCount(pool, page.markdown, contentType, { jobId, jobType, poiId: poi.id, poiName: poi.name, phase });
+    logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ItemCount] ${count} ${contentType}(s) on ${url}`);
+    await setCacheItemCount(pool, url, contentType, count);
+  }
   if (count === 0) return { news: [], events: [] };
   // Absurd counts (>500) indicate a paginated listing total, not actual page items — skip entirely
   if (count > 500) {
@@ -703,13 +711,25 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       }
       if (extracted.cached) logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Cache] Hit for ${url}`);
 
-      updateProgress(poi.id, { phase: 'classify', message: url });
-      const classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets);
-      logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
-      await setCachePageType(pool, url, classification.pageType);
+      let classification;
+      if (extracted.pageType) {
+        // Cache already knows the page type — skip Gemini classify call
+        classification = { pageType: extracted.pageType, detailLinks: [], reasoning: 'cached' };
+        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Cache] Classify skip — already ${extracted.pageType}: ${url}`);
+        if (extracted.pageType === 'listing') {
+          classification.detailLinks = filterDetailLinks(
+            (extracted.links || []).map(l => l.url), url
+          );
+        }
+      } else {
+        updateProgress(poi.id, { phase: 'classify', message: url });
+        classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets);
+        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
+        await setCachePageType(pool, url, classification.pageType);
+      }
 
       if (classification.pageType === 'detail') {
-        collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title });
+        collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
       } else if (classification.pageType === 'listing') {
         const validLinks = filterDetailLinks(classification.detailLinks, url);
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
@@ -732,7 +752,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
  * @param {string} collectionType - 'news', 'events', or 'both' to indicate what's being collected
  * @returns {Object} - { news: [], events: [] }
  */
-export async function collectPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null, processedUrls = null) {
+export async function collectPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null) {
   // Only collect news/events for POIs with roles: point, organization, or river
   const collectibleRoles = ['point', 'organization', 'river'];
   const poiRoles = poi.poi_roles || [];
@@ -983,21 +1003,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
           }
 
           // Skip URLs already present in poi_news — avoid re-analyzing known content.
-          let urlsToProcess = await filterKnownPages(pool, urlsToProcessRaw, 'news',
+          const urlsToProcess = await filterKnownPages(pool, urlsToProcessRaw, 'news',
             { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II' });
-
-          // Cross-POI dedup: skip URLs already processed by another POI in this run
-          if (processedUrls) {
-            urlsToProcess = urlsToProcess.filter(u => {
-              const normPath = (() => { try { const p = new URL(u.url); return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, ''); } catch { return u.url.toLowerCase(); } })();
-              if (processedUrls.has(normPath)) {
-                logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Skip] Already processed by another POI: ${u.url}`);
-                return false;
-              }
-              processedUrls.add(normPath);
-              return true;
-            });
-          }
 
           let renderedCount = 0;
           let phase2PagesCollected = 0;
@@ -1096,21 +1103,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
           const eventUrlsToProcessRaw = externalEventUrls.slice(0, MAX_SEARCH_URLS);
 
           // Skip URLs already present in poi_events — avoid re-analyzing known content.
-          let eventUrlsToProcess = await filterKnownPages(pool, eventUrlsToProcessRaw, 'event',
+          const eventUrlsToProcess = await filterKnownPages(pool, eventUrlsToProcessRaw, 'event',
             { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II Events' });
-
-          // Cross-POI dedup: skip URLs already processed by another POI in this run
-          if (processedUrls) {
-            eventUrlsToProcess = eventUrlsToProcess.filter(u => {
-              const normPath = (() => { try { const p = new URL(u.url); return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, ''); } catch { return u.url.toLowerCase(); } })();
-              if (processedUrls.has(normPath)) {
-                logInfo(jobId, jobType, poi.id, poi.name, `Phase II Events: [Skip] Already processed by another POI: ${u.url}`);
-                return false;
-              }
-              processedUrls.add(normPath);
-              return true;
-            });
-          }
 
           let renderedEventCount = 0;
           let phase2EventPagesCollected = 0;
@@ -1727,9 +1721,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   // Initialize display slots — must be after maxConcurrency is resolved
   initializeSlots(jobId, maxConcurrency);
 
-  // Cross-POI URL cache: prevents re-classifying/rendering the same Serper URL for every POI
-  const processedUrls = new Set();
-
   try {
     const { results: batchResults, cancelled: jobCancelled } = await runBatch({
       pool,
@@ -1763,7 +1754,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       },
 
       collectFn: async (poi, { index, total }) => {
-        const { news, events, metadata } = await collectPoi(pool, poi, sheets, 'America/New_York', 'both', null, processedUrls);
+        const { news, events, metadata } = await collectPoi(pool, poi, sheets, 'America/New_York');
         tracker.updateProgress(poi.id, { phase: 'save', message: `${news.length} news, ${events.length} events` });
         const saveLog = (msg) => { logInfo(jobId, 'news', poi.id, poi.name, msg); };
         const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog });

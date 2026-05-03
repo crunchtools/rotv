@@ -47,7 +47,10 @@ export async function renderPage(pool, url, options = {}) {
         links: row.links || [],
         reachable: true,
         excerpt: row.markdown ? row.markdown.slice(0, 200) : null,
-        cached: true
+        cached: true,
+        pageType: row.page_type || null,
+        itemCountNews: row.item_count_news ?? null,
+        itemCountEvents: row.item_count_events ?? null
       };
     }
   } catch (err) { console.error('[Cache] Read failure:', err.message); }
@@ -94,6 +97,19 @@ export async function setCachePageType(pool, url, pageType) {
     await pool.query(
       'UPDATE rendered_page_cache SET page_type = $1 WHERE url = $2',
       [pageType, url]
+    );
+  } catch { /* non-fatal */ }
+}
+
+/**
+ * Save the item count for a cached URL (called after Gemini itemCount).
+ */
+export async function setCacheItemCount(pool, url, contentType, count) {
+  const col = contentType === 'event' ? 'item_count_events' : 'item_count_news';
+  try {
+    await pool.query(
+      `UPDATE rendered_page_cache SET ${col} = $1 WHERE url = $2`,
+      [count, url]
     );
   } catch { /* non-fatal */ }
 }
