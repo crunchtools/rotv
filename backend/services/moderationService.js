@@ -346,7 +346,13 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         }
 
         if (consensus.date) {
-          newDate = consensus.date;
+          // Promote date-only to noon Eastern so TIMESTAMPTZ display never shifts the calendar day
+          if (/^\d{4}-\d{2}-\d{2}$/.test(consensus.date)) {
+            const noon = parseDateTime(consensus.date + 'T12:00:00', 'America/New_York');
+            newDate = noon ? noon + 'Z' : consensus.date;
+          } else {
+            newDate = consensus.date;
+          }
           newScore = consensus.score;
           rescoredDate = true;
         }
@@ -771,8 +777,12 @@ export async function fixDate(pool, contentType, contentId) {
     });
   }
 
-  // Update the item
-  const newDate = consensus.date || null;
+  // Update the item — promote date-only to noon Eastern so display never shifts
+  let newDate = consensus.date || null;
+  if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
+    const noon = parseDateTime(newDate + 'T12:00:00', 'America/New_York');
+    newDate = noon ? noon + 'Z' : newDate;
+  }
   const newScore = consensus.score || 0;
   await pool.query(
     `UPDATE ${table} SET publication_date = $1, date_consensus_score = $2, moderation_processed = true WHERE id = $3`,
