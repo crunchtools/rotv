@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import PoiSearchSelect from './PoiSearchSelect';
 
 // Data collection configuration: AI providers, credentials, moderation, infrastructure, sub-tabs.
 // Job triggering, progress, and history are in the Jobs tab (JobsDashboard.jsx).
@@ -1056,18 +1057,14 @@ function DataCollectionSettings() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-              <select
+              <PoiSearchSelect
+                pois={allPois.filter(p => !excludedPois.some(e => e.id === p.id))}
                 value={selectedPoiId}
-                onChange={e => setSelectedPoiId(e.target.value)}
-                style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
+                onChange={(id) => setSelectedPoiId(id || '')}
+                placeholder="Search POIs to exclude..."
                 disabled={excludedPoisSaving}
-              >
-                <option value="">— Select a POI to exclude —</option>
-                {allPois
-                  .filter(p => !excludedPois.some(e => e.id === p.id))
-                  .map(p => <option key={p.id} value={p.id}>{p.name}</option>)
-                }
-              </select>
+                style={{ flex: 1 }}
+              />
               <button className="action-btn secondary" onClick={handleAddExcludedPoi} disabled={excludedPoisSaving || !selectedPoiId}>Add</button>
             </div>
             <button className="action-btn primary" onClick={handleSaveExcludedPois} disabled={excludedPoisSaving}>
