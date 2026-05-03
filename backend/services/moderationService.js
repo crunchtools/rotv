@@ -182,6 +182,7 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
  * Returns array of { relevant: boolean, reasoning: string }.
  */
 async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
+  const typeLabel = contentType === 'event' ? 'event' : 'news article or announcement';
   const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park.
 
 Title: "${title}"
@@ -189,10 +190,24 @@ Summary: "${description || '(none)'}"
 Location: ${poiName || '(unknown)'}
 Type: ${contentType}
 
-Is this actual ${contentType} relevant to Cuyahoga Valley National Park visitors?
-Consider: Is it about the park region? Does it connect to nature, trails, recreation,
-conservation, history, ecology, wildlife, or community stewardship? Is it timely
-(actual news/event, not a static reference page)?
+Is this a real ${typeLabel}, NOT a static reference page?
+
+APPROVE if the content:
+- Reports on something that happened or will happen (article, announcement, press release)
+- Describes a specific event with dates (concert, hike, meeting, cleanup)
+- Is relevant to the Cuyahoga Valley National Park region (nature, trails, recreation,
+  conservation, history, ecology, wildlife, community stewardship, heritage, arts/culture)
+- Old news IS valid — a 2021 trail opening article is still news
+
+REJECT if the content is:
+- A permanent informational page (trail description, facility info, visitor guide)
+- An education resource or reference tool (StoryMap, interactive map, FAQ)
+- A general "about us" or organization overview page
+- A product/service page or commercial listing
+- A page that describes what something IS rather than what happened or will happen
+
+The key test: does this page report on a HAPPENING (past, present, or future),
+or does it describe a THING that permanently exists?
 
 Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
 
@@ -370,6 +385,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     // Reject news with future publication dates (only applies when we rescored)
     const isFutureDate = contentType === 'news' && rescoredDate && newDate && new Date(newDate) > new Date();
+    // Effective date: rescored date takes priority, fall back to existing publication_date
+    const effectiveDate = newDate || row.publication_date;
 
     let resolvedStatus;
     let reasoning;
@@ -382,7 +399,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     } else if (unanimousNo) {
       resolvedStatus = 'rejected';
       reasoning = `Rejected: relevance vote unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})`;
-    } else if (unanimousYes && newScore >= newsDateThreshold) {
+    } else if (unanimousYes && newScore >= newsDateThreshold && effectiveDate) {
       resolvedStatus = 'published';
       reasoning = `Published: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${newsDateThreshold}`;
     } else {
