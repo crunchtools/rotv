@@ -8,7 +8,7 @@ import { moderateContent, moderatePhoto, generateTextWithCustomPrompt } from './
 import { renderPage } from './renderPage.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDate, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
+import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { scoreDate, normalizeRenderUrl } from './newsService.js';
 
 const TABLE_MAP = {
@@ -590,8 +590,21 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   for (const field of allowedFields) {
     if (edits[field] !== undefined) {
       setClauses.push(`${field} = $${idx}`);
-      // Coerce empty strings to null for date/timestamp columns
-      values.push(DATE_FIELDS.includes(field) && edits[field] === '' ? null : edits[field]);
+      if (DATE_FIELDS.includes(field)) {
+        if (!edits[field] || edits[field] === '') {
+          values.push(null);
+        } else if (edits[field].includes('T')) {
+          // datetime-local value — admin entered in Eastern, convert to UTC
+          const utc = localToUTC(edits[field], 'America/New_York');
+          values.push(utc ? utc + 'Z' : edits[field]);
+        } else {
+          // date-only fallback — noon Eastern
+          const utc = parseDateTime(edits[field] + 'T12:00:00', 'America/New_York');
+          values.push(utc ? utc + 'Z' : edits[field]);
+        }
+      } else {
+        values.push(edits[field]);
+      }
       idx++;
     }
   }

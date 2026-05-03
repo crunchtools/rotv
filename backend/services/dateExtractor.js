@@ -52,18 +52,25 @@ export function parseDateTime(raw, timezone = 'America/New_York') {
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
-  // chrono-node handles both cases:
-  //   - Bare strings ("2026-04-28T18:00", "April 28 at 6pm") → interpreted in `timezone`
-  //   - Explicit offsets ("2026-04-28T18:00:00-04:00", "...Z") → offset honored as-is
-  // start.date() returns a UTC-correct JS Date in both cases.
+  // Bare ISO strings ("2026-04-22T10:30", "2026-04-22T10:30:00") — no Z, no ±offset.
+  // chrono-node ignores the timezone parameter for these and treats them as UTC.
+  // Use localToUTC instead, which correctly interprets them in the given timezone.
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(trimmed) &&
+      !/[Zz]/.test(trimmed) &&
+      !/[+-]\d{2}(:\d{2})?$/.test(trimmed)) {
+    return localToUTC(trimmed, timezone);
+  }
+
+  // Everything else: natural language ("April 28 at 6pm"), explicit offsets
+  // ("2026-04-28T18:00:00-04:00"), Z-terminated ("...Z"). chrono handles correctly.
   let parsedDates;
   try {
     parsedDates = chrono.parse(trimmed, { instant: new Date(), timezone });
   } catch { return null; }
   if (parsedDates.length === 0) return null;
 
-  const d = parsedDates[0].start.date(); // UTC-correct JS Date
-  return d.toISOString().substring(0, 19); // "YYYY-MM-DDTHH:MM:SS" in UTC
+  const d = parsedDates[0].start.date();
+  return d.toISOString().substring(0, 19);
 }
 
 /**
@@ -331,4 +338,27 @@ export function findEventDates(text, title, timezone = 'America/New_York') {
   }
 
   return eventDates;
+}
+
+/**
+ * Convert a datetime-local string (no offset) from a given IANA timezone to UTC ISO.
+ * Unlike parseDateTime, this correctly handles ISO-format strings (chrono-node
+ * ignores the timezone parameter for ISO strings and treats them as UTC).
+ *
+ * @param {string} localStr - "YYYY-MM-DDTHH:MM" (datetime-local input value)
+ * @param {string} timezone - IANA timezone the value is expressed in (default: America/New_York)
+ * @returns {string|null} "YYYY-MM-DDTHH:MM:SS" in UTC, or null
+ */
+export function localToUTC(localStr, timezone = 'America/New_York') {
+  if (!localStr || !localStr.includes('T')) return null;
+  // Eastern is either -04:00 (EDT) or -05:00 (EST). Try both, verify with round-trip.
+  for (const offset of ['-04:00', '-05:00']) {
+    const d = new Date(localStr + ':00' + offset);
+    if (isNaN(d.getTime())) continue;
+    const rt = d.toLocaleString('sv-SE', { timeZone: timezone }).replace(' ', 'T').substring(0, 16);
+    if (rt === localStr.substring(0, 16)) {
+      return d.toISOString().substring(0, 19);
+    }
+  }
+  return null;
 }

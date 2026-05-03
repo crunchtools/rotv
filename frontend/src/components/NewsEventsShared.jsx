@@ -197,13 +197,16 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
           const endStr = String(item.end_date || '');
           const startDateOnly = startStr.substring(0, 10);
           const endDateOnly = endStr.substring(0, 10);
-          const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
-          const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
+          // Detect non-midnight time in both ISO ('T') and pg space format
+          const _hasTime = (s) => { const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/); return m && m[1] !== '00:00:00'; };
+          const _toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2');
+          const startHasTime = _hasTime(startStr);
+          const endHasTime = _hasTime(endStr);
           const sameDay = endDateOnly === startDateOnly;
 
           if (sameDay && startHasTime) {
             // Same-day event with times: "Sun, Apr 19, 2026, 10:30 AM – 12:00 PM"
-            const startDate = new Date(startStr);
+            const startDate = new Date(_toISO(startStr));
             const dateLabel = startDate.toLocaleDateString('en-US', {
               weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York'
             });
@@ -211,7 +214,7 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
               hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
             });
             if (endHasTime) {
-              const endTime = new Date(endStr).toLocaleTimeString('en-US', {
+              const endTime = new Date(_toISO(endStr)).toLocaleTimeString('en-US', {
                 hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
               });
               return `${dateLabel}, ${startTime} – ${endTime}`;
@@ -254,13 +257,20 @@ export function formatEventDateRange(startDate, endDate) {
   if (!startStr) return '';
   const startDateOnly = startStr.substring(0, 10);
   const endDateOnly = endStr.substring(0, 10);
-  const startHasTime = startStr.includes('T') && !startStr.endsWith('T00:00:00');
-  const endHasTime = endStr.includes('T') && !endStr.endsWith('T00:00:00');
+  // Detect non-midnight time in both ISO ('T') and pg space format ("2026-04-22 18:30:00+00")
+  const hasNonMidnightTime = (s) => {
+    const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/);
+    return m && m[1] !== '00:00:00';
+  };
+  // Normalize pg space format to ISO for Date parsing
+  const toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2');
+  const startHasTime = hasNonMidnightTime(startStr);
+  const endHasTime = hasNonMidnightTime(endStr);
   const sameDay = endDateOnly === startDateOnly;
-  const fmtTime = (s) => new Date(s).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
+  const fmtTime = (s) => new Date(toISO(s)).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
 
   if (sameDay && startHasTime) {
-    const d = new Date(startStr);
+    const d = new Date(toISO(startStr));
     const dateLabel = d.toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' });
     const startTime = fmtTime(startStr);
     if (endHasTime) return `${dateLabel}, ${startTime} – ${fmtTime(endStr)}`;

@@ -2,24 +2,27 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Lightbox from './Lightbox';
 import { NewsCardBody, EventCardBody, formatPublicationDate } from './NewsEventsShared';
 
+// Eastern timezone abbreviation (EST or EDT) for datetime labels
+const TZ_ABBR = new Date().toLocaleTimeString('en-US', { timeZone: 'America/New_York', timeZoneName: 'short' }).split(' ').pop();
+
 const FIELD_CONFIGS = {
   news: [
     { key: 'title', label: 'Title', type: 'text', required: true },
     { key: 'summary', label: 'Summary', type: 'textarea' },
     { key: 'source_name', label: 'Source Name', type: 'text' },
     { key: 'news_type', label: 'Type', type: 'select', options: ['general', 'closure', 'seasonal', 'maintenance', 'wildlife'] },
-    { key: 'publication_date', label: 'Publication Date', type: 'date' },
+    { key: 'publication_date', label: `Publication Date (${TZ_ABBR})`, type: 'datetime-local' },
     { key: 'poi_id', label: 'POI', type: 'poi' },
     { key: 'source_url', label: 'Primary URL', type: 'text' },
   ],
   event: [
     { key: 'title', label: 'Title', type: 'text', required: true },
     { key: 'description', label: 'Description', type: 'textarea' },
-    { key: 'start_date', label: 'Start Date/Time', type: 'datetime-local', required: true },
-    { key: 'end_date', label: 'End Date/Time', type: 'datetime-local' },
+    { key: 'start_date', label: `Start Date/Time (${TZ_ABBR})`, type: 'datetime-local', required: true },
+    { key: 'end_date', label: `End Date/Time (${TZ_ABBR})`, type: 'datetime-local' },
     { key: 'event_type', label: 'Event Type', type: 'text' },
     { key: 'location_details', label: 'Location Details', type: 'text' },
-    { key: 'publication_date', label: 'Publication Date', type: 'date' },
+    { key: 'publication_date', label: `Publication Date (${TZ_ABBR})`, type: 'datetime-local' },
     { key: 'poi_id', label: 'POI', type: 'poi' },
     { key: 'source_url', label: 'Primary URL', type: 'text' },
   ],
@@ -442,12 +445,15 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         for (const fc of fieldConfigs) {
           if (fc.type === 'datetime-local' && detail[fc.key]) {
             const raw = String(detail[fc.key]);
-            const match = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
-            fields[fc.key] = match ? `${match[1]}T${match[2]}` : raw.slice(0, 16);
-          } else if (fc.type === 'date' && detail[fc.key]) {
-            const raw = String(detail[fc.key]);
-            const match = raw.match(/^(\d{4}-\d{2}-\d{2})/);
-            fields[fc.key] = match ? match[1] : raw.slice(0, 10);
+            // Convert UTC/pg timestamp to Eastern for display in datetime-local input
+            const utcDate = new Date(raw.replace(' ', 'T').replace(/\+\d{2}$/, 'Z'));
+            if (!isNaN(utcDate.getTime())) {
+              const eastern = utcDate.toLocaleString('sv-SE', { timeZone: 'America/New_York' });
+              fields[fc.key] = eastern.replace(' ', 'T').substring(0, 16);
+            } else {
+              const match = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/);
+              fields[fc.key] = match ? `${match[1]}T${match[2]}` : raw.slice(0, 16);
+            }
           } else {
             fields[fc.key] = detail[fc.key] || '';
           }
