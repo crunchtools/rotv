@@ -214,28 +214,28 @@ describe('normalizeRenderUrl', () => {
 });
 
 describe('normalizeDateSources datetime mode', () => {
-  it('normalizes to minute precision (drops seconds)', () => {
+  it('bare ISO treated as Eastern → converted to UTC (Apr = EDT, +4h)', () => {
     const result = normalizeDateSources({ jsonLd: ['2026-04-22T10:30'] }, 'America/New_York', 'datetime');
-    expect(result.jsonLd).toContain('2026-04-22T10:30');
+    expect(result.jsonLd).toContain('2026-04-22T14:30');
   });
 
-  it('parses datetime strings with timezone offsets to minute precision', () => {
+  it('explicit offset honored as-is', () => {
     const result = normalizeDateSources({ jsonLd: ['2026-04-22T10:30-04:00'] }, 'America/New_York', 'datetime');
     expect(result.jsonLd.length).toBe(1);
-    expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
+    expect(result.jsonLd[0]).toBe('2026-04-22T14:30');
   });
 
-  it('handles date-only strings by adding T00:00', () => {
+  it('handles date-only strings (produces a datetime)', () => {
     const result = normalizeDateSources({ jsonLd: ['2026-04-22'] }, 'America/New_York', 'datetime');
     expect(result.jsonLd.length).toBe(1);
     expect(result.jsonLd[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/);
   });
 
-  it('makes "10:30" and "10:30:00" match after normalization', () => {
+  it('bare "10:30" and "10:30:00" match after normalization', () => {
     const a = normalizeDateSources({ jsonLd: ['2026-04-22T10:30'] }, 'America/New_York', 'datetime');
     const b = normalizeDateSources({ jsonLd: ['2026-04-22T10:30:00'] }, 'America/New_York', 'datetime');
-    expect(a.jsonLd[0]).toBe('2026-04-22T10:30');
-    expect(b.jsonLd[0]).toBe('2026-04-22T10:30');
+    expect(a.jsonLd[0]).toBe(b.jsonLd[0]);
+    expect(a.jsonLd[0]).toBe('2026-04-22T14:30');
   });
 
   it('discards unparseable strings', () => {

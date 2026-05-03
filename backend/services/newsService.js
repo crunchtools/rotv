@@ -1284,15 +1284,15 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 
   for (const item of newsItems) {
     try {
-      // Normalize dates. Full ISO timestamps are converted to UTC via parseDateTime
-      // (bare strings assumed Eastern; explicit offsets honored). Bare dates are promoted
-      // to noon UTC (YYYY-MM-DDT12:00:00Z) so timezone conversion never shifts the calendar date.
+      // Normalize dates: bare strings assumed Eastern, explicit offsets honored.
+      // Date-only values promoted to noon Eastern so display never shifts the calendar day.
       if (item.published_date && item.published_date.includes('T')) {
         const normalized = parseDateTime(item.published_date, 'America/New_York');
         item.published_date = normalized ? normalized + 'Z' : null;
       } else {
         const d = parseDate(item.published_date);
-        item.published_date = d ? `${d}T12:00:00Z` : null;
+        const noon = d ? parseDateTime(d + 'T12:00:00', 'America/New_York') : null;
+        item.published_date = noon ? noon + 'Z' : null;
       }
 
       // Resolve redirect URLs to final destination URLs
@@ -1387,9 +1387,23 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
 
   for (const item of eventItems) {
     try {
-      // Normalize event dates — preserve datetimes if present, fall back to date-only
-      item.start_date = parseDateTime(item.start_date) || parseDate(item.start_date) || item.start_date;
-      item.end_date = parseDateTime(item.end_date) || parseDate(item.end_date) || null;
+      // Format event dates for DB storage. Values from the scoring pipeline are already
+      // UTC — do NOT re-parse them (would double-convert Eastern→UTC). Just append Z.
+      // Date-only values get promoted to noon Eastern.
+      const noonEastern = (raw) => {
+        const d = parseDate(raw);
+        if (!d) return null;
+        const utc = parseDateTime(d + 'T12:00:00', 'America/New_York');
+        return utc ? utc + 'Z' : null;
+      };
+      const formatForDb = (val) => {
+        if (!val) return null;
+        if (/[Zz]$/.test(val) || /[+-]\d{2}(:\d{2})?$/.test(val)) return val;
+        if (val.includes('T')) return val + 'Z';  // bare UTC from scoring pipeline
+        return noonEastern(val);                   // date-only fallback
+      };
+      item.start_date = formatForDb(item.start_date) || item.start_date;
+      item.end_date = formatForDb(item.end_date) || null;
 
       // Default end time: if start has a time component but end is NULL, assume 60 minutes
       if (item.start_date && !item.end_date && item.start_date.includes('T')) {
