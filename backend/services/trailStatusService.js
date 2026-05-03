@@ -403,6 +403,17 @@ async function saveTrailStatus(pool, poiId, status) {
       }
     }
 
+    // Cap last_updated at current time — Gemini sometimes hallucinates future dates
+    // from phrases like "anticipating opening the week of May 24th"
+    let lastUpdated = status.last_updated;
+    if (lastUpdated) {
+      const parsedDate = new Date(lastUpdated);
+      if (!isNaN(parsedDate) && parsedDate > new Date()) {
+        console.log(`[Trail Status] Capping future last_updated ${lastUpdated} to now`);
+        lastUpdated = new Date().toISOString();
+      }
+    }
+
     // Insert new status
     await pool.query(`
       INSERT INTO trail_status (
@@ -419,7 +430,7 @@ async function saveTrailStatus(pool, poiId, status) {
       poiId,
       status.status,
       status.conditions,
-      status.last_updated,
+      lastUpdated,
       status.source_name,
       status.source_url,
       status.weather_impact,
