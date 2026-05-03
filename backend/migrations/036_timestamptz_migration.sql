@@ -1,31 +1,45 @@
 -- Migration 036: Change TIMESTAMP WITHOUT TIME ZONE → TIMESTAMPTZ
 -- The server timezone is UTC, so existing values are already UTC.
 -- AT TIME ZONE 'UTC' interprets the bare timestamps as UTC during the cast.
--- publication_date (DATE) is intentionally left as DATE — it is a
--- timezone-agnostic calendar date and needs no conversion.
+-- publication_date was DATE, promoted to TIMESTAMPTZ with +12h noon offset.
 --
 -- Must drop and recreate moderation_queue view since it depends on collection_date.
+--
+-- IMPORTANT: This migration is guarded so it only runs once. ALTER TYPE with
+-- a USING clause re-applies the expression on every run, even when the column
+-- is already the target type. The init script runs all migrations on each
+-- container start, so without the guard the +12h would compound on every restart.
 
-DROP VIEW IF EXISTS moderation_queue CASCADE;
-DROP VIEW IF EXISTS newsletter_digest CASCADE;
+DO $$
+BEGIN
+  -- Only run if publication_date on poi_news is not yet timestamptz
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'poi_news' AND column_name = 'publication_date'
+      AND data_type != 'timestamp with time zone'
+  ) THEN
+    DROP VIEW IF EXISTS moderation_queue CASCADE;
+    DROP VIEW IF EXISTS newsletter_digest CASCADE;
 
-ALTER TABLE poi_events
-  ALTER COLUMN start_date      TYPE TIMESTAMPTZ USING start_date      AT TIME ZONE 'UTC',
-  ALTER COLUMN end_date        TYPE TIMESTAMPTZ USING end_date        AT TIME ZONE 'UTC',
-  ALTER COLUMN collection_date TYPE TIMESTAMPTZ USING collection_date AT TIME ZONE 'UTC',
-  ALTER COLUMN updated_at      TYPE TIMESTAMPTZ USING updated_at      AT TIME ZONE 'UTC',
-  ALTER COLUMN moderated_at    TYPE TIMESTAMPTZ USING moderated_at    AT TIME ZONE 'UTC';
+    ALTER TABLE poi_events
+      ALTER COLUMN start_date      TYPE TIMESTAMPTZ USING start_date      AT TIME ZONE 'UTC',
+      ALTER COLUMN end_date        TYPE TIMESTAMPTZ USING end_date        AT TIME ZONE 'UTC',
+      ALTER COLUMN collection_date TYPE TIMESTAMPTZ USING collection_date AT TIME ZONE 'UTC',
+      ALTER COLUMN updated_at      TYPE TIMESTAMPTZ USING updated_at      AT TIME ZONE 'UTC',
+      ALTER COLUMN moderated_at    TYPE TIMESTAMPTZ USING moderated_at    AT TIME ZONE 'UTC';
 
-ALTER TABLE poi_news
-  ALTER COLUMN collection_date  TYPE TIMESTAMPTZ USING collection_date  AT TIME ZONE 'UTC',
-  ALTER COLUMN updated_at       TYPE TIMESTAMPTZ USING updated_at       AT TIME ZONE 'UTC',
-  ALTER COLUMN moderated_at     TYPE TIMESTAMPTZ USING moderated_at     AT TIME ZONE 'UTC',
-  ALTER COLUMN publication_date TYPE TIMESTAMPTZ
-    USING (publication_date::timestamp + interval '12 hours') AT TIME ZONE 'UTC';
+    ALTER TABLE poi_news
+      ALTER COLUMN collection_date  TYPE TIMESTAMPTZ USING collection_date  AT TIME ZONE 'UTC',
+      ALTER COLUMN updated_at       TYPE TIMESTAMPTZ USING updated_at       AT TIME ZONE 'UTC',
+      ALTER COLUMN moderated_at     TYPE TIMESTAMPTZ USING moderated_at     AT TIME ZONE 'UTC',
+      ALTER COLUMN publication_date TYPE TIMESTAMPTZ
+        USING (publication_date::timestamp + interval '12 hours') AT TIME ZONE 'UTC';
 
-ALTER TABLE poi_events
-  ALTER COLUMN publication_date TYPE TIMESTAMPTZ
-    USING (publication_date::timestamp + interval '12 hours') AT TIME ZONE 'UTC';
+    ALTER TABLE poi_events
+      ALTER COLUMN publication_date TYPE TIMESTAMPTZ
+        USING (publication_date::timestamp + interval '12 hours') AT TIME ZONE 'UTC';
+  END IF;
+END $$;
 
 -- Recreate moderation_queue view (identical logic, column types now TIMESTAMPTZ)
 CREATE OR REPLACE VIEW moderation_queue AS
