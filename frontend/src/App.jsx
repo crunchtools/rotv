@@ -22,6 +22,8 @@ import UsersSettings from './components/UsersSettings';
 import UserSettings from './components/UserSettings';
 import NewsletterSettings from './components/NewsletterSettings';
 import ResultsTab from './components/ResultsTab';
+import NewsPermalink from './components/NewsPermalink';
+import EventPermalink from './components/EventPermalink';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -1438,6 +1440,16 @@ function AppContent() {
       setAddingAssociationsToOrgId(null);
     }
   };
+
+  // Permalink routes — render standalone pages for /news/ and /events/ paths
+  const newsPermaMatch = location.pathname.match(/^\/news\/([^/]+)\/([^/]+)$/);
+  const eventPermaMatch = location.pathname.match(/^\/events\/([^/]+)\/([^/]+)$/);
+  if (newsPermaMatch) {
+    return <NewsPermalink poiSlug={newsPermaMatch[1]} titleSlug={newsPermaMatch[2]} />;
+  }
+  if (eventPermaMatch) {
+    return <EventPermalink poiSlug={eventPermaMatch[1]} titleSlug={eventPermaMatch[2]} />;
+  }
 
   if (loading) {
     return (

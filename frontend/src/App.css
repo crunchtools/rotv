@@ -13297,3 +13297,145 @@ svg.leaflet-zoom-animated {
   font-size: 0.78rem;
   margin-left: auto;
 }
+
+/* Permalink pages */
+.permalink-page {
+  min-height: 100vh;
+  background: #f5f5f0;
+  display: flex;
+  justify-content: center;
+  padding: 40px 16px;
+}
+
+.permalink-card {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+  padding: 32px;
+  max-width: 720px;
+  width: 100%;
+  align-self: flex-start;
+}
+
+.permalink-nav {
+  margin-bottom: 24px;
+}
+
+.permalink-back-btn {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 6px 14px;
+  cursor: pointer;
+  color: #555;
+  font-size: 14px;
+}
+
+.permalink-back-btn:hover {
+  background: #f0f0f0;
+}
+
+.permalink-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.permalink-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.permalink-poi-link {
+  background: none;
+  border: none;
+  color: #2e7d32;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 16px;
+  display: inline-block;
+}
+
+.permalink-poi-link:hover {
+  text-decoration: underline;
+}
+
+.permalink-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+}
+
+.permalink-source {
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.permalink-summary {
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #333;
+  margin-bottom: 24px;
+}
+
+.permalink-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.permalink-read-more {
+  color: #1565c0;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.permalink-read-more:hover {
+  text-decoration: underline;
+}
+
+.permalink-additional-sources {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+  font-size: 0.9rem;
+  color: #666;
+}
+
+.permalink-additional-sources a {
+  color: #1565c0;
+  margin-left: 8px;
+}
+
+.permalink-loading, .permalink-error {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.permalink-error h2 {
+  color: #c62828;
+}
+
+@media (max-width: 600px) {
+  .permalink-page {
+    padding: 16px 8px;
+  }
+  .permalink-card {
+    padding: 20px 16px;
+  }
+  .permalink-title {
+    font-size: 1.25rem;
+  }
+}
