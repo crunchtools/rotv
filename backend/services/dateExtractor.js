@@ -353,7 +353,8 @@ export function localToUTC(localStr, timezone = 'America/New_York') {
   if (!localStr || !localStr.includes('T')) return null;
   // Eastern is either -04:00 (EDT) or -05:00 (EST). Try both, verify with round-trip.
   for (const offset of ['-04:00', '-05:00']) {
-    const d = new Date(localStr + ':00' + offset);
+    const needsSeconds = (localStr.match(/:/g) || []).length < 2;
+    const d = new Date(localStr + (needsSeconds ? ':00' : '') + offset);
     if (isNaN(d.getTime())) continue;
     const rt = d.toLocaleString('sv-SE', { timeZone: timezone }).replace(' ', 'T').substring(0, 16);
     if (rt === localStr.substring(0, 16)) {
