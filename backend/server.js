@@ -1999,69 +1999,25 @@ app.get('/api/pois/:id/events', async (req, res) => {
   }
 });
 
-// Public permalink API — single news item by POI slug + title slug
+// Public permalink API — single news/event item by POI slug + title slug
 app.get('/api/news/:poiSlug/:titleSlug', async (req, res) => {
   try {
-    const { poiSlug, titleSlug } = req.params;
-
-    // Find POI by slug
-    const poisQuery = await pool.query(
-      `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
-    );
-    const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
-    if (!poi) return res.status(404).json({ error: 'POI not found' });
-
-    // Find news under this POI by title slug
-    const newsQuery = await pool.query(`
-      SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.publication_date, n.collection_date, p.name AS poi_name, p.id AS poi_id,
-             COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
-      FROM poi_news n
-      JOIN pois p ON n.poi_id = p.id
-      LEFT JOIN poi_news_urls u ON u.news_id = n.id
-      WHERE n.poi_id = $1 AND n.moderation_status IN ('published', 'auto_approved')
-      GROUP BY n.id, p.name, p.id
-      ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
-    `, [poi.id]);
-
-    const item = newsQuery.rows.find(n => generateSlug(n.title) === titleSlug);
+    const item = await findItemBySlugs('news', req.params.poiSlug, req.params.titleSlug);
     if (!item) return res.status(404).json({ error: 'News item not found' });
-
-    res.json({ ...item, poi_slug: poiSlug });
+    const { _poi, ...data } = item;
+    res.json(data);
   } catch (error) {
     console.error('Error fetching news permalink:', error);
     res.status(500).json({ error: 'Failed to fetch news item' });
   }
 });
 
-// Public permalink API — single event item by POI slug + title slug
 app.get('/api/events/:poiSlug/:titleSlug', async (req, res) => {
   try {
-    const { poiSlug, titleSlug } = req.params;
-
-    const poisQuery = await pool.query(
-      `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
-    );
-    const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
-    if (!poi) return res.status(404).json({ error: 'POI not found' });
-
-    const eventsQuery = await pool.query(`
-      SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, e.publication_date, e.collection_date,
-             p.name AS poi_name, p.id AS poi_id,
-             COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
-      FROM poi_events e
-      JOIN pois p ON e.poi_id = p.id
-      LEFT JOIN poi_event_urls u ON u.event_id = e.id
-      WHERE e.poi_id = $1 AND e.moderation_status IN ('published', 'auto_approved')
-      GROUP BY e.id, p.name, p.id
-      ORDER BY e.start_date DESC
-    `, [poi.id]);
-
-    const item = eventsQuery.rows.find(e => generateSlug(e.title) === titleSlug);
+    const item = await findItemBySlugs('event', req.params.poiSlug, req.params.titleSlug);
     if (!item) return res.status(404).json({ error: 'Event not found' });
-
-    res.json({ ...item, poi_slug: poiSlug });
+    const { _poi, ...data } = item;
+    res.json(data);
   } catch (error) {
     console.error('Error fetching event permalink:', error);
     res.status(500).json({ error: 'Failed to fetch event' });
@@ -2452,6 +2408,55 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');
 }
 
+// Escape HTML special characters for safe injection into meta tags
+function escapeHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+
+// Shared lookup: find a news or event item by POI slug + title slug
+async function findItemBySlugs(type, poiSlug, titleSlug) {
+  const poisQuery = await pool.query(
+    `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
+  );
+  const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
+  if (!poi) return null;
+
+  let rows;
+  if (type === 'event') {
+    const q = await pool.query(`
+      SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
+             e.location_details, e.source_url, e.publication_date, e.collection_date,
+             p.name AS poi_name, p.id AS poi_id,
+             COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
+      FROM poi_events e
+      JOIN pois p ON e.poi_id = p.id
+      LEFT JOIN poi_event_urls u ON u.event_id = e.id
+      WHERE e.poi_id = $1 AND e.moderation_status IN ('published', 'auto_approved')
+      GROUP BY e.id, p.name, p.id
+      ORDER BY e.start_date DESC
+    `, [poi.id]);
+    rows = q.rows;
+  } else {
+    const q = await pool.query(`
+      SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
+             n.publication_date, n.collection_date, p.name AS poi_name, p.id AS poi_id,
+             COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
+      FROM poi_news n
+      JOIN pois p ON n.poi_id = p.id
+      LEFT JOIN poi_news_urls u ON u.news_id = n.id
+      WHERE n.poi_id = $1 AND n.moderation_status IN ('published', 'auto_approved')
+      GROUP BY n.id, p.name, p.id
+      ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
+    `, [poi.id]);
+    rows = q.rows;
+  }
+
+  const item = rows.find(r => generateSlug(r.title) === titleSlug);
+  return item ? { ...item, poi_slug: poiSlug, _poi: poi } : null;
+}
+
 // Middleware to inject OpenGraph tags for POI deep links (MUST be before express.static)
 // This allows social media crawlers to get proper previews when users share ?poi= URLs
 app.use(async (req, res, next) => {
@@ -2548,54 +2553,28 @@ app.use(async (req, res, next) => {
   const [poiSlug, titleSlug] = isEvent ? [eventMatch[1], eventMatch[2]] : [newsMatch[1], newsMatch[2]];
 
   try {
-    // Find POI by slug
-    const poisQuery = await pool.query(
-      `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
-    );
-    const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
-    if (!poi) return next();
-
-    // Find the item under this POI
-    let item;
-    if (isEvent) {
-      const q = await pool.query(`
-        SELECT id, title, description, start_date, end_date, event_type, source_url
-        FROM poi_events
-        WHERE poi_id = $1 AND moderation_status IN ('published', 'auto_approved')
-        ORDER BY start_date DESC
-      `, [poi.id]);
-      item = q.rows.find(e => generateSlug(e.title) === titleSlug);
-    } else {
-      const q = await pool.query(`
-        SELECT id, title, summary, source_url, source_name, news_type, publication_date
-        FROM poi_news
-        WHERE poi_id = $1 AND moderation_status IN ('published', 'auto_approved')
-        ORDER BY COALESCE(publication_date, collection_date) DESC
-      `, [poi.id]);
-      item = q.rows.find(n => generateSlug(n.title) === titleSlug);
-    }
+    const item = await findItemBySlugs(isEvent ? 'event' : 'news', poiSlug, titleSlug);
     if (!item) return next();
 
     const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
     const canonicalUrl = `${baseUrl}${req.path}`;
     const description = (isEvent ? item.description : item.summary) || '';
-    const ogTitle = `${item.title} | ${poi.name}`;
-    const ogDescription = description.length > 200 ? description.substring(0, 197) + '...' : description;
+    const safeTitle = escapeHtml(`${item.title} | ${item._poi.name}`);
+    const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
     const ogImage = `${baseUrl}/brand/rotv-og-share-1200x630.jpg`;
 
-    // Read index.html and inject OG tags
     const indexPath = path.join(staticPath, 'index.html');
     let html = await fs.readFile(indexPath, 'utf-8');
 
-    html = html.replace(/<title>.*?<\/title>/, `<title>${ogTitle.replace(/</g, '&lt;')} | Roots of The Valley</title>`);
-    html = html.replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${ogTitle.replace(/"/g, '&quot;')}" />`);
-    html = html.replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${ogDescription.replace(/"/g, '&quot;')}" />`);
+    html = html.replace(/<title>.*?<\/title>/, `<title>${safeTitle} | Roots of The Valley</title>`);
+    html = html.replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${safeTitle}" />`);
+    html = html.replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${safeDesc}" />`);
     html = html.replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${canonicalUrl}" />`);
     html = html.replace(/<meta property="og:type" content="[^"]*" \/>/, `<meta property="og:type" content="article" />`);
     html = html.replace(/<meta property="og:image" content="[^"]*" \/>/, `<meta property="og:image" content="${ogImage}" />`);
-    html = html.replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${ogTitle.replace(/"/g, '&quot;')}" />`);
-    html = html.replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${ogDescription.replace(/"/g, '&quot;')}" />`);
-    html = html.replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${ogDescription.replace(/"/g, '&quot;')}" />`);
+    html = html.replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${safeTitle}" />`);
+    html = html.replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${safeDesc}" />`);
+    html = html.replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${safeDesc}" />`);
 
     res.setHeader('Content-Type', 'text/html');
     return res.send(html);
