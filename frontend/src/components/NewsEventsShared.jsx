@@ -3,6 +3,18 @@
  * Used by NewsSettings, NewsEvents, ParkNews, and ParkEvents
  */
 import React from 'react';
+import ShareButton from './ShareButton';
+
+// Generate URL-friendly slug (must match backend generateSlug)
+function generateSlug(name) {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
 
 /**
  * Format a date string for display in US format (MM/DD/YYYY)
@@ -335,6 +347,14 @@ export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
         ) : item.source_url ? (
           <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">Read more</a>
         ) : null}
+        {item.poi_name && (
+          <ShareButton
+            compact
+            title={item.title}
+            text={item.summary || ''}
+            url={`/news/${generateSlug(item.poi_name)}/${generateSlug(item.title)}`}
+          />
+        )}
       </div>
       {children}
     </div>
@@ -402,6 +422,14 @@ export function EventCardBody({ item, onSelectPoi, calendarButtons, children, cl
         ) : item.source_url ? (
           <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="event-link">More info</a>
         ) : null}
+        {item.poi_name && (
+          <ShareButton
+            compact
+            title={item.title}
+            text={item.description || ''}
+            url={`/events/${generateSlug(item.poi_name)}/${generateSlug(item.title)}`}
+          />
+        )}
       </div>
       {children}
     </div>

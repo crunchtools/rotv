@@ -22,6 +22,8 @@ import UsersSettings from './components/UsersSettings';
 import UserSettings from './components/UserSettings';
 import NewsletterSettings from './components/NewsletterSettings';
 import ResultsTab from './components/ResultsTab';
+import NewsPermalink from './components/NewsPermalink';
+import EventPermalink from './components/EventPermalink';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -234,6 +236,10 @@ function AppContent() {
     }
   }, [location.pathname]);
 
+  // Known main tab paths — used to distinguish tab URLs from POI slugs
+  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'edit', 'settings']);
+  const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
+
   // Helper to handle tab changes and clear MTB mode if needed
   const handleTabChange = useCallback((newTab) => {
     const previousActiveTab = activeTab;
@@ -260,11 +266,20 @@ function AppContent() {
       if (location.pathname.startsWith('/mtb-trail-status')) {
         navigate('/');
         setSelectedFromMtbList(false);
+        return;
       } else if (location.pathname.startsWith('/organizations')) {
         navigate('/');
+        return;
       }
     }
-  }, [activeTab, location.pathname, navigate]);
+
+    // Update URL to reflect the active main tab (only when no POI is selected)
+    if (!selectedDestination && !selectedLinearFeature) {
+      isProgrammaticNavigationRef.current = true;
+      if (newTab === 'view') navigate('/');
+      else navigate(`/${newTab}`);
+    }
+  }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature]);
 
   // Sync URL to settings tab (for direct navigation to /admin/jobs)
   useEffect(() => {
@@ -388,6 +403,10 @@ function AppContent() {
 
   // Store initial POI slug for after data loads
   const [initialPoiSlug, setInitialPoiSlug] = useState(null);
+  // Initial sidebar sub-tab from URL (e.g., /poi-slug/news → 'news')
+  const [initialSidebarTab, setInitialSidebarTab] = useState(null);
+  // Permalink state: when set, sidebar shows news/event detail instead of normal tabs
+  const [permalinkInfo, setPermalinkInfo] = useState(null); // { type: 'news'|'event', poiSlug, titleSlug }
 
   // Handle tab query parameter from auth redirect
   useEffect(() => {
@@ -407,7 +426,21 @@ function AppContent() {
     let poiSlug = null;
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
-    if (pathParts.length === 1 && pathParts[0] !== 'mtb-trail-status') {
+    const mainTabPaths = ['results', 'news', 'events', 'edit', 'settings'];
+    const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
+
+    if (pathParts.length === 3 && (pathParts[0] === 'news' || pathParts[0] === 'events')) {
+      // Permalink path: /news/:poiSlug/:titleSlug or /events/:poiSlug/:titleSlug
+      poiSlug = pathParts[1];
+      setPermalinkInfo({ type: pathParts[0] === 'events' ? 'event' : 'news', poiSlug: pathParts[1], titleSlug: pathParts[2] });
+    } else if (pathParts.length === 2 && sidebarSubTabs.includes(pathParts[1])) {
+      // POI sub-tab path: /:poiSlug/:subTab (e.g., /the-rabbit-hole-akron/news)
+      poiSlug = pathParts[0];
+      setInitialSidebarTab(pathParts[1] === 'info' ? 'view' : pathParts[1]);
+    } else if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
+      // Main tab path: /news, /events, /results, /edit, /settings
+      setActiveTab(pathParts[0]);
+    } else if (pathParts.length === 1 && pathParts[0] !== 'mtb-trail-status') {
       // POI path: /:slug (but not /mtb-trail-status which is the list page)
       poiSlug = pathParts[0];
     } else {
@@ -523,8 +556,56 @@ function AppContent() {
       return;
     }
 
-    // Check if path is a POI slug: /:slug (single segment) or /mtb-trail-status/:slug (2 segments)
-    const pathParts = location.pathname.split('/').filter(Boolean); // Remove empty strings
+    // Check path structure
+    const pathParts = location.pathname.split('/').filter(Boolean);
+
+    // Handle main tab paths: /results, /news, /events, /edit, /settings
+    const mainTabPaths = ['results', 'news', 'events', 'edit', 'settings'];
+    if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
+      setActiveTab(pathParts[0]);
+      if (selectedDestination || selectedLinearFeature) {
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        document.title = 'Roots of The Valley';
+      }
+      return;
+    }
+
+    // Handle POI sub-tab paths: /:poiSlug/:subTab (e.g., /the-rabbit-hole-akron/news)
+    const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
+    if (pathParts.length === 2 && sidebarSubTabs.includes(pathParts[1])
+        && pathParts[0] !== 'mtb-trail-status' && pathParts[0] !== 'organizations' && pathParts[0] !== 'admin') {
+      const poiSlug = pathParts[0];
+      const subTab = pathParts[1] === 'info' ? 'view' : pathParts[1];
+      setInitialSidebarTab(subTab);
+
+      const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
+        : selectedLinearFeature ? generateSlug(selectedLinearFeature.name) : null;
+      if (currentSlug !== poiSlug) {
+        skipNextFlyRef.current = false;
+        isLoadingFromUrlRef.current = true;
+        const destination = destinations.find(d => generateSlug(d.name) === poiSlug);
+        if (destination) {
+          setSelectedDestination(destination);
+          setSelectedLinearFeature(null);
+          setActiveTab('view');
+          document.title = `${destination.name} | Roots of The Valley`;
+          setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+          return;
+        }
+        const lf = linearFeatures.find(f => generateSlug(f.name) === poiSlug);
+        if (lf) {
+          setSelectedLinearFeature(lf);
+          setSelectedDestination(null);
+          setActiveTab('view');
+          document.title = `${lf.name} | Roots of The Valley`;
+          setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+          return;
+        }
+        isLoadingFromUrlRef.current = false;
+      }
+      return;
+    }
 
     // Handle /mtb-trail-status/:slug (2 segments)
     if (pathParts.length === 2 && pathParts[0] === 'mtb-trail-status') {
@@ -619,6 +700,32 @@ function AppContent() {
       // Organization not found - clear flag
       console.warn('[Browser Nav Effect] Organization not found for slug:', orgSlug);
       isLoadingFromUrlRef.current = false;
+      return;
+    }
+
+    // Handle /news/:poiSlug/:titleSlug or /events/:poiSlug/:titleSlug (3 segments)
+    if (pathParts.length === 3 && (pathParts[0] === 'news' || pathParts[0] === 'events')) {
+      const type = pathParts[0] === 'events' ? 'event' : 'news';
+      const poiSlug = pathParts[1];
+      const titleSlug = pathParts[2];
+
+      // Set permalink info so sidebar shows the detail panel
+      setPermalinkInfo({ type, poiSlug, titleSlug });
+
+      // Select the POI if not already selected
+      const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
+        : selectedLinearFeature ? generateSlug(selectedLinearFeature.name) : null;
+      if (currentSlug !== poiSlug) {
+        const destination = destinations.find(d => generateSlug(d.name) === poiSlug);
+        if (destination) {
+          isLoadingFromUrlRef.current = true;
+          setSelectedDestination(destination);
+          setSelectedLinearFeature(null);
+          setActiveTab('view');
+          document.title = `${destination.name} | Roots of The Valley`;
+          setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+        }
+      }
       return;
     }
 
@@ -1483,7 +1590,7 @@ function AppContent() {
             className={`tab-btn ${activeTab === 'view' ? 'active' : ''}`}
             onClick={() => handleTabChange('view')}
           >
-            View
+            Map
           </button>
           <button
             className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
@@ -1970,6 +2077,11 @@ function AppContent() {
           onStartDrawingAssociations={handleStartDrawingAssociations}
           showNpsMap={showNpsMap}
           onToggleNpsMap={setShowNpsMap}
+          permalinkInfo={permalinkInfo}
+          onSetPermalink={setPermalinkInfo}
+          onClearPermalink={() => setPermalinkInfo(null)}
+          initialSidebarTab={initialSidebarTab}
+          onSidebarTabChange={(tab) => setInitialSidebarTab(null)}
         />
       </main>
     </div>

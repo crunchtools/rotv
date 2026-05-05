@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from './ImageUploader';
 import ThumbnailCarousel from './ThumbnailCarousel';
-import { formatDateTime, formatPublicationDate } from './NewsEventsShared';
+import { formatDateTime, formatPublicationDate, NewsTypeIcon } from './NewsEventsShared';
+import ShareButton from './ShareButton';
 import Mosaic from './Mosaic';
 import MediaUploadModal from './MediaUploadModal';
 
@@ -1123,8 +1124,14 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   );
 }
 
+// Generate URL-friendly slug (must match backend generateSlug)
+function generateSlug(name) {
+  if (!name) return '';
+  return name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
 // POI-specific News component
-function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
+function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNews }) {
   const navigate = useNavigate();
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1224,13 +1231,22 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
         {news.length === 0 ? (
           <div className="sidebar-tab-empty">No news for this location.</div>
         ) : news.map(item => (
-        <div key={item.id} className={`poi-news-item ${item.news_type || 'general'}`}>
+        <div key={item.id} className={`poi-news-item ${item.news_type || 'general'}`}
+             onClick={() => {
+               if (!poiName) return;
+               const poiSlug = generateSlug(poiName);
+               const titleSlug = generateSlug(item.title);
+               navigate(`/news/${poiSlug}/${titleSlug}`);
+               if (onSelectNews) onSelectNews({ type: 'news', poiSlug, titleSlug });
+             }}
+             style={{ cursor: 'pointer' }}>
           <div className="poi-news-header">
+            <NewsTypeIcon type={item.news_type} />
             <span className="poi-news-title">{item.title}</span>
             {isAdmin && editMode && (
               <button
                 className="news-delete-btn"
-                onClick={() => handleDelete(item.id)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
                 disabled={deleting === item.id}
               >
                 {deleting === item.id ? '...' : '×'}
@@ -1247,15 +1263,85 @@ function PoiNews({ poiId, isAdmin, editMode, onCountChange }) {
           {item.summary && <p className="poi-news-summary">{item.summary}</p>}
           <div className="poi-news-meta">
             {item.source_name && <span className="news-source">{item.source_name}</span>}
-            {item.source_url && (
-              <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">
-                Read more
-              </a>
-            )}
           </div>
         </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// News/Event detail panel — takes over the sidebar when a permalink is active
+function ContentDetail({ permalinkInfo, onBack }) {
+  const [item, setItem] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!permalinkInfo) return;
+    const { type, poiSlug, titleSlug } = permalinkInfo;
+    const endpoint = type === 'event' ? 'events' : 'news';
+    fetch(`/api/${endpoint}/${poiSlug}/${titleSlug}`)
+      .then(res => {
+        if (!res.ok) throw new Error(res.status === 404 ? 'Not found' : 'Failed to load');
+        return res.json();
+      })
+      .then(data => { setItem(data); setLoading(false); })
+      .catch(err => { setError(err.message); setLoading(false); });
+  }, [permalinkInfo]);
+
+  if (loading) return <div className="sidebar-tab-loading">Loading...</div>;
+  if (error || !item) return (
+    <div className="content-detail">
+      <button className="content-detail-back" onClick={onBack}>&larr; Back</button>
+      <p className="sidebar-tab-empty">{error || 'Not found'}</p>
+    </div>
+  );
+
+  const isEvent = permalinkInfo.type === 'event';
+  const description = isEvent ? item.description : item.summary;
+  const dateStr = isEvent
+    ? (item.start_date ? new Date(item.start_date).toLocaleDateString('en-US', { weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' }) : '')
+    : (item.publication_date ? formatPublicationDate(item.publication_date) : '');
+
+  return (
+    <div className="content-detail">
+      <button className="content-detail-back" onClick={onBack}>&larr; Back to {item.poi_name || 'POI'}</button>
+      <div className="content-detail-header">
+        {isEvent ? <EventTypeIcon type={item.event_type} /> : <NewsTypeIcon type={item.news_type} />}
+        <h3 className="content-detail-title">{item.title}</h3>
+      </div>
+      <div className="content-detail-meta">
+        {item.source_name && <span className="news-source">{item.source_name}</span>}
+        {dateStr && <span className="news-date">{dateStr}</span>}
+      </div>
+      {isEvent && item.location_details && (
+        <div className="content-detail-location"><strong>Location:</strong> {item.location_details}</div>
+      )}
+      {description && <p className="content-detail-body">{description}</p>}
+      <div className="content-detail-actions">
+        {item.source_url && (
+          <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">
+            {isEvent ? 'View original' : 'Read full article'}
+          </a>
+        )}
+        <ShareButton
+          compact
+          title={item.title}
+          text={description || ''}
+          url={`/${isEvent ? 'events' : 'news'}/${permalinkInfo.poiSlug}/${permalinkInfo.titleSlug}`}
+        />
+      </div>
+      {!isEvent && item.additional_urls && item.additional_urls.length > 0 && (
+        <div className="content-detail-sources">
+          <span>Also reported by: </span>
+          {item.additional_urls.map((u, i) => (
+            <a key={i} href={u.url} target="_blank" rel="noopener noreferrer" className="news-link">
+              {u.source_name || `Source ${i + 2}`}
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -2269,12 +2355,29 @@ function TrailStatus({ poiId, _poiName, isAdmin, editMode, _selectedFromMtbList,
   );
 }
 
-function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, showNpsMap, onToggleNpsMap }) {
+function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, showNpsMap, onToggleNpsMap, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
+  const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [sidebarTab, setSidebarTab] = useState('view');
+  const [sidebarTab, setSidebarTab] = useState(initialSidebarTab || 'view');
+
+  // Switch to news/events tab when a permalink is active
+  useEffect(() => {
+    if (permalinkInfo) {
+      setSidebarTab(permalinkInfo.type === 'event' ? 'events' : 'news');
+    }
+  }, [permalinkInfo]);
+
+  // Apply initialSidebarTab when it changes (e.g., from browser back/forward)
+  useEffect(() => {
+    if (initialSidebarTab) {
+      setSidebarTab(initialSidebarTab);
+    }
+  }, [initialSidebarTab]);
+
+  // handleSidebarTabChange defined after displayItem (below)
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAssociationsModal, setShowAssociationsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -2513,6 +2616,16 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const displayItem = linearFeature || destination;
   const isLinearFeature = !!linearFeature;
 
+  // Helper to change sidebar tab and update URL
+  const handleSidebarTabChange = useCallback((tab) => {
+    setSidebarTab(tab);
+    if (onSidebarTabChange) onSidebarTabChange(tab);
+    const poiSlug = generateSlug(displayItem?.name);
+    if (poiSlug) {
+      navigate(tab === 'view' ? `/${poiSlug}` : `/${poiSlug}/${tab}`);
+    }
+  }, [displayItem, navigate, onSidebarTabChange]);
+
   // Reset edit state and sidebar tab when selection changes
   useEffect(() => {
     if (displayItem) {
@@ -2520,8 +2633,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       // Auto-enter edit mode if admin and editMode is on, or if creating new POI
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
-      // Stay on view tab — trail status is now shown inline on the Info tab
-      setSidebarTab('view');
+      // Stay on view tab unless a permalink or initial sub-tab is active
+      if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
       setIsEditing(false);
     }
@@ -3040,31 +3153,31 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         <div className="sidebar-tabs">
           <button
             className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('view')}
+            onClick={() => handleSidebarTabChange('view')}
           >
             Info
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('news')}
+            onClick={() => handleSidebarTabChange('news')}
           >
             News
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('events')}
+            onClick={() => handleSidebarTabChange('events')}
           >
             Events
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('history')}
+            onClick={() => handleSidebarTabChange('history')}
           >
             History
           </button>
           <button
             className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-            onClick={() => setSidebarTab('associations')}
+            onClick={() => handleSidebarTabChange('associations')}
           >
             Associations
           </button>
@@ -3112,7 +3225,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           )}
 
           {sidebarTab === 'news' && linearFeature && (
-            <PoiNews poiId={linearFeature.id} isAdmin={isAdmin} editMode={editMode} onCountChange={setNewsCount} />
+            <PoiNews poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setNewsCount}
+              onSelectNews={(info) => onSetPermalink && onSetPermalink(info)} />
           )}
 
           {sidebarTab === 'events' && linearFeature && (
@@ -3347,31 +3461,31 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       <div className="sidebar-tabs">
         <button
           className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('view')}
+          onClick={() => handleSidebarTabChange('view')}
         >
           Info
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('news')}
+          onClick={() => handleSidebarTabChange('news')}
         >
           News
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('events')}
+          onClick={() => handleSidebarTabChange('events')}
         >
           Events
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('history')}
+          onClick={() => handleSidebarTabChange('history')}
         >
           History
         </button>
         <button
           className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-          onClick={() => setSidebarTab('associations')}
+          onClick={() => handleSidebarTabChange('associations')}
         >
           Associations
         </button>
@@ -3419,11 +3533,26 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           )
         )}
 
-        {sidebarTab === 'news' && destination && (
-          <PoiNews poiId={destination.id} isAdmin={isAdmin} editMode={editMode} onCountChange={setNewsCount} />
+        {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') && (
+          <ContentDetail
+            permalinkInfo={permalinkInfo}
+            onBack={() => {
+              if (onClearPermalink) onClearPermalink();
+              // Navigate back to the POI's news/events sub-tab
+              const subTab = permalinkInfo?.type === 'event' ? 'events' : 'news';
+              if (destination) {
+                navigate(`/${generateSlug(destination.name)}/${subTab}`);
+              }
+            }}
+          />
         )}
 
-        {sidebarTab === 'events' && destination && (
+        {sidebarTab === 'news' && destination && !permalinkInfo && (
+          <PoiNews poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setNewsCount}
+            onSelectNews={(info) => onSetPermalink && onSetPermalink(info)} />
+        )}
+
+        {sidebarTab === 'events' && destination && !permalinkInfo && (
           <PoiEvents poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount} />
         )}
 
