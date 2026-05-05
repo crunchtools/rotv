@@ -19,7 +19,7 @@ export default function ShareButton({ title, text, url, compact = false }) {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 3000);
     } catch {
       // Last resort: select-and-copy via textarea
       const ta = document.createElement('textarea');
@@ -29,7 +29,7 @@ export default function ShareButton({ title, text, url, compact = false }) {
       document.execCommand('copy');
       document.body.removeChild(ta);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 3000);
     }
   };
 
@@ -43,16 +43,28 @@ export default function ShareButton({ title, text, url, compact = false }) {
 
   if (compact) {
     return (
-      <button
-        onClick={(e) => { e.stopPropagation(); handleShare(); }}
-        title={copied ? 'Link copied!' : 'Share'}
-        style={{
-          background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
-          color: copied ? '#2e7d32' : '#666', display: 'inline-flex', alignItems: 'center'
-        }}
-      >
-        {copied ? '\u2713' : shareIcon}
-      </button>
+      <span style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
+        <button
+          onClick={(e) => { e.stopPropagation(); handleShare(); }}
+          title="Share"
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
+            color: copied ? '#2e7d32' : '#666', display: 'inline-flex', alignItems: 'center'
+          }}
+        >
+          {copied ? '\u2713' : shareIcon}
+        </button>
+        {copied && (
+          <span style={{
+            position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
+            background: '#333', color: '#fff', padding: '4px 10px', borderRadius: '4px',
+            fontSize: '12px', whiteSpace: 'nowrap', marginBottom: '4px',
+            pointerEvents: 'none', zIndex: 1000
+          }}>
+            Link copied!
+          </span>
+        )}
+      </span>
     );
   }
 
