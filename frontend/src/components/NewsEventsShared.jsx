@@ -352,7 +352,7 @@ export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
             compact
             title={item.title}
             text={item.summary || ''}
-            url={`/news/${generateSlug(item.poi_name)}/${generateSlug(item.title)}`}
+            url={`/${generateSlug(item.poi_name)}/news/${generateSlug(item.title)}`}
           />
         )}
       </div>
@@ -427,7 +427,7 @@ export function EventCardBody({ item, onSelectPoi, calendarButtons, children, cl
             compact
             title={item.title}
             text={item.description || ''}
-            url={`/events/${generateSlug(item.poi_name)}/${generateSlug(item.title)}`}
+            url={`/${generateSlug(item.poi_name)}/events/${generateSlug(item.title)}`}
           />
         )}
       </div>

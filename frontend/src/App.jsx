@@ -273,8 +273,21 @@ function AppContent() {
       }
     }
 
-    // Update URL to reflect the active main tab (only when no POI is selected)
-    if (!selectedDestination && !selectedLinearFeature) {
+    // Update URL to reflect the active main tab
+    // If a POI is selected and we're switching to a content tab (news, events, results),
+    // clear the POI so the URL reflects the main tab
+    if (newTab !== 'view' && newTab !== 'edit') {
+      if (selectedDestination || selectedLinearFeature) {
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        // Clear any permalink state
+        setPermalinkInfo(null);
+        document.title = 'Roots of The Valley';
+      }
+      isProgrammaticNavigationRef.current = true;
+      navigate(`/${newTab}`);
+    } else if (!selectedDestination && !selectedLinearFeature) {
+      // Map or Edit tab with no POI — go to root
       isProgrammaticNavigationRef.current = true;
       if (newTab === 'view') navigate('/');
       else navigate(`/${newTab}`);
@@ -429,10 +442,10 @@ function AppContent() {
     const mainTabPaths = ['results', 'news', 'events', 'edit', 'settings'];
     const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
 
-    if (pathParts.length === 3 && (pathParts[0] === 'news' || pathParts[0] === 'events')) {
-      // Permalink path: /news/:poiSlug/:titleSlug or /events/:poiSlug/:titleSlug
-      poiSlug = pathParts[1];
-      setPermalinkInfo({ type: pathParts[0] === 'events' ? 'event' : 'news', poiSlug: pathParts[1], titleSlug: pathParts[2] });
+    if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
+      // Permalink path: /:poiSlug/news/:titleSlug or /:poiSlug/events/:titleSlug
+      poiSlug = pathParts[0];
+      setPermalinkInfo({ type: pathParts[1] === 'events' ? 'event' : 'news', poiSlug: pathParts[0], titleSlug: pathParts[2] });
     } else if (pathParts.length === 2 && sidebarSubTabs.includes(pathParts[1])) {
       // POI sub-tab path: /:poiSlug/:subTab (e.g., /the-rabbit-hole-akron/news)
       poiSlug = pathParts[0];
@@ -703,10 +716,10 @@ function AppContent() {
       return;
     }
 
-    // Handle /news/:poiSlug/:titleSlug or /events/:poiSlug/:titleSlug (3 segments)
-    if (pathParts.length === 3 && (pathParts[0] === 'news' || pathParts[0] === 'events')) {
-      const type = pathParts[0] === 'events' ? 'event' : 'news';
-      const poiSlug = pathParts[1];
+    // Handle /:poiSlug/news/:titleSlug or /:poiSlug/events/:titleSlug (3 segments)
+    if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
+      const type = pathParts[1] === 'events' ? 'event' : 'news';
+      const poiSlug = pathParts[0];
       const titleSlug = pathParts[2];
 
       // Set permalink info so sidebar shows the detail panel

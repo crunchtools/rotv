@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from './ImageUploader';
 import ThumbnailCarousel from './ThumbnailCarousel';
-import { formatDateTime, formatPublicationDate, NewsTypeIcon } from './NewsEventsShared';
+import { formatDateTime, formatPublicationDate, NewsTypeIcon, EventTypeIcon } from './NewsEventsShared';
 import ShareButton from './ShareButton';
 import Mosaic from './Mosaic';
 import MediaUploadModal from './MediaUploadModal';
@@ -1236,7 +1236,7 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
                if (!poiName) return;
                const poiSlug = generateSlug(poiName);
                const titleSlug = generateSlug(item.title);
-               navigate(`/news/${poiSlug}/${titleSlug}`);
+               navigate(`/${poiSlug}/news/${titleSlug}`);
                if (onSelectNews) onSelectNews({ type: 'news', poiSlug, titleSlug });
              }}
              style={{ cursor: 'pointer' }}>
@@ -1281,7 +1281,7 @@ function ContentDetail({ permalinkInfo, onBack }) {
     if (!permalinkInfo) return;
     const { type, poiSlug, titleSlug } = permalinkInfo;
     const endpoint = type === 'event' ? 'events' : 'news';
-    fetch(`/api/${endpoint}/${poiSlug}/${titleSlug}`)
+    fetch(`/api/pois/${poiSlug}/${endpoint}/${titleSlug}`)
       .then(res => {
         if (!res.ok) throw new Error(res.status === 404 ? 'Not found' : 'Failed to load');
         return res.json();
@@ -1322,14 +1322,23 @@ function ContentDetail({ permalinkInfo, onBack }) {
       <div className="content-detail-actions">
         {item.source_url && (
           <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">
-            {isEvent ? 'View original' : 'Read full article'}
+            {isEvent ? 'More info' : 'Read more'}
+          </a>
+        )}
+        {isEvent && item.start_date && (
+          <a
+            href={`https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(item.title)}&dates=${String(item.start_date).split('T')[0].replace(/-/g, '')}/${String(item.end_date || item.start_date).split('T')[0].replace(/-/g, '')}&details=${encodeURIComponent(description)}&location=${encodeURIComponent(item.location_details || item.poi_name || '')}`}
+            target="_blank" rel="noopener noreferrer" className="news-link"
+          >
+            + Add to Calendar
           </a>
         )}
         <ShareButton
           compact
           title={item.title}
           text={description || ''}
-          url={`/${isEvent ? 'events' : 'news'}/${permalinkInfo.poiSlug}/${permalinkInfo.titleSlug}`}
+          url={`/${permalinkInfo.poiSlug}/${isEvent ? 'events' : 'news'}/${permalinkInfo.titleSlug}`}
+          label="Share"
         />
       </div>
       {!isEvent && item.additional_urls && item.additional_urls.length > 0 && (
@@ -1347,7 +1356,7 @@ function ContentDetail({ permalinkInfo, onBack }) {
 }
 
 // POI-specific Events component
-function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
+function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectEvent }) {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1461,13 +1470,21 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
         {events.length === 0 ? (
           <div className="sidebar-tab-empty">No upcoming events for this location.</div>
         ) : events.map(item => (
-        <div key={item.id} className={`poi-event-item ${item.event_type || 'program'}`}>
+        <div key={item.id} className={`poi-event-item ${item.event_type || 'program'}`}
+             onClick={() => {
+               if (!poiName) return;
+               const poiSlug = generateSlug(poiName);
+               const titleSlug = generateSlug(item.title);
+               navigate(`/${poiSlug}/events/${titleSlug}`);
+               if (onSelectEvent) onSelectEvent({ type: 'event', poiSlug, titleSlug });
+             }}
+             style={{ cursor: 'pointer' }}>
           <div className="poi-event-header">
             <span className="poi-event-title">{item.title}</span>
             {isAdmin && editMode && (
               <button
                 className="news-delete-btn"
-                onClick={() => handleDelete(item.id)}
+                onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
                 disabled={deleting === item.id}
               >
                 {deleting === item.id ? '...' : '×'}
@@ -1476,7 +1493,7 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
           </div>
           <div className="poi-event-date">
             {formatPublicationDate(item.start_date)}
-            {item.end_date && item.end_date !== item.start_date && (
+            {item.end_date && String(item.end_date).substring(0, 10) !== String(item.start_date).substring(0, 10) && (
               <> - {formatPublicationDate(item.end_date)}</>
             )}
           </div>
@@ -1486,21 +1503,6 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange }) {
               <strong>Location:</strong> {item.location_details}
             </div>
           )}
-          <div className="event-links">
-            {item.source_url && (
-              <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="event-link">
-                More info
-              </a>
-            )}
-            <a
-              href={createGoogleCalendarLink(item, poiName)}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="event-link calendar-link"
-            >
-              + Add to Calendar
-            </a>
-          </div>
         </div>
         ))}
       </div>
@@ -2620,11 +2622,13 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const handleSidebarTabChange = useCallback((tab) => {
     setSidebarTab(tab);
     if (onSidebarTabChange) onSidebarTabChange(tab);
+    // Clear permalink when switching to a different tab (backs out of news/event detail)
+    if (permalinkInfo && onClearPermalink) onClearPermalink();
     const poiSlug = generateSlug(displayItem?.name);
     if (poiSlug) {
       navigate(tab === 'view' ? `/${poiSlug}` : `/${poiSlug}/${tab}`);
     }
-  }, [displayItem, navigate, onSidebarTabChange]);
+  }, [displayItem, navigate, onSidebarTabChange, permalinkInfo, onClearPermalink]);
 
   // Reset edit state and sidebar tab when selection changes
   useEffect(() => {
@@ -2633,8 +2637,9 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       // Auto-enter edit mode if admin and editMode is on, or if creating new POI
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
-      // Stay on view tab unless a permalink or initial sub-tab is active
-      if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
+      // Always reset to Info tab when selecting a new POI.
+      // Permalink and initialSidebarTab effects will override if needed.
+      if (!permalinkInfo) setSidebarTab('view');
     } else {
       setIsEditing(false);
     }
@@ -3230,7 +3235,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           )}
 
           {sidebarTab === 'events' && linearFeature && (
-            <PoiEvents poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount} />
+            <PoiEvents poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount}
+              onSelectEvent={(info) => onSetPermalink && onSetPermalink(info)} />
           )}
 
           {sidebarTab === 'history' && linearFeature && (
@@ -3553,7 +3559,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         )}
 
         {sidebarTab === 'events' && destination && !permalinkInfo && (
-          <PoiEvents poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount} />
+          <PoiEvents poiId={destination.id} poiName={destination.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount}
+            onSelectEvent={(info) => onSetPermalink && onSetPermalink(info)} />
         )}
 
         {sidebarTab === 'history' && destination && (

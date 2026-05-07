@@ -20,7 +20,7 @@ export default function NewsPermalink({ poiSlug, titleSlug }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(`/api/news/${poiSlug}/${titleSlug}`)
+    fetch(`/api/pois/${poiSlug}/news/${titleSlug}`)
       .then(res => {
         if (!res.ok) throw new Error(res.status === 404 ? 'Article not found' : 'Failed to load');
         return res.json();
@@ -51,7 +51,7 @@ export default function NewsPermalink({ poiSlug, titleSlug }) {
     );
   }
 
-  const permalinkUrl = `/news/${poiSlug}/${titleSlug}`;
+  const permalinkUrl = `/${poiSlug}/news/${titleSlug}`;
 
   return (
     <div className="permalink-page">

@@ -1623,6 +1623,25 @@ body {
   margin-top: 0.75rem;
 }
 
+.content-detail-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.content-detail-btn:hover {
+  background: #f0f0f0;
+  text-decoration: none;
+}
+
 .content-detail-sources {
   margin-top: 0.75rem;
   padding-top: 0.75rem;

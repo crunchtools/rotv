@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-export default function ShareButton({ title, text, url, compact = false }) {
+export default function ShareButton({ title, text, url, compact = false, label = null }) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
@@ -47,14 +47,19 @@ export default function ShareButton({ title, text, url, compact = false }) {
         <button
           onClick={(e) => { e.stopPropagation(); handleShare(); }}
           title="Share"
-          style={{
+          className={label ? 'news-link' : undefined}
+          style={label ? {
+            background: 'none', border: 'none', cursor: 'pointer', padding: 0,
+            fontSize: '0.875rem', fontWeight: 500, fontFamily: 'inherit',
+            display: 'inline-flex', alignItems: 'center', gap: '4px'
+          } : {
             background: 'none', border: 'none', cursor: 'pointer', padding: '4px',
             color: copied ? '#2e7d32' : '#666', display: 'inline-flex', alignItems: 'center'
           }}
         >
-          {copied ? '\u2713' : shareIcon}
+          {copied ? '\u2713 Copied!' : label || shareIcon}
         </button>
-        {copied && (
+        {!label && copied && (
           <span style={{
             position: 'absolute', bottom: '100%', left: '50%', transform: 'translateX(-50%)',
             background: '#333', color: '#fff', padding: '4px 10px', borderRadius: '4px',

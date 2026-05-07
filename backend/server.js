@@ -2000,7 +2000,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
 });
 
 // Public permalink API — single news/event item by POI slug + title slug
-app.get('/api/news/:poiSlug/:titleSlug', async (req, res) => {
+app.get('/api/pois/:poiSlug/news/:titleSlug', async (req, res) => {
   try {
     const item = await findItemBySlugs('news', req.params.poiSlug, req.params.titleSlug);
     if (!item) return res.status(404).json({ error: 'News item not found' });
@@ -2012,7 +2012,7 @@ app.get('/api/news/:poiSlug/:titleSlug', async (req, res) => {
   }
 });
 
-app.get('/api/events/:poiSlug/:titleSlug', async (req, res) => {
+app.get('/api/pois/:poiSlug/events/:titleSlug', async (req, res) => {
   try {
     const item = await findItemBySlugs('event', req.params.poiSlug, req.params.titleSlug);
     if (!item) return res.status(404).json({ error: 'Event not found' });
@@ -2543,10 +2543,10 @@ app.use(async (req, res, next) => {
 });
 
 // Middleware to inject OpenGraph tags for news/event permalink URLs
-// Matches /news/:poiSlug/:titleSlug and /events/:poiSlug/:titleSlug
+// Matches /:poiSlug/news/:titleSlug and /:poiSlug/events/:titleSlug
 app.use(async (req, res, next) => {
-  const newsMatch = req.path.match(/^\/news\/([^/]+)\/([^/]+)$/);
-  const eventMatch = req.path.match(/^\/events\/([^/]+)\/([^/]+)$/);
+  const newsMatch = req.path.match(/^\/([^/]+)\/news\/([^/]+)$/);
+  const eventMatch = req.path.match(/^\/([^/]+)\/events\/([^/]+)$/);
   if (!newsMatch && !eventMatch) return next();
 
   const isEvent = !!eventMatch;

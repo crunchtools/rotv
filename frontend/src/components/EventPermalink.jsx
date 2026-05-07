@@ -20,7 +20,7 @@ export default function EventPermalink({ poiSlug, titleSlug }) {
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetch(`/api/events/${poiSlug}/${titleSlug}`)
+    fetch(`/api/pois/${poiSlug}/events/${titleSlug}`)
       .then(res => {
         if (!res.ok) throw new Error(res.status === 404 ? 'Event not found' : 'Failed to load');
         return res.json();
@@ -51,7 +51,7 @@ export default function EventPermalink({ poiSlug, titleSlug }) {
     );
   }
 
-  const permalinkUrl = `/events/${poiSlug}/${titleSlug}`;
+  const permalinkUrl = `/${poiSlug}/events/${titleSlug}`;
 
   return (
     <div className="permalink-page">
