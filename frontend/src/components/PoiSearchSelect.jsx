@@ -13,14 +13,12 @@ function PoiSearchSelect({ pois, value, onChange, placeholder = 'Search POIs...'
   const inputRef = useRef(null);
   const listRef = useRef(null);
 
-  // Find the currently selected POI name for display
   const selectedPoi = value ? pois.find(p => p.id === parseInt(value)) : null;
 
   const filtered = search.trim()
     ? pois.filter(p => p.name.toLowerCase().includes(search.toLowerCase())).slice(0, 50)
     : pois.slice(0, 50);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handler = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -31,7 +29,6 @@ function PoiSearchSelect({ pois, value, onChange, placeholder = 'Search POIs...'
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // Scroll highlighted item into view
   useEffect(() => {
     if (isOpen && listRef.current && listRef.current.children[highlightIndex]) {
       listRef.current.children[highlightIndex].scrollIntoView({ block: 'nearest' });

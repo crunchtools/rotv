@@ -88,8 +88,6 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
 
   const context = boundaries.join(', ');
 
-  // Events use "at POI" to anchor results to the venue, not just nearby geography.
-  // News uses "for POI in location" to capture coverage about the POI in local outlets.
   const query = contentType === 'events'
     ? `${prefix} at ${poi.name}${context ? ` (${context})` : ''}`
     : context
