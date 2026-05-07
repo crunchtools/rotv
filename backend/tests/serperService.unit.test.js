@@ -119,7 +119,7 @@ describe('Serper Service', () => {
 
       const result = await searchNewsUrls(mockPool, mockPoi, { contentType: 'events' });
 
-      expect(result.query).toBe('Upcoming events for Ledges Trail in Cuyahoga Valley National Park');
+      expect(result.query).toBe('Upcoming events at Ledges Trail (Cuyahoga Valley National Park)');
     });
 
     it('should include num: 3 in Serper API call body', async () => {
