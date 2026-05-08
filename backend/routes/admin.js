@@ -4068,6 +4068,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       if (!response.ok) {
         return res.status(502).json({ error: 'Internet Archive CDX API unavailable' });
       }
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('json')) {
+        return res.status(502).json({ error: 'Internet Archive returned non-JSON response (service may be temporarily offline)' });
+      }
       const data = await response.json();
       // CDX returns [[header], [row]] — first row after header is the earliest snapshot
       if (data.length < 2 || !Array.isArray(data[1]) || !data[1][0] || !/^\d{14}$/.test(data[1][0])) {
