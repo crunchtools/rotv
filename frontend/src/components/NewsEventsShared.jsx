@@ -207,14 +207,14 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
         {(() => {
           const startStr = String(item.start_date || '');
           const endStr = String(item.end_date || '');
-          const startDateOnly = startStr.substring(0, 10);
-          const endDateOnly = endStr.substring(0, 10);
           // Detect non-midnight time in both ISO ('T') and pg space format
           const _hasTime = (s) => { const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/); return m && m[1] !== '00:00:00'; };
           const _toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
           const startHasTime = _hasTime(startStr);
           const endHasTime = _hasTime(endStr);
-          const sameDay = endDateOnly === startDateOnly;
+          // Compare dates in Eastern time, not UTC — evening events can span midnight UTC
+          const _localDate = (s) => new Date(_toISO(s)).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+          const sameDay = endStr ? _localDate(startStr) === _localDate(endStr) : true;
 
           if (sameDay && startHasTime) {
             // Same-day event with times: "Sun, Apr 19, 2026, 10:30 AM – 12:00 PM"
@@ -267,8 +267,6 @@ export function formatEventDateRange(startDate, endDate) {
   const startStr = String(startDate || '');
   const endStr = String(endDate || '');
   if (!startStr) return '';
-  const startDateOnly = startStr.substring(0, 10);
-  const endDateOnly = endStr.substring(0, 10);
   // Detect non-midnight time in both ISO ('T') and pg space format ("2026-04-22 18:30:00+00")
   const hasNonMidnightTime = (s) => {
     const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/);
@@ -278,7 +276,10 @@ export function formatEventDateRange(startDate, endDate) {
   const toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
   const startHasTime = hasNonMidnightTime(startStr);
   const endHasTime = hasNonMidnightTime(endStr);
-  const sameDay = endDateOnly === startDateOnly;
+  // Compare dates in Eastern time, not UTC — an evening event (e.g. 9:30 PM–12:30 AM UTC)
+  // can span midnight UTC while being same-day in local time
+  const localDate = (s) => new Date(toISO(s)).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
+  const sameDay = endStr ? localDate(startStr) === localDate(endStr) : true;
   const fmtTime = (s) => new Date(toISO(s)).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
 
   if (sameDay && startHasTime) {
