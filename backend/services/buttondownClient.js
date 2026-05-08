@@ -181,29 +181,45 @@ export async function getSubscriberCount(pool = null) {
  * @param {string} subject - Email subject line
  * @param {string} htmlBody - HTML email body
  * @param {Pool} pool - Database connection pool
+ * @param {object} [options] - Options
+ * @param {string} [options.existingEmailId] - Resume scheduling a previously created draft
+ * @param {Function} [options.onDraftCreated] - Callback with (emailId) after draft creation, before scheduling
  * @returns {Promise<Object>} Email object from Buttondown
  */
-export async function sendEmail(subject, htmlBody, pool = null) {
+export async function sendEmail(subject, htmlBody, pool = null, { existingEmailId, onDraftCreated } = {}) {
   const apiKey = await getApiKey(pool);
 
-  // Step 1: Create draft email (outside retry to avoid duplicate drafts)
-  console.log(`📧 Creating draft email: "${subject}"`);
+  let emailId;
 
-  let createResponse;
-  try {
-    const draftClient = createClient(apiKey);
-    createResponse = await draftClient.post('/v1/emails', {
-      subject,
-      body: htmlBody,
-      email_type: 'public'
-    });
-  } catch (error) {
-    console.error(`❌ Draft creation failed:`, error.response?.status, error.response?.data);
-    throw error;
+  if (existingEmailId) {
+    // Resume: skip draft creation, go straight to scheduling
+    emailId = existingEmailId;
+    console.log(`📧 Resuming with existing draft: ${emailId}`);
+  } else {
+    // Step 1: Create draft email (outside retry to avoid duplicate drafts)
+    console.log(`📧 Creating draft email: "${subject}"`);
+
+    let createResponse;
+    try {
+      const draftClient = createClient(apiKey);
+      createResponse = await draftClient.post('/v1/emails', {
+        subject,
+        body: htmlBody,
+        email_type: 'public'
+      });
+    } catch (error) {
+      console.error(`❌ Draft creation failed:`, error.response?.status, error.response?.data);
+      throw error;
+    }
+
+    emailId = createResponse.data.id;
+    console.log(`✓ Created email draft: ${emailId}`);
+
+    // Notify caller of the draft ID so it can be persisted for retry recovery
+    if (onDraftCreated) {
+      await onDraftCreated(emailId);
+    }
   }
-
-  const emailId = createResponse.data.id;
-  console.log(`✓ Created email draft: ${emailId}`);
 
   // Step 2: Schedule for immediate sending (with retry)
   return retryRequest(async () => {

@@ -297,7 +297,38 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
       ? `What's Happening in the Valley This Weekend - ${dateStr} @ ${sendDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
       : `What's Happening in the Valley This Weekend - ${dateStr}`;
 
-    await sendEmail(subject, digestHtml, pool);
+    // Check for an existing draft from a previous failed attempt today.
+    // If the draft was created but scheduling failed (e.g., slug_uniqueness),
+    // pg-boss retries the whole job — reuse the draft instead of creating a duplicate.
+    let existingEmailId = null;
+    const draftCheck = await pool.query(
+      `SELECT details->>'buttondownEmailId' as email_id FROM job_logs
+       WHERE job_type = $1
+         AND level = 'info'
+         AND message = 'Draft created in Buttondown'
+         AND created_at::date = $2::date
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [jobType, today]
+    );
+    if (draftCheck.rows.length > 0 && draftCheck.rows[0].email_id) {
+      existingEmailId = draftCheck.rows[0].email_id;
+      console.log(`Found existing draft from earlier attempt: ${existingEmailId}`);
+    }
+
+    await sendEmail(subject, digestHtml, pool, {
+      existingEmailId,
+      onDraftCreated: async (emailId) => {
+        if (jobId > 0) {
+          await pool.query(
+            `INSERT INTO job_logs (job_id, job_type, level, message, details)
+             VALUES ($1, $2, $3, $4, $5)`,
+            [jobId, jobType, 'info', 'Draft created in Buttondown',
+             JSON.stringify({ buttondownEmailId: emailId })]
+          );
+        }
+      }
+    });
 
     console.log('Weekly digest sent successfully');
 
