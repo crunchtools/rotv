@@ -38,7 +38,6 @@ console.log('Loading county/state boundary geometries...\n');
 
 for (const boundary of boundaries) {
   try {
-    // Check if the POI exists and needs geometry
     const existing = await pool.query(
       "SELECT id, boundary_geom IS NOT NULL as has_geom FROM pois WHERE name = $1 AND 'boundary' = ANY(poi_roles)",
       [boundary.name]
@@ -54,7 +53,6 @@ for (const boundary of boundaries) {
       continue;
     }
 
-    // Read and parse GeoJSON
     const dataDir = join(__dirname, '..', 'data', 'boundaries');
     const filePath = join(dataDir, boundary.file);
     const geojson = JSON.parse(readFileSync(filePath, 'utf-8'));
@@ -67,7 +65,6 @@ for (const boundary of boundaries) {
     const feature = geojson.features[0];
     const geometryJson = JSON.stringify(feature.geometry);
 
-    // Update both the JSONB geometry column and the PostGIS boundary_geom column
     await pool.query(`
       UPDATE pois
       SET geometry = $1::jsonb,
@@ -81,7 +78,6 @@ for (const boundary of boundaries) {
   }
 }
 
-// Verify grounding now works for Liberty Park
 const verify = await pool.query(`
   WITH poi_point AS (
     SELECT id, name, geom as point_geom

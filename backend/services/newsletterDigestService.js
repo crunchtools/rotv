@@ -316,8 +316,7 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
       console.log(`Found existing draft from earlier attempt: ${existingEmailId}`);
     }
 
-    // Wrap sendEmail to log the draft ID before scheduling attempts
-    const result = await sendEmail(subject, digestHtml, pool, {
+    await sendEmail(subject, digestHtml, pool, {
       existingEmailId,
       onDraftCreated: async (emailId) => {
         if (jobId > 0) {
