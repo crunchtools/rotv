@@ -328,7 +328,7 @@ For DETAIL: detail_links should be empty.`;
  * @param {string} sourceUrl - The page URL that produced these links
  * @returns {Array} - Filtered, deduplicated URLs
  */
-function filterDetailLinks(detailLinks, sourceUrl) {
+function filterDetailLinks(detailLinks, sourceUrl, basePath = null) {
   if (!detailLinks?.length) return [];
   let sourceOrigin;
   try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
@@ -337,6 +337,9 @@ function filterDetailLinks(detailLinks, sourceUrl) {
     try {
       const parsed = new URL(link);
       if (parsed.origin !== sourceOrigin) return false;
+      // When basePath is set, only follow links under the start URL's path prefix.
+      // e.g., crawling /about/news only follows /about/news/... links, not /excursions/...
+      if (basePath && !parsed.pathname.startsWith(basePath)) return false;
       if (seen.has(link)) return false;
       seen.add(link);
       return true;
@@ -675,10 +678,22 @@ async function filterKnownPages(pool, pages, contentType, opts = {}) {
 }
 
 async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancellation, options = {}) {
-  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, phase = 'Phase I', jobId = 0, jobType = 'news' } = options;
+  const { maxDepth = 2, maxPages = 50, maxDetailPages = 30, phase = 'Phase I', jobId = 0, jobType = 'news', scopeToPath = true } = options;
   const visited = new Set();
   let totalPagesRendered = 0;
   const collectedPages = []; // { url, markdown, rawText, ogDates, title }
+
+  // Compute base path from start URL — links outside this path are filtered out.
+  // e.g., startUrl = "https://cvsr.org/about/news" → basePath = "/about/news"
+  // This prevents the news crawl from wandering into /excursions/ via nav links.
+  let basePath = null;
+  if (scopeToPath) {
+    try {
+      const startParsed = new URL(startUrl);
+      // Strip trailing slash and hash fragments for consistent matching
+      basePath = startParsed.pathname.replace(/\/$/, '') || '/';
+    } catch { /* leave basePath null if URL is unparseable */ }
+  }
 
   async function processLevel(urls, depth) {
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
@@ -718,7 +733,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Cache] Classify skip — already ${extracted.pageType}: ${url}`);
         if (extracted.pageType === 'listing') {
           classification.detailLinks = filterDetailLinks(
-            (extracted.links || []).map(l => l.url), url
+            (extracted.links || []).map(l => l.url), url, basePath
           );
         }
       } else {
@@ -731,7 +746,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       if (classification.pageType === 'detail') {
         collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
       } else if (classification.pageType === 'listing') {
-        const validLinks = filterDetailLinks(classification.detailLinks, url);
+        const validLinks = filterDetailLinks(classification.detailLinks, url, basePath);
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
