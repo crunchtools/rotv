@@ -1948,8 +1948,8 @@ export async function getPoisForTierCollection(pool, tier) {
     // Weekly: only POIs explicitly in weekly tier that are NOT auto-daily
     tierClause = "(collection_tier = 'weekly' AND (news_url IS NULL OR news_url = '') AND (events_url IS NULL OR events_url = ''))";
   } else if (tier === 'monthly') {
-    // Monthly: only POIs explicitly in monthly tier
-    tierClause = "(collection_tier = 'monthly')";
+    // Monthly: only POIs explicitly in monthly tier that are NOT auto-daily
+    tierClause = "(collection_tier = 'monthly' AND (news_url IS NULL OR news_url = '') AND (events_url IS NULL OR events_url = ''))";
   } else {
     throw new Error(`Invalid collection tier: ${tier}`);
   }
