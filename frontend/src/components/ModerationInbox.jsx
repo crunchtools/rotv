@@ -36,7 +36,7 @@ const FIELD_CONFIGS = {
 function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectPoi }) {
   const [queue, setQueue] = useState([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+
   const [filter, setFilter] = useState(null);
   // Lazy-initialize statusFilter/searchInput/idFilter from props so the very first
   // fetchQueue already has the right values — avoids a race condition where the
@@ -68,7 +68,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const [lightboxPoiId, setLightboxPoiId] = useState(null);
   const [user, setUser] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // "news:123" key
-  const LIMIT = 20;
+  const LIMIT = 1000;
 
   // Handle focusItemId changes (e.g. user clicks Edit on a second article without
   // leaving the Moderation tab — the component stays mounted but props change).
@@ -79,7 +79,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     setFilter(null);
     setSourceFilter(null);
     setSearchQuery('');
-    setPage(1);
     setSearchInput(focusItemTitle || '');
     setIdFilter(focusItemId);
   }, [focusItemId, focusItemTitle]);
@@ -104,7 +103,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page, limit: LIMIT, status: statusFilter });
+      const params = new URLSearchParams({ page: 1, limit: LIMIT, status: statusFilter });
       if (filter) params.set('type', filter);
       if (sourceFilter) params.set('source', sourceFilter);
       if (idFilter) {
@@ -125,7 +124,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     } finally {
       setLoading(false);
     }
-  }, [page, filter, statusFilter, sourceFilter, searchQuery, idFilter]);
+  }, [filter, statusFilter, sourceFilter, searchQuery, idFilter]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -580,7 +579,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   };
 
   const isPending = statusFilter === 'pending';
-  const totalPages = Math.ceil(total / LIMIT);
 
   const filterBtn = (active) => ({
     padding: '5px 0',
@@ -688,7 +686,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
               onClick={async () => {
                 const pendingItems = queue.filter(q => q.moderation_status === 'pending');
                 if (pendingItems.length === 0) return;
-                if (!window.confirm(`Reject all ${pendingItems.length} pending items on this page?`)) return;
+                if (!window.confirm(`Reject all ${pendingItems.length} pending items?`)) return;
                 try {
                   const items = pendingItems.map(q => ({ type: q.content_type, id: q.id }));
                   const response = await fetch('/api/admin/moderation/bulk-reject', {
@@ -725,8 +723,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         <input
           type="text"
           value={searchInput}
-          onChange={e => { setSearchInput(e.target.value); if (!e.target.value) { setIdFilter(null); setSearchQuery(''); setPage(1); } }}
-          onKeyDown={e => { if (e.key === 'Enter') { setIdFilter(null); setSearchQuery(searchInput); setPage(1); } }}
+          onChange={e => { setSearchInput(e.target.value); if (!e.target.value) { setIdFilter(null); setSearchQuery('');} }}
+          onKeyDown={e => { if (e.key === 'Enter') { setIdFilter(null); setSearchQuery(searchInput);} }}
           placeholder="Search by title or description..."
           style={{
             width: '100%', padding: '8px 12px', fontSize: '0.88rem',
@@ -745,7 +743,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
             { label: 'Events', value: 'event' },
             { label: 'Photos', value: 'photo' },
           ].map(f => (
-            <button key={f.label} onClick={() => { setFilter(f.value); setPage(1); }}
+            <button key={f.label} onClick={() => { setFilter(f.value);}}
               style={filterBtn(filter === f.value)}>
               {f.label}
             </button>
@@ -759,7 +757,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
             { label: 'Human', value: 'human' },
             { label: 'Newsletter', value: 'newsletter' },
           ].map(f => (
-            <button key={`src-${f.label}`} onClick={() => { setSourceFilter(f.value); setPage(1); }}
+            <button key={`src-${f.label}`} onClick={() => { setSourceFilter(f.value);}}
               style={filterBtn(sourceFilter === f.value)}>
               {f.label}
             </button>
@@ -773,7 +771,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
             { label: 'Approved', value: 'approved' },
             { label: 'Rejected', value: 'rejected' },
           ].map(f => (
-            <button key={f.value} onClick={() => { setStatusFilter(f.value); setPage(1); setSelectedItems(new Set()); }}
+            <button key={f.value} onClick={() => { setStatusFilter(f.value);setSelectedItems(new Set()); }}
               style={filterBtn(statusFilter === f.value)}>
               {f.label}
             </button>
@@ -1151,23 +1149,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
               );
             }
           })}
-        </div>
-      )}
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '12px', alignItems: 'center' }}>
-          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-            style={{ ...btnStyle(page === 1 ? '#eee' : '#f0f0f0', page === 1 ? '#ccc' : '#333'), cursor: page === 1 ? 'default' : 'pointer' }}>
-            Prev
-          </button>
-          <span style={{ fontSize: '0.85rem', color: '#666' }}>
-            {page} / {totalPages}
-          </span>
-          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-            style={{ ...btnStyle(page === totalPages ? '#eee' : '#f0f0f0', page === totalPages ? '#ccc' : '#333'), cursor: page === totalPages ? 'default' : 'pointer' }}>
-            Next
-          </button>
         </div>
       )}
 
