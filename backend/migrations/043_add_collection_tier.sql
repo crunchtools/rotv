@@ -1,8 +1,8 @@
 -- Migration 043: Add collection_tier for tiered news collection scheduling
 -- Tiers: 'daily', 'weekly', 'monthly'
 -- Default is 'weekly' (safe middle ground)
--- POIs with news_url or events_url are effectively daily regardless of stored tier
--- (enforced in application code via auto-promote rule)
+-- The collection_tier column is the single source of truth for scheduling.
+-- Admins can change any POI's tier at any time via the admin panel.
 
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS collection_tier TEXT DEFAULT 'weekly';
 
@@ -20,9 +20,16 @@ END $$;
 -- Index for efficient tier-based queries
 CREATE INDEX IF NOT EXISTS idx_pois_collection_tier ON pois (collection_tier);
 
+-- Set daily tier for POIs with dedicated news/events URLs + Cleveland Metroparks
+UPDATE pois SET collection_tier = 'daily'
+WHERE (news_url IS NOT NULL AND news_url != '')
+   OR (events_url IS NOT NULL AND events_url != '')
+   OR id = 5658;  -- Cleveland Metroparks (ToS prevents crawling, but Serper coverage is frequent)
+
 -- Set monthly tier for low-activity POIs (0-1 published items, no dedicated URLs)
 UPDATE pois SET collection_tier = 'monthly'
-WHERE id IN (
+WHERE collection_tier = 'weekly'  -- only demote POIs still at default, not ones just set to daily
+  AND id IN (
   5475, 5477, 5478, 5480, 5482, 5486, 5491, 5492, 5494, 5495,
   5496, 5497, 5498, 5500, 5501, 5502, 5504, 5506, 5513, 5514,
   5516, 5517, 5518, 5519, 5522, 5525, 5526, 5529, 5530, 5532,
@@ -37,10 +44,4 @@ WHERE id IN (
   5694, 5695, 5696, 5697, 5698, 5699, 5700, 5703, 5704, 5705,
   5706, 5710, 5711, 5712, 5716, 5717, 5718, 5719, 5721, 5724,
   5725, 5726, 5727, 5730, 5731, 5732, 5736, 5738, 5741
-);
-
--- Set daily tier for explicit daily overrides (no dedicated URL but high value)
-UPDATE pois SET collection_tier = 'daily'
-WHERE id IN (
-  5658  -- Cleveland Metroparks (ToS prevents crawling, but Serper coverage is frequent)
 );

@@ -1940,26 +1940,25 @@ export async function getPoisForTierCollection(pool, tier) {
     }
   }
 
-  let tierClause;
-  if (tier === 'daily') {
-    // Daily: explicit daily tier OR has dedicated content URLs (auto-promote)
-    tierClause = "(collection_tier = 'daily' OR (news_url IS NOT NULL AND news_url != '') OR (events_url IS NOT NULL AND events_url != ''))";
-  } else if (tier === 'weekly') {
-    // Weekly: only POIs explicitly in weekly tier that are NOT auto-daily
-    tierClause = "(collection_tier = 'weekly' AND (news_url IS NULL OR news_url = '') AND (events_url IS NULL OR events_url = ''))";
-  } else if (tier === 'monthly') {
-    // Monthly: only POIs explicitly in monthly tier that are NOT auto-daily
-    tierClause = "(collection_tier = 'monthly' AND (news_url IS NULL OR news_url = '') AND (events_url IS NULL OR events_url = ''))";
-  } else {
+  const validTiers = ['daily', 'weekly', 'monthly'];
+  if (!validTiers.includes(tier)) {
     throw new Error(`Invalid collection tier: ${tier}`);
+  }
+
+  const params = [tier];
+  let paramIdx = 2;
+  let excludeClause = '';
+  if (excludedIds.length > 0) {
+    excludeClause = `AND id != ALL($${paramIdx})`;
+    params.push(excludedIds);
   }
 
   const result = await pool.query(
     `SELECT id FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
        AND poi_roles && ARRAY['point','organization','river']::text[]
-       AND ${tierClause}
-       ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
+       AND collection_tier = $1
+       ${excludeClause}
      ORDER BY
        CASE
          WHEN 'point' = ANY(poi_roles) THEN 1
@@ -1967,7 +1966,7 @@ export async function getPoisForTierCollection(pool, tier) {
          ELSE 3
        END,
        name`,
-    excludedIds.length > 0 ? [excludedIds] : []
+    params
   );
   return result.rows.map(r => r.id);
 }
