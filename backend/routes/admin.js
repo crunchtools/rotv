@@ -4051,7 +4051,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       if (!url) {
         return res.status(400).json({ error: 'url query parameter is required' });
       }
-      const cdxUrl = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(url)}&output=json&fl=timestamp&limit=1`;
+      // CDX API expects raw URLs — encodeURIComponent escapes slashes to %2F which causes timeouts
+      const cdxUrl = `https://web.archive.org/cdx/search/cdx?url=${url}&output=json&fl=timestamp&limit=1`;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 10000);
       let response;
