@@ -988,6 +988,21 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </small>
       </div>
 
+      <div className="edit-section">
+        <label>News Collection Tier</label>
+        <select
+          value={editedData.collection_tier || 'weekly'}
+          onChange={(e) => handleChange('collection_tier', e.target.value)}
+        >
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+        <small style={{ color: '#666', display: 'block', marginTop: '0.5rem' }}>
+          How often this POI is included in scheduled news collection
+        </small>
+      </div>
+
 
       </div>
 

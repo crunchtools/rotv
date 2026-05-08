@@ -71,6 +71,8 @@ function formatCronHuman(cron) {
   if (cron === '0 6 * * *') return 'Daily at 6:00 AM';
   if (cron === '0 2 * * *') return 'Daily at 2:00 AM';
   if (cron === '0 3 * * *') return 'Daily at 3:00 AM';
+  if (cron === '0 6 * * 1') return 'Mondays at 6:00 AM';
+  if (cron === '0 6 1 * *') return '1st of month at 6:00 AM';
   if (cron.startsWith('*/')) return `Every ${min.slice(2)} minutes`;
   if (hour !== '*' && min !== '*' && dom === '*') return `Daily at ${hour}:${min.padStart(2, '0')}`;
   return cron;
@@ -333,7 +335,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     if (expandedRun.jobType !== 'news_single' && expandedRun.jobType !== 'events_single') return;
     const hasCompleted = runLogs.some(l => l.details?.completed === true);
     if (hasCompleted) {
-      setJobHistory(prev => { const next = { ...prev }; delete next['news']; return next; });
+      setJobHistory(prev => { const next = { ...prev }; delete next['news_daily']; return next; });
     }
   }, [expandedRun, runLogs]);
 
@@ -368,7 +370,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     if (urlJobId && urlJobType && !scheduledLoading) {
       // For single-POI jobs, expand the News & Events card and the specific run
       if (urlJobType === 'news_single' || urlJobType === 'events_single') {
-        setExpandedScheduled('news');
+        setExpandedScheduled('news_daily');
         setExpandedRun({ jobType: urlJobType, runId: urlJobId, poiId: urlPoiId || urlJobId });
 
         // Clear URL params so this effect doesn't re-fire
@@ -509,7 +511,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     const stats = aiStats[job.id];
 
     // Progress values
-    const isNews = job.id === 'news';
+    const isNews = job.id.startsWith('news');
     const processed = isNews ? (info.pois_processed || 0) : (info.trails_processed || 0);
     const total = isNews ? (info.total_pois || 0) : (info.total_trails || 0);
     const pct = total > 0 ? (processed / total) * 100 : 0;
