@@ -52,7 +52,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const [createFields, setCreateFields] = useState({});
   const [pois, setPois] = useState([]);
   const [sourceFilter, setSourceFilter] = useState(null);
-  const [fixingDateItem, setFixingDateItem] = useState(null);
+  const [iaDateItem, setIaDateItem] = useState(null);
   const [mergingItem, setMergingItem] = useState(null); // { type, id, poiId }
   const [mergeCandidates, setMergeCandidates] = useState([]);
   const [merging, setMerging] = useState(false);
@@ -303,30 +303,37 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     } catch (err) { notify('error', err.message); }
   };
 
-  const handleFixDate = async (type, id) => {
+  const handleIaDate = async (type, id, sourceUrl) => {
     const itemKey = `${type}:${id}`;
-    setFixingDateItem(itemKey);
+    if (!sourceUrl) { notify('error', 'No source URL for this item'); return; }
+    setIaDateItem(itemKey);
     try {
-      const response = await fetch('/api/admin/moderation/fix-date', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ type, id })
+      const response = await fetch(`/api/admin/moderation/ia-date?url=${encodeURIComponent(sourceUrl)}`, {
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.date_updated) {
-          const parts = [`${type} #${id} — date set: ${data.publication_date} (score=${data.date_consensus_score})`];
-          if (data.start_date) parts.push(`event: ${data.start_date}${data.end_date ? ' — ' + data.end_date : ''}`);
-          notify('success', parts.join(', '));
+        if (data.date) {
+          // Update the item's publication date with the Wayback date
+          const saveResponse = await fetch('/api/admin/moderation/save', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            credentials: 'include', body: JSON.stringify({ type, id, edits: { publication_date: data.date } })
+          });
+          if (saveResponse.ok) {
+            notify('success', `${type} #${id} — date set to ${data.date} (earliest IA snapshot)`);
+            fetchQueue();
+          } else {
+            notify('error', 'IA date found but failed to update item');
+          }
         } else {
-          notify('success', `${type} #${id} — could not determine date`);
+          notify('error', `No Internet Archive snapshots found for this URL`);
         }
-        fetchQueue();
       } else {
         const err = await response.json();
-        notify('error', err.error || 'Fix Date failed');
+        notify('error', err.error || 'IA Date lookup failed');
       }
     } catch (err) { notify('error', err.message); }
-    finally { setFixingDateItem(null); }
+    finally { setIaDateItem(null); }
   };
 
   const startMerge = async (item) => {
@@ -987,12 +994,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
                       onChange={() => toggleSelect(item.content_type, item.id)}
                       style={{ marginRight: '4px' }} />
                   )}
-                  <button onClick={() => startEditing(item)}
-                    style={actionBtn()}>Edit</button>
-                  {item.content_type !== 'photo' && (
-                    <button onClick={() => startMerge(item)}
-                      style={actionBtn()}>Merge</button>
-                  )}
+                  {/* Approve / Reject / Requeue */}
                   {isPending && (
                     <>
                       <button onClick={() => handleApprove(item.content_type, item.id)}
@@ -1009,13 +1011,24 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
                         style={actionBtn()}>Requeue</button>
                     </>
                   )}
+                  {/* IA Date */}
                   {item.content_type !== 'photo' && (
-                    <button onClick={() => handleFixDate(item.content_type, item.id)}
-                      disabled={fixingDateItem === itemKey}
-                      style={actionBtn(fixingDateItem === itemKey)}>
-                      {fixingDateItem === itemKey ? 'Finding...' : 'Fix Date'}
+                    <button onClick={() => handleIaDate(item.content_type, item.id, item.source_url)}
+                      disabled={iaDateItem === itemKey}
+                      title="Look up earliest Internet Archive snapshot date for this URL"
+                      style={actionBtn(iaDateItem === itemKey)}>
+                      {iaDateItem === itemKey ? 'Looking up...' : 'IA Date'}
                     </button>
                   )}
+                  {/* Edit */}
+                  <button onClick={() => startEditing(item)}
+                    style={actionBtn()}>Edit</button>
+                  {/* Merge */}
+                  {item.content_type !== 'photo' && (
+                    <button onClick={() => startMerge(item)}
+                      style={actionBtn()}>Merge</button>
+                  )}
+                  {/* Delete */}
                   {item.content_type !== 'photo' && (
                     confirmDelete === itemKey ? (
                       <>
