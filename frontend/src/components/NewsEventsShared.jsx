@@ -211,7 +211,7 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
           const endDateOnly = endStr.substring(0, 10);
           // Detect non-midnight time in both ISO ('T') and pg space format
           const _hasTime = (s) => { const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/); return m && m[1] !== '00:00:00'; };
-          const _toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2');
+          const _toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
           const startHasTime = _hasTime(startStr);
           const endHasTime = _hasTime(endStr);
           const sameDay = endDateOnly === startDateOnly;
@@ -275,7 +275,7 @@ export function formatEventDateRange(startDate, endDate) {
     return m && m[1] !== '00:00:00';
   };
   // Normalize pg space format to ISO for Date parsing
-  const toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2');
+  const toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
   const startHasTime = hasNonMidnightTime(startStr);
   const endHasTime = hasNonMidnightTime(endStr);
   const sameDay = endDateOnly === startDateOnly;
