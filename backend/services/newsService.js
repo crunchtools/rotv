@@ -333,7 +333,10 @@ function filterDetailLinks(detailLinks, sourceUrl, basePath = null) {
   let sourceOrigin;
   try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
   const seen = new Set();
-  return detailLinks.filter(link => {
+  return detailLinks.map(link => {
+    // Strip hash fragments — they return identical server content
+    try { const u = new URL(link); u.hash = ''; return u.toString(); } catch { return link; }
+  }).filter(link => {
     try {
       const parsed = new URL(link);
       if (parsed.origin !== sourceOrigin) return false;
@@ -698,8 +701,15 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
   async function processLevel(urls, depth) {
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
 
+    // Strip hash fragments — #section anchors return identical HTML from the server,
+    // so /page#cvsr and /page#power are the same content. Without this, CVSR's events
+    // crawl rendered the same pages 2-3x each via different anchor links.
+    const cleanUrls = urls.map(url => {
+      try { const u = new URL(url); u.hash = ''; return u.toString(); } catch { return url; }
+    });
+
     // Deduplicate and mark visited upfront to prevent concurrent duplicate fetches
-    const toProcess = urls.filter(url => !visited.has(url));
+    const toProcess = cleanUrls.filter(url => !visited.has(url));
     toProcess.forEach(url => visited.add(url));
 
     // Circuit breaker: verify browser is responsive before dispatching renders
