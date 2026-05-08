@@ -171,7 +171,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'research_context',
-      'length_miles', 'difficulty', 'boundary_type', 'boundary_color'
+      'length_miles', 'difficulty', 'boundary_type', 'boundary_color',
+      'collection_tier'
     ];
     const updates = {};
     const values = [];
@@ -227,7 +228,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const allowedFields = [
       'name', 'latitude', 'longitude', 'property_owner', 'owner_id', 'brief_description',
       'era', 'era_id', 'historical_description', 'primary_activities', 'surface',
-      'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url', 'research_context', 'status_url'
+      'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url', 'research_context', 'status_url',
+      'collection_tier'
     ];
     const updates = {};
     const values = [];
@@ -299,7 +301,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const allowedFields = [
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
-      'events_url', 'news_url', 'status_url'
+      'events_url', 'news_url', 'status_url',
+      'collection_tier'
     ];
 
     const fields = ['name', 'latitude', 'longitude'];
@@ -365,7 +368,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const allowedFields = [
       'poi_roles', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
       'historical_description', 'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
-      'events_url', 'news_url', 'has_primary_image'
+      'events_url', 'news_url', 'has_primary_image',
+      'collection_tier'
     ];
 
     const fields = ['name', 'poi_roles'];
@@ -2100,7 +2104,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         'name', 'poi_roles', 'geometry', 'property_owner', 'owner_id', 'brief_description',
         'era_id', 'historical_description', 'primary_activities', 'surface', 'pets',
         'cell_signal', 'more_info_link', 'length_miles', 'difficulty',
-        'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url'
+        'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url',
+        'collection_tier'
       ];
 
       const updates = [];

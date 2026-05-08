@@ -20,6 +20,9 @@ import {
   initJobScheduler,
   scheduleNewsCollection,
   registerNewsCollectionHandler,
+  scheduleTierNewsCollection,
+  registerTierNewsCollectionHandler,
+  unscheduleJob,
   registerBatchNewsHandler,
   submitBatchNewsJob,
   scheduleTrailStatusCollection,
@@ -42,6 +45,7 @@ import {
 import { processItem, processPendingItems } from './services/moderationService.js';
 import {
   runNewsCollection,
+  runTierNewsCollection,
   processNewsCollectionJob,
   ensureNewsJobCheckpointColumns,
   findIncompleteJobs
@@ -2706,25 +2710,38 @@ async function start() {
   try {
     await initJobScheduler(connectionString);
 
-    // Register scheduled news collection handler (daily job for all POIs)
-    await registerNewsCollectionHandler(withJitter(async () => {
-      console.log('Running scheduled news collection for all POIs...');
-      const newsCollectionResult = await runNewsCollection(pool, null);
-      if (newsCollectionResult.totalPois > 0) {
-        console.log(`News collection completed: ${newsCollectionResult.newsFound} news items, ${newsCollectionResult.eventsFound} events found`);
-      } else {
-        console.log('No POIs to collect');
-      }
-    }, 'news-collection'));
+    // Unschedule legacy unified news-collection (replaced by tiered jobs)
+    try {
+      await unscheduleJob('news-collection');
+      console.log('Legacy news-collection schedule removed');
+    } catch (e) {
+      // Ignore if already removed
+    }
+
+    // Register and schedule tiered news collection (daily/weekly/monthly)
+    for (const { tier, cron } of [
+      { tier: 'daily',   cron: '0 6 * * *' },     // Every day at 6 AM Eastern
+      { tier: 'weekly',  cron: '0 6 * * 1' },     // Monday at 6 AM Eastern
+      { tier: 'monthly', cron: '0 6 1 * *' },     // 1st of month at 6 AM Eastern
+    ]) {
+      await registerTierNewsCollectionHandler(tier, withJitter(async () => {
+        console.log(`Running scheduled ${tier} news collection...`);
+        const result = await runTierNewsCollection(pool, tier, null);
+        if (result.totalPois > 0) {
+          console.log(`${tier} news collection started for ${result.totalPois} POIs`);
+        } else {
+          console.log(`No POIs to collect for ${tier} tier`);
+        }
+      }, `news-collection-${tier}`));
+
+      await scheduleTierNewsCollection(tier, cron);
+    }
 
     // Register batch news collection handler (for admin-triggered jobs via pg-boss)
     await registerBatchNewsHandler(async (pgBossJobId, jobData) => {
       console.log(`[pg-boss] Processing batch news job: ${pgBossJobId}`);
       await processNewsCollectionJob(pool, null, pgBossJobId, jobData);
     });
-
-    // Schedule daily news collection at 6 AM Eastern
-    await scheduleNewsCollection('0 6 * * *');
 
     // Register scheduled trail status collection handler
     await registerTrailStatusHandler(withJitter(async () => {
