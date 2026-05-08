@@ -4052,13 +4052,25 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'url query parameter is required' });
       }
       const cdxUrl = `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(url)}&output=json&fl=timestamp&limit=1`;
-      const response = await fetch(cdxUrl);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      let response;
+      try {
+        response = await fetch(cdxUrl, { signal: controller.signal });
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          return res.status(504).json({ error: 'Internet Archive request timed out' });
+        }
+        throw err;
+      } finally {
+        clearTimeout(timeoutId);
+      }
       if (!response.ok) {
         return res.status(502).json({ error: 'Internet Archive CDX API unavailable' });
       }
       const data = await response.json();
       // CDX returns [[header], [row]] — first row after header is the earliest snapshot
-      if (data.length < 2) {
+      if (data.length < 2 || !Array.isArray(data[1]) || !data[1][0] || !/^\d{14}$/.test(data[1][0])) {
         return res.json({ date: null, message: 'No snapshots found' });
       }
       const timestamp = data[1][0]; // Format: YYYYMMDDHHmmss
