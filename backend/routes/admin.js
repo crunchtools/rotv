@@ -26,6 +26,7 @@ import {
   runBatchNewsCollection,
   createNewsCollectionJob,
   getAllPoisForCollection,
+  getPoisForTierCollection,
   getNewsForPoi,
   getEventsForPoi,
   getRecentNews,
@@ -2565,7 +2566,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   // Trigger news collection job manually (all POIs) - starts job and returns immediately
   router.post('/news/collect', isAdmin, async (req, res) => {
     try {
-      console.log(`Admin ${req.user.email} triggered full news collection`);
+      const tier = req.query.tier; // optional: 'daily', 'weekly', 'monthly'
+      const tierLabel = tier ? `${tier} tier` : 'all POIs';
+      console.log(`Admin ${req.user.email} triggered news collection for ${tierLabel}`);
 
       // Check if a job is already running
       const runningJobCheck = await pool.query(`
@@ -2581,22 +2584,25 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Use the same function as the scheduled collection so filters stay in sync
-      const poiIds = await getAllPoisForCollection(pool);
+      // Get POIs — tier-filtered or all
+      const poiIds = tier
+        ? await getPoisForTierCollection(pool, tier)
+        : await getAllPoisForCollection(pool);
 
       if (poiIds.length === 0) {
-        return res.status(400).json({ error: 'No POIs found to process' });
+        return res.status(400).json({ error: `No POIs found for ${tierLabel}` });
       }
 
       // Create the job record first
-      const { jobId, totalPois } = await createNewsCollectionJob(pool, poiIds, 'manual');
+      const source = tier ? `manual-${tier}` : 'manual';
+      const { jobId, totalPois } = await createNewsCollectionJob(pool, poiIds, source);
 
       // Submit to pg-boss for crash-recoverable processing
       await submitBatchNewsJob({ jobId, poiIds });
 
       res.json({
         success: true,
-        message: 'News & events collection started for all POIs (pg-boss)',
+        message: `News & events collection started for ${tierLabel} (${totalPois} POIs)`,
         jobId,
         totalPois
       });

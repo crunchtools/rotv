@@ -10,22 +10,50 @@
 
 export const COLLECTION_TYPES = [
   {
-    id: 'news',
-    label: 'News & Events',
-    description: 'AI-powered news and event discovery for POIs',
+    id: 'news_daily',
+    label: 'News & Events (Daily)',
+    description: 'Daily collection for POIs with dedicated URLs + high-value POIs',
     icon: '\u{1F4F0}',
     promptKeys: [{
       key: 'news_collection_prompt',
       label: 'News Collection Prompt',
       placeholders: ['{{name}}', '{{poi_roles}}', '{{timezone}}', '{{website}}', '{{eventsUrl}}', '{{newsUrl}}']
     }],
-    scheduleJobName: 'news-collection',
+    scheduleJobName: 'news-collection-daily',
     schedule: '0 6 * * *',
     statusTable: 'news_job_status',
     historyTypes: ['news', 'news_single', 'events_single'],
-    triggerEndpoint: '/api/admin/news/collect',
+    triggerEndpoint: '/api/admin/news/collect?tier=daily',
     manualTriggerMethod: 'POST',
     hasPrompt: true
+  },
+  {
+    id: 'news_weekly',
+    label: 'News & Events (Weekly)',
+    description: 'Weekly collection for active parks, landmarks, and organizations',
+    icon: '\u{1F4F0}',
+    promptKeys: [],
+    scheduleJobName: 'news-collection-weekly',
+    schedule: '0 6 * * 1',
+    statusTable: 'news_job_status',
+    historyTypes: ['news'],
+    triggerEndpoint: '/api/admin/news/collect?tier=weekly',
+    manualTriggerMethod: 'POST',
+    hasPrompt: false
+  },
+  {
+    id: 'news_monthly',
+    label: 'News & Events (Monthly)',
+    description: 'Monthly collection for low-activity and static POIs',
+    icon: '\u{1F4F0}',
+    promptKeys: [],
+    scheduleJobName: 'news-collection-monthly',
+    schedule: '0 6 1 * *',
+    statusTable: 'news_job_status',
+    historyTypes: ['news'],
+    triggerEndpoint: '/api/admin/news/collect?tier=monthly',
+    manualTriggerMethod: 'POST',
+    hasPrompt: false
   },
   {
     id: 'trail_status',
