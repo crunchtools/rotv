@@ -210,8 +210,8 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
           // Detect non-midnight time in both ISO ('T') and pg space format
           const _hasTime = (s) => { const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/); return m && m[1] !== '00:00:00'; };
           const _toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
-          const startHasTime = _hasTime(startStr);
           const endHasTime = _hasTime(endStr);
+          const startHasTime = _hasTime(startStr) || endHasTime;
           // Compare dates in Eastern time, not UTC — evening events can span midnight UTC
           const _localDate = (s) => new Date(_toISO(s)).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
           const sameDay = endStr ? _localDate(startStr) === _localDate(endStr) : true;
@@ -274,8 +274,9 @@ export function formatEventDateRange(startDate, endDate) {
   };
   // Normalize pg space format to ISO for Date parsing
   const toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
-  const startHasTime = hasNonMidnightTime(startStr);
   const endHasTime = hasNonMidnightTime(endStr);
+  // If end has a real time, start does too — it just happens to be midnight UTC (e.g. 8 PM EDT)
+  const startHasTime = hasNonMidnightTime(startStr) || endHasTime;
   // Compare dates in Eastern time, not UTC — an evening event (e.g. 9:30 PM–12:30 AM UTC)
   // can span midnight UTC while being same-day in local time
   const localDate = (s) => new Date(toISO(s)).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
