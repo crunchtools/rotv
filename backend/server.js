@@ -904,7 +904,7 @@ app.get('/api/pois', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
-             p.deleted, p.created_at, p.updated_at
+             p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id
       LEFT JOIN eras e ON p.era_id = e.id
@@ -939,7 +939,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
-             p.deleted, p.created_at, p.updated_at
+             p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1778,7 +1778,7 @@ app.get('/api/destinations', async (req, res) => {
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
-             p.deleted, p.created_at, p.updated_at
+             p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1802,7 +1802,7 @@ app.get('/api/destinations/:id', async (req, res) => {
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
-             p.deleted, p.created_at, p.updated_at
+             p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1830,7 +1830,7 @@ app.get('/api/linear-features', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.deleted, p.created_at, p.updated_at
+             p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
@@ -1855,7 +1855,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.deleted, p.created_at, p.updated_at
+             p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
