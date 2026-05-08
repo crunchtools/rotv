@@ -194,9 +194,10 @@ Is this a real ${typeLabel}, NOT a static reference page?
 
 APPROVE if the content:
 - Reports on something that happened or will happen (article, announcement, press release)
-- Describes a specific event with dates (concert, hike, meeting, cleanup)
-- Is relevant to the Cuyahoga Valley National Park region (nature, trails, recreation,
-  conservation, history, ecology, wildlife, community stewardship, heritage, arts/culture)
+- Describes a specific event with dates
+- The TOPIC is directly related to: nature, trails, hiking, biking, paddling, outdoor recreation,
+  conservation, ecology, wildlife, park operations, land management, environmental education,
+  local history of the Cuyahoga Valley, or outdoor arts/music events hosted by a park or nature organization
 - Old news IS valid — a 2021 trail opening article is still news
 
 REJECT if the content is:
@@ -205,9 +206,18 @@ REJECT if the content is:
 - A general "about us" or organization overview page
 - A product/service page or commercial listing
 - A page that describes what something IS rather than what happened or will happen
+- A religious service, worship gathering, spiritual discussion, or faith-based event
+- A political rally, campaign event, or partisan meeting
+- A private party, wedding, corporate retreat, or commercial rental event
+- A general community event unrelated to nature, parks, or outdoor recreation
+  (e.g., book clubs, support groups, fitness classes, fundraising galas)
 
-The key test: does this page report on a HAPPENING (past, present, or future),
-or does it describe a THING that permanently exists?
+IMPORTANT: Location alone does NOT make content relevant. An event held at a park
+venue is NOT automatically on-topic — the event's SUBJECT must relate to nature,
+trails, parks, conservation, history, or outdoor recreation.
+
+The key test: does this page report on a HAPPENING (past, present, or future)
+whose TOPIC relates to nature, parks, or outdoor recreation in the Cuyahoga Valley?
 
 Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
 
