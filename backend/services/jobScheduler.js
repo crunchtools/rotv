@@ -8,7 +8,10 @@ import { PgBoss } from 'pg-boss';
 let boss = null;
 
 const JOB_NAMES = {
-  NEWS_COLLECTION: 'news-collection',           // Scheduled daily collection
+  NEWS_COLLECTION: 'news-collection',           // Legacy (kept for admin batch + unschedule)
+  NEWS_COLLECTION_DAILY: 'news-collection-daily',     // Tier: daily at 6 AM
+  NEWS_COLLECTION_WEEKLY: 'news-collection-weekly',   // Tier: weekly Monday 6 AM
+  NEWS_COLLECTION_MONTHLY: 'news-collection-monthly', // Tier: monthly 1st 6 AM
   NEWS_COLLECTION_POI: 'news-collection-poi',   // Individual POI processing
   NEWS_BATCH: 'news-batch-collection',          // Admin-triggered batch collection
   TRAIL_STATUS_COLLECTION: 'trail-status-collection',  // Scheduled trail status collection
@@ -66,7 +69,60 @@ export async function scheduleNewsCollection(cronExpression = '0 6 * * *') {
 }
 
 /**
- * Register the news collection job handler
+ * Schedule a tiered news collection job
+ * @param {string} tier - 'daily', 'weekly', or 'monthly'
+ * @param {string} cronExpression - Cron expression for this tier
+ */
+export async function scheduleTierNewsCollection(tier, cronExpression) {
+  const jobName = JOB_NAMES[`NEWS_COLLECTION_${tier.toUpperCase()}`];
+  if (!jobName) throw new Error(`Invalid tier: ${tier}`);
+  const scheduler = getJobScheduler();
+  await scheduler.schedule(jobName, cronExpression, { tier }, { tz: 'America/New_York' });
+  console.log(`${tier} news collection scheduled with cron: ${cronExpression}`);
+}
+
+/**
+ * Register handler for a tiered news collection job
+ * @param {string} tier - 'daily', 'weekly', or 'monthly'
+ * @param {Function} handler - Async function(jobData) to handle the job
+ */
+export async function registerTierNewsCollectionHandler(tier, handler) {
+  const jobName = JOB_NAMES[`NEWS_COLLECTION_${tier.toUpperCase()}`];
+  if (!jobName) throw new Error(`Invalid tier: ${tier}`);
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(jobName);
+    console.log(`Queue '${jobName}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${jobName}' may already exist`);
+    }
+  }
+
+  await scheduler.work(jobName, async (job) => {
+    console.log(`Starting ${tier} news collection job:`, job.id);
+    try {
+      await handler(job.data);
+      console.log(`${tier} news collection job completed:`, job.id);
+    } catch (error) {
+      console.error(`${tier} news collection job failed:`, error);
+      throw error;
+    }
+  });
+}
+
+/**
+ * Unschedule a job by name (used to remove legacy schedules)
+ * @param {string} jobName - The job name to unschedule
+ */
+export async function unscheduleJob(jobName) {
+  const scheduler = getJobScheduler();
+  await scheduler.unschedule(jobName);
+}
+
+/**
+ * Register the news collection job handler (legacy — kept for admin batch compatibility)
  * @param {Function} handler - Async function to handle the job
  */
 export async function registerNewsCollectionHandler(handler) {

@@ -15,7 +15,7 @@ import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normali
 let geminiCallCount = 0;
 
 
-const LLM_DATE_VOTES = 5;
+const LLM_DATE_VOTES = 3;
 
 /**
  * Normalize social media URLs to canonical forms for better metadata extraction.
@@ -1920,7 +1920,81 @@ export async function getAllPoisForCollection(pool) {
 }
 
 /**
- * Run news collection for all POIs
+ * Get POIs for a specific collection tier
+ * @param {Pool} pool - Database connection pool
+ * @param {string} tier - 'daily', 'weekly', or 'monthly'
+ * @returns {Array<number>} - Array of POI IDs
+ */
+export async function getPoisForTierCollection(pool, tier) {
+  // Load excluded POI IDs from admin settings
+  const settingResult = await pool.query(
+    "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
+  );
+  let excludedIds = [];
+  if (settingResult.rows.length > 0 && settingResult.rows[0].value) {
+    try {
+      const parsed = JSON.parse(settingResult.rows[0].value);
+      excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
+    } catch (e) {
+      console.error('[newsService] Failed to parse news_collection_excluded_pois:', e.message);
+    }
+  }
+
+  let tierClause;
+  if (tier === 'daily') {
+    // Daily: explicit daily tier OR has dedicated content URLs (auto-promote)
+    tierClause = "(collection_tier = 'daily' OR (news_url IS NOT NULL AND news_url != '') OR (events_url IS NOT NULL AND events_url != ''))";
+  } else if (tier === 'weekly') {
+    // Weekly: only POIs explicitly in weekly tier that are NOT auto-daily
+    tierClause = "(collection_tier = 'weekly' AND (news_url IS NULL OR news_url = '') AND (events_url IS NULL OR events_url = ''))";
+  } else if (tier === 'monthly') {
+    // Monthly: only POIs explicitly in monthly tier
+    tierClause = "(collection_tier = 'monthly')";
+  } else {
+    throw new Error(`Invalid collection tier: ${tier}`);
+  }
+
+  const result = await pool.query(
+    `SELECT id FROM pois
+     WHERE (deleted IS NULL OR deleted = FALSE)
+       AND poi_roles && ARRAY['point','organization','river']::text[]
+       AND ${tierClause}
+       ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
+     ORDER BY
+       CASE
+         WHEN 'point' = ANY(poi_roles) THEN 1
+         WHEN 'organization' = ANY(poi_roles) THEN 2
+         ELSE 3
+       END,
+       name`,
+    excludedIds.length > 0 ? [excludedIds] : []
+  );
+  return result.rows.map(r => r.id);
+}
+
+/**
+ * Run news collection for a specific tier
+ * @param {Pool} pool - Database connection pool
+ * @param {string} tier - 'daily', 'weekly', or 'monthly'
+ * @param {Object} sheets - Optional sheets client
+ * @returns {Object} - Job status summary
+ */
+export async function runTierNewsCollection(pool, tier, sheets = null) {
+  const poiIds = await getPoisForTierCollection(pool, tier);
+
+  if (poiIds.length === 0) {
+    const runId = Math.floor(Date.now() / 1000);
+    logInfo(runId, 'news', null, null, `No POIs to collect for ${tier} tier`);
+    return { jobId: null, totalPois: 0, message: `No POIs to collect for ${tier} tier` };
+  }
+
+  const runId = Math.floor(Date.now() / 1000);
+  logInfo(runId, 'news', null, null, `Starting ${tier} news collection for ${poiIds.length} POIs`);
+  return runBatchNewsCollection(pool, poiIds, sheets, `scheduled-${tier}`);
+}
+
+/**
+ * Run news collection for all POIs (used by admin-triggered batch jobs)
  * @param {Pool} pool - Database connection pool
  * @param {Object} sheets - Optional sheets client
  * @returns {Object} - Job status summary
