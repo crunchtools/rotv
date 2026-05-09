@@ -52,6 +52,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const [createFields, setCreateFields] = useState({});
   const [pois, setPois] = useState([]);
   const [sourceFilter, setSourceFilter] = useState(null);
+  const [sortOrder, setSortOrder] = useState('collected_desc');
   const [iaDateItem, setIaDateItem] = useState(null);
   const [mergingItem, setMergingItem] = useState(null); // { type, id, poiId }
   const [mergeCandidates, setMergeCandidates] = useState([]);
@@ -103,7 +104,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const fetchQueue = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ page: 1, limit: LIMIT, status: statusFilter });
+      const params = new URLSearchParams({ page: 1, limit: LIMIT, status: statusFilter, sort: sortOrder });
       if (filter) params.set('type', filter);
       if (sourceFilter) params.set('source', sourceFilter);
       if (idFilter) {
@@ -124,7 +125,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     } finally {
       setLoading(false);
     }
-  }, [filter, statusFilter, sourceFilter, searchQuery, idFilter]);
+  }, [filter, statusFilter, sourceFilter, searchQuery, idFilter, sortOrder]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
 
@@ -743,7 +744,11 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
             { label: 'Events', value: 'event' },
             { label: 'Photos', value: 'photo' },
           ].map(f => (
-            <button key={f.label} onClick={() => { setFilter(f.value);}}
+            <button key={f.label} onClick={() => {
+              setFilter(f.value);
+              if (f.value === 'event') setSortOrder('date_asc');
+              else if (f.value !== filter) setSortOrder('collected_desc');
+            }}
               style={filterBtn(filter === f.value)}>
               {f.label}
             </button>
@@ -773,6 +778,22 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
           ].map(f => (
             <button key={f.value} onClick={() => { setStatusFilter(f.value);setSelectedItems(new Set()); }}
               style={filterBtn(statusFilter === f.value)}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+        {/* Row 4: Sort order */}
+        <div style={{ display: 'flex', gap: '3px' }}>
+          {[
+            { label: 'Collected \u2193', value: 'collected_desc' },
+            { label: 'Collected \u2191', value: 'collected_asc' },
+            { label: 'Date \u2191', value: 'date_asc' },
+            { label: 'Date \u2193', value: 'date_desc' },
+            { label: 'POI A\u2192Z', value: 'poi_asc' },
+            { label: 'POI Z\u2192A', value: 'poi_desc' },
+          ].map(f => (
+            <button key={f.value} onClick={() => setSortOrder(f.value)}
+              style={filterBtn(sortOrder === f.value)}>
               {f.label}
             </button>
           ))}
