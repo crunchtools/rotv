@@ -75,8 +75,8 @@ export const COLLECTION_TYPES = [
   },
   {
     id: 'moderation_sweep',
-    label: 'Moderation Sweep',
-    description: 'Re-checks unscored items missed by per-item queue',
+    label: 'Content Moderation',
+    description: 'Scores pending content with Gemini (every 15 min)',
     icon: '\u{1F50D}',
     promptKeys: [],
     scheduleJobName: 'content-moderation-sweep',
@@ -144,20 +144,6 @@ export const COLLECTION_TYPES = [
     hasPrompt: false
   },
   {
-    id: 'moderation_item',
-    label: 'AI Moderation',
-    description: 'Scores new content with Gemini when inserted',
-    icon: '\u{2696}',
-    promptKeys: [],
-    scheduleJobName: 'content-moderation',
-    schedule: null,
-    statusTable: null,
-    historyTypes: ['moderation'],
-    triggerEndpoint: null,
-    manualTriggerMethod: null,
-    hasPrompt: false
-  },
-  {
     id: 'research',
     label: 'POI Research',
     description: 'Multi-pass AI research for POI metadata, descriptions, and hero images',
@@ -179,20 +165,6 @@ export const COLLECTION_TYPES = [
     manualTriggerMethod: 'POST',
     hasPrompt: true
   },
-  {
-    id: 'cleanup',
-    label: 'Content Cleanup',
-    description: 'Deletes old news and past events',
-    icon: '\u{1F9F9}',
-    promptKeys: [],
-    scheduleJobName: null,
-    schedule: null,
-    statusTable: null,
-    historyTypes: ['cleanup'],
-    triggerEndpoint: null,
-    manualTriggerMethod: null,
-    hasPrompt: false
-  }
 ];
 
 /**

@@ -5,7 +5,6 @@ function NewsSettings() {
   const [jobStatus, setJobStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [collecting, setCollecting] = useState(false);
-  const [cleaningUp, setCleaningUp] = useState(false);
   const [result, setResult] = useState(null);
   const [liveProgress, setLiveProgress] = useState(null);
   const [activeJobId, setActiveJobId] = useState(null);
@@ -171,43 +170,6 @@ function NewsSettings() {
     }
   };
 
-  const handleCleanup = async () => {
-    if (!confirm('Delete old news (>90 days) and past events (>30 days)?')) {
-      return;
-    }
-
-    setCleaningUp(true);
-    setResult(null);
-
-    try {
-      const response = await fetch('/api/admin/news/cleanup', {
-        method: 'POST',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setResult({
-          type: 'success',
-          message: `Cleaned up ${data.newsDeleted} old news items and ${data.eventsDeleted} past events`
-        });
-      } else {
-        const error = await response.json();
-        setResult({
-          type: 'error',
-          message: error.error || 'Cleanup failed'
-        });
-      }
-    } catch (err) {
-      setResult({
-        type: 'error',
-        message: err.message
-      });
-    } finally {
-      setCleaningUp(false);
-    }
-  };
-
   return (
     <div className="news-settings-revamped">
       <h3>News & Events Collection</h3>
@@ -319,25 +281,12 @@ function NewsSettings() {
           <button
             className="action-btn primary"
             onClick={handleCollectNews}
-            disabled={collecting || cleaningUp}
+            disabled={collecting}
           >
             {collecting ? 'Collecting...' : 'Start Collection'}
           </button>
         </div>
 
-        <div className="action-card">
-          <div className="action-info">
-            <strong>Cleanup Old Data</strong>
-            <p>Remove news older than 90 days and events that have already passed (more than 30 days ago).</p>
-          </div>
-          <button
-            className="action-btn secondary"
-            onClick={handleCleanup}
-            disabled={collecting || cleaningUp}
-          >
-            {cleaningUp ? 'Cleaning...' : 'Run Cleanup'}
-          </button>
-        </div>
       </div>
 
       {/* Result message */}

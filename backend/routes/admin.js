@@ -33,8 +33,6 @@ import {
   getUpcomingEvents,
   getLatestJobStatus,
   getJobStatus,
-  cleanupOldNews,
-  cleanupPastEvents,
   collectPoi,
   saveNewsItems,
   saveEventItems,
@@ -45,7 +43,7 @@ import {
   getAllActiveProgress,
   getDisplaySlots as getNewsDisplaySlots
 } from '../services/newsService.js';
-import { submitBatchNewsJob, queueModerationJob, getJobScheduler, JOB_NAMES, updateSchedule } from '../services/jobScheduler.js';
+import { submitBatchNewsJob, getJobScheduler, JOB_NAMES, updateSchedule } from '../services/jobScheduler.js';
 import {
   getQueue as getModerationQueue,
   getPendingCount as getModerationPendingCount,
@@ -58,7 +56,6 @@ import {
   requeueItem,
   fixDate,
   createItem,
-  purgeRejected,
   processItem,
   mergeItems,
   getMergeCandidates,
@@ -3069,23 +3066,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Cleanup old news and past events
-  router.post('/news/cleanup', isAdmin, async (req, res) => {
-    try {
-      const newsDeleted = await cleanupOldNews(pool, 90);
-      const eventsDeleted = await cleanupPastEvents(pool, 30);
-      console.log(`Admin ${req.user.email} cleaned up ${newsDeleted} old news items and ${eventsDeleted} past events`);
-      res.json({
-        success: true,
-        newsDeleted,
-        eventsDeleted
-      });
-    } catch (error) {
-      console.error('Error cleaning up news/events:', error);
-      res.status(500).json({ error: 'Failed to cleanup' });
-    }
-  });
-
   // POI Associations CRUD endpoints (admin only)
   router.post('/poi-associations', isAdmin, async (req, res) => {
     try {
@@ -4035,8 +4015,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'type and id are required' });
       }
       await requeueItem(pool, type, id);
-      // Queue a new moderation job
-      await queueModerationJob(type, id);
       res.json({ success: true });
     } catch (error) {
       console.error('Error requeuing item:', error);
@@ -4103,18 +4081,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('Error fixing date:', error);
       res.status(500).json({ error: error.message || 'Failed to fix date' });
-    }
-  });
-
-  // Purge all rejected items
-  router.post('/moderation/purge-rejected', isAdmin, async (req, res) => {
-    try {
-      const { type } = req.body;
-      const result = await purgeRejected(pool, type || null);
-      res.json(result);
-    } catch (error) {
-      console.error('Error purging rejected items:', error);
-      res.status(500).json({ error: 'Failed to purge rejected items' });
     }
   });
 
@@ -4250,9 +4216,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [parseInt(poi_id), uploadResult.assetId, req.file.originalname, req.user.id, caption || null]
       );
-
-      // Queue moderation job
-      await queueModerationJob('photo', result.rows[0].id);
 
       res.json({ success: true, submissionId: result.rows[0].id });
     } catch (error) {
@@ -4415,8 +4378,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [JOB_NAMES.NEWS_BATCH]: { label: 'News & Events (Manual)', description: 'Admin-triggered batch collection from Data Collection tab' },
         [JOB_NAMES.TRAIL_STATUS_COLLECTION]: { label: 'Trail Status Check', description: 'Checks MTB trail conditions via status URLs (every 30 min)' },
         [JOB_NAMES.TRAIL_STATUS_BATCH]: { label: 'Trail Status (Manual)', description: 'Admin-triggered trail status collection' },
-        [JOB_NAMES.CONTENT_MODERATION]: { label: 'AI Moderation', description: 'Scores new content with Gemini when inserted' },
-        [JOB_NAMES.CONTENT_MODERATION_SWEEP]: { label: 'Moderation Sweep', description: 'Re-checks unscored items missed by per-item queue (every 15 min)' },
+        [JOB_NAMES.CONTENT_MODERATION_SWEEP]: { label: 'Content Moderation', description: 'Scores pending content with Gemini (every 15 min)' },
         [JOB_NAMES.NEWSLETTER_PROCESS]: { label: 'Email Ingestion', description: 'Extracts news and events from inbound newsletters' },
         [JOB_NAMES.IMAGE_BACKUP]: { label: 'Image Server Backup', description: 'Syncs image server media files to Google Drive (2 AM daily)' },
         [JOB_NAMES.DATABASE_BACKUP]: { label: 'Database Backup', description: 'Uploads PostgreSQL dump to Google Drive (3 AM daily)' }

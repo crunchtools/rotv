@@ -23,15 +23,12 @@ import {
   fixDate,
   bulkApprove,
   createItem,
-  editAndPublish,
-  purgeRejected
+  editAndPublish
 } from './moderationService.js';
 
 import {
   getJobStatus as getNewsJobStatus,
   getDisplaySlots as getNewsDisplaySlots,
-  cleanupOldNews,
-  cleanupPastEvents,
   getLatestJobStatus as getLatestNewsJobStatus
 } from './newsService.js';
 
@@ -411,36 +408,6 @@ function registerTools(server, pool, boss) {
     async ({ items }) => {
       const result = await bulkApprove(pool, items, MCP_ADMIN_USER_ID);
       return { content: [{ type: 'text', text: `Approved ${result.approved} items` }] };
-    }
-  );
-
-  server.tool(
-    'content_cleanup',
-    'Remove old news (>N days) or past events (>N days)',
-    {
-      type: z.enum(['news', 'events']).describe('What to clean up'),
-      days_old: z.number().optional().describe('Delete items older than this many days (default: 90 for news, 30 for events)')
-    },
-    async ({ type, days_old }) => {
-      let deleted;
-      if (type === 'news') {
-        deleted = await cleanupOldNews(pool, days_old || 90);
-      } else {
-        deleted = await cleanupPastEvents(pool, days_old || 30);
-      }
-      return { content: [{ type: 'text', text: `Cleaned up ${deleted} old ${type}` }] };
-    }
-  );
-
-  server.tool(
-    'content_purge_rejected',
-    'Delete all rejected content items (news, events, photos)',
-    {
-      content_type: z.enum(['news', 'event', 'photo']).optional().describe('Purge only this type (omit for all)')
-    },
-    async ({ content_type }) => {
-      const result = await purgeRejected(pool, content_type || null);
-      return { content: [{ type: 'text', text: `Purged ${result.deleted} rejected items${content_type ? ` (${content_type})` : ''}` }] };
     }
   );
 

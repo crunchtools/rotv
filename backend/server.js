@@ -28,7 +28,6 @@ import {
   scheduleTrailStatusCollection,
   registerTrailStatusHandler,
   registerBatchTrailStatusHandler,
-  registerModerationHandler,
   registerModerationSweepHandler,
   scheduleModerationSweep,
   registerNewsletterHandler,
@@ -2768,12 +2767,7 @@ async function start() {
     const trailStatusInterval = '*/30 * * * *';
     await scheduleTrailStatusCollection(trailStatusInterval);
 
-    // Register content moderation handler (processes individual items)
-    await registerModerationHandler(async (contentType, contentId) => {
-      await processItem(pool, contentType, contentId);
-    });
-
-    // Register moderation sweep handler (catches unprocessed items)
+    // Register moderation sweep handler (processes all unprocessed items every 15 min)
     await registerModerationSweepHandler(withJitter(async () => {
       await processPendingItems(pool);
       // Retention: purge job logs older than 30 days

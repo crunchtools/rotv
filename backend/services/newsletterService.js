@@ -10,7 +10,7 @@ import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL } from './geminiService.js';
-import { queueModerationJob, queueNewsletterJob } from './jobScheduler.js';
+import { queueNewsletterJob } from './jobScheduler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 const turndown = new TurndownService({
@@ -322,12 +322,6 @@ IMPORTANT:
           item.news_type || 'general', item.published_date || null
         ]);
 
-        try {
-          await queueModerationJob('news', newsInsert.rows[0].id);
-        } catch (modErr) {
-          console.error(`[Newsletter] Failed to queue moderation for news #${newsInsert.rows[0].id}:`, modErr.message);
-        }
-
         newsInserted++;
       } catch (err) {
         console.error(`[Newsletter] Failed to insert news "${item.title}":`, err.message);
@@ -349,12 +343,6 @@ IMPORTANT:
           item.event_type || null, item.location_details || null,
           item.source_url || null
         ]);
-
-        try {
-          await queueModerationJob('event', eventInsert.rows[0].id);
-        } catch (modErr) {
-          console.error(`[Newsletter] Failed to queue moderation for event #${eventInsert.rows[0].id}:`, modErr.message);
-        }
 
         eventsInserted++;
       } catch (err) {
