@@ -1382,7 +1382,10 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
     if (!poiId) return;
     setLoading(true);
     try {
-      const response = await fetch(`/api/pois/${poiId}/events?limit=50`);
+      const tz = localStorage.getItem('app-timezone')
+        || Intl.DateTimeFormat().resolvedOptions().timeZone
+        || 'America/New_York';
+      const response = await fetch(`/api/pois/${poiId}/events?limit=50&tz=${encodeURIComponent(tz)}`);
       if (response.ok) {
         const data = await response.json();
         setEvents(data);

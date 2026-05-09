@@ -44,7 +44,9 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
     setLoading(true);
     setError(null);
     try {
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const tz = localStorage.getItem('app-timezone')
+        || Intl.DateTimeFormat().resolvedOptions().timeZone
+        || 'America/New_York';
       const response = await fetch(`/api/events/upcoming?tz=${encodeURIComponent(tz)}`);
       if (response.ok) {
         const data = await response.json();

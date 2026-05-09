@@ -17,9 +17,12 @@ function NewsEvents({ poiId, isAdmin }) {
       setError(null);
 
       try {
+        const tz = localStorage.getItem('app-timezone')
+          || Intl.DateTimeFormat().resolvedOptions().timeZone
+          || 'America/New_York';
         const [newsRes, eventsRes] = await Promise.all([
           fetch(`/api/pois/${poiId}/news?limit=10`),
-          fetch(`/api/pois/${poiId}/events`)
+          fetch(`/api/pois/${poiId}/events?tz=${encodeURIComponent(tz)}`)
         ]);
 
         if (newsRes.ok) {

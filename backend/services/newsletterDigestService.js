@@ -3,17 +3,18 @@ import { sendEmail } from './buttondownClient.js';
 /**
  * Generate HTML digest content for weekly newsletter
  * @param {Pool} pool - Database connection pool
+ * @param {string} tz - IANA timezone for date comparison
  * @returns {Promise<string>} HTML digest content
  */
-export async function generateDigest(pool) {
+export async function generateDigest(pool, tz = 'America/New_York') {
   // Get events happening Friday-Sunday (next 3 days from Friday)
   const eventsQuery = `
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
            e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_events e
     JOIN pois p ON e.poi_id = p.id
-    WHERE e.start_date >= CURRENT_DATE
-      AND e.start_date <= CURRENT_DATE + INTERVAL '2 days'
+    WHERE (e.start_date AT TIME ZONE $1)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
+      AND (e.start_date AT TIME ZONE $1)::date <= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date + 2
       AND e.moderation_status IN ('published', 'auto_approved')
     ORDER BY e.start_date ASC
     LIMIT 10
@@ -32,7 +33,7 @@ export async function generateDigest(pool) {
   `;
 
   const [eventsResult, newsResult] = await Promise.all([
-    pool.query(eventsQuery),
+    pool.query(eventsQuery, [tz]),
     pool.query(newsQuery)
   ]);
 
