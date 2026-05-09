@@ -4053,27 +4053,40 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
       // CDX API expects raw URLs — encodeURIComponent escapes slashes to %2F which causes timeouts
       const cdxUrl = `https://web.archive.org/cdx/search/cdx?url=${url}&output=json&fl=timestamp&limit=1`;
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
+      // IA's CDX API is flaky — retry up to 3 times on 503/network errors
       let response;
-      try {
-        response = await fetch(cdxUrl, { signal: controller.signal });
-      } catch (err) {
-        if (err.name === 'AbortError') {
-          return res.status(504).json({ error: 'Internet Archive request timed out' });
+      let lastError;
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000);
+        try {
+          response = await fetch(cdxUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+          if (response.ok) break; // success — stop retrying
+          lastError = `CDX API returned ${response.status}`;
+          if (attempt < 3) await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+        } catch (err) {
+          clearTimeout(timeoutId);
+          if (err.name === 'AbortError') {
+            lastError = 'request timed out';
+          } else {
+            lastError = err.message;
+          }
+          if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
         }
-        throw err;
-      } finally {
-        clearTimeout(timeoutId);
       }
-      if (!response.ok) {
-        return res.status(502).json({ error: 'Internet Archive CDX API unavailable' });
+
+      if (!response || !response.ok) {
+        console.error(`[IA Date] CDX API failed after 3 attempts for ${url}: ${lastError}`);
+        return res.status(502).json({ error: `Internet Archive unavailable after 3 attempts (${lastError})` });
       }
+
       let data;
       try {
         data = await response.json();
       } catch {
-        return res.status(502).json({ error: 'Internet Archive returned non-JSON response (service may be temporarily offline)' });
+        return res.status(502).json({ error: 'Internet Archive returned non-JSON response' });
       }
       // CDX returns [[header], [row]] — first row after header is the earliest snapshot
       if (data.length < 2 || !Array.isArray(data[1]) || !data[1][0] || !/^\d{14}$/.test(data[1][0])) {

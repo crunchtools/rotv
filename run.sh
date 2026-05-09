@@ -3,7 +3,8 @@ set -e
 
 BASE_IMAGE_NAME="quay.io/crunchtools/rotv-base"
 IMAGE_NAME="quay.io/crunchtools/rotv"
-CONTAINER_NAME="rotv"
+CONTAINER_NAME="${ROTV_CONTAINER:-rotv}"
+HOST_PORT="${ROTV_PORT:-8080}"
 
 # Load environment variables from .env file if it exists
 if [ -f ".env" ]; then
@@ -171,12 +172,17 @@ ENVFILE
         MCP_PORT_MAP=""
         [ -n "$MCP_ADMIN_TOKEN" ] && MCP_PORT_MAP="-p 3001:3001"
 
+        # Use host network for default instance, bridge network for alternate ports
+        if [ "$HOST_PORT" = "8080" ]; then
+            NETWORK_ARGS="--network=host"
+        else
+            NETWORK_ARGS="-p ${HOST_PORT}:8080 -p $((HOST_PORT + 1000)):25"
+        fi
+
         podman run -d \
             --name "$CONTAINER_NAME" \
             --privileged \
-            --network=host \
-            -p 8080:8080 \
-            -p 2525:25 \
+            $NETWORK_ARGS \
             $MCP_PORT_MAP \
             --tmpfs /run \
             -v ~/.rotv/environment-dev:/etc/rotv/environment:ro \
@@ -184,7 +190,7 @@ ENVFILE
             $SEED_MOUNT \
             "$IMAGE_NAME"
 
-        echo "Application starting at http://localhost:8080"
+        echo "Application starting at http://localhost:${HOST_PORT}"
         if [ -n "$SEED_MOUNT" ]; then
             echo "Seed data will be imported during startup..."
         fi
@@ -251,7 +257,7 @@ ENVFILE
             --name "$CONTAINER_NAME" \
             --privileged \
             --network=host \
-            -p 8080:8080 \
+            -p ${HOST_PORT}:8080 \
             -p 2525:25 \
             --tmpfs /run \
             --tmpfs /data/pgdata:rw,size=2G,mode=0700 \
@@ -265,7 +271,7 @@ ENVFILE
 
         # Check if server is ready by polling the API
         for i in {1..30}; do
-            if podman exec "$CONTAINER_NAME" curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
+            if podman exec "$CONTAINER_NAME" curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then  # internal port is always 8080
                 echo "✓ Server is ready"
                 break
             fi
@@ -601,7 +607,7 @@ ENVFILE
         echo "QUICK START"
         echo "  1. ./run.sh build       # Build container image"
         echo "  2. ./run.sh seed        # Pull production data (first time only)"
-        echo "  3. ./run.sh start       # Start at http://localhost:8080"
+        echo "  3. ./run.sh start       # Start at http://localhost:\${ROTV_PORT:-8080}"
         echo "  4. ./run.sh test        # Run tests before PR"
         echo ""
         echo "DEVELOPMENT WORKFLOW"
