@@ -3891,7 +3891,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   // Get paginated moderation queue
   router.get('/moderation/queue', isAdmin, async (req, res) => {
     try {
-      const { page = 1, limit = 20, type, status = 'pending', source, search, id } = req.query;
+      const { page = 1, limit = 20, type, status = 'pending', source, search, id, sort } = req.query;
       const result = await getModerationQueue(pool, {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -3899,7 +3899,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         status,
         contentSource: source || null,
         search: search || null,
-        id: id || null
+        id: id || null,
+        sort: sort || 'collected_desc'
       });
       res.json(result);
     } catch (error) {

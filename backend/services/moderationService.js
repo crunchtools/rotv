@@ -810,7 +810,7 @@ export async function fixDate(pool, contentType, contentId) {
   };
 }
 
-export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null, search = null, id = null } = {}) {
+export async function getQueue(pool, { page = 1, limit = 20, contentType = null, status = 'pending', contentSource = null, search = null, id = null, sort = 'collected_desc' } = {}) {
   const offset = (page - 1) * limit;
   const statusList = status === 'all'
     ? ['pending', 'published', 'auto_approved', 'rejected']
@@ -892,9 +892,15 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
 
   const whereClause = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
 
-  const orderBy = status === 'approved'
-    ? 'ORDER BY COALESCE(publication_date, created_at) DESC, created_at DESC'
-    : 'ORDER BY created_at DESC';
+  const sortMap = {
+    collected_desc: 'ORDER BY created_at DESC',
+    collected_asc: 'ORDER BY created_at ASC',
+    date_asc: 'ORDER BY COALESCE(start_date, publication_date, created_at) ASC',
+    date_desc: 'ORDER BY COALESCE(start_date, publication_date, created_at) DESC',
+    poi_asc: 'ORDER BY poi_name ASC NULLS LAST, created_at DESC',
+    poi_desc: 'ORDER BY poi_name DESC NULLS LAST, created_at DESC',
+  };
+  const orderBy = sortMap[sort] || sortMap.collected_desc;
   const wrappedQuery = `SELECT * FROM (${baseQuery}) AS q ${whereClause} ${orderBy} LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
   const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q ${whereClause}`;
 
