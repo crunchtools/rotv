@@ -266,7 +266,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const extraFields = contentType === 'event' ? ', t.start_date, t.content_source' : '';
 
     const itemQuery = await pool.query(
-      `SELECT t.id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
+      `SELECT t.id, t.poi_id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
               t.date_consensus_score, t.rendered_content, t.date_signals, p.name as poi_name${extraFields}
        FROM ${table} t
        LEFT JOIN pois p ON t.poi_id = p.id
@@ -310,6 +310,27 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       console.log(`[Moderation] ${contentType} #${contentId}: rejected (no source URL)`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: no source URL`, { completed: true });
       return;
+    }
+
+    // Excluded POI check
+    const excludedSetting = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
+    );
+    if (excludedSetting.rows.length > 0 && excludedSetting.rows[0].value) {
+      try {
+        const excludedIds = JSON.parse(excludedSetting.rows[0].value);
+        if (Array.isArray(excludedIds) && excludedIds.includes(row.poi_id)) {
+          await pool.query(
+            `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+            [`Rejected: POI is on the excluded list`, contentId]
+          );
+          console.log(`[Moderation] ${contentType} #${contentId}: rejected (excluded POI ${row.poi_id})`);
+          logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: excluded POI ${row.poi_id}`, { completed: true });
+          return;
+        }
+      } catch (e) {
+        console.error('[Moderation] Failed to parse news_collection_excluded_pois:', e.message);
+      }
     }
 
     let dateScore = row.date_consensus_score || 0;

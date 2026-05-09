@@ -1031,8 +1031,8 @@ function DataCollectionSettings() {
 
       {/* Excluded POIs from News Collection */}
       <div className="ai-config-section">
-        <h4>Excluded POIs from News Collection</h4>
-        <p className="settings-description">POIs in this list are skipped entirely during automated news collection. Use for broad geographic entities (e.g. Cuyahoga County, Cleveland) whose news feeds pull in irrelevant content.</p>
+        <h4>Excluded POIs from News and Events</h4>
+        <p className="settings-description">POIs in this list are skipped during automated news collection, and any news or events from these POIs are automatically rejected during moderation. Use for broad geographic entities (e.g. Cuyahoga County, Cleveland) whose feeds pull in irrelevant content.</p>
         {excludedPoisLoading ? <p>Loading...</p> : (
           <>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>

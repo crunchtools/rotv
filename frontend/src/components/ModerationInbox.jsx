@@ -101,8 +101,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [expandedItem]);
 
-  const fetchQueue = useCallback(async () => {
-    setLoading(true);
+  const fetchQueue = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const params = new URLSearchParams({ page: 1, limit: LIMIT, status: statusFilter, sort: sortOrder });
       if (filter) params.set('type', filter);
@@ -123,11 +123,17 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     } catch (err) {
       console.error('Error fetching moderation queue:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [filter, statusFilter, sourceFilter, searchQuery, idFilter, sortOrder]);
 
   useEffect(() => { fetchQueue(); }, [fetchQueue]);
+
+  // Auto-poll every 5 seconds to pick up background sweep changes
+  useEffect(() => {
+    const interval = setInterval(() => fetchQueue({ silent: true }), 5000);
+    return () => clearInterval(interval);
+  }, [fetchQueue]);
 
   useEffect(() => {
     if (!notification) return;
@@ -658,29 +664,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <h3 style={{ margin: 0 }}>Moderation Queue</h3>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-          {/* Purge rejected button */}
-          {statusFilter === 'rejected' && total > 0 && (
-            <button
-              onClick={async () => {
-                const typeLabel = filter ? filter + 's' : 'items';
-                if (!window.confirm(`Delete all ${total} rejected ${typeLabel}? This cannot be undone.`)) return;
-                try {
-                  const response = await fetch('/api/admin/moderation/purge-rejected', {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include', body: JSON.stringify({ type: filter || null })
-                  });
-                  if (response.ok) {
-                    const data = await response.json();
-                    notify('success', `Purged ${data.deleted} rejected items`);
-                    fetchQueue();
-                  }
-                } catch (err) { notify('error', err.message); }
-              }}
-              style={btnStyle('#b71c1c')}
-            >
-              Purge Rejected
-            </button>
-          )}
           {/* Reject All visible pending items */}
           {statusFilter === 'pending' && queue.length > 0 && (
             <button

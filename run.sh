@@ -457,10 +457,21 @@ ENVFILE
         if [ $? -eq 0 ]; then
             SEED_SIZE=$(du -h "$SEED_DATA_FILE" | cut -f1)
             echo "✓ Production data saved to $SEED_DATA_FILE ($SEED_SIZE)"
-            echo ""
-            echo "Next steps:"
-            echo "  ./run.sh start   # Start with this data"
-            echo "  ./run.sh test    # Run tests with this data"
+
+            # If container is running, import seed data directly
+            if podman ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+                echo ""
+                echo "Importing seed data into running container..."
+                podman cp "$SEED_DATA_FILE" "$CONTAINER_NAME:/tmp/seed-data.sql"
+                podman exec "$CONTAINER_NAME" psql -U postgres -d rotv -f /tmp/seed-data.sql 2>&1 | grep -c "^COPY" | xargs echo "Imported rows from tables:"
+                podman exec "$CONTAINER_NAME" sh -c 'for m in /app/migrations/[0-9]*.sql; do [ -f "$m" ] && psql -U postgres -d rotv -f "$m"; done' 2>&1 | grep -i "notice\|error" || true
+                echo "✓ Seed data imported into running container"
+            else
+                echo ""
+                echo "Next steps:"
+                echo "  ./run.sh start   # Start with this data"
+                echo "  ./run.sh test    # Run tests with this data"
+            fi
         else
             echo "❌ Failed to pull production data"
             rm -f "$SEED_DATA_FILE"
