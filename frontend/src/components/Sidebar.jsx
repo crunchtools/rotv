@@ -681,18 +681,18 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       </div>
 
       <div className="edit-section">
-        <label>Research Context <span className="field-hint">(optional notes for AI)</span></label>
+        <label title="Optional notes to guide AI research (e.g., 'This is a historic gristmill built in 1810, focus on canal era connections')">Research Context</label>
         <textarea
           value={editedData.research_context || ''}
           onChange={(e) => handleChange('research_context', e.target.value)}
-          placeholder="Add context to guide AI research (e.g., 'This is a historic gristmill built in 1810, focus on canal era connections')"
+          placeholder="Optional notes to guide AI research..."
           rows={2}
           style={{ resize: 'vertical' }}
         />
       </div>
 
       <div className="edit-section">
-        <label>Name *</label>
+        <label title="The display name for this location">Name *</label>
         <input
           type="text"
           value={editedData.name || ''}
@@ -702,7 +702,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       </div>
 
       <div className="edit-section">
-        <label>Overview</label>
+        <label title="A short public-facing description of this location">Overview</label>
         <textarea
           value={editedData.brief_description || ''}
           onChange={(e) => {
@@ -725,7 +725,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         <>
           <div className="edit-row">
             <div className="edit-section half">
-              <label>Era</label>
+              <label title="Historical era this location is associated with">Era</label>
               <select
                 value={editedData.era_id || ''}
                 onChange={(e) => {
@@ -746,7 +746,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
               </select>
             </div>
             <div className="edit-section half">
-              <label>Property Owner</label>
+              <label title="Organization that owns or manages this property">Property Owner</label>
               <select
                 value={editedData.owner_id || ''}
                 onChange={(e) => {
@@ -768,7 +768,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
           </div>
 
           <div className="edit-section">
-            <label>Primary Activities</label>
+            <label title="Activities available at this location (hiking, biking, fishing, etc.)">Primary Activities</label>
             <div className="activities-selector">
               <div
                 className="activities-toggle"
@@ -804,7 +804,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
           <div className="edit-row">
             <div className="edit-section half">
-              <label>Surface</label>
+              <label title="Trail or path surface type">Surface</label>
               <select
                 value={editedData.surface || ''}
                 onChange={(e) => handleChange('surface', e.target.value)}
@@ -818,7 +818,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
               </select>
             </div>
             <div className="edit-section half">
-              <label>Pets Allowed</label>
+              <label title="Whether pets are allowed at this location">Pets Allowed</label>
               <select
                 value={editedData.pets || ''}
                 onChange={(e) => handleChange('pets', e.target.value)}
@@ -833,7 +833,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
           <div className="edit-row">
             <div className="edit-section half">
-              <label>Cell Signal</label>
+              <label title="Typical cell signal strength at this location">Cell Signal</label>
               <EditableCellSignal
                 level={editedData.cell_signal}
                 onChange={(val) => handleChange('cell_signal', val)}
@@ -848,7 +848,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         <>
           <div className="edit-row">
             <div className="edit-section half">
-              <label>Feature Type</label>
+              <label title="Type of linear feature (trail, river, boundary)">Feature Type</label>
               <select
                 value={editedData.feature_type || 'trail'}
                 onChange={(e) => handleChange('feature_type', e.target.value)}
@@ -857,7 +857,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
               </select>
             </div>
             <div className="edit-section half">
-              <label>Difficulty</label>
+              <label title="Trail difficulty rating">Difficulty</label>
               <select
                 value={editedData.difficulty || ''}
                 onChange={(e) => handleChange('difficulty', e.target.value)}
@@ -870,7 +870,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             </div>
           </div>
           <div className="edit-section">
-            <label>Length (miles)</label>
+            <label title="Total length of the trail in miles">Length (miles)</label>
             <input
               type="number"
               step="0.1"
@@ -885,7 +885,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       {/* Boundary color picker */}
       {isLinearFeature && editedData.feature_type === 'boundary' && (
         <div className="edit-section">
-          <label>Boundary Color</label>
+          <label title="Color used to display this boundary on the map">Boundary Color</label>
           <div className="boundary-color-palette">
             {[
               '#228B22', // Forest Green
@@ -925,7 +925,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       {!isLinearFeature && !destination?.poi_roles?.includes('organization') && (
         <div className="edit-row">
           <div className="edit-section half">
-            <label>Latitude</label>
+            <label title="GPS latitude coordinate">Latitude</label>
             <input
               type="number"
               step="0.000001"
@@ -934,7 +934,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             />
           </div>
           <div className="edit-section half">
-            <label>Longitude</label>
+            <label title="GPS longitude coordinate">Longitude</label>
             <input
               type="number"
               step="0.000001"
@@ -946,7 +946,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       )}
 
       <div className="edit-section">
-        <label>More Info Link</label>
+        <label title="Primary website or information page for this location">More Info Link</label>
         <input
           type="text"
           value={editedData.more_info_link || ''}
@@ -956,17 +956,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       </div>
 
       <div className="edit-section">
-        <label>Events Page URL (for AI Research)</label>
-        <input
-          type="text"
-          value={editedData.events_url || ''}
-          onChange={(e) => handleChange('events_url', e.target.value)}
-          placeholder="https://example.com/events or /adventures"
-        />
-      </div>
-
-      <div className="edit-section">
-        <label>News Page URL (for AI Research)</label>
+        <label title="URL of the news or blog page to crawl for this POI">News Page URL</label>
         <input
           type="text"
           value={editedData.news_url || ''}
@@ -976,20 +966,51 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       </div>
 
       <div className="edit-section">
-        <label>MTB Trail Status URL (for AI status collection)</label>
+        <label title="Auto-approve score for news from this URL. Blank uses global default (4). Only applies to items from the News Page URL, not Serper results.">News Score Threshold</label>
+        <input
+          type="number"
+          min="1"
+          max="8"
+          value={editedData.news_score_threshold ?? ''}
+          onChange={(e) => handleChange('news_score_threshold', e.target.value ? parseInt(e.target.value) : null)}
+          placeholder="Default: 4"
+        />
+      </div>
+
+      <div className="edit-section">
+        <label title="URL of the events or calendar page to crawl for this POI">Events Page URL</label>
+        <input
+          type="text"
+          value={editedData.events_url || ''}
+          onChange={(e) => handleChange('events_url', e.target.value)}
+          placeholder="https://example.com/events or /adventures"
+        />
+      </div>
+
+      <div className="edit-section">
+        <label title="Auto-approve score for events from this URL. Blank uses global default (4). Only applies to items from the Events Page URL, not Serper results.">Events Score Threshold</label>
+        <input
+          type="number"
+          min="1"
+          max="8"
+          value={editedData.events_score_threshold ?? ''}
+          onChange={(e) => handleChange('events_score_threshold', e.target.value ? parseInt(e.target.value) : null)}
+          placeholder="Default: 4"
+        />
+      </div>
+
+      <div className="edit-section">
+        <label title="Trail status page URL. If set, this trail will appear in MTB status collection.">MTB Trail Status URL</label>
         <input
           type="text"
           value={editedData.status_url || ''}
           onChange={(e) => handleChange('status_url', e.target.value)}
-          placeholder="https://example.com/trail-status (leave empty if not an MTB trail)"
+          placeholder="https://example.com/trail-status"
         />
-        <small style={{ color: '#666', display: 'block', marginTop: '0.5rem' }}>
-          If a trail status URL is provided, this trail will appear in MTB status collection
-        </small>
       </div>
 
       <div className="edit-section">
-        <label>News Collection Tier</label>
+        <label title="How often this POI is included in scheduled news and events collection">Collection Tier</label>
         <select
           value={editedData.collection_tier || 'weekly'}
           onChange={(e) => handleChange('collection_tier', e.target.value)}
@@ -998,9 +1019,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
           <option value="weekly">Weekly</option>
           <option value="monthly">Monthly</option>
         </select>
-        <small style={{ color: '#666', display: 'block', marginTop: '0.5rem' }}>
-          How often this POI is included in scheduled news collection
-        </small>
       </div>
 
 

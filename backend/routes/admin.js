@@ -170,7 +170,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'research_context',
       'length_miles', 'difficulty', 'boundary_type', 'boundary_color',
-      'collection_tier'
+      'collection_tier', 'news_score_threshold', 'events_score_threshold'
     ];
     const updates = {};
     const values = [];
@@ -227,7 +227,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'name', 'latitude', 'longitude', 'property_owner', 'owner_id', 'brief_description',
       'era', 'era_id', 'historical_description', 'primary_activities', 'surface',
       'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url', 'research_context', 'status_url',
-      'collection_tier'
+      'collection_tier', 'news_score_threshold', 'events_score_threshold'
     ];
     const updates = {};
     const values = [];
@@ -300,7 +300,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'status_url',
-      'collection_tier'
+      'collection_tier', 'news_score_threshold', 'events_score_threshold'
     ];
 
     const fields = ['name', 'latitude', 'longitude'];
@@ -367,7 +367,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'poi_roles', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
       'historical_description', 'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'has_primary_image',
-      'collection_tier'
+      'collection_tier', 'news_score_threshold', 'events_score_threshold'
     ];
 
     const fields = ['name', 'poi_roles'];
@@ -2103,7 +2103,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         'era_id', 'historical_description', 'primary_activities', 'surface', 'pets',
         'cell_signal', 'more_info_link', 'length_miles', 'difficulty',
         'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url',
-        'collection_tier'
+        'collection_tier', 'news_score_threshold', 'events_score_threshold'
       ];
 
       const updates = [];
