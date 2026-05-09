@@ -188,7 +188,7 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
  */
 async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
   const typeLabel = contentType === 'event' ? 'event' : 'news article or announcement';
-  const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park.
+  const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park and the surrounding region including Cleveland Metroparks, Summit Metro Parks, and other nearby parks, trails, and outdoor recreation areas.
 
 Title: "${title}"
 Summary: "${description || '(none)'}"
@@ -200,6 +200,7 @@ Is this a real ${typeLabel}, NOT a static reference page?
 APPROVE if the content:
 - Reports on something that happened or will happen (article, announcement, press release)
 - Describes a specific event with dates
+- Scheduled recreational excursions, tours, or rides with specific dates (e.g., scenic train rides, guided hikes, boat tours) — even if they run regularly
 - The TOPIC is directly related to: nature, trails, hiking, biking, paddling, outdoor recreation,
   conservation, ecology, wildlife, park operations, land management, environmental education,
   local history of the Cuyahoga Valley, or outdoor arts/music events hosted by a park or nature organization
