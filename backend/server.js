@@ -1990,7 +1990,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
         AND e.moderation_status IN ('published', 'auto_approved')
     `;
     if (upcomingOnly) {
-      query += ` AND e.start_date >= (CURRENT_TIMESTAMP AT TIME ZONE $3)::date`;
+      query += ` AND (e.start_date AT TIME ZONE $3)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $3)::date`;
     }
     query += ` GROUP BY e.id ORDER BY e.start_date ASC LIMIT $2`;
 
@@ -2203,7 +2203,7 @@ app.get('/api/events/upcoming', async (req, res) => {
       JOIN pois p ON e.poi_id = p.id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
-        AND e.start_date >= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
+        AND (e.start_date AT TIME ZONE $1)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY e.id, p.id, p.name, p.poi_roles
       ORDER BY e.start_date ASC
@@ -2228,7 +2228,7 @@ app.get('/api/events/past', async (req, res) => {
       JOIN pois p ON e.poi_id = p.id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
-        AND e.start_date < (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+        AND (e.start_date AT TIME ZONE $2)::date < (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY e.id, p.id, p.name, p.poi_roles
       ORDER BY e.start_date DESC

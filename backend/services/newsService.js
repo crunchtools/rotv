@@ -2094,8 +2094,9 @@ export async function getNewsForPoi(pool, poiId, limit = 10) {
  * @param {Pool} pool - Database connection pool
  * @param {number} poiId - POI ID
  * @param {boolean} upcomingOnly - Only return future events
+ * @param {string} tz - IANA timezone for date comparison
  */
-export async function getEventsForPoi(pool, poiId, upcomingOnly = true) {
+export async function getEventsForPoi(pool, poiId, upcomingOnly = true, tz = 'America/New_York') {
   let query = `
     SELECT id, title, description, start_date, end_date, event_type, location_details, source_url, collection_date
     FROM poi_events
@@ -2104,12 +2105,12 @@ export async function getEventsForPoi(pool, poiId, upcomingOnly = true) {
   `;
 
   if (upcomingOnly) {
-    query += ` AND start_date >= CURRENT_DATE`;
+    query += ` AND (start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date`;
   }
 
   query += ` ORDER BY start_date ASC`;
 
-  const result = await pool.query(query, [poiId]);
+  const result = await pool.query(query, upcomingOnly ? [poiId, tz] : [poiId]);
   return result.rows;
 }
 
@@ -2136,18 +2137,19 @@ export async function getRecentNews(pool, limit = 20) {
  * Get all upcoming events across all POIs
  * @param {Pool} pool - Database connection pool
  * @param {number} daysAhead - How many days ahead to look
+ * @param {string} tz - IANA timezone for date comparison
  */
-export async function getUpcomingEvents(pool, daysAhead = 30) {
+export async function getUpcomingEvents(pool, daysAhead = 30, tz = 'America/New_York') {
   const result = await pool.query(`
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
            e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_events e
     JOIN pois p ON e.poi_id = p.id
-    WHERE e.start_date >= CURRENT_DATE
-      AND e.start_date <= CURRENT_DATE + INTERVAL '1 day' * $1
+    WHERE (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+      AND (e.start_date AT TIME ZONE $2)::date <= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date + $1
       AND e.moderation_status IN ('published', 'auto_approved')
     ORDER BY e.start_date ASC
-  `, [daysAhead]);
+  `, [daysAhead, tz]);
 
   return result.rows;
 }
