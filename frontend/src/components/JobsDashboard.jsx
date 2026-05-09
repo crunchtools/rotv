@@ -66,15 +66,18 @@ function formatCronHuman(cron) {
   if (!cron) return 'Event-driven';
   const parts = cron.split(/\s+/);
   if (parts.length !== 5) return cron;
-  const [min, hour, dom] = parts;
+  const [min, hour, dom, , dow] = parts;
+  const DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+  let h = parseInt(hour, 10);
+  const suffix = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12; else if (h > 12) h -= 12;
+  const time = `${h}:${min.padStart(2, '0')} ${suffix}`;
+  const ordinal = (d) => { const n = parseInt(d, 10); return (n > 3 && n < 21) ? d + 'th' : d + ['th','st','nd','rd'][n % 10] || d + 'th'; };
 
-  if (cron === '0 6 * * *') return 'Daily at 6:00 AM';
-  if (cron === '0 2 * * *') return 'Daily at 2:00 AM';
-  if (cron === '0 3 * * *') return 'Daily at 3:00 AM';
-  if (cron === '0 6 * * 1') return 'Mondays at 6:00 AM';
-  if (cron === '0 6 1 * *') return '1st of month at 6:00 AM';
   if (cron.startsWith('*/')) return `Every ${min.slice(2)} minutes`;
-  if (hour !== '*' && min !== '*' && dom === '*') return `Daily at ${hour}:${min.padStart(2, '0')}`;
+  if (dom !== '*' && hour !== '*') return `${ordinal(dom)} of month at ${time}`;
+  if (dow !== '*' && hour !== '*') return `${DAYS[dow] || dow} at ${time}`;
+  if (hour !== '*' && min !== '*' && dom === '*' && dow === '*') return `Daily at ${time}`;
   return cron;
 }
 
