@@ -11,6 +11,11 @@ import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 
+function sameOrigin(urlA, urlB) {
+  try { return new URL(urlA).origin === new URL(urlB).origin; }
+  catch { return false; }
+}
+
 const TABLE_MAP = {
   news: 'poi_news',
   event: 'poi_events',
@@ -267,7 +272,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     const itemQuery = await pool.query(
       `SELECT t.id, t.poi_id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
-              t.date_consensus_score, t.rendered_content, t.date_signals, p.name as poi_name${extraFields}
+              t.date_consensus_score, t.rendered_content, t.date_signals, p.name as poi_name,
+              p.news_score_threshold, p.events_score_threshold, p.news_url, p.events_url${extraFields}
        FROM ${table} t
        LEFT JOIN pois p ON t.poi_id = p.id
        WHERE t.id = $1`, [contentId]
@@ -333,14 +339,20 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       }
     }
 
+    // Per-POI threshold override: applies only when item came from the POI's configured URL
+    const poiConfigUrl = contentType === 'news' ? row.news_url : row.events_url;
+    const poiThreshold = contentType === 'news' ? row.news_score_threshold : row.events_score_threshold;
+    const fromConfiguredUrl = row.source_url && poiConfigUrl && sameOrigin(row.source_url, poiConfigUrl);
+    const effectiveThreshold = (fromConfiguredUrl && poiThreshold != null) ? poiThreshold : newsDateThreshold;
+
     let dateScore = row.date_consensus_score || 0;
     let newScore = dateScore;
     let newDate = null;        // only set if a rescore actually produces a date
     let rescoredDate = false;  // track whether we ran a rescore
 
     // --- Step 1: Date scoring (rescore from cached signals or full extraction) ---
-    if (dateScore < newsDateThreshold || forceStatus) {
-      console.log(`[Moderation] ${contentType} #${contentId}: rescoring (current score=${dateScore}, threshold=${newsDateThreshold})`);
+    if (dateScore < effectiveThreshold || forceStatus) {
+      console.log(`[Moderation] ${contentType} #${contentId}: rescoring (current score=${dateScore}, threshold=${effectiveThreshold})`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rescoring ${contentType} #${contentId} (score=${dateScore})`);
 
       try {
@@ -439,12 +451,12 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     } else if (unanimousNo) {
       resolvedStatus = 'rejected';
       reasoning = `Rejected: relevance vote unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})`;
-    } else if (unanimousYes && newScore >= newsDateThreshold && effectiveDate) {
+    } else if (unanimousYes && newScore >= effectiveThreshold && effectiveDate) {
       resolvedStatus = 'published';
-      reasoning = `Published: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${newsDateThreshold}`;
+      reasoning = `Published: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${effectiveThreshold}`;
     } else {
       resolvedStatus = 'pending';
-      reasoning = `Pending: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${newsDateThreshold}`;
+      reasoning = `Pending: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${effectiveThreshold}`;
     }
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
