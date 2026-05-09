@@ -2720,8 +2720,8 @@ async function start() {
     // Register and schedule tiered news collection (daily/weekly/monthly)
     for (const { tier, cron } of [
       { tier: 'daily',   cron: '0 6 * * *' },     // Every day at 6 AM Eastern
-      { tier: 'weekly',  cron: '0 6 * * 1' },     // Monday at 6 AM Eastern
-      { tier: 'monthly', cron: '0 6 1 * *' },     // 1st of month at 6 AM Eastern
+      { tier: 'weekly',  cron: '0 5 * * 4' },     // Thursday at 5 AM Eastern
+      { tier: 'monthly', cron: '0 1 1 * *' },     // 1st of month at 1 AM Eastern
     ]) {
       await registerTierNewsCollectionHandler(tier, withJitter(async () => {
         console.log(`Running scheduled ${tier} news collection...`);
