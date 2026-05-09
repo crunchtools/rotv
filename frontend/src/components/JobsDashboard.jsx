@@ -66,15 +66,14 @@ function formatCronHuman(cron) {
   if (!cron) return 'Event-driven';
   const parts = cron.split(/\s+/);
   if (parts.length !== 5) return cron;
-  const [min, hour, dom] = parts;
+  const [min, hour, dom, , dow] = parts;
+  const DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+  const time = `${hour}:${min.padStart(2, '0')} AM`;
 
-  if (cron === '0 6 * * *') return 'Daily at 6:00 AM';
-  if (cron === '0 2 * * *') return 'Daily at 2:00 AM';
-  if (cron === '0 3 * * *') return 'Daily at 3:00 AM';
-  if (cron === '0 6 * * 1') return 'Mondays at 6:00 AM';
-  if (cron === '0 6 1 * *') return '1st of month at 6:00 AM';
   if (cron.startsWith('*/')) return `Every ${min.slice(2)} minutes`;
-  if (hour !== '*' && min !== '*' && dom === '*') return `Daily at ${hour}:${min.padStart(2, '0')}`;
+  if (dom !== '*' && hour !== '*') return `${dom === '1' ? '1st' : dom + 'th'} of month at ${time}`;
+  if (dow !== '*' && hour !== '*') return `${DAYS[dow] || dow} at ${time}`;
+  if (hour !== '*' && min !== '*' && dom === '*' && dow === '*') return `Daily at ${time}`;
   return cron;
 }
 
