@@ -10,8 +10,8 @@ let boss = null;
 const JOB_NAMES = {
   NEWS_COLLECTION: 'news-collection',           // Legacy (kept for admin batch + unschedule)
   NEWS_COLLECTION_DAILY: 'news-collection-daily',     // Tier: daily at 6 AM
-  NEWS_COLLECTION_WEEKLY: 'news-collection-weekly',   // Tier: weekly Monday 6 AM
-  NEWS_COLLECTION_MONTHLY: 'news-collection-monthly', // Tier: monthly 1st 6 AM
+  NEWS_COLLECTION_WEEKLY: 'news-collection-weekly',   // Tier: weekly Thursday 5 AM
+  NEWS_COLLECTION_MONTHLY: 'news-collection-monthly', // Tier: monthly 1st 1 AM
   NEWS_COLLECTION_POI: 'news-collection-poi',   // Individual POI processing
   NEWS_BATCH: 'news-batch-collection',          // Admin-triggered batch collection
   TRAIL_STATUS_COLLECTION: 'trail-status-collection',  // Scheduled trail status collection
