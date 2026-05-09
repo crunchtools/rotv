@@ -1069,8 +1069,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
           for (const itemsOrError of phase2Results) {
             if (!itemsOrError || itemsOrError instanceof Error) continue;
             const newNews = itemsOrError.filter(item => {
-              const titleLower = item.title.toLowerCase().trim();
-              return !allNews.some(n => n.title.toLowerCase().trim() === titleLower);
+              const norm = normalizeTitle(item.title);
+              return !allNews.some(n => normalizeTitle(n.title) === norm);
             });
             if (newNews.length > 0) {
               logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Adding ${newNews.length} unique items`);
@@ -1277,6 +1277,20 @@ async function resolveRedirectUrl(url) {
 }
 
 /**
+ * Normalize a title for duplicate detection by stripping leading articles.
+ * "The David Mayfield Parade" and "David Mayfield Parade" → same normalized form.
+ * @param {string} title - Original title
+ * @returns {string} - Normalized title (lowercased, article-stripped)
+ */
+export function normalizeTitle(title) {
+  if (!title) return '';
+  return title.toLowerCase().replace(/^the\s+/i, '').trim();
+}
+
+// SQL expression matching normalizeTitle() — strip leading "The", lowercase, trim
+const SQL_NORMALIZE_TITLE = `TRIM(LOWER(REGEXP_REPLACE(title, '^[Tt]he\\s+', '')))`;
+
+/**
  * Normalize a news title for duplicate detection
  * Strips date suffixes like "| January 30" or "| 2026-01-30"
  * @param {string} title - Original title
@@ -1358,14 +1372,15 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       const normalizedTitle = normalizeNewsTitle(item.title);
 
       const normalizedUrl = normalizeUrl(resolvedUrl);
+      const normalizedTitleNoArticle = normalizeTitle(item.title);
       const existing = await pool.query(
         `SELECT id, title, source_url, poi_id FROM poi_news
          WHERE (
            ($1::text IS NOT NULL AND LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = $1::text)
-           OR (poi_id = $2 AND title = $3)
-           OR (poi_id = $2 AND REGEXP_REPLACE(title, '\\s*\\|\\s*(\\d{4}-\\d{2}-\\d{2}|[A-Z][a-z]+\\s+\\d{1,2}(,\\s*\\d{4})?)\\s*$', '', 'i') = $4)
+           OR (poi_id = $2 AND ${SQL_NORMALIZE_TITLE} = $3)
+           OR (poi_id = $2 AND TRIM(LOWER(REGEXP_REPLACE(REGEXP_REPLACE(title, '\\s*\\|\\s*(\\d{4}-\\d{2}-\\d{2}|[A-Z][a-z]+\\s+\\d{1,2}(,\\s*\\d{4})?)\\s*$', '', 'i'), '^[Tt]he\\s+', ''))) = $4)
          )`,
-        [normalizedUrl, poiId, item.title, normalizedTitle]
+        [normalizedUrl, poiId, normalizedTitleNoArticle, normalizeTitle(normalizedTitle)]
       );
 
       if (existing.rows.length > 0) {
@@ -1475,13 +1490,14 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
       }
 
       const normalizedEventUrl = normalizeUrl(resolvedUrl);
+      const normalizedEventTitle = normalizeTitle(item.title);
       const existing = await pool.query(
         `SELECT id, title, source_url, poi_id FROM poi_events
          WHERE (
            ($1::text IS NOT NULL AND LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = $1::text)
-           OR (poi_id = $2 AND title = $3 AND start_date = $4)
+           OR (poi_id = $2 AND ${SQL_NORMALIZE_TITLE} = $3 AND start_date = $4)
          )`,
-        [normalizedEventUrl, poiId, item.title, item.start_date]
+        [normalizedEventUrl, poiId, normalizedEventTitle, item.start_date]
       );
 
       if (existing.rows.length > 0) {

@@ -9,7 +9,7 @@ import { renderPage } from './renderPage.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
-import { scoreDate, normalizeRenderUrl } from './newsService.js';
+import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -275,13 +275,16 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     if (!itemQuery.rows.length) return;
     const row = itemQuery.rows[0];
 
-    // Duplicate check (cheap DB query)
+    // Duplicate check (cheap DB query) — strip leading "The" so
+    // "The David Mayfield Parade" matches "David Mayfield Parade"
+    const titleNorm = `TRIM(LOWER(REGEXP_REPLACE(title, '^[Tt]he\\s+', '')))`;
+    const paramNorm = normalizeTitle(row.title);
     const dupWhere = contentType === 'news'
-      ? `LOWER(title) = LOWER($1) AND id != $2`
-      : `LOWER(title) = LOWER($1) AND start_date = $3 AND id != $2`;
+      ? `${titleNorm} = $1 AND id != $2`
+      : `${titleNorm} = $1 AND start_date = $3 AND id != $2`;
     const dupParams = contentType === 'news'
-      ? [row.title, contentId]
-      : [row.title, contentId, row.start_date];
+      ? [paramNorm, contentId]
+      : [paramNorm, contentId, row.start_date];
     const dupCheck = await pool.query(
       `SELECT id FROM ${table} WHERE ${dupWhere}
        AND moderation_status IN ('published', 'auto_approved') LIMIT 1`,
