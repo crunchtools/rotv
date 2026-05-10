@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 function UserSettings({ user }) {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('general');
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle');
@@ -75,6 +77,17 @@ function UserSettings({ user }) {
               <p className="field-hint">
                 Your email is managed through your authentication provider
               </p>
+            </div>
+            <div className="settings-divider"></div>
+            <div className="settings-field">
+              <label>Legal</label>
+              <a
+                href="/privacy"
+                className="settings-link"
+                onClick={(e) => { e.preventDefault(); navigate('/privacy'); }}
+              >
+                Privacy Policy
+              </a>
             </div>
           </div>
         )}

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 const TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern Time (EST/EDT)', icon: '🗽' },
@@ -11,6 +12,7 @@ const TIMEZONES = [
 ];
 
 function GeneralSettings() {
+  const navigate = useNavigate();
   const [timezone, setTimezone] = useState('America/New_York');
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState(null);
@@ -98,6 +100,19 @@ function GeneralSettings() {
           <li>Dates are extracted in ISO 8601 format (YYYY-MM-DD)</li>
           <li>All dates match exactly what appears on the source websites</li>
         </ul>
+      </div>
+
+      <div className="settings-divider"></div>
+
+      <div className="settings-section">
+        <h3>Legal</h3>
+        <a
+          href="/privacy"
+          className="settings-link"
+          onClick={(e) => { e.preventDefault(); navigate('/privacy'); }}
+        >
+          Privacy Policy
+        </a>
       </div>
     </div>
   );

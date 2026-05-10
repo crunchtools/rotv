@@ -13543,3 +13543,131 @@ svg.leaflet-zoom-animated {
     font-size: 1.25rem;
   }
 }
+
+/* Privacy Policy Page */
+.privacy-policy-page {
+  min-height: 100vh;
+  background: #fafafa;
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1rem;
+}
+
+.privacy-policy-content {
+  max-width: 720px;
+  width: 100%;
+  background: white;
+  border-radius: 8px;
+  padding: 2.5rem 3rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.privacy-back-btn {
+  background: none;
+  border: none;
+  color: #2d6a4f;
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 1.5rem;
+}
+
+.privacy-back-btn:hover {
+  text-decoration: underline;
+}
+
+.privacy-policy-content h1 {
+  font-size: 1.8rem;
+  margin: 0 0 0.25rem;
+  color: #1b4332;
+}
+
+.privacy-updated {
+  color: #6c757d;
+  font-size: 0.85rem;
+  margin: 0 0 2rem;
+}
+
+.privacy-policy-content section {
+  margin-bottom: 1.75rem;
+}
+
+.privacy-policy-content h2 {
+  font-size: 1.15rem;
+  color: #2d6a4f;
+  margin: 0 0 0.5rem;
+}
+
+.privacy-policy-content p {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #333;
+  margin: 0 0 0.75rem;
+}
+
+.privacy-policy-content ul {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
+
+.privacy-policy-content li {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #333;
+  margin-bottom: 0.25rem;
+}
+
+.privacy-policy-content a {
+  color: #2d6a4f;
+  text-decoration: underline;
+}
+
+.privacy-policy-content a:hover {
+  color: #1b4332;
+}
+
+/* Privacy link in login/user dropdown */
+.privacy-link-inline {
+  display: block;
+  text-align: center;
+  font-size: 0.8rem;
+  color: #6c757d;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #eee;
+  text-decoration: none;
+}
+
+.privacy-link-inline:hover {
+  color: #2d6a4f;
+  text-decoration: underline;
+}
+
+/* Privacy link in user dropdown (authenticated) */
+.user-dropdown-inline .privacy-link-inline {
+  text-align: left;
+  padding: 8px 12px;
+  margin-top: 0;
+  border-top: 1px solid #eee;
+}
+
+/* Settings link style */
+.settings-link {
+  color: #2d6a4f;
+  text-decoration: none;
+  font-size: 0.9rem;
+}
+
+.settings-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 768px) {
+  .privacy-policy-content {
+    padding: 1.5rem;
+  }
+
+  .privacy-policy-content h1 {
+    font-size: 1.4rem;
+  }
+}
