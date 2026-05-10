@@ -26,6 +26,9 @@ import NewsPermalink from './components/NewsPermalink';
 import EventPermalink from './components/EventPermalink';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import FeedbackForm from './components/FeedbackForm';
+import AboutPage from './components/AboutPage';
+import GuidedTour from './components/GuidedTour';
+import TourPrompt from './components/TourPrompt';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -132,6 +135,11 @@ function AppContent() {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [profileImageError, setProfileImageError] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+
+  // Tour state
+  const [showTourPrompt, setShowTourPrompt] = useState(false);
+  const [tourActive, setTourActive] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
 
   // Router hooks
   const location = useLocation();
@@ -242,6 +250,66 @@ function AppContent() {
   // Known main tab paths — used to distinguish tab URLs from POI slugs
   const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'settings', 'privacy']);
   const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
+
+  // Tour handlers
+  const startTour = useCallback(() => {
+    setShowTourPrompt(false);
+    setTourStep(0);
+    setTourActive(true);
+    localStorage.setItem('rotv-tour-seen', 'true');
+    // Switch to map view for tour start
+    setActiveTab('view');
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+    isProgrammaticNavigationRef.current = true;
+    navigate('/');
+  }, [navigate]);
+
+  const endTour = useCallback(() => {
+    setTourActive(false);
+    setTourStep(0);
+    // Return to map view
+    setActiveTab('view');
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+    isProgrammaticNavigationRef.current = true;
+    navigate('/');
+  }, [navigate]);
+
+  const handleTourStepAction = useCallback((action) => {
+    switch (action) {
+      case 'selectVisitorCenter': {
+        // Select Boston Mill Visitor Center to show sidebar tabs
+        setActiveTab('view');
+        const visitorCenter = destinations.find(d => d.name === 'Boston Mill Visitor Center');
+        if (visitorCenter) {
+          setSelectedDestination(visitorCenter);
+        }
+        break;
+      }
+      case 'showMapView': {
+        // Return to map view, clear POI selection
+        setActiveTab('view');
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        isProgrammaticNavigationRef.current = true;
+        navigate('/');
+        break;
+      }
+      case 'showNewsletter': {
+        // Navigate to Settings -> Newsletter tab
+        if (isAuthenticated) {
+          setActiveTab('settings');
+          if (isAdmin) {
+            setSettingsTab('newsletter');
+          }
+          isProgrammaticNavigationRef.current = true;
+          navigate('/settings');
+        }
+        break;
+      }
+    }
+  }, [destinations, isAuthenticated, isAdmin, navigate]);
 
   // Helper to handle tab changes and clear MTB mode if needed
   const handleTabChange = useCallback((newTab) => {
@@ -432,7 +500,7 @@ function AppContent() {
     let poiSlug = null;
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
-    const mainTabPaths = ['results', 'news', 'events', 'settings'];
+    const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
 
     if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
@@ -566,7 +634,7 @@ function AppContent() {
     const pathParts = location.pathname.split('/').filter(Boolean);
 
     // Handle main tab paths: /results, /news, /events, /settings
-    const mainTabPaths = ['results', 'news', 'events', 'settings'];
+    const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
       setActiveTab(pathParts[0]);
       if (selectedDestination || selectedLinearFeature) {
@@ -856,6 +924,27 @@ function AppContent() {
   useEffect(() => {
     refreshAllData();
   }, [refreshAllData]);
+
+  // Show tour prompt for first-time visitors
+  useEffect(() => {
+    if (!localStorage.getItem('rotv-tour-seen')) {
+      setShowTourPrompt(true);
+    }
+  }, []);
+
+  // Handle /tutorial/stepN URLs for testing
+  useEffect(() => {
+    const match = location.pathname.match(/^\/tutorial\/step(\d+)$/);
+    if (match && !tourActive) {
+      const stepNum = parseInt(match[1], 10) - 1;
+      if (stepNum >= 0 && stepNum <= 8) {
+        setTourStep(stepNum);
+        setTourActive(true);
+        setShowTourPrompt(false);
+        localStorage.setItem('rotv-tour-seen', 'true');
+      }
+    }
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize visibleTypes from iconConfig ONCE after it loads from database
   // Use a ref to ensure this only runs once, not every time iconConfig changes
@@ -1575,6 +1664,8 @@ function AppContent() {
     return <PrivacyPolicy />;
   }
 
+
+
   return (
     <div className="app">
       <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
@@ -1620,6 +1711,12 @@ function AppContent() {
           >
             Events
           </button>
+          <button
+            className={`tab-btn ${activeTab === 'about' ? 'active' : ''}`}
+            onClick={() => handleTabChange('about')}
+          >
+            About
+          </button>
           {isAuthenticated && (
             <button
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
@@ -1659,6 +1756,12 @@ function AppContent() {
                       <span className="user-email-inline">{user?.email}</span>
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
+                    <button
+                      className="dropdown-item-inline privacy-link-inline"
+                      onClick={() => { setShowUserDropdown(false); handleTabChange('about'); }}
+                    >
+                      About
+                    </button>
                     <a
                       className="dropdown-item-inline privacy-link-inline"
                       href="https://buttondown.com/rotv/rss"
@@ -1734,6 +1837,12 @@ function AppContent() {
                         <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                       </svg>
                       Continue with Facebook
+                    </button>
+                    <button
+                      className="privacy-link-inline"
+                      onClick={() => { setShowLoginDropdown(false); handleTabChange('about'); }}
+                    >
+                      About
                     </button>
                     <a
                       className="privacy-link-inline"
@@ -1849,6 +1958,12 @@ function AppContent() {
         </main>
       )}
 
+      {/* About tab content */}
+      {activeTab === 'about' && (
+        <main className="main-content-full">
+          <AboutPage onStartTour={startTour} />
+        </main>
+      )}
 
       {activeTab === 'settings' && (
         <main className="settings-content">
@@ -2145,6 +2260,27 @@ function AppContent() {
       </main>
       {showFeedbackForm && (
         <FeedbackForm onClose={() => setShowFeedbackForm(false)} />
+      )}
+
+      {/* Tour prompt for first-time visitors */}
+      {showTourPrompt && (
+        <TourPrompt
+          onStartTour={startTour}
+          onDismiss={() => {
+            setShowTourPrompt(false);
+            localStorage.setItem('rotv-tour-seen', 'true');
+          }}
+        />
+      )}
+
+      {/* Guided tour overlay */}
+      {tourActive && (
+        <GuidedTour
+          onEnd={endTour}
+          currentStep={tourStep}
+          setCurrentStep={setTourStep}
+          onStepAction={handleTourStepAction}
+        />
       )}
     </div>
   );
