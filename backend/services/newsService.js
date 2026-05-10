@@ -252,9 +252,118 @@ export async function findIncompleteJobs(pool) {
   return result.rows;
 }
 
+// Calendar/view navigation suffixes — links ending with these are view selectors, not detail pages
+const CALENDAR_VIEW_SUFFIXES = ['/list/', '/list', '/month/', '/month', '/today/', '/today',
+  '/week/', '/week', '/day/', '/day', '/map/', '/map', '/photo/', '/photo',
+  '/summary/', '/summary', '/calendar/', '/calendar'];
+
+// Single-segment nav paths — pages that are never content detail pages
+const NAV_PATHS = [
+  '/login', '/signin', '/signup', '/register',
+  '/cart', '/checkout', '/account', '/household',
+  '/contact', '/contactus', '/contact-us',
+  '/about', '/about-us', '/aboutus',
+  '/privacy', '/terms', '/cookie', '/accessibility',
+  '/search', '/subscribe', '/newsletter',
+  '/donate', '/give', '/membership',
+  '/splash', '/faq', '/help',
+  '/become-a-member', '/get-involved', '/volunteer'
+];
+
+// WebTrac navigation files — sibling HTML files that aren't event detail pages
+const WEBTRAC_NAV_FILES = ['splash.html', 'contactus.html', 'cart.html', 'login.html',
+  'household.html', 'register.html', 'forgotpassword.html', 'wishlist.html', 'addtocart.html'];
+
+/**
+ * Test whether a URL is a known non-detail pattern (noise link).
+ * Used by deterministic link extraction to filter calendar nav, pagination,
+ * images, forms, and other links that look like content but aren't detail pages.
+ *
+ * @param {string} url - The link URL to test
+ * @param {string} sourceUrl - The page the link was found on
+ * @returns {boolean} - true if the link is noise (should be excluded)
+ */
+function isNoiseLink(url, sourceUrl) {
+  let parsed;
+  try { parsed = new URL(url); } catch { return true; }
+
+  const path = parsed.pathname.toLowerCase();
+  const search = parsed.search.toLowerCase();
+
+  // Non-page resources (images, docs, stylesheets)
+  if (/\.(png|jpe?g|gif|svg|webp|pdf|css|js|ico|woff2?|mp[34]|zip|ics)$/i.test(path)) return true;
+
+  // Hash-only link (same page anchor)
+  try {
+    const source = new URL(sourceUrl);
+    if (parsed.origin === source.origin && parsed.pathname === source.pathname && parsed.hash) return true;
+  } catch { /* ignore */ }
+
+  // Homepage / site root
+  if (path === '/' || path === '') return true;
+
+  // Calendar view selectors
+  for (const suffix of CALENDAR_VIEW_SUFFIXES) {
+    if (path.endsWith(suffix)) return true;
+  }
+
+  // Past events / archive views
+  if (search.includes('eventdisplay=past') || search.includes('display=past')) return true;
+
+  // iCal / feed exports
+  if (search.includes('ical=1') || search.includes('outlook-ical') || path.endsWith('.ics')) return true;
+
+  // Pagination links
+  if (/\/page\/\d+\/?$/.test(path)) return true;
+  if (/[?&]page=\d+/.test(search)) return true;
+
+  // Common non-content pages (only single-segment paths like /about, not /about/news)
+  const pathSegments = path.replace(/\/$/, '').split('/').filter(Boolean);
+  if (pathSegments.length <= 1) {
+    const simplePath = '/' + (pathSegments[0] || '');
+    if (NAV_PATHS.includes(simplePath)) return true;
+  }
+
+  // WebTrac-specific nav pages
+  const filename = path.split('/').pop();
+  if (WEBTRAC_NAV_FILES.includes(filename)) return true;
+
+  // Request/submission forms
+  const lastSegment = path.replace(/\/$/, '').split('/').pop() || '';
+  if (/\brequest|submit|apply|form\b/i.test(lastSegment)) return true;
+
+  return false;
+}
+
+/**
+ * Deduplicate URLs by keeping the shortest when one is a prefix of another.
+ * Handles WebTrac sub-tab URLs: iteminfo.html?FMID=123&option=fees is longer
+ * than iteminfo.html?FMID=123, so the shorter base event URL wins.
+ *
+ * @param {Array} urls - Array of URL strings
+ * @returns {Array} - Deduplicated URLs
+ */
+function shortestUrlDedup(urls) {
+  const byUrl = new Map();
+  for (const url of urls) {
+    let dominated = false;
+    for (const [existing] of byUrl) {
+      if (url.startsWith(existing + '&') || url.startsWith(existing + '%')) {
+        dominated = true;
+        break;
+      }
+      if (existing.startsWith(url + '&') || existing.startsWith(url + '%')) {
+        byUrl.delete(existing);
+      }
+    }
+    if (!dominated) byUrl.set(url, true);
+  }
+  return [...byUrl.keys()];
+}
+
 /**
  * Classify a web page as LISTING or DETAIL using Gemini.
- * Sends first 3000 chars of markdown + first 20 links, returns classification.
+ * Gemini classifies only — link extraction is fully deterministic.
  *
  * @param {Pool} pool - Database connection pool
  * @param {string} markdown - Page markdown content
@@ -262,9 +371,10 @@ export async function findIncompleteJobs(pool) {
  * @param {string} url - The page URL
  * @param {string} contentType - 'event' or 'news'
  * @param {Object} sheets - Optional sheets client for API key restore
+ * @param {Array} trustedEventPaths - URL path patterns that bypass basePath (e.g., /event, iteminfo.html)
  * @returns {Object} - { pageType, detailLinks, reasoning }
  */
-async function classifyPage(pool, markdown, links, url, contentType, sheets) {
+async function classifyPage(pool, markdown, links, url, contentType, sheets, trustedEventPaths = []) {
   // Prioritize content links over navigation — "Read More", article-pattern URLs, etc.
   // Navigation links (menus, footers) dominate the first positions in DOM order,
   // burying the actual article links the classifier needs to see.
@@ -282,53 +392,101 @@ async function classifyPage(pool, markdown, links, url, contentType, sheets) {
       const linkPath = new URL(l.url).pathname;
       if (sourceOrigin.length > 1 && linkPath.startsWith(sourceOrigin) && linkPath !== sourceOrigin && linkPath !== sourceOrigin + '/') return true;
     } catch { /* ignore */ }
+    // Links to a different page in the same directory (sibling files)
+    // e.g., /webtrac/web/search.html → /webtrac/web/iteminfo.html
+    try {
+      const linkPath = new URL(l.url).pathname;
+      const sourceDir = sourceOrigin.replace(/\/[^/]+\.[^/]+$/, '');
+      if (sourceDir && sourceDir !== sourceOrigin && linkPath.startsWith(sourceDir + '/') && linkPath !== sourceOrigin) return true;
+    } catch { /* ignore */ }
+    // Links matching trusted event path patterns (e.g., /event, /events, iteminfo.html)
+    if (trustedEventPaths.length > 0) {
+      try {
+        const linkPath = new URL(l.url).pathname;
+        if (trustedEventPaths.some(pattern => linkPath.includes(pattern))) return true;
+      } catch { /* ignore */ }
+    }
     return false;
   });
+  // Filter out links pointing to the same page (same pathname, different query params).
+  // e.g., search.html?category=Golf is a filtered view of search.html, not a detail page.
+  let sourcePathname;
+  try { sourcePathname = new URL(url).pathname; } catch { sourcePathname = null; }
+  const notSelfRef = l => {
+    if (!sourcePathname) return true;
+    try { return new URL(l.url).pathname !== sourcePathname; } catch { return true; }
+  };
+  // Deduplicate by URL — same event may appear multiple times with different anchor text
+  // (e.g., "Archery for Beginners", "Fee Details", "Share" all link to the same iteminfo.html).
+  // Keep the first occurrence, which is typically the event title.
+  const dedup = (arr) => {
+    const urlSeen = new Set();
+    return arr.filter(l => {
+      if (urlSeen.has(l.url)) return false;
+      urlSeen.add(l.url);
+      return true;
+    });
+  };
   // Use content links first, then fill with remaining links up to 30
-  const seen = new Set(contentLinks.map(l => l.url));
-  const otherLinks = links.filter(l => !seen.has(l.url));
-  const rankedLinks = [...contentLinks, ...otherLinks].slice(0, 30);
+  const filteredContentLinks = dedup(contentLinks.filter(notSelfRef));
+  const seen = new Set(filteredContentLinks.map(l => l.url));
+  const otherLinks = dedup(links.filter(l => !seen.has(l.url)).filter(notSelfRef));
+  const rankedLinks = [...filteredContentLinks, ...otherLinks].slice(0, 30);
 
   const prompt = `Classify this web page. Based on the content, is it:
 A) LISTING — lists multiple ${contentType}s with links to individual pages
 B) DETAIL — describes a single ${contentType} with dates/descriptions/details
+C) NEITHER — not a ${contentType} page at all (e.g., about page, contact form, login, navigation, store/shop, generic info)
 
 PAGE URL: ${url}
 CONTENT (first 3000 chars):
 ${markdown.substring(0, 5000)}
 
-LINKS (${rankedLinks.length} most relevant, content links first):
-${rankedLinks.map(l => `- "${(l.text || '').substring(0, 60)}" → ${l.url}`).join('\n')}
-
 Return ONLY valid JSON:
-{"page_type": "listing|detail", "reasoning": "one sentence", "detail_links": ["url1", "url2"]}
-For LISTING: populate detail_links with URLs to individual ${contentType} pages (max 15).
-For DETAIL: detail_links should be empty.`;
+{"page_type": "listing|detail|neither", "reasoning": "one sentence"}`;
 
-  const result = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 1024, thinkingBudget: 0 });
+  const result = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 256, thinkingBudget: 0 });
 
   // Parse JSON from response (handle markdown code blocks)
   const text = result.response || result;
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    return { pageType: 'listing', detailLinks: links.map(l => l.url).slice(0, 15), reasoning: 'parse failure fallback' };
+    // Parse failure — assume listing and pass all ranked links for deterministic filtering
+    return { pageType: 'listing', detailLinks: rankedLinks.map(l => l.url), reasoning: 'parse failure fallback' };
   }
   try {
     const parsed = JSON.parse(jsonMatch[0]);
-    return { pageType: (parsed.page_type || '').toLowerCase(), detailLinks: parsed.detail_links || [], reasoning: parsed.reasoning };
+    const pageType = (parsed.page_type || '').toLowerCase();
+
+    // Gemini is ONLY a classifier — it does NOT select links.
+    // rankedLinks were built deterministically above (content link heuristics + dedup).
+    // filterDetailLinks() applies noise filtering, basePath, and trusted patterns downstream.
+    if (pageType === 'listing') {
+      return { pageType, detailLinks: rankedLinks.map(l => l.url), reasoning: parsed.reasoning };
+    }
+    if (pageType === 'detail') {
+      return { pageType, detailLinks: [], reasoning: parsed.reasoning };
+    }
+    if (pageType === 'neither') {
+      return { pageType, detailLinks: [], reasoning: parsed.reasoning };
+    }
+    // Unrecognized response — treat as listing (safer than dropping links)
+    return { pageType: 'listing', detailLinks: rankedLinks.map(l => l.url), reasoning: parsed.reasoning || 'unrecognized classification fallback' };
   } catch {
-    return { pageType: 'listing', detailLinks: links.map(l => l.url).slice(0, 15), reasoning: 'parse failure fallback' };
+    return { pageType: 'listing', detailLinks: rankedLinks.map(l => l.url), reasoning: 'parse failure fallback' };
   }
 }
 
 /**
- * Filter detail links to same-origin, deduplicate, and cap at 15.
+ * Filter detail links: noise filter, same-origin, basePath/trusted patterns, deduplicate, cap at 20.
  *
- * @param {Array} detailLinks - URLs returned by the classifier
+ * @param {Array} detailLinks - Ranked URLs from deterministic extraction
  * @param {string} sourceUrl - The page URL that produced these links
+ * @param {string} basePath - Path prefix for scoping (e.g., /excursions)
+ * @param {Array} trustedEventPaths - Patterns that bypass basePath (e.g., /event, iteminfo.html)
  * @returns {Array} - Filtered, deduplicated URLs
  */
-function filterDetailLinks(detailLinks, sourceUrl, basePath = null) {
+function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = []) {
   if (!detailLinks?.length) return [];
   let sourceOrigin;
   try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
@@ -340,14 +498,22 @@ function filterDetailLinks(detailLinks, sourceUrl, basePath = null) {
     try {
       const parsed = new URL(link);
       if (parsed.origin !== sourceOrigin) return false;
+      // Noise filter — reject known non-detail patterns (calendar nav, pagination, images, etc.)
+      if (isNoiseLink(link, sourceUrl)) return false;
       // When basePath is set, only follow links under the start URL's path prefix.
       // e.g., crawling /about/news only follows /about/news/... links, not /excursions/...
-      if (basePath && !parsed.pathname.startsWith(basePath)) return false;
+      // Trusted event paths bypass this restriction for known detail-page patterns.
+      if (basePath && !parsed.pathname.startsWith(basePath)) {
+        const matchesTrusted = trustedEventPaths.some(pattern =>
+          parsed.pathname.includes(pattern)
+        );
+        if (!matchesTrusted) return false;
+      }
       if (seen.has(link)) return false;
       seen.add(link);
       return true;
     } catch { return false; }
-  }).slice(0, 15);
+  }).slice(0, 20);
 }
 
 /**
@@ -694,8 +860,34 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
     try {
       const startParsed = new URL(startUrl);
       // Strip trailing slash and hash fragments for consistent matching
-      basePath = startParsed.pathname.replace(/\/$/, '') || '/';
+      let rawPath = startParsed.pathname.replace(/\/$/, '') || '/';
+      // If the path ends with a web filename (e.g., search.html), use the directory instead.
+      // e.g., /webtrac/web/search.html → /webtrac/web
+      // This allows sibling files like iteminfo.html to pass the basePath filter.
+      // Directory-style paths like /excursions are unchanged.
+      // Only matches known web extensions — prevents false positives on paths like /api/v2.0
+      if (/\/[^/]+\.(html?|aspx?|php|jsp|shtml)$/i.test(rawPath)) {
+        const dir = rawPath.replace(/\/[^/]+$/, '');
+        // Don't collapse to root — /events.html stays as /events.html, not /
+        if (dir && dir !== '/') rawPath = dir;
+      }
+      basePath = rawPath;
     } catch { /* leave basePath null if URL is unparseable */ }
+  }
+
+  // Load trusted event paths — patterns that bypass basePath for known detail-page URLs.
+  // e.g., /event, /events, iteminfo.html — allows the events crawler to follow links
+  // to detail pages even when they don't share the listing page's path prefix.
+  let trustedEventPaths = [];
+  if (contentType === 'event') {
+    try {
+      const tepResult = await pool.query(
+        "SELECT value FROM admin_settings WHERE key = 'trusted_event_paths'"
+      );
+      if (tepResult.rows.length) {
+        trustedEventPaths = JSON.parse(tepResult.rows[0].value);
+      }
+    } catch { /* use empty list */ }
   }
 
   async function processLevel(urls, depth) {
@@ -742,13 +934,13 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         classification = { pageType: extracted.pageType, detailLinks: [], reasoning: 'cached' };
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Cache] Classify skip — already ${extracted.pageType}: ${url}`);
         if (extracted.pageType === 'listing') {
-          classification.detailLinks = filterDetailLinks(
-            (extracted.links || []).map(l => l.url), url, basePath
-          );
+          classification.detailLinks = shortestUrlDedup(filterDetailLinks(
+            (extracted.links || []).map(l => l.url), url, basePath, trustedEventPaths
+          ));
         }
       } else {
         updateProgress(poi.id, { phase: 'classify', message: url });
-        classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets);
+        classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets, trustedEventPaths);
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
         await setCachePageType(pool, url, classification.pageType);
       }
@@ -756,10 +948,13 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       if (classification.pageType === 'detail') {
         collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
       } else if (classification.pageType === 'listing') {
-        const validLinks = filterDetailLinks(classification.detailLinks, url, basePath);
+        // shortestUrlDedup removes sub-tab variants (e.g., &option=fees) before they consume slots
+        const validLinks = shortestUrlDedup(filterDetailLinks(classification.detailLinks, url, basePath, trustedEventPaths));
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
+      } else if (classification.pageType === 'neither') {
+        logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Skip] Not a ${contentType} page: ${url} (${classification.reasoning})`);
       }
     }), 3, 2000);
   }
