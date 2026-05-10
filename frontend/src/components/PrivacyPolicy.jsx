@@ -90,6 +90,21 @@ function PrivacyPolicy() {
         </section>
 
         <section>
+          <h2>Photos You Upload</h2>
+          <p>
+            When you submit a photo to a point of interest, you retain full ownership
+            and all rights to that image. By uploading, you grant ROTV a non-exclusive
+            license to display the photo on the site and in the weekly newsletter — nothing
+            more. We won't sell your photos, use them in advertising, or sub-license them
+            to third parties.
+          </p>
+          <p>
+            Photos go through moderation before they appear on the site. If you want a
+            photo removed, contact us and we'll take it down.
+          </p>
+        </section>
+
+        <section>
           <h2>Open Source Transparency</h2>
           <p>
             Don't take our word for it. The entire ROTV codebase is open source under
