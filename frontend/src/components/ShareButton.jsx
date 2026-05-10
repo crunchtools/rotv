@@ -15,13 +15,11 @@ export default function ShareButton({ title, text, url, compact = false, label =
       }
     }
 
-    // Fallback: copy to clipboard
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     } catch {
-      // Last resort: select-and-copy via textarea
       const ta = document.createElement('textarea');
       ta.value = shareUrl;
       document.body.appendChild(ta);

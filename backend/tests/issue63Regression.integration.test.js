@@ -100,10 +100,12 @@ describe('Issue #63 Regression Tests', () => {
 
       // Wait for markers and click one
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
+      await page.waitForTimeout(500);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar
+      // Wait for sidebar and transition to complete (0.3s CSS transition)
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await page.waitForTimeout(500);
 
       // Check sidebar positioning
       const sidebarPosition = await page.evaluate(() => {

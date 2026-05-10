@@ -25,12 +25,12 @@ const TRUSTED_SET = new Set(TRUSTED_DOMAINS);
 const COMPETITOR_SET = new Set(COMPETITOR_DOMAINS);
 
 describe('Quality filters', () => {
-  test('rejects competitor domains', () => {
+  test('rejects blocklisted domains', () => {
     const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
     const filtered = applyQualityFilters(scoring, 'https://cuyahogavalley.com/', {}, TRUSTED_SET, COMPETITOR_SET);
     expect(filtered.confidence_score).toBeLessThan(0.5);
-    expect(filtered.issues).toContain('competitor_domain');
-    expect(filtered.reasoning).toContain('competitor aggregator');
+    expect(filtered.issues).toContain('blocklisted_domain');
+    expect(filtered.reasoning).toContain('blocklist');
   });
 
   test('penalizes generic URLs', () => {
@@ -62,9 +62,9 @@ describe('Quality filters', () => {
     const filtered = applyQualityFilters(scoring, 'https://cuyahogavalley.com/', {
       dateConfidence: 'unknown'
     }, TRUSTED_SET, COMPETITOR_SET);
-    // 1.0 * 0.3 (competitor) * 0.6 (generic) = 0.18, capped at 0.7 = 0.18
+    // 1.0 * 0.3 (blocklisted) * 0.6 (generic) = 0.18
     expect(filtered.confidence_score).toBeLessThan(0.2);
-    expect(filtered.issues).toContain('competitor_domain');
+    expect(filtered.issues).toContain('blocklisted_domain');
     expect(filtered.issues).toContain('generic_url');
   });
 
@@ -107,10 +107,10 @@ describe('Domain reputation detection', () => {
     expect(getDomainReputation('https://wkyc.com/news/local/story', TRUSTED_SET, COMPETITOR_SET)).toBe('trusted');
   });
 
-  test('identifies competitor domains', () => {
-    expect(getDomainReputation('https://cuyahogavalley.com/', TRUSTED_SET, COMPETITOR_SET)).toBe('competitor');
-    expect(getDomainReputation('https://cvnp.guide/trail', TRUSTED_SET, COMPETITOR_SET)).toBe('competitor');
-    expect(getDomainReputation('https://www.cuyahogavalleyguide.com/news', TRUSTED_SET, COMPETITOR_SET)).toBe('competitor');
+  test('identifies blocklisted domains', () => {
+    expect(getDomainReputation('https://cuyahogavalley.com/', TRUSTED_SET, COMPETITOR_SET)).toBe('blocklisted');
+    expect(getDomainReputation('https://cvnp.guide/trail', TRUSTED_SET, COMPETITOR_SET)).toBe('blocklisted');
+    expect(getDomainReputation('https://www.cuyahogavalleyguide.com/news', TRUSTED_SET, COMPETITOR_SET)).toBe('blocklisted');
   });
 
   test('identifies unknown domains', () => {
