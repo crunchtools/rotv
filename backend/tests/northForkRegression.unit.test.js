@@ -91,11 +91,12 @@ describe('North Fork Trail Regression Tests', () => {
       );
 
       // Find the allowedFields array in the PUT linear-features handler
+      // Search from the handler start to the end of the allowedFields array (no fixed char window)
       const putHandler = source.indexOf("router.put('/linear-features/:id'");
       expect(putHandler).toBeGreaterThan(-1);
 
-      const handlerBody = source.slice(putHandler, putHandler + 800);
-      const allowedFieldsMatch = handlerBody.match(/allowedFields\s*=\s*\[([\s\S]*?)\]/);
+      const fromHandler = source.slice(putHandler);
+      const allowedFieldsMatch = fromHandler.match(/allowedFields\s*=\s*\[([\s\S]*?)\]/);
       expect(allowedFieldsMatch).not.toBeNull();
 
       const fields = allowedFieldsMatch[1];

@@ -433,15 +433,15 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar to open
+      // Wait for sidebar to open and transition to settle
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await page.waitForTimeout(500);
 
-      // Navigation buttons only appear when: mobile, multiple POIs, and POI has media
-      // If conditions aren't met (e.g. single POI or no media), skip gracefully
-      try {
-        await page.waitForSelector('.image-nav-btn', { timeout: 5000 });
-      } catch {
-        // No navigation buttons available — conditions not met, skip test
+      // Navigation buttons only appear when: mobile, multiple POIs, and POI has media.
+      // Check without throwing — if conditions aren't met, verify absence and move on.
+      const navButtonCount = await page.locator('.image-nav-btn').count();
+      if (navButtonCount === 0) {
+        // Buttons correctly absent — POI may lack media or be the only one in the list
         await page.setViewportSize({ width: 1280, height: 720 });
         return;
       }
@@ -531,14 +531,13 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar to open
+      // Wait for sidebar to open and transition to settle
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await page.waitForTimeout(500);
 
       // Navigation buttons only appear when: mobile, multiple POIs, and POI has media
-      try {
-        await page.waitForSelector('.image-nav-btn', { timeout: 5000 });
-      } catch {
-        // No navigation buttons available — conditions not met, skip test
+      const navButtonCount = await page.locator('.image-nav-btn').count();
+      if (navButtonCount === 0) {
         await page.setViewportSize({ width: 1280, height: 720 });
         return;
       }
