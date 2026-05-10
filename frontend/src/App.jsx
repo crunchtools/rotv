@@ -1677,6 +1677,14 @@ function AppContent() {
                     </div>
                     <a
                       className="dropdown-item-inline privacy-link-inline"
+                      href="https://buttondown.com/rotv/rss"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      RSS Feed
+                    </a>
+                    <a
+                      className="dropdown-item-inline privacy-link-inline"
                       href="/privacy"
                       onClick={(e) => { e.preventDefault(); setShowUserDropdown(false); navigate('/privacy'); }}
                     >
@@ -1722,6 +1730,14 @@ function AppContent() {
                       </svg>
                       Continue with Facebook
                     </button>
+                    <a
+                      className="privacy-link-inline"
+                      href="https://buttondown.com/rotv/rss"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      RSS Feed
+                    </a>
                     <a
                       className="privacy-link-inline"
                       href="/privacy"

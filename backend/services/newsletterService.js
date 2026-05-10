@@ -442,7 +442,6 @@ export function startSmtpServer(pool) {
           const raw = Buffer.concat(chunks);
           const recipient = session.envelope.rcptTo[0]?.address?.toLowerCase();
 
-          // Forward admin@ emails to personal Gmail via Gmail MX
           if (recipient === 'admin@rootsofthevalley.org') {
             const transporter = nodemailer.createTransport({
               host: 'gmail-smtp-in.l.google.com',
@@ -467,7 +466,6 @@ export function startSmtpServer(pool) {
             return;
           }
 
-          // Newsletter processing
           const parsed = await simpleParser(raw);
 
           const from = parsed.from?.text || 'unknown';
