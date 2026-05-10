@@ -1619,11 +1619,27 @@ function AppContent() {
             <h1>Roots of The Valley</h1>
             <span className="subtitle">Explore Cuyahoga Valley&apos;s History</span>
           </div>
-          <nav className="header-tabs" aria-label="Main navigation">
+          <nav className="header-tabs" aria-label="Main navigation"
+            onKeyDown={(e) => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+              e.preventDefault();
+              const tabs = Array.from(e.currentTarget.querySelectorAll('.tab-btn:not(.tab-account)'));
+              const currentIndex = tabs.indexOf(e.target);
+              if (currentIndex === -1) return;
+              let nextIndex;
+              if (e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+              else if (e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+              else if (e.key === 'Home') nextIndex = 0;
+              else if (e.key === 'End') nextIndex = tabs.length - 1;
+              tabs[nextIndex].focus();
+              tabs[nextIndex].click();
+            }}
+          >
           <button
             className={`tab-btn ${activeTab === 'view' ? 'active' : ''}`}
             onClick={() => handleTabChange('view')}
             aria-current={activeTab === 'view' ? 'page' : undefined}
+            tabIndex={activeTab === 'view' ? 0 : -1}
           >
             Map
           </button>
@@ -1631,6 +1647,7 @@ function AppContent() {
             className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
             onClick={() => handleTabChange('results')}
             aria-current={activeTab === 'results' ? 'page' : undefined}
+            tabIndex={activeTab === 'results' ? 0 : -1}
           >
             Results
           </button>
@@ -1638,6 +1655,7 @@ function AppContent() {
             className={`tab-btn ${activeTab === 'news' ? 'active' : ''}`}
             onClick={() => handleTabChange('news')}
             aria-current={activeTab === 'news' ? 'page' : undefined}
+            tabIndex={activeTab === 'news' ? 0 : -1}
           >
             News
           </button>
@@ -1645,6 +1663,7 @@ function AppContent() {
             className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
             onClick={() => handleTabChange('events')}
             aria-current={activeTab === 'events' ? 'page' : undefined}
+            tabIndex={activeTab === 'events' ? 0 : -1}
           >
             Events
           </button>
@@ -1653,6 +1672,7 @@ function AppContent() {
               className={`tab-btn ${activeTab === 'edit' ? 'active' : ''}`}
               onClick={() => handleTabChange('edit')}
               aria-current={activeTab === 'edit' ? 'page' : undefined}
+              tabIndex={activeTab === 'edit' ? 0 : -1}
             >
               Edit
             </button>
@@ -1662,12 +1682,13 @@ function AppContent() {
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => handleTabChange('settings')}
               aria-current={activeTab === 'settings' ? 'page' : undefined}
+              tabIndex={activeTab === 'settings' ? 0 : -1}
             >
               Settings
             </button>
           )}
 
-          {/* Login/Account tab */}
+          {/* Login/Account button (not a tab — marked as presentation for tablist) */}
           {isAuthenticated ? (
             <div className="tab-account-container">
               <button
@@ -1794,7 +1815,7 @@ function AppContent() {
 
       {/* Results tab content - only render when active to avoid processing 300+ tiles on every re-render */}
       {activeTab === 'results' && (
-        <main id="main-content" className="main-content-full" tabIndex="-1">
+        <main id="main-content" className="main-content-full" tabIndex="-1" role="tabpanel">
           <ResultsTab
             viewportFilteredDestinations={viewportFilteredDestinations}
             viewportFilteredLinearFeatures={viewportFilteredLinearFeatures}
@@ -1878,7 +1899,7 @@ function AppContent() {
 
 
       {activeTab === 'settings' && (
-        <main id="main-content" className="settings-content" tabIndex="-1">
+        <main id="main-content" className="settings-content" tabIndex="-1" role="tabpanel">
           <div className="settings-panel">
             {isAdmin ? (
             <>
@@ -2012,7 +2033,7 @@ function AppContent() {
         id={(activeTab === 'view' || activeTab === 'edit') ? 'main-content' : undefined}
         className={`main-content ${editMode ? 'edit-mode' : ''}`}
         tabIndex="-1"
-        aria-hidden={(activeTab !== 'view' && activeTab !== 'edit') ? 'true' : undefined}
+               aria-hidden={(activeTab !== 'view' && activeTab !== 'edit') ? 'true' : undefined}
         style={{
           display: 'flex',
           zIndex: (activeTab === 'view' || activeTab === 'edit') ? '1' : '-1',

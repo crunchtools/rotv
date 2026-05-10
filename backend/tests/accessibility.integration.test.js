@@ -132,12 +132,19 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
     expect(box.y).toBeGreaterThanOrEqual(0);
   }, 30000);
 
-  it('tab navigation buttons have aria-current on active tab', async () => {
+  it('tab navigation uses roving tabindex with aria-current', async () => {
     await page.goto(BASE_URL, { waitUntil: 'networkidle' });
     await page.waitForSelector('.tab-btn.active', { timeout: 15000 });
 
     const ariaCurrent = await page.locator('.tab-btn.active').getAttribute('aria-current');
     expect(ariaCurrent).toBe('page');
+
+    const tabIndex = await page.locator('.tab-btn.active').getAttribute('tabindex');
+    expect(tabIndex).toBe('0');
+
+    // Inactive tabs should have tabindex -1 (roving tabindex)
+    const inactiveTabIndex = await page.locator('.tab-btn:not(.active):not(.tab-account)').first().getAttribute('tabindex');
+    expect(inactiveTabIndex).toBe('-1');
   }, 30000);
 
   it('map controls are keyboard accessible', async () => {
