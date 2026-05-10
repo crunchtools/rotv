@@ -50,7 +50,7 @@ const DEFAULT_PARK_BOUNDS = [
 ];
 
 function AppContent() {
-  const { isAuthenticated, isAdmin, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
+  const { isAuthenticated, isAdmin, role, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
   const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
@@ -104,7 +104,7 @@ function AppContent() {
   const [error, setError] = useState(null);
   const [editMode, setEditMode] = useState(false);
 
-  // Tab state for admin interface: 'view', 'edit', 'settings'
+  // Tab state for admin interface: 'view', 'settings'
   const [activeTab, setActiveTab] = useState('view');
 
   // MTB trails viewport state for focus restoration
@@ -240,7 +240,7 @@ function AppContent() {
   }, [location.pathname]);
 
   // Known main tab paths — used to distinguish tab URLs from POI slugs
-  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'edit', 'settings', 'privacy']);
+  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'settings', 'privacy']);
   const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
 
   // Helper to handle tab changes and clear MTB mode if needed
@@ -264,8 +264,8 @@ function AppContent() {
     }
 
     // If switching away from Results tab and currently on MTB trail status or organizations page, navigate back to home
-    // BUT: Don't navigate away if switching to Edit or View - preserve the selected item
-    if (newTab !== 'results' && newTab !== 'edit' && newTab !== 'view') {
+    // BUT: Don't navigate away if switching to View - preserve the selected item
+    if (newTab !== 'results' && newTab !== 'view') {
       if (location.pathname.startsWith('/mtb-trail-status')) {
         navigate('/');
         setSelectedFromMtbList(false);
@@ -279,7 +279,7 @@ function AppContent() {
     // Update URL to reflect the active main tab
     // If a POI is selected and we're switching to a content tab (news, events, results),
     // clear the POI so the URL reflects the main tab
-    if (newTab !== 'view' && newTab !== 'edit') {
+    if (newTab !== 'view') {
       if (selectedDestination || selectedLinearFeature) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
@@ -290,10 +290,9 @@ function AppContent() {
       isProgrammaticNavigationRef.current = true;
       navigate(`/${newTab}`);
     } else if (!selectedDestination && !selectedLinearFeature) {
-      // Map or Edit tab with no POI — go to root
+      // Map tab with no POI — go to root
       isProgrammaticNavigationRef.current = true;
-      if (newTab === 'view') navigate('/');
-      else navigate(`/${newTab}`);
+      navigate('/');
     }
   }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature]);
 
@@ -337,12 +336,12 @@ function AppContent() {
     }
   }, [iconConfig]);
 
-  // Reset to View tab when user loses admin status (e.g., logout)
+  // Reset editMode when user loses admin/poi_admin status (e.g., logout)
   useEffect(() => {
-    if (!isAdmin && activeTab === 'edit') {
-      setActiveTab('view');
+    if (role !== 'admin' && role !== 'poi_admin') {
+      setEditMode(false);
     }
-  }, [isAdmin, activeTab]);
+  }, [role]);
 
   // Reset to View tab when user logs out completely
   useEffect(() => {
@@ -408,15 +407,6 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDestination?.id, editMode]);
 
-  // Auto-enable edit mode when Edit tab is selected, disable when leaving
-  useEffect(() => {
-    if (activeTab === 'edit') {
-      setEditMode(true);
-    } else {
-      setEditMode(false);
-    }
-  }, [activeTab]);
-
   // Store initial POI slug for after data loads
   const [initialPoiSlug, setInitialPoiSlug] = useState(null);
   // Initial sidebar sub-tab from URL (e.g., /poi-slug/news → 'news')
@@ -428,7 +418,7 @@ function AppContent() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab === 'settings' || tab === 'edit' || tab === 'view') {
+    if (tab === 'settings' || tab === 'view') {
       setActiveTab(tab);
       // Clean URL but keep other params if any
       params.delete('tab');
@@ -442,7 +432,7 @@ function AppContent() {
     let poiSlug = null;
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
-    const mainTabPaths = ['results', 'news', 'events', 'edit', 'settings'];
+    const mainTabPaths = ['results', 'news', 'events', 'settings'];
     const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
 
     if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
@@ -575,8 +565,8 @@ function AppContent() {
     // Check path structure
     const pathParts = location.pathname.split('/').filter(Boolean);
 
-    // Handle main tab paths: /results, /news, /events, /edit, /settings
-    const mainTabPaths = ['results', 'news', 'events', 'edit', 'settings'];
+    // Handle main tab paths: /results, /news, /events, /settings
+    const mainTabPaths = ['results', 'news', 'events', 'settings'];
     if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
       setActiveTab(pathParts[0]);
       if (selectedDestination || selectedLinearFeature) {
@@ -1630,14 +1620,6 @@ function AppContent() {
           >
             Events
           </button>
-          {isAdmin && (
-            <button
-              className={`tab-btn ${activeTab === 'edit' ? 'active' : ''}`}
-              onClick={() => handleTabChange('edit')}
-            >
-              Edit
-            </button>
-          )}
           {isAuthenticated && (
             <button
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
@@ -1707,6 +1689,21 @@ function AppContent() {
                     >
                       Sign Out
                     </button>
+                    {(role === 'admin' || role === 'poi_admin') && (
+                      <label className="edit-mode-toggle" onClick={(e) => e.stopPropagation()}>
+                        Edit Mode
+                        <input
+                          type="checkbox"
+                          checked={editMode}
+                          onChange={(e) => {
+                            setEditMode(e.target.checked);
+                            if (e.target.checked && activeTab !== 'view') {
+                              handleTabChange('view');
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
                   </div>
                 </>
               )}
@@ -1988,8 +1985,8 @@ function AppContent() {
         className={`main-content ${editMode ? 'edit-mode' : ''}`}
         style={{
           display: 'flex',
-          zIndex: (activeTab === 'view' || activeTab === 'edit') ? '1' : '-1',
-          pointerEvents: (activeTab === 'view' || activeTab === 'edit') ? 'auto' : 'none'
+          zIndex: activeTab === 'view' ? '1' : '-1',
+          pointerEvents: activeTab === 'view' ? 'auto' : 'none'
         }}
       >
         <Map

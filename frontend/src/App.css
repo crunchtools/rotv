@@ -275,6 +275,28 @@ body {
   margin-top: 0.25rem;
 }
 
+.edit-mode-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+  color: #333;
+  border-top: 1px solid #eee;
+}
+
+.edit-mode-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2d6a4f;
+  cursor: pointer;
+}
+
+.edit-mode-toggle:hover {
+  background: #f5f5f5;
+}
+
 .dropdown-item-inline {
   display: block;
   width: 100%;
