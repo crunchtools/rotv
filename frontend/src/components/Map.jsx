@@ -137,35 +137,40 @@ function Legend({
         </div>
 
         {/* Unified icon grid - all POI types and layers sorted alphabetically */}
-        <div className="legend-icons">
+        <div className="legend-icons" role="group" aria-label="Map layer filters">
           {iconTypes.map(type => {
             if (type.type === 'layer') {
               // Layer icon (Trails, Rivers)
               return (
-                <div
+                <button
                   key={type.id}
                   className={`legend-icon-item ${type.isActive ? 'active' : 'inactive'}`}
                   onClick={type.onToggle}
+                  aria-pressed={type.isActive}
+                  type="button"
                 >
-                  <img src={`/icons/layers/${type.id}.svg`} alt={type.label} />
+                  <img src={`/icons/layers/${type.id}.svg`} alt="" aria-hidden="true" />
                   <span>{type.label}</span>
-                </div>
+                </button>
               );
             } else {
               // POI type icon
+              const isActive = visibleTypes.has(type.id);
               return (
-                <div
+                <button
                   key={type.id}
-                  className={`legend-icon-item ${visibleTypes.has(type.id) ? 'active' : 'inactive'}`}
+                  className={`legend-icon-item ${isActive ? 'active' : 'inactive'}`}
                   onClick={() => onToggleType(type.id)}
+                  aria-pressed={isActive}
+                  type="button"
                 >
                   {type.svg_content ? (
-                    <div className="legend-icon-svg" dangerouslySetInnerHTML={{ __html: type.svg_content }} />
+                    <div className="legend-icon-svg" aria-hidden="true" dangerouslySetInnerHTML={{ __html: type.svg_content }} />
                   ) : (
-                    <img src={type.iconUrl || `/icons/${type.svg_filename}`} alt={type.label} />
+                    <img src={type.iconUrl || `/icons/${type.svg_filename}`} alt="" aria-hidden="true" />
                   )}
                   <span>{type.label}</span>
-                </div>
+                </button>
               );
             }
           })}

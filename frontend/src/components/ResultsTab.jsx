@@ -538,7 +538,7 @@ const ResultsTab = memo(function ResultsTab({
 
       <div className="news-events-layout">
         <div className="news-events-content">
-          <div className="results-tab-list" onClick={handleListClick}>
+          <div className="results-tab-list" onClick={handleListClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleListClick(e); }}}>
             {sortedPois.map(poi => {
               const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
               const poiKey = `${type}-${poi.id}`;

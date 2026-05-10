@@ -217,8 +217,9 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
                   onClick={() => setCurrentIndex(index)}
                   role="button"
                   tabIndex={0}
-                  onKeyPress={(e) => {
+                  onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
                       setCurrentIndex(index);
                     }
                   }}

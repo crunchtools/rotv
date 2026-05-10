@@ -55,7 +55,7 @@
   background: none;
   border: none;
   font-size: 24px;
-  color: #666;
+  color: #525252;
   cursor: pointer;
   width: 32px;
   height: 32px;
@@ -84,7 +84,7 @@
   background: none;
   cursor: pointer;
   font-size: 16px;
-  color: #666;
+  color: #525252;
   border-bottom: 3px solid transparent;
   transition: color 0.2s, border-color 0.2s;
 }
@@ -140,7 +140,7 @@
 
 .upload-hint {
   font-size: 14px;
-  color: #666;
+  color: #525252;
 }
 
 /* Preview */
@@ -184,7 +184,7 @@
   justify-content: space-between;
   align-items: center;
   font-size: 14px;
-  color: #666;
+  color: #525252;
 }
 
 .file-info strong {

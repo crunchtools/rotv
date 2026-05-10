@@ -351,6 +351,18 @@ function AppContent() {
     }
   }, [isAuthenticated, activeTab]);
 
+  // Move focus to main content when tab changes (accessibility)
+  const prevTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (prevTabRef.current !== activeTab) {
+      prevTabRef.current = activeTab;
+      requestAnimationFrame(() => {
+        const main = document.getElementById('main-content');
+        if (main) main.focus();
+      });
+    }
+  }, [activeTab]);
+
   // Fetch moderation pending count for admin badge
   const refreshModerationCount = useCallback(async () => {
     console.log('[App] Refreshing moderation count...');
@@ -1587,6 +1599,7 @@ function AppContent() {
 
   return (
     <div className="app">
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
         {activeTheme && videoUrls[activeTheme] && (
           <video
@@ -1596,37 +1609,42 @@ function AppContent() {
             loop
             muted
             playsInline
+            aria-hidden="true"
             src={videoUrls[activeTheme]}
             onLoadedData={(e) => { e.target.playbackRate = 0.7; }}
           />
         )}
         <div className="header-content-wrapper">
-          <div className="header-left" onClick={() => handleTabChange('view')} style={{ cursor: 'pointer' }}>
+          <div className="header-left" onClick={() => handleTabChange('view')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTabChange('view'); }}} role="button" tabIndex={0} style={{ cursor: 'pointer' }}>
             <h1>Roots of The Valley</h1>
             <span className="subtitle">Explore Cuyahoga Valley&apos;s History</span>
           </div>
-          <nav className="header-tabs">
+          <nav className="header-tabs" aria-label="Main navigation">
           <button
             className={`tab-btn ${activeTab === 'view' ? 'active' : ''}`}
             onClick={() => handleTabChange('view')}
+            aria-current={activeTab === 'view' ? 'page' : undefined}
           >
             Map
           </button>
           <button
             className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
             onClick={() => handleTabChange('results')}
+            aria-current={activeTab === 'results' ? 'page' : undefined}
           >
             Results
           </button>
           <button
             className={`tab-btn ${activeTab === 'news' ? 'active' : ''}`}
             onClick={() => handleTabChange('news')}
+            aria-current={activeTab === 'news' ? 'page' : undefined}
           >
             News
           </button>
           <button
             className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
             onClick={() => handleTabChange('events')}
+            aria-current={activeTab === 'events' ? 'page' : undefined}
           >
             Events
           </button>
@@ -1634,6 +1652,7 @@ function AppContent() {
             <button
               className={`tab-btn ${activeTab === 'edit' ? 'active' : ''}`}
               onClick={() => handleTabChange('edit')}
+              aria-current={activeTab === 'edit' ? 'page' : undefined}
             >
               Edit
             </button>
@@ -1642,6 +1661,7 @@ function AppContent() {
             <button
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
               onClick={() => handleTabChange('settings')}
+              aria-current={activeTab === 'settings' ? 'page' : undefined}
             >
               Settings
             </button>
@@ -1653,6 +1673,8 @@ function AppContent() {
               <button
                 className="tab-btn tab-account"
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
+                aria-expanded={showUserDropdown}
+                aria-haspopup="true"
               >
                 {user?.pictureUrl && !profileImageError ? (
                   <img
@@ -1671,7 +1693,7 @@ function AppContent() {
               {showUserDropdown && (
                 <>
                   <div className="tab-dropdown-backdrop" onClick={() => setShowUserDropdown(false)} />
-                  <div className="tab-dropdown user-dropdown-inline">
+                  <div className="tab-dropdown user-dropdown-inline" role="menu" onKeyDown={(e) => { if (e.key === 'Escape') setShowUserDropdown(false); }}>
                     <div className="user-info-inline">
                       <span className="user-name-inline">{user?.name}</span>
                       <span className="user-email-inline">{user?.email}</span>
@@ -1716,13 +1738,15 @@ function AppContent() {
               <button
                 className="tab-btn"
                 onClick={() => setShowLoginDropdown(!showLoginDropdown)}
+                aria-expanded={showLoginDropdown}
+                aria-haspopup="true"
               >
                 Login
               </button>
               {showLoginDropdown && (
                 <>
                   <div className="tab-dropdown-backdrop" onClick={() => setShowLoginDropdown(false)} />
-                  <div className="tab-dropdown login-dropdown-inline">
+                  <div className="tab-dropdown login-dropdown-inline" role="menu" onKeyDown={(e) => { if (e.key === 'Escape') setShowLoginDropdown(false); }}>
                     <button className="oauth-btn-inline google-btn" onClick={loginWithGoogle}>
                       <svg viewBox="0 0 24 24" width="18" height="18">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -1770,7 +1794,7 @@ function AppContent() {
 
       {/* Results tab content - only render when active to avoid processing 300+ tiles on every re-render */}
       {activeTab === 'results' && (
-        <main className="main-content-full">
+        <main id="main-content" className="main-content-full" tabIndex="-1">
           <ResultsTab
             viewportFilteredDestinations={viewportFilteredDestinations}
             viewportFilteredLinearFeatures={viewportFilteredLinearFeatures}
@@ -1798,7 +1822,7 @@ function AppContent() {
 
       {/* News tab content */}
       {activeTab === 'news' && (
-        <main className="main-content-full" style={{ display: 'flex', flexDirection: 'column' }}>
+        <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkNews
           isAdmin={isAdmin}
           filteredDestinations={viewportFilteredDestinations}
@@ -1829,7 +1853,7 @@ function AppContent() {
 
       {/* Events tab content */}
       {activeTab === 'events' && (
-        <main className="main-content-full" style={{ display: 'flex', flexDirection: 'column' }}>
+        <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkEvents
           isAdmin={isAdmin}
           filteredDestinations={viewportFilteredDestinations}
@@ -1854,7 +1878,7 @@ function AppContent() {
 
 
       {activeTab === 'settings' && (
-        <main className="settings-content">
+        <main id="main-content" className="settings-content" tabIndex="-1">
           <div className="settings-panel">
             {isAdmin ? (
             <>
@@ -1985,7 +2009,10 @@ function AppContent() {
 
       {/* Map content - always mounted and visible to Leaflet, layered below Results tab when not active */}
       <main
+        id={(activeTab === 'view' || activeTab === 'edit') ? 'main-content' : undefined}
         className={`main-content ${editMode ? 'edit-mode' : ''}`}
+        tabIndex="-1"
+        aria-hidden={(activeTab !== 'view' && activeTab !== 'edit') ? 'true' : undefined}
         style={{
           display: 'flex',
           zIndex: (activeTab === 'view' || activeTab === 'edit') ? '1' : '-1',

@@ -1780,6 +1780,12 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                           onClose();
                         }
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.currentTarget.click();
+                        }
+                      }}
                       role="button"
                       tabIndex={0}
                     >
@@ -2113,6 +2119,12 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                         onSelectDestination(associatedPoi);
                       } else if (associatedPoi._isLinear) {
                         onSelectLinearFeature(associatedPoi);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        e.currentTarget.click();
                       }
                     }}
                     role="button"

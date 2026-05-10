@@ -38,7 +38,7 @@
 }
 
 .feedback-modal .feedback-subtitle {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin: 0 0 1.5rem 0;
 }
@@ -219,7 +219,7 @@
 }
 
 .feedback-success p {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin: 0 0 1.5rem 0;
 }
