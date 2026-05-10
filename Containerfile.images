@@ -17,11 +17,13 @@
 
 # Stage 1: Build pgvector from source — postgresql-server-devel requires RHSM
 FROM registry.access.redhat.com/ubi10/ubi-init:latest AS pgvector-build
-RUN --mount=type=secret,id=RHSM_ACTIVATION_KEY \
-    --mount=type=secret,id=RHSM_ORG_ID \
+RUN --mount=type=secret,id=activation_key \
+    --mount=type=secret,id=org_id \
+    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
     subscription-manager register \
-      --activationkey="$(cat /run/secrets/RHSM_ACTIVATION_KEY)" \
-      --org="$(cat /run/secrets/RHSM_ORG_ID)" \
+      --activationkey="$(cat /run/secrets/activation_key)" \
+      --org="$(cat /run/secrets/org_id)"; \
+    fi \
     && dnf install -y \
     gcc gcc-c++ make wget \
     redhat-rpm-config \
@@ -37,11 +39,13 @@ RUN --mount=type=secret,id=RHSM_ACTIVATION_KEY \
 
 # Stage 2: Build Python wheels — python3.12-devel requires RHSM
 FROM registry.access.redhat.com/ubi10/ubi-init:latest AS python-build
-RUN --mount=type=secret,id=RHSM_ACTIVATION_KEY \
-    --mount=type=secret,id=RHSM_ORG_ID \
+RUN --mount=type=secret,id=activation_key \
+    --mount=type=secret,id=org_id \
+    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
     subscription-manager register \
-      --activationkey="$(cat /run/secrets/RHSM_ACTIVATION_KEY)" \
-      --org="$(cat /run/secrets/RHSM_ORG_ID)" \
+      --activationkey="$(cat /run/secrets/activation_key)" \
+      --org="$(cat /run/secrets/org_id)"; \
+    fi \
     && dnf install -y \
     python3.12 python3.12-pip python3.12-devel \
     gcc gcc-c++ make \
@@ -68,11 +72,13 @@ LABEL description="Image Server - PostgreSQL + pgvector + FastAPI for ROTV"
 LABEL version="0.1.0"
 
 # postgresql-server requires RHSM
-RUN --mount=type=secret,id=RHSM_ACTIVATION_KEY \
-    --mount=type=secret,id=RHSM_ORG_ID \
+RUN --mount=type=secret,id=activation_key \
+    --mount=type=secret,id=org_id \
+    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
     subscription-manager register \
-      --activationkey="$(cat /run/secrets/RHSM_ACTIVATION_KEY)" \
-      --org="$(cat /run/secrets/RHSM_ORG_ID)" \
+      --activationkey="$(cat /run/secrets/activation_key)" \
+      --org="$(cat /run/secrets/org_id)"; \
+    fi \
     && dnf install -y \
       postgresql-server \
       postgresql-contrib \

@@ -66,7 +66,11 @@ class GeminiBackend:
             raise RuntimeError(msg) from exc
 
         client = self._get_client()
-        mime = _get_image_mime(image_path)
+        suffix = image_path.suffix.lower()
+        mime = _IMAGE_MIMES.get(suffix)
+        if not mime:
+            msg = f"Unknown image MIME type for extension: {suffix}"
+            raise ValueError(msg)
         file_bytes = image_path.read_bytes()
 
         content = types.Content(
@@ -89,7 +93,7 @@ class GeminiBackend:
         msg = f"Gemini returned empty response for {image_path}"
         raise RuntimeError(msg)
 
-    def caption_bytes(self, data: bytes, mime_type: str) -> str:
+    def caption_bytes(self, caption_data: bytes, mime_type: str) -> str:
         """Generate a caption from raw image bytes."""
         try:
             from google.genai import types
@@ -100,7 +104,7 @@ class GeminiBackend:
         client = self._get_client()
         content = types.Content(
             parts=[
-                types.Part.from_bytes(data=data, mime_type=mime_type),
+                types.Part.from_bytes(data=caption_data, mime_type=mime_type),
                 types.Part.from_text(text=self._prompt),
             ]
         )
@@ -117,16 +121,6 @@ class GeminiBackend:
             return str(response.text)
         msg = "Gemini returned empty response"
         raise RuntimeError(msg)
-
-
-def _get_image_mime(path: Path) -> str:
-    """Get MIME type from file extension."""
-    suffix = path.suffix.lower()
-    mime = _IMAGE_MIMES.get(suffix)
-    if mime:
-        return mime
-    msg = f"Unknown image MIME type for extension: {suffix}"
-    raise ValueError(msg)
 
 
 _backend: GeminiBackend | None = None

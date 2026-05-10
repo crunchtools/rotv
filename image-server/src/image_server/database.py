@@ -48,7 +48,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_assets_primary ON assets(poi_id) WHERE rol
 CREATE INDEX IF NOT EXISTS idx_assets_search ON assets USING gin(search_vector);
 """
 
-# ivfflat index requires rows to exist first; created separately after data load
 VECTOR_INDEX_SQL = """
 CREATE INDEX IF NOT EXISTS idx_assets_embedding
 ON assets USING ivfflat (embedding vector_cosine_ops)
@@ -67,7 +66,6 @@ def get_pool() -> ConnectionPool:
             max_size=10,
             kwargs={"row_factory": dict_row, "autocommit": False},
         )
-        # Register pgvector type for all connections
         with _pool.connection() as conn:
             register_vector(conn)
     return _pool
@@ -120,7 +118,6 @@ def insert_asset(
     with pool.connection() as conn:
         register_vector(conn)
 
-        # Build search vector from caption + original filename + tags
         search_parts = []
         if caption:
             search_parts.append(caption)
@@ -130,7 +127,7 @@ def insert_asset(
             search_parts.extend(tags)
         search_text = " ".join(search_parts) if search_parts else ""
 
-        row = conn.execute(
+        asset_row = conn.execute(
             """
             INSERT INTO assets (
                 poi_id, asset_type, role, theme, filename, original_filename,
@@ -165,7 +162,7 @@ def insert_asset(
             },
         ).fetchone()
         conn.commit()
-        return dict(row) if row else {}
+        return dict(asset_row) if asset_row else {}
 
 
 def get_asset(asset_id: int) -> dict[str, Any] | None:
@@ -197,6 +194,12 @@ def get_assets_for_poi(
         return [dict(r) for r in rows]
 
 
+_UPDATE_FIELD_FORMATTERS = {
+    "tags": lambda key: (f"{key} = %({key})s::jsonb", True),
+    "embedding": lambda key: (f"{key} = %({key})s", False),
+}
+
+
 def update_asset(
     asset_id: int, **updates: Any
 ) -> dict[str, Any] | None:
@@ -217,19 +220,17 @@ def update_asset(
         params: dict[str, Any] = {"asset_id": asset_id}
 
         for key, value in filtered.items():
-            if key == "tags":
-                set_clauses.append(f"{key} = %({key})s::jsonb")
-                params[key] = json.dumps(value)
-            elif key == "embedding":
-                set_clauses.append(f"{key} = %({key})s")
-                params[key] = value
+            formatter = _UPDATE_FIELD_FORMATTERS.get(key)
+            if formatter:
+                clause, needs_json = formatter(key)
+                set_clauses.append(clause)
+                params[key] = json.dumps(value) if needs_json else value
             else:
                 set_clauses.append(f"{key} = %({key})s")
                 params[key] = value
 
         set_clauses.append("updated_at = CURRENT_TIMESTAMP")
 
-        # Rebuild search vector if caption or tags changed
         if "caption" in filtered or "tags" in filtered:
             asset = get_asset(asset_id)
             if asset:
@@ -248,9 +249,9 @@ def update_asset(
                 params["search_text"] = search_text
 
         sql = f"UPDATE assets SET {', '.join(set_clauses)} WHERE id = %(asset_id)s RETURNING *"
-        row = conn.execute(sql, params).fetchone()
+        updated_row = conn.execute(sql, params).fetchone()
         conn.commit()
-        return dict(row) if row else None
+        return dict(updated_row) if updated_row else None
 
 
 def get_all_assets() -> list[dict[str, Any]]:
@@ -267,11 +268,11 @@ def delete_asset(asset_id: int) -> bool:
     """Delete an asset. Returns True if deleted."""
     pool = get_pool()
     with pool.connection() as conn:
-        result = conn.execute(
+        delete_result = conn.execute(
             "DELETE FROM assets WHERE id = %s", (asset_id,)
         )
         conn.commit()
-        return (result.rowcount or 0) > 0
+        return (delete_result.rowcount or 0) > 0
 
 
 def search_assets(

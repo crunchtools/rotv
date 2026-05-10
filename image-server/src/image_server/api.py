@@ -48,17 +48,17 @@ MIME_TO_EXT = {
 
 def _serialize_asset(asset: dict[str, Any]) -> dict[str, Any]:
     """Convert asset dict for JSON response (handle non-serializable types)."""
-    result = {}
+    serialized = {}
     for key, value in asset.items():
         if key == "embedding":
-            continue  # Don't send embedding vectors in responses
+            continue
         if key == "search_vector":
-            continue  # Internal field
+            continue
         if hasattr(value, "isoformat"):
-            result[key] = value.isoformat()
+            serialized[key] = value.isoformat()
         else:
-            result[key] = value
-    return result
+            serialized[key] = value
+    return serialized
 
 
 @app.get("/")
@@ -73,9 +73,12 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "image-server"}
 
 
+_upload_file = File(...)
+
+
 @app.post("/api/assets")
 async def upload_asset(
-    file: UploadFile = File(...),
+    file: UploadFile = _upload_file,
     poi_id: int | None = Form(None),
     role: str = Form("gallery"),
     theme: str | None = Form(None),
@@ -101,7 +104,6 @@ async def upload_asset(
     data = await file.read()
     file_size = len(data)
 
-    # Save original file
     if is_image:
         original_path = Path(cfg.media_path) / "originals" / filename
     else:
@@ -111,7 +113,6 @@ async def upload_asset(
     original_path.parent.mkdir(parents=True, exist_ok=True)
     original_path.write_bytes(data)
 
-    # Generate thumbnail and get dimensions for images
     width = None
     height = None
     if is_image:
@@ -121,15 +122,12 @@ async def upload_asset(
             logger.warning("Could not get image dimensions for %s", filename)
 
         try:
-            # Legacy single thumbnail (backward compatibility)
             thumb_path = Path(cfg.media_path) / "thumbnails" / f"{file_uuid}.jpg"
             generate_thumbnail_from_bytes(data, thumb_path)
-            # Multi-size thumbnails (small, medium, large)
             generate_all_thumbnails_from_bytes(data, file_uuid)
         except Exception:
             logger.warning("Could not generate thumbnails for %s", filename)
 
-    # Extract EXIF for images
     exif_data: dict[str, Any] = {}
     if is_image:
         try:
@@ -137,7 +135,6 @@ async def upload_asset(
         except Exception:
             logger.warning("Could not extract EXIF for %s", filename)
 
-    # Generate caption asynchronously if vision backend configured
     caption = None
     if is_image:
         backend = get_backend()
@@ -148,7 +145,6 @@ async def upload_asset(
             except Exception:
                 logger.warning("Vision captioning failed for %s", filename, exc_info=True)
 
-    # Generate embedding from caption or filename
     embedding = None
     embed_text = caption or file.filename or filename
     try:
@@ -158,7 +154,6 @@ async def upload_asset(
     except Exception:
         logger.warning("Embedding generation failed for %s", filename, exc_info=True)
 
-    # Insert into database
     asset = db.insert_asset(
         poi_id=poi_id,
         asset_type=asset_type,
@@ -226,11 +221,9 @@ async def serve_thumbnail(
     if size and size in ("small", "medium", "large"):
         thumb_path = Path(cfg.media_path) / "thumbnails" / size / f"{file_uuid}.jpg"
     else:
-        # Legacy path (backward compatible)
         thumb_path = Path(cfg.media_path) / "thumbnails" / f"{file_uuid}.jpg"
 
     if not thumb_path.exists():
-        # Fall back to legacy thumbnail if sized version doesn't exist yet
         fallback = Path(cfg.media_path) / "thumbnails" / f"{file_uuid}.jpg"
         if fallback.exists():
             thumb_path = fallback
@@ -249,7 +242,6 @@ async def delete_asset(asset_id: int) -> dict[str, Any]:
 
     cfg = get_config()
 
-    # Delete files from disk
     if asset["asset_type"] == "video":
         subdir = "theme-videos" if asset["role"] == "theme_video" else "videos"
     else:
@@ -259,7 +251,6 @@ async def delete_asset(asset_id: int) -> dict[str, Any]:
     if original_path.exists():
         original_path.unlink()
 
-    # Delete thumbnails (legacy + all sizes)
     if asset["asset_type"] == "image":
         file_uuid = asset["filename"].rsplit(".", 1)[0]
         thumb_path = Path(cfg.media_path) / "thumbnails" / f"{file_uuid}.jpg"
@@ -270,7 +261,6 @@ async def delete_asset(asset_id: int) -> dict[str, Any]:
             if sized_path.exists():
                 sized_path.unlink()
 
-    # Delete from database
     db.delete_asset(asset_id)
 
     return {"deleted": True, "id": asset_id}
@@ -303,7 +293,6 @@ async def update_asset(asset_id: int, body: dict[str, Any]) -> dict[str, Any]:
     if not asset:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    # Re-embed if caption or tags changed
     if "caption" in body or "tags" in body:
         caption = body.get("caption", asset.get("caption", ""))
         tags = body.get("tags", asset.get("tags", []))
@@ -343,7 +332,6 @@ async def trigger_caption(asset_id: int) -> dict[str, Any]:
 
     caption = backend.caption(file_path)
 
-    # Update caption and re-embed
     embedding = None
     try:
         embeddings = embed_texts([caption])
@@ -397,8 +385,7 @@ async def serve_theme_video(theme: str) -> FileResponse:
     video_path = Path(cfg.media_path) / "theme-videos" / f"{theme}.mp4"
 
     if not video_path.exists():
-        # Try to find via database
-        assets = db.get_assets_for_poi(0, role="theme_video")  # poi_id=0 for global assets
+        assets = db.get_assets_for_poi(0, role="theme_video")
         for asset in assets:
             if asset.get("theme") == theme:
                 alt_path = Path(cfg.media_path) / "theme-videos" / asset["filename"]
@@ -422,19 +409,19 @@ async def bulk_caption(body: dict[str, Any]) -> dict[str, Any]:
         raise HTTPException(status_code=503, detail="Vision backend not configured")
 
     cfg = get_config()
-    results: dict[str, Any] = {"captioned": 0, "failed": 0, "errors": []}
+    caption_results: dict[str, Any] = {"captioned": 0, "failed": 0, "errors": []}
 
     for asset_id in asset_ids:
         asset = db.get_asset(asset_id)
         if not asset or asset["asset_type"] != "image":
-            results["failed"] += 1
-            results["errors"].append({"id": asset_id, "error": "Not found or not an image"})
+            caption_results["failed"] += 1
+            caption_results["errors"].append({"id": asset_id, "error": "Not found or not an image"})
             continue
 
         file_path = Path(cfg.media_path) / "originals" / asset["filename"]
         if not file_path.exists():
-            results["failed"] += 1
-            results["errors"].append({"id": asset_id, "error": "File not found"})
+            caption_results["failed"] += 1
+            caption_results["errors"].append({"id": asset_id, "error": "File not found"})
             continue
 
         try:
@@ -451,17 +438,13 @@ async def bulk_caption(body: dict[str, Any]) -> dict[str, Any]:
             if embedding:
                 updates["embedding"] = embedding
             db.update_asset(asset_id, **updates)
-            results["captioned"] += 1
+            caption_results["captioned"] += 1
         except Exception as exc:
-            results["failed"] += 1
-            results["errors"].append({"id": asset_id, "error": str(exc)})
+            caption_results["failed"] += 1
+            caption_results["errors"].append({"id": asset_id, "error": str(exc)})
 
-    return results
+    return caption_results
 
-
-# ---------------------------------------------------------------------------
-# Backup / Restore / Media endpoints
-# ---------------------------------------------------------------------------
 
 MEDIA_SUBDIRS = {"originals", "thumbnails", "videos", "theme-videos"}
 
@@ -492,7 +475,7 @@ async def backup_db() -> StreamingResponse:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="pg_dump not found on server") from exc
 
-    async def _stream() -> asyncio.AsyncIterator[bytes]:  # type: ignore[type-arg]
+    async def _stream() -> asyncio.AsyncIterator[bytes]:
         assert proc.stdout is not None
         while True:
             chunk = await proc.stdout.read(64 * 1024)
@@ -512,8 +495,11 @@ async def backup_db() -> StreamingResponse:
     )
 
 
+_restore_file = File(...)
+
+
 @app.post("/api/restore/db")
-async def restore_db(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B008
+async def restore_db(file: UploadFile = _restore_file) -> dict[str, Any]:
     """Restore the image server database from a SQL dump upload."""
     env = _pg_env()
     try:
@@ -527,7 +513,6 @@ async def restore_db(file: UploadFile = File(...)) -> dict[str, Any]:  # noqa: B
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="psql not found on server") from exc
 
-    # Stream upload data into psql stdin in chunks
     assert proc.stdin is not None
     while chunk := await file.read(64 * 1024):
         proc.stdin.write(chunk)
@@ -567,13 +552,15 @@ async def list_media_files() -> list[dict[str, Any]]:
     return files
 
 
+_media_upload_file = File(...)
+
+
 @app.get("/api/media/{subdir}/{filename}")
 async def serve_media_file(subdir: str, filename: str) -> FileResponse:
     """Serve any file from a media subdirectory."""
     if subdir not in MEDIA_SUBDIRS:
         raise HTTPException(status_code=400, detail=f"Invalid subdir: {subdir}")
 
-    # Block path traversal
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
@@ -589,7 +576,7 @@ async def serve_media_file(subdir: str, filename: str) -> FileResponse:
 
 @app.put("/api/media/{subdir}/{filename}")
 async def upload_media_file(
-    subdir: str, filename: str, file: UploadFile = File(...)  # noqa: B008
+    subdir: str, filename: str, file: UploadFile = _media_upload_file
 ) -> dict[str, Any]:
     """Upload (restore) a file to a media subdirectory."""
     if subdir not in MEDIA_SUBDIRS:

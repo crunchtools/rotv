@@ -14,7 +14,6 @@ import os
 import sys
 from pathlib import Path
 
-# Add src to path so we can import the package
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from image_server.config import THUMBNAIL_SIZES, get_config

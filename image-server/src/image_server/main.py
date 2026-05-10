@@ -6,9 +6,11 @@ import logging
 
 import uvicorn
 
-from .api import app  # noqa: F401 — re-exported for uvicorn
+from .api import app
 from .config import get_config
 from .database import init_schema
+
+__all__ = ["app"]
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,15 +24,12 @@ def main() -> None:
     """Start the image server."""
     cfg = get_config()
 
-    # Ensure media directories exist
     cfg.ensure_media_dirs()
     logger.info("Media path: %s", cfg.media_path)
 
-    # Initialize database schema
     init_schema()
     logger.info("Database initialized: %s:%s/%s", cfg.pg_host, cfg.pg_port, cfg.pg_database)
 
-    # Log AI capabilities
     if cfg.vision_backend != "none":
         logger.info("Vision backend: %s (%s)", cfg.vision_backend, cfg.vision_model)
     else:
@@ -38,7 +37,6 @@ def main() -> None:
 
     logger.info("Embedding model: %s", cfg.embedding_model)
 
-    # Start server
     uvicorn.run(
         "image_server.main:app",
         host=cfg.host,

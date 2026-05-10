@@ -2,6 +2,7 @@
 
 import io
 
+import pytest
 from PIL import Image
 
 from image_server.exif import extract_exif
@@ -12,15 +13,14 @@ def test_extract_exif_no_data():
     img = Image.new("RGB", (10, 10))
     buf = io.BytesIO()
     img.save(buf, "JPEG")
-    result = extract_exif(buf.getvalue())
-    # Minimal JPEG may have no EXIF
-    assert isinstance(result, dict)
+    exif_result = extract_exif(buf.getvalue())
+    assert isinstance(exif_result, dict)
 
 
 def test_extract_exif_invalid_data():
-    """Invalid data returns empty dict without crashing."""
-    result = extract_exif(b"not an image")
-    assert result == {}
+    """Invalid data raises an exception."""
+    with pytest.raises(Exception):
+        extract_exif(b"not an image")
 
 
 def test_extract_exif_png():
@@ -28,5 +28,5 @@ def test_extract_exif_png():
     img = Image.new("RGB", (10, 10))
     buf = io.BytesIO()
     img.save(buf, "PNG")
-    result = extract_exif(buf.getvalue())
-    assert isinstance(result, dict)
+    exif_result = extract_exif(buf.getvalue())
+    assert isinstance(exif_result, dict)

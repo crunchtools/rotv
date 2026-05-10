@@ -908,805 +908,88 @@ check = "generic_names"
 path = "backend/services/contentExtractor.js"
 justification = "Technical debt: page.evaluate() callback variables. Should be refactored in dedicated code quality PR."
 
-# Image server — Python project with ruff/mypy; Gourmand excluded_paths glob bug requires individual exceptions
 
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "defensive_error_silencing"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "generic_names"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+# Image server — implicit_state_machine false positives
+# Gourmand misidentifies Python type annotations (str, int, bool) as boolean state flags.
+# This is a Rust-centric check. All other violations have been fixed in the Python source.
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 [[exceptions]]
 check = "implicit_state_machine"
 path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "lint_suppression"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "prefer_match"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "primitive_obsession"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "redundant_error_handling"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "silent_fallbacks"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/database.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/main.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/src/image_server/vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/tests/conftest.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/tests/test_api.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/tests/test_config.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/tests/test_embedder.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/tests/test_exif.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "image-server/tests/test_vision.py"
-justification = "Python project uses ruff/mypy for linting, not Gourmand"
+justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
