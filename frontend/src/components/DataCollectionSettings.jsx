@@ -57,6 +57,8 @@ function DataCollectionSettings() {
   const [domainListsSaving, setDomainListsSaving] = useState(false);
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
   const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
+  const [trustedEventPaths, setTrustedEventPaths] = useState([]);
+  const [newTrustedEventPath, setNewTrustedEventPath] = useState('');
 
   // Excluded POIs state
   const [excludedPois, setExcludedPois] = useState([]); // [{id, name}]
@@ -374,13 +376,16 @@ function DataCollectionSettings() {
         const settings = await response.json();
         const trusted = settings.moderation_trusted_domains?.value || '[]';
         const blocklist = settings.blocklist_urls?.value || '[]';
+        const eventPaths = settings.trusted_event_paths?.value || '[]';
         try {
           const parsedTrusted = JSON.parse(trusted);
           const parsedBlocklist = JSON.parse(blocklist);
+          const parsedEventPaths = JSON.parse(eventPaths);
           setDomainLists({
             trusted: Array.isArray(parsedTrusted) ? parsedTrusted.filter(d => typeof d === 'string') : [],
             competitor: Array.isArray(parsedBlocklist) ? parsedBlocklist.filter(d => typeof d === 'string') : []
           });
+          setTrustedEventPaths(Array.isArray(parsedEventPaths) ? parsedEventPaths.filter(d => typeof d === 'string') : []);
           if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedBlocklist)) {
             setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
           }
@@ -398,7 +403,8 @@ function DataCollectionSettings() {
     try {
       const settings = [
         { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
-        { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) }
+        { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) },
+        { key: 'trusted_event_paths', value: JSON.stringify(trustedEventPaths) }
       ];
       // Note: N+1 pattern - acceptable for 2 settings, batch endpoint would be better for scale
       for (const setting of settings) {
@@ -449,6 +455,19 @@ function DataCollectionSettings() {
 
   const handleRemoveCompetitorDomain = (domain) => {
     setDomainLists({ ...domainLists, competitor: domainLists.competitor.filter(d => d !== domain) });
+  };
+
+  const handleAddTrustedEventPath = () => {
+    const path = newTrustedEventPath.trim().toLowerCase();
+    if (!path) return;
+    if (!trustedEventPaths.includes(path)) {
+      setTrustedEventPaths([...trustedEventPaths, path]);
+      setNewTrustedEventPath('');
+    }
+  };
+
+  const handleRemoveTrustedEventPath = (path) => {
+    setTrustedEventPaths(trustedEventPaths.filter(p => p !== path));
   };
 
   const fetchExcludedPois = async () => {
@@ -1019,6 +1038,49 @@ function DataCollectionSettings() {
                   disabled={domainListsSaving}
                 />
                 <button className="action-btn secondary" onClick={handleAddCompetitorDomain} disabled={domainListsSaving || !newCompetitorDomain.trim()}>Add</button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#17a2b8' }}>Trusted Event Paths</h5>
+              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>URL path patterns the events crawler can follow beyond the listing page path (e.g., /event, /events, iteminfo.html).</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                {trustedEventPaths.map(path => (
+                  <span key={path} style={{
+                    padding: '0.25rem 0.5rem',
+                    backgroundColor: '#d1ecf1',
+                    color: '#0c5460',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    {path}
+                    <button onClick={() => handleRemoveTrustedEventPath(path)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#0c5460',
+                        cursor: 'pointer',
+                        padding: '0',
+                        fontSize: '1rem',
+                        lineHeight: '1'
+                      }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  value={newTrustedEventPath}
+                  onChange={e => setNewTrustedEventPath(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleAddTrustedEventPath()}
+                  placeholder="/event"
+                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
+                  disabled={domainListsSaving}
+                />
+                <button className="action-btn secondary" onClick={handleAddTrustedEventPath} disabled={domainListsSaving || !newTrustedEventPath.trim()}>Add</button>
               </div>
             </div>
 
