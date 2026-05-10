@@ -28,10 +28,8 @@ describe('Slot Management Unit Tests - News Service', () => {
 
   describe('Slot Initialization', () => {
     it('should initialize exactly 10 empty slots for a job', () => {
-      // Initialize slots by calling updateProgress with jobId
-      // First, we need to trigger slot initialization
-      // Looking at the code, slots are initialized in processNewsCollectionJob via initializeSlots(jobId)
-      // Since initializeSlots is not exported, we test via getDisplaySlots which returns empty slots if not found
+      // Slots must be explicitly initialized via initializeSlots()
+      newsService.initializeSlots(TEST_JOB_ID);
 
       const slots = newsService.getDisplaySlots(TEST_JOB_ID);
 
@@ -41,6 +39,7 @@ describe('Slot Management Unit Tests - News Service', () => {
     });
 
     it('should create slots with correct structure (slotId, poiId, poiName, phase, provider, status)', () => {
+      newsService.initializeSlots(TEST_JOB_ID);
       const slots = newsService.getDisplaySlots(TEST_JOB_ID);
 
       slots.forEach((slot, index) => {
@@ -55,6 +54,7 @@ describe('Slot Management Unit Tests - News Service', () => {
     });
 
     it('should set all fields to null except slotId (0-9)', () => {
+      newsService.initializeSlots(TEST_JOB_ID);
       const slots = newsService.getDisplaySlots(TEST_JOB_ID);
 
       slots.forEach((slot, index) => {
@@ -270,11 +270,13 @@ describe('Slot Management Unit Tests - News Service', () => {
       const singleSlotJobId = 'single-slot-job';
       const fullJobId = 'full-job';
 
-      // Empty job
+      // Empty job (initialized but no progress)
+      newsService.initializeSlots(emptyJobId);
       const emptySlots = newsService.getDisplaySlots(emptyJobId);
       expect(emptySlots.length).toBe(10);
 
       // Single slot filled
+      newsService.initializeSlots(singleSlotJobId);
       newsService.updateProgress(200, {
         jobId: singleSlotJobId,
         slotId: 0,
@@ -285,6 +287,7 @@ describe('Slot Management Unit Tests - News Service', () => {
       expect(singleSlots.length).toBe(10);
 
       // All slots filled
+      newsService.initializeSlots(fullJobId);
       for (let i = 0; i < 10; i++) {
         newsService.updateProgress(300 + i, {
           jobId: fullJobId,
@@ -339,18 +342,12 @@ describe('Slot Management Unit Tests - News Service', () => {
       newsService.clearProgress(poiId);
     });
 
-    it('should return empty array (10 nulls) if jobId not found', () => {
+    it('should return empty array if jobId not found', () => {
       const nonExistentJobId = 'does-not-exist-12345';
 
       const slots = newsService.getDisplaySlots(nonExistentJobId);
 
-      expect(slots.length).toBe(10);
-      slots.forEach(slot => {
-        expect(slot.poiId).toBeNull();
-        expect(slot.poiName).toBeNull();
-        expect(slot.phase).toBeNull();
-        expect(slot.status).toBeNull();
-      });
+      expect(slots).toEqual([]);
     });
 
     it('should handle missing collectionProgress gracefully (return slot data as-is)', () => {
@@ -358,7 +355,8 @@ describe('Slot Management Unit Tests - News Service', () => {
       const slotId = 8;
       const jobId = 'missing-progress-job';
 
-      // Create progress with jobId and slotId
+      // Initialize slots first, then create progress
+      newsService.initializeSlots(jobId);
       newsService.updateProgress(poiId, {
         jobId,
         slotId,
@@ -371,9 +369,7 @@ describe('Slot Management Unit Tests - News Service', () => {
 
       const slots = newsService.getDisplaySlots(jobId);
 
-      // Slot should still have the last known data
-      // Note: Based on code inspection, if progress is deleted, slot will show last saved slot data
-      // This tests the graceful degradation
+      // Slot should still have the last known data from the slot array
       expect(slots[slotId]).toBeDefined();
     });
 
@@ -511,6 +507,7 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
 
   describe('Slot Initialization', () => {
     it('should initialize exactly 10 empty slots for a job', () => {
+      trailStatusService.initializeSlots(TEST_JOB_ID);
       const slots = trailStatusService.getDisplaySlots(TEST_JOB_ID);
 
       expect(slots).toBeDefined();
@@ -519,6 +516,7 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
     });
 
     it('should create slots with correct structure', () => {
+      trailStatusService.initializeSlots(TEST_JOB_ID);
       const slots = trailStatusService.getDisplaySlots(TEST_JOB_ID);
 
       slots.forEach((slot, index) => {
@@ -626,10 +624,13 @@ describe('Slot Management Unit Tests - Trail Status Service', () => {
       const emptyJobId = 'trail-empty-job';
       const partialJobId = 'trail-partial-job';
 
+      // Initialized but empty job
+      trailStatusService.initializeSlots(emptyJobId);
       const emptySlots = trailStatusService.getDisplaySlots(emptyJobId);
       expect(emptySlots.length).toBe(10);
 
       // Fill 3 slots
+      trailStatusService.initializeSlots(partialJobId);
       for (let i = 0; i < 3; i++) {
         trailStatusService.updateProgress(2000 + i, {
           jobId: partialJobId,

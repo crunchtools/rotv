@@ -94,7 +94,7 @@ describe('North Fork Trail Regression Tests', () => {
       const putHandler = source.indexOf("router.put('/linear-features/:id'");
       expect(putHandler).toBeGreaterThan(-1);
 
-      const handlerBody = source.slice(putHandler, putHandler + 500);
+      const handlerBody = source.slice(putHandler, putHandler + 800);
       const allowedFieldsMatch = handlerBody.match(/allowedFields\s*=\s*\[([\s\S]*?)\]/);
       expect(allowedFieldsMatch).not.toBeNull();
 
