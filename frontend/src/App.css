@@ -13651,6 +13651,18 @@ svg.leaflet-zoom-animated {
   border-top: 1px solid #eee;
 }
 
+/* Feedback link in dropdowns (button reset to match privacy-link-inline) */
+button.feedback-link-inline {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  margin-top: 0;
+  border-top: none;
+  padding-top: 4px;
+}
+
 /* Settings link style */
 .settings-link {
   color: #2d6a4f;

@@ -39,6 +39,11 @@ function DataCollectionSettings() {
   const [serperSaving, setSerperSaving] = useState(false);
   const [serperTesting, setSerperTesting] = useState(false);
 
+  const [githubToken, setGithubToken] = useState('');
+  const [githubTokenSet, setGithubTokenSet] = useState(false);
+  const [githubSaving, setGithubSaving] = useState(false);
+  const [githubResult, setGithubResult] = useState(null);
+
   // Playwright status state
   const [playwrightStatus, setPlaywrightStatus] = useState(null);
   const [playwrightLoading, setPlaywrightLoading] = useState(true);
@@ -126,6 +131,7 @@ function DataCollectionSettings() {
     fetchGeminiStatus();
     fetchApifyStatus();
     fetchSerperStatus();
+    fetchGithubStatus();
     fetchPlaywrightStatus();
     fetchModerationConfig();
     fetchDomainLists();
@@ -292,6 +298,31 @@ function DataCollectionSettings() {
       }
     } catch (err) { setSerperResult({ type: 'error', message: `Test failed: ${err.message}` }); }
     finally { setSerperTesting(false); }
+  };
+
+  const fetchGithubStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) { const settings = await response.json(); setGithubTokenSet(settings.github_api_token?.isSet || false); }
+    } catch (err) { console.error('Error fetching GitHub status:', err); }
+  };
+
+  const handleSaveGithubToken = async () => {
+    if (!githubToken.trim()) { setGithubResult({ type: 'error', message: 'Token cannot be empty' }); return; }
+    setGithubSaving(true); setGithubResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/github_api_token', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: githubToken })
+      });
+      if (response.ok) {
+        setGithubResult({ type: 'success', message: 'Saved successfully' });
+        setGithubToken('');
+        setGithubTokenSet(true);
+        await fetchGithubStatus();
+      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
+    } catch (err) { setGithubResult({ type: 'error', message: `Save failed: ${err.message}` }); }
+    finally { setGithubSaving(false); }
   };
 
   const handleSaveTwitterCredentials = async () => {
@@ -834,6 +865,50 @@ function DataCollectionSettings() {
           </div>
           <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
             Twitter/X and Facebook scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
+          </p>
+        </div>
+
+        {/* GitHub API Token */}
+        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e0e0e0' }}>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>GitHub</h5>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+            <span className={`status-indicator ${githubTokenSet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{githubTokenSet ? 'Configured' : 'Not configured'}</span>
+            {githubResult && (
+              <span
+                style={{
+                  marginLeft: '12px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  backgroundColor: githubResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: githubResult.type === 'success' ? '#155724' : '#721c24',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setGithubResult(null)}
+                title="Click to dismiss"
+              >
+                {githubResult.message}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
+            <input
+              type="password"
+              value={githubToken || (githubTokenSet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setGithubToken(e.target.value)}
+              placeholder="Enter GitHub token..."
+              disabled={githubSaving}
+              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
+            />
+            <button className="action-btn primary" onClick={handleSaveGithubToken} disabled={githubSaving || !githubToken.trim()}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {githubSaving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+            Feedback form creates GitHub Issues. Use a fine-grained PAT with <code>issues:write</code> scope for <code>crunchtools/rotv</code>.
           </p>
         </div>
       </div>

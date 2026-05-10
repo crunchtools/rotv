@@ -25,6 +25,7 @@ import ResultsTab from './components/ResultsTab';
 import NewsPermalink from './components/NewsPermalink';
 import EventPermalink from './components/EventPermalink';
 import PrivacyPolicy from './components/PrivacyPolicy';
+import FeedbackForm from './components/FeedbackForm';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -130,6 +131,7 @@ function AppContent() {
   const [showLoginDropdown, setShowLoginDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [profileImageError, setProfileImageError] = useState(false);
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
 
   // Router hooks
   const location = useLocation();
@@ -1691,6 +1693,12 @@ function AppContent() {
                       Privacy Policy
                     </a>
                     <button
+                      className="dropdown-item-inline privacy-link-inline feedback-link-inline"
+                      onClick={() => { setShowUserDropdown(false); setShowFeedbackForm(true); }}
+                    >
+                      Send Feedback
+                    </button>
+                    <button
                       className="dropdown-item-inline"
                       onClick={() => {
                         setShowUserDropdown(false);
@@ -1745,6 +1753,12 @@ function AppContent() {
                     >
                       Privacy Policy
                     </a>
+                    <button
+                      className="privacy-link-inline feedback-link-inline"
+                      onClick={() => { setShowLoginDropdown(false); setShowFeedbackForm(true); }}
+                    >
+                      Send Feedback
+                    </button>
                   </div>
                 </>
               )}
@@ -2132,6 +2146,9 @@ function AppContent() {
           onSidebarTabChange={(tab) => setInitialSidebarTab(null)}
         />
       </main>
+      {showFeedbackForm && (
+        <FeedbackForm onClose={() => setShowFeedbackForm(false)} />
+      )}
     </div>
   );
 }
