@@ -442,15 +442,24 @@ export function startSmtpServer(pool) {
           const raw = Buffer.concat(chunks);
           const recipient = session.envelope.rcptTo[0]?.address?.toLowerCase();
 
-          // Forward admin@ emails to personal Gmail
+          // Forward admin@ emails to personal Gmail via Gmail MX
           if (recipient === 'admin@rootsofthevalley.org') {
-            const transporter = nodemailer.createTransport({ direct: true });
-            await transporter.sendMail({
-              from: 'admin@rootsofthevalley.org',
-              to: 'scott.mccarty@gmail.com',
-              raw: raw
+            const transporter = nodemailer.createTransport({
+              host: 'gmail-smtp-in.l.google.com',
+              port: 25,
+              secure: false,
+              tls: { rejectUnauthorized: false },
+              name: 'rootsofthevalley.org'
             });
-            console.log(`[SMTP] Forwarded admin email to scott.mccarty@gmail.com`);
+            const parsed = await simpleParser(raw);
+            await transporter.sendMail({
+              from: parsed.from?.text || 'admin@rootsofthevalley.org',
+              to: 'scott.mccarty@gmail.com',
+              subject: parsed.subject || '(no subject)',
+              text: parsed.text || '',
+              html: parsed.html || undefined
+            });
+            console.log(`[SMTP] Forwarded admin email to scott.mccarty@gmail.com: "${parsed.subject}"`);
             callback();
             return;
           }
