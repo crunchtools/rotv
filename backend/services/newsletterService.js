@@ -452,14 +452,17 @@ export function startSmtpServer(pool) {
               name: 'rootsofthevalley.org'
             });
             const parsed = await simpleParser(raw);
+            const originalFrom = parsed.from?.text || 'unknown sender';
             await transporter.sendMail({
-              from: parsed.from?.text || 'admin@rootsofthevalley.org',
+              envelope: { from: 'admin@rootsofthevalley.org', to: 'scott.mccarty@gmail.com' },
+              from: `"ROTV Admin Forward" <admin@rootsofthevalley.org>`,
               to: 'scott.mccarty@gmail.com',
-              subject: parsed.subject || '(no subject)',
-              text: parsed.text || '',
-              html: parsed.html || undefined
+              subject: `[ROTV] ${parsed.subject || '(no subject)'}`,
+              replyTo: parsed.from?.value?.[0]?.address || undefined,
+              text: `--- Forwarded from ${originalFrom} ---\n\n${parsed.text || ''}`,
+              html: parsed.html ? `<p><em>Forwarded from ${originalFrom}</em></p><hr>${parsed.html}` : undefined
             });
-            console.log(`[SMTP] Forwarded admin email to scott.mccarty@gmail.com: "${parsed.subject}"`);
+            console.log(`[SMTP] Forwarded admin email to scott.mccarty@gmail.com: "${parsed.subject}" from ${originalFrom}`);
             callback();
             return;
           }
