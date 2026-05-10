@@ -30,6 +30,7 @@
     "mailparser": "^3.7.2",
     "multer": "^1.4.5-lts.1",
     "node-fetch": "^3.3.2",
+    "nodemailer": "^8.0.7",
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",

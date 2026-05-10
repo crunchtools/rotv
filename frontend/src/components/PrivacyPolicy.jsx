@@ -135,7 +135,7 @@ function PrivacyPolicy() {
             <a href="https://github.com/crunchtools/rotv/issues" target="_blank" rel="noopener noreferrer">
               GitHub
             </a>{' '}
-            or email scott@crunchtools.com.
+            or email admin@rootsofthevalley.org.
           </p>
         </section>
       </div>

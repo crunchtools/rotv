@@ -8,6 +8,7 @@ import { SMTPServer } from 'smtp-server';
 import { simpleParser } from 'mailparser';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
+import nodemailer from 'nodemailer';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { GEMINI_MODEL } from './geminiService.js';
 import { queueNewsletterJob } from './jobScheduler.js';
@@ -426,7 +427,8 @@ export function startSmtpServer(pool) {
 
     onRcptTo(address, session, callback) {
       const recipient = address.address.toLowerCase();
-      if (recipient !== 'news@rootsofthevalley.org') {
+      const ACCEPTED_RECIPIENTS = ['news@rootsofthevalley.org', 'admin@rootsofthevalley.org'];
+      if (!ACCEPTED_RECIPIENTS.includes(recipient)) {
         return callback(new Error(`Recipient <${address.address}> not accepted`));
       }
       callback();
@@ -438,6 +440,22 @@ export function startSmtpServer(pool) {
       stream.on('end', async () => {
         try {
           const raw = Buffer.concat(chunks);
+          const recipient = session.envelope.rcptTo[0]?.address?.toLowerCase();
+
+          // Forward admin@ emails to personal Gmail
+          if (recipient === 'admin@rootsofthevalley.org') {
+            const transporter = nodemailer.createTransport({ direct: true });
+            await transporter.sendMail({
+              from: 'admin@rootsofthevalley.org',
+              to: 'scott.mccarty@gmail.com',
+              raw: raw
+            });
+            console.log(`[SMTP] Forwarded admin email to scott.mccarty@gmail.com`);
+            callback();
+            return;
+          }
+
+          // Newsletter processing
           const parsed = await simpleParser(raw);
 
           const from = parsed.from?.text || 'unknown';
