@@ -7,7 +7,7 @@ function PrivacyPolicy() {
   return (
     <div className="privacy-policy-page">
       <div className="privacy-policy-content">
-        <button className="privacy-back-btn" onClick={() => navigate(-1)}>
+        <button className="privacy-back-btn" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}>
           &larr; Back
         </button>
 
