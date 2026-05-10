@@ -26,6 +26,9 @@ import NewsPermalink from './components/NewsPermalink';
 import EventPermalink from './components/EventPermalink';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import FeedbackForm from './components/FeedbackForm';
+import AboutPage from './components/AboutPage';
+import GuidedTour from './components/GuidedTour';
+import TourPrompt from './components/TourPrompt';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -50,7 +53,7 @@ const DEFAULT_PARK_BOUNDS = [
 ];
 
 function AppContent() {
-  const { isAuthenticated, isAdmin, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
+  const { isAuthenticated, isAdmin, role, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
   const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
@@ -104,7 +107,7 @@ function AppContent() {
   const [error, setError] = useState(null);
   const [editMode, setEditMode] = useState(false);
 
-  // Tab state for admin interface: 'view', 'edit', 'settings'
+  // Tab state for admin interface: 'view', 'settings'
   const [activeTab, setActiveTab] = useState('view');
 
   // MTB trails viewport state for focus restoration
@@ -132,6 +135,11 @@ function AppContent() {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [profileImageError, setProfileImageError] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+
+  // Tour state
+  const [showTourPrompt, setShowTourPrompt] = useState(false);
+  const [tourActive, setTourActive] = useState(false);
+  const [tourStep, setTourStep] = useState(0);
 
   // Router hooks
   const location = useLocation();
@@ -240,8 +248,68 @@ function AppContent() {
   }, [location.pathname]);
 
   // Known main tab paths — used to distinguish tab URLs from POI slugs
-  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'edit', 'settings', 'privacy']);
+  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'settings', 'privacy']);
   const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
+
+  // Tour handlers
+  const startTour = useCallback(() => {
+    setShowTourPrompt(false);
+    setTourStep(0);
+    setTourActive(true);
+    localStorage.setItem('rotv-tour-seen', 'true');
+    // Switch to map view for tour start
+    setActiveTab('view');
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+    isProgrammaticNavigationRef.current = true;
+    navigate('/');
+  }, [navigate]);
+
+  const endTour = useCallback(() => {
+    setTourActive(false);
+    setTourStep(0);
+    // Return to map view
+    setActiveTab('view');
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+    isProgrammaticNavigationRef.current = true;
+    navigate('/');
+  }, [navigate]);
+
+  const handleTourStepAction = useCallback((action) => {
+    switch (action) {
+      case 'selectVisitorCenter': {
+        // Select Boston Mill Visitor Center to show sidebar tabs
+        setActiveTab('view');
+        const visitorCenter = destinations.find(d => d.name === 'Boston Mill Visitor Center');
+        if (visitorCenter) {
+          setSelectedDestination(visitorCenter);
+        }
+        break;
+      }
+      case 'showMapView': {
+        // Return to map view, clear POI selection
+        setActiveTab('view');
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        isProgrammaticNavigationRef.current = true;
+        navigate('/');
+        break;
+      }
+      case 'showNewsletter': {
+        // Navigate to Settings -> Newsletter tab
+        if (isAuthenticated) {
+          setActiveTab('settings');
+          if (isAdmin) {
+            setSettingsTab('newsletter');
+          }
+          isProgrammaticNavigationRef.current = true;
+          navigate('/settings');
+        }
+        break;
+      }
+    }
+  }, [destinations, isAuthenticated, isAdmin, navigate]);
 
   // Helper to handle tab changes and clear MTB mode if needed
   const handleTabChange = useCallback((newTab) => {
@@ -264,8 +332,8 @@ function AppContent() {
     }
 
     // If switching away from Results tab and currently on MTB trail status or organizations page, navigate back to home
-    // BUT: Don't navigate away if switching to Edit or View - preserve the selected item
-    if (newTab !== 'results' && newTab !== 'edit' && newTab !== 'view') {
+    // BUT: Don't navigate away if switching to View - preserve the selected item
+    if (newTab !== 'results' && newTab !== 'view') {
       if (location.pathname.startsWith('/mtb-trail-status')) {
         navigate('/');
         setSelectedFromMtbList(false);
@@ -279,7 +347,7 @@ function AppContent() {
     // Update URL to reflect the active main tab
     // If a POI is selected and we're switching to a content tab (news, events, results),
     // clear the POI so the URL reflects the main tab
-    if (newTab !== 'view' && newTab !== 'edit') {
+    if (newTab !== 'view') {
       if (selectedDestination || selectedLinearFeature) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
@@ -290,10 +358,9 @@ function AppContent() {
       isProgrammaticNavigationRef.current = true;
       navigate(`/${newTab}`);
     } else if (!selectedDestination && !selectedLinearFeature) {
-      // Map or Edit tab with no POI — go to root
+      // Map tab with no POI — go to root
       isProgrammaticNavigationRef.current = true;
-      if (newTab === 'view') navigate('/');
-      else navigate(`/${newTab}`);
+      navigate('/');
     }
   }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature]);
 
@@ -337,12 +404,12 @@ function AppContent() {
     }
   }, [iconConfig]);
 
-  // Reset to View tab when user loses admin status (e.g., logout)
+  // Reset editMode when user loses admin/poi_admin status (e.g., logout)
   useEffect(() => {
-    if (!isAdmin && activeTab === 'edit') {
-      setActiveTab('view');
+    if (role !== 'admin' && role !== 'poi_admin') {
+      setEditMode(false);
     }
-  }, [isAdmin, activeTab]);
+  }, [role]);
 
   // Reset to View tab when user logs out completely
   useEffect(() => {
@@ -420,15 +487,6 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDestination?.id, editMode]);
 
-  // Auto-enable edit mode when Edit tab is selected, disable when leaving
-  useEffect(() => {
-    if (activeTab === 'edit') {
-      setEditMode(true);
-    } else {
-      setEditMode(false);
-    }
-  }, [activeTab]);
-
   // Store initial POI slug for after data loads
   const [initialPoiSlug, setInitialPoiSlug] = useState(null);
   // Initial sidebar sub-tab from URL (e.g., /poi-slug/news → 'news')
@@ -440,7 +498,7 @@ function AppContent() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
-    if (tab === 'settings' || tab === 'edit' || tab === 'view') {
+    if (tab === 'settings' || tab === 'view') {
       setActiveTab(tab);
       // Clean URL but keep other params if any
       params.delete('tab');
@@ -454,7 +512,7 @@ function AppContent() {
     let poiSlug = null;
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
-    const mainTabPaths = ['results', 'news', 'events', 'edit', 'settings'];
+    const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
 
     if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
@@ -587,8 +645,8 @@ function AppContent() {
     // Check path structure
     const pathParts = location.pathname.split('/').filter(Boolean);
 
-    // Handle main tab paths: /results, /news, /events, /edit, /settings
-    const mainTabPaths = ['results', 'news', 'events', 'edit', 'settings'];
+    // Handle main tab paths: /results, /news, /events, /settings
+    const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
       setActiveTab(pathParts[0]);
       if (selectedDestination || selectedLinearFeature) {
@@ -878,6 +936,27 @@ function AppContent() {
   useEffect(() => {
     refreshAllData();
   }, [refreshAllData]);
+
+  // Show tour prompt for first-time visitors
+  useEffect(() => {
+    if (!localStorage.getItem('rotv-tour-seen')) {
+      setShowTourPrompt(true);
+    }
+  }, []);
+
+  // Handle /tutorial/stepN URLs for testing
+  useEffect(() => {
+    const match = location.pathname.match(/^\/tutorial\/step(\d+)$/);
+    if (match && !tourActive) {
+      const stepNum = parseInt(match[1], 10) - 1;
+      if (stepNum >= 0 && stepNum <= 8) {
+        setTourStep(stepNum);
+        setTourActive(true);
+        setShowTourPrompt(false);
+        localStorage.setItem('rotv-tour-seen', 'true');
+      }
+    }
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialize visibleTypes from iconConfig ONCE after it loads from database
   // Use a ref to ensure this only runs once, not every time iconConfig changes
@@ -1597,6 +1676,8 @@ function AppContent() {
     return <PrivacyPolicy />;
   }
 
+
+
   return (
     <div className="app">
       <a href="#main-content" className="skip-link">Skip to main content</a>
@@ -1667,16 +1748,14 @@ function AppContent() {
           >
             Events
           </button>
-          {isAdmin && (
-            <button
-              className={`tab-btn ${activeTab === 'edit' ? 'active' : ''}`}
-              onClick={() => handleTabChange('edit')}
-              aria-current={activeTab === 'edit' ? 'page' : undefined}
-              tabIndex={activeTab === 'edit' ? 0 : -1}
-            >
-              Edit
-            </button>
-          )}
+          <button
+            className={`tab-btn ${activeTab === 'about' ? 'active' : ''}`}
+            onClick={() => handleTabChange('about')}
+            aria-current={activeTab === 'about' ? 'page' : undefined}
+            tabIndex={activeTab === 'about' ? 0 : -1}
+          >
+            About
+          </button>
           {isAuthenticated && (
             <button
               className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
@@ -1720,6 +1799,12 @@ function AppContent() {
                       <span className="user-email-inline">{user?.email}</span>
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
+                    <button
+                      className="dropdown-item-inline privacy-link-inline"
+                      onClick={() => { setShowUserDropdown(false); handleTabChange('about'); }}
+                    >
+                      About
+                    </button>
                     <a
                       className="dropdown-item-inline privacy-link-inline"
                       href="https://buttondown.com/rotv/rss"
@@ -1750,6 +1835,21 @@ function AppContent() {
                     >
                       Sign Out
                     </button>
+                    {(role === 'admin' || role === 'poi_admin') && (
+                      <label className="edit-mode-toggle" onClick={(e) => e.stopPropagation()}>
+                        Edit Mode
+                        <input
+                          type="checkbox"
+                          checked={editMode}
+                          onChange={(e) => {
+                            setEditMode(e.target.checked);
+                            if (e.target.checked && activeTab !== 'view') {
+                              handleTabChange('view');
+                            }
+                          }}
+                        />
+                      </label>
+                    )}
                   </div>
                 </>
               )}
@@ -1782,6 +1882,12 @@ function AppContent() {
                         <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                       </svg>
                       Continue with Facebook
+                    </button>
+                    <button
+                      className="privacy-link-inline"
+                      onClick={() => { setShowLoginDropdown(false); handleTabChange('about'); }}
+                    >
+                      About
                     </button>
                     <a
                       className="privacy-link-inline"
@@ -1897,6 +2003,12 @@ function AppContent() {
         </main>
       )}
 
+      {/* About tab content */}
+      {activeTab === 'about' && (
+        <main className="main-content-full">
+          <AboutPage onStartTour={startTour} />
+        </main>
+      )}
 
       {activeTab === 'settings' && (
         <main id="main-content" className="settings-content" tabIndex="-1" role="tabpanel">
@@ -2036,8 +2148,8 @@ function AppContent() {
                aria-hidden={(activeTab !== 'view' && activeTab !== 'edit') ? 'true' : undefined}
         style={{
           display: 'flex',
-          zIndex: (activeTab === 'view' || activeTab === 'edit') ? '1' : '-1',
-          pointerEvents: (activeTab === 'view' || activeTab === 'edit') ? 'auto' : 'none'
+          zIndex: activeTab === 'view' ? '1' : '-1',
+          pointerEvents: activeTab === 'view' ? 'auto' : 'none'
         }}
       >
         <Map
@@ -2196,6 +2308,27 @@ function AppContent() {
       </main>
       {showFeedbackForm && (
         <FeedbackForm onClose={() => setShowFeedbackForm(false)} />
+      )}
+
+      {/* Tour prompt for first-time visitors */}
+      {showTourPrompt && (
+        <TourPrompt
+          onStartTour={startTour}
+          onDismiss={() => {
+            setShowTourPrompt(false);
+            localStorage.setItem('rotv-tour-seen', 'true');
+          }}
+        />
+      )}
+
+      {/* Guided tour overlay */}
+      {tourActive && (
+        <GuidedTour
+          onEnd={endTour}
+          currentStep={tourStep}
+          setCurrentStep={setTourStep}
+          onStepAction={handleTourStepAction}
+        />
       )}
     </div>
   );
