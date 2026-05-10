@@ -328,6 +328,9 @@ function isNoiseLink(url, sourceUrl) {
   const filename = path.split('/').pop();
   if (WEBTRAC_NAV_FILES.includes(filename)) return true;
 
+  // WebTrac non-event modules (PM=passes, FR=facility rentals — not events)
+  if (/[?&]module=(PM|FR)\b/i.test(search)) return true;
+
   // Request/submission forms
   const lastSegment = path.replace(/\/$/, '').split('/').pop() || '';
   if (/\brequest|submit|apply|form\b/i.test(lastSegment)) return true;
