@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ResultsTile from './ResultsTile';
 import MapThumbnail from './MapThumbnail';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
+import { handleRovingKeyDown } from '../utils/a11yUtils';
 
 // Default park bounds - same as used in App.jsx
 // Expanded to include all MTB trailheads (especially western ones like Reagan-Huffman)
@@ -397,12 +398,13 @@ const ResultsTab = memo(function ResultsTab({
         </div>
 
         {/* Sub-tabs (data-driven from config) */}
-        <div className="results-subtabs">
+        <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
           {activeSubtabs.map(tab => (
             <button
               key={tab.id}
               className={`results-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
               onClick={() => handleSubTabChange(tab.id)}
+              tabIndex={activeSubTab === tab.id ? 0 : -1}
             >
               <span className="subtab-label-full">{tab.label}</span>
               <span className="subtab-label-short">{tab.shortLabel || tab.label}</span>
@@ -490,12 +492,13 @@ const ResultsTab = memo(function ResultsTab({
       </div>
 
       {/* Sub-tabs (data-driven from config) */}
-      <div className="results-subtabs">
+      <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
         {activeSubtabs.map(tab => (
           <button
             key={tab.id}
             className={`results-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
             onClick={() => handleSubTabChange(tab.id)}
+            tabIndex={activeSubTab === tab.id ? 0 : -1}
           >
             <span className="subtab-label-full">{tab.label}</span>
             <span className="subtab-label-short">{tab.shortLabel || tab.label}</span>
@@ -538,7 +541,17 @@ const ResultsTab = memo(function ResultsTab({
 
       <div className="news-events-layout">
         <div className="news-events-content">
-          <div className="results-tab-list" onClick={handleListClick} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleListClick(e); }}}>
+          <div className="results-tab-list" onClick={handleListClick} onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleListClick(e); }
+            else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              const tiles = Array.from(e.currentTarget.querySelectorAll('.results-tile'));
+              const idx = tiles.indexOf(e.target.closest('.results-tile'));
+              if (idx === -1) return;
+              e.preventDefault();
+              const next = e.key === 'ArrowDown' ? Math.min(idx + 1, tiles.length - 1) : Math.max(idx - 1, 0);
+              tiles[next].focus();
+            }
+          }}>
             {sortedPois.map(poi => {
               const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
               const poiKey = `${type}-${poi.id}`;

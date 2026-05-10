@@ -124,6 +124,12 @@ body {
   color: white;
 }
 
+.tab-btn:focus-visible,
+.tab-btn.kbd-focus {
+  outline: 2px solid white;
+  outline-offset: 2px;
+}
+
 .tab-btn.active {
   background: rgba(255, 255, 255, 0.95);
   color: #2d5016;

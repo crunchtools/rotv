@@ -174,7 +174,16 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
                 : 'No recent news available.'}
             </p>
           ) : (
-          <div className="park-news-list">
+          <div className="park-news-list" onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              const items = Array.from(e.currentTarget.querySelectorAll('.park-news-item'));
+              const idx = items.indexOf(e.target.closest('.park-news-item'));
+              if (idx === -1) return;
+              e.preventDefault();
+              const next = e.key === 'ArrowDown' ? Math.min(idx + 1, items.length - 1) : Math.max(idx - 1, 0);
+              items[next].focus();
+            }
+          }}>
         {paginatedNews.map(item => (
           <NewsCardBody
             key={item.id}

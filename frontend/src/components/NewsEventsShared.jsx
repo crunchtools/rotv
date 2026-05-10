@@ -309,7 +309,7 @@ export function formatEventDateRange(startDate, endDate) {
 export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
   const summary = item.summary || item.description;
   return (
-    <div className={`park-news-item ${item.news_type || 'general'}${className ? ' ' + className : ''}`} id={id}>
+    <div className={`park-news-item ${item.news_type || 'general'}${className ? ' ' + className : ''}`} id={id} tabIndex={0}>
       <div className="park-news-header">
         <NewsTypeIcon type={item.news_type} />
         <div className="park-news-title-section">
@@ -377,7 +377,7 @@ export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
  */
 export function EventCardBody({ item, onSelectPoi, calendarButtons, children, className, id }) {
   return (
-    <div className={`park-event-item ${item.event_type || 'program'}${className ? ' ' + className : ''}`} id={id}>
+    <div className={`park-event-item ${item.event_type || 'program'}${className ? ' ' + className : ''}`} id={id} tabIndex={0}>
       <div className="park-event-header">
         <EventTypeIcon type={item.event_type} />
         <div className="park-event-title-section">
