@@ -301,9 +301,8 @@ function MapVisibilityHandler({ activeTab }) {
   const prevTab = useRef(activeTab);
 
   useEffect(() => {
-    // When switching back to view/edit tab, invalidate size to fix rendering
-    if ((activeTab === 'view' || activeTab === 'edit') &&
-        prevTab.current !== 'view' && prevTab.current !== 'edit') {
+    // When switching back to view tab, invalidate size to fix rendering
+    if (activeTab === 'view' && prevTab.current !== 'view') {
       // Call invalidateSize immediately so MapUpdater can flyTo with correct dimensions
       // Use requestAnimationFrame to ensure DOM has painted
       requestAnimationFrame(() => {
