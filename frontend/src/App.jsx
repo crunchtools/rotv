@@ -24,6 +24,7 @@ import NewsletterSettings from './components/NewsletterSettings';
 import ResultsTab from './components/ResultsTab';
 import NewsPermalink from './components/NewsPermalink';
 import EventPermalink from './components/EventPermalink';
+import PrivacyPolicy from './components/PrivacyPolicy';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -237,7 +238,7 @@ function AppContent() {
   }, [location.pathname]);
 
   // Known main tab paths — used to distinguish tab URLs from POI slugs
-  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'edit', 'settings']);
+  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'edit', 'settings', 'privacy']);
   const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
 
   // Helper to handle tab changes and clear MTB mode if needed
@@ -1578,6 +1579,10 @@ function AppContent() {
     );
   }
 
+  if (location.pathname === '/privacy') {
+    return <PrivacyPolicy />;
+  }
+
   return (
     <div className="app">
       <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
@@ -1670,6 +1675,13 @@ function AppContent() {
                       <span className="user-email-inline">{user?.email}</span>
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
+                    <a
+                      className="dropdown-item-inline privacy-link-inline"
+                      href="/privacy"
+                      onClick={(e) => { e.preventDefault(); setShowUserDropdown(false); navigate('/privacy'); }}
+                    >
+                      Privacy Policy
+                    </a>
                     <button
                       className="dropdown-item-inline"
                       onClick={() => {
@@ -1710,6 +1722,13 @@ function AppContent() {
                       </svg>
                       Continue with Facebook
                     </button>
+                    <a
+                      className="privacy-link-inline"
+                      href="/privacy"
+                      onClick={(e) => { e.preventDefault(); setShowLoginDropdown(false); navigate('/privacy'); }}
+                    >
+                      Privacy Policy
+                    </a>
                   </div>
                 </>
               )}
