@@ -14,6 +14,10 @@ excluded_paths = [
     "*.min.css",
     # Backend test scripts are manual debugging utilities
     "backend/test-*.js",
+    # Image server is a Python project with its own lint tooling (ruff, mypy)
+    "image-server/**",
+    "image-server/**/*",
+    "Containerfile.images",
 ]
 
 [checks]
