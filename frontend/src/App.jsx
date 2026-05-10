@@ -29,6 +29,7 @@ import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
 import GuidedTour from './components/GuidedTour';
 import TourPrompt from './components/TourPrompt';
+import { handleRovingKeyDown } from './utils/a11yUtils';
 
 // Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -133,6 +134,14 @@ function AppContent() {
   // Login/account dropdown state
   const [showLoginDropdown, setShowLoginDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+
+  // Roving tabindex: which tab has keyboard focus highlight (null = none)
+  const [kbdFocusIndex, setKbdFocusIndex] = useState(null);
+
+  // When dropdown closes, clear any stale state
+  useEffect(() => {
+    if (!showLoginDropdown && !showUserDropdown) return;
+  }, [showLoginDropdown, showUserDropdown]);
   const [profileImageError, setProfileImageError] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
 
@@ -417,6 +426,38 @@ function AppContent() {
       setActiveTab('view');
     }
   }, [isAuthenticated, activeTab]);
+
+  // Escape key returns focus from content area to the active tab
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key !== 'Escape') return;
+      const main = document.getElementById('main-content');
+      if (main && main.contains(document.activeElement)) {
+        const activeTabBtn = document.querySelector('.tab-btn.active');
+        if (activeTabBtn) activeTabBtn.focus();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, []);
+
+  // Move focus to main content when tab changes (accessibility)
+  // Skip when arrow-key navigating within the tab bar (focus stays on tabs)
+  const prevTabRef = useRef(activeTab);
+  const arrowNavRef = useRef(false);
+  useEffect(() => {
+    if (prevTabRef.current !== activeTab) {
+      prevTabRef.current = activeTab;
+      if (arrowNavRef.current) {
+        arrowNavRef.current = false;
+        return;
+      }
+      requestAnimationFrame(() => {
+        const main = document.getElementById('main-content');
+        if (main) main.focus();
+      });
+    }
+  }, [activeTab]);
 
   // Fetch moderation pending count for admin badge
   const refreshModerationCount = useCallback(async () => {
@@ -1668,6 +1709,7 @@ function AppContent() {
 
   return (
     <div className="app">
+      <a href="#main-content" className="skip-link">Skip to main content</a>
       <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
         {activeTheme && videoUrls[activeTheme] && (
           <video
@@ -1677,61 +1719,99 @@ function AppContent() {
             loop
             muted
             playsInline
+            aria-hidden="true"
             src={videoUrls[activeTheme]}
             onLoadedData={(e) => { e.target.playbackRate = 0.7; }}
           />
         )}
         <div className="header-content-wrapper">
-          <div className="header-left" onClick={() => handleTabChange('view')} style={{ cursor: 'pointer' }}>
+          <div className="header-left" onClick={() => handleTabChange('view')} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTabChange('view'); }}} role="button" tabIndex={0} style={{ cursor: 'pointer' }}>
             <h1>Roots of The Valley</h1>
             <span className="subtitle">Explore Cuyahoga Valley&apos;s History</span>
           </div>
-          <nav className="header-tabs">
-          <button
-            className={`tab-btn ${activeTab === 'view' ? 'active' : ''}`}
-            onClick={() => handleTabChange('view')}
-          >
-            Map
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'results' ? 'active' : ''}`}
-            onClick={() => handleTabChange('results')}
-          >
-            Results
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'news' ? 'active' : ''}`}
-            onClick={() => handleTabChange('news')}
-          >
-            News
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'events' ? 'active' : ''}`}
-            onClick={() => handleTabChange('events')}
-          >
-            Events
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'about' ? 'active' : ''}`}
-            onClick={() => handleTabChange('about')}
-          >
-            About
-          </button>
-          {isAuthenticated && (
-            <button
-              className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
-              onClick={() => handleTabChange('settings')}
-            >
-              Settings
-            </button>
-          )}
+          <nav className={`header-tabs ${kbdFocusIndex !== null ? 'kbd-nav' : ''}`} aria-label="Main navigation"
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) {
+                setKbdFocusIndex(null);
+              }
+            }}
+            onKeyDown={(e) => {
+              const tabs = Array.from(e.currentTarget.querySelectorAll('.tab-btn'));
+              const currentIndex = tabs.indexOf(e.target);
+              if (currentIndex === -1) return;
 
-          {/* Login/Account tab */}
-          {isAuthenticated ? (
+              const isMenuButton = e.target.classList.contains('tab-account') || e.target.textContent.trim() === 'Login';
+
+              if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
+                e.preventDefault();
+                let nextIndex;
+                if (e.key === 'ArrowRight') nextIndex = (currentIndex + 1) % tabs.length;
+                else if (e.key === 'ArrowLeft') nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+                else if (e.key === 'Home') nextIndex = 0;
+                else if (e.key === 'End') nextIndex = tabs.length - 1;
+                arrowNavRef.current = true;
+                setKbdFocusIndex(nextIndex);
+                tabs[nextIndex].focus();
+              } else if ((e.key === 'Enter' || e.key === ' ') && isMenuButton) {
+                // Toggle dropdown, keep focus + highlight on menu button
+                e.preventDefault();
+                e.target.click();
+              } else if (e.key === 'ArrowDown' && isMenuButton) {
+                // Open dropdown if closed, then focus first item
+                e.preventDefault();
+                if (!showLoginDropdown && !showUserDropdown) {
+                  e.target.click(); // open it
+                }
+                setKbdFocusIndex(null);
+                setTimeout(() => {
+                  const dropdown = e.target.closest('.tab-account-container')?.querySelector('.tab-dropdown');
+                  const firstItem = dropdown?.querySelector('a, button');
+                  if (firstItem) firstItem.focus();
+                }, 50);
+              } else if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                setKbdFocusIndex(null);
+                e.target.click();
+              }
+            }}
+          >
+          {(() => {
+            let idx = 0;
+            const navTabs = [
+              { id: 'view', label: 'Map', show: true },
+              { id: 'results', label: 'Results', show: true },
+              { id: 'news', label: 'News', show: true },
+              { id: 'events', label: 'Events', show: true },
+              { id: 'about', label: 'About', show: true },
+              { id: 'settings', label: 'Settings', show: isAuthenticated },
+            ];
+            return navTabs.filter(t => t.show).map(tab => {
+              const i = idx++;
+              return (
+                <button
+                  key={tab.id}
+                  className={`tab-btn ${activeTab === tab.id ? 'active' : ''} ${kbdFocusIndex === i ? 'kbd-focus' : ''}`}
+                  onClick={() => handleTabChange(tab.id)}
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
+                  tabIndex={activeTab === tab.id ? 0 : -1}
+                >
+                  {tab.label}
+                </button>
+              );
+            });
+          })()}
+
+          {/* Login/Account button */}
+          {(() => {
+            const menuIdx = [true, true, true, true, true, isAuthenticated].filter(Boolean).length;
+            return isAuthenticated ? (
             <div className="tab-account-container">
               <button
-                className="tab-btn tab-account"
+                className={`tab-btn tab-account ${kbdFocusIndex === menuIdx ? 'kbd-focus' : ''}`}
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
+                tabIndex={-1}
+                aria-expanded={showUserDropdown}
+                aria-haspopup="true"
               >
                 {user?.pictureUrl && !profileImageError ? (
                   <img
@@ -1750,7 +1830,16 @@ function AppContent() {
               {showUserDropdown && (
                 <>
                   <div className="tab-dropdown-backdrop" onClick={() => setShowUserDropdown(false)} />
-                  <div className="tab-dropdown user-dropdown-inline">
+                  <div className="tab-dropdown user-dropdown-inline" role="menu" onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setShowUserDropdown(false); setKbdFocusIndex(menuIdx); document.querySelector('.tab-btn.tab-account')?.focus(); }
+                    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const items = Array.from(e.currentTarget.querySelectorAll('a, button'));
+                      const idx = items.indexOf(document.activeElement);
+                      const next = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
+                      items[next]?.focus();
+                    }
+                  }}>
                     <div className="user-info-inline">
                       <span className="user-name-inline">{user?.name}</span>
                       <span className="user-email-inline">{user?.email}</span>
@@ -1814,15 +1903,27 @@ function AppContent() {
           ) : (
             <div className="tab-account-container">
               <button
-                className="tab-btn"
+                className={`tab-btn ${kbdFocusIndex === menuIdx ? 'kbd-focus' : ''}`}
                 onClick={() => setShowLoginDropdown(!showLoginDropdown)}
+                tabIndex={-1}
+                aria-expanded={showLoginDropdown}
+                aria-haspopup="true"
               >
                 Login
               </button>
               {showLoginDropdown && (
                 <>
                   <div className="tab-dropdown-backdrop" onClick={() => setShowLoginDropdown(false)} />
-                  <div className="tab-dropdown login-dropdown-inline">
+                  <div className="tab-dropdown login-dropdown-inline" role="menu" onKeyDown={(e) => {
+                    if (e.key === 'Escape') { setShowLoginDropdown(false); setKbdFocusIndex(menuIdx); e.currentTarget.closest('.tab-account-container')?.querySelector('.tab-btn')?.focus(); }
+                    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const items = Array.from(e.currentTarget.querySelectorAll('a, button'));
+                      const idx = items.indexOf(document.activeElement);
+                      const next = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
+                      items[next]?.focus();
+                    }
+                  }}>
                     <button className="oauth-btn-inline google-btn" onClick={loginWithGoogle}>
                       <svg viewBox="0 0 24 24" width="18" height="18">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -1869,14 +1970,15 @@ function AppContent() {
                 </>
               )}
             </div>
-          )}
+          );
+          })()}
           </nav>
         </div>
       </header>
 
       {/* Results tab content - only render when active to avoid processing 300+ tiles on every re-render */}
       {activeTab === 'results' && (
-        <main className="main-content-full">
+        <main id="main-content" className="main-content-full" tabIndex="-1" role="tabpanel">
           <ResultsTab
             viewportFilteredDestinations={viewportFilteredDestinations}
             viewportFilteredLinearFeatures={viewportFilteredLinearFeatures}
@@ -1904,7 +2006,7 @@ function AppContent() {
 
       {/* News tab content */}
       {activeTab === 'news' && (
-        <main className="main-content-full" style={{ display: 'flex', flexDirection: 'column' }}>
+        <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkNews
           isAdmin={isAdmin}
           filteredDestinations={viewportFilteredDestinations}
@@ -1935,7 +2037,7 @@ function AppContent() {
 
       {/* Events tab content */}
       {activeTab === 'events' && (
-        <main className="main-content-full" style={{ display: 'flex', flexDirection: 'column' }}>
+        <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkEvents
           isAdmin={isAdmin}
           filteredDestinations={viewportFilteredDestinations}
@@ -1960,26 +2062,29 @@ function AppContent() {
 
       {/* About tab content */}
       {activeTab === 'about' && (
-        <main className="main-content-full">
+        <main id="main-content" className="main-content-full" tabIndex="-1">
           <AboutPage onStartTour={startTour} />
         </main>
       )}
 
       {activeTab === 'settings' && (
-        <main className="settings-content">
+        <main id="main-content" className="settings-content" tabIndex="-1" role="tabpanel">
           <div className="settings-panel">
             {isAdmin ? (
             <>
+            <div className="settings-tabs-wrapper" onKeyDown={(e) => handleRovingKeyDown(e, '.settings-tab-btn')}>
             <nav className="settings-tabs">
               <button
                 className={`settings-tab-btn ${settingsTab === 'general' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('general')}
+                tabIndex={settingsTab === 'general' ? 0 : -1}
               >
                 General
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'newsletter' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('newsletter')}
+                tabIndex={settingsTab === 'newsletter' ? 0 : -1}
               >
                 Newsletter
               </button>
@@ -1988,36 +2093,42 @@ function AppContent() {
               <button
                 className={`settings-tab-btn ${settingsTab === 'users' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('users')}
+                tabIndex={settingsTab === 'users' ? 0 : -1}
               >
                 Users
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'themes' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('themes')}
+                tabIndex={settingsTab === 'themes' ? 0 : -1}
               >
                 Themes
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'activities' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('activities')}
+                tabIndex={settingsTab === 'activities' ? 0 : -1}
               >
                 Activities
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'eras' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('eras')}
+                tabIndex={settingsTab === 'eras' ? 0 : -1}
               >
                 Eras
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'surfaces' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('surfaces')}
+                tabIndex={settingsTab === 'surfaces' ? 0 : -1}
               >
                 Surfaces
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'icons' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('icons')}
+                tabIndex={settingsTab === 'icons' ? 0 : -1}
               >
                 Icons
               </button>
@@ -2026,6 +2137,7 @@ function AppContent() {
               <button
                 className={`settings-tab-btn ${settingsTab === 'moderation' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('moderation')}
+                tabIndex={settingsTab === 'moderation' ? 0 : -1}
                 style={{ position: 'relative' }}
               >
                 Moderation
@@ -2044,22 +2156,26 @@ function AppContent() {
               <button
                 className={`settings-tab-btn ${settingsTab === 'jobs' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('jobs')}
+                tabIndex={settingsTab === 'jobs' ? 0 : -1}
               >
                 Jobs
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'dataCollection' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('dataCollection')}
+                tabIndex={settingsTab === 'dataCollection' ? 0 : -1}
               >
                 Data Collection
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
                 onClick={() => setSettingsTab('google')}
+                tabIndex={settingsTab === 'google' ? 0 : -1}
               >
                 Google
               </button>
             </nav>
+            </div>
 
             <div className="settings-tab-content">
               {settingsTab === 'general' && <GeneralSettings />}
@@ -2097,7 +2213,10 @@ function AppContent() {
 
       {/* Map content - always mounted and visible to Leaflet, layered below Results tab when not active */}
       <main
+        id={(activeTab === 'view' || activeTab === 'edit') ? 'main-content' : undefined}
         className={`main-content ${editMode ? 'edit-mode' : ''}`}
+        tabIndex="-1"
+               aria-hidden={(activeTab !== 'view' && activeTab !== 'edit') ? 'true' : undefined}
         style={{
           display: 'flex',
           zIndex: activeTab === 'view' ? '1' : '-1',

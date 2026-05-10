@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { EventCardBody } from './NewsEventsShared';
+import { handleRovingKeyDown } from '../utils/a11yUtils';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -197,16 +198,18 @@ END:VCALENDAR`;
     return (
       <div className="park-events-tab">
         <h2>{tabLabel}</h2>
-        <div className="results-subtabs">
+        <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
           <button
             className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('future')}
+            tabIndex={activeSubTab === 'future' ? 0 : -1}
           >
             Future
           </button>
           <button
             className={`results-subtab ${activeSubTab === 'past' ? 'active' : ''}`}
             onClick={() => setActiveSubTab('past')}
+            tabIndex={activeSubTab === 'past' ? 0 : -1}
           >
             Past
           </button>
@@ -233,16 +236,18 @@ END:VCALENDAR`;
       </div>
 
       {/* Sub-tabs */}
-      <div className="results-subtabs">
+      <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
         <button
           className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('future')}
+          tabIndex={activeSubTab === 'future' ? 0 : -1}
         >
           Future
         </button>
         <button
           className={`results-subtab ${activeSubTab === 'past' ? 'active' : ''}`}
           onClick={() => setActiveSubTab('past')}
+          tabIndex={activeSubTab === 'past' ? 0 : -1}
         >
           Past
         </button>
@@ -292,7 +297,16 @@ END:VCALENDAR`;
                 : activeSubTab === 'future' ? 'No upcoming events found.' : 'No past events found.'}
             </p>
           ) : (
-          <div className="park-events-list">
+          <div className="park-events-list" onKeyDown={(e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+              const items = Array.from(e.currentTarget.querySelectorAll('.park-event-item'));
+              const idx = items.indexOf(e.target.closest('.park-event-item'));
+              if (idx === -1) return;
+              e.preventDefault();
+              const next = e.key === 'ArrowDown' ? Math.min(idx + 1, items.length - 1) : Math.max(idx - 1, 0);
+              items[next].focus();
+            }
+          }}>
             {filteredEvents.map(item => (
           <EventCardBody
             key={item.id}

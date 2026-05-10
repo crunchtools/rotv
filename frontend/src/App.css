@@ -1,3 +1,27 @@
+/* === Accessibility === */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: #2d5016;
+  color: white;
+  padding: 8px 16px;
+  z-index: 100000;
+  font-size: 0.9rem;
+  text-decoration: none;
+  border-radius: 0 0 4px 0;
+  transition: top 0.2s;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+:focus-visible {
+  outline: 3px solid #4a7c23;
+  outline-offset: 2px;
+}
+
 :root {
   --header-height: 108px; /* Desktop header height */
   --banner-height: 40px; /* Edit mode banner height */
@@ -87,7 +111,7 @@ body {
   padding: 0.5rem 1.25rem;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
@@ -98,6 +122,12 @@ body {
 .tab-btn:hover {
   background: rgba(255, 255, 255, 0.1);
   color: white;
+}
+
+.tab-btn:focus-visible,
+.tab-btn.kbd-focus {
+  outline: 2px solid white;
+  outline-offset: 2px;
 }
 
 .tab-btn.active {
@@ -258,7 +288,7 @@ body {
 
 .user-email-inline {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
 }
 
 .admin-badge-inline {
@@ -382,7 +412,7 @@ body {
   border-radius: 4px;
   font-size: 0.85rem;
   cursor: pointer;
-  color: #666;
+  color: #525252;
 }
 
 .clear-filters:hover {
@@ -392,7 +422,7 @@ body {
 .result-count {
   margin-left: auto;
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
 }
 
 /* Main Content */
@@ -635,7 +665,7 @@ body {
   background: #f0f0f0;
   border-radius: 3px;
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 0.5rem;
 }
 
@@ -927,7 +957,7 @@ body {
 .share-link-section label {
   display: block;
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 0.5rem;
 }
 
@@ -1035,7 +1065,7 @@ body {
 
 .associations-modal-description {
   margin: 0 0 1rem 0;
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
 }
 
@@ -1048,7 +1078,7 @@ body {
 .associations-modal-empty {
   padding: 2rem;
   text-align: center;
-  color: #999;
+  color: #767676;
 }
 
 /* Associations Tab View - shows button to open modal */
@@ -1059,7 +1089,7 @@ body {
 
 .associations-tab-view p {
   margin-bottom: 1rem;
-  color: #666;
+  color: #525252;
 }
 
 .btn-view-associations {
@@ -1451,7 +1481,7 @@ body {
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 500;
-  color: #666;
+  color: #525252;
   transition: all 0.2s;
 }
 
@@ -1485,7 +1515,7 @@ body {
 .sidebar-tab-empty {
   padding: 2rem 1.5rem;
   text-align: center;
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -1720,7 +1750,7 @@ body {
 
 .poi-event-location {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   margin: 0.25rem 0;
 }
 
@@ -1953,7 +1983,7 @@ body {
   margin-left: auto;
   background: transparent;
   border: 1px solid #ccc;
-  color: #999;
+  color: #767676;
   width: 22px;
   height: 22px;
   border-radius: 50%;
@@ -2001,7 +2031,7 @@ body {
 }
 
 .tab-subtitle {
-  color: #666;
+  color: #525252;
   font-size: 0.85rem;
   margin: 0 0 1rem 0;
 }
@@ -2136,7 +2166,7 @@ body {
 
 .park-event-location {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   margin: 0.5rem 0;
 }
 
@@ -2184,7 +2214,7 @@ body {
 
 .add-calendar-btn.ics:hover {
   background: #f5f5f5;
-  border-color: #999;
+  border-color: #767676;
 }
 
 /* Settings Tab */
@@ -2204,7 +2234,7 @@ body {
 
 .settings-tab li {
   margin: 0.5rem 0;
-  color: #666;
+  color: #525252;
 }
 
 /* No POI Selected */
@@ -2291,7 +2321,7 @@ body {
 
 .news-item-id {
   font-size: 0.75rem;
-  color: #aaa;
+  color: #767676;
   font-family: monospace;
   margin-left: 0.25rem;
 }
@@ -2314,14 +2344,14 @@ body {
 
 .event-date {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   font-weight: 500;
   margin-bottom: 0.3rem;
 }
 
 .event-location {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   margin-top: 0.3rem;
 }
 
@@ -2481,7 +2511,7 @@ body {
   cursor: pointer;
   padding: 0;
   line-height: 1;
-  color: #999;
+  color: #767676;
 }
 
 .map-refresh-result .dismiss-btn:hover {
@@ -2616,7 +2646,7 @@ body {
   border: 1px solid #ddd;
   border-radius: 3px;
   cursor: pointer;
-  color: #666;
+  color: #525252;
 }
 
 .boundary-chips-actions button:hover {
@@ -2824,7 +2854,7 @@ body {
     font-size: 0.85rem;
     cursor: pointer;
     text-align: left;
-    color: #666;
+    color: #525252;
   }
 
   .filter-bar-mobile-toggle:hover {
@@ -3074,7 +3104,7 @@ body {
 .selected-file .cancel-btn {
   background: none;
   border: none;
-  color: #999;
+  color: #767676;
   cursor: pointer;
   font-size: 1rem;
   line-height: 1;
@@ -3204,7 +3234,7 @@ body {
 
 .admin-instructions {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 1rem;
   line-height: 1.4;
 }
@@ -3242,7 +3272,7 @@ body {
   gap: 0.5rem;
   margin-bottom: 1rem;
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
 }
 
 .fine-controls .shift-row.small button {
@@ -3266,7 +3296,7 @@ body {
 
 .input-group label {
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   text-transform: uppercase;
 }
 
@@ -3454,6 +3484,11 @@ body {
   border-radius: 4px;
   cursor: pointer;
   transition: background 0.15s, opacity 0.15s;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  color: inherit;
+  text-align: left;
 }
 
 .legend-icon-item:hover {
@@ -3718,13 +3753,13 @@ body {
 
 .user-email {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
 }
 
 .dropdown-hint {
   padding: 0.5rem 1rem;
   font-size: 0.75rem;
-  color: #999;
+  color: #767676;
   font-style: italic;
   border-bottom: 1px solid #eee;
   margin: 0;
@@ -3800,7 +3835,7 @@ body {
   border-radius: 50%;
   font-size: 1rem;
   cursor: pointer;
-  color: #666;
+  color: #525252;
 }
 
 .admin-panel-header .close-btn:hover {
@@ -3818,7 +3853,7 @@ body {
 
 .admin-panel-content ul {
   margin-left: 1.5rem;
-  color: #666;
+  color: #525252;
 }
 
 .admin-panel-content li {
@@ -3941,7 +3976,7 @@ body {
 .coord-label {
   display: block;
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 0.25rem;
@@ -3966,12 +4001,12 @@ body {
 
 .coord-arrow {
   font-size: 1.25rem;
-  color: #999;
+  color: #767676;
 }
 
 .coord-diff {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 1rem;
   text-align: center;
 }
@@ -3993,7 +4028,7 @@ body {
 .coord-confirm-buttons .cancel-btn {
   background: #f5f5f5;
   border: 1px solid #ddd;
-  color: #666;
+  color: #525252;
 }
 
 .coord-confirm-buttons .cancel-btn:hover {
@@ -4072,7 +4107,7 @@ body {
 .edit-buttons-footer .cancel-btn {
   background: #f5f5f5;
   border: 1px solid #ddd;
-  color: #666;
+  color: #525252;
 }
 
 .edit-buttons-footer .cancel-btn:hover {
@@ -4182,7 +4217,7 @@ body {
 }
 
 .delete-warning {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin-bottom: 1.5rem;
 }
@@ -4205,7 +4240,7 @@ body {
 .delete-confirm-buttons .cancel-btn {
   background: #f5f5f5;
   border: 1px solid #ddd;
-  color: #666;
+  color: #525252;
 }
 
 .delete-confirm-buttons .cancel-btn:hover {
@@ -4296,7 +4331,7 @@ body {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #666;
+  color: #525252;
   margin-bottom: 0.35rem;
   font-weight: 500;
 }
@@ -4374,7 +4409,7 @@ body {
 .edit-buttons .cancel-btn {
   background: #f5f5f5;
   border: 1px solid #ddd;
-  color: #666;
+  color: #525252;
 }
 
 .edit-buttons .cancel-btn:hover {
@@ -4522,7 +4557,7 @@ body {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #666;
+  color: #525252;
   margin-bottom: 0.35rem;
   font-weight: 500;
 }
@@ -4581,7 +4616,7 @@ body {
 .form-buttons .cancel-btn {
   background: #f5f5f5;
   border: 1px solid #ddd;
-  color: #666;
+  color: #525252;
 }
 
 .form-buttons .cancel-btn:hover {
@@ -4781,7 +4816,7 @@ body {
   padding: 0.75rem 1.25rem;
   font-size: 0.9rem;
   font-weight: 500;
-  color: #666;
+  color: #525252;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -4890,7 +4925,7 @@ body {
 }
 
 .status-label {
-  color: #666;
+  color: #525252;
   font-weight: 500;
 }
 
@@ -4911,7 +4946,7 @@ body {
 }
 
 .no-status {
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -4956,7 +4991,7 @@ body {
 }
 
 .progress-stat .stat-label {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
 }
 
@@ -4966,7 +5001,7 @@ body {
 }
 
 .progress-hint {
-  color: #666;
+  color: #525252;
   font-size: 0.85rem;
   font-style: italic;
   margin: 0;
@@ -4987,7 +5022,7 @@ body {
 }
 
 .ai-config-section .settings-description {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin-bottom: 16px;
 }
@@ -5035,7 +5070,7 @@ body {
 
 .config-hint {
   font-size: 12px;
-  color: #666;
+  color: #525252;
   margin-top: 4px;
 }
 
@@ -5098,7 +5133,7 @@ body {
 }
 
 .action-info p {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin: 0;
 }
@@ -5333,7 +5368,7 @@ body {
   padding: 0.6rem 1rem;
   border: none;
   background: transparent;
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
@@ -5368,13 +5403,13 @@ body {
 .results-loading {
   padding: 2rem;
   text-align: center;
-  color: #666;
+  color: #525252;
 }
 
 .no-results {
   padding: 2rem;
   text-align: center;
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -5433,7 +5468,7 @@ body {
 .item-card-delete {
   background: none;
   border: none;
-  color: #999;
+  color: #767676;
   font-size: 1.25rem;
   cursor: pointer;
   padding: 0;
@@ -5453,7 +5488,7 @@ body {
 
 .item-card-summary {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   margin: 0.25rem 0;
   line-height: 1.4;
 }
@@ -5517,7 +5552,7 @@ body {
 }
 
 .settings-description {
-  color: #666;
+  color: #525252;
   margin-bottom: 2rem;
   font-size: 0.95rem;
 }
@@ -5576,7 +5611,7 @@ body {
 
 .settings-field input:disabled {
   background: #f5f5f5;
-  color: #999;
+  color: #767676;
   cursor: not-allowed;
 }
 
@@ -5599,7 +5634,7 @@ body {
 }
 
 .general-settings .settings-description {
-  color: #666;
+  color: #525252;
   margin-bottom: 1.5rem;
   font-size: 0.95rem;
   line-height: 1.5;
@@ -5725,7 +5760,7 @@ body {
 .info-list {
   margin: 0;
   padding-left: 1.75rem;
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   line-height: 1.6;
 }
@@ -5735,7 +5770,7 @@ body {
 }
 
 .coming-soon {
-  color: #999;
+  color: #767676;
   font-style: italic;
   padding: 1rem;
   background: #f9f9f9;
@@ -5756,7 +5791,7 @@ body {
 }
 
 .theme-settings .settings-description {
-  color: #666;
+  color: #525252;
   margin-bottom: 1.5rem;
   font-size: 0.95rem;
   line-height: 1.5;
@@ -6635,7 +6670,7 @@ body {
 }
 
 .sync-description {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin-bottom: 1rem;
 }
@@ -6703,7 +6738,7 @@ body {
 
 .sync-status-item label {
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -6808,7 +6843,7 @@ body {
 
 .sync-status-row .sync-status-item label {
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -6922,7 +6957,7 @@ body {
 }
 
 .queue-arrow {
-  color: #999;
+  color: #767676;
   font-size: 0.9rem;
 }
 
@@ -6931,7 +6966,7 @@ body {
   padding: 0.15rem 0.4rem;
   border-radius: 3px;
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   font-weight: 500;
   white-space: nowrap;
 }
@@ -7011,7 +7046,7 @@ body {
 .button-description {
   margin: 0.4rem 0 0 0;
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   line-height: 1.3;
 }
 
@@ -7050,7 +7085,7 @@ body {
 
 .clear-hint {
   font-size: 0.75rem;
-  color: #999;
+  color: #767676;
 }
 
 .sync-btn.sync-now-btn {
@@ -7080,7 +7115,7 @@ body {
 
 .sync-full-label {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
 }
 
 .sync-btn-small {
@@ -7118,7 +7153,7 @@ body {
 
 .sync-btn-small.clear-btn {
   background: #f5f5f5;
-  color: #666;
+  color: #525252;
   border: 1px solid #ddd;
 }
 
@@ -7128,13 +7163,13 @@ body {
 
 .sync-btn-small.disconnect-btn {
   background: #fff;
-  color: #666;
+  color: #525252;
   border: 1px solid #ddd;
 }
 
 .sync-btn-small.disconnect-btn:hover:not(:disabled) {
   background: #f5f5f5;
-  border-color: #999;
+  border-color: #767676;
 }
 
 /* Legacy sync-action-group (kept for backwards compatibility) */
@@ -7153,7 +7188,7 @@ body {
 
 .action-hint {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 0.75rem;
 }
 
@@ -7189,7 +7224,7 @@ body {
 
 .sync-btn.clear-btn {
   background: #f5f5f5;
-  color: #666;
+  color: #525252;
   border: 1px solid #ddd;
 }
 
@@ -7264,7 +7299,7 @@ body {
 
 .spreadsheet-field label {
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -7316,7 +7351,7 @@ body {
 
 .sync-btn-small.disconnect-btn {
   background: #f5f5f5;
-  color: #666;
+  color: #525252;
   border: 1px solid #ddd;
 }
 
@@ -7425,7 +7460,7 @@ body {
 /* Drive ID Editing */
 .drive-info-description {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 1rem;
 }
 
@@ -7664,7 +7699,7 @@ body {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #666;
+  color: #525252;
 }
 
 .queue-item.queue-header span {
@@ -7699,12 +7734,12 @@ body {
 }
 
 .queue-table {
-  color: #666;
+  color: #525252;
   font-size: 0.8rem;
 }
 
 .queue-time {
-  color: #999;
+  color: #767676;
   font-size: 0.75rem;
   white-space: nowrap;
 }
@@ -7770,7 +7805,7 @@ body {
 
 .sync-no-spreadsheet .auth-hint {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   font-style: italic;
   margin-top: 0.5rem;
 }
@@ -7844,7 +7879,7 @@ body {
   border-radius: 8px;
   margin-bottom: 1rem;
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
 }
 
 .sync-permission-info code {
@@ -7920,7 +7955,7 @@ body {
 
 .connect-hint {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 0.75rem;
 }
 
@@ -7978,7 +8013,7 @@ body {
 .import-hint {
   margin: 1rem 0 0 0;
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
 }
 
 /* Danger Zone */
@@ -8004,7 +8039,7 @@ body {
 .danger-hint {
   margin: 1rem 0 0 0;
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
 }
 
 .sync-btn.danger-btn {
@@ -8035,7 +8070,7 @@ body {
 }
 
 .ai-description {
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin-bottom: 1rem;
 }
@@ -8100,7 +8135,7 @@ body {
 
 .section-description {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   margin-bottom: 1rem;
   line-height: 1.5;
 }
@@ -8162,7 +8197,7 @@ body {
 
 .prompt-textarea:disabled {
   background: #f5f5f5;
-  color: #666;
+  color: #525252;
 }
 
 /* AI Generate Buttons in Sidebar */
@@ -8273,7 +8308,7 @@ body {
   border: none;
   font-size: 1.5rem;
   cursor: pointer;
-  color: #666;
+  color: #525252;
   padding: 0;
   line-height: 1;
 }
@@ -8284,7 +8319,7 @@ body {
 
 .prompt-editor-hint {
   padding: 1rem 1.25rem 0.5rem;
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin: 0;
 }
@@ -8292,7 +8327,7 @@ body {
 .prompt-loading {
   padding: 3rem 1.25rem;
   text-align: center;
-  color: #666;
+  color: #525252;
 }
 
 .prompt-editor-textarea {
@@ -8315,7 +8350,7 @@ body {
 
 .prompt-editor-textarea:disabled {
   background: #f5f5f5;
-  color: #999;
+  color: #767676;
 }
 
 .ai-error-inline {
@@ -8610,7 +8645,7 @@ body {
 .field-hint {
   font-weight: 400;
   font-size: 0.75rem;
-  color: #999;
+  color: #767676;
   margin-left: 0.25rem;
 }
 
@@ -8755,7 +8790,7 @@ body {
 }
 
 .activity-drag-handle {
-  color: #999;
+  color: #767676;
   font-size: 1rem;
   cursor: grab;
   user-select: none;
@@ -8764,7 +8799,7 @@ body {
 }
 
 .activity-drag-handle:hover {
-  color: #666;
+  color: #525252;
 }
 
 .activity-item.dragging .activity-drag-handle {
@@ -8835,7 +8870,7 @@ body {
 .no-activities {
   padding: 1rem;
   text-align: center;
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -8876,7 +8911,7 @@ body {
 
 .activities-arrow {
   margin-left: 0.5rem;
-  color: #666;
+  color: #525252;
   font-size: 0.8rem;
 }
 
@@ -8923,7 +8958,7 @@ body {
 .activities-empty {
   padding: 1rem;
   text-align: center;
-  color: #666;
+  color: #525252;
   font-size: 0.85rem;
 }
 
@@ -8997,7 +9032,7 @@ body {
 }
 
 .no-boundaries {
-  color: #666;
+  color: #525252;
   font-style: italic;
   padding: 1rem;
   text-align: center;
@@ -9056,7 +9091,7 @@ body {
 }
 
 .boundary-field span:first-child {
-  color: #666;
+  color: #525252;
   font-weight: 500;
 }
 
@@ -9079,7 +9114,7 @@ body {
 .color-value {
   font-family: monospace;
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
 }
 
 /* Eras Settings */
@@ -9181,7 +9216,7 @@ body {
 }
 
 .era-drag-handle {
-  color: #999;
+  color: #767676;
   font-size: 1rem;
   cursor: grab;
   user-select: none;
@@ -9190,7 +9225,7 @@ body {
 }
 
 .era-drag-handle:hover {
-  color: #666;
+  color: #525252;
 }
 
 .era-item.dragging .era-drag-handle {
@@ -9211,7 +9246,7 @@ body {
 
 .era-years {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -9307,7 +9342,7 @@ body {
 .no-eras {
   padding: 1rem;
   text-align: center;
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -9411,7 +9446,7 @@ body {
 }
 
 .surface-drag-handle {
-  color: #999;
+  color: #767676;
   font-size: 1rem;
   cursor: grab;
   user-select: none;
@@ -9420,7 +9455,7 @@ body {
 }
 
 .surface-drag-handle:hover {
-  color: #666;
+  color: #525252;
 }
 
 .surface-item.dragging .surface-drag-handle {
@@ -9523,7 +9558,7 @@ body {
 .no-surfaces {
   padding: 1rem;
   text-align: center;
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -9612,7 +9647,7 @@ body {
 }
 
 .icon-drag-handle {
-  color: #999;
+  color: #767676;
   font-size: 1rem;
   cursor: grab;
   user-select: none;
@@ -9622,7 +9657,7 @@ body {
 }
 
 .icon-drag-handle:hover {
-  color: #666;
+  color: #525252;
 }
 
 .icon-preview-container {
@@ -9677,7 +9712,7 @@ body {
 .keywords-label,
 .activities-label {
   font-size: 0.75rem;
-  color: #666;
+  color: #525252;
   font-weight: 500;
 }
 
@@ -9874,7 +9909,7 @@ body {
 .no-icons {
   padding: 1rem;
   text-align: center;
-  color: #666;
+  color: #525252;
   font-style: italic;
 }
 
@@ -9946,7 +9981,7 @@ body {
   background: none;
   border: none;
   font-size: 1.5rem;
-  color: #666;
+  color: #525252;
   cursor: pointer;
   padding: 0;
   line-height: 1;
@@ -10084,7 +10119,7 @@ body {
 
 .custom-color label {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
 }
 
 .custom-color input {
@@ -10156,7 +10191,7 @@ body {
 }
 
 .preview-placeholder {
-  color: #999;
+  color: #767676;
   font-size: 0.9rem;
   text-align: center;
 }
@@ -10183,7 +10218,7 @@ body {
 
 .size-label {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
 }
 
 .preview-sizes .svg-preview.size-32 svg {
@@ -10506,7 +10541,7 @@ body {
   gap: 0.5rem;
   margin-top: 0.75rem;
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
 }
 
 .current-color-display .color-preview {
@@ -10864,7 +10899,7 @@ body {
 
 .poi-nav-position {
   font-size: 0.9rem;
-  color: #666;
+  color: #525252;
   font-weight: 500;
   min-width: 80px;
   text-align: center;
@@ -10887,7 +10922,7 @@ body {
   padding: 0.75rem 1.5rem;
   font-size: 0.95rem;
   font-weight: 500;
-  color: #666;
+  color: #525252;
   background: transparent;
   border: none;
   cursor: pointer;
@@ -11097,7 +11132,7 @@ img.type-filter-icon {
 
 .results-count {
   font-size: 0.85rem;
-  color: #666;
+  color: #525252;
   font-weight: 500;
 }
 
@@ -11311,7 +11346,7 @@ img.type-filter-icon {
   background: #f0f0f0;
   border-radius: 4px;
   font-size: 0.65rem;
-  color: #666;
+  color: #525252;
 }
 
 .results-tile-difficulty {
@@ -11340,7 +11375,7 @@ img.type-filter-icon {
 /* Tile description */
 .results-tile-description {
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
   line-height: 1.4;
 }
 
@@ -11362,7 +11397,7 @@ img.type-filter-icon {
 
 .results-tile-status-info .status-updated {
   font-size: 0.75rem;
-  color: #999;
+  color: #767676;
 }
 
 /* Empty state */
@@ -11389,7 +11424,7 @@ img.type-filter-icon {
 
 .results-tab-empty-hint {
   font-size: 0.9rem;
-  color: #666;
+  color: #525252;
 }
 
 /* Mobile responsive */
@@ -11445,7 +11480,7 @@ img.type-filter-icon {
 
 .associations-description {
   margin-bottom: 1rem;
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
 }
 
@@ -11632,7 +11667,7 @@ img.type-filter-icon {
   border: none;
   font-size: 2rem;
   cursor: pointer;
-  color: #666;
+  color: #525252;
   line-height: 1;
   padding: 0;
   width: 32px;
@@ -11765,7 +11800,7 @@ img.type-filter-icon {
 .virtual-poi-creator-modal .empty-message {
   padding: 2rem;
   text-align: center;
-  color: #666;
+  color: #525252;
 }
 
 .virtual-poi-creator-modal .modal-footer {
@@ -12500,7 +12535,7 @@ svg.leaflet-zoom-animated {
 .trail-status-updated {
   margin: 0.25rem 0 0;
   font-size: 0.8rem;
-  color: #999;
+  color: #767676;
 }
 
 .collect-status-inline-btn {
@@ -12590,7 +12625,7 @@ svg.leaflet-zoom-animated {
   gap: 1rem;
   margin-top: 0.75rem;
   font-size: 0.8rem;
-  color: #666;
+  color: #525252;
 }
 
 .trail-meta-item {
@@ -12617,7 +12652,7 @@ svg.leaflet-zoom-animated {
 .results-tab-empty-inline {
   text-align: center;
   padding: 2rem;
-  color: #666;
+  color: #525252;
   font-size: 1rem;
 }
 
@@ -13496,7 +13531,7 @@ svg.leaflet-zoom-animated {
   flex-wrap: wrap;
   gap: 12px;
   align-items: center;
-  color: #666;
+  color: #525252;
   font-size: 0.9rem;
   margin-bottom: 20px;
 }
@@ -13537,7 +13572,7 @@ svg.leaflet-zoom-animated {
   padding-top: 16px;
   border-top: 1px solid #eee;
   font-size: 0.9rem;
-  color: #666;
+  color: #525252;
 }
 
 .permalink-additional-sources a {

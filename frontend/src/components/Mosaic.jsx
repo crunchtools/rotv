@@ -37,8 +37,9 @@ function Mosaic({ media, allMedia, poiId, user, onMediaUpdate }) {
             onClick={() => handleImageClick(index)}
             role="button"
             tabIndex={0}
-            onKeyPress={(e) => {
+            onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
                 handleImageClick(index);
               }
             }}

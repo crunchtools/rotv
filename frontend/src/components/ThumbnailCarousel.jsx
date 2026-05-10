@@ -129,6 +129,7 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
               ref={isSelected ? selectedRef : null}
               className={`thumbnail-item ${isSelected ? 'selected' : ''}`}
               onClick={() => handleThumbnailClick(index)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleThumbnailClick(index); }}}
               role="button"
               tabIndex={0}
               aria-label={`Navigate to ${poi.name}`}
