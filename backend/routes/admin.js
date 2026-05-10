@@ -556,6 +556,33 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  router.post('/settings/github-api-token/test', isAdmin, async (req, res) => {
+    try {
+      const result = await pool.query("SELECT value FROM admin_settings WHERE key = 'github_api_token'");
+      const token = result.rows[0]?.value;
+      if (!token) {
+        return res.json({ success: false, message: 'GitHub token is not configured' });
+      }
+
+      const response = await fetch('https://api.github.com/repos/crunchtools/rotv', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28'
+        }
+      });
+
+      if (response.ok) {
+        res.json({ success: true, message: 'GitHub token is valid' });
+      } else {
+        res.json({ success: false, message: `GitHub API returned ${response.status}` });
+      }
+    } catch (error) {
+      console.error('Error testing GitHub token:', error);
+      res.status(500).json({ success: false, message: 'Failed to test token', error: error.message });
+    }
+  });
+
   // ============================================
   // AI Content Generation Routes (Gemini)
   // ============================================

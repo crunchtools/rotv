@@ -42,6 +42,7 @@ function DataCollectionSettings() {
   const [githubToken, setGithubToken] = useState('');
   const [githubTokenSet, setGithubTokenSet] = useState(false);
   const [githubSaving, setGithubSaving] = useState(false);
+  const [githubTesting, setGithubTesting] = useState(false);
   const [githubResult, setGithubResult] = useState(null);
 
   // Playwright status state
@@ -323,6 +324,20 @@ function DataCollectionSettings() {
       } else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
     } catch (err) { setGithubResult({ type: 'error', message: `Save failed: ${err.message}` }); }
     finally { setGithubSaving(false); }
+  };
+
+  const handleTestGithubToken = async () => {
+    setGithubTesting(true); setGithubResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/github-api-token/test', { method: 'POST', credentials: 'include' });
+      const data = await response.json();
+      if (data.success) {
+        setGithubResult({ type: 'success', message: 'Test passed' });
+      } else {
+        setGithubResult({ type: 'error', message: data.message || 'Test failed' });
+      }
+    } catch (err) { setGithubResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    finally { setGithubTesting(false); }
   };
 
   const handleSaveTwitterCredentials = async () => {
@@ -869,7 +884,7 @@ function DataCollectionSettings() {
         </div>
 
         {/* GitHub API Token */}
-        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e0e0e0' }}>
+        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e0e0e0' , paddingBottom: '1.5rem' }}>
           <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>GitHub</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
             <span className={`status-indicator ${githubTokenSet ? 'configured' : 'not-configured'}`}></span>
@@ -905,6 +920,10 @@ function DataCollectionSettings() {
             <button className="action-btn primary" onClick={handleSaveGithubToken} disabled={githubSaving || !githubToken.trim()}
               style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
               {githubSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button className="action-btn secondary" onClick={handleTestGithubToken} disabled={githubTesting || !githubTokenSet}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {githubTesting ? 'Testing...' : 'Test'}
             </button>
           </div>
           <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
