@@ -1,0 +1,253 @@
+/* Feedback Modal Overlay */
+.feedback-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: feedbackFadeIn 0.2s ease-in-out;
+}
+
+@keyframes feedbackFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* Modal Container */
+.feedback-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 90%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.feedback-modal h2 {
+  margin: 0 0 0.25rem 0;
+  color: #2d5016;
+  font-size: 1.4rem;
+}
+
+.feedback-modal .feedback-subtitle {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem 0;
+}
+
+/* Close Button */
+.feedback-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #999;
+  cursor: pointer;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background-color 0.2s;
+}
+
+.feedback-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* Form Elements */
+.feedback-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.feedback-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.feedback-field label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.feedback-field .field-optional {
+  font-weight: 400;
+  color: #999;
+  font-size: 0.8rem;
+}
+
+/* Radio Group */
+.feedback-radio-group {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.feedback-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.feedback-radio-label:hover {
+  border-color: #4a7c2e;
+}
+
+.feedback-radio-label.selected {
+  border-color: #2d5016;
+  background: #f0f7eb;
+}
+
+.feedback-radio-label input[type="radio"] {
+  accent-color: #2d5016;
+}
+
+/* Text Inputs */
+.feedback-form input[type="text"],
+.feedback-form input[type="email"],
+.feedback-form textarea {
+  padding: 0.6rem 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+
+.feedback-form input[type="text"]:focus,
+.feedback-form input[type="email"]:focus,
+.feedback-form textarea:focus {
+  outline: none;
+  border-color: #4a7c2e;
+}
+
+.feedback-form textarea {
+  resize: vertical;
+  min-height: 100px;
+}
+
+.feedback-char-count {
+  font-size: 0.75rem;
+  color: #999;
+  text-align: right;
+}
+
+.feedback-char-count.near-limit {
+  color: #c0392b;
+}
+
+/* Honeypot — visually hidden */
+.feedback-hp {
+  position: absolute;
+  left: -9999px;
+  top: -9999px;
+  opacity: 0;
+  height: 0;
+  width: 0;
+  overflow: hidden;
+}
+
+/* Submit Button */
+.feedback-submit {
+  padding: 0.75rem 1.5rem;
+  background: #2d5016;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.feedback-submit:hover:not(:disabled) {
+  background: #3a6a1e;
+}
+
+.feedback-submit:disabled {
+  background: #999;
+  cursor: not-allowed;
+}
+
+/* Error Message */
+.feedback-error {
+  background: #fef2f2;
+  color: #c0392b;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  border: 1px solid #fecaca;
+}
+
+/* Success State */
+.feedback-success {
+  text-align: center;
+  padding: 1rem 0;
+}
+
+.feedback-success .success-icon {
+  font-size: 3rem;
+  margin-bottom: 0.75rem;
+}
+
+.feedback-success h3 {
+  color: #2d5016;
+  margin: 0 0 0.5rem 0;
+}
+
+.feedback-success p {
+  color: #666;
+  font-size: 0.9rem;
+  margin: 0 0 1.5rem 0;
+}
+
+.feedback-success .feedback-done-btn {
+  padding: 0.6rem 2rem;
+  background: #2d5016;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.feedback-success .feedback-done-btn:hover {
+  background: #3a6a1e;
+}
+
+/* Mobile */
+@media (max-width: 600px) {
+  .feedback-modal {
+    width: 95%;
+    padding: 1.5rem;
+  }
+
+  .feedback-radio-group {
+    flex-direction: column;
+  }
+}

@@ -15,6 +15,7 @@ import { configurePassport } from './config/passport.js';
 import authRoutes from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createNewsletterRouter } from './routes/newsletter.js';
+import { createFeedbackRouter } from './routes/feedback.js';
 import { isAuthenticated } from './middleware/auth.js';
 import {
   initJobScheduler,
@@ -179,6 +180,9 @@ app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 
 // Mount newsletter routes
 app.use('/api/newsletter', createNewsletterRouter(pool));
+
+// Mount feedback routes
+app.use('/api/feedback', createFeedbackRouter(pool));
 
 // Import trails and rivers from GeoJSON files into unified pois table
 async function importGeoJSONFeatures(client) {
