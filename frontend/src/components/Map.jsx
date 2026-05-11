@@ -44,6 +44,9 @@ function createIconsFromConfig(iconConfig) {
 const PARK_CENTER = [41.26, -81.55];
 const DEFAULT_ZOOM = 11;
 
+// Tooltip hover delay — prevents rapid-fire popups when sweeping mouse across markers
+const TOOLTIP_HOVER_DELAY = 250; // ms
+
 function Legend({
   // Layer toggles
   showTrails, onToggleTrails,
@@ -416,6 +419,50 @@ function MapMoveTracker({ onMapMove }) {
   return null;
 }
 
+// Hide all tooltips when zoom starts so the map feels clean during zoom
+function ZoomTooltipHider() {
+  const map = useMap();
+  const hiddenPermanentRef = useRef([]);
+
+  useEffect(() => {
+    if (!map) return;
+
+    const hideTooltips = () => {
+      hiddenPermanentRef.current = [];
+      map.eachLayer((layer) => {
+        if (layer.getTooltip && layer.getTooltip() && layer.isTooltipOpen()) {
+          const tooltip = layer.getTooltip();
+          if (tooltip.options.permanent) {
+            // Hide permanent tooltips via opacity (can't close them)
+            const el = tooltip.getElement();
+            if (el) el.style.opacity = '0';
+            hiddenPermanentRef.current.push(tooltip);
+          } else {
+            layer.closeTooltip();
+          }
+        }
+      });
+    };
+
+    const restorePermanent = () => {
+      hiddenPermanentRef.current.forEach((tooltip) => {
+        const el = tooltip.getElement();
+        if (el) el.style.opacity = '0.95';
+      });
+      hiddenPermanentRef.current = [];
+    };
+
+    map.on('zoomstart', hideTooltips);
+    map.on('zoomend', restorePermanent);
+    return () => {
+      map.off('zoomstart', hideTooltips);
+      map.off('zoomend', restorePermanent);
+    };
+  }, [map]);
+
+  return null;
+}
+
 // Component to track which POIs are visible in the current map viewport
 function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries }) {
   const map = useMap();
@@ -765,6 +812,7 @@ function createViewSelectedIcon(iconUrl) {
 function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDragEnd, _mapMoveCount, hasSelection }) {
   const markerRef = useRef(null);
   const map = useMap();
+  const hoverTimerRef = useRef(null);
 
   // Calculate best tooltip direction based on marker position relative to map bounds
   // For selected markers, use a stable direction to prevent flickering
@@ -812,6 +860,27 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
       if (marker) {
         const { lat, lng } = marker.getLatLng();
         onDragEnd(dest, lat, lng);
+      }
+    },
+    // Hover delay: hide tooltip on open, reposition after images load, then fade in
+    tooltipopen: (e) => {
+      if (!isSelected) {
+        const el = e.tooltip.getElement();
+        if (el) el.style.opacity = '0';
+        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = setTimeout(() => {
+          // Recalculate position — images may have loaded during delay, changing dimensions
+          e.tooltip.update();
+          const el2 = e.tooltip.getElement();
+          if (el2) el2.style.opacity = '0.95';
+          hoverTimerRef.current = null;
+        }, TOOLTIP_HOVER_DELAY);
+      }
+    },
+    tooltipclose: () => {
+      if (hoverTimerRef.current) {
+        clearTimeout(hoverTimerRef.current);
+        hoverTimerRef.current = null;
       }
     }
   };
@@ -1252,6 +1321,16 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                       }
                     });
 
+                    // Highlight on hover
+                    if (!isSelected) {
+                      layer.on('mouseover', () => {
+                        layer.setStyle({ color: 'rgba(0, 102, 204, 0.35)', weight: 8 });
+                      });
+                      layer.on('mouseout', () => {
+                        layer.setStyle({ color: 'transparent', weight: 20 });
+                      });
+                    }
+
                     layer.on('click', (e) => {
                       // Stop propagation to prevent MapClickHandler from clearing selection
                       L.DomEvent.stopPropagation(e);
@@ -1282,6 +1361,25 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                         sticky: !isSelected,
                         className: `destination-tooltip ${isSelected ? 'selected-tooltip' : ''}`
                       });
+
+                      // Hover delay for non-selected linear features
+                      if (!isSelected) {
+                        let hoverTimer = null;
+                        layer.on('tooltipopen', (e) => {
+                          const el = e.tooltip.getElement();
+                          if (el) el.style.opacity = '0';
+                          if (hoverTimer) clearTimeout(hoverTimer);
+                          hoverTimer = setTimeout(() => {
+                            e.tooltip.update();
+                            const el2 = e.tooltip.getElement();
+                            if (el2) el2.style.opacity = '0.95';
+                            hoverTimer = null;
+                          }, TOOLTIP_HOVER_DELAY);
+                        });
+                        layer.on('tooltipclose', () => {
+                          if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+                        });
+                      }
                     }
                   }}
                 />
@@ -1322,6 +1420,16 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                     handleLinearFeatureClick(feature);
                   });
 
+                  // Highlight on hover
+                  if (!isSelected) {
+                    layer.on('mouseover', () => {
+                      layer.setStyle({ color: 'rgba(0, 102, 204, 0.35)', weight: 8 });
+                    });
+                    layer.on('mouseout', () => {
+                      layer.setStyle({ color: 'transparent', weight: 20 });
+                    });
+                  }
+
                   // Only show tooltip if this feature is selected OR nothing is selected
                   const hasAnySelection = selectedDestination || selectedLinearFeature;
                   if (isSelected || !hasAnySelection) {
@@ -1349,6 +1457,24 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
                       sticky: !isSelected,
                       className: `destination-tooltip ${isSelected ? 'selected-tooltip' : ''}`
                     });
+
+                    // Hover delay for non-selected linear features
+                    if (!isSelected) {
+                      let hoverTimer = null;
+                      layer.on('tooltipopen', (e) => {
+                        const el = e.tooltip.getElement();
+                        if (el) el.style.opacity = '0';
+                        if (hoverTimer) clearTimeout(hoverTimer);
+                        hoverTimer = setTimeout(() => {
+                          const el2 = e.tooltip.getElement();
+                          if (el2) el2.style.opacity = '0.95';
+                          hoverTimer = null;
+                        }, TOOLTIP_HOVER_DELAY);
+                      });
+                      layer.on('tooltipclose', () => {
+                        if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+                      });
+                    }
                   }
                 }}
               />
@@ -1385,6 +1511,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
           visibleBoundaries={visibleBoundaries}
         />
         <MapMoveTracker onMapMove={() => setMapMoveCount(c => c + 1)} />
+        <ZoomTooltipHider />
         <MapClickHandler
           isAdmin={isAdmin}
           editMode={editMode}

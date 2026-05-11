@@ -576,12 +576,23 @@ body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.3);
 }
 
+/* Instant highlight on marker hover */
+.leaflet-marker-icon:hover {
+  filter: drop-shadow(0 0 6px rgba(0, 102, 204, 0.9)) drop-shadow(0 0 2px rgba(0, 102, 204, 0.9));
+}
+
 /* Hover Tooltip */
 .destination-tooltip {
   min-width: 350px;
   max-width: 450px;
   white-space: normal;
   word-wrap: break-word;
+}
+
+/* Non-selected tooltips start hidden and fade in after hover delay */
+.destination-tooltip:not(.selected-tooltip) {
+  opacity: 0;
+  transition: opacity 150ms ease-in;
 }
 
 .destination-tooltip .leaflet-tooltip-content {
