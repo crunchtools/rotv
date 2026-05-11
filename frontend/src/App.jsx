@@ -118,6 +118,8 @@ function AppContent() {
 
   // Settings sub-tab state: 'general', 'activities', 'news', 'google'
   const [settingsTab, setSettingsTab] = useState('general');
+  // About sub-tab state: 'story', 'tutorial', 'feedback', 'privacy'
+  const [aboutTab, setAboutTab] = useState('story');
   const [jobsExpandTarget, setJobsExpandTarget] = useState(null);
 
   // Moderation queue pending count for badge
@@ -551,6 +553,10 @@ function AppContent() {
       // POI sub-tab path: /:poiSlug/:subTab (e.g., /the-rabbit-hole-akron/news)
       poiSlug = pathParts[0];
       setInitialSidebarTab(pathParts[1] === 'info' ? 'view' : pathParts[1]);
+    } else if (pathParts.length === 2 && pathParts[0] === 'about' && ['story', 'tutorial', 'feedback', 'privacy'].includes(pathParts[1])) {
+      // About sub-tab path: /about/story, /about/tutorial, etc.
+      setActiveTab('about');
+      setAboutTab(pathParts[1]);
     } else if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
       // Main tab path: /news, /events, /results, /edit, /settings
       setActiveTab(pathParts[0]);
@@ -677,6 +683,19 @@ function AppContent() {
     const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
       setActiveTab(pathParts[0]);
+      if (selectedDestination || selectedLinearFeature) {
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        document.title = 'Roots of The Valley';
+      }
+      return;
+    }
+
+    // Handle About sub-tab paths: /about/story, /about/tutorial, /about/feedback, /about/privacy
+    const aboutSubTabs = ['story', 'tutorial', 'feedback', 'privacy'];
+    if (pathParts.length === 2 && pathParts[0] === 'about' && aboutSubTabs.includes(pathParts[1])) {
+      setActiveTab('about');
+      setAboutTab(pathParts[1]);
       if (selectedDestination || selectedLinearFeature) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
@@ -1782,7 +1801,6 @@ function AppContent() {
               { id: 'news', label: 'News', show: true },
               { id: 'events', label: 'Events', show: true },
               { id: 'about', label: 'About', show: true },
-              { id: 'settings', label: 'Settings', show: isAuthenticated },
             ];
             return navTabs.filter(t => t.show).map(tab => {
               const i = idx++;
@@ -1844,26 +1862,11 @@ function AppContent() {
                       <span className="user-email-inline">{user?.email}</span>
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
-                    <a
-                      className="dropdown-item-inline privacy-link-inline"
-                      href="https://buttondown.com/rotv/rss"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      RSS Feed
-                    </a>
-                    <a
-                      className="dropdown-item-inline privacy-link-inline"
-                      href="/privacy"
-                      onClick={(e) => { e.preventDefault(); setShowUserDropdown(false); navigate('/privacy'); }}
-                    >
-                      Privacy Policy
-                    </a>
                     <button
-                      className="dropdown-item-inline privacy-link-inline feedback-link-inline"
-                      onClick={() => { setShowUserDropdown(false); setShowFeedbackForm(true); }}
+                      className="dropdown-item-inline privacy-link-inline"
+                      onClick={() => { setShowUserDropdown(false); handleTabChange('settings'); }}
                     >
-                      Send Feedback
+                      Settings
                     </button>
                     <button
                       className="dropdown-item-inline"
@@ -1931,27 +1934,6 @@ function AppContent() {
                         <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                       </svg>
                       Continue with Facebook
-                    </button>
-                    <a
-                      className="privacy-link-inline"
-                      href="https://buttondown.com/rotv/rss"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      RSS Feed
-                    </a>
-                    <a
-                      className="privacy-link-inline"
-                      href="/privacy"
-                      onClick={(e) => { e.preventDefault(); setShowLoginDropdown(false); navigate('/privacy'); }}
-                    >
-                      Privacy Policy
-                    </a>
-                    <button
-                      className="privacy-link-inline feedback-link-inline"
-                      onClick={() => { setShowLoginDropdown(false); setShowFeedbackForm(true); }}
-                    >
-                      Send Feedback
                     </button>
                   </div>
                 </>
@@ -2050,7 +2032,7 @@ function AppContent() {
       {/* About tab content */}
       {activeTab === 'about' && (
         <main id="main-content" className="main-content-full" tabIndex="-1">
-          <AboutPage onStartTour={startTour} />
+          <AboutPage onStartTour={startTour} aboutTab={aboutTab} onTabChange={setAboutTab} />
         </main>
       )}
 
@@ -2074,6 +2056,13 @@ function AppContent() {
                 tabIndex={settingsTab === 'newsletter' ? 0 : -1}
               >
                 Newsletter
+              </button>
+              <button
+                className={`settings-tab-btn ${settingsTab === 'rss' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('rss')}
+                tabIndex={settingsTab === 'rss' ? 0 : -1}
+              >
+                RSS Feed
               </button>
             </nav>
             <nav className="settings-tabs settings-tabs-row2">
@@ -2189,6 +2178,20 @@ function AppContent() {
               )}
               {settingsTab === 'users' && <UsersSettings />}
               {settingsTab === 'newsletter' && <NewsletterSettings user={user} />}
+              {settingsTab === 'rss' && (
+                <div className="settings-section">
+                  <h3>RSS Feed</h3>
+                  <p>Subscribe to the Roots of the Valley RSS feed to get news and events delivered to your favorite feed reader.</p>
+                  <a
+                    href="https://buttondown.com/rotv/rss"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rss-feed-link"
+                  >
+                    https://buttondown.com/rotv/rss
+                  </a>
+                </div>
+              )}
             </div>
             </>
             ) : (

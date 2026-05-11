@@ -13744,59 +13744,68 @@ button.feedback-link-inline {
 }
 
 /* ===========================================
-   About Page
+   About Page (Sub-tabbed)
    =========================================== */
 
 .about-page {
   overflow-y: auto;
 }
 
-.about-content h2 {
+.about-tab-content {
+  margin-top: 1rem;
+}
+
+/* Story sub-tab */
+.about-story h2 {
   color: #2d6a4f;
-  font-size: 1.6rem;
-  margin-bottom: 0.5rem;
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
+  margin-top: 1.5rem;
 }
 
-.about-tagline {
-  font-size: 1.1rem;
-  color: #555;
-  margin-bottom: 2rem;
+.about-story h2:first-child {
+  margin-top: 0;
+}
+
+.about-story p {
+  color: #444;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+
+.about-story a {
+  color: #2d6a4f;
+  text-decoration: none;
+}
+
+.about-story a:hover {
+  text-decoration: underline;
+}
+
+.about-divider {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 2rem 0;
+}
+
+.about-closing {
   font-style: italic;
+  color: #2d6a4f;
+  font-weight: 500;
+  margin-top: 1.5rem;
 }
 
-.about-section {
-  margin-bottom: 2rem;
-}
-
-.about-section h3 {
-  color: #333;
-  font-size: 1.2rem;
+/* Tutorial sub-tab */
+.about-tutorial h2 {
+  color: #2d6a4f;
+  font-size: 1.4rem;
   margin-bottom: 0.75rem;
 }
 
-.about-section p {
+.about-tutorial p {
   color: #444;
   line-height: 1.6;
-}
-
-.about-features-list {
-  list-style: none;
-  padding: 0;
-}
-
-.about-features-list li {
-  padding: 0.5rem 0;
-  color: #444;
-  line-height: 1.5;
-  border-bottom: 1px solid #eee;
-}
-
-.about-features-list li:last-child {
-  border-bottom: none;
-}
-
-.about-features-list li strong {
-  color: #2d6a4f;
+  margin-bottom: 1rem;
 }
 
 .about-tour-btn {
@@ -13814,23 +13823,75 @@ button.feedback-link-inline {
   background: #1b4332;
 }
 
-.about-credits {
-  border-top: 1px solid #ddd;
-  padding-top: 1.5rem;
+/* Inline feedback form */
+.feedback-inline {
+  max-width: 600px;
 }
 
-.about-credits a {
+.feedback-inline h2 {
   color: #2d6a4f;
-  text-decoration: none;
+  font-size: 1.4rem;
+  margin-bottom: 0.25rem;
 }
 
-.about-credits a:hover {
+.feedback-inline .feedback-subtitle {
+  color: #666;
+  margin-bottom: 1.5rem;
+}
+
+/* Privacy Policy inline mode — strip container styling to match other About sub-tabs */
+.privacy-inline {
+  min-height: unset;
+  background: none;
+  padding: 0;
+  display: block;
+}
+
+.privacy-inline .privacy-policy-content {
+  max-width: none;
+  background: none;
+  border-radius: 0;
+  padding: 0;
+  box-shadow: none;
+}
+
+.privacy-inline .privacy-policy-content h1 {
+  color: #2d6a4f;
+  font-size: 1.4rem;
+  margin-bottom: 0.25rem;
+}
+
+.privacy-inline .privacy-policy-content h2 {
+  color: #2d6a4f;
+  font-size: 1.1rem;
+}
+
+.privacy-inline .privacy-policy-content p,
+.privacy-inline .privacy-policy-content li {
+  color: #444;
+  font-size: 1rem;
+  line-height: 1.7;
+}
+
+/* RSS Feed link in Settings */
+.rss-feed-link {
+  display: inline-block;
+  color: #2d6a4f;
+  font-weight: 500;
+  margin-top: 0.5rem;
+}
+
+.rss-feed-link:hover {
   text-decoration: underline;
 }
 
 @media (max-width: 768px) {
-  .about-content h2 {
-    font-size: 1.3rem;
+  .about-story h2 {
+    font-size: 1.2rem;
+  }
+
+  .about-tab-btn {
+    font-size: 0.8rem;
   }
 }
 
