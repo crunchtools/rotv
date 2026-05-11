@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Tooltip, useMap, ImageOverlay, GeoJSON, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
-import MapAdmin from './MapAdmin';
 import VirtualPoiCreator from './VirtualPoiCreator';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 
@@ -47,7 +46,6 @@ const DEFAULT_ZOOM = 11;
 
 function Legend({
   // Layer toggles
-  showNpsMap, onToggleNpsMap,
   showTrails, onToggleTrails,
   showRivers, onToggleRivers,
   // Boundary controls - individual toggles
@@ -188,15 +186,6 @@ function Legend({
           )}
         </div>
         <div className="boundary-chips">
-          {/* NPS Map overlay chip */}
-          <button
-            className={`boundary-chip nps-map-chip ${showNpsMap ? 'active' : 'inactive'}`}
-            onClick={() => onToggleNpsMap(!showNpsMap)}
-            title="NPS Park Map Overlay"
-          >
-            <span className="boundary-chip-icon">🗺️</span>
-            <span className="boundary-chip-name">NPS Map</span>
-          </button>
           {/* Individual boundary chips */}
           {boundaries && boundaries.map(boundary => (
             <button
@@ -477,7 +466,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
             isLayerVisible = showTrails;
           } else if (feature.feature_type === 'river') {
             isLayerVisible = showRivers;
-          } else if (feature.feature_type === 'boundary') {
+          } else if (feature.poi_roles?.includes('boundary')) {
             isLayerVisible = visibleBoundaries.has(feature.id);
           }
 
@@ -937,22 +926,11 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
   );
 }
 
-// NPS Park Map overlay default bounds for cropped image (legend removed)
-// Manually calibrated to align Boston Mill Visitor Center and Route 8
-// These coordinates define the corners of the map image: [[south, west], [north, east]]
-const DEFAULT_NPS_MAP_BOUNDS = [
-  [41.1390, -81.6654],  // Southwest corner
-  [41.4226, -81.4706]   // Northeast corner
-];
-
 // Default icon type IDs for initializing the filter (before config loads)
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showNpsMap, onToggleNpsMap, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
-  const [showAdmin, setShowAdmin] = useState(false);
+function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
-  const [mapBounds, setMapBounds] = useState(DEFAULT_NPS_MAP_BOUNDS);
-  const [overlayOpacity, setOverlayOpacity] = useState(1.0);
   const [useSatellite, setUseSatellite] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState(null); // Just for UI display
   const [importType, setImportType] = useState('trail');
@@ -1178,7 +1156,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
         opacity: isSelected ? 1 : 0.8,
         color: isSelected ? (editMode ? editSelectedColor : viewSelectedColor) : '#1E90FF'
       };
-    } else if (feature.feature_type === 'boundary') {
+    } else if (feature.poi_roles?.includes('boundary')) {
       // Park boundaries - use per-boundary color from database
       // Note: invisible hit area layer handles click detection, so stroke can be thin
       const boundaryColor = feature.boundary_color || '#228B22';
@@ -1235,22 +1213,13 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
           />
         )}
 
-        {/* NPS Park Map overlay - rendered first so markers appear on top */}
-        {showNpsMap && (
-          <ImageOverlay
-            url="/data/cvnp-map-cropped.jpg"
-            bounds={mapBounds}
-            opacity={overlayOpacity}
-            zIndex={100}
-          />
-        )}
 
         {/* Clickable linear features - split by type for independent toggle control */}
         {linearFeatures && linearFeatures.map(feature => {
           // Check visibility based on feature type
           const isVisible = (feature.feature_type === 'trail' && showTrails) ||
                            (feature.feature_type === 'river' && showRivers) ||
-                           (feature.feature_type === 'boundary' && visibleBoundaries.has(feature.id));
+                           (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id));
           if (!isVisible) return null;
 
           const isSelected = selectedLinearFeature?.id === feature.id;
@@ -1261,7 +1230,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
           };
 
           // For boundaries, render TWO layers: invisible hit area + visible styled line
-          if (feature.feature_type === 'boundary') {
+          if (feature.poi_roles?.includes('boundary')) {
             return (
               <React.Fragment key={`boundary-${feature.id}-${isSelected}-${editMode}-${hasAnySelection}-${feature.updated_at}`}>
                 {/* Invisible wide hit area for click/hover detection - stroke only */}
@@ -1553,8 +1522,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
       />
 
       <Legend
-        showNpsMap={showNpsMap}
-        onToggleNpsMap={onToggleNpsMap}
         showTrails={showTrails}
         onToggleTrails={onToggleTrails}
         showRivers={showRivers}
@@ -1563,7 +1530,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
         onToggleBoundary={onToggleBoundary}
         onShowAllBoundaries={onShowAllBoundaries}
         onHideAllBoundaries={onHideAllBoundaries}
-        boundaries={linearFeatures.filter(f => f.feature_type === 'boundary')}
+        boundaries={linearFeatures.filter(f => f.poi_roles?.includes('boundary') && !['county', 'state'].includes(f.boundary_type))}
         visibleTypes={visibleTypes}
         onToggleType={handleToggleType}
         onShowAll={handleShowAll}
@@ -1575,7 +1542,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
         editMode={editMode}
         activeTab={activeTab}
         iconConfig={iconConfig}
-        onOpenAdmin={() => setShowAdmin(true)}
+        onOpenAdmin={() => {}}
         onFileSelect={handleFileSelect}
         selectedFileName={selectedFileName}
         importType={importType}
@@ -1585,20 +1552,6 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
         importMessage={importMessage}
         onDismissMessage={handleDismissMessage}
       />
-      {showAdmin && (
-        <MapAdmin
-          bounds={{
-            south: mapBounds[0][0],
-            west: mapBounds[0][1],
-            north: mapBounds[1][0],
-            east: mapBounds[1][1]
-          }}
-          onBoundsChange={setMapBounds}
-          onClose={() => setShowAdmin(false)}
-          opacity={overlayOpacity}
-          onOpacityChange={setOverlayOpacity}
-        />
-      )}
       {pendingUpdate && (
         <CoordinateConfirmDialog
           destination={pendingUpdate.destination}

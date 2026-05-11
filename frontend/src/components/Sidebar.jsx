@@ -210,7 +210,7 @@ function EditableCellSignal({ level, onChange }) {
 }
 
 // Read-only view component - works for both destinations and linear features
-function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, _showNpsMap, _onToggleNpsMap, onCollectStatus }) {
+function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, onCollectStatus }) {
   return (
     <div className="view-container">
       <div className="view-scroll">
@@ -2405,7 +2405,7 @@ function TrailStatus({ poiId, _poiName, isAdmin, editMode, _selectedFromMtbList,
   );
 }
 
-function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, showNpsMap, onToggleNpsMap, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
+function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
@@ -3270,8 +3270,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
                 onShare={() => setShowShareModal(true)}
                 moreInfoLink={linearFeature.more_info_link}
                 trailStatus={trailStatus}
-                showNpsMap={showNpsMap}
-                onToggleNpsMap={onToggleNpsMap}
                 onCollectStatus={handleCollectStatusInline}
               />
             )
@@ -3580,8 +3578,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               onShare={() => setShowShareModal(true)}
               moreInfoLink={destination.more_info_link}
               trailStatus={trailStatus}
-              showNpsMap={showNpsMap}
-              onToggleNpsMap={onToggleNpsMap}
               onCollectStatus={handleCollectStatusInline}
             />
           )
