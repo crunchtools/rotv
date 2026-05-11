@@ -4748,7 +4748,8 @@ body {
 
 .main-content-full .park-news-tab,
 .main-content-full .park-events-tab,
-.main-content-full .results-tab-wrapper {
+.main-content-full .results-tab-wrapper,
+.main-content-full .about-page {
   flex: 0 0 auto; /* Allow content to grow naturally for scrolling */
   min-height: min-content;
   width: 100%;
@@ -4769,7 +4770,8 @@ body {
 
   .main-content-full .park-news-tab,
   .main-content-full .park-events-tab,
-  .main-content-full .results-tab-wrapper {
+  .main-content-full .results-tab-wrapper,
+  .main-content-full .about-page {
     padding: 1rem;
     border-radius: 8px;
   }
@@ -13746,11 +13748,7 @@ button.feedback-link-inline {
    =========================================== */
 
 .about-page {
-  max-width: 700px;
-  margin: 0 auto;
-  padding: 0;
   overflow-y: auto;
-  flex: 1;
 }
 
 .about-content h2 {
@@ -13831,10 +13829,6 @@ button.feedback-link-inline {
 }
 
 @media (max-width: 768px) {
-  .about-page {
-    padding: 1.5rem;
-  }
-
   .about-content h2 {
     font-size: 1.3rem;
   }

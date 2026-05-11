@@ -74,7 +74,6 @@ function AppContent() {
   const visiblePoiCount = visiblePoiIds.length;
 
   // Layer visibility states (lifted from Map component for unified control)
-  const [showNpsMap, setShowNpsMap] = useState(false);
   const [showTrails, setShowTrails] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [visibleBoundaries, setVisibleBoundaries] = useState(new Set()); // Set of boundary IDs
@@ -1845,12 +1844,6 @@ function AppContent() {
                       <span className="user-email-inline">{user?.email}</span>
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
-                    <button
-                      className="dropdown-item-inline privacy-link-inline"
-                      onClick={() => { setShowUserDropdown(false); handleTabChange('about'); }}
-                    >
-                      About
-                    </button>
                     <a
                       className="dropdown-item-inline privacy-link-inline"
                       href="https://buttondown.com/rotv/rss"
@@ -1938,12 +1931,6 @@ function AppContent() {
                         <path fill="#1877F2" d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
                       </svg>
                       Continue with Facebook
-                    </button>
-                    <button
-                      className="privacy-link-inline"
-                      onClick={() => { setShowLoginDropdown(false); handleTabChange('about'); }}
-                    >
-                      About
                     </button>
                     <a
                       className="privacy-link-inline"
@@ -2245,8 +2232,6 @@ function AppContent() {
           onVisibleTypesChange={setVisibleTypes}
           onVisiblePoisChange={setVisiblePoiIds}
           onMapStateChange={setMapState}
-          showNpsMap={showNpsMap}
-          onToggleNpsMap={setShowNpsMap}
           showTrails={showTrails}
           onToggleTrails={setShowTrails}
           showRivers={showRivers}
@@ -2262,7 +2247,7 @@ function AppContent() {
             return next;
           })}
           onShowAllBoundaries={() => {
-            const boundaryIds = linearFeatures.filter(f => f.feature_type === 'boundary').map(f => f.id);
+            const boundaryIds = linearFeatures.filter(f => f.poi_roles?.includes('boundary') && !['county', 'state'].includes(f.boundary_type)).map(f => f.id);
             setVisibleBoundaries(new Set(boundaryIds));
           }}
           onHideAllBoundaries={() => setVisibleBoundaries(new Set())}
@@ -2368,8 +2353,6 @@ function AppContent() {
           onSelectLinearFeature={handleSelectLinearFeature}
           onAssociationsChanged={refreshAllData}
           onStartDrawingAssociations={handleStartDrawingAssociations}
-          showNpsMap={showNpsMap}
-          onToggleNpsMap={setShowNpsMap}
           permalinkInfo={permalinkInfo}
           onSetPermalink={setPermalinkInfo}
           onClearPermalink={() => setPermalinkInfo(null)}
