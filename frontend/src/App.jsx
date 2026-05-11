@@ -1863,7 +1863,7 @@ function AppContent() {
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
                     <button
-                      className="dropdown-item-inline privacy-link-inline"
+                      className="dropdown-item-inline settings-item-inline"
                       onClick={() => { setShowUserDropdown(false); handleTabChange('settings'); }}
                     >
                       Settings
