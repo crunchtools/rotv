@@ -1,15 +1,17 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
-function PrivacyPolicy() {
+function PrivacyPolicy({ inline = false }) {
   const navigate = useNavigate();
 
   return (
-    <div className="privacy-policy-page">
+    <div className={`privacy-policy-page ${inline ? 'privacy-inline' : ''}`}>
       <div className="privacy-policy-content">
-        <button className="privacy-back-btn" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}>
-          &larr; Back
-        </button>
+        {!inline && (
+          <button className="privacy-back-btn" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}>
+            &larr; Back
+          </button>
+        )}
 
         <h1>Privacy Policy</h1>
         <p className="privacy-updated">Last updated: May 2026</p>
