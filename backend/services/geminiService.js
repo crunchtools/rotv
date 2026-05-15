@@ -9,6 +9,7 @@ if (!globalThis.fetch) {
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
+import { getContainingBoundaries } from './geoService.js';
 
 // Gemini model — configurable via environment variable, defaults to gemini-2.5-flash
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
@@ -517,6 +518,15 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   }
   if (destination.research_context) {
     optionalSections.push(`ADMIN CONTEXT (use this to guide your research): ${destination.research_context}`);
+  }
+
+  // Geographic grounding — reuses the same PostGIS boundary lookup as news/events collection
+  if (destination.id) {
+    const boundaries = await getContainingBoundaries(pool, destination.id);
+    if (boundaries.length > 0) {
+      optionalSections.push(`Geographic context: Located in ${boundaries.join(', ')}`);
+      console.log(`[Research v2] Geographic grounding for ${destination.name}: ${boundaries.join(', ')}`);
+    }
   }
 
   // Build Pass 1 prompt
