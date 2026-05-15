@@ -22,6 +22,8 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
   const [error, setError] = useState(null);
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
   const [activeSubTab, setActiveSubTab] = useState('future');
   const [pastEvents, setPastEvents] = useState([]);
   const [pastLoading, setPastLoading] = useState(false);
@@ -142,6 +144,12 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
     return filtered;
   }, [sourceEvents, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
 
+  const totalPages = Math.ceil(filteredEvents.length / PAGE_SIZE);
+  const paginatedEvents = filteredEvents.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE
+  );
+
   const generateCalendarUrl = (event) => {
     const title = encodeURIComponent(event.title);
     const startDate = formatDateForCalendar(event.start_date);
@@ -239,14 +247,14 @@ END:VCALENDAR`;
       <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
         <button
           className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
-          onClick={() => setActiveSubTab('future')}
+          onClick={() => { setActiveSubTab('future'); setCurrentPage(1); }}
           tabIndex={activeSubTab === 'future' ? 0 : -1}
         >
           Future
         </button>
         <button
           className={`results-subtab ${activeSubTab === 'past' ? 'active' : ''}`}
-          onClick={() => setActiveSubTab('past')}
+          onClick={() => { setActiveSubTab('past'); setCurrentPage(1); }}
           tabIndex={activeSubTab === 'past' ? 0 : -1}
         >
           Past
@@ -259,7 +267,7 @@ END:VCALENDAR`;
           className="results-search-input"
           placeholder="Search events by title, description, or location..."
           value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
+          onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
         />
         <div className="results-type-filters">
           {[
@@ -276,7 +284,7 @@ END:VCALENDAR`;
             <div
               key={f.key}
               className={`type-filter-chip ${f.key} ${typeFilters[f.key] ? 'active' : 'inactive'}`}
-              onClick={() => setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] }))}
+              onClick={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}
             >
               <span className="type-filter-icon">{f.icon}</span>
               {f.label}
@@ -284,7 +292,7 @@ END:VCALENDAR`;
           ))}
         </div>
         <div className="results-count">
-          Showing {filteredEvents.length} of {sourceEvents.length} events
+          Showing {filteredEvents.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, filteredEvents.length)}`} of {filteredEvents.length} events
         </div>
       </div>
 
@@ -307,7 +315,7 @@ END:VCALENDAR`;
               items[next].focus();
             }
           }}>
-            {filteredEvents.map(item => (
+            {paginatedEvents.map(item => (
           <EventCardBody
             key={item.id}
             item={item}
@@ -335,6 +343,27 @@ END:VCALENDAR`;
           />
             ))}
           </div>
+          )}
+          {totalPages > 1 && (
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(p => p - 1)}
+                disabled={currentPage === 1}
+              >
+                Back
+              </button>
+              <span className="pagination-info">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
           )}
         </div>
         {/* Map thumbnail sidebar */}

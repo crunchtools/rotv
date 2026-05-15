@@ -15,7 +15,7 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 20;
   const [typeFilters, setTypeFilters] = useState({
     general: true,
     alert: true,
