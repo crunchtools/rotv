@@ -12,6 +12,10 @@ describe('UI Integration Tests', () => {
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     page = await browser.newPage();
+    // Dismiss tour prompt so the overlay doesn't block pointer events
+    await page.addInitScript(() => {
+      localStorage.setItem('rotv-tour-seen', 'true');
+    });
   });
 
   afterAll(async () => {

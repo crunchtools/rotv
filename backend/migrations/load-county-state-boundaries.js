@@ -32,6 +32,7 @@ const boundaries = [
   { name: 'Cuyahoga County', file: 'cuyahoga-county.geojson' },
   { name: 'Summit County', file: 'summit-county.geojson' },
   { name: 'Ohio', file: 'ohio.geojson' },
+  { name: 'Hampton Hills Mountain Bike Area', file: 'hampton-hills-mtb.geojson' },
 ];
 
 console.log('Loading county/state boundary geometries...\n');
