@@ -1546,6 +1546,7 @@ function AppContent() {
     setNewPOI({
       id: 'new-temp',
       name: '',
+      poi_roles: ['point'],
       latitude: coords.lat,
       longitude: coords.lng,
       property_owner: '',
@@ -1566,6 +1567,47 @@ function AppContent() {
   const handleCancelNewPOI = () => {
     setNewPOI(null);
     setPreviewCoords(null);
+  };
+
+  // Create new POI from Results tab (defaults based on active sub-tab)
+  const handleNewPOIFromResults = (subTab) => {
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+
+    if (subTab === 'organizations') {
+      // Organizations don't need coordinates — open sidebar directly
+      setNewPOI({
+        id: 'new-temp',
+        name: '',
+        poi_roles: ['organization'],
+        brief_description: '',
+        property_owner: '',
+        more_info_link: '',
+        events_url: '',
+        news_url: ''
+      });
+      setActiveTab('view');
+    } else {
+      // Point-based POIs — switch to map for click-to-place
+      const defaults = {
+        id: 'new-temp',
+        name: '',
+        poi_roles: subTab === 'mtb' ? ['mtb_trail'] : ['point'],
+        brief_description: '',
+        historical_description: '',
+        primary_activities: '',
+        surface: '',
+        pets: '',
+        cell_signal: null,
+        more_info_link: '',
+        events_url: '',
+        news_url: '',
+        status_url: subTab === 'mtb' ? '' : undefined
+      };
+      setNewPOI(defaults);
+      setActiveTab('view');
+      // Map will show "click to place" indicator since newPOI is set but no coords yet
+    }
   };
 
   // Start creating a new organization with found POIs
@@ -1598,7 +1640,9 @@ function AppContent() {
 
   // Save new POI
   const handleSaveNewPOI = async (poiData) => {
-    const response = await fetch('/api/admin/destinations', {
+    // Use /api/admin/pois when poi_roles is present (new flow), otherwise legacy /destinations
+    const endpoint = poiData.poi_roles ? '/api/admin/pois' : '/api/admin/destinations';
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -1885,9 +1929,6 @@ function AppContent() {
                           checked={editMode}
                           onChange={(e) => {
                             setEditMode(e.target.checked);
-                            if (e.target.checked && activeTab !== 'view') {
-                              handleTabChange('view');
-                            }
                           }}
                         />
                       </label>
@@ -1969,6 +2010,10 @@ function AppContent() {
             bypassViewportFilter={bypassViewportFilter}
             visiblePoiCount={visiblePoiCount}
             iconConfig={iconConfig}
+            editMode={editMode}
+            isAdmin={isAdmin}
+            userRole={role}
+            onNewPOI={handleNewPOIFromResults}
           />
         </main>
       )}
@@ -1978,6 +2023,7 @@ function AppContent() {
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkNews
           isAdmin={isAdmin}
+          editMode={editMode}
           filteredDestinations={viewportFilteredDestinations}
           filteredLinearFeatures={viewportFilteredLinearFeatures}
           filteredVirtualPois={viewportFilteredVirtualPois}
@@ -2009,6 +2055,7 @@ function AppContent() {
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkEvents
           isAdmin={isAdmin}
+          editMode={editMode}
           filteredDestinations={viewportFilteredDestinations}
           filteredLinearFeatures={viewportFilteredLinearFeatures}
           filteredVirtualPois={viewportFilteredVirtualPois}
@@ -2024,6 +2071,12 @@ function AppContent() {
               setSelectedDestination(poi);
               setActiveTab('view');
             }
+          }}
+          onEditEventItem={(eventId, eventTitle) => {
+            setModerationFocusId(eventId);
+            setModerationFocusTitle(eventTitle || null);
+            setActiveTab('settings');
+            setSettingsTab('moderation');
           }}
         />
         </main>

@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { EventCardBody } from './NewsEventsShared';
 import { handleRovingKeyDown } from '../utils/a11yUtils';
+import ContentFormModal from './ContentFormModal';
+import useModeration from '../hooks/useModeration';
+import ModerationExtras from './ModerationExtras';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -16,7 +19,7 @@ function formatDateForCalendar(dateString) {
   return date.toISOString().replace(/-|:|\.\d{3}/g, '').slice(0, 15) + 'Z';
 }
 
-function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -37,6 +40,12 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
     'arts': true,
     'community': true,
     'alert': true
+  });
+  const [showNewForm, setShowNewForm] = useState(false);
+
+  // Shared moderation hook (only active when admin)
+  const mod = useModeration({
+    onItemsChanged: () => { fetchEvents(); fetchPastEvents(); }
   });
 
   useEffect(() => {
@@ -238,10 +247,25 @@ END:VCALENDAR`;
 
   return (
     <div className="park-events-tab">
-      <div className="news-events-header">
-        <h2>{tabLabel}</h2>
-        <p className="tab-subtitle">Events across Cuyahoga Valley National Park</p>
+      <div className="news-events-header tab-header-with-new">
+        <div>
+          <h2>{tabLabel}</h2>
+          <p className="tab-subtitle">Events across Cuyahoga Valley National Park</p>
+        </div>
+        {editMode && isAdmin && (
+          <button className="tab-new-btn" onClick={() => setShowNewForm(true)}>+ New</button>
+        )}
       </div>
+
+      {showNewForm && (
+        <ContentFormModal
+          mode="create"
+          contentType="event"
+          pois={mod.pois}
+          onCreate={() => fetchEvents()}
+          onClose={() => setShowNewForm(false)}
+        />
+      )}
 
       {/* Sub-tabs */}
       <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
@@ -340,7 +364,41 @@ END:VCALENDAR`;
                 </button>
               </div>
             }
-          />
+          >
+            {editMode && isAdmin && (
+              <ModerationExtras
+                item={{ ...item, content_type: 'event' }}
+                isPending={false}
+                editingItem={mod.editingItem}
+                editFields={mod.editFields}
+                setEditFields={mod.setEditFields}
+                itemUrls={mod.itemUrls}
+                newUrlInput={mod.newUrlInput}
+                setNewUrlInput={mod.setNewUrlInput}
+                addingUrl={mod.addingUrl}
+                iaDateItem={mod.iaDateItem}
+                mergingItem={mod.mergingItem}
+                mergeCandidates={mod.mergeCandidates}
+                merging={mod.merging}
+                confirmDelete={mod.confirmDelete}
+                setConfirmDelete={mod.setConfirmDelete}
+                pois={mod.pois}
+                onApprove={mod.handleApprove}
+                onReject={mod.handleReject}
+                onRequeue={mod.handleRequeue}
+                onDelete={mod.handleDelete}
+                onSave={mod.handleSave}
+                onIaDate={mod.handleIaDate}
+                onStartEditing={mod.startEditing}
+                onCancelEditing={mod.cancelEditing}
+                onStartMerge={mod.startMerge}
+                onMerge={mod.handleMerge}
+                onCancelMerge={mod.cancelMerge}
+                onAddUrl={mod.handleAddUrl}
+                onRemoveUrl={mod.handleRemoveUrl}
+              />
+            )}
+          </EventCardBody>
             ))}
           </div>
           )}
@@ -379,6 +437,12 @@ END:VCALENDAR`;
           </div>
         )}
       </div>
+      {/* Moderation notification */}
+      {editMode && isAdmin && mod.notification && (
+        <div className={`result-message ${mod.notification.type}`} style={{ margin: '10px 1rem' }}>
+          {mod.notification.message}
+        </div>
+      )}
     </div>
   );
 }

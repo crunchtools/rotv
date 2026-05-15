@@ -1,17 +1,17 @@
 #!/bin/bash
 set -e
 
-BASE_IMAGE_NAME="quay.io/crunchtools/rotv-base"
-IMAGE_NAME="quay.io/crunchtools/rotv"
-CONTAINER_NAME="${ROTV_CONTAINER:-rotv}"
-HOST_PORT="${ROTV_PORT:-8080}"
-
-# Load environment variables from .env file if it exists
+# Load environment variables from .env file FIRST (before defaults)
 if [ -f ".env" ]; then
     export $(grep -v '^#' .env | xargs)
 elif [ -f "backend/.env" ]; then
     export $(grep -v '^#' backend/.env | xargs)
 fi
+
+BASE_IMAGE_NAME="quay.io/crunchtools/rotv-base"
+IMAGE_NAME="quay.io/crunchtools/rotv"
+CONTAINER_NAME="${ROTV_CONTAINER:-rotv}"
+HOST_PORT="${ROTV_PORT:-8080}"
 
 # Development uses ephemeral storage (tmpfs) - data is thrown away on restart
 # Set PERSISTENT_DATA=true in .env or environment to persist across restarts

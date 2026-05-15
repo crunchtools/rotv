@@ -33,7 +33,11 @@ const ResultsTab = memo(function ResultsTab({
   onFilterByTypes,  // Callback to filter by POI types: array of types or null for all
   bypassViewportFilter = false,  // Temporarily show all POIs (bypass viewport filtering)
   visiblePoiCount,  // Global POI count from App.jsx
-  iconConfig  // Icon configuration for rendering POI icons
+  iconConfig,  // Icon configuration for rendering POI icons
+  editMode = false,  // Whether edit mode is active
+  isAdmin = false,  // Whether user is admin
+  userRole = 'viewer',  // User role (admin, poi_admin, media_admin, viewer)
+  onNewPOI  // Callback when New button is clicked, receives activeSubTab
 }) {
   const navigate = useNavigate();
   const isNavigatingRef = useRef(false);
@@ -424,6 +428,15 @@ const ResultsTab = memo(function ResultsTab({
               <span className="subtab-label-short">{tab.shortLabel || tab.label}</span>
             </button>
           ))}
+          {editMode && (isAdmin || userRole === 'poi_admin') && onNewPOI && (
+            <button
+              className="results-new-btn"
+              onClick={() => onNewPOI(activeSubTab)}
+              title={`Create new ${activeSubTab === 'mtb' ? 'MTB trailhead' : activeSubTab === 'organizations' ? 'organization' : 'point of interest'}`}
+            >
+              + New
+            </button>
+          )}
         </div>
 
         {/* Filter badges - always visible even when no results */}
@@ -518,6 +531,15 @@ const ResultsTab = memo(function ResultsTab({
             <span className="subtab-label-short">{tab.shortLabel || tab.label}</span>
           </button>
         ))}
+        {editMode && (isAdmin || userRole === 'poi_admin') && onNewPOI && (
+          <button
+            className="results-new-btn"
+            onClick={() => onNewPOI(activeSubTab)}
+            title={`Create new ${activeSubTab === 'mtb' ? 'MTB trailhead' : activeSubTab === 'organizations' ? 'organization' : 'point of interest'}`}
+          >
+            + New
+          </button>
+        )}
       </div>
 
       <div className="results-filters">

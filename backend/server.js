@@ -2157,7 +2157,7 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
       ) ts ON true
       WHERE p.status_url IS NOT NULL
         AND p.status_url != ''
-        AND 'point' = ANY(p.poi_roles)
+        AND ('mtb_trail' = ANY(p.poi_roles) OR 'point' = ANY(p.poi_roles))
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY p.name
     `);
@@ -2173,10 +2173,15 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
 app.get('/api/news/recent', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 500;
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
+    const adminColumns = isAdmin
+      ? `, n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues,
+           n.content_source, n.moderated_at`
+      : '';
     const recentNewsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.publication_date, n.date_consensus_score, n.collection_date,
-             p.id as poi_id, p.name as poi_name, p.poi_roles,
+             p.id as poi_id, p.name as poi_name, p.poi_roles${adminColumns},
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
@@ -2199,9 +2204,14 @@ app.get('/api/events/upcoming', async (req, res) => {
   try {
     // Use client timezone for "today" calculation (defaults to America/New_York)
     const tz = req.query.tz || 'America/New_York';
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
+    const adminColumns = isAdmin
+      ? `, e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
+           e.content_source, e.moderated_at`
+      : '';
     const upcomingEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles,
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles${adminColumns},
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
@@ -2224,9 +2234,14 @@ app.get('/api/events/past', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
     const tz = req.query.tz || 'America/New_York';
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
+    const adminColumns = isAdmin
+      ? `, e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
+           e.content_source, e.moderated_at`
+      : '';
     const pastEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles,
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles${adminColumns},
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id

@@ -9,7 +9,7 @@ export function getDestinationIconTypeFromConfig(destination, iconConfig) {
     return 'default';
   }
 
-  if (destination.status_url && destination.status_url.trim() !== '') {
+  if (destination.poi_roles?.includes('mtb_trail') || (destination.status_url && destination.status_url.trim() !== '')) {
     return 'mtb-trailhead';
   }
 

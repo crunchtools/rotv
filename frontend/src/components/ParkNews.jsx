@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { NewsCardBody } from './NewsEventsShared';
+import ContentFormModal from './ContentFormModal';
+import useModeration from '../hooks/useModeration';
+import ModerationExtras from './ModerationExtras';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -8,7 +11,7 @@ const DEFAULT_PARK_BOUNDS = [
   [41.45, -81.50]   // Northeast corner
 ];
 
-function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -22,6 +25,12 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
     wildlife: true,
     infrastructure: true,
     community: true
+  });
+  const [showNewForm, setShowNewForm] = useState(false);
+
+  // Shared moderation hook (only active when admin)
+  const mod = useModeration({
+    onItemsChanged: () => fetchNews()
   });
 
   useEffect(() => {
@@ -129,10 +138,25 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
 
   return (
     <div className="park-news-tab">
-      <div className="news-events-header">
-        <h2>Park News</h2>
-        <p className="tab-subtitle">Recent news from across Cuyahoga Valley National Park</p>
+      <div className="news-events-header tab-header-with-new">
+        <div>
+          <h2>Park News</h2>
+          <p className="tab-subtitle">Recent news from across Cuyahoga Valley National Park</p>
+        </div>
+        {editMode && isAdmin && (
+          <button className="tab-new-btn" onClick={() => setShowNewForm(true)}>+ New</button>
+        )}
       </div>
+
+      {showNewForm && (
+        <ContentFormModal
+          mode="create"
+          contentType="news"
+          pois={mod.pois}
+          onCreate={() => fetchNews()}
+          onClose={() => setShowNewForm(false)}
+        />
+      )}
 
       <div className="results-filters">
         <input
@@ -184,13 +208,50 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
               items[next].focus();
             }
           }}>
-        {paginatedNews.map(item => (
-          <NewsCardBody
-            key={item.id}
-            item={item}
-            onSelectPoi={onSelectPoi}
-          />
-        ))}
+        {paginatedNews.map(item => {
+          const enrichedItem = { ...item, content_type: 'news' };
+          return (
+            <NewsCardBody
+              key={item.id}
+              item={item}
+              onSelectPoi={onSelectPoi}
+            >
+              {editMode && isAdmin && (
+                <ModerationExtras
+                  item={enrichedItem}
+                  isPending={false}
+                  editingItem={mod.editingItem}
+                  editFields={mod.editFields}
+                  setEditFields={mod.setEditFields}
+                  itemUrls={mod.itemUrls}
+                  newUrlInput={mod.newUrlInput}
+                  setNewUrlInput={mod.setNewUrlInput}
+                  addingUrl={mod.addingUrl}
+                  iaDateItem={mod.iaDateItem}
+                  mergingItem={mod.mergingItem}
+                  mergeCandidates={mod.mergeCandidates}
+                  merging={mod.merging}
+                  confirmDelete={mod.confirmDelete}
+                  setConfirmDelete={mod.setConfirmDelete}
+                  pois={mod.pois}
+                  onApprove={mod.handleApprove}
+                  onReject={mod.handleReject}
+                  onRequeue={mod.handleRequeue}
+                  onDelete={mod.handleDelete}
+                  onSave={mod.handleSave}
+                  onIaDate={mod.handleIaDate}
+                  onStartEditing={mod.startEditing}
+                  onCancelEditing={mod.cancelEditing}
+                  onStartMerge={mod.startMerge}
+                  onMerge={mod.handleMerge}
+                  onCancelMerge={mod.cancelMerge}
+                  onAddUrl={mod.handleAddUrl}
+                  onRemoveUrl={mod.handleRemoveUrl}
+                />
+              )}
+            </NewsCardBody>
+          );
+        })}
           </div>
           )}
           {totalPages > 1 && (
@@ -228,6 +289,12 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
           </div>
         )}
       </div>
+      {/* Moderation notification */}
+      {editMode && isAdmin && mod.notification && (
+        <div className={`result-message ${mod.notification.type}`} style={{ margin: '10px 1rem' }}>
+          {mod.notification.message}
+        </div>
+      )}
     </div>
   );
 }
