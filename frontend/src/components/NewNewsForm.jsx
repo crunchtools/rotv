@@ -1,14 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import PoiSearchSelect from './PoiSearchSelect';
+
+// Matches FIELD_CONFIGS.news in ModerationInbox.jsx
+const TZ_ABBR = (() => {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', timeZone: 'America/New_York' })
+      .formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value || 'ET';
+  } catch { return 'ET'; }
+})();
 
 function NewNewsForm({ onClose, onCreate }) {
   const [formData, setFormData] = useState({
     poi_id: '',
     title: '',
     summary: '',
-    source_url: '',
-    source_name: '',
     news_type: 'general',
-    publication_date: new Date().toISOString().split('T')[0]
+    publication_date: '',
+    source_name: '',
+    source_url: ''
   });
   const [pois, setPois] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -34,12 +43,12 @@ function NewNewsForm({ onClose, onCreate }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.poi_id) {
-      setError('Please select a location');
-      return;
-    }
     if (!formData.title.trim()) {
       setError('Title is required');
+      return;
+    }
+    if (!formData.poi_id) {
+      setError('Please select a location');
       return;
     }
 
@@ -53,7 +62,8 @@ function NewNewsForm({ onClose, onCreate }) {
         credentials: 'include',
         body: JSON.stringify({
           ...formData,
-          poi_id: parseInt(formData.poi_id)
+          poi_id: parseInt(formData.poi_id),
+          publication_date: formData.publication_date || null
         })
       });
 
@@ -83,20 +93,7 @@ function NewNewsForm({ onClose, onCreate }) {
         <form onSubmit={handleSubmit} className="new-content-form">
           {error && <div className="form-error">{error}</div>}
 
-          <div className="form-section">
-            <label>Location *</label>
-            <select
-              value={formData.poi_id}
-              onChange={(e) => handleChange('poi_id', e.target.value)}
-              required
-            >
-              <option value="">Select a location...</option>
-              {pois.map(poi => (
-                <option key={poi.id} value={poi.id}>{poi.name}</option>
-              ))}
-            </select>
-          </div>
-
+          {/* Primary fields: Title, Summary, POI, Date */}
           <div className="form-section">
             <label>Title *</label>
             <input
@@ -118,49 +115,58 @@ function NewNewsForm({ onClose, onCreate }) {
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-section">
-              <label>Source URL</label>
-              <input
-                type="url"
-                value={formData.source_url}
-                onChange={(e) => handleChange('source_url', e.target.value)}
-                placeholder="https://..."
-              />
-            </div>
-            <div className="form-section">
-              <label>Source Name</label>
-              <input
-                type="text"
-                value={formData.source_name}
-                onChange={(e) => handleChange('source_name', e.target.value)}
-                placeholder="e.g., NPS.gov"
-              />
-            </div>
+          <div className="form-section">
+            <label>POI *</label>
+            <PoiSearchSelect
+              pois={pois}
+              value={formData.poi_id}
+              onChange={(id) => handleChange('poi_id', id || '')}
+              placeholder="Search POIs..."
+            />
           </div>
 
-          <div className="form-row">
-            <div className="form-section">
-              <label>Type</label>
-              <select
-                value={formData.news_type}
-                onChange={(e) => handleChange('news_type', e.target.value)}
-              >
-                <option value="general">General</option>
-                <option value="alert">Alert</option>
-                <option value="wildlife">Wildlife</option>
-                <option value="infrastructure">Infrastructure</option>
-                <option value="community">Community</option>
-              </select>
-            </div>
-            <div className="form-section">
-              <label>Publication Date</label>
-              <input
-                type="date"
-                value={formData.publication_date}
-                onChange={(e) => handleChange('publication_date', e.target.value)}
-              />
-            </div>
+          <div className="form-section">
+            <label>Publication Date ({TZ_ABBR})</label>
+            <input
+              type="datetime-local"
+              value={formData.publication_date}
+              onChange={(e) => handleChange('publication_date', e.target.value)}
+            />
+          </div>
+
+          {/* Secondary fields: Type, Source */}
+          <div className="form-section">
+            <label>Type</label>
+            <select
+              value={formData.news_type}
+              onChange={(e) => handleChange('news_type', e.target.value)}
+            >
+              <option value="general">General</option>
+              <option value="closure">Closure</option>
+              <option value="seasonal">Seasonal</option>
+              <option value="maintenance">Maintenance</option>
+              <option value="wildlife">Wildlife</option>
+            </select>
+          </div>
+
+          <div className="form-section">
+            <label>Source Name</label>
+            <input
+              type="text"
+              value={formData.source_name}
+              onChange={(e) => handleChange('source_name', e.target.value)}
+              placeholder="e.g., NPS.gov"
+            />
+          </div>
+
+          <div className="form-section">
+            <label>Primary URL</label>
+            <input
+              type="url"
+              value={formData.source_url}
+              onChange={(e) => handleChange('source_url', e.target.value)}
+              placeholder="https://..."
+            />
           </div>
 
           <div className="form-buttons">

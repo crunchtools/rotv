@@ -327,16 +327,16 @@ export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
           ) : null}
         </div>
       </div>
+      {(item.publication_date || item.collection_date) && (
+        <div className="park-news-date">
+          {item.publication_date
+            ? formatPublicationDate(item.publication_date)
+            : new Date(item.collection_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}
+        </div>
+      )}
       {summary && <p className="park-news-summary">{summary}</p>}
       <div className="park-news-meta">
         {item.source_name && <span className="news-source">{item.source_name}</span>}
-        {(item.publication_date || item.collection_date) && (
-          <span className="news-date">
-            {item.publication_date
-              ? formatPublicationDate(item.publication_date)
-              : new Date(item.collection_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}
-          </span>
-        )}
         {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
           <span className="news-sources-group">
             <a href={item.source_url} target="_blank" rel="noopener noreferrer" className="news-link">Source</a>

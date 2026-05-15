@@ -343,7 +343,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       return res.status(400).json({ error: 'Name is required' });
     }
 
-    const validRoles = ['point', 'trail', 'river', 'boundary', 'organization'];
+    const validRoles = ['point', 'mtb_trail', 'trail', 'river', 'boundary', 'organization'];
     const rolesArray = Array.isArray(poi_roles) ? poi_roles : (poi_roles ? [poi_roles] : []);
     if (rolesArray.length === 0 || !rolesArray.every(r => validRoles.includes(r))) {
       return res.status(400).json({ error: 'Invalid poi_roles. Must include at least one of: point, trail, river, boundary, organization' });
@@ -369,7 +369,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'historical_description', 'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'has_primary_image',
       'collection_tier', 'news_score_threshold', 'events_score_threshold',
-      'geometry', 'is_mtb_trail', 'status_url', 'research_context'
+      'geometry', 'status_url', 'research_context'
     ];
 
     const fields = ['name', 'poi_roles'];
@@ -442,7 +442,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     try {
       const result = await pool.query(
         `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, content_source, moderation_status, collection_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', 'published', CURRENT_TIMESTAMP)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'human', 'published', CURRENT_TIMESTAMP)
          RETURNING *`,
         [poi_id, title.trim(), summary || null, source_url || null, source_name || null, news_type || 'general', publication_date || null]
       );
@@ -457,7 +457,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   // Create manual event
   router.post('/events', isAdmin, async (req, res) => {
-    const { poi_id, title, start_date, end_date, description, event_type, location_details, source_url } = req.body;
+    const { poi_id, title, start_date, end_date, description, event_type, location_details, source_url, publication_date } = req.body;
 
     if (!poi_id || !title || !title.trim() || !start_date) {
       return res.status(400).json({ error: 'poi_id, title, and start_date are required' });
@@ -465,10 +465,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
     try {
       const result = await pool.query(
-        `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, content_source, moderation_status, collection_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'manual', 'published', CURRENT_TIMESTAMP)
+        `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, content_source, moderation_status, collection_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'human', 'published', CURRENT_TIMESTAMP)
          RETURNING *`,
-        [poi_id, title.trim(), description || null, start_date, end_date || null, event_type || null, location_details || null, source_url || null]
+        [poi_id, title.trim(), description || null, start_date, end_date || null, event_type || null, location_details || null, source_url || null, publication_date || null]
       );
 
       console.log(`Admin ${req.user.email} created manual event: ${title}`);

@@ -3,9 +3,10 @@ import React from 'react';
 const VALID_ROLES = [
   { id: 'point', label: 'Point', description: 'A location on the map' },
   { id: 'trail', label: 'Trail', description: 'A hiking/biking trail' },
-  { id: 'river', label: 'River', description: 'A river or waterway' },
   { id: 'boundary', label: 'Boundary', description: 'A geographic boundary' },
-  { id: 'organization', label: 'Organization', description: 'A virtual/organizational POI' }
+  { id: 'river', label: 'River', description: 'A river or waterway' },
+  { id: 'organization', label: 'Organization', description: 'A virtual/organizational POI' },
+  { id: 'mtb_trail', label: 'MTB Trail', description: 'An MTB trailhead with status tracking' }
 ];
 
 function RoleEditor({ roles = [], onChange }) {

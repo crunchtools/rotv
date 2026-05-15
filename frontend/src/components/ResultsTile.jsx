@@ -9,8 +9,8 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
 
-  // Check if this is an MTB trailhead (destination with status_url)
-  const isMtbTrailhead = !isLinear && !isVirtual && poi.status_url && poi.status_url.trim() !== '';
+  // Check if this is an MTB trailhead (has mtb_trail role or status_url)
+  const isMtbTrailhead = !isLinear && !isVirtual && (poi.poi_roles?.includes('mtb_trail') || (poi.status_url && poi.status_url.trim() !== ''));
 
   // Get default thumbnail SVG path based on type
   const getDefaultThumbnail = () => {

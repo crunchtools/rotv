@@ -1,14 +1,24 @@
 import React, { useState, useEffect } from 'react';
+import PoiSearchSelect from './PoiSearchSelect';
+
+// Matches FIELD_CONFIGS.event in ModerationInbox.jsx
+const TZ_ABBR = (() => {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', timeZone: 'America/New_York' })
+      .formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value || 'ET';
+  } catch { return 'ET'; }
+})();
 
 function NewEventForm({ onClose, onCreate }) {
   const [formData, setFormData] = useState({
     poi_id: '',
     title: '',
+    description: '',
     start_date: '',
     end_date: '',
-    description: '',
     event_type: '',
     location_details: '',
+    publication_date: '',
     source_url: ''
   });
   const [pois, setPois] = useState([]);
@@ -35,12 +45,12 @@ function NewEventForm({ onClose, onCreate }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.poi_id) {
-      setError('Please select a location');
-      return;
-    }
     if (!formData.title.trim()) {
       setError('Title is required');
+      return;
+    }
+    if (!formData.poi_id) {
+      setError('Please select a location');
       return;
     }
     if (!formData.start_date) {
@@ -58,7 +68,8 @@ function NewEventForm({ onClose, onCreate }) {
         credentials: 'include',
         body: JSON.stringify({
           ...formData,
-          poi_id: parseInt(formData.poi_id)
+          poi_id: parseInt(formData.poi_id),
+          publication_date: formData.publication_date || null
         })
       });
 
@@ -88,20 +99,7 @@ function NewEventForm({ onClose, onCreate }) {
         <form onSubmit={handleSubmit} className="new-content-form">
           {error && <div className="form-error">{error}</div>}
 
-          <div className="form-section">
-            <label>Location *</label>
-            <select
-              value={formData.poi_id}
-              onChange={(e) => handleChange('poi_id', e.target.value)}
-              required
-            >
-              <option value="">Select a location...</option>
-              {pois.map(poi => (
-                <option key={poi.id} value={poi.id}>{poi.name}</option>
-              ))}
-            </select>
-          </div>
-
+          {/* Primary fields: Title, Description, POI, Dates */}
           <div className="form-section">
             <label>Title *</label>
             <input
@@ -111,26 +109,6 @@ function NewEventForm({ onClose, onCreate }) {
               placeholder="Event title..."
               required
             />
-          </div>
-
-          <div className="form-row">
-            <div className="form-section">
-              <label>Start Date *</label>
-              <input
-                type="date"
-                value={formData.start_date}
-                onChange={(e) => handleChange('start_date', e.target.value)}
-                required
-              />
-            </div>
-            <div className="form-section">
-              <label>End Date</label>
-              <input
-                type="date"
-                value={formData.end_date}
-                onChange={(e) => handleChange('end_date', e.target.value)}
-              />
-            </div>
           </div>
 
           <div className="form-section">
@@ -143,37 +121,67 @@ function NewEventForm({ onClose, onCreate }) {
             />
           </div>
 
-          <div className="form-row">
-            <div className="form-section">
-              <label>Event Type</label>
-              <select
-                value={formData.event_type}
-                onChange={(e) => handleChange('event_type', e.target.value)}
-              >
-                <option value="">Select type...</option>
-                <option value="hike">Hike</option>
-                <option value="race">Race</option>
-                <option value="concert">Concert</option>
-                <option value="festival">Festival</option>
-                <option value="program">Program</option>
-                <option value="volunteer">Volunteer</option>
-                <option value="arts">Arts</option>
-                <option value="community">Community</option>
-              </select>
-            </div>
-            <div className="form-section">
-              <label>Location Details</label>
-              <input
-                type="text"
-                value={formData.location_details}
-                onChange={(e) => handleChange('location_details', e.target.value)}
-                placeholder="e.g., Howe Meadow"
-              />
-            </div>
+          <div className="form-section">
+            <label>POI *</label>
+            <PoiSearchSelect
+              pois={pois}
+              value={formData.poi_id}
+              onChange={(id) => handleChange('poi_id', id || '')}
+              placeholder="Search POIs..."
+            />
           </div>
 
           <div className="form-section">
-            <label>Source URL</label>
+            <label>Start Date/Time ({TZ_ABBR}) *</label>
+            <input
+              type="datetime-local"
+              value={formData.start_date}
+              onChange={(e) => handleChange('start_date', e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-section">
+            <label>End Date/Time ({TZ_ABBR})</label>
+            <input
+              type="datetime-local"
+              value={formData.end_date}
+              onChange={(e) => handleChange('end_date', e.target.value)}
+            />
+          </div>
+
+          {/* Secondary fields: Type, Location, Publication Date, Source */}
+          <div className="form-section">
+            <label>Event Type</label>
+            <input
+              type="text"
+              value={formData.event_type}
+              onChange={(e) => handleChange('event_type', e.target.value)}
+              placeholder="e.g., hike, concert, festival"
+            />
+          </div>
+
+          <div className="form-section">
+            <label>Location Details</label>
+            <input
+              type="text"
+              value={formData.location_details}
+              onChange={(e) => handleChange('location_details', e.target.value)}
+              placeholder="e.g., Howe Meadow"
+            />
+          </div>
+
+          <div className="form-section">
+            <label>Publication Date ({TZ_ABBR})</label>
+            <input
+              type="datetime-local"
+              value={formData.publication_date}
+              onChange={(e) => handleChange('publication_date', e.target.value)}
+            />
+          </div>
+
+          <div className="form-section">
+            <label>Primary URL</label>
             <input
               type="url"
               value={formData.source_url}

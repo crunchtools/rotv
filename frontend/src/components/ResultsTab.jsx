@@ -531,6 +531,15 @@ const ResultsTab = memo(function ResultsTab({
             <span className="subtab-label-short">{tab.shortLabel || tab.label}</span>
           </button>
         ))}
+        {editMode && (isAdmin || userRole === 'poi_admin') && onNewPOI && (
+          <button
+            className="results-new-btn"
+            onClick={() => onNewPOI(activeSubTab)}
+            title={`Create new ${activeSubTab === 'mtb' ? 'MTB trailhead' : activeSubTab === 'organizations' ? 'organization' : 'point of interest'}`}
+          >
+            + New
+          </button>
+        )}
       </div>
 
       <div className="results-filters">

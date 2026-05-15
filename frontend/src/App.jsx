@@ -1546,6 +1546,7 @@ function AppContent() {
     setNewPOI({
       id: 'new-temp',
       name: '',
+      poi_roles: ['point'],
       latitude: coords.lat,
       longitude: coords.lng,
       property_owner: '',
@@ -1591,8 +1592,7 @@ function AppContent() {
       const defaults = {
         id: 'new-temp',
         name: '',
-        poi_roles: subTab === 'mtb' ? ['point'] : ['point'],
-        is_mtb_trail: subTab === 'mtb' ? true : undefined,
+        poi_roles: subTab === 'mtb' ? ['mtb_trail'] : ['point'],
         brief_description: '',
         historical_description: '',
         primary_activities: '',
@@ -1601,11 +1601,9 @@ function AppContent() {
         cell_signal: null,
         more_info_link: '',
         events_url: '',
-        news_url: ''
+        news_url: '',
+        status_url: subTab === 'mtb' ? '' : undefined
       };
-      if (subTab === 'mtb') {
-        defaults.status_url = '';
-      }
       setNewPOI(defaults);
       setActiveTab('view');
       // Map will show "click to place" indicator since newPOI is set but no coords yet
@@ -1931,9 +1929,6 @@ function AppContent() {
                           checked={editMode}
                           onChange={(e) => {
                             setEditMode(e.target.checked);
-                            if (e.target.checked && activeTab !== 'view') {
-                              handleTabChange('view');
-                            }
                           }}
                         />
                       </label>
@@ -2076,6 +2071,12 @@ function AppContent() {
               setSelectedDestination(poi);
               setActiveTab('view');
             }
+          }}
+          onEditEventItem={(eventId, eventTitle) => {
+            setModerationFocusId(eventId);
+            setModerationFocusTitle(eventTitle || null);
+            setActiveTab('settings');
+            setSettingsTab('moderation');
           }}
         />
         </main>

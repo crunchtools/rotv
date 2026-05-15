@@ -1776,7 +1776,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                 };
 
                 const isMtbTrailhead = !associatedPoi._isLinear && !associatedPoi._isVirtual &&
-                                      associatedPoi.status_url && associatedPoi.status_url.trim() !== '';
+                                      (associatedPoi.poi_roles?.includes('mtb_trail') || (associatedPoi.status_url && associatedPoi.status_url.trim() !== ''));
                 const poiType = associatedPoi._isVirtual ? 'virtual' :
                                 !associatedPoi._isLinear ? (isMtbTrailhead ? 'mtb' : 'destination') :
                                 associatedPoi.feature_type || 'trail';
