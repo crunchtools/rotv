@@ -1568,6 +1568,50 @@ function AppContent() {
     setPreviewCoords(null);
   };
 
+  // Create new POI from Results tab (defaults based on active sub-tab)
+  const handleNewPOIFromResults = (subTab) => {
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+
+    if (subTab === 'organizations') {
+      // Organizations don't need coordinates — open sidebar directly
+      setNewPOI({
+        id: 'new-temp',
+        name: '',
+        poi_roles: ['organization'],
+        brief_description: '',
+        property_owner: '',
+        more_info_link: '',
+        events_url: '',
+        news_url: ''
+      });
+      setActiveTab('view');
+    } else {
+      // Point-based POIs — switch to map for click-to-place
+      const defaults = {
+        id: 'new-temp',
+        name: '',
+        poi_roles: subTab === 'mtb' ? ['point'] : ['point'],
+        is_mtb_trail: subTab === 'mtb' ? true : undefined,
+        brief_description: '',
+        historical_description: '',
+        primary_activities: '',
+        surface: '',
+        pets: '',
+        cell_signal: null,
+        more_info_link: '',
+        events_url: '',
+        news_url: ''
+      };
+      if (subTab === 'mtb') {
+        defaults.status_url = '';
+      }
+      setNewPOI(defaults);
+      setActiveTab('view');
+      // Map will show "click to place" indicator since newPOI is set but no coords yet
+    }
+  };
+
   // Start creating a new organization with found POIs
   const handleStartNewOrganization = (poisInBounds) => {
     // Clear any existing selection
@@ -1598,7 +1642,9 @@ function AppContent() {
 
   // Save new POI
   const handleSaveNewPOI = async (poiData) => {
-    const response = await fetch('/api/admin/destinations', {
+    // Use /api/admin/pois when poi_roles is present (new flow), otherwise legacy /destinations
+    const endpoint = poiData.poi_roles ? '/api/admin/pois' : '/api/admin/destinations';
+    const response = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
@@ -1969,6 +2015,10 @@ function AppContent() {
             bypassViewportFilter={bypassViewportFilter}
             visiblePoiCount={visiblePoiCount}
             iconConfig={iconConfig}
+            editMode={editMode}
+            isAdmin={isAdmin}
+            userRole={role}
+            onNewPOI={handleNewPOIFromResults}
           />
         </main>
       )}
@@ -1978,6 +2028,7 @@ function AppContent() {
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkNews
           isAdmin={isAdmin}
+          editMode={editMode}
           filteredDestinations={viewportFilteredDestinations}
           filteredLinearFeatures={viewportFilteredLinearFeatures}
           filteredVirtualPois={viewportFilteredVirtualPois}
@@ -2009,6 +2060,7 @@ function AppContent() {
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkEvents
           isAdmin={isAdmin}
+          editMode={editMode}
           filteredDestinations={viewportFilteredDestinations}
           filteredLinearFeatures={viewportFilteredLinearFeatures}
           filteredVirtualPois={viewportFilteredVirtualPois}

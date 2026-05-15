@@ -6,6 +6,8 @@ import { formatDateTime, formatPublicationDate, NewsTypeIcon, EventTypeIcon } fr
 import ShareButton from './ShareButton';
 import Mosaic from './Mosaic';
 import MediaUploadModal from './MediaUploadModal';
+import RoleEditor from './RoleEditor';
+import GeoJSONUploader from './GeoJSONUploader';
 
 // Sidebar component with tabs: Info, News, Events, History
 // Share Modal Component
@@ -700,6 +702,22 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
           placeholder="Enter POI name..."
         />
       </div>
+
+      {/* Role editor - shown for new POIs or when editing existing POIs */}
+      {(isNewPOI || isNewOrganization || editedData.poi_roles) && (
+        <RoleEditor
+          roles={editedData.poi_roles || []}
+          onChange={(roles) => handleChange('poi_roles', roles)}
+        />
+      )}
+
+      {/* GeoJSON uploader - shown when POI has trail, river, or boundary role */}
+      {editedData.poi_roles && (editedData.poi_roles.includes('trail') || editedData.poi_roles.includes('river') || editedData.poi_roles.includes('boundary')) && (
+        <GeoJSONUploader
+          geometry={editedData.geometry}
+          onChange={(geometry) => handleChange('geometry', geometry)}
+        />
+      )}
 
       <div className="edit-section">
         <label title="A short public-facing description of this location">Overview</label>

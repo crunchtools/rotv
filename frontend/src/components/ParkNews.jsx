@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { NewsCardBody } from './NewsEventsShared';
+import NewNewsForm from './NewNewsForm';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -8,7 +9,7 @@ const DEFAULT_PARK_BOUNDS = [
   [41.45, -81.50]   // Northeast corner
 ];
 
-function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -23,6 +24,7 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
     infrastructure: true,
     community: true
   });
+  const [showNewForm, setShowNewForm] = useState(false);
 
   useEffect(() => {
     fetchNews();
@@ -129,10 +131,22 @@ function ParkNews({ isAdmin, onSelectPoi, onEditNewsItem, filteredDestinations, 
 
   return (
     <div className="park-news-tab">
-      <div className="news-events-header">
-        <h2>Park News</h2>
-        <p className="tab-subtitle">Recent news from across Cuyahoga Valley National Park</p>
+      <div className="news-events-header tab-header-with-new">
+        <div>
+          <h2>Park News</h2>
+          <p className="tab-subtitle">Recent news from across Cuyahoga Valley National Park</p>
+        </div>
+        {editMode && isAdmin && (
+          <button className="tab-new-btn" onClick={() => setShowNewForm(true)}>+ New</button>
+        )}
       </div>
+
+      {showNewForm && (
+        <NewNewsForm
+          onClose={() => setShowNewForm(false)}
+          onCreate={() => fetchNews()}
+        />
+      )}
 
       <div className="results-filters">
         <input

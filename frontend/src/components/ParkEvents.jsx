@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import MapThumbnail from './MapThumbnail';
 import { EventCardBody } from './NewsEventsShared';
 import { handleRovingKeyDown } from '../utils/a11yUtils';
+import NewEventForm from './NewEventForm';
 
 // Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
@@ -16,7 +17,7 @@ function formatDateForCalendar(dateString) {
   return date.toISOString().replace(/-|:|\.\d{3}/g, '').slice(0, 15) + 'Z';
 }
 
-function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+function ParkEvents({ isAdmin, editMode, onSelectPoi, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -38,6 +39,7 @@ function ParkEvents({ isAdmin, onSelectPoi, filteredDestinations, filteredLinear
     'community': true,
     'alert': true
   });
+  const [showNewForm, setShowNewForm] = useState(false);
 
   useEffect(() => {
     fetchEvents();
@@ -238,10 +240,22 @@ END:VCALENDAR`;
 
   return (
     <div className="park-events-tab">
-      <div className="news-events-header">
-        <h2>{tabLabel}</h2>
-        <p className="tab-subtitle">Events across Cuyahoga Valley National Park</p>
+      <div className="news-events-header tab-header-with-new">
+        <div>
+          <h2>{tabLabel}</h2>
+          <p className="tab-subtitle">Events across Cuyahoga Valley National Park</p>
+        </div>
+        {editMode && isAdmin && (
+          <button className="tab-new-btn" onClick={() => setShowNewForm(true)}>+ New</button>
+        )}
       </div>
+
+      {showNewForm && (
+        <NewEventForm
+          onClose={() => setShowNewForm(false)}
+          onCreate={() => fetchEvents()}
+        />
+      )}
 
       {/* Sub-tabs */}
       <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
