@@ -69,7 +69,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const [lightboxPoiId, setLightboxPoiId] = useState(null);
   const [user, setUser] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null); // "news:123" key
-  const LIMIT = 1000;
+  const [page, setPage] = useState(1);
+  const LIMIT = 20;
 
   // Handle focusItemId changes (e.g. user clicks Edit on a second article without
   // leaving the Moderation tab — the component stays mounted but props change).
@@ -82,6 +83,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     setSearchQuery('');
     setSearchInput(focusItemTitle || '');
     setIdFilter(focusItemId);
+    setPage(1);
   }, [focusItemId, focusItemTitle]);
 
   // After queue loads, auto-expand and open edit mode for the focused item
@@ -104,7 +106,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const fetchQueue = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const params = new URLSearchParams({ page: 1, limit: LIMIT, status: statusFilter, sort: sortOrder });
+      const params = new URLSearchParams({ page, limit: LIMIT, status: statusFilter, sort: sortOrder });
       if (filter) params.set('type', filter);
       if (sourceFilter) params.set('source', sourceFilter);
       if (idFilter) {
@@ -125,9 +127,9 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [filter, statusFilter, sourceFilter, searchQuery, idFilter, sortOrder]);
+  }, [page, filter, statusFilter, sourceFilter, searchQuery, idFilter, sortOrder]);
 
-  useEffect(() => { fetchQueue(); }, [fetchQueue]);
+  useEffect(() => { fetchQueue(); setSelectedItems(new Set()); }, [fetchQueue]);
 
   // Auto-poll every 5 seconds to pick up background sweep changes
   useEffect(() => {
@@ -707,8 +709,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         <input
           type="text"
           value={searchInput}
-          onChange={e => { setSearchInput(e.target.value); if (!e.target.value) { setIdFilter(null); setSearchQuery('');} }}
-          onKeyDown={e => { if (e.key === 'Enter') { setIdFilter(null); setSearchQuery(searchInput);} }}
+          onChange={e => { setSearchInput(e.target.value); if (!e.target.value) { setIdFilter(null); setSearchQuery(''); setPage(1);} }}
+          onKeyDown={e => { if (e.key === 'Enter') { setIdFilter(null); setSearchQuery(searchInput); setPage(1);} }}
           placeholder="Search by title or description..."
           style={{
             width: '100%', padding: '8px 12px', fontSize: '0.88rem',
@@ -731,6 +733,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
               setFilter(f.value);
               if (f.value === 'event') setSortOrder('date_asc');
               else if (f.value !== filter) setSortOrder('collected_desc');
+              setPage(1);
             }}
               style={filterBtn(filter === f.value)}>
               {f.label}
@@ -745,7 +748,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
             { label: 'Human', value: 'human' },
             { label: 'Newsletter', value: 'newsletter' },
           ].map(f => (
-            <button key={`src-${f.label}`} onClick={() => { setSourceFilter(f.value);}}
+            <button key={`src-${f.label}`} onClick={() => { setSourceFilter(f.value); setPage(1);}}
               style={filterBtn(sourceFilter === f.value)}>
               {f.label}
             </button>
@@ -759,7 +762,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
             { label: 'Approved', value: 'approved' },
             { label: 'Rejected', value: 'rejected' },
           ].map(f => (
-            <button key={f.value} onClick={() => { setStatusFilter(f.value);setSelectedItems(new Set()); }}
+            <button key={f.value} onClick={() => { setStatusFilter(f.value);setSelectedItems(new Set()); setPage(1);}}
               style={filterBtn(statusFilter === f.value)}>
               {f.label}
             </button>
@@ -775,7 +778,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
             { label: 'POI A\u2192Z', value: 'poi_asc' },
             { label: 'POI Z\u2192A', value: 'poi_desc' },
           ].map(f => (
-            <button key={f.value} onClick={() => setSortOrder(f.value)}
+            <button key={f.value} onClick={() => { setSortOrder(f.value); setPage(1);}}
               style={filterBtn(sortOrder === f.value)}>
               {f.label}
             </button>
@@ -1153,6 +1156,29 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
               );
             }
           })}
+        </div>
+      )}
+
+      {/* Pagination controls */}
+      {!loading && Math.ceil(total / LIMIT) > 1 && (
+        <div className="pagination-controls">
+          <button
+            className="pagination-btn"
+            onClick={() => setPage(p => p - 1)}
+            disabled={page === 1}
+          >
+            Back
+          </button>
+          <span className="pagination-info">
+            Page {page} of {Math.ceil(total / LIMIT)}
+          </span>
+          <button
+            className="pagination-btn"
+            onClick={() => setPage(p => p + 1)}
+            disabled={page === Math.ceil(total / LIMIT)}
+          >
+            Next
+          </button>
         </div>
       )}
 

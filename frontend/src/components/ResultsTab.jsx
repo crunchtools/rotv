@@ -43,6 +43,8 @@ const ResultsTab = memo(function ResultsTab({
     initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all'
   );
   const [searchText, setSearchText] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   // Sub-tab configuration (fetched from server, with hardcoded fallback)
   const DEFAULT_SUBTABS = [
@@ -234,6 +236,14 @@ const ResultsTab = memo(function ResultsTab({
     };
   }, [activeSubTab, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, bypassViewportFilter, isInTransition, iconConfig]);
 
+  const totalPages = Math.ceil(sortedPois.length / PAGE_SIZE) || 1;
+  const clampedPage = Math.min(currentPage, totalPages);
+  if (clampedPage !== currentPage) setCurrentPage(clampedPage);
+  const paginatedPois = sortedPois.slice(
+    (clampedPage - 1) * PAGE_SIZE,
+    clampedPage * PAGE_SIZE
+  );
+
   // Event delegation handler - single handler for all tiles
   const handleListClick = useCallback((e) => {
     const tile = e.target.closest('.results-tile');
@@ -315,14 +325,17 @@ const ResultsTab = memo(function ResultsTab({
       }
       return newSet;
     });
+    setCurrentPage(1);
   }, []);
 
   const showAllFilters = useCallback(() => {
     setEnabledFilters(new Set(allFilterTypes));
+    setCurrentPage(1);
   }, [allFilterTypes]);
 
   const hideAllFilters = useCallback(() => {
     setEnabledFilters(new Set());
+    setCurrentPage(1);
   }, []);
 
   // Clear transition state when App.jsx bypassViewportFilter catches up
@@ -375,6 +388,7 @@ const ResultsTab = memo(function ResultsTab({
     }
 
     setActiveSubTab(tab);
+    setCurrentPage(1);
 
     // Don't clear bypass filter here - let App.jsx MTB Route Effect handle it
     // This prevents flickering when switching from MTB to All Results
@@ -419,7 +433,7 @@ const ResultsTab = memo(function ResultsTab({
             className="results-search-input"
             placeholder="Search by name or description..."
             value={searchText}
-            onChange={(e) => setSearchText(e.target.value)}
+            onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
           />
           {activeSubTab === 'all' && (
             <>
@@ -442,7 +456,7 @@ const ResultsTab = memo(function ResultsTab({
             </>
           )}
           <div className="results-count">
-            Showing {poiCount} of {totalCount} POIs
+            Showing {sortedPois.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, sortedPois.length)}`} of {sortedPois.length} POIs
           </div>
         </div>
 
@@ -535,7 +549,7 @@ const ResultsTab = memo(function ResultsTab({
           </>
         )}
         <div className="results-count">
-          Showing {poiCount} of {totalCount} POIs
+          Showing {sortedPois.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, sortedPois.length)}`} of {sortedPois.length} POIs
         </div>
       </div>
 
@@ -552,7 +566,7 @@ const ResultsTab = memo(function ResultsTab({
               tiles[next].focus();
             }
           }}>
-            {sortedPois.map(poi => {
+            {paginatedPois.map(poi => {
               const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
               const poiKey = `${type}-${poi.id}`;
               const isSelected = poi._isLinear
@@ -573,6 +587,27 @@ const ResultsTab = memo(function ResultsTab({
               );
             })}
           </div>
+          {totalPages > 1 && (
+            <div className="pagination-controls">
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(p => p - 1)}
+                disabled={currentPage === 1}
+              >
+                Back
+              </button>
+              <span className="pagination-info">
+                Page {currentPage} of {totalPages}
+              </span>
+              <button
+                className="pagination-btn"
+                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={currentPage === totalPages}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
         {mapState && (
           <div className="map-thumbnail-sidebar">
