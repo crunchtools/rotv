@@ -14,6 +14,7 @@
  */
 
 import fetch from 'node-fetch';
+import { getContainingBoundaries } from './geoService.js';
 
 
 /**
@@ -57,34 +58,7 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
     ? Math.min(10, Math.max(1, parseInt(maxResultsRow.rows[0].value, 10) || 3))
     : 3;
 
-  let boundaries = [];
-  try {
-    const contextResult = await pool.query(`
-      WITH poi_point AS (
-        SELECT
-          id,
-          CASE
-            WHEN 'point' = ANY(poi_roles) AND geom IS NOT NULL THEN geom
-            WHEN poi_roles && ARRAY['trail','boundary','river']::text[] AND geometry IS NOT NULL THEN
-              ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
-            ELSE NULL
-          END as point_geom
-        FROM pois
-        WHERE id = $1
-      )
-      SELECT boundary.name
-      FROM poi_point
-      LEFT JOIN pois AS boundary
-        ON 'boundary' = ANY(boundary.poi_roles)
-        AND boundary.boundary_geom IS NOT NULL
-        AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
-      WHERE poi_point.point_geom IS NOT NULL
-      ORDER BY ST_Area(boundary.boundary_geom) ASC
-    `, [poi.id]);
-    boundaries = contextResult.rows.map(r => r.name).filter(Boolean);
-  } catch (err) {
-    console.warn(`[Serper] PostGIS grounding unavailable, using ungrounded search: ${err.message}`);
-  }
+  const boundaries = await getContainingBoundaries(pool, poi.id);
 
   const context = boundaries.join(', ');
 
