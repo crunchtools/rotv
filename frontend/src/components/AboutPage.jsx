@@ -170,7 +170,7 @@ function AboutPage({ onStartTour, aboutTab, onTabChange, isAdmin, editMode }) {
             role="tab"
             aria-selected={aboutTab === 'feedback'}
           >
-            Send Feedback
+            Feedback
           </button>
           <button
             className={`settings-tab-btn about-tab-btn ${aboutTab === 'privacy' ? 'active' : ''}`}
@@ -179,7 +179,7 @@ function AboutPage({ onStartTour, aboutTab, onTabChange, isAdmin, editMode }) {
             role="tab"
             aria-selected={aboutTab === 'privacy'}
           >
-            Privacy Policy
+            Privacy
           </button>
         </nav>
       </div>

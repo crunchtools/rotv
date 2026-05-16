@@ -1154,7 +1154,8 @@ app.get('/api/pois/:id/media', async (req, res) => {
         const videoId = extractYouTubeId(media.youtube_url);
         item.youtube_url = media.youtube_url;
         item.youtube_id = videoId;
-        item.thumbnail_url = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
+        item.thumbnail_url = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+        item.medium_url = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
         item.embed_url = `https://www.youtube-nocookie.com/embed/${videoId}`;
       } else {
         // Image or video from image server
