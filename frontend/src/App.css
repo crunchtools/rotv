@@ -14751,4 +14751,9 @@ button.feedback-link-inline {
     bottom: 20px !important;
     top: auto !important;
   }
+
+  .guided-tour-tooltip.tour-position-above {
+    bottom: auto !important;
+    top: var(--tour-top) !important;
+  }
 }

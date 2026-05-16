@@ -288,6 +288,57 @@ function AppContent() {
 
   const handleTourStepAction = useCallback((action) => {
     switch (action) {
+      case 'showResults': {
+        setActiveTab('results');
+        isProgrammaticNavigationRef.current = true;
+        navigate('/results');
+        break;
+      }
+      case 'showNews': {
+        setActiveTab('news');
+        isProgrammaticNavigationRef.current = true;
+        navigate('/news');
+        break;
+      }
+      case 'showEvents': {
+        setActiveTab('events');
+        isProgrammaticNavigationRef.current = true;
+        navigate('/events');
+        break;
+      }
+      case 'showAbout': {
+        setActiveTab('about');
+        setAboutTab('story');
+        isProgrammaticNavigationRef.current = true;
+        navigate('/about/story');
+        break;
+      }
+      case 'expandLegend': {
+        setActiveTab('view');
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        isProgrammaticNavigationRef.current = true;
+        navigate('/');
+        setTimeout(() => {
+          if (!document.querySelector('.legend.legend-expanded')) {
+            const btn = document.querySelector('.map-poi-count');
+            if (btn) btn.click();
+          }
+        }, 100);
+        break;
+      }
+      case 'collapseLegendThenSelectVisitorCenter': {
+        if (document.querySelector('.legend.legend-expanded')) {
+          const btn = document.querySelector('.map-poi-count');
+          if (btn) btn.click();
+        }
+        setActiveTab('view');
+        const visitorCenter = destinations.find(d => d.name === 'Boston Mill Visitor Center');
+        if (visitorCenter) {
+          setSelectedDestination(visitorCenter);
+        }
+        break;
+      }
       case 'selectVisitorCenter': {
         // Select Boston Mill Visitor Center to show sidebar tabs
         setActiveTab('view');
@@ -298,12 +349,15 @@ function AppContent() {
         break;
       }
       case 'showMapView': {
-        // Return to map view, clear POI selection
         setActiveTab('view');
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
         isProgrammaticNavigationRef.current = true;
         navigate('/');
+        if (document.querySelector('.legend.legend-expanded')) {
+          const btn = document.querySelector('.map-poi-count');
+          if (btn) btn.click();
+        }
         break;
       }
       case 'showNewsletter': {
@@ -996,7 +1050,7 @@ function AppContent() {
     const match = location.pathname.match(/^\/tutorial\/step(\d+)$/);
     if (match && !tourActive) {
       const stepNum = parseInt(match[1], 10) - 1;
-      if (stepNum >= 0 && stepNum <= 8) {
+      if (stepNum >= 0 && stepNum <= 11) {
         setTourStep(stepNum);
         setTourActive(true);
         setShowTourPrompt(false);
