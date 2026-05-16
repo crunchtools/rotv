@@ -1,82 +1,129 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { handleRovingKeyDown } from '../utils/a11yUtils';
 import FeedbackForm from './FeedbackForm';
 import PrivacyPolicy from './PrivacyPolicy';
+import MarkdownRenderer from './MarkdownRenderer';
 
-function AboutStory() {
+function AboutEditor({ contentKey, content, onSave }) {
+  const [draft, setDraft] = useState(content || '');
+  const [saving, setSaving] = useState(false);
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    setDraft(content || '');
+  }, [content]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    }
+  }, [draft]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/admin/settings/${contentKey}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ value: draft })
+      });
+      if (!res.ok) throw new Error('Save failed');
+      onSave(contentKey, draft);
+    } catch (err) {
+      console.error('Error saving about content:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setDraft(content || '');
+    onSave(null);
+  };
+
   return (
-    <div className="about-story">
-      <h2>One Map for Everything Happening in the Cuyahoga Valley</h2>
-
-      <p>
-        The Cuyahoga Valley has over 300 parks, trailheads, preserves, and landmarks, but the
-        information about them is scattered across dozens of websites run by the National Park
-        Service, Cleveland Metroparks, Summit Metro Parks, and countless other organizations.
-        A mountain biker checking whether trails are rideable might need to check TrailForks,
-        Twitter, and two different park district websites. A family looking for weekend activities
-        doesn't have time to visit dozens of event calendars.
-      </p>
-
-      <p>
-        The result: people stick to what they already know and miss 95% of what the valley offers.
-      </p>
-
-      <p>
-        <strong>Roots of the Valley fixes that.</strong> We traverse the deepest corners of the web
-        to aggregate news, events, and social signals that traditional search engines miss, distilling
-        them into one seamless, interactive map. Every point of interest shows its latest news,
-        upcoming events, and current trail status. Open one page and immediately see what's open,
-        what's happening this weekend, and what's worth discovering for the first time.
-      </p>
-
-      <hr className="about-divider" />
-
-      <h2>Built in the Open</h2>
-
-      <p>
-        The Cuyahoga Valley is public land, maintained through shared stewardship by rangers,
-        volunteers, trail crews, and the people who use it every day. Roots of the Valley works
-        the same way.
-      </p>
-
-      <p>
-        The entire project, code, data, and infrastructure, is open source. Anyone can see how it
-        works, suggest improvements, or adapt it for their own region.
-      </p>
-
-      <p>
-        <strong>Transparency.</strong> When ROTV says a trail is closed, you can trace exactly where
-        that information came from. There's no opaque algorithm deciding what you see. The collection
-        sources are public, the moderation queue is human-reviewed, and the codebase is
-        on <a href="https://github.com/crunchtools/rotv" target="_blank" rel="noopener noreferrer">GitHub</a>.
-      </p>
-
-      <p>
-        <strong>Durability.</strong> Free services disappear all the time, the company pivots, the
-        funding dries up, or the product gets buried under ads and paywalls. ROTV can't be acquired,
-        shut down, or locked behind a subscription. The community owns it.
-      </p>
-
-      <p>
-        <strong>Participation.</strong> The same people who maintain trails, lead hikes, and organize
-        cleanups can contribute to ROTV. Park districts can submit event feeds. Developers can
-        contribute features. The goal is to build the same volunteer stewardship network online that
-        already exists on the trails.
-      </p>
-
-      <p className="about-closing">The valley belongs to everyone. The map should too.</p>
+    <div className="about-editor">
+      <textarea
+        ref={textareaRef}
+        className="about-editor-textarea"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        disabled={saving}
+      />
+      <div className="about-editor-actions">
+        <button className="save-btn" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button className="cancel-btn" onClick={handleCancel} disabled={saving}>
+          Cancel
+        </button>
+        <a
+          href="https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="about-editor-help"
+        >
+          Markdown Guide
+        </a>
+      </div>
     </div>
   );
 }
 
-function AboutTutorial({ onStartTour }) {
+function AboutStory({ content, isAdmin, editMode }) {
+  const [editing, setEditing] = useState(false);
+  const [localContent, setLocalContent] = useState(content);
+
+  useEffect(() => {
+    setLocalContent(content);
+  }, [content]);
+
+  const handleSave = (key, newContent) => {
+    if (key) setLocalContent(newContent);
+    setEditing(false);
+  };
+
+  return (
+    <div className="about-story">
+      {isAdmin && editMode && !editing && (
+        <button className="about-edit-btn" onClick={() => setEditing(true)}>Edit</button>
+      )}
+      {editing ? (
+        <AboutEditor contentKey="about_story_md" content={localContent} onSave={handleSave} />
+      ) : (
+        <MarkdownRenderer content={localContent} className="about-story-content" />
+      )}
+    </div>
+  );
+}
+
+function AboutTutorial({ onStartTour, content, isAdmin, editMode }) {
+  const [editing, setEditing] = useState(false);
+  const [localContent, setLocalContent] = useState(content);
+
+  useEffect(() => {
+    setLocalContent(content);
+  }, [content]);
+
+  const handleSave = (key, newContent) => {
+    if (key) setLocalContent(newContent);
+    setEditing(false);
+  };
+
   return (
     <div className="about-tutorial">
-      <h2>Learn How ROTV Works</h2>
-      <p>
-        New here? Take a quick guided tour to learn how to use the interactive map,
-        find events, check trail conditions, and discover new places in the valley.
-      </p>
+      {isAdmin && editMode && !editing && (
+        <button className="about-edit-btn" onClick={() => setEditing(true)}>Edit</button>
+      )}
+      {editing ? (
+        <AboutEditor contentKey="about_tutorial_md" content={localContent} onSave={handleSave} />
+      ) : (
+        <MarkdownRenderer content={localContent} className="about-tutorial-content" />
+      )}
       <button className="about-tour-btn" onClick={onStartTour}>
         Take a Tour
       </button>
@@ -84,7 +131,16 @@ function AboutTutorial({ onStartTour }) {
   );
 }
 
-function AboutPage({ onStartTour, aboutTab, onTabChange }) {
+function AboutPage({ onStartTour, aboutTab, onTabChange, isAdmin, editMode }) {
+  const [aboutContent, setAboutContent] = useState({});
+
+  useEffect(() => {
+    fetch('/api/about-content')
+      .then(res => res.ok ? res.json() : {})
+      .then(data => setAboutContent(data))
+      .catch(() => {});
+  }, []);
+
   return (
     <div className="about-page">
       <div className="settings-tabs-wrapper" onKeyDown={(e) => handleRovingKeyDown(e, '.about-tab-btn')}>
@@ -129,10 +185,16 @@ function AboutPage({ onStartTour, aboutTab, onTabChange }) {
       </div>
 
       <div className="about-tab-content" role="tabpanel">
-        {aboutTab === 'story' && <AboutStory />}
-        {aboutTab === 'tutorial' && <AboutTutorial onStartTour={onStartTour} />}
+        {aboutTab === 'story' && (
+          <AboutStory content={aboutContent.about_story_md} isAdmin={isAdmin} editMode={editMode} />
+        )}
+        {aboutTab === 'tutorial' && (
+          <AboutTutorial onStartTour={onStartTour} content={aboutContent.about_tutorial_md} isAdmin={isAdmin} editMode={editMode} />
+        )}
         {aboutTab === 'feedback' && <FeedbackForm inline />}
-        {aboutTab === 'privacy' && <PrivacyPolicy inline />}
+        {aboutTab === 'privacy' && (
+          <PrivacyPolicy inline content={aboutContent.about_privacy_md} isAdmin={isAdmin} editMode={editMode} />
+        )}
       </div>
     </div>
   );

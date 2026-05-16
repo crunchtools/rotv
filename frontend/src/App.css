@@ -14318,6 +14318,164 @@ button.feedback-link-inline {
   background: #1b4332;
 }
 
+/* Markdown-rendered content inherits about-story styles */
+.about-story .markdown-content h2 {
+  color: #2d6a4f;
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.about-story .markdown-content h2:first-child {
+  margin-top: 0;
+}
+
+.about-story .markdown-content p {
+  color: #444;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+
+.about-story .markdown-content a {
+  color: #2d6a4f;
+  text-decoration: none;
+}
+
+.about-story .markdown-content a:hover {
+  text-decoration: underline;
+}
+
+.about-story .markdown-content hr {
+  border: none;
+  border-top: 1px solid #ddd;
+  margin: 2rem 0;
+}
+
+.about-story .markdown-content em:last-child {
+  display: block;
+  color: #2d6a4f;
+  font-weight: 500;
+  margin-top: 1.5rem;
+}
+
+/* Tutorial markdown content */
+.about-tutorial .markdown-content h2 {
+  color: #2d6a4f;
+  font-size: 1.4rem;
+  margin-bottom: 0.75rem;
+}
+
+.about-tutorial .markdown-content p {
+  color: #444;
+  line-height: 1.6;
+  margin-bottom: 1rem;
+}
+
+/* Privacy markdown content */
+.privacy-markdown-content h1 {
+  color: #333;
+  font-size: 1.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.privacy-markdown-content h2 {
+  color: #2d6a4f;
+  font-size: 1.25rem;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.privacy-markdown-content p {
+  color: #444;
+  line-height: 1.7;
+  margin-bottom: 1rem;
+}
+
+.privacy-markdown-content ul {
+  padding-left: 1.5rem;
+}
+
+.privacy-markdown-content li {
+  color: #444;
+  line-height: 1.7;
+  margin-bottom: 0.25rem;
+}
+
+.privacy-markdown-content a {
+  color: #2d6a4f;
+  text-decoration: none;
+}
+
+.privacy-markdown-content a:hover {
+  text-decoration: underline;
+}
+
+.privacy-markdown-content em:first-child {
+  display: block;
+  color: #888;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+/* About page edit button */
+.about-edit-btn {
+  float: right;
+  background: #2d6a4f;
+  color: white;
+  border: none;
+  padding: 0.4rem 1rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.about-edit-btn:hover {
+  background: #1b4332;
+}
+
+/* About page markdown editor */
+.about-editor {
+  margin-top: 0.5rem;
+}
+
+.about-editor-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.about-editor-textarea:focus {
+  outline: none;
+  border-color: #2d6a4f;
+  box-shadow: 0 0 0 2px rgba(45, 106, 79, 0.2);
+}
+
+.about-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.about-editor-help {
+  margin-left: auto;
+  color: #888;
+  font-size: 0.8rem;
+  text-decoration: none;
+}
+
+.about-editor-help:hover {
+  color: #2d6a4f;
+  text-decoration: underline;
+}
+
 /* Inline feedback form */
 .feedback-inline {
   max-width: 600px;

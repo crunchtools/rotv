@@ -2085,7 +2085,7 @@ function AppContent() {
       {/* About tab content */}
       {activeTab === 'about' && (
         <main id="main-content" className="main-content-full" tabIndex="-1">
-          <AboutPage onStartTour={startTour} aboutTab={aboutTab} onTabChange={setAboutTab} />
+          <AboutPage onStartTour={startTour} aboutTab={aboutTab} onTabChange={setAboutTab} isAdmin={isAdmin} editMode={editMode} />
         </main>
       )}
 

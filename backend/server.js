@@ -895,6 +895,23 @@ async function initDatabase() {
   }
 }
 
+// API Routes - About page content (public, markdown stored in admin_settings)
+app.get('/api/about-content', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_privacy_md')`
+    );
+    const content = {};
+    for (const row of result.rows) {
+      content[row.key] = row.value;
+    }
+    res.json(content);
+  } catch (error) {
+    console.error('Error fetching about content:', error);
+    res.status(500).json({ error: 'Failed to fetch about content' });
+  }
+});
+
 // API Routes - Unified POIs
 app.get('/api/pois', async (req, res) => {
   try {
