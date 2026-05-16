@@ -1,44 +1,89 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
 const TOUR_STEPS = [
   {
     selector: '.leaflet-container',
     title: 'Interactive Map',
     description: 'Pan, zoom, and click any point of interest to explore Cuyahoga Valley\'s history.',
-    position: 'center'
+    position: 'center',
+    action: 'showMapView',
+    delay: 300
   },
   {
     selector: '.zoom-locate-control',
     title: 'Zoom In & Out',
     description: 'Use these controls to zoom the map and discover more detail.',
-    position: 'right'
+    position: 'right',
+    action: 'showMapView',
+    delay: 300
   },
   {
     selector: '.header-tabs .tab-btn:nth-child(2)',
     title: 'Browse Results',
     description: 'Results update as you zoom \u2014 see all points of interest in the current map view.',
     position: 'bottom',
-    padding: 2
+    padding: 2,
+    action: 'showResults',
+    delay: 300
+  },
+  {
+    selector: '.results-subtab[data-subtab="mtb"]',
+    title: 'MTB Trail Status',
+    description: 'Switch to the MTB Trail Status view to see current mountain bike trail conditions.',
+    position: 'bottom',
+    padding: 2,
+    action: 'showResults',
+    delay: 300
   },
   {
     selector: '.tab-btn:nth-child(3)',
     title: 'Park News',
     description: 'News updates with the map too \u2014 curated from local sources about the valley.',
     position: 'bottom',
-    padding: 2
+    padding: 2,
+    action: 'showNews',
+    delay: 300
   },
   {
     selector: '.tab-btn:nth-child(4)',
     title: 'Upcoming Events',
     description: 'Events also follow the map \u2014 concerts, hikes, programs in your current view.',
     position: 'bottom',
-    padding: 2
+    padding: 2,
+    action: 'showEvents',
+    delay: 300
+  },
+  {
+    selector: '.header-tabs .tab-btn:nth-child(5)',
+    title: 'About',
+    description: 'Learn the project story, revisit this tutorial, send feedback, or read the privacy policy.',
+    position: 'bottom',
+    padding: 2,
+    action: 'showAbout',
+    delay: 300
+  },
+  {
+    selector: '.map-poi-count',
+    title: 'Results',
+    description: 'Tap the results chip to open the filter panel for POI types and boundaries.',
+    position: 'bottom',
+    action: 'showMapView',
+    delay: 300,
+    mobileOnly: true
   },
   {
     selector: '.legend',
     title: 'POIs & Boundaries',
     description: 'Toggle point of interest types and boundary overlays to customize your view.',
-    position: 'right'
+    position: 'right',
+    action: 'showMapView',
+    delay: 300,
+    mobile: {
+      selector: '.legend.legend-expanded',
+      spotlightSelector: '.legend.legend-expanded',
+      action: 'expandLegend',
+      delay: 350
+    }
   },
   {
     selector: '.sidebar-tabs .sidebar-tab',
@@ -47,7 +92,11 @@ const TOUR_STEPS = [
     position: 'left',
     action: 'selectVisitorCenter',
     delay: 400,
-    spotlightSelector: '.sidebar-tabs'
+    spotlightSelector: '.sidebar-tabs',
+    mobile: {
+      action: 'collapseLegendThenSelectVisitorCenter',
+      delay: 600
+    }
   },
   {
     selector: '.tab-account-container',
@@ -62,13 +111,31 @@ const TOUR_STEPS = [
     description: 'Sign up for a weekly digest of news and events delivered to your inbox.',
     position: 'right',
     action: 'showNewsletter',
-    delay: 100
+    delay: 100,
+    mobile: {
+      delay: 400,
+      position: 'top',
+      mobilePositionAbove: true
+    }
   }
 ];
 
-// Pure function — compute spotlight rect and tooltip position from a step and its DOM element
+function getEffectiveStep(step, isMobile) {
+  if (!step || !isMobile || !step.mobile) return step;
+  return { ...step, ...step.mobile };
+}
+
+function getActiveSteps(isMobile) {
+  return TOUR_STEPS.filter(s => {
+    if (s.mobileOnly && !isMobile) return false;
+    if (s.desktopOnly && isMobile) return false;
+    return true;
+  });
+}
+
 function computePosition(step, el) {
-  if (!el) {
+  const isHidden = el && (el.offsetParent === null || (el.getBoundingClientRect().width === 0 && el.getBoundingClientRect().height === 0));
+  if (!el || isHidden) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     return {
@@ -77,7 +144,6 @@ function computePosition(step, el) {
     };
   }
 
-  // Scroll into view if needed (only for non-map elements like settings forms)
   const elRect = el.getBoundingClientRect();
   const isOffScreen = elRect.top < 0 || elRect.bottom > window.innerHeight;
   const isInSettingsPanel = el.closest('.settings-content');
@@ -140,7 +206,6 @@ function computePosition(step, el) {
       left = spotlight.left;
   }
 
-  // Clamp to viewport
   if (top + tooltipHeight > vh - 20) {
     top = Math.min(spotlight.top + spotlight.height - tooltipHeight - gap, vh - tooltipHeight - 20);
     top = Math.max(20, top);
@@ -156,12 +221,14 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
   const [spotlightRect, setSpotlightRect] = useState(null);
   const [tooltipStyle, setTooltipStyle] = useState({});
   const [stepReady, setStepReady] = useState(true);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const resizeRef = useRef(null);
   const prevStepRef = useRef(-1);
 
-  const step = TOUR_STEPS[currentStep];
+  const activeSteps = useMemo(() => getActiveSteps(isMobile), [isMobile]);
+  const baseStep = activeSteps[currentStep];
+  const step = useMemo(() => getEffectiveStep(baseStep, isMobile), [baseStep, isMobile]);
 
-  // Apply positioning from a step
   const applyPosition = useCallback((s) => {
     const spotlightEl = s.spotlightSelector ? document.querySelector(s.spotlightSelector) : null;
     const el = spotlightEl || document.querySelector(s.selector);
@@ -170,13 +237,11 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
     setTooltipStyle(result.tooltipStyle);
   }, []);
 
-  // Single effect for step transitions — handles actions, delays, and positioning
   useEffect(() => {
     if (!step) return;
     let cancelled = false;
     const timers = [];
 
-    // Fire action on step entry (only once per step)
     if (prevStepRef.current !== currentStep) {
       prevStepRef.current = currentStep;
 
@@ -186,11 +251,9 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
     }
 
     if (step.delay) {
-      // Hide everything until element is found and layout is stable
       setStepReady(false);
       setSpotlightRect(null);
 
-      // Poll until element appears and position is stable
       let retryCount = 0;
       let lastTop = null;
       let stableCount = 0;
@@ -200,7 +263,6 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
         const el = document.querySelector(targetSelector);
         if (el) {
           const rect = el.getBoundingClientRect();
-          // Wait until the element position is stable (not moving from animations)
           if (lastTop !== null && Math.abs(rect.top - lastTop) < 2) {
             stableCount++;
           } else {
@@ -223,33 +285,43 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
       };
       timers.push(setTimeout(poll, step.delay));
     } else {
-      // Immediate positioning
       setStepReady(true);
       applyPosition(step);
     }
 
-    // Resize handler
     const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
       if (resizeRef.current) cancelAnimationFrame(resizeRef.current);
       resizeRef.current = requestAnimationFrame(() => applyPosition(step));
     };
     window.addEventListener('resize', handleResize);
 
+    const handleScroll = () => {
+      if (resizeRef.current) cancelAnimationFrame(resizeRef.current);
+      resizeRef.current = requestAnimationFrame(() => applyPosition(step));
+    };
+    window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
+
+    const repositionInterval = setInterval(() => {
+      if (!cancelled) applyPosition(step);
+    }, 250);
+
     return () => {
       cancelled = true;
       timers.forEach(t => clearTimeout(t));
+      clearInterval(repositionInterval);
       window.removeEventListener('resize', handleResize);
+      window.removeEventListener('scroll', handleScroll, { capture: true });
       if (resizeRef.current) cancelAnimationFrame(resizeRef.current);
     };
-  }, [currentStep, step, onStepAction, applyPosition]);
+  }, [currentStep, step, onStepAction, applyPosition, isMobile]);
 
-  // Keyboard navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         onEnd();
       } else if (e.key === 'Enter' || e.key === 'ArrowRight') {
-        if (currentStep < TOUR_STEPS.length - 1) {
+        if (currentStep < activeSteps.length - 1) {
           setCurrentStep(currentStep + 1);
         } else {
           onEnd();
@@ -260,11 +332,11 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentStep, setCurrentStep, onEnd]);
+  }, [currentStep, setCurrentStep, onEnd, activeSteps.length]);
 
   if (!step) return null;
 
-  const isLastStep = currentStep === TOUR_STEPS.length - 1;
+  const isLastStep = currentStep === activeSteps.length - 1;
 
   return (
     <div className="guided-tour-overlay" aria-label="Guided tour" role="dialog">
@@ -289,13 +361,13 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
       )}
 
       <div
-        className={`guided-tour-tooltip ${stepReady ? 'tour-visible' : 'tour-hidden'}`}
-        style={tooltipStyle}
+        className={`guided-tour-tooltip ${stepReady ? 'tour-visible' : 'tour-hidden'} ${isMobile && step.mobilePositionAbove ? 'tour-position-above' : ''}`}
+        style={{ ...tooltipStyle, '--tour-top': tooltipStyle.top }}
         role="alertdialog"
         aria-label={step.title}
       >
         <div className="guided-tour-step-indicator">
-          {currentStep + 1} of {TOUR_STEPS.length}
+          {currentStep + 1} of {activeSteps.length}
         </div>
         <h4 className="guided-tour-title">{step.title}</h4>
         <p className="guided-tour-description">{step.description}</p>

@@ -421,6 +421,7 @@ const ResultsTab = memo(function ResultsTab({
             <button
               key={tab.id}
               className={`results-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
+              data-subtab={tab.id}
               onClick={() => handleSubTabChange(tab.id)}
               tabIndex={activeSubTab === tab.id ? 0 : -1}
             >
@@ -524,6 +525,7 @@ const ResultsTab = memo(function ResultsTab({
           <button
             key={tab.id}
             className={`results-subtab ${activeSubTab === tab.id ? 'active' : ''}`}
+            data-subtab={tab.id}
             onClick={() => handleSubTabChange(tab.id)}
             tabIndex={activeSubTab === tab.id ? 0 : -1}
           >
