@@ -940,7 +940,7 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
             {dest.has_primary_image && (
               <div className="tooltip-thumbnail">
                 <img
-                  src={`/api/pois/${dest.id}/thumbnail?size=medium`}
+                  src={`/api/pois/${dest.id}/thumbnail?size=medium&v=${dest.updated_at || ''}`}
                   alt=""
                   onError={(e) => {
                     e.target.style.display = 'none';
