@@ -540,7 +540,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'blocklist_urls',
       'moderation_trusted_domains',
       'trusted_event_paths',
-      'github_api_token'
+      'github_api_token',
+      'about_story_md',
+      'about_tutorial_md',
+      'about_privacy_md'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });

@@ -1,8 +1,106 @@
-import React from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import MarkdownRenderer from './MarkdownRenderer';
 
-function PrivacyPolicy({ inline = false }) {
+function PrivacyEditor({ content, onSave }) {
+  const [draft, setDraft] = useState(content || '');
+  const [saving, setSaving] = useState(false);
+  const textareaRef = useRef(null);
+
+  useEffect(() => {
+    setDraft(content || '');
+  }, [content]);
+
+  useEffect(() => {
+    const ta = textareaRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = ta.scrollHeight + 'px';
+    }
+  }, [draft]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/settings/about_privacy_md', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ value: draft })
+      });
+      if (!res.ok) throw new Error('Save failed');
+      onSave(draft);
+    } catch (err) {
+      console.error('Error saving privacy content:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setDraft(content || '');
+    onSave(null);
+  };
+
+  return (
+    <div className="about-editor">
+      <textarea
+        ref={textareaRef}
+        className="about-editor-textarea"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        disabled={saving}
+      />
+      <div className="about-editor-actions">
+        <button className="save-btn" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button className="cancel-btn" onClick={handleCancel} disabled={saving}>
+          Cancel
+        </button>
+        <a
+          href="https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="about-editor-help"
+        >
+          Markdown Guide
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
   const navigate = useNavigate();
+  const [editing, setEditing] = useState(false);
+  const [localContent, setLocalContent] = useState(content);
+  const [standaloneContent, setStandaloneContent] = useState(null);
+
+  useEffect(() => {
+    setLocalContent(content);
+  }, [content]);
+
+  // Standalone route: fetch content directly if not provided as prop
+  useEffect(() => {
+    if (!inline && !content) {
+      fetch('/api/about-content')
+        .then(res => res.ok ? res.json() : {})
+        .then(data => {
+          if (data.about_privacy_md) {
+            setStandaloneContent(data.about_privacy_md);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [inline, content]);
+
+  const displayContent = localContent || standaloneContent;
+
+  const handleSave = (newContent) => {
+    if (newContent) setLocalContent(newContent);
+    setEditing(false);
+  };
 
   return (
     <div className={`privacy-policy-page ${inline ? 'privacy-inline' : ''}`}>
@@ -13,133 +111,15 @@ function PrivacyPolicy({ inline = false }) {
           </button>
         )}
 
-        <h1>Privacy Policy</h1>
-        <p className="privacy-updated">Last updated: May 2026</p>
+        {isAdmin && editMode && !editing && (
+          <button className="about-edit-btn" onClick={() => setEditing(true)}>Edit</button>
+        )}
 
-        <section>
-          <h2>The Short Version</h2>
-          <p>
-            Roots of the Valley is a free, open source community project. We don't run ads.
-            We don't sell data. We don't track you. We collect the minimum information needed
-            to let you sign in, and that's it.
-          </p>
-        </section>
-
-        <section>
-          <h2>What We Collect</h2>
-          <p>When you sign in with Google or Facebook, we receive:</p>
-          <ul>
-            <li>Your name</li>
-            <li>Your email address</li>
-            <li>Your profile photo</li>
-          </ul>
-          <p>
-            That's the full list. We don't request access to your contacts, calendar,
-            files, or anything else.
-          </p>
-        </section>
-
-        <section>
-          <h2>How We Use It</h2>
-          <p>Your account information is used for one purpose: identifying you when you sign in.
-            We use your name and photo to show who's logged in. We use your email to
-            associate your session with your account. We don't send marketing emails,
-            newsletters (unless you explicitly subscribe), or third-party communications.
-          </p>
-        </section>
-
-        <section>
-          <h2>What We Don't Do</h2>
-          <ul>
-            <li>We don't sell your data. Ever. To anyone.</li>
-            <li>We don't run advertisements.</li>
-            <li>We don't use third-party analytics or tracking scripts.</li>
-            <li>We don't share your information with other organizations.</li>
-            <li>We don't build advertising profiles or behavioral models.</li>
-          </ul>
-          <p>
-            ROTV is a community project, not a business. There is no revenue model that
-            depends on your data. The plan is to create a non-profit to govern this project
-            permanently.
-          </p>
-        </section>
-
-        <section>
-          <h2>Cookies</h2>
-          <p>
-            We use a single session cookie to keep you logged in. That's it. No tracking
-            cookies, no third-party cookies, no cookie consent banners because there's
-            nothing to consent to beyond basic session management.
-          </p>
-        </section>
-
-        <section>
-          <h2>Where Your Data Lives</h2>
-          <p>
-            Your account data is stored in a PostgreSQL database on infrastructure we
-            control. We don't use third-party data processors, cloud analytics platforms,
-            or customer data platforms. The data sits on our server and nowhere else.
-          </p>
-        </section>
-
-        <section>
-          <h2>Your Rights</h2>
-          <ul>
-            <li><strong>Delete your account:</strong> Contact us and we'll remove all your data.</li>
-            <li><strong>Export your data:</strong> Contact us and we'll provide everything we have on you (it's not much).</li>
-            <li><strong>Know what we have:</strong> This page is the complete picture. There are no hidden data stores.</li>
-          </ul>
-        </section>
-
-        <section>
-          <h2>Photos You Upload</h2>
-          <p>
-            When you submit a photo or video to a point of interest, you retain full
-            ownership and all rights to that content. By uploading, you grant ROTV a
-            non-exclusive license to display it on the site, in the weekly newsletter,
-            and on ROTV social media accounts — nothing more. We won't sell your photos
-            or videos, use them in unrelated advertising, or sub-license them to third
-            parties.
-          </p>
-          <p>
-            All uploads go through moderation before they appear on the site. If you
-            want something removed, contact us and we'll take it down.
-          </p>
-        </section>
-
-        <section>
-          <h2>Open Source Transparency</h2>
-          <p>
-            Don't take our word for it. The entire ROTV codebase is open source under
-            the AGPL-3.0 license. You can read exactly how authentication works, what
-            we store in the database, and how data flows through the system.
-          </p>
-          <p>
-            <a href="https://github.com/crunchtools/rotv" target="_blank" rel="noopener noreferrer">
-              View the source code on GitHub
-            </a>
-          </p>
-        </section>
-
-        <section>
-          <h2>Changes to This Policy</h2>
-          <p>
-            If we ever change this policy, we'll update the date at the top of this page.
-            Given that our entire model is "collect nothing, sell nothing," we don't
-            anticipate meaningful changes.
-          </p>
-        </section>
-
-        <section>
-          <h2>Contact</h2>
-          <p>
-            Questions? Open an issue on{' '}
-            <a href="https://github.com/crunchtools/rotv/issues" target="_blank" rel="noopener noreferrer">
-              GitHub
-            </a>{' '}
-            or email admin@rootsofthevalley.org.
-          </p>
-        </section>
+        {editing ? (
+          <PrivacyEditor content={displayContent} onSave={handleSave} />
+        ) : (
+          <MarkdownRenderer content={displayContent} className="privacy-markdown-content" />
+        )}
       </div>
     </div>
   );
