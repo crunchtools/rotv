@@ -16,11 +16,11 @@ const FACEBOOK_ACTOR_ID = 'apify~facebook-posts-scraper';
  */
 async function getApifyToken(pool) {
   try {
-    const result = await pool.query(
+    const tokenRow = await pool.query(
       `SELECT value FROM admin_settings WHERE key = 'apify_api_token'`
     );
-    if (result.rows.length > 0 && result.rows[0].value) {
-      return result.rows[0].value;
+    if (tokenRow.rows.length > 0 && tokenRow.rows[0].value) {
+      return tokenRow.rows[0].value;
     }
   } catch (err) {
     console.error('[Apify] Error loading API token:', err.message);

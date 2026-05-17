@@ -19,12 +19,11 @@ async function getApiKey(pool) {
   // Try to get from database first
   if (pool) {
     try {
-      const result = await pool.query(
+      const settingRow = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'buttondown_api_key'"
       );
-      if (result.rows.length > 0 && result.rows[0].value) {
-        // Sanitize: keep only printable ASCII characters (no control chars)
-        const rawKey = result.rows[0].value;
+      if (settingRow.rows.length > 0 && settingRow.rows[0].value) {
+        const rawKey = settingRow.rows[0].value;
         apiKeyCache = rawKey.replace(/[^\x20-\x7E]/g, '').trim();
 
         // Validate format (should be alphanumeric, dashes, underscores only)

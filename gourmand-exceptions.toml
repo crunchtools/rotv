@@ -582,11 +582,6 @@ justification = "HTML placeholder attribute on form inputs — standard HTML syn
 
 [[exceptions]]
 check = "generic_names"
-path = "backend/services/apifyService.js"
-justification = "Technical debt: Apify API response uses generic 'result' variable. Should be refactored in dedicated code quality PR."
-
-[[exceptions]]
-check = "generic_names"
 path = "backend/services/backupService.js"
 justification = "Technical debt: Google Drive API responses and backup data use generic 'result'/'data' variables. Should be refactored in dedicated code quality PR."
 
@@ -727,11 +722,6 @@ justification = "Newsletter digest service has JSDoc function documentation"
 check = "generic_names"
 path = "backend/routes/newsletter.js"
 justification = "Technical debt: Newsletter route handlers use generic 'result' variable for API responses. Should be refactored in dedicated code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/buttondownClient.js"
-justification = "Technical debt: Buttondown API client uses generic 'result' variable for API responses. Should be refactored in dedicated code quality PR."
 
 [[exceptions]]
 check = "single_use_helpers"
