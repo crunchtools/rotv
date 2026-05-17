@@ -1978,6 +1978,31 @@ app.get('/api/theme-video/:theme', async (req, res) => {
 });
 
 // Public news and events endpoints
+app.get('/api/pois/:id/tab-counts', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const tz = req.query.tz || 'America/New_York';
+    const result = await pool.query(`
+      SELECT
+        (SELECT COUNT(*) FROM poi_news n
+         WHERE n.poi_id = $1
+           AND n.moderation_status IN ('published', 'auto_approved')) AS news_count,
+        (SELECT COUNT(*) FROM poi_events e
+         WHERE e.poi_id = $1
+           AND e.moderation_status IN ('published', 'auto_approved')
+           AND (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date) AS events_count
+    `, [id, tz]);
+    const row = result.rows[0];
+    res.json({
+      news_count: parseInt(row.news_count, 10),
+      events_count: parseInt(row.events_count, 10)
+    });
+  } catch (error) {
+    console.error('Error fetching POI tab counts:', error);
+    res.status(500).json({ error: 'Failed to fetch tab counts' });
+  }
+});
+
 app.get('/api/pois/:id/news', async (req, res) => {
   try {
     const { id } = req.params;
