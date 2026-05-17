@@ -243,13 +243,13 @@ export async function ensureNewsJobCheckpointColumns(pool) {
 export async function findIncompleteJobs(pool) {
   // Only resume jobs from the last 1 hour — older ones are stale
   // (e.g. imported via seed data from a previous run)
-  const result = await pool.query(`
+  const incompleteJobs = await pool.query(`
     SELECT * FROM news_job_status
     WHERE status IN ('queued', 'running')
     AND created_at > NOW() - INTERVAL '1 hour'
     ORDER BY created_at ASC
   `);
-  return result.rows;
+  return incompleteJobs.rows;
 }
 
 // Calendar/view navigation suffixes — links ending with these are view selectors, not detail pages
@@ -448,10 +448,10 @@ ${markdown.substring(0, 5000)}
 Return ONLY valid JSON:
 {"page_type": "listing|detail|neither", "reasoning": "one sentence"}`;
 
-  const result = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 256, thinkingBudget: 0 });
+  const classifierOutput = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 256, thinkingBudget: 0 });
 
   // Parse JSON from response (handle markdown code blocks)
-  const text = result.response || result;
+  const text = classifierOutput.response || classifierOutput;
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
     // Parse failure — assume listing and pass all ranked links for deterministic filtering
@@ -539,8 +539,8 @@ ${markdown.substring(0, 5000)}
 
 Respond with ONLY this JSON object, nothing else: {"count": N}`;
 
-  const result = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 64, thinkingBudget: 0 });
-  const text = (result.response || result || '').trim();
+  const countOutput = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 64, thinkingBudget: 0 });
+  const text = (countOutput.response || countOutput || '').trim();
   logInfo(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Gemini response: ${text}`);
   const MAX_ITEM_COUNT = 20;
   const clamp = (n) => {
@@ -832,13 +832,13 @@ async function filterKnownPages(pool, pages, contentType, opts = {}) {
   const fullUrls = pages.map(p => normFull(p.url));
   const pathUrls = pages.map(p => normPath(p.url));
 
-  const result = await pool.query(
+  const existingUrlRows = await pool.query(
     `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM ${table}
      WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
         OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`,
     [fullUrls, pathUrls]
   );
-  const known = new Set(result.rows.map(r => r.url));
+  const known = new Set(existingUrlRows.rows.map(r => r.url));
 
   return pages.filter(p => {
     if (known.has(normFull(p.url)) || known.has(normPath(p.url))) {
@@ -1838,9 +1838,9 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
   await allDone;
 
   // Aggregate results
-  for (const result of results) {
-    newsFound += result.newsFound;
-    eventsFound += result.eventsFound;
+  for (const poiOutcome of results) {
+    newsFound += poiOutcome.newsFound;
+    eventsFound += poiOutcome.eventsFound;
     processed++;
   }
 
@@ -1993,11 +1993,11 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       dispatchInterval: DISPATCH_INTERVAL_MS,
 
       checkCancelled: async () => {
-        const result = await pool.query(
+        const statusRows = await pool.query(
           'SELECT status FROM news_job_status WHERE id = $1',
           [jobId]
         );
-        return result.rows[0]?.status === 'cancelled';
+        return statusRows.rows[0]?.status === 'cancelled';
       },
 
       onItemStart: async (poi, { slotId, jobId: jid }) => {
@@ -2030,7 +2030,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         return { savedNews, savedEvents, news, events };
       },
 
-      checkpointFn: async (poi, result, error) => {
+      checkpointFn: async (poi, poiOutcome, error) => {
         // Circuit breaker: don't mark browser-killed POIs as processed (they'll retry on resume)
         const MAX_CB_RETRIES = 3;
         if (error && error.name === 'BrowserOverloadError') {
@@ -2054,9 +2054,9 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         processed++;
         newlyProcessedIds.push(poi.id);
 
-        if (result) {
-          newsFound += result.savedNews;
-          eventsFound += result.savedEvents;
+        if (poiOutcome) {
+          newsFound += poiOutcome.savedNews;
+          eventsFound += poiOutcome.savedEvents;
         }
         if (error) {
           logError(jobId, jobType, poi.id, poi.name, error.message, { error_stack: error.stack?.split('\n').slice(0, 3).join('\n') });
@@ -2165,12 +2165,12 @@ function extractDomain(url) {
  * @returns {Map<string, {poiId: number, poiName: string}>} - domain → POI info
  */
 export async function buildDomainOwnershipMap(pool) {
-  const result = await pool.query(
+  const urlOwners = await pool.query(
     `SELECT id, name, news_url, events_url FROM pois
      WHERE (news_url IS NOT NULL OR events_url IS NOT NULL) AND deleted = false`
   );
   const map = new Map();
-  for (const row of result.rows) {
+  for (const row of urlOwners.rows) {
     for (const url of [row.news_url, row.events_url]) {
       const domain = extractDomain(url);
       if (domain) {
@@ -2217,7 +2217,7 @@ export async function getAllPoisForCollection(pool) {
     }
   }
 
-  const result = await pool.query(
+  const collectionPoiRows = await pool.query(
     `SELECT id FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
        AND poi_roles && ARRAY['point','organization','river']::text[]
@@ -2231,7 +2231,7 @@ export async function getAllPoisForCollection(pool) {
        name`,
     excludedIds.length > 0 ? [excludedIds] : []
   );
-  return result.rows.map(r => r.id);
+  return collectionPoiRows.rows.map(r => r.id);
 }
 
 /**
@@ -2268,7 +2268,7 @@ export async function getPoisForTierCollection(pool, tier) {
     params.push(excludedIds);
   }
 
-  const result = await pool.query(
+  const tierPoiRows = await pool.query(
     `SELECT id FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
        AND poi_roles && ARRAY['point','organization','river']::text[]
@@ -2283,7 +2283,7 @@ export async function getPoisForTierCollection(pool, tier) {
        name`,
     params
   );
-  return result.rows.map(r => r.id);
+  return tierPoiRows.rows.map(r => r.id);
 }
 
 /**
@@ -2337,11 +2337,11 @@ export async function runNewsCollection(pool, sheets = null) {
  * @param {number} jobId - Job ID
  */
 export async function getJobStatus(pool, jobId) {
-  const result = await pool.query(
+  const jobStatusRows = await pool.query(
     'SELECT * FROM news_job_status WHERE id = $1',
     [jobId]
   );
-  return result.rows[0] || null;
+  return jobStatusRows.rows[0] || null;
 }
 
 /**
@@ -2351,7 +2351,7 @@ export async function getJobStatus(pool, jobId) {
  * @param {number} limit - Max items to return
  */
 export async function getNewsForPoi(pool, poiId, limit = 10) {
-  const result = await pool.query(`
+  const newsRows = await pool.query(`
     SELECT id, title, summary, source_url, source_name, news_type, publication_date, collection_date
     FROM poi_news
     WHERE poi_id = $1
@@ -2360,7 +2360,7 @@ export async function getNewsForPoi(pool, poiId, limit = 10) {
     LIMIT $2
   `, [poiId, limit]);
 
-  return result.rows;
+  return newsRows.rows;
 }
 
 /**
@@ -2384,8 +2384,8 @@ export async function getEventsForPoi(pool, poiId, upcomingOnly = true, tz = 'Am
 
   query += ` ORDER BY start_date ASC`;
 
-  const result = await pool.query(query, upcomingOnly ? [poiId, tz] : [poiId]);
-  return result.rows;
+  const eventRows = await pool.query(query, upcomingOnly ? [poiId, tz] : [poiId]);
+  return eventRows.rows;
 }
 
 /**
@@ -2394,7 +2394,7 @@ export async function getEventsForPoi(pool, poiId, upcomingOnly = true, tz = 'Am
  * @param {number} limit - Max items to return
  */
 export async function getRecentNews(pool, limit = 20) {
-  const result = await pool.query(`
+  const recentNewsRows = await pool.query(`
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
            n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_news n
@@ -2404,7 +2404,7 @@ export async function getRecentNews(pool, limit = 20) {
     LIMIT $1
   `, [limit]);
 
-  return result.rows;
+  return recentNewsRows.rows;
 }
 
 /**
@@ -2414,7 +2414,7 @@ export async function getRecentNews(pool, limit = 20) {
  * @param {string} tz - IANA timezone for date comparison
  */
 export async function getUpcomingEvents(pool, daysAhead = 30, tz = 'America/New_York') {
-  const result = await pool.query(`
+  const upcomingEventRows = await pool.query(`
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
            e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_events e
@@ -2425,7 +2425,7 @@ export async function getUpcomingEvents(pool, daysAhead = 30, tz = 'America/New_
     ORDER BY e.start_date ASC
   `, [daysAhead, tz]);
 
-  return result.rows;
+  return upcomingEventRows.rows;
 }
 
 /**
@@ -2433,13 +2433,13 @@ export async function getUpcomingEvents(pool, daysAhead = 30, tz = 'America/New_
  * @param {Pool} pool - Database connection pool
  */
 export async function getLatestJobStatus(pool) {
-  const result = await pool.query(`
+  const latestJobRows = await pool.query(`
     SELECT * FROM news_job_status
     ORDER BY created_at DESC
     LIMIT 1
   `);
 
-  return result.rows[0] || null;
+  return latestJobRows.rows[0] || null;
 }
 
 /**
@@ -2449,14 +2449,14 @@ export async function getLatestJobStatus(pool) {
  */
 export async function cleanupOldNews(pool, daysOld = 90) {
   const runId = Math.floor(Date.now() / 1000);
-  const result = await pool.query(`
+  const deleteOutcome = await pool.query(`
     DELETE FROM poi_news
     WHERE collection_date < CURRENT_DATE - INTERVAL '1 day' * $1
   `, [daysOld]);
 
-  logInfo(runId, 'cleanup', null, null, `Cleanup: deleted ${result.rowCount} news older than ${daysOld} days`, { completed: true, deleted: result.rowCount, type: 'news', days_old: daysOld });
+  logInfo(runId, 'cleanup', null, null, `Cleanup: deleted ${deleteOutcome.rowCount} news older than ${daysOld} days`, { completed: true, deleted: deleteOutcome.rowCount, type: 'news', days_old: daysOld });
   await flushJobLogs();
-  return result.rowCount;
+  return deleteOutcome.rowCount;
 }
 
 /**
@@ -2466,13 +2466,13 @@ export async function cleanupOldNews(pool, daysOld = 90) {
  */
 export async function cleanupPastEvents(pool, daysOld = 30) {
   const runId = Math.floor(Date.now() / 1000);
-  const result = await pool.query(`
+  const deleteOutcome = await pool.query(`
     DELETE FROM poi_events
     WHERE end_date < CURRENT_DATE - INTERVAL '1 day' * $1
        OR (end_date IS NULL AND start_date < CURRENT_DATE - INTERVAL '1 day' * $1)
   `, [daysOld]);
 
-  logInfo(runId, 'cleanup', null, null, `Cleanup: deleted ${result.rowCount} events older than ${daysOld} days`, { completed: true, deleted: result.rowCount, type: 'events', days_old: daysOld });
+  logInfo(runId, 'cleanup', null, null, `Cleanup: deleted ${deleteOutcome.rowCount} events older than ${daysOld} days`, { completed: true, deleted: deleteOutcome.rowCount, type: 'events', days_old: daysOld });
   await flushJobLogs();
-  return result.rowCount;
+  return deleteOutcome.rowCount;
 }

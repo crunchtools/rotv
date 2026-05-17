@@ -513,30 +513,6 @@ justification = "withHardTimeout wraps browser operations with timeout enforceme
 
 # Single-use helpers - Admin routes queue helpers
 
-# Generic names - Technical debt to be addressed in future refactoring
-# TODO: Refactor generic variable names like 'result' and 'data' to be more descriptive
-# Tracking issue: Would require renaming ~89 variables across codebase
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/server.js"
-justification = "Technical debt: 60+ database query results use generic 'result' variable name. Should be refactored to descriptive names (e.g., userRecords, poiData, etc.) in future PR focused on code quality improvements."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/newsService.js"
-justification = "Technical debt: Database query results and API responses use generic 'result' variable name. Should be refactored in future code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/jsRenderer.js"
-justification = "Technical debt: Playwright render results use generic 'result' variable name. Should be refactored in future code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/routes/admin.js"
-justification = "Technical debt: Admin route handlers use generic 'result' and 'data' variable names for database queries and API responses. Should be refactored in future code quality PR."
-
 # Single-use helpers - Icon utility shared logic (Issue #73)
 
 [[exceptions]]
@@ -578,37 +554,10 @@ path = "frontend/src/components/MediaUploadModal.jsx"
 justification = "HTML placeholder attribute on form inputs — standard HTML syntax, not deferred work"
 
 # Generic names — database query results use 'result'/'data' pattern
-# TODO: Rename these in a dedicated code quality PR
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/backupService.js"
-justification = "Technical debt: Google Drive API responses and backup data use generic 'result'/'data' variables. Should be refactored in dedicated code quality PR."
-
 [[exceptions]]
 check = "generic_names"
 path = "backend/services/collection/BatchRunner.js"
-justification = "Technical debt: batch collection result uses generic 'result' variable. Should be refactored in dedicated code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/imageServerClient.js"
-justification = "Technical debt: image server API responses use generic 'result'/'data' variables. Should be refactored in dedicated code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/mcpServer.js"
-justification = "Technical debt: MCP tool handlers use generic 'result' for 19 database query results. Should be refactored in dedicated code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/moderationService.js"
-justification = "Technical debt: moderation queries use generic 'result' for 6 database results. Should be refactored in dedicated code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/trailStatusService.js"
-justification = "Technical debt: trail status queries use generic 'result' variable. Should be refactored in dedicated code quality PR."
+justification = "The 'result' local is consumed into results.push({ item, result, success }) where 'result' is part of the pushed object's key — the same key callers reach for downstream. Renaming the local would only produce { item, result: <newName> } which adds zero clarity."
 
 # Verbose comments — JSDoc function documentation in new services
 
@@ -717,11 +666,6 @@ justification = "Buttondown API client has JSDoc function documentation"
 check = "verbose_comments"
 path = "backend/services/newsletterDigestService.js"
 justification = "Newsletter digest service has JSDoc function documentation"
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/routes/newsletter.js"
-justification = "Technical debt: Newsletter route handlers use generic 'result' variable for API responses. Should be refactored in dedicated code quality PR."
 
 [[exceptions]]
 check = "single_use_helpers"

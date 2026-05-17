@@ -17,7 +17,7 @@ export function createNewsletterRouter(pool) {
 
     try {
       // Add to Buttondown (idempotent - handles duplicates gracefully)
-      const result = await addSubscriber(email, pool);
+      const subscribeResult = await addSubscriber(email, pool);
 
       // Track locally for analytics (but ignore duplicates)
       try {
@@ -33,8 +33,8 @@ export function createNewsletterRouter(pool) {
       }
 
       // Check if already subscribed
-      if (result.status === 'already_subscribed') {
-        if (result.needsConfirmation) {
+      if (subscribeResult.status === 'already_subscribed') {
+        if (subscribeResult.needsConfirmation) {
           return res.json({
             success: true,
             message: 'You\'re already subscribed! Check your email for the confirmation link (check spam folder).'
@@ -72,7 +72,7 @@ export function createNewsletterRouter(pool) {
       const totalSubscribers = await getSubscriberCount();
 
       // Count new subscriptions in last 7 days from local tracking
-      const result = await pool.query(
+      const recentSubscriberQuery = await pool.query(
         `SELECT COUNT(*) as new_this_week
          FROM newsletter_subscriptions
          WHERE subscribed_at > NOW() - INTERVAL '7 days'`
@@ -80,7 +80,7 @@ export function createNewsletterRouter(pool) {
 
       res.json({
         total_subscribers: totalSubscribers,
-        new_this_week: parseInt(result.rows[0].new_this_week),
+        new_this_week: parseInt(recentSubscriberQuery.rows[0].new_this_week),
         source: 'buttondown'
       });
     } catch (error) {
@@ -107,12 +107,12 @@ export function createNewsletterRouter(pool) {
   // Test Buttondown API key (admin only)
   router.post('/test-api-key', isAdmin, async (req, res) => {
     try {
-      const result = await testApiKey(pool);
+      const apiKeyTestResult = await testApiKey(pool);
       console.log(`Admin ${req.user.email} tested Buttondown API key - success`);
       res.json({
         success: true,
-        message: result.message,
-        subscriberCount: result.subscriberCount
+        message: apiKeyTestResult.message,
+        subscriberCount: apiKeyTestResult.subscriberCount
       });
     } catch (error) {
       console.error('Buttondown API key test failed:', error);

@@ -53,12 +53,12 @@ async function trackTwitterResult(pool, statusUrl, success) {
          ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = NOW()`
       );
     } else {
-      const result = await pool.query(
+      const failureCountRow = await pool.query(
         `INSERT INTO admin_settings (key, value, updated_at) VALUES ('twitter_consecutive_failures', '1', NOW())
          ON CONFLICT (key) DO UPDATE SET value = (COALESCE(admin_settings.value, '0')::int + 1)::text, updated_at = NOW()
          RETURNING value`
       );
-      const failures = parseInt(result.rows[0]?.value) || 0;
+      const failures = parseInt(failureCountRow.rows[0]?.value) || 0;
       if (failures >= 3) {
         console.warn(`[Trail Status] WARNING: ${failures} consecutive Twitter failures — cookies may be stale. Refresh at Settings > Data Collection.`);
       }
@@ -673,12 +673,12 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
         return { statusFound: statusCollection.statusFound, statusSaved: statusCollection.statusSaved, poiName: poi.name };
       },
 
-      checkpointFn: async (poiId, result, error) => {
+      checkpointFn: async (poiId, statusOutcome, error) => {
         processedPois.add(poiId);
 
-        if (result && !result.notFound) {
-          totalStatusFound += result.statusFound;
-          totalStatusSaved += result.statusSaved;
+        if (statusOutcome && !statusOutcome.notFound) {
+          totalStatusFound += statusOutcome.statusFound;
+          totalStatusSaved += statusOutcome.statusSaved;
         }
         if (error) {
           logError(jobId, 'trail_status', poiId, null, error.message);

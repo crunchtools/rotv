@@ -728,20 +728,20 @@ export async function purgeRejected(pool, contentType) {
   if (contentType) {
     const table = TABLE_MAP[contentType];
     if (!table) throw new Error(`Unknown content type: ${contentType}`);
-    const result = await pool.query(
+    const purgeResult = await pool.query(
       `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
     );
-    logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${result.rowCount} ${contentType} items`, { completed: true, deleted: result.rowCount, type: contentType });
+    logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${purgeResult.rowCount} ${contentType} items`, { completed: true, deleted: purgeResult.rowCount, type: contentType });
     await flushJobLogs();
-    return { deleted: result.rowCount };
+    return { deleted: purgeResult.rowCount };
   }
   // Purge all three tables
   let total = 0;
   for (const table of Object.values(TABLE_MAP)) {
-    const result = await pool.query(
+    const purgeResult = await pool.query(
       `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
     );
-    total += result.rowCount;
+    total += purgeResult.rowCount;
   }
   logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${total} items (all types)`, { completed: true, deleted: total, type: 'all' });
   await flushJobLogs();
@@ -1059,7 +1059,7 @@ export async function getMergeCandidates(pool, contentType, contentId) {
   const poiId = item.rows[0].poi_id;
 
   // Get all other items from the same POI
-  const result = await pool.query(`
+  const candidatesQuery = await pool.query(`
     SELECT t.id, t.title, t.source_url, t.moderation_status, t.collection_date,
            t.publication_date,
            COUNT(u.id)::int AS additional_url_count
@@ -1071,7 +1071,7 @@ export async function getMergeCandidates(pool, contentType, contentId) {
     LIMIT 50
   `, [poiId, contentId]);
 
-  return result.rows;
+  return candidatesQuery.rows;
 }
 
 export async function addItemUrl(pool, contentType, contentId, url, sourceName) {
@@ -1102,7 +1102,7 @@ export async function addItemUrl(pool, contentType, contentId, url, sourceName) 
     return { added: false, reason: 'URL matches primary source_url' };
   }
 
-  const result = await pool.query(
+  const urlInsert = await pool.query(
     `INSERT INTO ${urlTable} (${fkColumn}, url, source_name)
      SELECT $1, $2, $3
      WHERE NOT EXISTS (
@@ -1112,12 +1112,12 @@ export async function addItemUrl(pool, contentType, contentId, url, sourceName) 
     [contentId, url, sourceName || null]
   );
 
-  if (result.rows.length === 0) {
+  if (urlInsert.rows.length === 0) {
     return { added: false, reason: 'URL already exists' };
   }
 
   console.log(`[Moderation] Added URL to ${contentType} #${contentId}: ${url}`);
-  return { added: true, urlId: result.rows[0].id };
+  return { added: true, urlId: urlInsert.rows[0].id };
 }
 
 export async function removeItemUrl(pool, contentType, contentId, urlId) {
@@ -1127,9 +1127,9 @@ export async function removeItemUrl(pool, contentType, contentId, urlId) {
 
   const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
   const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
-  const result = await pool.query(`DELETE FROM ${urlTable} WHERE id = $1 AND ${fkColumn} = $2 RETURNING id`, [urlId, contentId]);
+  const deleteResult = await pool.query(`DELETE FROM ${urlTable} WHERE id = $1 AND ${fkColumn} = $2 RETURNING id`, [urlId, contentId]);
 
-  if (result.rows.length === 0) throw new Error('URL not found');
+  if (deleteResult.rows.length === 0) throw new Error('URL not found');
 
   console.log(`[Moderation] Removed URL #${urlId} from ${contentType} #${contentId}`);
   return { removed: true };

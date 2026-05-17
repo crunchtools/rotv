@@ -553,8 +553,8 @@ class ImageServerClient {
         throw new Error(`DB restore failed: ${response.status} - ${errorText}`);
       }
 
-      const result = await response.json();
-      return { success: true, output: result.output };
+      const restoreResponse = await response.json();
+      return { success: true, output: restoreResponse.output };
     } catch (error) {
       console.error('[ImageServer] Failed to restore DB:', error);
       return { success: false, error: error.message };
@@ -576,11 +576,11 @@ class ImageServerClient {
       throw new Error(`List media failed: ${response.status}`);
     }
 
-    const data = await response.json();
-    if (!Array.isArray(data)) {
+    const mediaFiles = await response.json();
+    if (!Array.isArray(mediaFiles)) {
       throw new Error('Image server returned invalid media file list (expected array)');
     }
-    return data;
+    return mediaFiles;
   }
 
   /**

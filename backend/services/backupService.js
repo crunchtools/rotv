@@ -71,7 +71,7 @@ export async function triggerBackup(pool, drive) {
       stdio: ['ignore', 'pipe', 'pipe']
     });
     proc.stdout.on('data', (chunk) => chunks.push(chunk));
-    proc.stderr.on('data', (data) => console.warn('[Backup] pg_dump stderr:', data.toString()));
+    proc.stderr.on('data', (chunk) => console.warn('[Backup] pg_dump stderr:', chunk.toString()));
     proc.on('close', (code) => {
       if (code !== 0) return reject(new Error(`pg_dump exited with code ${code}`));
       resolve(Buffer.concat(chunks).toString('utf-8'));
@@ -176,7 +176,7 @@ export async function restoreBackup(pool, drive, fileId) {
     });
 
     let stderr = '';
-    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
     proc.stdin.write(sqlDump);
     proc.stdin.end();
 
@@ -200,13 +200,13 @@ export async function restoreBackup(pool, drive, fileId) {
  * Get the last backup status
  */
 export async function getBackupStatus(pool) {
-  const result = await pool.query(
+  const lastBackupRow = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'last_backup'"
   );
   const backupsFolderId = await getDriveSetting(pool, 'backups_folder_id');
 
   return {
-    lastBackup: result.rows[0]?.value || null,
+    lastBackup: lastBackupRow.rows[0]?.value || null,
     backupsFolderId: backupsFolderId || null
   };
 }
@@ -474,9 +474,9 @@ export async function restoreImagesFromDrive(pool, drive) {
       );
 
       const buffer = Buffer.from(response.data);
-      const result = await imageServerClient.uploadMediaFile(subdir, filename, buffer);
+      const uploadResult = await imageServerClient.uploadMediaFile(subdir, filename, buffer);
 
-      if (result.success) {
+      if (uploadResult.success) {
         restored++;
       } else {
         failed++;

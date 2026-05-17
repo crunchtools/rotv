@@ -230,14 +230,14 @@ export async function renderJavaScriptPage(url, options = {}) {
       ? requireTwitterLogin
       : (url.includes('twitter.com') || url.includes('x.com'));
 
-    const result = await Promise.race([
+    const renderedPage = await Promise.race([
       renderJavaScriptPageInternal(url, {
         timeout, waitForSelector, waitTime, extractSelectors, contextRef, needsTwitterLogin, twitterCredentials
       }),
       hardTimeoutPromise
     ]);
 
-    return result;
+    return renderedPage;
   } catch (error) {
     console.error(`[JS Renderer] ❌ Error for ${url}:`, error.message);
     return {
@@ -298,14 +298,14 @@ async function renderJavaScriptPageInternal(url, options) {
           port: process.env.PGPORT || 5432,
         });
 
-        const result = await dbPool.query(
+        const cookieQuery = await dbPool.query(
           "SELECT value FROM admin_settings WHERE key = 'twitter_cookies'"
         );
 
         await dbPool.end();
 
-        if (result.rows.length > 0) {
-          const cookies = JSON.parse(result.rows[0].value);
+        if (cookieQuery.rows.length > 0) {
+          const cookies = JSON.parse(cookieQuery.rows[0].value);
 
           // Sanitize cookies for Playwright compatibility
           const sanitizedCookies = cookies.map(cookie => {

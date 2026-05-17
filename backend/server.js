@@ -99,10 +99,10 @@ function getMosaicFromCache(poiId) {
   return null;
 }
 
-function setMosaicCache(poiId, data) {
+function setMosaicCache(poiId, mosaicPayload) {
   const cacheKey = `poi:${poiId}`;
   mosaicCache.set(cacheKey, {
-    data,
+    data: mosaicPayload,
     expires: Date.now() + MOSAIC_CACHE_TTL
   });
 }
@@ -904,11 +904,11 @@ async function initDatabase() {
 // API Routes - About page content (public, markdown stored in admin_settings)
 app.get('/api/about-content', async (req, res) => {
   try {
-    const result = await pool.query(
+    const aboutSettings = await pool.query(
       `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_privacy_md')`
     );
     const content = {};
-    for (const row of result.rows) {
+    for (const row of aboutSettings.rows) {
       content[row.key] = row.value;
     }
     res.json(content);
@@ -997,16 +997,16 @@ app.get('/api/pois/:id/image', async (req, res) => {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    const result = await imageServerClient.fetchAssetData(asset.id);
-    if (!result.success) {
-      console.error(`[POI Image] Fetch failed for POI ${id}:`, result.error);
+    const assetFetch = await imageServerClient.fetchAssetData(asset.id);
+    if (!assetFetch.success) {
+      console.error(`[POI Image] Fetch failed for POI ${id}:`, assetFetch.error);
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Type', assetFetch.contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(result.data);
+    res.send(assetFetch.data);
   } catch (error) {
     console.error('Error serving POI image:', error);
     res.status(500).json({ error: 'Failed to serve image' });
@@ -1020,7 +1020,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     const size = req.query.size; // small, medium, large — passed through to image server
 
     // Fix: Query poi_media table for primary image (Gatehouse finding)
-    const result = await pool.query(`
+    const primaryMediaQuery = await pool.query(`
       SELECT image_server_asset_id
       FROM poi_media
       WHERE poi_id = $1
@@ -1032,8 +1032,8 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     `, [id]);
 
     let assetId;
-    if (result.rows.length > 0) {
-      assetId = result.rows[0].image_server_asset_id;
+    if (primaryMediaQuery.rows.length > 0) {
+      assetId = primaryMediaQuery.rows[0].image_server_asset_id;
     } else if (imageServerClient.initialized) {
       // Fallback: query image server directly for POIs without poi_media records
       const asset = await imageServerClient.getPrimaryAsset(id);
@@ -1115,7 +1115,7 @@ app.get('/api/pois/:id/media', async (req, res) => {
     }
 
     // Query media: published for everyone, pending only for uploader
-    const result = await pool.query(`
+    const mediaQuery = await pool.query(`
       SELECT
         id,
         media_type,
@@ -1143,7 +1143,7 @@ app.get('/api/pois/:id/media', async (req, res) => {
     const allMedia = [];
 
     // Enrich media with URLs
-    for (const media of result.rows) {
+    for (const media of mediaQuery.rows) {
       const item = {
         id: media.id,
         media_type: media.media_type,
@@ -1555,21 +1555,21 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
       return res.status(503).json({ error: 'Image service unavailable' });
     }
 
-    const result = await imageServerClient.fetchThumbnailData(assetId, size);
-    if (!result.success) {
+    const thumbnailFetch = await imageServerClient.fetchThumbnailData(assetId, size);
+    if (!thumbnailFetch.success) {
       // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
       // 404 = asset doesn't exist, 502/503 = image server down
-      const statusCode = result.statusCode || 500;
+      const statusCode = thumbnailFetch.statusCode || 500;
       const message = statusCode === 404 ? 'Asset not found' :
                       statusCode >= 500 ? 'Image service error' :
                       'Failed to fetch asset';
       return res.status(statusCode).json({ error: message });
     }
 
-    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Type', thumbnailFetch.contentType);
     res.setHeader('Cache-Control', 'public, max-age=604800');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(result.data);
+    res.send(thumbnailFetch.data);
   } catch (error) {
     console.error('Error serving asset thumbnail:', error);
     res.status(500).json({ error: 'Failed to serve thumbnail' });
@@ -1621,21 +1621,21 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
       return res.status(503).json({ error: 'Image service unavailable' });
     }
 
-    const result = await imageServerClient.fetchAssetData(assetId);
-    if (!result.success) {
+    const assetFetch = await imageServerClient.fetchAssetData(assetId);
+    if (!assetFetch.success) {
       // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
       // 404 = asset doesn't exist, 502/503 = image server down
-      const statusCode = result.statusCode || 500;
+      const statusCode = assetFetch.statusCode || 500;
       const message = statusCode === 404 ? 'Asset not found' :
                       statusCode >= 500 ? 'Image service error' :
                       'Failed to fetch asset';
       return res.status(statusCode).json({ error: message });
     }
 
-    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Type', assetFetch.contentType);
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.send(result.data);
+    res.send(assetFetch.data);
   } catch (error) {
     console.error('Error serving asset:', error);
     res.status(500).json({ error: 'Failed to serve asset' });
@@ -1906,14 +1906,14 @@ app.get('/api/health', (req, res) => {
 // Public theme configuration endpoint (no auth required)
 app.get('/api/theme-config', async (req, res) => {
   try {
-    const result = await pool.query(
+    const themeConfigRow = await pool.query(
       "SELECT value FROM admin_settings WHERE key = 'seasonal_themes'"
     );
 
-    if (result.rows.length > 0) {
-      const config = typeof result.rows[0].value === 'string'
-        ? JSON.parse(result.rows[0].value)
-        : result.rows[0].value;
+    if (themeConfigRow.rows.length > 0) {
+      const config = typeof themeConfigRow.rows[0].value === 'string'
+        ? JSON.parse(themeConfigRow.rows[0].value)
+        : themeConfigRow.rows[0].value;
 
       // Generate proxy URLs for theme videos via image server
       const themes = config.themes || [];
@@ -1933,7 +1933,7 @@ app.get('/api/theme-config', async (req, res) => {
       }
 
       res.json({
-        seasonal_themes: result.rows[0].value,
+        seasonal_themes: themeConfigRow.rows[0].value,
         video_urls: videoUrls
       });
     } else {
@@ -1962,15 +1962,15 @@ app.get('/api/theme-video/:theme', async (req, res) => {
     }
 
     // Fetch video data from image server
-    const result = await imageServerClient.fetchThemeVideoData(theme);
-    if (!result.success) {
+    const themeVideoFetch = await imageServerClient.fetchThemeVideoData(theme);
+    if (!themeVideoFetch.success) {
       return res.status(404).json({ error: 'Theme video not available' });
     }
 
-    res.set('Content-Type', result.contentType);
+    res.set('Content-Type', themeVideoFetch.contentType);
     res.set('Cache-Control', 'public, max-age=3600');
-    res.set('Content-Length', String(result.data.length));
-    res.send(result.data);
+    res.set('Content-Length', String(themeVideoFetch.data.length));
+    res.send(themeVideoFetch.data);
   } catch (error) {
     console.error(`[Theme Video] Error serving video:`, error);
     res.status(500).json({ error: 'Failed to serve video' });
@@ -1990,7 +1990,7 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
     const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
       ? rawTz
       : 'America/New_York';
-    const result = await pool.query(`
+    const tabCountsQuery = await pool.query(`
       SELECT
         (SELECT COUNT(*) FROM poi_news n
          WHERE n.poi_id = $1
@@ -2002,7 +2002,7 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
     `, [id, tz]);
     // The subquery-only SELECT always returns exactly one row, but guard anyway
     // so a future refactor with a FROM clause doesn't silently break (PR #368 review).
-    const row = result.rows[0] || { news_count: 0, events_count: 0 };
+    const row = tabCountsQuery.rows[0] || { news_count: 0, events_count: 0 };
     res.json({
       news_count: parseInt(row.news_count, 10),
       events_count: parseInt(row.events_count, 10)
@@ -2174,11 +2174,11 @@ app.get('/api/results-subtabs', async (req, res) => {
     { id: 'organizations', label: 'Organizations', shortLabel: 'Orgs', route: '/organizations', filterTypes: ['organization'], protected: false }
   ];
   try {
-    const result = await pool.query(
+    const subtabsConfigRow = await pool.query(
       "SELECT value FROM admin_settings WHERE key = 'results_subtabs_config'"
     );
-    if (result.rows.length > 0 && result.rows[0].value) {
-      res.json(JSON.parse(result.rows[0].value));
+    if (subtabsConfigRow.rows.length > 0 && subtabsConfigRow.rows[0].value) {
+      res.json(JSON.parse(subtabsConfigRow.rows[0].value));
     } else {
       res.json({ subtabs: DEFAULT_SUBTABS });
     }
@@ -2803,9 +2803,9 @@ async function start() {
     ]) {
       await registerTierNewsCollectionHandler(tier, withJitter(async () => {
         console.log(`Running scheduled ${tier} news collection...`);
-        const result = await runTierNewsCollection(pool, tier, null);
-        if (result.totalPois > 0) {
-          console.log(`${tier} news collection started for ${result.totalPois} POIs`);
+        const tierRun = await runTierNewsCollection(pool, tier, null);
+        if (tierRun.totalPois > 0) {
+          console.log(`${tier} news collection started for ${tierRun.totalPois} POIs`);
         } else {
           console.log(`No POIs to collect for ${tier} tier`);
         }
@@ -2868,7 +2868,7 @@ async function start() {
     });
 
     // Register weekly digest handler
-    await registerDigestHandler(async (pgBossJobId, data) => {
+    await registerDigestHandler(async (pgBossJobId, _digestPayload) => {
       await sendWeeklyDigest(pool, pgBossJobId);
     });
 
@@ -2899,8 +2899,8 @@ async function start() {
       console.log('Running scheduled image backup...');
       const { triggerImageBackup } = await import('./services/backupService.js');
       const drive = await getAdminDriveService();
-      const result = await triggerImageBackup(pool, drive);
-      console.log(`Image backup completed: ${result.uploaded} uploaded, ${result.skipped} skipped, ${result.failed} failed`);
+      const imageBackupResult = await triggerImageBackup(pool, drive);
+      console.log(`Image backup completed: ${imageBackupResult.uploaded} uploaded, ${imageBackupResult.skipped} skipped, ${imageBackupResult.failed} failed`);
     }, 'image-backup'));
 
     // Schedule nightly image backup at 2 AM Eastern
@@ -2911,8 +2911,8 @@ async function start() {
       console.log('Running scheduled database backup...');
       const { triggerBackup } = await import('./services/backupService.js');
       const drive = await getAdminDriveService();
-      const result = await triggerBackup(pool, drive);
-      console.log(`Database backup completed: ${result.filename} (${result.driveFileId})`);
+      const dbBackupResult = await triggerBackup(pool, drive);
+      console.log(`Database backup completed: ${dbBackupResult.filename} (${dbBackupResult.driveFileId})`);
     }, 'database-backup'));
 
     // Schedule nightly database backup at 3 AM Eastern
