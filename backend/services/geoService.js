@@ -18,7 +18,7 @@
  */
 export async function getContainingBoundaries(pool, poiId) {
   try {
-    const result = await pool.query(`
+    const boundaryQuery = await pool.query(`
       WITH poi_point AS (
         SELECT
           id,
@@ -40,7 +40,7 @@ export async function getContainingBoundaries(pool, poiId) {
       WHERE poi_point.point_geom IS NOT NULL
       ORDER BY ST_Area(boundary.boundary_geom) ASC
     `, [poiId]);
-    return result.rows.map(r => r.name).filter(Boolean);
+    return boundaryQuery.rows.map(r => r.name).filter(Boolean);
   } catch (err) {
     console.warn(`[Geo] Boundary lookup unavailable for POI ${poiId}: ${err.message}`);
     return [];

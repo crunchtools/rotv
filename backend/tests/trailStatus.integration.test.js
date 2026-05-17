@@ -95,6 +95,7 @@ describe('Trail Status Integration Tests', () => {
         source_url VARCHAR(1000),
         weather_impact TEXT,
         seasonal_closure BOOLEAN DEFAULT FALSE,
+        content_hash VARCHAR(64),
         created_at TIMESTAMP DEFAULT NOW()
       )
     `);

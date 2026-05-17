@@ -993,3 +993,83 @@ check = "implicit_state_machine"
 path = "image-server/tests/test_vision.py"
 justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
+# Deferred work false positives — HTML placeholder attributes are form input hints, not TODO markers
+
+[[exceptions]]
+check = "deferred_work"
+path = "frontend/src/components/NewEventForm.jsx"
+justification = "HTML placeholder attributes on form inputs misidentified as deferred-work markers"
+
+[[exceptions]]
+check = "deferred_work"
+path = "frontend/src/components/NewNewsForm.jsx"
+justification = "HTML placeholder attributes on form inputs misidentified as deferred-work markers"
+
+# Verbose comments — JSX components and integration tests have legitimate inline comments
+# labeling sections, state management, and test-step intent
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/tests/accessibility.integration.test.js"
+justification = "Test step labels explain test intent (legitimate test documentation)"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/tests/filterIconsMatch.integration.test.js"
+justification = "Test step labels explain test intent (legitimate test documentation)"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/tests/rovingTabindex.integration.test.js"
+justification = "Per-step comments label keyboard navigation assertions (legitimate test documentation)"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/AboutPage.jsx"
+justification = "Inline component comments describe state and effect intent"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/ContentFormModal.jsx"
+justification = "Inline comments describe mode-specific behavior and validation steps"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/GeoJSONUploader.jsx"
+justification = "Inline comments describe upload pipeline stages"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/MarkdownRenderer.jsx"
+justification = "Module-level JSDoc describes component contract"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/ModerationExtras.jsx"
+justification = "Inline comments describe moderation action handlers"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/NewEventForm.jsx"
+justification = "Inline comments describe form section and submission logic"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/NewNewsForm.jsx"
+justification = "Inline comments describe form section and submission logic"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/PrivacyPolicy.jsx"
+justification = "Module-level JSDoc describes component intent"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/RoleEditor.jsx"
+justification = "Inline comments describe role management logic"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/hooks/useModeration.js"
+justification = "Inline JSDoc and section comments describe hook state and effect handlers"
+

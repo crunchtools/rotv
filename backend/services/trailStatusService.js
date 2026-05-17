@@ -6,11 +6,14 @@
  * Progress is checkpointed after each trail so jobs can resume after container restarts.
  */
 
+import crypto from 'crypto';
 import { generateTextWithCustomPrompt } from './geminiService.js';
 import { renderPage } from './renderPage.js';
 import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
+
+const HASH_SKIP_MAX_AGE_HOURS = 48;
 
 // Helper to detect Twitter/X URLs (used in multiple places)
 function isTwitterUrl(url) {
@@ -226,6 +229,27 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     console.log(`[Trail Status] Extracted content (${rendered.markdown.length} chars)`);
 
+    const contentHash = crypto.createHash('sha256').update(rendered.markdown).digest('hex');
+
+    const lastHashResult = await pool.query(
+      `SELECT content_hash, created_at FROM trail_status WHERE poi_id = $1 ORDER BY created_at DESC LIMIT 1`,
+      [poi.id]
+    );
+    const lastRow = lastHashResult.rows[0];
+    if (lastRow && lastRow.content_hash === contentHash) {
+      const ageHours = (Date.now() - new Date(lastRow.created_at).getTime()) / (1000 * 60 * 60);
+      if (ageHours < HASH_SKIP_MAX_AGE_HOURS) {
+        console.log(`[Trail Status] Content unchanged for ${poi.name} (hash ${contentHash.slice(0, 12)}, age ${ageHours.toFixed(1)}h), skipping Gemini extraction`);
+        updateProgress(poi.id, {
+          phase: 'skipped_unchanged',
+          message: 'Content unchanged since last check',
+          completed: true,
+          skipped: true
+        });
+        return { statusFound: 1, statusSaved: 0, skipped: true };
+      }
+    }
+
     // Check for cancellation after rendering
     if (isCancellationRequested(poi.id)) {
       console.log(`[Trail Status] Cancellation requested after rendering, aborting`);
@@ -259,7 +283,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       .replace(/\{\{renderedContent\}\}/g, rendered.markdown);
 
     console.log(`[Trail Status] Extracting status with Gemini (${prompt.length} char prompt)...`);
-    const response = await generateTextWithCustomPrompt(pool, prompt);
+    const response = await generateTextWithCustomPrompt(pool, prompt, { thinkingBudget: 0 });
 
     console.log(`[Trail Status] Received response (${response.length} chars)`);
 
@@ -334,7 +358,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       steps: ['Initialized', 'Rendered', 'Extracting', 'Saving']
     });
 
-    const saved = await saveTrailStatus(pool, poi.id, status);
+    const saved = await saveTrailStatus(pool, poi.id, status, contentHash);
 
     updateProgress(poi.id, {
       phase: 'complete',
@@ -366,7 +390,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
  * @param {Object} status - Status object
  * @returns {boolean} - true if new status was saved, false if duplicate
  */
-async function saveTrailStatus(pool, poiId, status) {
+async function saveTrailStatus(pool, poiId, status, contentHash = null) {
   try {
     // Validate that last_updated is not too old (reject status older than 90 days)
     if (status.last_updated) {
@@ -398,6 +422,13 @@ async function saveTrailStatus(pool, poiId, status) {
       const sourceChanged = recent.source_url !== status.source_url;
 
       if (!statusChanged && !conditionsChanged && !sourceChanged) {
+        // Refresh hash on the prior row so future identical renders hit the skip path
+        if (contentHash && recent.content_hash !== contentHash) {
+          await pool.query(
+            `UPDATE trail_status SET content_hash = $1 WHERE id = $2`,
+            [contentHash, recent.id]
+          );
+        }
         console.log(`[Trail Status] Status unchanged, skipping duplicate`);
         return false;
       }
@@ -424,8 +455,9 @@ async function saveTrailStatus(pool, poiId, status) {
         source_name,
         source_url,
         weather_impact,
-        seasonal_closure
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        seasonal_closure,
+        content_hash
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `, [
       poiId,
       status.status,
@@ -434,7 +466,8 @@ async function saveTrailStatus(pool, poiId, status) {
       status.source_name,
       status.source_url,
       status.weather_impact,
-      status.seasonal_closure || false
+      status.seasonal_closure || false,
+      contentHash
     ]);
 
     console.log(`[Trail Status] Status saved to database`);

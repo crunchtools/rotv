@@ -689,8 +689,14 @@ async function initDatabase() {
         source_url VARCHAR(1000),
         weather_impact TEXT,
         seasonal_closure BOOLEAN DEFAULT FALSE,
+        content_hash VARCHAR(64),
         created_at TIMESTAMP DEFAULT NOW()
       )
+    `);
+
+    // Add content_hash column if missing (for existing tables)
+    await client.query(`
+      ALTER TABLE trail_status ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)
     `);
 
     // Create indexes for trail_status

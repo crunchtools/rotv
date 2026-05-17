@@ -62,8 +62,8 @@ export function createFeedbackRouter(pool) {
 
     let token;
     try {
-      const result = await pool.query("SELECT value FROM admin_settings WHERE key = 'github_api_token'");
-      token = result.rows[0]?.value;
+      const tokenQuery = await pool.query("SELECT value FROM admin_settings WHERE key = 'github_api_token'");
+      token = tokenQuery.rows[0]?.value;
     } catch (err) {
       console.error('Failed to read GitHub token from admin_settings:', err.message);
     }
