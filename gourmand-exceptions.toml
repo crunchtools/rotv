@@ -176,11 +176,6 @@ justification = "Maintenance script requires explanatory comments"
 
 [[exceptions]]
 check = "verbose_comments"
-path = "frontend/src/components/AISettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "frontend/src/components/ActivitiesSettings.jsx"
 justification = "React component with JSDoc documentation"
 
@@ -201,11 +196,6 @@ justification = "React component with JSDoc documentation"
 
 [[exceptions]]
 check = "verbose_comments"
-path = "frontend/src/components/GeneralSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "frontend/src/components/IconGeneratorModal.jsx"
 justification = "React component with JSDoc documentation"
 
@@ -222,7 +212,7 @@ justification = "React component with JSDoc documentation"
 [[exceptions]]
 check = "verbose_comments"
 path = "frontend/src/components/LoginButton.jsx"
-justification = "React component with JSDoc documentation"
+justification = "WHY-comment on setTimeout(0) workaround that prevents the click which opens the dropdown from immediately closing it on the same event tick"
 
 [[exceptions]]
 check = "verbose_comments"
@@ -286,22 +276,12 @@ justification = "React component with JSDoc documentation"
 
 [[exceptions]]
 check = "verbose_comments"
-path = "frontend/src/components/SyncSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "frontend/src/components/ThumbnailCarousel.jsx"
 justification = "React component with JSDoc documentation"
 
 [[exceptions]]
 check = "verbose_comments"
 path = "frontend/src/components/TrailStatusSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/UserMenu.jsx"
 justification = "React component with JSDoc documentation"
 
 [[exceptions]]
@@ -821,11 +801,6 @@ justification = "Test step labels explain test intent (legitimate test documenta
 check = "verbose_comments"
 path = "backend/tests/rovingTabindex.integration.test.js"
 justification = "Per-step comments label keyboard navigation assertions (legitimate test documentation)"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/AboutPage.jsx"
-justification = "Inline component comments describe state and effect intent"
 
 [[exceptions]]
 check = "verbose_comments"

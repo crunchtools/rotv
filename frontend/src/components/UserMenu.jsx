@@ -8,7 +8,6 @@ function UserMenu() {
 
   if (!user) return null;
 
-  // Show avatar placeholder if no picture URL or if image failed to load
   const showPlaceholder = !user.pictureUrl || imageError;
 
   return (

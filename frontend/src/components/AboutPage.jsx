@@ -13,7 +13,6 @@ function AboutEditor({ contentKey, content, onSave }) {
     setDraft(content || '');
   }, [content]);
 
-  // Auto-resize textarea
   useEffect(() => {
     const ta = textareaRef.current;
     if (ta) {

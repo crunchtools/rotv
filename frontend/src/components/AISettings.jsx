@@ -8,7 +8,6 @@ function AISettings() {
   const [error, setError] = useState(null);
   const [message, setMessage] = useState(null);
 
-  // Form state
   const [apiKey, setApiKey] = useState('');
 
   const fetchSettings = useCallback(async () => {
