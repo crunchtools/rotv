@@ -1,4 +1,3 @@
-// Polyfill fetch for Node.js environments where it's not globally available
 import fetch, { Headers, Request, Response } from 'node-fetch';
 if (!globalThis.fetch) {
   globalThis.fetch = fetch;
@@ -11,12 +10,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { getContainingBoundaries } from './geoService.js';
 
-// Gemini model — configurable via environment variable, defaults to gemini-2.5-flash
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-// Image generation model — separate because it requires image output modality support
-
-// Default prompt templates - designed to avoid generic AI slop
 const DEFAULT_PROMPTS = {
   gemini_prompt_brief: `You are a local historian writing for the Cuyahoga Valley National Park visitor guide.
 
@@ -46,33 +41,27 @@ REQUIREMENTS:
 Location context: Era: {{era}}, Owner: {{property_owner}}`
 };
 
-/**
- * Parse JSON from Gemini response text, handling markdown code blocks,
- * duplicated JSON, and truncated responses (e.g. token limit hit mid-array).
- */
+// Handles markdown code blocks, duplicated JSON, and responses truncated mid-array by token limit
 export function parseJsonResponse(text) {
   let jsonText = text;
 
-  // Remove markdown code blocks if present
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (jsonMatch) {
     jsonText = jsonMatch[1].trim();
   } else {
-    // No closing ``` found — response may be truncated. Extract from first {
+    // No closing ``` — response is truncated; salvage from the first {
     const openBrace = text.indexOf('{');
     if (openBrace >= 0) {
       jsonText = text.substring(openBrace);
     }
   }
 
-  // If there are multiple JSON objects, take the first complete one
   const firstBrace = jsonText.indexOf('{');
   if (firstBrace > 0) {
     jsonText = jsonText.substring(firstBrace);
   }
 
-  // Find the matching closing brace for the first opening brace.
-  // Skip braces/brackets inside quoted strings to avoid miscounting.
+  // Skip braces inside quoted strings to avoid miscounting nested JSON
   let braceCount = 0;
   let bracketCount = 0;
   let endIndex = -1;
@@ -97,12 +86,10 @@ export function parseJsonResponse(text) {
   if (endIndex > 0) {
     jsonText = jsonText.substring(0, endIndex);
   } else if (braceCount > 0) {
-    // Truncated JSON — try to salvage by closing open brackets/braces
-    // Trim trailing incomplete values (partial strings, trailing commas)
-    jsonText = jsonText.replace(/,\s*"[^"]*"?\s*$/, '');  // trailing partial key-value
-    jsonText = jsonText.replace(/,\s*"[^"]*$/, '');        // trailing partial string in array
-    jsonText = jsonText.replace(/,\s*$/, '');               // trailing comma
-    // Close open brackets and braces
+    // Truncated JSON — salvage by trimming incomplete trailing values and closing open brackets
+    jsonText = jsonText.replace(/,\s*"[^"]*"?\s*$/, '');
+    jsonText = jsonText.replace(/,\s*"[^"]*$/, '');
+    jsonText = jsonText.replace(/,\s*$/, '');
     for (let i = 0; i < bracketCount; i++) jsonText += ']';
     for (let i = 0; i < braceCount; i++) jsonText += '}';
     console.warn('[parseJsonResponse] Salvaged truncated JSON by closing', bracketCount, 'brackets and', braceCount, 'braces');
@@ -111,7 +98,6 @@ export function parseJsonResponse(text) {
   return JSON.parse(jsonText);
 }
 
-// Research prompt for filling all fields - {{activities_list}}, {{eras_list}}, and {{surfaces_list}} placeholders will be filled dynamically
 const RESEARCH_PROMPT_TEMPLATE = `You are a researcher for Cuyahoga Valley National Park. Search the web and find accurate information about this location.
 
 Location to research: {{name}}
@@ -152,26 +138,13 @@ IMPORTANT:
 - The brief_description and historical_description should contain real, searchable facts
 - For sources, include MAXIMUM 5 unique URLs. No duplicate URLs.`;
 
-/**
- * Get default prompt for a given key
- */
-export function getDefaultPrompt(promptKey) {
-  return DEFAULT_PROMPTS[promptKey] || '';
-}
-
-/**
- * Initialize Gemini client with API key from database or environment
- * Priority: 1) Environment variable (for CI/testing), 2) Database
- * @param {Pool} pool - Database connection pool
- */
+// Env var takes priority over DB so CI/tests can override without DB setup
 export async function createGeminiClient(pool) {
-  // Check environment variable first (for CI/testing)
   if (process.env.GEMINI_API_KEY) {
     console.log('[Gemini] Using API key from environment variable');
     return new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
   }
 
-  // Otherwise check database (production path)
   const apiKeyQuery = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
   );
@@ -183,9 +156,6 @@ export async function createGeminiClient(pool) {
   return new GoogleGenerativeAI(apiKeyQuery.rows[0].value);
 }
 
-/**
- * Get prompt template from database with fallback to defaults
- */
 export async function getPromptTemplate(pool, promptKey) {
   const templateQuery = await pool.query(
     'SELECT value FROM admin_settings WHERE key = $1',
@@ -196,12 +166,9 @@ export async function getPromptTemplate(pool, promptKey) {
     return templateQuery.rows[0].value;
   }
 
-  return getDefaultPrompt(promptKey);
+  return DEFAULT_PROMPTS[promptKey] || '';
 }
 
-/**
- * Replace {{placeholder}} variables with actual destination data
- */
 export function interpolatePrompt(template, destination) {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
     const value = destination[key];
@@ -212,17 +179,11 @@ export function interpolatePrompt(template, destination) {
   });
 }
 
-/**
- * Get the interpolated prompt (template with placeholders filled in)
- */
 export async function getInterpolatedPrompt(pool, promptKey, destination) {
   const template = await getPromptTemplate(pool, promptKey);
   return interpolatePrompt(template, destination);
 }
 
-/**
- * Generate text content using Gemini
- */
 export async function generateText(pool, promptKey, destination) {
   const genAI = await createGeminiClient(pool);
 
@@ -243,9 +204,6 @@ export async function generateText(pool, promptKey, destination) {
   return text;
 }
 
-/**
- * Generate text content using a custom prompt
- */
 export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {
   const genAI = await createGeminiClient(pool);
 
@@ -267,14 +225,6 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
   return text;
 }
 
-/**
- * Research a location and return structured data for all fields
- * @param {object} pool - Database pool
- * @param {object} destination - Destination data with name, coordinates, etc.
- * @param {string[]} availableActivities - List of standardized activity names
- * @param {string[]} availableEras - List of standardized era names
- * @param {string[]} availableSurfaces - List of standardized surface names
- */
 export async function researchLocation(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
   const genAI = await createGeminiClient(pool);
 
@@ -283,7 +233,6 @@ export async function researchLocation(pool, destination, availableActivities = 
     generationConfig: { temperature: 0 }
   });
 
-  // Build the prompt with the activities, eras, and surfaces lists
   let promptTemplate = RESEARCH_PROMPT_TEMPLATE;
   const activitiesList = availableActivities.length > 0
     ? availableActivities.join(', ')
@@ -324,9 +273,6 @@ export async function researchLocation(pool, destination, availableActivities = 
   }
 }
 
-/**
- * Test API key validity with a simple request
- */
 export async function testApiKey(pool) {
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
@@ -337,7 +283,6 @@ export async function testApiKey(pool) {
   return text;
 }
 
-// Example SVGs for icon generation prompt
 const EXAMPLE_SVGS = `
 Example 1 - Waterfall (blue background, water flowing):
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
@@ -361,17 +306,9 @@ Example 3 - Historic Building (orange background, house shape):
 </svg>
 `;
 
-/**
- * Generate an SVG icon using Gemini AI
- * @param {object} pool - Database pool
- * @param {string} description - Description of what the icon should depict
- * @param {string} color - Hex color for the background circle (e.g., "#0288d1")
- * @returns {Promise<string>} - Generated SVG content
- */
 export async function generateIconSvg(pool, description, color) {
   const genAI = await createGeminiClient(pool);
 
-  // Plain LLM for icon generation - we want creative output
   const model = genAI.getGenerativeModel({
     model: GEMINI_MODEL
   });
@@ -403,16 +340,13 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
   const response = iconGeneration.response;
   let text = response.text();
 
-  // Clean up the response - extract just the SVG
   text = text.trim();
 
-  // Remove markdown code blocks if present
   const svgMatch = text.match(/```(?:svg|xml)?\s*([\s\S]*?)```/);
   if (svgMatch) {
     text = svgMatch[1].trim();
   }
 
-  // Find the SVG tag
   const svgStart = text.indexOf('<svg');
   const svgEnd = text.lastIndexOf('</svg>');
 
@@ -420,15 +354,12 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
     throw new Error('AI did not return valid SVG code. Please try again.');
   }
 
-  text = text.substring(svgStart, svgEnd + 6); // +6 for </svg>
+  text = text.substring(svgStart, svgEnd + 6);
 
-  // Basic validation - check it has the required structure
   if (!text.includes('viewBox="0 0 32 32"') && !text.includes("viewBox='0 0 32 32'")) {
-    // Try to fix missing viewBox
     text = text.replace('<svg', '<svg viewBox="0 0 32 32"');
   }
 
-  // Ensure xmlns is present
   if (!text.includes('xmlns=')) {
     text = text.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
   }
@@ -437,10 +368,6 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
   await flushJobLogs();
   return text;
 }
-
-// ============================================================
-// Multi-Pass Research (Issue #102)
-// ============================================================
 
 const RESEARCH_PASS1_TEMPLATE = `You are a researcher for Cuyahoga Valley National Park. Search the web and find accurate information about this location.
 
@@ -495,11 +422,6 @@ Return a JSON object:
   "additional_sources": ["Array of additional source URLs or references used"]
 }`;
 
-/**
- * Multi-pass research for a location (Issue #102)
- * Pass 1: metadata + brief description
- * Pass 2: historical description with Pass 1 context
- */
 export async function researchLocationMultiPass(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
   const genAI = await createGeminiClient(pool);
 
@@ -508,7 +430,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     generationConfig: { temperature: 0 }
   });
 
-  // Build optional sections for prompts
   const optionalSections = [];
   if (destination.latitude && destination.longitude) {
     optionalSections.push(`Coordinates: ${destination.latitude}, ${destination.longitude}`);
@@ -520,7 +441,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     optionalSections.push(`ADMIN CONTEXT (use this to guide your research): ${destination.research_context}`);
   }
 
-  // Geographic grounding — reuses the same PostGIS boundary lookup as news/events collection
   if (destination.id) {
     const boundaries = await getContainingBoundaries(pool, destination.id);
     if (boundaries.length > 0) {
@@ -529,7 +449,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     }
   }
 
-  // Build Pass 1 prompt
   let pass1Template = RESEARCH_PASS1_TEMPLATE;
   pass1Template = pass1Template.replace('%%OPTIONAL_SECTIONS%%', optionalSections.join('\n'));
 
@@ -554,7 +473,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   console.log(`[Research v2] Pass 1 for: ${destination.name}`);
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1: ${destination.name}`);
 
-  // Pass 1
   const pass1Generation = await model.generateContent(pass1Prompt);
   const pass1Text = pass1Generation.response.text();
   let pass1Data;
@@ -570,7 +488,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
 
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1 complete: ${destination.name}`, { fields: Object.keys(pass1Data) });
 
-  // Pass 2 — historical description with Pass 1 context
   let pass2Template = RESEARCH_PASS2_TEMPLATE;
   pass2Template = pass2Template.replace('%%OPTIONAL_SECTIONS%%', optionalSections.join('\n'));
   pass2Template = pass2Template.replace('{{pass1_era}}', pass1Data.era || 'unknown');
@@ -594,7 +511,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     throw new Error('AI returned invalid format in Pass 2. Please try again.');
   }
 
-  // Resolve era name → era_id
   let eraId = null;
   if (pass1Data.era) {
     const eraResult = await pool.query(
@@ -606,7 +522,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     }
   }
 
-  // Merge results
   const mergedSources = [
     ...(pass1Data.sources || []),
     ...(pass2Data.additional_sources || [])
@@ -630,12 +545,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   return mergedResearch;
 }
 
-/**
- * Moderate text content (news/events) using Gemini Flash
- * @param {Pool} pool - Database connection pool
- * @param {Object} content - { type, title, summary, source_url, poi_name }
- * @returns {Object} - { confidence_score, reasoning, issues }
- */
 export async function moderateContent(pool, content) {
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
@@ -745,12 +654,6 @@ Return ONLY valid JSON (no markdown, no code blocks):
   }
 }
 
-/**
- * Moderate a photo submission using Gemini Vision
- * @param {Pool} pool - Database connection pool
- * @param {Object} photo - { poi_name, image_url }
- * @returns {Object} - { confidence_score, reasoning, flags }
- */
 export async function moderatePhoto(pool, photo) {
   const genAI = await createGeminiClient(pool);
   const model = genAI.getGenerativeModel({
@@ -769,7 +672,6 @@ Return ONLY valid JSON (no markdown, no code blocks):
 {"confidence_score": 0.0, "reasoning": "...", "flags": []}`;
 
   try {
-    // If we have an image URL, fetch and include it
     if (photo.image_url) {
       const imageResponse = await fetch(photo.image_url);
       if (imageResponse.ok) {

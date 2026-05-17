@@ -1,14 +1,4 @@
 #!/usr/bin/env node
-/**
- * Migration script to populate poi_media from existing primary images
- * Run with: node backend/scripts/migrate-primary-images.js [--dry-run]
- *
- * This script:
- * 1. Queries image server for all POIs with primary images
- * 2. Creates poi_media records with role='primary' and status='published'
- * 3. Skips POIs that already have primary entries in poi_media
- */
-
 import pg from 'pg';
 import fetch from 'node-fetch';
 
@@ -25,9 +15,6 @@ const pool = new Pool({
   password: process.env.POSTGRES_PASSWORD || 'postgres'
 });
 
-/**
- * Fetch primary asset for a POI from image server
- */
 async function fetchPrimaryAsset(poiId) {
   try {
     const response = await fetch(`${IMAGE_SERVER_URL}/api/assets?poi_id=${poiId}&role=primary`);
@@ -44,9 +31,6 @@ async function fetchPrimaryAsset(poiId) {
   }
 }
 
-/**
- * Check if POI already has a primary entry in poi_media
- */
 async function hasPrimaryMedia(poiId) {
   const existingMedia = await pool.query(
     `SELECT id FROM poi_media WHERE poi_id = $1 AND role = 'primary' LIMIT 1`,
@@ -55,9 +39,6 @@ async function hasPrimaryMedia(poiId) {
   return existingMedia.rows.length > 0;
 }
 
-/**
- * Create poi_media entry for primary image
- */
 async function createPrimaryMediaEntry(poiId, assetId) {
   if (DRY_RUN) {
     console.log(`[DRY RUN] Would create poi_media entry: POI ${poiId} -> asset ${assetId}`);
@@ -82,9 +63,6 @@ async function createPrimaryMediaEntry(poiId, assetId) {
   return createdMedia.rows[0];
 }
 
-/**
- * Main migration logic
- */
 async function migrateImages() {
   console.log('='.repeat(60));
   console.log('Primary Image Migration');

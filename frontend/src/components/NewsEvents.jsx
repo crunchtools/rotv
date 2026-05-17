@@ -91,7 +91,6 @@ function NewsEvents({ poiId, isAdmin }) {
     }
   };
 
-  // Don't render anything if no news and no events
   if (!loading && news.length === 0 && events.length === 0) {
     return null;
   }

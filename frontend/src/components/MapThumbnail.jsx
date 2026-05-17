@@ -1,17 +1,14 @@
 import React, { useEffect, useState, useRef, memo } from 'react';
 import { MapContainer, TileLayer, CircleMarker, useMap } from 'react-leaflet';
 
-// Park center for default view
 const PARK_CENTER = [41.26, -81.55];
 const DEFAULT_BOUNDS = [[41.1, -81.7], [41.4, -81.4]];
 
-// Component to fix map size and sync bounds
 function MapBoundsSync({ bounds }) {
   const map = useMap();
   const prevBoundsRef = useRef(null);
 
   useEffect(() => {
-    // Check if bounds coordinates actually changed
     const boundsChanged = !prevBoundsRef.current || !bounds ||
       bounds[0][0] !== prevBoundsRef.current[0][0] ||
       bounds[0][1] !== prevBoundsRef.current[0][1] ||
@@ -25,21 +22,18 @@ function MapBoundsSync({ bounds }) {
     prevBoundsRef.current = bounds;
 
     try {
-      // Force size recalculation
       if (map && map.getContainer()) {
         map.invalidateSize();
 
-        // Fit to bounds if provided
         if (bounds && bounds.length === 2) {
           map.fitBounds(bounds, { animate: false, padding: [0, 0] });
         }
       }
     } catch {
-      // Map not ready, will retry on next update
+      void 0;
     }
   }, [map, bounds]);
 
-  // Use IntersectionObserver to detect when map becomes visible
   useEffect(() => {
     if (!map) return;
 
@@ -54,11 +48,9 @@ function MapBoundsSync({ bounds }) {
               try {
                 if (map && map.getContainer()) {
                   map.invalidateSize();
-                  // Don't call fitBounds here - MapBoundsSync effect already handles it
-                  // This was causing double-drawing (MapBoundsSync + IntersectionObserver 50ms later)
                 }
               } catch {
-                // Map not ready, ignore
+                void 0;
               }
             }, 50);
           }
@@ -74,10 +66,6 @@ function MapBoundsSync({ bounds }) {
   return null;
 }
 
-/**
- * MapThumbnail - A small, non-interactive map preview showing the current viewport
- * Used in News and Events tabs to show which area is being filtered
- */
 function MapThumbnail({
   bounds = DEFAULT_BOUNDS,
   aspectRatio = 1.5,
@@ -88,19 +76,15 @@ function MapThumbnail({
   const [isReady, setIsReady] = useState(false);
   const containerRef = useRef(null);
 
-  // Delay map render until container is mounted
   useEffect(() => {
     const timer = setTimeout(() => setIsReady(true), 50);
     return () => clearTimeout(timer);
   }, []);
 
-  // Calculate thumbnail dimensions based on aspect ratio
-  // Max width of 200px, height adjusts to match aspect ratio
   const maxWidth = 200;
   const width = maxWidth;
   const height = Math.round(maxWidth / aspectRatio);
 
-  // Calculate center from bounds for initial render
   const center = bounds && bounds.length === 2
     ? [(bounds[0][0] + bounds[1][0]) / 2, (bounds[0][1] + bounds[1][1]) / 2]
     : PARK_CENTER;
@@ -131,7 +115,6 @@ function MapThumbnail({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
 
-          {/* Small dots for visible POIs */}
           {visibleDestinations.map(dest => {
             if (!dest.latitude || !dest.longitude) return null;
             return (
@@ -151,7 +134,6 @@ function MapThumbnail({
         </MapContainer>
       )}
 
-      {/* Results count chip - same style as main map */}
       <div className="map-thumbnail-poi-count">
         {poiCount} Result{poiCount !== 1 ? 's' : ''}
       </div>
@@ -159,9 +141,7 @@ function MapThumbnail({
   );
 }
 
-// Custom comparison function - only re-render if bounds coordinates actually changed
 function arePropsEqual(prevProps, nextProps) {
-  // Check if bounds coordinates are the same
   const prevBounds = prevProps.bounds;
   const nextBounds = nextProps.bounds;
 
@@ -171,12 +151,10 @@ function arePropsEqual(prevProps, nextProps) {
     prevBounds[1][0] === nextBounds[1][0] &&
     prevBounds[1][1] === nextBounds[1][1];
 
-  // Check other props
   const aspectRatioEqual = prevProps.aspectRatio === nextProps.aspectRatio;
   const poiCountEqual = prevProps.poiCount === nextProps.poiCount;
   const onClickEqual = prevProps.onClick === nextProps.onClick;
 
-  // Check visibleDestinations length (good enough for most cases)
   const destinationsEqual = prevProps.visibleDestinations?.length === nextProps.visibleDestinations?.length;
 
   const shouldSkipRender = boundsEqual && aspectRatioEqual && poiCountEqual && onClickEqual && destinationsEqual;

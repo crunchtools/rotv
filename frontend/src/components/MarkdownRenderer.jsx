@@ -2,7 +2,6 @@ import React, { useMemo } from 'react';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
-// Configure marked for GFM with links opening in new tabs
 marked.use({
   gfm: true,
   breaks: false,

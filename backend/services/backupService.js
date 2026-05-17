@@ -6,14 +6,10 @@ import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 
 const BACKUPS_FOLDER_NAME = 'Database';
 
-/**
- * Ensure the Backups folder exists in Drive under the root ROTV folder
- */
 async function ensureBackupsFolder(drive, pool) {
   let backupsFolderId = await getDriveSetting(pool, 'backups_folder_id');
 
   if (backupsFolderId) {
-    // Verify folder still exists
     try {
       const response = await drive.files.get({
         fileId: backupsFolderId,
@@ -27,7 +23,6 @@ async function ensureBackupsFolder(drive, pool) {
     }
   }
 
-  // Create the backups folder under the root folder
   const rootFolderId = await getDriveSetting(pool, 'root_folder_id');
   if (!rootFolderId) {
     throw new Error('Root Drive folder not configured. Set up Drive folders first.');
@@ -48,9 +43,6 @@ async function ensureBackupsFolder(drive, pool) {
   return backupsFolderId;
 }
 
-/**
- * Run pg_dump and upload the SQL dump to Google Drive
- */
 export async function triggerBackup(pool, drive) {
   const runId = Math.floor(Date.now() / 1000);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').slice(0, 19);
@@ -58,7 +50,6 @@ export async function triggerBackup(pool, drive) {
 
   logInfo(runId, 'database_backup', null, null, 'Starting database backup');
 
-  // Stream pg_dump output to avoid buffering large dumps in memory
   const pgHost = process.env.PGHOST || 'localhost';
   const pgPort = process.env.PGPORT || '5432';
   const pgDatabase = process.env.PGDATABASE || 'rotv';
@@ -81,10 +72,8 @@ export async function triggerBackup(pool, drive) {
 
   logInfo(runId, 'database_backup', null, null, `pg_dump complete, uploading ${filename} to Drive`);
 
-  // Ensure backups folder exists
   const backupsFolderId = await ensureBackupsFolder(drive, pool);
 
-  // Upload to Drive
   const response = await drive.files.create({
     requestBody: {
       name: filename,
@@ -101,7 +90,6 @@ export async function triggerBackup(pool, drive) {
   const driveFileId = response.data.id;
   const now = new Date().toISOString();
 
-  // Store last backup timestamp
   await pool.query(`
     INSERT INTO admin_settings (key, value, updated_at)
     VALUES ('last_backup', $1, CURRENT_TIMESTAMP)
@@ -122,9 +110,6 @@ export async function triggerBackup(pool, drive) {
   };
 }
 
-/**
- * List available backups in the Database folder
- */
 export async function listBackups(drive, pool) {
   const backupsFolderId = await getDriveSetting(pool, 'backups_folder_id');
   if (!backupsFolderId) return [];
@@ -143,14 +128,10 @@ export async function listBackups(drive, pool) {
   }
 }
 
-/**
- * Restore a database from a Drive backup file
- */
 export async function restoreBackup(pool, drive, fileId) {
   const runId = Math.floor(Date.now() / 1000);
   logInfo(runId, 'database_backup', null, null, 'Starting database restore from Drive');
 
-  // Download the SQL dump from Drive
   const response = await drive.files.get(
     { fileId, alt: 'media' },
     { responseType: 'text' }
@@ -168,7 +149,6 @@ export async function restoreBackup(pool, drive, fileId) {
   const pgDatabase = process.env.PGDATABASE || 'rotv';
   const pgUser = process.env.PGUSER || 'rotv';
 
-  // Run psql to restore — drop and recreate via pg_dump's output
   return new Promise((resolve, reject) => {
     const proc = spawn('psql', ['-h', pgHost, '-p', pgPort, '-U', pgUser, pgDatabase], {
       env: { ...process.env },
@@ -196,9 +176,6 @@ export async function restoreBackup(pool, drive, fileId) {
   });
 }
 
-/**
- * Get the last backup status
- */
 export async function getBackupStatus(pool) {
   const lastBackupRow = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'last_backup'"
@@ -211,9 +188,6 @@ export async function getBackupStatus(pool) {
   };
 }
 
-/**
- * List files in the Drive Images folder (paginated)
- */
 async function listDriveImages(drive, imagesFolderId) {
   const files = [];
   let pageToken = null;
@@ -234,13 +208,6 @@ async function listDriveImages(drive, imagesFolderId) {
   return files;
 }
 
-/**
- * Sync image server DB + all media files to Drive Images folder.
- *
- * 1. Fetch pg_dump from image server, upload as imageserver-backup-{timestamp}.sql
- * 2. List all media files via listMediaFiles()
- * 3. For each file not already in Drive, download and upload with flat name {subdir}--{filename}
- */
 export async function triggerImageBackup(pool, drive) {
   const runId = Math.floor(Date.now() / 1000);
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
@@ -254,7 +221,6 @@ export async function triggerImageBackup(pool, drive) {
 
   logInfo(runId, 'backup', null, null, 'Starting image server backup');
 
-  // Step 1: Backup image server database
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').slice(0, 19);
   const dbFilename = `imageserver-backup-${timestamp}.sql`;
 
@@ -278,7 +244,6 @@ export async function triggerImageBackup(pool, drive) {
   logInfo(runId, 'backup', null, null, `Uploaded DB dump: ${dbFilename}`);
   console.log(`[ImageBackup] Uploaded DB dump: ${dbFilename}`);
 
-  // Step 2: List all media files and compare with Drive
   const mediaFiles = await imageServerClient.listMediaFiles();
   const driveFiles = await listDriveImages(drive, imagesFolderId);
   const driveFileNames = new Set(driveFiles.map(f => f.name));
@@ -338,9 +303,6 @@ export async function triggerImageBackup(pool, drive) {
   return { success: true, uploaded, skipped, failed, timestamp: now };
 }
 
-/**
- * Get image backup status — media files vs Drive files
- */
 export async function getImageBackupStatus(pool, drive) {
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
 
@@ -364,7 +326,6 @@ export async function getImageBackupStatus(pool, drive) {
     for (const f of driveFiles) {
       if (f.name.startsWith('imageserver-backup-') && f.name.endsWith('.sql')) {
         driveDbDumpCount++;
-        // Track the most recent .sql file by createdTime
         if (f.createdTime && (!latestDriveBackupDate || new Date(f.createdTime) > new Date(latestDriveBackupDate))) {
           latestDriveBackupDate = f.createdTime;
         }
@@ -374,7 +335,6 @@ export async function getImageBackupStatus(pool, drive) {
     }
   }
 
-  // Use admin_settings timestamp if available, otherwise fall back to latest Drive .sql file date
   const lastBackupResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'last_image_backup'"
   );
@@ -389,12 +349,6 @@ export async function getImageBackupStatus(pool, drive) {
   };
 }
 
-/**
- * Restore image server from Drive Images folder.
- *
- * 1. Find most recent imageserver-backup-*.sql, download, POST to image server /api/restore/db
- * 2. For each {subdir}--{filename} file in Drive, download and PUT to image server
- */
 export async function restoreImagesFromDrive(pool, drive) {
   const runId = Math.floor(Date.now() / 1000);
   const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
@@ -409,10 +363,9 @@ export async function restoreImagesFromDrive(pool, drive) {
   logInfo(runId, 'backup', null, null, 'Starting image restore from Drive');
   const driveFiles = await listDriveImages(drive, imagesFolderId);
 
-  // Step 1: Find and restore the most recent DB dump
   const dbDumps = driveFiles
     .filter(f => f.name.startsWith('imageserver-backup-') && f.name.endsWith('.sql'))
-    .sort((a, b) => b.name.localeCompare(a.name)); // Newest first (timestamp in name)
+    .sort((a, b) => b.name.localeCompare(a.name));
 
   let dbRestored = false;
   if (dbDumps.length > 0) {
@@ -436,7 +389,6 @@ export async function restoreImagesFromDrive(pool, drive) {
     }
   }
 
-  // Step 2: Restore media files
   const existingMedia = await imageServerClient.listMediaFiles();
   const existingSet = new Set(existingMedia.map(m => `${m.subdir}--${m.filename}`));
 
@@ -445,12 +397,10 @@ export async function restoreImagesFromDrive(pool, drive) {
   let failed = 0;
 
   for (const file of driveFiles) {
-    // Skip DB dumps
     if (file.name.startsWith('imageserver-backup-') && file.name.endsWith('.sql')) {
       continue;
     }
 
-    // Parse {subdir}--{filename} format
     const separatorIdx = file.name.indexOf('--');
     if (separatorIdx === -1) {
       console.warn(`[ImageRestore] Skipping unrecognized file: ${file.name}`);
@@ -461,7 +411,6 @@ export async function restoreImagesFromDrive(pool, drive) {
     const subdir = file.name.substring(0, separatorIdx);
     const filename = file.name.substring(separatorIdx + 2);
 
-    // Skip if already exists on image server
     if (existingSet.has(file.name)) {
       skipped++;
       continue;

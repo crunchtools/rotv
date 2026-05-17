@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 
-// Default bounds - starting point for adjustment
 const DEFAULT_BOUNDS = {
   south: 41.1390,
   west: -81.6654,
@@ -21,7 +20,6 @@ function MapAdmin({ bounds, onBoundsChange, onClose, opacity, onOpacityChange })
     updateBounds(newBounds);
   };
 
-  // Shift entire overlay (all bounds move together)
   const shiftOverlay = (direction, amount) => {
     const newBounds = { ...localBounds };
     switch (direction) {
@@ -45,7 +43,6 @@ function MapAdmin({ bounds, onBoundsChange, onClose, opacity, onOpacityChange })
     updateBounds(newBounds);
   };
 
-  // Stretch individual edges (only one bound moves)
   const stretchEdge = (edge, amount) => {
     const newBounds = { ...localBounds };
     newBounds[edge] += amount;

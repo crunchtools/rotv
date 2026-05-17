@@ -9,7 +9,6 @@ function ActivitiesSettings() {
   const [editingName, setEditingName] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
@@ -125,12 +124,10 @@ function ActivitiesSettings() {
     }
   };
 
-  // Drag and drop handlers
   const handleDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/html', e.target.outerHTML);
-    // Add dragging class after a brief delay for visual feedback
     setTimeout(() => {
       e.target.classList.add('dragging');
     }, 0);
@@ -151,7 +148,6 @@ function ActivitiesSettings() {
   };
 
   const handleDragLeave = (e) => {
-    // Only clear if leaving the list entirely
     if (!e.currentTarget.contains(e.relatedTarget)) {
       setDragOverIndex(null);
     }
@@ -172,7 +168,6 @@ function ActivitiesSettings() {
     setDraggedIndex(null);
     setDragOverIndex(null);
 
-    // Save new order to backend
     try {
       await fetch('/api/admin/activities/reorder', {
         method: 'PUT',
@@ -185,14 +180,12 @@ function ActivitiesSettings() {
     }
   };
 
-  // Sort alphabetically
   const handleSortAlphabetically = async () => {
     const sorted = [...activities].sort((a, b) =>
       a.name.toLowerCase().localeCompare(b.name.toLowerCase())
     );
     setActivities(sorted);
 
-    // Save new order to backend
     try {
       await fetch('/api/admin/activities/reorder', {
         method: 'PUT',
@@ -223,7 +216,6 @@ function ActivitiesSettings() {
 
       {error && <div className="sync-error">{error}</div>}
 
-      {/* Add new activity form and sort button */}
       <div className="activities-toolbar">
         <form className="add-activity-form" onSubmit={handleAddActivity}>
           <input
@@ -247,7 +239,6 @@ function ActivitiesSettings() {
         </button>
       </div>
 
-      {/* Activities list */}
       <div className="activities-list">
         {activities.length === 0 ? (
           <p className="no-activities">No activities defined yet.</p>

@@ -21,7 +21,6 @@ function NewPOIForm({ onClose, onCreate, initialCoords }) {
   const [availableOwnerOrgs, setAvailableOwnerOrgs] = useState([]);
   const [availableEras, setAvailableEras] = useState([]);
 
-  // Fetch owner organizations and eras on mount
   useEffect(() => {
     async function fetchOwnerOrgs() {
       try {

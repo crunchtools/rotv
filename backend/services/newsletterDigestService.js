@@ -1,13 +1,6 @@
 import { sendEmail } from './buttondownClient.js';
 
-/**
- * Generate HTML digest content for weekly newsletter
- * @param {Pool} pool - Database connection pool
- * @param {string} tz - IANA timezone for date comparison
- * @returns {Promise<string>} HTML digest content
- */
 export async function generateDigest(pool, tz = 'America/New_York') {
-  // Get events happening Friday-Sunday (next 3 days from Friday)
   const eventsQuery = `
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
            e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
@@ -20,7 +13,6 @@ export async function generateDigest(pool, tz = 'America/New_York') {
     LIMIT 10
   `;
 
-  // Get news published in last 7 days
   const newsQuery = `
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
            n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles
@@ -40,12 +32,10 @@ export async function generateDigest(pool, tz = 'America/New_York') {
   const events = eventsResult.rows;
   const news = newsResult.rows;
 
-  // If no content, return empty string
   if (events.length === 0 && news.length === 0) {
     return '';
   }
 
-  // Build HTML digest
   let html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -140,7 +130,6 @@ export async function generateDigest(pool, tz = 'America/New_York') {
     <p>Your weekly digest from <a href="https://rootsofthevalley.org" style="color: #2c5f2d;">Roots of The Valley</a></p>
 `;
 
-  // Events section
   if (events.length > 0) {
     html += `
     <h2>🎉 Events This Weekend</h2>
@@ -169,7 +158,6 @@ export async function generateDigest(pool, tz = 'America/New_York') {
     });
   }
 
-  // News section
   if (news.length > 0) {
     html += `
     <h2>📰 Recent News</h2>
@@ -190,14 +178,12 @@ export async function generateDigest(pool, tz = 'America/New_York') {
     });
   }
 
-  // No content fallback
   if (events.length === 0 && news.length === 0) {
     html += `
     <p class="no-content">No events or news available this week. Check back next Friday!</p>
 `;
   }
 
-  // Footer
   html += `
     <div class="footer">
       <p>Roots of The Valley is an open-source community project for the Cuyahoga Valley.</p>
@@ -211,28 +197,21 @@ export async function generateDigest(pool, tz = 'America/New_York') {
   return html;
 }
 
-/**
- * Send weekly digest to all subscribers
- * @param {Pool} pool - Database connection pool
- * @param {string} pgBossJobId - pg-boss job ID for tracking
- * @returns {Promise<Object>} Result object with success status
- */
 export async function sendWeeklyDigest(pool, pgBossJobId = null) {
-  // Hash UUID to a signed 32-bit integer (max: 2147483647)
+  // job_logs.job_id is int32 — hash the pg-boss UUID into that range so we can write logs
   let jobId = 0;
   if (pgBossJobId) {
-    // Simple hash: sum character codes and modulo by max signed int32
     let hash = 0;
     for (let i = 0; i < pgBossJobId.length; i++) {
       hash = ((hash << 5) - hash) + pgBossJobId.charCodeAt(i);
-      hash = hash & 0x7FFFFFFF; // Keep within signed int32 range
+      hash = hash & 0x7FFFFFFF;
     }
     jobId = hash;
   }
   const jobType = 'newsletter-digest';
 
-  // Idempotency check: Don't send multiple digests on the same day
-  const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+  // Idempotency: prevent multiple digest sends on the same day even if pg-boss retries
+  const today = new Date().toISOString().split('T')[0];
   const alreadySentCheck = await pool.query(
     `SELECT id FROM job_logs
      WHERE job_type = $1
@@ -257,7 +236,6 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
     return { success: true, skipped: true, reason: 'already_sent_today' };
   }
 
-  // Log job start
   if (jobId > 0) {
     await pool.query(
       'INSERT INTO job_logs (job_id, job_type, level, message) VALUES ($1, $2, $3, $4)',
@@ -266,10 +244,8 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
   }
 
   try {
-    // 1. Generate digest HTML
     const digestHtml = await generateDigest(pool);
 
-    // 2. If no content, skip sending
     if (!digestHtml) {
       console.log('No content for digest this week, skipping send');
 
@@ -284,7 +260,6 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
       return { success: true, skipped: true, reason: 'No content available' };
     }
 
-    // 3. Send via Buttondown
     const sendDate = new Date();
     const dateStr = sendDate.toLocaleDateString('en-US', {
       month: 'long',
@@ -292,15 +267,14 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
       year: 'numeric'
     });
 
-    // In development, add time to allow multiple sends per day for testing
-    // (Idempotency is enforced above via database check to prevent duplicate sends)
+    // Append time in development so the dev-mode subject is unique enough to bypass
+    // Buttondown's slug uniqueness check during repeated testing
     const subject = process.env.NODE_ENV === 'development'
       ? `What's Happening in the Valley This Weekend - ${dateStr} @ ${sendDate.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
       : `What's Happening in the Valley This Weekend - ${dateStr}`;
 
-    // Check for an existing draft from a previous failed attempt today.
-    // If the draft was created but scheduling failed (e.g., slug_uniqueness),
-    // pg-boss retries the whole job — reuse the draft instead of creating a duplicate.
+    // Reuse drafts from a previous same-day failed attempt — pg-boss retries the whole job,
+    // and creating a fresh draft each retry hits Buttondown's slug_uniqueness constraint.
     let existingEmailId = null;
     const draftCheck = await pool.query(
       `SELECT details->>'buttondownEmailId' as email_id FROM job_logs
@@ -333,7 +307,6 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
 
     console.log('Weekly digest sent successfully');
 
-    // Log successful completion
     if (jobId > 0) {
       await pool.query(
         `INSERT INTO job_logs (job_id, job_type, level, message, details)
@@ -346,14 +319,13 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
   } catch (error) {
     console.error('Failed to send weekly digest:', error);
 
-    // Log error with full details (including buttondownDetails if available)
     if (jobId > 0) {
       const errorDetails = {
         completed: false,
         error: error.message,
         status: error.response?.status,
         buttondownResponse: error.response?.data,
-        buttondownDetails: error.buttondownDetails, // Added by buttondownClient.js
+        buttondownDetails: error.buttondownDetails,
         stack: error.stack?.split('\n').slice(0, 3).join('\n')
       };
 
@@ -373,11 +345,6 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
   }
 }
 
-/**
- * Escape HTML special characters
- * @param {string} text - Text to escape
- * @returns {string} Escaped text
- */
 function escapeHtml(text) {
   if (!text) return '';
   return String(text)

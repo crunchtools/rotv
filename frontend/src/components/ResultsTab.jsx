@@ -5,44 +5,40 @@ import MapThumbnail from './MapThumbnail';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 import { handleRovingKeyDown } from '../utils/a11yUtils';
 
-// Default park bounds - same as used in App.jsx
-// Expanded to include all MTB trailheads (especially western ones like Reagan-Huffman)
 const DEFAULT_PARK_BOUNDS = [
-  [41.13, -81.85],  // Southwest corner
-  [41.45, -81.50]   // Northeast corner
+  [41.13, -81.85],
+  [41.45, -81.50]
 ];
 
-// Results tab component showing all visible POIs as tiles
 const ResultsTab = memo(function ResultsTab({
   viewportFilteredDestinations,
   viewportFilteredLinearFeatures,
   viewportFilteredVirtualPois,
   allDestinations,
   allLinearFeatures,
-  allVirtualPois,  // All virtual POIs (for organizations mode)
+  allVirtualPois,
   selectedDestination,
   selectedLinearFeature,
   onSelectDestination,
   onSelectLinearFeature,
   mapState,
   _boundsToFit,
-  cachedMtbBoundsRef,  // Pre-calculated MTB bounds for instant access
+  cachedMtbBoundsRef,
   onMapClick,
   initialShowMtbOnly = false,
-  initialShowOrganizationsOnly = false,  // Whether to show organizations sub-tab (controlled by URL)
-  onFilterByTypes,  // Callback to filter by POI types: array of types or null for all
-  bypassViewportFilter = false,  // Temporarily show all POIs (bypass viewport filtering)
-  visiblePoiCount,  // Global POI count from App.jsx
-  iconConfig,  // Icon configuration for rendering POI icons
-  editMode = false,  // Whether edit mode is active
-  isAdmin = false,  // Whether user is admin
-  userRole = 'viewer',  // User role (admin, poi_admin, media_admin, viewer)
-  onNewPOI  // Callback when New button is clicked, receives activeSubTab
+  initialShowOrganizationsOnly = false,
+  onFilterByTypes,
+  bypassViewportFilter = false,
+  visiblePoiCount,
+  iconConfig,
+  editMode = false,
+  isAdmin = false,
+  userRole = 'viewer',
+  onNewPOI
 }) {
   const navigate = useNavigate();
   const isNavigatingRef = useRef(false);
 
-  // Sub-tab state: 'all', 'mtb', or 'organizations'
   const [activeSubTab, setActiveSubTab] = useState(
     initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all'
   );
@@ -50,7 +46,6 @@ const ResultsTab = memo(function ResultsTab({
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
 
-  // Sub-tab configuration (fetched from server, with hardcoded fallback)
   const DEFAULT_SUBTABS = [
     { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
     { id: 'mtb', label: 'MTB Trail Status', shortLabel: 'MTB Status', route: '/mtb-trail-status', filterTypes: ['mtb-trailhead'], protected: false },
@@ -58,7 +53,6 @@ const ResultsTab = memo(function ResultsTab({
   ];
   const [subtabConfig, setSubtabConfig] = useState(null);
 
-  // Fetch sub-tab config on mount
   useEffect(() => {
     fetch('/api/results-subtabs')
       .then(res => res.json())
@@ -72,9 +66,8 @@ const ResultsTab = memo(function ResultsTab({
 
   const activeSubtabs = subtabConfig || DEFAULT_SUBTABS;
 
-  // Generate initial filter types from iconConfig + layer types
   const allFilterTypes = useMemo(() => {
-    const types = new Set(['trails', 'rivers', 'boundaries']); // Layer types
+    const types = new Set(['trails', 'rivers', 'boundaries']);
     if (iconConfig && iconConfig.length > 0) {
       iconConfig.forEach(icon => {
         if (icon.enabled !== false) {
@@ -82,7 +75,6 @@ const ResultsTab = memo(function ResultsTab({
         }
       });
     } else {
-      // Fallback default POI types
       ['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge',
        'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default'].forEach(t => types.add(t));
     }
@@ -92,16 +84,12 @@ const ResultsTab = memo(function ResultsTab({
   const [enabledFilters, setEnabledFilters] = useState(() => new Set(allFilterTypes));
   const [mtbTrailStatuses, setMtbTrailStatuses] = useState({});
 
-  // Update enabled filters when allFilterTypes changes (iconConfig loads)
   useEffect(() => {
     setEnabledFilters(new Set(allFilterTypes));
   }, [allFilterTypes]);
 
-  // Transition state - tracks when we're leaving MTB mode but bypassViewportFilter hasn't caught up yet
   const [isInTransition, setIsInTransition] = useState(false);
 
-  // Update sub-tab when initialShowMtbOnly or initialShowOrganizationsOnly changes (e.g., from route navigation)
-  // But skip if we initiated the navigation ourselves
   useEffect(() => {
     if (isNavigatingRef.current) {
       isNavigatingRef.current = false;
@@ -117,7 +105,6 @@ const ResultsTab = memo(function ResultsTab({
     }
   }, [initialShowMtbOnly, initialShowOrganizationsOnly, activeSubTab]);
 
-  // Fetch MTB trail statuses when in MTB mode
   useEffect(() => {
     if (activeSubTab === 'mtb') {
       fetch('/api/trail-status/mtb-trails')
@@ -139,28 +126,21 @@ const ResultsTab = memo(function ResultsTab({
   }, [activeSubTab]);
 
 
-  // Apply POI type filter when sub-tab changes
   useEffect(() => {
     if (onFilterByTypes) {
-      // Determine which POI types to show based on active sub-tab
-      let typesToShow = null; // null means "show all"
+      let typesToShow = null;
 
       if (activeSubTab === 'mtb') {
         typesToShow = ['mtb-trailhead'];
       } else if (activeSubTab === 'organizations') {
-        typesToShow = ['organization']; // virtual POIs
+        typesToShow = ['organization'];
       }
-      // 'all' sub-tab passes null to show all types
 
       onFilterByTypes(typesToShow);
     }
   }, [activeSubTab, onFilterByTypes]);
 
-  // Combine and sort POIs alphabetically - also create a lookup map
   const { sortedPois, poiMap, totalCount, thumbnailDestinations } = useMemo(() => {
-    // When in MTB mode OR organizations mode OR bypassing viewport filter OR in transition,
-    // use ALL destinations/features (not viewport-filtered)
-    // This prevents the list from becoming empty during map zoom animations
     const useAllPois = activeSubTab === 'mtb' || activeSubTab === 'organizations' || bypassViewportFilter || isInTransition;
 
 
@@ -169,15 +149,13 @@ const ResultsTab = memo(function ResultsTab({
     let sourceVirtual = useAllPois ? (allVirtualPois || []) : (viewportFilteredVirtualPois || []);
 
 
-    // When in MTB mode, filter to only MTB trailheads (POIs with status_url)
     if (activeSubTab === 'mtb') {
       sourceDestinations = sourceDestinations.filter(d => d.status_url && d.status_url.trim() !== '');
-      sourceLinear = []; // No linear features in MTB mode
-      sourceVirtual = []; // No virtual POIs in MTB mode
+      sourceLinear = [];
+      sourceVirtual = [];
     } else if (activeSubTab === 'organizations') {
-      sourceDestinations = []; // No regular POIs in organizations mode
-      sourceLinear = []; // No linear features in organizations mode
-      // sourceVirtual stays as-is to show all organizations
+      sourceDestinations = [];
+      sourceLinear = [];
     }
 
     const dests = sourceDestinations.map(d => ({
@@ -202,10 +180,8 @@ const ResultsTab = memo(function ResultsTab({
     const allPois = [...dests, ...linear, ...virtual];
     const total = allPois.length;
 
-    // Apply filters
     let filtered = allPois;
 
-    // Text search filter
     if (searchText.trim()) {
       const search = searchText.toLowerCase();
       filtered = filtered.filter(poi =>
@@ -214,17 +190,14 @@ const ResultsTab = memo(function ResultsTab({
       );
     }
 
-    // Type filter (only applies to Points of Interest subtab)
     if (activeSubTab === 'all') {
       filtered = filtered.filter(poi => enabledFilters.has(poi._poiType));
     }
 
-    // Sort alphabetically
     const sorted = filtered.sort((a, b) =>
       (a.name || '').localeCompare(b.name || '')
     );
 
-    // Create lookup map for event delegation
     const map = new Map();
     sorted.forEach(poi => {
       const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
@@ -236,7 +209,7 @@ const ResultsTab = memo(function ResultsTab({
       sortedPois: sorted,
       poiMap: map,
       totalCount: total,
-      thumbnailDestinations: sourceDestinations // For MapThumbnail - use source destinations (MTB trailheads or all destinations during transition)
+      thumbnailDestinations: sourceDestinations
     };
   }, [activeSubTab, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, bypassViewportFilter, isInTransition, iconConfig]);
 
@@ -248,7 +221,6 @@ const ResultsTab = memo(function ResultsTab({
     clampedPage * PAGE_SIZE
   );
 
-  // Event delegation handler - single handler for all tiles
   const handleListClick = useCallback((e) => {
     const tile = e.target.closest('.results-tile');
     if (!tile) return;
@@ -264,20 +236,14 @@ const ResultsTab = memo(function ResultsTab({
     }
   }, [poiMap, onSelectDestination, onSelectLinearFeature]);
 
-  // Memoize selected IDs for faster comparison
   const selectedId = selectedDestination?.id;
   const selectedLinearId = selectedLinearFeature?.id;
 
-  // Use appropriate POI count based on mode
-  // Organizations mode: use count of organizations (sortedPois.length since it's filtered to only organizations)
-  // Other modes: use global POI count from App.jsx
   const poiCount = activeSubTab === 'organizations' ? sortedPois.length : visiblePoiCount;
 
-  // Generate filter chips dynamically from iconConfig
   const filterChips = useMemo(() => {
     const chips = [];
 
-    // POI type chips
     if (iconConfig && iconConfig.length > 0) {
       iconConfig.forEach(icon => {
         if (icon.enabled !== false) {
@@ -295,7 +261,6 @@ const ResultsTab = memo(function ResultsTab({
       });
     }
 
-    // Layer chips (trails, rivers, boundaries)
     chips.push({
       id: 'trails',
       label: 'Trails',
@@ -315,7 +280,6 @@ const ResultsTab = memo(function ResultsTab({
       type: 'layer'
     });
 
-    // Sort alphabetically
     return chips.sort((a, b) => a.label.localeCompare(b.label));
   }, [iconConfig]);
 
@@ -342,31 +306,23 @@ const ResultsTab = memo(function ResultsTab({
     setCurrentPage(1);
   }, []);
 
-  // Clear transition state when App.jsx bypassViewportFilter catches up
   useEffect(() => {
     if (bypassViewportFilter && isInTransition) {
       setIsInTransition(false);
     }
   }, [bypassViewportFilter, isInTransition]);
 
-  // Simple, direct bounds computation - no async effects, no delays
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
 
   let currentBounds;
   if (activeSubTab === 'mtb') {
-    // MTB mode: use pre-calculated cached bounds
     currentBounds = cachedMtbBoundsRef?.current || DEFAULT_PARK_BOUNDS;
   } else if (bypassViewportFilter || isInTransition) {
-    // Bypass mode OR in transition: use default park bounds constant
-    // Stay in transition until bypassViewportFilter catches up to prevent using stale mapState.bounds
     currentBounds = DEFAULT_PARK_BOUNDS;
   } else {
-    // Normal mode: use current viewport bounds
     currentBounds = mapState?.bounds || DEFAULT_PARK_BOUNDS;
   }
 
-  // Only update stable ref if coordinates actually changed
-  // This prevents MapThumbnail from re-rendering when bounds array reference changes but values don't
   const boundsChanged = currentBounds &&
     (!stableBoundsRef.current ||
     currentBounds[0][0] !== stableBoundsRef.current[0][0] ||
@@ -380,13 +336,9 @@ const ResultsTab = memo(function ResultsTab({
 
   const thumbnailBounds = stableBoundsRef.current;
 
-  // Handle sub-tab change
   const handleSubTabChange = (tab) => {
-    // Set flag to prevent redundant sync when URL changes
     isNavigatingRef.current = true;
 
-    // If leaving MTB mode, immediately set transition state
-    // This ensures the next render has the correct POI list and bounds
     if (activeSubTab === 'mtb' && tab === 'all') {
       setIsInTransition(true);
     }
@@ -394,17 +346,12 @@ const ResultsTab = memo(function ResultsTab({
     setActiveSubTab(tab);
     setCurrentPage(1);
 
-    // Don't clear bypass filter here - let App.jsx MTB Route Effect handle it
-    // This prevents flickering when switching from MTB to All Results
-
-    // Navigate to config-driven route
     const tabConfig = activeSubtabs.find(t => t.id === tab);
     if (tabConfig) {
       navigate(tabConfig.route);
     } else {
       navigate('/');
     }
-    // Filter will be applied by useEffect that watches activeSubTab
   };
 
   if (sortedPois.length === 0) {
@@ -415,7 +362,7 @@ const ResultsTab = memo(function ResultsTab({
           <p className="tab-subtitle">Points of interest visible in the current map area</p>
         </div>
 
-        {/* Sub-tabs (data-driven from config) */}
+
         <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
           {activeSubtabs.map(tab => (
             <button
@@ -440,7 +387,7 @@ const ResultsTab = memo(function ResultsTab({
           )}
         </div>
 
-        {/* Filter badges - always visible even when no results */}
+
         <div className="results-filters">
           <input
             type="text"
@@ -519,7 +466,7 @@ const ResultsTab = memo(function ResultsTab({
         <p className="tab-subtitle">Points of interest visible in the current map area</p>
       </div>
 
-      {/* Sub-tabs (data-driven from config) */}
+
       <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
         {activeSubtabs.map(tab => (
           <button

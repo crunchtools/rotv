@@ -6,33 +6,27 @@ import { triggerDigestManually } from '../services/jobScheduler.js';
 const router = express.Router();
 
 export function createNewsletterRouter(pool) {
-  // Subscribe to newsletter (public endpoint)
   router.post('/subscribe', async (req, res) => {
     const { email } = req.body;
 
-    // Validate email format
     if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
       return res.status(400).json({ error: 'Invalid email address' });
     }
 
     try {
-      // Add to Buttondown (idempotent - handles duplicates gracefully)
       const subscribeResult = await addSubscriber(email, pool);
 
-      // Track locally for analytics (but ignore duplicates)
       try {
         await pool.query(
           'INSERT INTO newsletter_subscriptions (email, source) VALUES ($1, $2)',
           [email, 'web']
         );
       } catch (dbError) {
-        // Ignore duplicate key errors in local tracking
         if (!dbError.message?.includes('duplicate key')) {
           throw dbError;
         }
       }
 
-      // Check if already subscribed
       if (subscribeResult.status === 'already_subscribed') {
         if (subscribeResult.needsConfirmation) {
           return res.json({
@@ -58,7 +52,6 @@ export function createNewsletterRouter(pool) {
         });
       }
 
-      // Show more specific error for debugging
       const errorMsg = error.response?.data?.detail || error.message || 'Failed to subscribe. Please try again.';
       console.error('Buttondown API response:', error.response?.data);
 
@@ -66,12 +59,10 @@ export function createNewsletterRouter(pool) {
     }
   });
 
-  // Get newsletter stats (admin only)
   router.get('/stats', isAdmin, async (req, res) => {
     try {
       const totalSubscribers = await getSubscriberCount();
 
-      // Count new subscriptions in last 7 days from local tracking
       const recentSubscriberQuery = await pool.query(
         `SELECT COUNT(*) as new_this_week
          FROM newsletter_subscriptions
@@ -89,7 +80,6 @@ export function createNewsletterRouter(pool) {
     }
   });
 
-  // Manually trigger digest send (admin only, for testing)
   router.post('/send-digest', isAdmin, async (req, res) => {
     try {
       const jobId = await triggerDigestManually();
@@ -104,7 +94,6 @@ export function createNewsletterRouter(pool) {
     }
   });
 
-  // Test Buttondown API key (admin only)
   router.post('/test-api-key', isAdmin, async (req, res) => {
     try {
       const apiKeyTestResult = await testApiKey(pool);

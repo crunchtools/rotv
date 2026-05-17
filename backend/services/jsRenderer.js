@@ -1,13 +1,5 @@
 import { acquireBrowser, releaseBrowser } from './browserPool.js';
 
-/**
- * Hard timeout wrapper - ensures a promise resolves within a time limit
- * This is a safety net for operations that may hang indefinitely
- * @param {Promise} promise - The promise to wrap
- * @param {number} ms - Timeout in milliseconds
- * @param {string} operationName - Name of operation for error messages
- * @returns {Promise} - Resolves with result or rejects with timeout error
- */
 function withHardTimeout(promise, ms, operationName = 'Operation') {
   let timeoutId;
   const timeoutPromise = new Promise((_, reject) => {
@@ -21,12 +13,6 @@ function withHardTimeout(promise, ms, operationName = 'Operation') {
   });
 }
 
-/**
- * Detect if a URL is likely a JavaScript-heavy site that needs rendering
- * @param {string} url - URL to check
- * @param {Object} options - Detection options
- * @returns {Promise<boolean>} - True if site should be rendered with browser
- */
 export async function isJavaScriptHeavySite(url, options = {}) {
   const { checkContent = true } = options;
 
@@ -38,7 +24,6 @@ export async function isJavaScriptHeavySite(url, options = {}) {
     const urlObj = new URL(url);
     const hostname = urlObj.hostname.toLowerCase();
 
-    // Known JavaScript-heavy platforms (domain-based detection)
     const jsHeavyDomains = [
       'wix.com',
       'wixsite.com',
@@ -48,23 +33,21 @@ export async function isJavaScriptHeavySite(url, options = {}) {
       'webflow.com',
       'carrd.co',
       'weebly.com',
-      'wordpress.com', // WordPress.com (hosted) often uses heavy JS
+      'wordpress.com',
       'sites.google.com',
-      'conservancyforcvnp.org', // Force rendering to extract structured data and links
-      'preservethevalley.com', // Force rendering for better link extraction
-      'bsky.app', // Bluesky social media - requires rendering for posts
-      'twitter.com', // Twitter - requires rendering for posts
-      'x.com', // X (Twitter rebrand) - requires rendering for posts
-      'facebook.com', // Facebook - requires rendering for posts and page content
-      'clevelandmetroparks.com' // Cleveland Metroparks - dynamic trail status table
+      'conservancyforcvnp.org',
+      'preservethevalley.com',
+      'bsky.app',
+      'twitter.com',
+      'x.com',
+      'facebook.com',
+      'clevelandmetroparks.com'
     ];
 
-    // Quick check: domain-based
     if (jsHeavyDomains.some(domain => hostname.includes(domain))) {
       return true;
     }
 
-    // Optional: Check HTML content for Wix/other framework signatures
     if (checkContent) {
       try {
         const response = await fetch(url, {
@@ -75,7 +58,6 @@ export async function isJavaScriptHeavySite(url, options = {}) {
           signal: AbortSignal.timeout(5000)
         });
 
-        // Check response headers for Wix signatures
         const server = response.headers.get('server') || '';
         const xWixRequestId = response.headers.get('x-wix-request-id');
 
@@ -84,7 +66,6 @@ export async function isJavaScriptHeavySite(url, options = {}) {
           return true;
         }
 
-        // Check HTML content for framework signatures
         const html = await response.text();
         const htmlLower = html.toLowerCase();
 
@@ -96,7 +77,7 @@ export async function isJavaScriptHeavySite(url, options = {}) {
           'webflow.com',
           'window.wixSite',
           'thunderbolt',
-          '__NEXT_DATA__' // Next.js (often needs rendering)
+          '__NEXT_DATA__'
         ];
 
         if (signatures.some(sig => htmlLower.includes(sig))) {
@@ -104,7 +85,6 @@ export async function isJavaScriptHeavySite(url, options = {}) {
           return true;
         }
       } catch (fetchError) {
-        // If fetch fails, assume we might need rendering
         console.log(`[JS Renderer] Fetch failed for ${url}, will try rendering: ${fetchError.message}`);
         return true;
       }
@@ -117,12 +97,6 @@ export async function isJavaScriptHeavySite(url, options = {}) {
   }
 }
 
-/**
- * Login to Twitter/X with credentials
- * @param {Page} page - Playwright page object
- * @param {Object} credentials - Twitter credentials { username, password }
- * @returns {Promise<boolean>} - True if login successful
- */
 async function loginToTwitter(page, credentials = {}) {
   const { username, password } = credentials;
 
@@ -136,33 +110,26 @@ async function loginToTwitter(page, credentials = {}) {
   try {
     console.log('[JS Renderer] 🔐 Attempting Twitter login...');
 
-    // Go to Twitter login page
     await page.goto('https://x.com/i/flow/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.waitForTimeout(2000);
 
-    // Enter username
     const usernameInput = await page.waitForSelector('input[autocomplete="username"]', { timeout: 10000 });
     await usernameInput.fill(username);
     await page.waitForTimeout(1000);
 
-    // Click Next button
     const nextButton = await page.locator('button:has-text("Next")').first();
     await nextButton.click();
     await page.waitForTimeout(2000);
 
-    // Enter password
     const passwordInput = await page.waitForSelector('input[name="password"]', { timeout: 10000 });
     await passwordInput.fill(password);
     await page.waitForTimeout(1000);
 
-    // Click Log in button
     const loginButton = await page.locator('button:has-text("Log in")').first();
     await loginButton.click();
     await page.waitForTimeout(3000);
 
-    // Check if login was successful by looking for home timeline or profile
     const isLoggedIn = await page.evaluate(() => {
-      // Check if we're redirected to home feed or if login failed
       const url = window.location.href;
       return url.includes('/home') || url.includes('/compose') || !url.includes('/flow/login');
     });
@@ -180,28 +147,21 @@ async function loginToTwitter(page, credentials = {}) {
   }
 }
 
-/**
- * Render a JavaScript-heavy page and extract content
- * @param {string} url - URL to render
- * @param {Object} options - Rendering options
- * @returns {Promise<Object>} - { text, html, title, success }
- */
 export async function renderJavaScriptPage(url, options = {}) {
   const {
     timeout = 15000,
     waitForSelector = null,
-    waitTime = 3000, // Extra wait for dynamic content
-    extractSelectors = [], // Optional specific selectors to extract
-    hardTimeout = 60000, // Hard timeout for entire operation (default 60s)
-    browserLaunchTimeout = 30000, // Timeout for browser launch specifically
-    requireTwitterLogin = null, // Auto-detect from URL if not specified
-    twitterCredentials = null // Twitter credentials { username, password }
+    waitTime = 3000,
+    extractSelectors = [],
+    hardTimeout = 60000,
+    browserLaunchTimeout = 30000,
+    requireTwitterLogin = null,
+    twitterCredentials = null
   } = options;
 
   console.log(`[JS Renderer] Acquiring browser context for: ${url}`);
 
-  // Track the BrowserContext and acquisitionId for cleanup on hard timeout.
-  // We close only the context, never the shared browser process.
+  // Only the BrowserContext gets closed on hard timeout — the shared browser process stays alive
   let contextRef = { context: null, acquisitionId: null };
   let hardTimeoutId;
   let isTimedOut = false;
@@ -251,21 +211,17 @@ export async function renderJavaScriptPage(url, options = {}) {
   } finally {
     clearTimeout(hardTimeoutId);
 
-    // Extra safety: release context if still open after hard timeout
     if (isTimedOut && contextRef.context) {
       try {
         await contextRef.context.close();
         releaseBrowser(contextRef.acquisitionId);
       } catch (e) {
-        // Ignore - context may already be closed
+        // ignore
       }
     }
   }
 }
 
-/**
- * Internal implementation of page rendering (wrapped by hard timeout)
- */
 async function renderJavaScriptPageInternal(url, options) {
   const { timeout, waitForSelector, waitTime, extractSelectors, contextRef, needsTwitterLogin, twitterCredentials } = options;
 
@@ -279,15 +235,12 @@ async function renderJavaScriptPageInternal(url, options) {
       ignoreHTTPSErrors: true
     });
 
-    // Store context reference so the hard timeout can close it if needed
     if (contextRef) {
       contextRef.context = context;
     }
 
-    // Load Twitter cookies if this is a Twitter URL
     if (needsTwitterLogin) {
       try {
-        // Import database pool
         const pkg = await import('pg');
         const { Pool } = pkg.default || pkg;
         const dbPool = new Pool({
@@ -307,17 +260,15 @@ async function renderJavaScriptPageInternal(url, options) {
         if (cookieQuery.rows.length > 0) {
           const cookies = JSON.parse(cookieQuery.rows[0].value);
 
-          // Sanitize cookies for Playwright compatibility
+          // Playwright rejects cookies unless sameSite is exactly "Strict"|"Lax"|"None" —
+          // raw browser exports often use null/"no_restriction"/lowercase values
           const sanitizedCookies = cookies.map(cookie => {
             const sanitized = { ...cookie };
 
-            // Fix sameSite - Playwright only accepts Strict, Lax, or None (capitalized)
-            // Handle null, "no_restriction", lowercase values, etc.
             const sameSiteValue = sanitized.sameSite;
             if (!sameSiteValue || sameSiteValue === 'no_restriction' || sameSiteValue === 'unspecified') {
               sanitized.sameSite = 'None';
             } else if (typeof sameSiteValue === 'string') {
-              // Capitalize properly: lax -> Lax, strict -> Strict, none -> None
               const normalized = sameSiteValue.charAt(0).toUpperCase() + sameSiteValue.slice(1).toLowerCase();
               if (['Strict', 'Lax', 'None'].includes(normalized)) {
                 sanitized.sameSite = normalized;
@@ -328,12 +279,10 @@ async function renderJavaScriptPageInternal(url, options) {
               sanitized.sameSite = 'None';
             }
 
-            // Ensure required fields exist
             if (!sanitized.name || !sanitized.value) {
               return null;
             }
 
-            // Convert expirationDate to expires if needed
             if (sanitized.expirationDate && !sanitized.expires) {
               sanitized.expires = sanitized.expirationDate;
             }
@@ -353,7 +302,6 @@ async function renderJavaScriptPageInternal(url, options) {
 
     const page = await context.newPage();
 
-    // Navigate to the page
     console.log(`[JS Renderer] Navigating to ${url}...`);
     try {
       await page.goto(url, {
@@ -361,19 +309,17 @@ async function renderJavaScriptPageInternal(url, options) {
         timeout
       });
     } catch (navError) {
-      // If networkidle times out, try with domcontentloaded as fallback
       if (navError.message.includes('Timeout') || navError.message.includes('timeout')) {
         console.log(`[JS Renderer] Network idle timeout, retrying with domcontentloaded...`);
         await page.goto(url, {
           waitUntil: 'domcontentloaded',
-          timeout: Math.min(timeout, 10000) // Shorter timeout for fallback
+          timeout: Math.min(timeout, 10000)
         });
       } else {
         throw navError;
       }
     }
 
-    // Wait for specific selector if provided
     if (waitForSelector) {
       console.log(`[JS Renderer] Waiting for selector: ${waitForSelector}`);
       await page.waitForSelector(waitForSelector, { timeout: 10000 }).catch(() => {
@@ -381,15 +327,12 @@ async function renderJavaScriptPageInternal(url, options) {
       });
     }
 
-    // Wait additional time for dynamic content to load
     console.log(`[JS Renderer] Waiting ${waitTime}ms for dynamic content...`);
     await page.waitForTimeout(waitTime);
 
-    // For Twitter/X pages, wait for tweets and scroll to load content
     if (url.includes('x.com') || url.includes('twitter.com')) {
       console.log('[JS Renderer] Waiting for Twitter tweets to load...');
 
-      // Wait for tweet articles to appear (up to 10 seconds)
       try {
         await page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
         console.log('[JS Renderer] ✓ Tweets loaded');
@@ -397,25 +340,21 @@ async function renderJavaScriptPageInternal(url, options) {
         console.log('[JS Renderer] ⚠️ Tweets not found via selector, trying scroll');
       }
 
-      // Additional wait for content to fully render
       await page.waitForTimeout(2000);
 
       console.log('[JS Renderer] Scrolling Twitter page to load more content...');
       await page.evaluate(async () => {
-        // Scroll down more aggressively to trigger lazy loading
+        // Aggressive scroll triggers Twitter's lazy-loading for tweets below the fold
         for (let i = 0; i < 5; i++) {
           window.scrollBy(0, 800);
           await new Promise(resolve => setTimeout(resolve, 800));
         }
-        // Scroll back to top to see newest tweets
         window.scrollTo(0, 0);
         await new Promise(resolve => setTimeout(resolve, 1000));
       });
     }
 
-    // Extract content including structured links
     const content = await page.evaluate((selectors) => {
-      // Helper to get text from specific selectors
       const getTextFromSelectors = (sels) => {
         const results = {};
         sels.forEach(sel => {
@@ -425,7 +364,6 @@ async function renderJavaScriptPageInternal(url, options) {
         return results;
       };
 
-      // Extract all links with context for event/news deep linking
       const extractLinks = () => {
         const links = [];
         const anchorElements = document.querySelectorAll('a[href]');
@@ -433,7 +371,6 @@ async function renderJavaScriptPageInternal(url, options) {
         anchorElements.forEach(anchor => {
           const href = anchor.href;
 
-          // Skip navigation links, social media, mailto, tel, etc.
           if (!href ||
               href.startsWith('mailto:') ||
               href.startsWith('tel:') ||
@@ -446,20 +383,16 @@ async function renderJavaScriptPageInternal(url, options) {
             return;
           }
 
-          // Get link text and surrounding context
           const linkText = anchor.innerText?.trim() || anchor.textContent?.trim() || '';
 
-          // Get parent container text for context
           let contextText = '';
           let parent = anchor.parentElement;
           let depth = 0;
 
-          // Traverse up to find meaningful context (event card, article, etc.)
           while (parent && depth < 3) {
             const classList = Array.from(parent.classList || []);
             const className = parent.className || '';
 
-            // Check if parent looks like an event/article container
             const isContainer = classList.some(c =>
               c.includes('event') || c.includes('article') || c.includes('news') ||
               c.includes('card') || c.includes('item') || c.includes('post')
@@ -474,12 +407,10 @@ async function renderJavaScriptPageInternal(url, options) {
             depth++;
           }
 
-          // Fallback to immediate parent text if no container found
           if (!contextText && anchor.parentElement) {
             contextText = anchor.parentElement.innerText?.trim() || '';
           }
 
-          // Limit context text length
           if (contextText.length > 500) {
             contextText = contextText.substring(0, 500);
           }
@@ -537,27 +468,17 @@ async function renderJavaScriptPageInternal(url, options) {
   }
 }
 
-/**
- * Extract event-like content from rendered page text
- * @param {string} text - Rendered page text
- * @returns {string} - Cleaned text focused on events
- */
 export function extractEventContent(text) {
-  // Remove common navigation/footer text
   const lines = text.split('\n');
 
-  // Filter out lines that are likely navigation/footer
   const eventLines = lines.filter(line => {
     const lower = line.toLowerCase().trim();
 
-    // Skip empty lines
     if (lower.length === 0) return false;
 
-    // Skip common navigation items
     const navKeywords = ['home', 'about', 'contact', 'login', 'sign in', 'sign up', 'menu', 'search'];
     if (navKeywords.some(kw => lower === kw)) return false;
 
-    // Keep lines that look like event-related content
     const eventKeywords = [
       'event', 'adventure', 'program', 'workshop', 'class', 'tour',
       'hike', 'walk', 'festival', 'concert', 'volunteer',

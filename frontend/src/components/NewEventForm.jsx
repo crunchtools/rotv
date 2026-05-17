@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
 
-// Matches FIELD_CONFIGS.event in ModerationInbox.jsx
 const TZ_ABBR = (() => {
   try {
     return new Intl.DateTimeFormat('en-US', { timeZoneName: 'short', timeZone: 'America/New_York' })
@@ -99,7 +98,6 @@ function NewEventForm({ onClose, onCreate }) {
         <form onSubmit={handleSubmit} className="new-content-form">
           {error && <div className="form-error">{error}</div>}
 
-          {/* Primary fields: Title, Description, POI, Dates */}
           <div className="form-section">
             <label>Title *</label>
             <input
@@ -150,7 +148,6 @@ function NewEventForm({ onClose, onCreate }) {
             />
           </div>
 
-          {/* Secondary fields: Type, Location, Publication Date, Source */}
           <div className="form-section">
             <label>Event Type</label>
             <input

@@ -7,76 +7,51 @@
 [[exceptions]]
 check = "summary_litter"
 path = "CLAUDE.md"
-justification = "Claude Code project instructions require structured summaries for AI assistant orientation"
+justification = "Claude Code orientation file required at repo root by the agent harness — structured summary headers (Required Reading, Quick Reference Commands, Workflow) are the conventional contract Claude reads on session start"
 
 [[exceptions]]
 check = "summary_litter"
 path = "README.md"
-justification = "Project readme requires summary for repository visitors"
+justification = "Repository README at project root — required by GitHub for the repo landing page and by npm consumers; moving it to docs/ would break both conventions"
 
 # Random scripts exceptions - legitimate shell scripts
 
 [[exceptions]]
 check = "random_scripts"
 path = "run.sh"
-justification = "Main container management script - essential for development workflow"
+justification = "Primary dev workflow entrypoint at repo root — invoked as ./run.sh by every contributor and by CLAUDE.md's Quick Reference Commands; relocating into a subdirectory would break documented muscle memory"
 
 # Verbose comments exceptions - JSDoc API documentation is standard for JavaScript
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/server.js"
-justification = "Main server file has JSDoc API endpoint documentation"
+justification = "Load-bearing comments only: PR-review Fix tags (rate-limit asset proxy, path-traversal sanitization, SSRF assetId guard, IANA tz whitelist, FROM-clause guard), MUST-orderings (OG-tag injection before express.static, eras-before-pois FK), security rationale (stream-to-avoid-DoS), and cross-system gotchas (pg type parser for ISO timestamps, scheduler graceful-failure, Buttondown cadence cost). JSDoc slop removed (200+ lines deleted)."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/routes/admin.js"
-justification = "Admin routes have JSDoc API endpoint documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/newsService.js"
-justification = "News service has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/trailStatusService.js"
-justification = "Trail status service has JSDoc function documentation"
+justification = "Load-bearing comments only: Express route-ordering MUSTs (/surfaces/reorder before :id, /icons/reorder before :id, trail-status latest-job before :jobId), PR/Gemini/Gatehouse Fix tags (image-server delete before DB delete, primary-activities string parsing, cookie format quirks for Chrome vs Playwright), API/schema constraints (IA CDX flakiness, pg-boss source-of-truth, sameSite normalization, frontend ResultsTab tab sync, fire-and-forget response patterns). JSDoc slop removed (250+ comments deleted)."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/services/geminiService.js"
-justification = "Gemini AI service has JSDoc function documentation"
+justification = "Load-bearing comments only: JSON-parse salvage algorithm (truncation handling, brace counting inside quoted strings) for token-limit-hit Gemini responses; env-var-priority-over-DB rationale for CI/test overrides."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/services/jsRenderer.js"
-justification = "JS renderer service has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/driveImageService.js"
-justification = "Drive image service has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/jobScheduler.js"
-justification = "Job scheduler service has JSDoc function documentation"
+justification = "Load-bearing comments only: BrowserContext-vs-shared-browser cleanup invariant for hard-timeout path; Playwright sameSite cookie format requirement (external API constraint); Twitter lazy-loading scroll requirement; `// ignore` rationale in catch block (context already closed)."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "frontend/src/App.jsx"
-justification = "Main React app has JSDoc component documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/Map.jsx"
-justification = "Map component has JSDoc documentation for Leaflet integration"
+justification = "Load-bearing comments only: 3 eslint-disable-next-line markers (~lines 484, 838, 896) and their adjacent WHY-comments explaining why fetchNews / selectedDestination are intentionally excluded from useEffect deps to prevent infinite re-fetches. JSDoc slop removed (250 lines deleted)."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "frontend/src/components/Sidebar.jsx"
-justification = "Sidebar component has JSDoc documentation"
+justification = "Load-bearing comments only: 4 eslint-disable-next-line markers (lines 1159, 1379, 2226, 2691) explaining why fetchNews/fetchEvents/fetchStatus/setTrailStatus are intentionally excluded from useEffect deps (avoid re-fetch on state/function reference changes). JSDoc slop removed."
 
 # Test files have verbose test descriptions which are intentional
 
@@ -154,60 +129,10 @@ justification = "Unit tests have verbose describe/it blocks for clarity"
 
 [[exceptions]]
 check = "verbose_comments"
-path = "backend/config/passport.js"
-justification = "OAuth configuration requires explanatory comments"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/middleware/auth.js"
-justification = "Authentication middleware requires explanatory comments"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/routes/auth.js"
-justification = "Auth routes require explanatory comments"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "backend/scripts/cleanup-failed-urls.js"
-justification = "Maintenance script requires explanatory comments"
+justification = "Load-bearing comment only: HTTP 405 fallback (some servers reject HEAD; retry with GET). JSDoc slop removed (25 lines deleted)."
 
 # Frontend components with JSDoc documentation
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ActivitiesSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/CollectionStatus.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/DataCollectionSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ErasSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/IconGeneratorModal.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/IconsSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ImageUploader.jsx"
-justification = "React component with JSDoc documentation"
 
 [[exceptions]]
 check = "verbose_comments"
@@ -216,83 +141,8 @@ justification = "WHY-comment on setTimeout(0) workaround that prevents the click
 
 [[exceptions]]
 check = "verbose_comments"
-path = "frontend/src/components/MapAdmin.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/MapThumbnail.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/NewPOIForm.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/NewsEvents.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/NewsSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/OrganizationsTab.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ParkEvents.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ParkNews.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ResultsTab.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ResultsTile.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "frontend/src/components/StatusTab.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/SurfacesSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ThumbnailCarousel.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/TrailStatusSettings.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/VirtualPoiCreator.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/contexts/AuthContext.jsx"
-justification = "React context with JSDoc documentation"
+justification = "Load-bearing comment only: WHY-comment adjacent to the eslint-disable-next-line at ~line 22 explaining why fetchMtbTrails is intentionally excluded from useEffect deps (mount-only fetch). JSDoc slop removed."
 
 # Backend test utility scripts (manual debugging tools)
 
@@ -373,17 +223,17 @@ justification = "OAuth token utility script"
 [[exceptions]]
 check = "lint_suppression"
 path = "frontend/src/App.jsx"
-justification = "React useEffect dependency suppression is intentional - comment on line 704-705 documents that selectedDestination/selectedLinearFeature must be excluded to prevent infinite loops on POI state changes"
+justification = "react-hooks/exhaustive-deps suppressions at lines 571, 994, 1060 — each has an inline WHY-comment: 571 depends only on selectedDestination.id (not the whole object) to prevent reset loops during coordinate editing; 994 excludes selectedDestination/selectedLinearFeature so browser back/forward URL changes don't re-fire on POI selection state; 1060 reacts to URL path only for /tutorial/stepN deep-links"
 
 [[exceptions]]
 check = "lint_suppression"
 path = "frontend/src/components/Sidebar.jsx"
-justification = "React useEffect dependency suppressions are intentional - lines 1158, 1386, 2331, 2676 document that fetchNews/fetchEvents/fetchStatus are excluded to avoid re-fetching on state/function reference changes"
+justification = "react-hooks/exhaustive-deps suppressions at lines 1215, 1439, 2323, 2860 — each excludes the fetch callback (fetchNews/fetchEvents/fetchStatus/setTrailStatus) from useEffect deps so the effect re-fires only on the POI id change, not on every render where the function identity churns. Each line has an adjacent WHY-comment naming the excluded reference"
 
 [[exceptions]]
 check = "lint_suppression"
 path = "frontend/src/components/StatusTab.jsx"
-justification = "React useEffect dependency suppression is intentional - line 23 documents that fetchMtbTrails is excluded to only run on component mount"
+justification = "react-hooks/exhaustive-deps suppression at line 23 with adjacent WHY-comment — fetchMtbTrails is intentionally excluded so the MTB trail fetch only runs on mount (empty deps array), not on every parent re-render"
 
 # Random scripts - test utilities
 
@@ -392,53 +242,41 @@ justification = "React useEffect dependency suppression is intentional - line 23
 [[exceptions]]
 check = "deferred_work"
 path = "backend/services/geminiService.js"
-justification = "The word 'placeholder' describes template variable syntax {{name}}, not deferred work"
+justification = "False positive — the word 'placeholder' at lines 114, 196, 209 describes Gemini prompt template variable syntax ({{activities_list}}, {{eras_list}}, {{surfaces_list}}), not a TODO marker"
 
 [[exceptions]]
 check = "deferred_work"
 path = "frontend/src/components/IconGeneratorModal.jsx"
-justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
+justification = "False positive — placeholder= attribute on the <input> elements at lines 149, 160, 170, 195 and the CSS class 'preview-placeholder' at line 225; not deferred work"
 
 [[exceptions]]
 check = "deferred_work"
 path = "frontend/src/components/ImageUploader.jsx"
-justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
+justification = "False positive — comment at line 23 describes UI state showing a placeholder image when pendingImage.deleted is true; not a TODO marker"
 
 [[exceptions]]
 check = "deferred_work"
 path = "frontend/src/components/NewPOIForm.jsx"
-justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
+justification = "False positive — placeholder= attribute on the <input> elements at lines 125, 138, 149, 203, 213, 223, 234, 274; not deferred work"
 
 [[exceptions]]
 check = "deferred_work"
 path = "frontend/src/components/Sidebar.jsx"
-justification = "mastodon contains 'todo' substring (false positive), placeholder is HTML attribute"
-
-[[exceptions]]
-check = "deferred_work"
-path = "frontend/src/components/UserMenu.jsx"
-justification = "HTML placeholder attribute on form inputs - standard HTML syntax"
+justification = "False positives — line 49 'mastodon' URL contains the substring 'todo'; lines 406 (comment), 690, 702, 733, 897, 972+ all use 'placeholder' as either a code-comment describing UI state or as the HTML placeholder= attribute on form inputs"
 
 # Random scripts - container entrypoint and OAuth utility
 
 [[exceptions]]
 check = "random_scripts"
 path = "entrypoint.sh"
-justification = "Container entrypoint script - required by Podman for startup"
+justification = "Container entrypoint at repo root — referenced by ENTRYPOINT directive in Containerfile and run by Podman as PID 1 on container start; conventional location for OCI entrypoints"
 
-# Primitive obsession and state machine - Python OAuth script uses port number
+# Primitive obsession - Python OAuth script uses fixed port number
 
 [[exceptions]]
 check = "primitive_obsession"
 path = "scripts/get_google_token.py"
-justification = "Port 8085 is standard OAuth callback port - no benefit to extracting constant"
-
-# Speculative generality - legitimate fallback logic
-
-[[exceptions]]
-check = "speculative_generality"
-path = "backend/services/jsRenderer.js"
-justification = "Comment explains fallback logic: if fetch fails, assume rendering might be needed"
+justification = "Port 8085 is hardcoded once as the local OAuth callback for InstalledAppFlow.run_local_server — extracting a single-use OAUTH_CALLBACK_PORT constant in a 30-line one-shot helper script would add ceremony without clarity"
 
 # Linter configuration - JavaScript/Node.js project doesn't use Rust/Python tools
 
@@ -449,67 +287,62 @@ justification = "Comment explains fallback logic: if fetch fails, assume renderi
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/trailStatusService.js"
-justification = "Trail status collection uses slot-based concurrency control with discrete phases (initialize, find, assign, update, collect, save). Each phase is a separate function for clarity and debugging. The slot architecture prevents race conditions during concurrent AI API calls - inlining would obscure the state machine flow."
+justification = "Flagged: collectTrailStatus (line 115) and saveTrailStatus (line 393) — each is a discrete phase in the slot-based concurrency pipeline. collectTrailStatus isolates the Gemini call + timeout from the slot scheduler so a hung LLM call can't deadlock the slot pool; saveTrailStatus isolates the cache-write transaction so a DB failure doesn't poison the slot reservation. Inlining either would entangle slot lifecycle with I/O error handling"
 
 # Single-use helpers - News service (batch collection orchestration)
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/newsService.js"
-justification = "News collection uses batch orchestration functions (runBatchNewsCollection, getAllPoisForCollection) to coordinate pg-boss job scheduling and database queries. These are separated for transaction boundary clarity and error handling isolation."
+justification = "Flagged helpers include several false positives — resetJobUsage, createNewsCollectionJob, processNewsCollectionJob, getAllPoisForCollection, getPoisForTierCollection are all exported and called from routes/admin.js, server.js, or mcpServer.js (gourmand only sees internal call sites). isNoiseLink is re-exported and used by tests/deterministicLinks.experiment.js. Remaining internals (classifyPage, itemCount, buildEventPrompt, buildNewsPrompt, normalizeNewsTitle) are discrete LLM-prompt-construction phases whose names document which Gemini call they prepare"
 
 # Single-use helpers - Test utilities (legitimate test setup/teardown)
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/tests/trailStatus.integration.test.js"
-justification = "Test setup helper setupEastRimTrail creates consistent test fixture with specific trail configuration"
-
-# Single-use helpers - Manual test scripts (simple entry points)
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/test-playwright.js"
-justification = "Manual test script entry point function for Playwright browser testing"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/test-timeout.js"
-justification = "Manual test script entry point function for timeout testing"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/test-twitter-login.js"
-justification = "Manual test script entry point function for Twitter authentication testing"
+justification = "Test fixture setup helper setupEastRimTrail (line 57) — encapsulates the multi-step database fixture (Twitter cookies + POI insert + trail_status reset + table creation) used by every test in the suite; inlining into beforeEach would obscure the fixture contract"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/scripts/cleanup-failed-urls.js"
-justification = "Maintenance script entry point function for cleaning up failed URL records"
+justification = "Top-level main() entry point at line 128 — a 150-line orchestration body (fetch URLs → test in batches → report → conditionally delete) for a maintenance CLI. Inlining to module scope would mix top-level execution with import declarations and lose the try/finally that closes the DB pool"
+
+# Single-use helpers - Manual debugging scripts (top-level async wrappers)
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/test-playwright.js"
+justification = "Manual debug script — top-level async test() function at line 6 wraps the await/Playwright body so the file can be executed with `node backend/test-playwright.js`. JS modules can't `await` at top level without --experimental-top-level-await; the function wrapper is the idiomatic pattern"
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/test-timeout.js"
+justification = "Manual debug script — top-level async testTimeout() function at line 6 wraps the Playwright timeout test body. Same top-level-await constraint as test-playwright.js; the wrapper is the idiomatic Node entry point"
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/test-twitter-login.js"
+justification = "Manual debug script — top-level async testTwitterLogin() function at line 18 wraps the Twitter cookie validation flow. Same top-level-await constraint as other test-*.js scripts; the wrapper is the idiomatic Node entry point"
 
 # Single-use helpers - Server initialization and setup (legitimate entry points)
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/server.js"
-justification = "Server initialization functions (initDatabase, setupAiSearchDefaults, start) are entry points for server setup. generateSlug is a utility for URL generation. These are separated for testability and error handling clarity."
+justification = "Flagged: getMosaicFromCache (93), setMosaicCache (102), initDatabase (269), setupAiSearchDefaults (2685), start (2739). getMosaicFromCache/setMosaicCache form a paired in-memory TTL cache abstraction (with invalidateMosaicCache that is multi-use) — splitting up the cache API would scatter the cache-key construction across call sites. initDatabase/setupAiSearchDefaults/start are the server bootstrap entry points called sequentially from start() at module load; flattening them would produce a 400+ line top-level IIFE with no error-isolation boundaries"
 
 # Single-use helpers - Service configuration and internal implementations
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/driveImageService.js"
-justification = "downloadFileFromDrive isolates Google Drive API calls for error handling and retry logic"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/geminiService.js"
-justification = "getDefaultPrompt centralizes default prompt configuration that may be overridden from database settings"
+justification = "Flagged: downloadFileFromDrive (325) and createOAuth2Client (456). downloadFileFromDrive is exported and called from routes/admin.js (false positive — gourmand sees only the internal call). createOAuth2Client wraps the OAuth2Client construction + refreshAccessToken + DB credential persistence in a single error boundary; inlining would force the refresh-token try/catch and the UPDATE users query into createDriveServiceWithRefresh's body"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/jsRenderer.js"
-justification = "withHardTimeout wraps browser operations with timeout enforcement. renderJavaScriptPageInternal is internal implementation separated for error boundary and resource cleanup."
+justification = "Flagged: renderJavaScriptPageInternal (269) — the 200-line page-rendering body that runs inside Promise.race against a hard-timeout. The outer function owns the timeout + cleanup contract (contextRef closure, releaseBrowser, timeout reject); the inner function owns the actual Playwright work. Inlining would merge timeout-cancellation control flow with browser orchestration and break the Promise.race pattern"
 
 # Single-use helpers - Admin routes queue helpers
 
@@ -518,23 +351,21 @@ justification = "withHardTimeout wraps browser operations with timeout enforceme
 [[exceptions]]
 check = "single_use_helpers"
 path = "frontend/src/utils/iconUtils.js"
-justification = "getDestinationIconTypeFromConfig is shared between Map.jsx (for map marker icons) and getIconUrlForPOI (for ResultsTile icons). Extracted from Map.jsx to avoid duplication when implementing Issue #73 (replacing letter badges with icons in Results lists). This is legitimate code reuse, not single-use extraction."
-
-# Migration script - one-time use, functions provide logical separation
+justification = "False positive — getDestinationIconTypeFromConfig (line 7) is imported and used by Map.jsx:1043 and ResultsTab.jsx:187 in addition to the internal getIconUrlForPOI:53 call. Three external call sites make this shared library code, not a single-use helper"
 
 # Theme hook - date calculation helpers improve readability
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "frontend/src/hooks/useSeasonalTheme.js"
-justification = "calculateActiveTheme and isDateInRange encapsulate complex date comparison logic for seasonal theme selection. Inlining would reduce readability of the main useEffect hook."
+justification = "Flagged: calculateActiveTheme (line 90) and isDateInRange (line 116). calculateActiveTheme is a pure date->theme selector with night-mode branching that the second useEffect consumes once per minute; extracting it keeps the useEffect readable as orchestration. isDateInRange documents the wrap-around year-boundary semantics (start > end means the range crosses Jan 1) — inlining the two-branch comparison loses that contract"
 
 # Newsletter service - exported functions with independent test coverage
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/newsletterService.js"
-justification = "extractContentFromEmail is exported and independently tested in newsletter.unit.test.js (5 test cases). processNewsletter is the core processing entry point called by processNewsletterById after DB lookup — separation keeps data-access and processing logic distinct."
+justification = "Flagged: extractContentFromEmail (31) and processNewsletter (202). extractContentFromEmail is exported and has 5 dedicated unit tests in newsletter.unit.test.js. processNewsletter is exported and called by both processNewsletterById internally and from server.js:2867 — false positive (gourmand only sees the internal call site)"
 
 # ============================================================
 # Exceptions added to clear pre-existing violations (PRs #104-#171)
@@ -563,139 +394,94 @@ justification = "The 'result' local is consumed into results.push({ item, result
 
 [[exceptions]]
 check = "verbose_comments"
-path = "backend/services/apifyService.js"
-justification = "Apify service has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/backupService.js"
-justification = "Backup service has JSDoc function documentation for Google Drive operations"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/collection/BatchRunner.js"
-justification = "BatchRunner has JSDoc documentation for collection orchestration"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "backend/services/collection/CollectionTracker.js"
-justification = "CollectionTracker has JSDoc documentation for job progress tracking"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/imageServerClient.js"
-justification = "Image server client has JSDoc documentation for API operations"
+justification = "Load-bearing comment only: `// Fix: return null (not 0) when uninitialized to avoid overwriting slot 0 (PR #168 review)` at line 76."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/services/jobLogger.js"
-justification = "Job logger service has JSDoc function documentation"
+justification = "Load-bearing comments only: `// Fix: clear existing timer before creating new one to prevent leaks (PR #166 review)` at line 10; node-postgres JSONB double-encoding gotcha at lines 72-73 (external API constraint)."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/services/mcpServer.js"
-justification = "MCP server has JSDoc documentation for tool registration and handlers"
+justification = "Load-bearing comment only: MCP SDK constraint at lines 801-802 — `Server.connect()` takes exclusive ownership of a transport, forcing per-request server+transport creation in stateless mode."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/services/moderationService.js"
-justification = "Moderation service has JSDoc documentation for content scoring and queue management"
+justification = "Load-bearing comments only: blocklistSet/trustedSet semantics (URL prefixes vs hostnames) at lines 21-22; SSRF protection contract at line 39 (security-critical); `The` article-stripping for duplicate detection at line 236; per-POI threshold scoping at line 291; noon-Eastern promotion to avoid timezone calendar shift at lines 343-344; only-write-when-rescore-produced-new-value invariant at lines 408-409."
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/tests/northForkRegression.unit.test.js"
 justification = "Unit tests have verbose describe/it blocks for clarity"
 
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/JobsDashboard.jsx"
-justification = "React component with JSDoc documentation for job management UI"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ModerationInbox.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/NewsEventsShared.jsx"
-justification = "React component with JSDoc documentation"
-
 # Single-use helpers — new service files
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/apifyService.js"
-justification = "getApifyToken isolates credential lookup from pool. runActorSync wraps Apify REST API with timeout/error handling. extractFacebookPageUrl parses redirect URLs. All three are separated for error boundary isolation and testability."
+justification = "Flagged: runActorSync (38) and extractFacebookPageUrl (62). runActorSync isolates the Apify REST API call with its 120s AbortSignal.timeout and formats the Apify-specific 'API error N: <text>' shape — inlining the signal+error-shape construction into fetchFacebookPosts would tangle network-error semantics with the post-processing pipeline. extractFacebookPageUrl names the FB-redirect-URL regex parser so the caller reads as 'extract page URL then fetch posts' rather than inline regex"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/backupService.js"
-justification = "ensureBackupsFolder creates Google Drive folder structure — separated for retry logic and error handling isolation from the main backup flow."
+justification = "Flagged: ensureBackupsFolder (12) — folder-find-or-create operation with its own 404 recovery path. Validates an existing Drive folder ID, falls back to creating a new folder under the configured root, and persists the new ID via setDriveSetting. Inlining into triggerBackup would put two nested try/catch blocks and three Drive API calls in the middle of the pg_dump streaming logic"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/mcpServer.js"
-justification = "registerTools encapsulates MCP tool registration with schema definitions — separated from server initialization for readability of the 800+ line tool registry."
+justification = "Flagged: registerTools (54) — registers all 31 MCP admin tools with Zod schemas across an 800+ line body. Inlining into the per-request handler would re-instantiate the McpServer.tool() schema registry on every HTTP request and bloat the request entry point past comprehension"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/scripts/migrate-primary-images.js"
-justification = "One-time migration script entry point functions (fetchPrimaryAsset, hasPrimaryMedia, createPrimaryMediaEntry, migrateImages) provide logical separation for the multi-step migration process. Script is run once during feature deployment."
+justification = "Flagged: fetchPrimaryAsset (31), hasPrimaryMedia (50), createPrimaryMediaEntry (61), migrateImages (88) — one-time migration script. Each helper isolates a single I/O operation (image-server REST call, SELECT, INSERT) with its own error path; migrateImages is the orchestrator. Inlining the four I/O helpers into one loop body would produce a 100-line for-of that mixes three different error-handling strategies"
 
 # Newsletter deployment documentation
 
 [[exceptions]]
 check = "summary_litter"
 path = "NEWSLETTER_DEPLOYMENT.md"
-justification = "Newsletter feature deployment runbook documenting production rollout steps and configuration"
+justification = "Production deployment runbook at repo root — kept alongside README.md and CLAUDE.md for visibility during release. Documents env vars, migration commands, Buttondown setup, and post-deploy verification; structured summary headers are required by the operator audience"
 
 # Newsletter service files
 
 [[exceptions]]
 check = "verbose_comments"
-path = "backend/routes/newsletter.js"
-justification = "Newsletter routes have JSDoc API endpoint documentation"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/buttondownClient.js"
-justification = "Buttondown API client has JSDoc function documentation"
-
-[[exceptions]]
-check = "verbose_comments"
 path = "backend/services/newsletterDigestService.js"
-justification = "Newsletter digest service has JSDoc function documentation"
+justification = "Load-bearing comments only: int32 hashing of pg-boss UUID to fit `job_logs.job_id` column type at line 201; idempotency rationale at line 213 (prevents same-day duplicates across pg-boss retries); dev-mode subject uniqueness rationale at lines 270-271 (Buttondown slug_uniqueness); draft reuse on same-day failed-attempt retries at lines 276-277."
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/moderationService.js"
-justification = "getDomainReputation isolates domain quality scoring logic for testing and future expansion to support multiple reputation services"
+justification = "Flagged: sameOrigin (14), getDomainReputation (36), runContentRelevanceVotes (189). getDomainReputation is exported, used by newsService.js (lines 1215, 1318), AND has its own unit test suite — false positive. sameOrigin wraps the URL constructor in try/catch so the boolean expression at line 346 stays readable. runContentRelevanceVotes encapsulates a 60-line prompt + 3-parallel-Gemini-votes pipeline as a discrete phase of moderation"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/newsletterDigestService.js"
-justification = "generateDigest encapsulates digest creation logic with slot filtering, content selection, and HTML generation — separated for testability and future digest format variations"
+justification = "Flagged: generateDigest (9) — exported and called externally from server.js:270 in addition to the internal newsletter-cron handler. Wraps the 200-line digest pipeline (slot filter → content selection → HTML render → Buttondown payload); false positive on the call-site count"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/browserPool.js"
-justification = "forceKill isolates unsafe browser cleanup (clearing timers, resetting state, killing process) — legitimate unsafe isolation boundary"
+justification = "Flagged: forceKill (52) — exported and called from newsService.js:915 (circuit breaker) AND from the internal watchdog at browserPool.js:117. False positive on call-site count. The function performs unsafe cleanup (clear pending watchdog timers, reset refCount, null sharedBrowser, swallow close() errors) that no other browser-pool function should ever inline"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/dateExtractor.js"
-justification = "scoreDeterministicSources is exported for unit testing and separates the deterministic scoring phase from the LLM consensus phase in the date pipeline"
+justification = "Flagged: scoreDeterministicSources (244) and localToUTC (344). Both are exported. scoreDeterministicSources is the named first phase of the date consensus pipeline (deterministic-sources scoring vs. LLM-vote tallying). localToUTC is imported by moderationService.js:11 and used at moderationService.js:668 — false positive on call-site count, plus migration 042 references a prior bug in this function as evidence of the testable boundary"
 
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/renderPage.js"
-justification = "isCacheFresh encapsulates TTL logic with page-type-dependent expiration — inlining would mix cache policy with cache lookup"
+justification = "Flagged: isCacheFresh (15) — encodes the page-type-dependent TTL policy (detail = Infinity, listing = 23h, trail_status = 25min) with the Infinity special case. Inlining the TTL_MS lookup + Infinity branch + Date arithmetic into the line 40 boolean conjunction would push three concerns onto one already-busy conditional"
 
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/services/dateExtractor.js"
-justification = "JSDoc function documentation for date extraction and consensus scoring pipeline"
+justification = "Load-bearing comments only: chrono-node ignores `timezone` arg for bare ISO strings (external library quirk) at lines 36-37; Eastern is EDT (-04:00) or EST (-05:00) — round-trip both at line 238 (DST gotcha that drives the algorithm)."
 
 [[exceptions]]
 check = "generic_names"
@@ -735,49 +521,4 @@ justification = "Test step labels explain test intent (legitimate test documenta
 check = "verbose_comments"
 path = "backend/tests/rovingTabindex.integration.test.js"
 justification = "Per-step comments label keyboard navigation assertions (legitimate test documentation)"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ContentFormModal.jsx"
-justification = "Inline comments describe mode-specific behavior and validation steps"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/GeoJSONUploader.jsx"
-justification = "Inline comments describe upload pipeline stages"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/MarkdownRenderer.jsx"
-justification = "Module-level JSDoc describes component contract"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/ModerationExtras.jsx"
-justification = "Inline comments describe moderation action handlers"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/NewEventForm.jsx"
-justification = "Inline comments describe form section and submission logic"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/NewNewsForm.jsx"
-justification = "Inline comments describe form section and submission logic"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/PrivacyPolicy.jsx"
-justification = "Module-level JSDoc describes component intent"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/RoleEditor.jsx"
-justification = "Inline comments describe role management logic"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/hooks/useModeration.js"
-justification = "Inline JSDoc and section comments describe hook state and effect handlers"
 

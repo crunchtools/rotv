@@ -2,11 +2,6 @@ import { useState } from 'react';
 import Lightbox from './Lightbox';
 import './Mosaic.css';
 
-/**
- * Mosaic Component
- * Displays 1-3 images in a Facebook-style mosaic layout
- * Click opens lightbox with all media
- */
 function Mosaic({ media, allMedia, poiId, user, onMediaUpdate }) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
@@ -68,13 +63,11 @@ function Mosaic({ media, allMedia, poiId, user, onMediaUpdate }) {
                 </svg>
               </div>
             )}
-            {/* Pending indicator for user's own uploads */}
             {item.moderation_status === 'pending' && (
               <div className="mosaic-pending-indicator">
                 Pending Review
               </div>
             )}
-            {/* Show count overlay on last image if there are more */}
             {index === 2 && lightboxMedia.length > 3 && (
               <div className="mosaic-more-overlay">
                 +{lightboxMedia.length - 3}

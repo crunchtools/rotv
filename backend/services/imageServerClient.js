@@ -1,10 +1,3 @@
-/**
- * Image Server Client
- *
- * Talks to the purpose-built image server at images.rootsofthevalley.org.
- * No API key needed — image server is internal.
- */
-
 class ImageServerClient {
   constructor() {
     this.serverUrl = null;
@@ -43,16 +36,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Upload an image to the image server
-   * @param {Buffer} imageBuffer - Image data
-   * @param {number} poiId - POI database ID
-   * @param {string} role - 'primary' | 'gallery' | 'theme'
-   * @param {string} filename - Original filename
-   * @param {string} mimeType - MIME type
-   * @param {Object} options - { theme, sortOrder }
-   * @returns {Object} - { success, assetId, asset, error }
-   */
   async uploadImage(imageBuffer, poiId, role, filename, mimeType, options = {}) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
@@ -91,9 +74,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Upload a video to the image server
-   */
   async uploadVideo(videoBuffer, poiId, filename, mimeType, role = 'gallery') {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
@@ -126,9 +106,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Fetch original image/video data (for proxying to frontend)
-   */
   async fetchAssetData(assetId) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
@@ -138,7 +115,6 @@ class ImageServerClient {
       const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/original`);
 
       if (!response.ok) {
-        // Fix: Return detailed error status for better error handling (Gemini review)
         return {
           success: false,
           error: `Fetch failed: ${response.status}`,
@@ -156,7 +132,6 @@ class ImageServerClient {
       };
     } catch (error) {
       console.error(`[ImageServer] Failed to fetch asset data:`, error);
-      // Network/timeout errors -> 503 Service Unavailable
       return {
         success: false,
         error: error.message,
@@ -165,9 +140,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Fetch thumbnail data (for proxying to frontend)
-   */
   async fetchThumbnailData(assetId, size) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
@@ -178,7 +150,6 @@ class ImageServerClient {
       const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/thumbnail${sizeParam}`);
 
       if (!response.ok) {
-        // Fix: Return detailed error status for better error handling (Gemini review)
         return {
           success: false,
           error: `Fetch failed: ${response.status}`,
@@ -196,7 +167,6 @@ class ImageServerClient {
       };
     } catch (error) {
       console.error(`[ImageServer] Failed to fetch thumbnail:`, error);
-      // Network/timeout errors -> 503 Service Unavailable
       return {
         success: false,
         error: error.message,
@@ -205,9 +175,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Delete an asset
-   */
   async deleteAsset(assetId) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
@@ -230,9 +197,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Get all assets for a POI
-   */
   async getPoiAssets(poiId, options = {}) {
     if (!this.initialized) {
       return [];
@@ -257,19 +221,11 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Get the primary asset for a POI
-   * @returns {Object|null} - Asset object or null
-   */
   async getPrimaryAsset(poiId) {
     const assets = await this.getPoiAssets(poiId, { role: 'primary' });
     return assets.length > 0 ? assets[0] : null;
   }
 
-  /**
-   * Get theme assets for a POI
-   * @returns {Object} - { theme: assetId, ... }
-   */
   async getThemeAssets(poiId) {
     const assets = await this.getPoiAssets(poiId, { role: 'theme' });
     const themeMap = {};
@@ -281,9 +237,6 @@ class ImageServerClient {
     return themeMap;
   }
 
-  /**
-   * Update asset metadata
-   */
   async updateAsset(assetId, updates) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
@@ -308,9 +261,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Trigger AI captioning for an asset
-   */
   async triggerCaption(assetId) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
@@ -333,9 +283,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Semantic search for assets
-   */
   async search(query, options = {}) {
     if (!this.initialized) {
       return [];
@@ -364,9 +311,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Get theme video URL (proxied through ROTV)
-   */
   async getThemeVideoUrl(themeName) {
     if (!this.initialized) {
       return null;
@@ -375,9 +319,6 @@ class ImageServerClient {
     return `${this.serverUrl}/api/theme-videos/${themeName}`;
   }
 
-  /**
-   * Fetch theme video data (for proxying)
-   */
   async fetchThemeVideoData(themeName) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
@@ -404,9 +345,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Get structured media data for a POI (photos + videos with roles)
-   */
   async getPoiMediaWithThemes(poiId) {
     if (!this.initialized) {
       return { photos: [], videos: [], themePrimaries: {} };
@@ -453,9 +391,6 @@ class ImageServerClient {
     return { photos, videos, themePrimaries };
   }
 
-  /**
-   * List all assets on the image server
-   */
   async listAllAssets() {
     if (!this.initialized) {
       return [];
@@ -475,9 +410,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Bulk caption multiple assets
-   */
   async bulkCaption(assetIds) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
@@ -501,14 +433,6 @@ class ImageServerClient {
     }
   }
 
-  // -------------------------------------------------------------------
-  // Backup / Restore / Media endpoints
-  // -------------------------------------------------------------------
-
-  /**
-   * Fetch a pg_dump of the image server database
-   * @returns {{ success: boolean, data?: Buffer, error?: string }}
-   */
   async fetchDbDump() {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
@@ -528,11 +452,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Restore the image server database from a SQL dump
-   * @param {Buffer} sqlBuffer - SQL dump data
-   * @returns {{ success: boolean, output?: string, error?: string }}
-   */
   async restoreDb(sqlBuffer) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
@@ -561,11 +480,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * List all media files on the image server.
-   * Throws on error so callers (backup job) can detect failures.
-   * @returns {Array<{ subdir: string, filename: string, size: number, modified: number }>}
-   */
   async listMediaFiles() {
     if (!this.initialized) {
       throw new Error('Image server not configured');
@@ -583,12 +497,6 @@ class ImageServerClient {
     return mediaFiles;
   }
 
-  /**
-   * Fetch a specific media file from the image server
-   * @param {string} subdir - Subdirectory (originals, thumbnails, videos, theme-videos)
-   * @param {string} filename - Filename
-   * @returns {{ success: boolean, data?: Buffer, contentType?: string, error?: string }}
-   */
   async fetchMediaFile(subdir, filename) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
@@ -610,13 +518,6 @@ class ImageServerClient {
     }
   }
 
-  /**
-   * Upload a media file to the image server (for restore)
-   * @param {string} subdir - Subdirectory
-   * @param {string} filename - Filename
-   * @param {Buffer} buffer - File data
-   * @returns {{ success: boolean, error?: string }}
-   */
   async uploadMediaFile(subdir, filename, buffer) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };

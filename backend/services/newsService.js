@@ -1,27 +1,12 @@
-/**
- * News Collection Service
- * Two-phase pipeline: Phase I crawls POI's own pages, Phase II searches via Serper.
- * Both phases use Gemini for summarization and consensus date scoring (JSON-LD,
- * LLM extraction, meta tags, <time> elements, URL patterns).
- *
- * Job execution is managed by pg-boss for crash recovery and resumability.
- * Progress is checkpointed after each batch so jobs can resume after container restarts.
- */
 
 import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
 import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
 
-// Gemini call counter for job usage stats
 let geminiCallCount = 0;
 
 
 const LLM_DATE_VOTES = 3;
 
-/**
- * Normalize social media URLs to canonical forms for better metadata extraction.
- * Instagram /reel/ and /reels/ → /p/ (exposes <time> elements).
- * Applied before rendering only — original URL preserved as source_url.
- */
 export function normalizeRenderUrl(url) {
   if (!url) return url;
   try {
@@ -34,15 +19,10 @@ export function normalizeRenderUrl(url) {
   } catch { return url; }
 }
 
-/**
- * Run LLM date extraction N times in parallel with today's date seeded.
- * Returns array of parsed date strings (YYYY-MM-DD or null).
- */
 export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES, mode = 'date') {
   const today = new Date().toISOString().substring(0, 10);
 
   if (mode === 'datetime') {
-    // Datetime mode: returns { startVotes, endVotes } for event start/end
     const datePrompt = `Today's date is ${today}. Extract the event start and end date/time from this page. If no year is shown, assume the current year. Return ONLY a JSON object like {"start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"} or {"start":"YYYY-MM-DDTHH:MM","end":null} if no end time. Return {"start":null,"end":null} if no dates found.\n\n${snippet}`;
     const results = await Promise.all(
       Array.from({ length: numVotes }, () =>
@@ -61,7 +41,6 @@ export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES, 
     return { startVotes: results.map(v => v.start), endVotes: results.map(v => v.end) };
   }
 
-  // Date mode: returns flat array of YYYY-MM-DD strings
   const datePrompt = `Today's date is ${today}. Extract the primary publication or start date from this article/page snippet. Return ONLY the date in ISO format YYYY-MM-DD, or the word null if no date is present.\n\n${snippet}`;
   const results = await Promise.all(
     Array.from({ length: numVotes }, () =>
@@ -76,37 +55,17 @@ export async function runLlmDateVotes(pool, snippet, numVotes = LLM_DATE_VOTES, 
   return results;
 }
 
-/**
- * Score a date using deterministic sources + LLM multi-vote consensus.
- * Single function for both news (date-only) and events (datetime).
- * Events call this twice — once for start, once for end.
- *
- * @param {Pool} pool - Database connection pool
- * @param {Object} params
- * @param {string} params.title - Item title (prepended to LLM snippet)
- * @param {string} params.description - Item summary/description
- * @param {string} params.pageContent - Extracted page text (rawText or markdown)
- * @param {Object} params.sources - Raw date sources { jsonLd: [], meta: [], timeTags: [], url: string }
- * @param {string} [params.timezone] - IANA timezone for normalization
- * @param {string} [params.mode] - 'date' (YYYY-MM-DD) or 'datetime' (YYYY-MM-DDTHH:MM)
- * @param {string[]} [params.llmVotes] - Pre-computed LLM votes (skips LLM calls if provided)
- * @returns {Object} { date, score, sourceMap, rawSignals }
- */
 export async function scoreDate(pool, { title, description, pageContent, sources, timezone, mode = 'date', llmVotes }) {
-  // Build LLM input: title + description first, then page content
   const itemContext = `${title || ''}\n${description || ''}`.trim();
   const dateText = itemContext
     ? `${itemContext}\n\n${pageContent || ''}`.substring(0, 2000)
     : (pageContent || '').substring(0, 2000);
 
-  // Use provided votes or run LLM voting
   const votes = llmVotes || (dateText.length >= 20
     ? await runLlmDateVotes(pool, dateText, LLM_DATE_VOTES, mode)
     : []);
 
   const normalizedSources = normalizeDateSources(sources, timezone, mode);
-  // For datetime mode, normalize LLM votes to UTC so they match normalized sources.
-  // In date mode, votes are already YYYY-MM-DD strings with no timezone concern.
   const normalizedVotes = (mode === 'datetime')
     ? votes.map(v => v ? parseDateTime(v, timezone)?.substring(0, 16) : null).filter(Boolean)
     : votes;
@@ -141,9 +100,6 @@ export function getJobStats() {
   };
 }
 
-/**
- * Wrapper around geminiService that tracks usage and returns { response, provider }
- */
 async function generateTextWithCustomPrompt(pool, prompt, options = {}) {
   geminiCallCount++;
   const text = await geminiGenerateText(pool, prompt, options);
@@ -154,10 +110,6 @@ import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
 
-/**
- * Thrown when the browser health check fails mid-crawl.
- * Signals an infrastructure failure (not the POI's fault) so the POI can be retried.
- */
 export class BrowserOverloadError extends Error {
   constructor(poiName) {
     super(`Browser circuit breaker tripped during crawl of ${poiName}`);
@@ -174,21 +126,15 @@ function debugLog(message) {
   try {
     fs.appendFileSync('/tmp/logs/debug.log', logMessage);
   } catch (err) {
-    // Ignore
   }
   console.error(message);
 }
 
-// Dispatch interval: start one new POI job every N milliseconds
 const DISPATCH_INTERVAL_MS = 1500;
-// Maximum number of concurrent jobs in flight
 const MAX_CONCURRENCY = 10;
 
-// Shared progress + slot tracker for news collection
 const tracker = new CollectionTracker('News');
 
-// Re-export tracker methods under original names for backward compatibility
-// (used by mcpServer.js, admin.js, server.js)
 export const updateProgress = (poiId, updates) => tracker.updateProgress(poiId, updates);
 export const getCollectionProgress = (poiId) => tracker.getCollectionProgress(poiId);
 export const clearProgress = (poiId) => tracker.clearProgress(poiId);
@@ -198,32 +144,24 @@ export const getDisplaySlots = (jobId) => tracker.getDisplaySlots(jobId);
 export const requestCancellation = (poiId) => tracker.requestCancellation(poiId);
 export const isCancellationRequested = (poiId) => tracker.isCancellationRequested(poiId);
 
-/**
- * Ensure the news_job_status table has checkpoint columns for resumability
- * Call this during server startup
- */
 export async function ensureNewsJobCheckpointColumns(pool) {
   const runId = Math.floor(Date.now() / 1000);
   try {
-    // Add poi_ids column if it doesn't exist
     await pool.query(`
       ALTER TABLE news_job_status
       ADD COLUMN IF NOT EXISTS poi_ids TEXT
     `);
 
-    // Add processed_poi_ids column if it doesn't exist
     await pool.query(`
       ALTER TABLE news_job_status
       ADD COLUMN IF NOT EXISTS processed_poi_ids TEXT
     `);
 
-    // Add pg_boss_job_id column if it doesn't exist
     await pool.query(`
       ALTER TABLE news_job_status
       ADD COLUMN IF NOT EXISTS pg_boss_job_id VARCHAR(100)
     `);
 
-    // Add circuit_breaker_retries column for tracking retriable failures
     await pool.query(`
       ALTER TABLE news_job_status
       ADD COLUMN IF NOT EXISTS circuit_breaker_retries TEXT
@@ -235,14 +173,7 @@ export async function ensureNewsJobCheckpointColumns(pool) {
   }
 }
 
-/**
- * Find incomplete jobs that need to be resumed after a restart
- * @param {Pool} pool - Database connection pool
- * @returns {Array} - Array of job records that need resuming
- */
 export async function findIncompleteJobs(pool) {
-  // Only resume jobs from the last 1 hour — older ones are stale
-  // (e.g. imported via seed data from a previous run)
   const incompleteJobs = await pool.query(`
     SELECT * FROM news_job_status
     WHERE status IN ('queued', 'running')
@@ -252,12 +183,10 @@ export async function findIncompleteJobs(pool) {
   return incompleteJobs.rows;
 }
 
-// Calendar/view navigation suffixes — links ending with these are view selectors, not detail pages
 const CALENDAR_VIEW_SUFFIXES = ['/list/', '/list', '/month/', '/month', '/today/', '/today',
   '/week/', '/week', '/day/', '/day', '/map/', '/map', '/photo/', '/photo',
   '/summary/', '/summary', '/calendar/', '/calendar'];
 
-// Single-segment nav paths — pages that are never content detail pages
 const NAV_PATHS = [
   '/login', '/signin', '/signup', '/register',
   '/cart', '/checkout', '/account', '/household',
@@ -270,19 +199,9 @@ const NAV_PATHS = [
   '/become-a-member', '/get-involved', '/volunteer'
 ];
 
-// WebTrac navigation files — sibling HTML files that aren't event detail pages
 const WEBTRAC_NAV_FILES = ['splash.html', 'contactus.html', 'cart.html', 'login.html',
   'household.html', 'register.html', 'forgotpassword.html', 'wishlist.html', 'addtocart.html'];
 
-/**
- * Test whether a URL is a known non-detail pattern (noise link).
- * Used by deterministic link extraction to filter calendar nav, pagination,
- * images, forms, and other links that look like content but aren't detail pages.
- *
- * @param {string} url - The link URL to test
- * @param {string} sourceUrl - The page the link was found on
- * @returns {boolean} - true if the link is noise (should be excluded)
- */
 function isNoiseLink(url, sourceUrl) {
   let parsed;
   try { parsed = new URL(url); } catch { return true; }
@@ -290,62 +209,43 @@ function isNoiseLink(url, sourceUrl) {
   const path = parsed.pathname.toLowerCase();
   const search = parsed.search.toLowerCase();
 
-  // Non-page resources (images, docs, stylesheets)
   if (/\.(png|jpe?g|gif|svg|webp|pdf|css|js|ico|woff2?|mp[34]|zip|ics)$/i.test(path)) return true;
 
-  // Hash-only link (same page anchor)
   try {
     const source = new URL(sourceUrl);
     if (parsed.origin === source.origin && parsed.pathname === source.pathname && parsed.hash) return true;
   } catch { /* ignore */ }
 
-  // Homepage / site root
   if (path === '/' || path === '') return true;
 
-  // Calendar view selectors
   for (const suffix of CALENDAR_VIEW_SUFFIXES) {
     if (path.endsWith(suffix)) return true;
   }
 
-  // Past events / archive views
   if (search.includes('eventdisplay=past') || search.includes('display=past')) return true;
 
-  // iCal / feed exports
   if (search.includes('ical=1') || search.includes('outlook-ical') || path.endsWith('.ics')) return true;
 
-  // Pagination links
   if (/\/page\/\d+\/?$/.test(path)) return true;
   if (/[?&]page=\d+/.test(search)) return true;
 
-  // Common non-content pages (only single-segment paths like /about, not /about/news)
   const pathSegments = path.replace(/\/$/, '').split('/').filter(Boolean);
   if (pathSegments.length <= 1) {
     const simplePath = '/' + (pathSegments[0] || '');
     if (NAV_PATHS.includes(simplePath)) return true;
   }
 
-  // WebTrac-specific nav pages
   const filename = path.split('/').pop();
   if (WEBTRAC_NAV_FILES.includes(filename)) return true;
 
-  // WebTrac non-event modules (PM=passes, FR=facility rentals — not events)
   if (/[?&]module=(PM|FR)\b/i.test(search)) return true;
 
-  // Request/submission forms
   const lastSegment = path.replace(/\/$/, '').split('/').pop() || '';
   if (/\brequest|submit|apply|form\b/i.test(lastSegment)) return true;
 
   return false;
 }
 
-/**
- * Deduplicate URLs by keeping the shortest when one is a prefix of another.
- * Handles WebTrac sub-tab URLs: iteminfo.html?FMID=123&option=fees is longer
- * than iteminfo.html?FMID=123, so the shorter base event URL wins.
- *
- * @param {Array} urls - Array of URL strings
- * @returns {Array} - Deduplicated URLs
- */
 function shortestUrlDedup(urls) {
   const byUrl = new Map();
   for (const url of urls) {
@@ -364,45 +264,23 @@ function shortestUrlDedup(urls) {
   return [...byUrl.keys()];
 }
 
-/**
- * Classify a web page as LISTING or DETAIL using Gemini.
- * Gemini classifies only — link extraction is fully deterministic.
- *
- * @param {Pool} pool - Database connection pool
- * @param {string} markdown - Page markdown content
- * @param {Array} links - Extracted links from the page
- * @param {string} url - The page URL
- * @param {string} contentType - 'event' or 'news'
- * @param {Object} sheets - Optional sheets client for API key restore
- * @param {Array} trustedEventPaths - URL path patterns that bypass basePath (e.g., /event, iteminfo.html)
- * @returns {Object} - { pageType, detailLinks, reasoning }
- */
 async function classifyPage(pool, markdown, links, url, contentType, sheets, trustedEventPaths = []) {
-  // Prioritize content links over navigation — "Read More", article-pattern URLs, etc.
-  // Navigation links (menus, footers) dominate the first positions in DOM order,
-  // burying the actual article links the classifier needs to see.
   let sourceOrigin;
   try { sourceOrigin = new URL(url).pathname; } catch { sourceOrigin = ''; }
   const contentLinks = (links || []).filter(l => {
     const text = (l.text || '').toLowerCase();
-    // Links with action text
     if (/read\s*more|continue|full\s*(article|story)|learn\s*more|details/i.test(text)) return true;
-    // Links in article-like containers
     if (/\b(article|post|news|event|card|entry|blog)\b/i.test(l.parentClassName || '')) return true;
     if (/\b(article|post|news|event|card|entry|blog)\b/i.test(l.className || '')) return true;
-    // Links whose URL extends the current page path (e.g., /news-updates/ → /news-updates/article-slug/)
     try {
       const linkPath = new URL(l.url).pathname;
       if (sourceOrigin.length > 1 && linkPath.startsWith(sourceOrigin) && linkPath !== sourceOrigin && linkPath !== sourceOrigin + '/') return true;
     } catch { /* ignore */ }
-    // Links to a different page in the same directory (sibling files)
-    // e.g., /webtrac/web/search.html → /webtrac/web/iteminfo.html
     try {
       const linkPath = new URL(l.url).pathname;
       const sourceDir = sourceOrigin.replace(/\/[^/]+\.[^/]+$/, '');
       if (sourceDir && sourceDir !== sourceOrigin && linkPath.startsWith(sourceDir + '/') && linkPath !== sourceOrigin) return true;
     } catch { /* ignore */ }
-    // Links matching trusted event path patterns (e.g., /event, /events, iteminfo.html)
     if (trustedEventPaths.length > 0) {
       try {
         const linkPath = new URL(l.url).pathname;
@@ -411,17 +289,12 @@ async function classifyPage(pool, markdown, links, url, contentType, sheets, tru
     }
     return false;
   });
-  // Filter out links pointing to the same page (same pathname, different query params).
-  // e.g., search.html?category=Golf is a filtered view of search.html, not a detail page.
   let sourcePathname;
   try { sourcePathname = new URL(url).pathname; } catch { sourcePathname = null; }
   const notSelfRef = l => {
     if (!sourcePathname) return true;
     try { return new URL(l.url).pathname !== sourcePathname; } catch { return true; }
   };
-  // Deduplicate by URL — same event may appear multiple times with different anchor text
-  // (e.g., "Archery for Beginners", "Fee Details", "Share" all link to the same iteminfo.html).
-  // Keep the first occurrence, which is typically the event title.
   const dedup = (arr) => {
     const urlSeen = new Set();
     return arr.filter(l => {
@@ -430,7 +303,6 @@ async function classifyPage(pool, markdown, links, url, contentType, sheets, tru
       return true;
     });
   };
-  // Use content links first, then fill with remaining links up to 30
   const filteredContentLinks = dedup(contentLinks.filter(notSelfRef));
   const seen = new Set(filteredContentLinks.map(l => l.url));
   const otherLinks = dedup(links.filter(l => !seen.has(l.url)).filter(notSelfRef));
@@ -450,20 +322,15 @@ Return ONLY valid JSON:
 
   const classifierOutput = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 256, thinkingBudget: 0 });
 
-  // Parse JSON from response (handle markdown code blocks)
   const text = classifierOutput.response || classifierOutput;
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    // Parse failure — assume listing and pass all ranked links for deterministic filtering
     return { pageType: 'listing', detailLinks: rankedLinks.map(l => l.url), reasoning: 'parse failure fallback' };
   }
   try {
     const parsed = JSON.parse(jsonMatch[0]);
     const pageType = (parsed.page_type || '').toLowerCase();
 
-    // Gemini is ONLY a classifier — it does NOT select links.
-    // rankedLinks were built deterministically above (content link heuristics + dedup).
-    // filterDetailLinks() applies noise filtering, basePath, and trusted patterns downstream.
     if (pageType === 'listing') {
       return { pageType, detailLinks: rankedLinks.map(l => l.url), reasoning: parsed.reasoning };
     }
@@ -473,39 +340,24 @@ Return ONLY valid JSON:
     if (pageType === 'neither') {
       return { pageType, detailLinks: [], reasoning: parsed.reasoning };
     }
-    // Unrecognized response — treat as listing (safer than dropping links)
     return { pageType: 'listing', detailLinks: rankedLinks.map(l => l.url), reasoning: parsed.reasoning || 'unrecognized classification fallback' };
   } catch {
     return { pageType: 'listing', detailLinks: rankedLinks.map(l => l.url), reasoning: 'parse failure fallback' };
   }
 }
 
-/**
- * Filter detail links: noise filter, same-origin, basePath/trusted patterns, deduplicate, cap at 20.
- *
- * @param {Array} detailLinks - Ranked URLs from deterministic extraction
- * @param {string} sourceUrl - The page URL that produced these links
- * @param {string} basePath - Path prefix for scoping (e.g., /excursions)
- * @param {Array} trustedEventPaths - Patterns that bypass basePath (e.g., /event, iteminfo.html)
- * @returns {Array} - Filtered, deduplicated URLs
- */
 function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = []) {
   if (!detailLinks?.length) return [];
   let sourceOrigin;
   try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
   const seen = new Set();
   return detailLinks.map(link => {
-    // Strip hash fragments — they return identical server content
     try { const u = new URL(link); u.hash = ''; return u.toString(); } catch { return link; }
   }).filter(link => {
     try {
       const parsed = new URL(link);
       if (parsed.origin !== sourceOrigin) return false;
-      // Noise filter — reject known non-detail patterns (calendar nav, pagination, images, etc.)
       if (isNoiseLink(link, sourceUrl)) return false;
-      // When basePath is set, only follow links under the start URL's path prefix.
-      // e.g., crawling /about/news only follows /about/news/... links, not /excursions/...
-      // Trusted event paths bypass this restriction for known detail-page patterns.
       if (basePath && !parsed.pathname.startsWith(basePath)) {
         const matchesTrusted = trustedEventPaths.some(pattern =>
           parsed.pathname.includes(pattern)
@@ -519,15 +371,6 @@ function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEvent
   }).slice(0, 20);
 }
 
-/**
- * Count how many distinct items (news or events) are on a page.
- * For events, recurring instances on different dates count as separate items.
- *
- * @param {Pool} pool - Database connection pool
- * @param {string} markdown - Rendered page markdown
- * @param {string} contentType - 'event' or 'news'
- * @returns {number} - Number of distinct items (0 if none found)
- */
 async function itemCount(pool, markdown, contentType, logContext = {}) {
   const { jobId = 0, jobType = 'news', poiId = null, poiName = '', phase = '' } = logContext;
   const typeLabel = contentType === 'event' ? 'events' : 'news articles';
@@ -571,15 +414,6 @@ Respond with ONLY this JSON object, nothing else: {"count": N}`;
   return 1;
 }
 
-/**
- * Build a summarize prompt for a single event on a page.
- *
- * @param {Object} poi - POI object
- * @param {string} markdown - Rendered page markdown
- * @param {number} eventIndex - Which event to extract (1-based)
- * @param {number} totalEvents - Total events on the page
- * @returns {string} - Prompt
- */
 function buildEventPrompt(poi, markdown, eventIndex, totalEvents) {
   const which = totalEvents > 1
     ? `Extract event #${eventIndex} of ${totalEvents} from this page.`
@@ -599,13 +433,6 @@ Do NOT include date or source_url fields — those are set separately.
 Return {} if no event found.`;
 }
 
-/**
- * Build a summarize prompt for a single news item on a page.
- *
- * @param {Object} poi - POI object
- * @param {string} markdown - Rendered page markdown
- * @returns {string} - Prompt
- */
 function buildNewsPrompt(poi, markdown) {
   return `Summarize the news described in this text.
 
@@ -621,17 +448,10 @@ Do NOT include date or source_url fields — those are set separately.
 Return {} if no news found.`;
 }
 
-/**
- * Run up to `limit` async tasks concurrently.
- * Each task is a zero-arg function returning a Promise.
- * Results are returned in original order; individual errors are caught and re-thrown per-task.
- * @param {number} delayMs - Optional delay (ms) between dispatching each new task to avoid rate limiting
- */
 async function runConcurrent(tasks, limit = 10, delayMs = 0) {
   const results = new Array(tasks.length);
 
   if (delayMs <= 0) {
-    // Fast path: worker pool with no delays
     let idx = 0;
     async function worker() {
       while (idx < tasks.length) {
@@ -641,7 +461,6 @@ async function runConcurrent(tasks, limit = 10, delayMs = 0) {
     }
     await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
   } else {
-    // Staggered dispatch: one task dispatched every delayMs, max `limit` in flight
     const inFlight = new Set();
     for (let i = 0; i < tasks.length; i++) {
       if (i > 0) await new Promise(r => setTimeout(r, delayMs));
@@ -658,29 +477,16 @@ async function runConcurrent(tasks, limit = 10, delayMs = 0) {
   return results;
 }
 
-/**
- * Process a pre-rendered page through dates + summarize (NO Playwright render).
- * Accepts a page object from crawlPage that already has markdown, rawText, ogDates.
- *
- * @param {Pool} pool - Database connection pool
- * @param {Object} page - Pre-extracted page { url, markdown, rawText, ogDates, title }
- * @param {Object} poi - POI object
- * @param {string} contentType - 'event' or 'news'
- * @param {Object} options - { phase, jobId, timezone, jobType }
- * @returns {Object} - { news: [], events: [] }
- */
 async function processPage(pool, page, poi, contentType, options = {}) {
   const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', jobType = 'news' } = options;
   const url = page.url;
   const isEvent = contentType === 'event';
 
-  // Skip pages with insufficient content
   if (!page.markdown || page.markdown.length < 200) {
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ProcessPage] Skip — too short (${page.markdown?.length || 0} chars) ${url}`);
     return { news: [], events: [] };
   }
 
-  // Count items on the page (use cache if available)
   const cachedCount = isEvent ? page.itemCountEvents : page.itemCountNews;
   let count;
   if (cachedCount != null) {
@@ -692,7 +498,6 @@ async function processPage(pool, page, poi, contentType, options = {}) {
     await setCacheItemCount(pool, url, contentType, count);
   }
   if (count === 0) return { news: [], events: [] };
-  // Absurd counts (>500) indicate a paginated listing total, not actual page items — skip entirely
   if (count > 500) {
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [ItemCount] Skip — absurd count (${count}) suggests pagination artifact: ${url}`);
     return { news: [], events: [] };
@@ -703,7 +508,6 @@ async function processPage(pool, page, poi, contentType, options = {}) {
   const renderedContent = pageText || null;
   const items = [];
 
-  // Build deterministic date sources once — shared across all items on this page
   const dateSources = isEvent
     ? {
         start: {
@@ -725,7 +529,6 @@ async function processPage(pool, page, poi, contentType, options = {}) {
       };
 
   for (let i = 1; i <= count; i++) {
-    // Summarize
     updateProgress(poi.id, { phase: 'summarize', message: `${contentType} ${i}/${count} from ${url}` });
     const prompt = isEvent
       ? buildEventPrompt(poi, page.markdown, i, count)
@@ -740,7 +543,6 @@ async function processPage(pool, page, poi, contentType, options = {}) {
     try { item = JSON.parse(jsonMatch[0]); } catch { continue; }
     if (!item.title) continue;
 
-    // Score dates — per item so each gets its own LLM votes
     updateProgress(poi.id, { phase: 'dates', message: `${contentType} ${i}/${count} from ${url}` });
     const dateSnippet = `${item.title}\n${item.description || item.summary || ''}\n\n${pageText}`.substring(0, 2000);
 
@@ -767,8 +569,6 @@ async function processPage(pool, page, poi, contentType, options = {}) {
         sources: dateSources, timezone, llmVotes
       });
       item.published_date = consensus.date;
-      // If an OG tag provided a full UTC timestamp whose date matches consensus, preserve it
-      // so the frontend can display the correct local time instead of just a calendar date.
       if (od.publishedTime && od.publishedTime.includes('T') && consensus.date) {
         try {
           const ogTs = new Date(od.publishedTime);
@@ -792,32 +592,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
   return isEvent ? { news: [], events: items } : { news: items, events: [] };
 }
 
-/**
- * Recursive AI-classified tree walker for dedicated URL crawling.
- * Visits each page, asks Gemini to classify it, follows links on listing pages,
- * collects content from detail pages. URLs come from actual page visits — no fabrication.
- *
- * @param {Pool} pool - Database connection pool
- * @param {string} startUrl - The starting URL to crawl
- * @param {string} contentType - 'event' or 'news'
- * @param {Object} poi - POI object for context
- * @param {Object} sheets - Optional sheets client
- * @param {Function} checkCancellation - Cancellation checker
- * @param {Object} options - Optional overrides
- * @returns {Object} - { pages: [{url, markdown, rawText, ogDates, title}], totalPagesRendered, totalDetailPages }
- */
 
-/**
- * Filter crawled pages, removing any whose URL already exists in poi_news or poi_events.
- * Enforces the invariant: no processPage call (Gemini) for content already in the DB.
- * Normalizes URLs by stripping trailing slashes and query strings for robust matching.
- *
- * @param {Pool} pool
- * @param {Array<{url: string}>} pages - from crawlPage() or a Serper URL list
- * @param {'news'|'event'} contentType
- * @param {Object} opts - { jobId, jobType, poiId, poiName, phase }
- * @returns {Array<{url: string}>} pages not already in the DB
- */
 async function filterKnownPages(pool, pages, contentType, opts = {}) {
   if (pages.length === 0) return pages;
   const { jobId = 0, jobType = 'news', poiId, poiName, phase = '' } = opts;
@@ -855,32 +630,19 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
   let totalPagesRendered = 0;
   const collectedPages = []; // { url, markdown, rawText, ogDates, title }
 
-  // Compute base path from start URL — links outside this path are filtered out.
-  // e.g., startUrl = "https://cvsr.org/about/news" → basePath = "/about/news"
-  // This prevents the news crawl from wandering into /excursions/ via nav links.
   let basePath = null;
   if (scopeToPath) {
     try {
       const startParsed = new URL(startUrl);
-      // Strip trailing slash and hash fragments for consistent matching
       let rawPath = startParsed.pathname.replace(/\/$/, '') || '/';
-      // If the path ends with a web filename (e.g., search.html), use the directory instead.
-      // e.g., /webtrac/web/search.html → /webtrac/web
-      // This allows sibling files like iteminfo.html to pass the basePath filter.
-      // Directory-style paths like /excursions are unchanged.
-      // Only matches known web extensions — prevents false positives on paths like /api/v2.0
       if (/\/[^/]+\.(html?|aspx?|php|jsp|shtml)$/i.test(rawPath)) {
         const dir = rawPath.replace(/\/[^/]+$/, '');
-        // Don't collapse to root — /events.html stays as /events.html, not /
         if (dir && dir !== '/') rawPath = dir;
       }
       basePath = rawPath;
     } catch { /* leave basePath null if URL is unparseable */ }
   }
 
-  // Load trusted event paths — patterns that bypass basePath for known detail-page URLs.
-  // e.g., /event, /events, iteminfo.html — allows the events crawler to follow links
-  // to detail pages even when they don't share the listing page's path prefix.
   let trustedEventPaths = [];
   if (contentType === 'event') {
     try {
@@ -896,18 +658,13 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
   async function processLevel(urls, depth) {
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
 
-    // Strip hash fragments — #section anchors return identical HTML from the server,
-    // so /page#cvsr and /page#power are the same content. Without this, CVSR's events
-    // crawl rendered the same pages 2-3x each via different anchor links.
     const cleanUrls = urls.map(url => {
       try { const u = new URL(url); u.hash = ''; return u.toString(); } catch { return url; }
     });
 
-    // Deduplicate and mark visited upfront to prevent concurrent duplicate fetches
     const toProcess = cleanUrls.filter(url => !visited.has(url));
     toProcess.forEach(url => visited.add(url));
 
-    // Circuit breaker: verify browser is responsive before dispatching renders
     if (toProcess.length > 0) {
       const healthy = await healthCheck(1000);
       if (!healthy) {
@@ -933,7 +690,6 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
 
       let classification;
       if (extracted.pageType) {
-        // Cache already knows the page type — skip Gemini classify call
         classification = { pageType: extracted.pageType, detailLinks: [], reasoning: 'cached' };
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Cache] Classify skip — already ${extracted.pageType}: ${url}`);
         if (extracted.pageType === 'listing') {
@@ -951,7 +707,6 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       if (classification.pageType === 'detail') {
         collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
       } else if (classification.pageType === 'listing') {
-        // shortestUrlDedup removes sub-tab variants (e.g., &option=fees) before they consume slots
         const validLinks = shortestUrlDedup(filterDetailLinks(classification.detailLinks, url, basePath, trustedEventPaths));
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
@@ -966,17 +721,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
   return { pages: collectedPages, totalPagesRendered, totalDetailPages: collectedPages.length };
 }
 
-/**
- * Collect news and events for a specific POI
- * @param {Pool} pool - Database connection pool
- * @param {Object} poi - POI object with id, name, poi_roles, primary_activities, more_info_link, events_url, news_url
- * @param {Object} sheets - Optional sheets client for API key restore
- * @param {string} timezone - IANA timezone string (e.g., 'America/New_York')
- * @param {string} collectionType - 'news', 'events', or 'both' to indicate what's being collected
- * @returns {Object} - { news: [], events: [] }
- */
 export async function collectPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null) {
-  // Only collect news/events for POIs with roles: point, organization, or river
   const collectibleRoles = ['point', 'organization', 'river'];
   const poiRoles = poi.poi_roles || [];
   if (!poiRoles.some(r => collectibleRoles.includes(r))) {
@@ -991,7 +736,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
   const eventsUrl = poi.events_url || 'No dedicated events page';
   const newsUrl = poi.news_url || 'No dedicated news page';
 
-  // Preserve slotId, jobId, and jobType if they exist (set by job processing loop or single-POI trigger)
   const existingProgress = tracker.getCollectionProgress(poi.id);
   const slotId = existingProgress?.slotId;
   const jobId = existingProgress?.jobId;
@@ -999,10 +743,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
   logInfo(jobId, jobType, poi.id, poi.name, `Collection type: ${collectionType}`);
 
-  // Clear any old progress data for this POI before starting
   tracker.clearProgress(poi.id);
 
-  // Initialize progress tracking with fresh data (preserving slotId/jobId)
   const typeLabel = collectionType === 'news' ? 'news' : collectionType === 'events' ? 'events' : 'news & events';
   updateProgress(poi.id, {
     phase: 'initializing',
@@ -1024,14 +766,12 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
     jobId    // Preserve job association
   });
 
-  // Progress reporting helper — calls callback if provided
   const reportProgress = (message) => {
     if (onProgress) onProgress(message);
   };
 
   logInfo(jobId, jobType, poi.id, poi.name, 'Starting search', { website, eventsUrl, newsUrl, activities });
 
-  // Helper to check for cancellation and throw if requested
   const checkCancellation = () => {
     if (isCancellationRequested(poi.id)) {
       logInfo(jobId, jobType, poi.id, poi.name, 'Cancellation detected');
@@ -1050,7 +790,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
   const MAX_PHASE2_PAGES = 5;
 
-  // Read pipeline settings once — used by all phases
   const [concurrencyRow, delayRow, blocklistRow] = await Promise.all([
     pool.query("SELECT value FROM admin_settings WHERE key = 'page_concurrency'"),
     pool.query("SELECT value FROM admin_settings WHERE key = 'page_delay_ms'"),
@@ -1072,7 +811,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
     return Number.isFinite(val) ? Math.min(10000, Math.max(0, val)) : 2000;
   })();
 
-  // PHASE I EVENTS: Classify → Crawl → per-URL pipeline
   if (collectionType !== 'news' && eventsUrl !== 'No dedicated events page') {
     try {
       checkCancellation();
@@ -1106,7 +844,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
     }
   }
 
-  // PHASE I NEWS: Classify → Crawl → per-URL pipeline
   if (collectionType !== 'events' && newsUrl !== 'No dedicated news page') {
     try {
       checkCancellation();
@@ -1150,7 +887,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
   checkCancellation(); // Check before Phase II
 
   try {
-    // Update progress after Phase I
     updateProgress(poi.id, {
       phase: 'processing_results',
       message: `Phase I: ${allNews.length} news, ${allEvents.length} events`,
@@ -1173,7 +909,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       logInfo(jobId, jobType, poi.id, poi.name, `News found:\n  ${newsList}`);
     }
 
-    // Read MAX_SEARCH_URLS once — used by both news and events Phase II blocks
     const searchUrlsResult = await pool.query(
       "SELECT value FROM admin_settings WHERE key = 'max_search_urls'"
     );
@@ -1183,7 +918,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : 10;
     })();
 
-    // PHASE II: External news via Serper — per-URL pipeline
     if (collectionType !== 'events') {
       try {
         updateProgress(poi.id, {
@@ -1200,7 +934,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
         reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
 
         if (serperResult.urls.length > 0) {
-          // Skip Serper URLs from the POI's own domains — Phase I already covered them
           const poiOrigins = new Set();
           for (const u of [website, eventsUrl, newsUrl]) {
             try { poiOrigins.add(new URL(u).origin); } catch { /* skip invalid */ }
@@ -1225,20 +958,16 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
           }
 
-          // Skip URLs already present in poi_news — avoid re-analyzing known content.
           const urlsToProcess = await filterKnownPages(pool, urlsToProcessRaw, 'news',
             { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II' });
 
           let renderedCount = 0;
           let phase2PagesCollected = 0;
 
-          // Crawl all Serper URLs in parallel (each is a different external domain)
           const phase2Results = await runConcurrent(urlsToProcess.map(urlData => async () => {
             checkCancellation();
             if (phase2PagesCollected >= MAX_PHASE2_PAGES) return [];
 
-            // Classify each Serper URL — articles pass through as DETAIL (1 render),
-            // listing pages get 1-level-deep link-following with tight caps
             reportProgress(`Phase II: [Classify] ${urlData.url}`);
             const crawlResult = await crawlPage(pool, urlData.url, 'news', poi, sheets, checkCancellation, {
               maxDepth: 1,
@@ -1263,7 +992,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             return pageItems;
           }), pageConcurrency, pageDelayMs);
 
-          // Merge results, deduplicating by title
           for (const itemsOrError of phase2Results) {
             if (!itemsOrError || itemsOrError instanceof Error) continue;
             const newNews = itemsOrError.filter(item => {
@@ -1287,7 +1015,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       }
     }
 
-    // PHASE II: External events via Serper — per-URL pipeline
     if (collectionType !== 'news') {
       try {
         updateProgress(poi.id, {
@@ -1325,7 +1052,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
           const eventUrlsToProcessRaw = externalEventUrls.slice(0, MAX_SEARCH_URLS);
 
-          // Skip URLs already present in poi_events — avoid re-analyzing known content.
           const eventUrlsToProcess = await filterKnownPages(pool, eventUrlsToProcessRaw, 'event',
             { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II Events' });
 
@@ -1383,7 +1109,6 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       }
     }
 
-    // Build completion message and stats based on collection type
     let completionMessage;
     let progressUpdate = {
       phase: 'complete',
@@ -1432,16 +1157,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 }
 
 
-/**
- * Resolve redirect URLs to their final destination
- * Handles Google/Vertex AI Search grounding redirect URLs
- * @param {string} url - URL that might be a redirect
- * @returns {Promise<string>} - Final destination URL or original if resolution fails
- */
 async function resolveRedirectUrl(url) {
   if (!url || url === 'N/A') return null;
 
-  // Check if this is a known redirect URL pattern
   const isRedirect = url.includes('grounding-api-redirect') ||
                      url.includes('redirect') ||
                      url.includes('vertexaisearch.cloud.google.com');
@@ -1451,7 +1169,6 @@ async function resolveRedirectUrl(url) {
   }
 
   try {
-    // Follow redirects to get the final URL
     const response = await fetch(url, {
       method: 'HEAD',
       redirect: 'follow',
@@ -1465,7 +1182,6 @@ async function resolveRedirectUrl(url) {
       return finalUrl;
     }
 
-    // If we got back the same URL, it's not redirecting properly
     console.log(`[Search] ✗ No redirect found for: ${url.substring(0, 60)}...`);
     return null; // Don't save broken redirects
   } catch (error) {
@@ -1474,52 +1190,26 @@ async function resolveRedirectUrl(url) {
   }
 }
 
-/**
- * Normalize a title for duplicate detection by stripping leading articles.
- * "The David Mayfield Parade" and "David Mayfield Parade" → same normalized form.
- * @param {string} title - Original title
- * @returns {string} - Normalized title (lowercased, article-stripped)
- */
 export function normalizeTitle(title) {
   if (!title) return '';
   return title.toLowerCase().replace(/^the\s+/i, '').trim();
 }
 
-// SQL expression matching normalizeTitle() — strip leading "The", lowercase, trim
 const SQL_NORMALIZE_TITLE = `TRIM(LOWER(REGEXP_REPLACE(title, '^[Tt]he\\s+', '')))`;
 
-/**
- * Normalize a news title for duplicate detection
- * Strips date suffixes like "| January 30" or "| 2026-01-30"
- * @param {string} title - Original title
- * @returns {string} - Normalized title
- */
 function normalizeNewsTitle(title) {
   if (!title) return '';
 
-  // Remove date suffixes in format "| Month Day" or "| YYYY-MM-DD" or "| Month DD, YYYY"
-  // Examples:
-  // "Article Title | January 30" -> "Article Title"
-  // "Article Title | 2026-01-30" -> "Article Title"
-  // "Article Title | May 9" -> "Article Title"
   return title
     .replace(/\s*\|\s*\d{4}-\d{2}-\d{2}\s*$/i, '')  // Remove "| 2026-01-30"
     .replace(/\s*\|\s*[A-Z][a-z]+\s+\d{1,2}(?:,\s*\d{4})?\s*$/i, '')  // Remove "| January 30" or "| May 9, 2025"
     .trim();
 }
 
-/**
- * Normalize a URL for duplicate detection.
- * Strips trailing slashes, removes fragment, lowercases, and normalizes
- * common path variations (e.g., /plan-your-visit/alerts/ → /alerts).
- * @param {string} url - Original URL
- * @returns {string|null} - Normalized URL or null
- */
 function normalizeUrl(url) {
   if (!url) return null;
   try {
     const parsed = new URL(url);
-    // Lowercase host, strip trailing slash, remove fragment
     let normalized = parsed.origin + parsed.pathname.replace(/\/+$/, '') + parsed.search;
     return normalized.toLowerCase();
   } catch {
@@ -1527,13 +1217,6 @@ function normalizeUrl(url) {
   }
 }
 
-/**
- * Save news items to database
- * @param {Pool} pool - Database connection pool
- * @param {number} poiId - POI ID
- * @param {Array} newsItems - Array of news items from AI summarization
- * @param {Object} options - Optional settings
- */
 export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
@@ -1541,8 +1224,6 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 
   for (const item of newsItems) {
     try {
-      // Normalize dates: bare strings assumed Eastern, explicit offsets honored.
-      // Date-only values promoted to noon Eastern so display never shifts the calendar day.
       if (item.published_date && item.published_date.includes('T')) {
         const normalized = parseDateTime(item.published_date, 'America/New_York');
         item.published_date = normalized ? normalized + 'Z' : null;
@@ -1552,10 +1233,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         item.published_date = noon ? noon + 'Z' : null;
       }
 
-      // Resolve redirect URLs to final destination URLs
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;
 
-      // Skip items where redirect resolution failed
       const isRedirectUrl = item.source_url && (
         item.source_url.includes('grounding-api-redirect') ||
         item.source_url.includes('vertexaisearch.cloud.google.com')
@@ -1566,7 +1245,6 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         continue;
       }
 
-      // Domain ownership check: if source URL belongs to another POI's domain, reassign
       let effectivePoiId = poiId;
       const domainOwner = checkDomainOwnership(resolvedUrl || item.source_url, poiId, domainOwnershipMap);
       if (domainOwner) {
@@ -1574,7 +1252,6 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         if (log) log(`[Save] Reassigning "${item.title}" → ${domainOwner.poiName} (domain ownership)`);
       }
 
-      // Normalize the title for duplicate checking
       const normalizedTitle = normalizeNewsTitle(item.title);
 
       const normalizedUrl = normalizeUrl(resolvedUrl);
@@ -1597,7 +1274,6 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
           if (log) log(`[Save] Skip duplicate (same URL): "${item.title}" — matches existing #${match.id}`);
           continue;
         }
-        // Different URL, similar title — merge URL into existing item
         await pool.query(
           `INSERT INTO poi_news_urls (news_id, url, source_name)
            SELECT $1, $2, $3
@@ -1611,7 +1287,6 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         continue;
       }
 
-      // All new items enter as pending — moderation sweep handles relevance voting + promotion
       const dateScore = item.date_consensus_score || 0;
       await pool.query(`
         INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
@@ -1640,12 +1315,6 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   return savedCount;
 }
 
-/**
- * Save events to database
- * @param {Pool} pool - Database connection pool
- * @param {number} poiId - POI ID
- * @param {Array} eventItems - Array of events from AI summarization
- */
 export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
@@ -1653,9 +1322,6 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
 
   for (const item of eventItems) {
     try {
-      // Format event dates for DB storage. Values from the scoring pipeline are already
-      // UTC — do NOT re-parse them (would double-convert Eastern→UTC). Just append Z.
-      // Date-only values get promoted to noon Eastern.
       const noonEastern = (raw) => {
         const d = parseDate(raw);
         if (!d) return null;
@@ -1671,7 +1337,6 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
       item.start_date = formatForDb(item.start_date) || item.start_date;
       item.end_date = formatForDb(item.end_date) || null;
 
-      // Default end time: if start has a time component but end is NULL, assume 60 minutes
       if (item.start_date && !item.end_date && item.start_date.includes('T')) {
         const startMs = new Date(item.start_date).getTime();
         if (!isNaN(startMs)) {
@@ -1681,10 +1346,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         }
       }
 
-      // Resolve redirect URLs to final destination URLs
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;
 
-      // Skip items where redirect resolution failed
       const isRedirectUrl = item.source_url && (
         item.source_url.includes('grounding-api-redirect') ||
         item.source_url.includes('vertexaisearch.cloud.google.com')
@@ -1695,7 +1358,6 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         continue;
       }
 
-      // Domain ownership check: if source URL belongs to another POI's domain, reassign
       let effectivePoiId = poiId;
       const domainOwner = checkDomainOwnership(resolvedUrl || item.source_url, poiId, domainOwnershipMap);
       if (domainOwner) {
@@ -1735,14 +1397,12 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         continue;
       }
 
-      // start_date is NOT NULL in DB — skip events with no date (e.g. Wordfence block pages)
       if (!item.start_date) {
         if (log) log(`[Save] Skip event "${item.title}" — no start_date`);
         duplicateCount++;
         continue;
       }
 
-      // All new events enter as pending — moderation sweep handles relevance voting + promotion
       const dateScore = item.date_consensus_score || 0;
       await pool.query(`
         INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
@@ -1773,25 +1433,14 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   return savedCount;
 }
 
-/**
- * Process a batch of POIs with staggered dispatch and limited concurrency
- * @param {Pool} pool - Database connection pool
- * @param {Array} pois - Array of POI objects
- * @param {Object} sheets - Optional sheets client
- * @param {number} dispatchInterval - Milliseconds between starting each POI
- * @param {string} timezone - IANA timezone string
- * @returns {Object} - { newsFound, eventsFound, processed }
- */
 async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_INTERVAL_MS, timezone = 'America/New_York') {
   let newsFound = 0;
   let eventsFound = 0;
   let processed = 0;
   const results = [];
 
-  // Build domain ownership map once for the entire batch
   const domainOwnershipMap = await buildDomainOwnershipMap(pool);
 
-  // Semaphore for limiting concurrency
   let inFlight = 0;
   let nextIndex = 0;
   let resolveAll;
@@ -1820,7 +1469,6 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
     }
 
     inFlight--;
-    // Start next job with delay when a slot opens (prevents API rate limiting)
     if (nextIndex < pois.length && inFlight < MAX_CONCURRENCY) {
       setTimeout(() => processNext(), dispatchInterval);
     } else if (nextIndex >= pois.length && inFlight === 0) {
@@ -1828,16 +1476,13 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
     }
   };
 
-  // Start initial batch with staggered dispatch
   const initialBatch = Math.min(MAX_CONCURRENCY, pois.length);
   for (let i = 0; i < initialBatch; i++) {
     setTimeout(() => processNext(), i * dispatchInterval);
   }
 
-  // Wait for all to complete
   await allDone;
 
-  // Aggregate results
   for (const poiOutcome of results) {
     newsFound += poiOutcome.newsFound;
     eventsFound += poiOutcome.eventsFound;
@@ -1847,17 +1492,9 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
   return { newsFound, eventsFound, processed };
 }
 
-/**
- * Create a news collection job record (called before submitting to pg-boss)
- * @param {Pool} pool - Database connection pool
- * @param {Array} poiIds - Array of POI IDs to process
- * @param {string} source - Source of the job ('manual', 'batch', 'scheduled')
- * @returns {Object} - Job info with jobId and totalPois
- */
 export async function createNewsCollectionJob(pool, poiIds, source = 'batch') {
   const startTime = new Date();
 
-  // Get POI details to validate they exist
   const poisResult = await pool.query(
     'SELECT id FROM pois WHERE id = ANY($1) AND (deleted IS NULL OR deleted = FALSE)',
     [poiIds]
@@ -1869,7 +1506,6 @@ export async function createNewsCollectionJob(pool, poiIds, source = 'batch') {
     throw new Error('No valid POIs to process');
   }
 
-  // Record job with status 'queued' and store POI IDs for resumability
   const jobResult = await pool.query(`
     INSERT INTO news_job_status (
       job_type, status, started_at, total_pois, pois_processed,
@@ -1891,20 +1527,9 @@ export async function createNewsCollectionJob(pool, poiIds, source = 'batch') {
   return { jobId, totalPois, poiIds: validPoiIds };
 }
 
-/**
- * Process a news collection job (pg-boss handler)
- * This is the main work function called by pg-boss. It supports resumability
- * by checking which POIs have already been processed.
- *
- * @param {Pool} pool - Database connection pool
- * @param {Object} sheets - Optional sheets client for syncing
- * @param {string} pgBossJobId - The pg-boss job ID
- * @param {Object} jobData - Data passed from pg-boss { jobId, poiIds }
- */
 export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobData) {
   const { jobId } = jobData;
 
-  // Get the job record
   const jobResult = await pool.query('SELECT * FROM news_job_status WHERE id = $1', [jobId]);
   if (jobResult.rows.length === 0) {
     throw new Error(`Job ${jobId} not found`);
@@ -1912,7 +1537,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
 
   const job = jobResult.rows[0];
 
-  // Parse POI IDs - handle both JSON strings and arrays
   let allPoiIds = job.poi_ids;
   let processedPoiIds = job.processed_poi_ids || [];
   let circuitBreakerRetries = job.circuit_breaker_retries || {};
@@ -1927,7 +1551,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     circuitBreakerRetries = JSON.parse(circuitBreakerRetries);
   }
 
-  // Filter out already processed POIs (for resumability)
   const processedSet = new Set(processedPoiIds);
   const remainingPoiIds = allPoiIds.filter(id => !processedSet.has(id));
 
@@ -1941,35 +1564,29 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     return;
   }
 
-  // Update job status to running
   await pool.query(`
     UPDATE news_job_status
     SET status = 'running', pg_boss_job_id = $1
     WHERE id = $2
   `, [pgBossJobId, jobId]);
 
-  // Reset AI provider usage tracking for this job
   resetJobUsage();
 
   logInfo(jobId, 'news', null, null, `Job started: ${remainingPoiIds.length} POIs remaining`, { total: allPoiIds.length, already_done: processedPoiIds.length });
 
-  // Get POI details for remaining POIs
   const poisResult = await pool.query(
     'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = ANY($1)',
     [remainingPoiIds]
   );
   const pois = poisResult.rows;
 
-  // Build domain ownership map once for the entire job
   const domainOwnershipMap = await buildDomainOwnershipMap(pool);
 
-  // Initialize counters from existing progress
   let newsFound = job.news_found || 0;
   let eventsFound = job.events_found || 0;
   let processed = processedPoiIds.length;
   const newlyProcessedIds = [...processedPoiIds];
 
-  // Read max concurrency from admin_settings at job start (falls back to module constant)
   const concurrencyResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'max_concurrency'"
   );
@@ -1979,7 +1596,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     return Number.isFinite(val) ? Math.min(50, Math.max(1, val)) : MAX_CONCURRENCY;
   })();
 
-  // Initialize display slots — must be after maxConcurrency is resolved
   initializeSlots(jobId, maxConcurrency);
 
   try {
@@ -2022,7 +1638,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog, domainOwnershipMap });
         logInfo(jobId, 'news', poi.id, poi.name, `[${index + 1}/${total}] ${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents });
 
-        // Update last_news_collection timestamp
         await pool.query(`
           UPDATE pois SET last_news_collection = CURRENT_TIMESTAMP WHERE id = $1
         `, [poi.id]);
@@ -2031,7 +1646,6 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       },
 
       checkpointFn: async (poi, poiOutcome, error) => {
-        // Circuit breaker: don't mark browser-killed POIs as processed (they'll retry on resume)
         const MAX_CB_RETRIES = 3;
         if (error && error.name === 'BrowserOverloadError') {
           const retryCount = (circuitBreakerRetries[poi.id] || 0) + 1;
@@ -2071,11 +1685,9 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       }
     });
 
-    // Log AI provider usage for this job
     const usage = getJobUsage();
     logInfo(jobId, 'news', null, null, `AI provider usage: Gemini=${usage.gemini}`, { gemini_calls: usage.gemini });
 
-    // Only mark complete if not cancelled (cancel endpoint already set status)
     if (!jobCancelled) {
       await pool.query(`
         UPDATE news_job_status
@@ -2093,9 +1705,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     }
     await flushJobLogs();
 
-    // Don't clear display slots — keep frozen for frontend
 
-    // Log summary of results
     const poisWithResults = batchResults.filter(r => r.success && r.result && (r.result.savedNews > 0 || r.result.savedEvents > 0));
     const poisWithoutResults = batchResults.filter(r => !r.success || !r.result || (r.result.savedNews === 0 && r.result.savedEvents === 0));
 
@@ -2123,15 +1733,9 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   }
 }
 
-/**
- * Legacy function for backward compatibility and scheduled jobs
- * Creates and immediately processes a news collection job (non-pg-boss path)
- * @deprecated Use createNewsCollectionJob + pg-boss for new code
- */
 export async function runBatchNewsCollection(pool, poiIds, sheets = null, source = 'batch') {
   const { jobId, totalPois, poiIds: validPoiIds } = await createNewsCollectionJob(pool, poiIds, source);
 
-  // Process in background using setImmediate for backward compatibility
   setImmediate(async () => {
     try {
       await processNewsCollectionJob(pool, sheets, `legacy-${jobId}`, { jobId });
@@ -2143,11 +1747,6 @@ export async function runBatchNewsCollection(pool, poiIds, sheets = null, source
   return { jobId, totalPois };
 }
 
-/**
- * Extract domain from a URL, stripping www. prefix.
- * @param {string} url - URL to extract domain from
- * @returns {string|null} - Lowercase domain or null
- */
 function extractDomain(url) {
   if (!url) return null;
   try {
@@ -2158,12 +1757,6 @@ function extractDomain(url) {
   }
 }
 
-/**
- * Build a map of domain → POI ID from all POIs that have news_url or events_url.
- * Used to detect when collected content belongs to a different organization.
- * @param {Pool} pool - Database connection pool
- * @returns {Map<string, {poiId: number, poiName: string}>} - domain → POI info
- */
 export async function buildDomainOwnershipMap(pool) {
   const urlOwners = await pool.query(
     `SELECT id, name, news_url, events_url FROM pois
@@ -2181,13 +1774,6 @@ export async function buildDomainOwnershipMap(pool) {
   return map;
 }
 
-/**
- * Check if a source URL's domain belongs to a different POI.
- * @param {string} sourceUrl - The source URL to check
- * @param {number} currentPoiId - The POI this item is currently assigned to
- * @param {Map} domainMap - Domain ownership map from buildDomainOwnershipMap()
- * @returns {{poiId: number, poiName: string}|null} - The owning POI if different, or null
- */
 function checkDomainOwnership(sourceUrl, currentPoiId, domainMap) {
   if (!sourceUrl || !domainMap) return null;
   const domain = extractDomain(sourceUrl);
@@ -2197,13 +1783,7 @@ function checkDomainOwnership(sourceUrl, currentPoiId, domainMap) {
   return null;
 }
 
-/**
- * Get all active POIs for collection
- * @param {Pool} pool - Database connection pool
- * @returns {Array<number>} - Array of POI IDs
- */
 export async function getAllPoisForCollection(pool) {
-  // Load excluded POI IDs from admin settings
   const settingResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
   );
@@ -2234,14 +1814,7 @@ export async function getAllPoisForCollection(pool) {
   return collectionPoiRows.rows.map(r => r.id);
 }
 
-/**
- * Get POIs for a specific collection tier
- * @param {Pool} pool - Database connection pool
- * @param {string} tier - 'daily', 'weekly', or 'monthly'
- * @returns {Array<number>} - Array of POI IDs
- */
 export async function getPoisForTierCollection(pool, tier) {
-  // Load excluded POI IDs from admin settings
   const settingResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
   );
@@ -2286,13 +1859,6 @@ export async function getPoisForTierCollection(pool, tier) {
   return tierPoiRows.rows.map(r => r.id);
 }
 
-/**
- * Run news collection for a specific tier
- * @param {Pool} pool - Database connection pool
- * @param {string} tier - 'daily', 'weekly', or 'monthly'
- * @param {Object} sheets - Optional sheets client
- * @returns {Object} - Job status summary
- */
 export async function runTierNewsCollection(pool, tier, sheets = null) {
   const poiIds = await getPoisForTierCollection(pool, tier);
 
@@ -2307,12 +1873,6 @@ export async function runTierNewsCollection(pool, tier, sheets = null) {
   return runBatchNewsCollection(pool, poiIds, sheets, `scheduled-${tier}`);
 }
 
-/**
- * Run news collection for all POIs (used by admin-triggered batch jobs)
- * @param {Pool} pool - Database connection pool
- * @param {Object} sheets - Optional sheets client
- * @returns {Object} - Job status summary
- */
 export async function runNewsCollection(pool, sheets = null) {
   const poiIds = await getAllPoisForCollection(pool);
 
@@ -2331,11 +1891,6 @@ export async function runNewsCollection(pool, sheets = null) {
   return runBatchNewsCollection(pool, poiIds, sheets, 'scheduled');
 }
 
-/**
- * Get job status by ID
- * @param {Pool} pool - Database connection pool
- * @param {number} jobId - Job ID
- */
 export async function getJobStatus(pool, jobId) {
   const jobStatusRows = await pool.query(
     'SELECT * FROM news_job_status WHERE id = $1',
@@ -2344,12 +1899,6 @@ export async function getJobStatus(pool, jobId) {
   return jobStatusRows.rows[0] || null;
 }
 
-/**
- * Get news for a specific POI
- * @param {Pool} pool - Database connection pool
- * @param {number} poiId - POI ID
- * @param {number} limit - Max items to return
- */
 export async function getNewsForPoi(pool, poiId, limit = 10) {
   const newsRows = await pool.query(`
     SELECT id, title, summary, source_url, source_name, news_type, publication_date, collection_date
@@ -2363,13 +1912,6 @@ export async function getNewsForPoi(pool, poiId, limit = 10) {
   return newsRows.rows;
 }
 
-/**
- * Get events for a specific POI
- * @param {Pool} pool - Database connection pool
- * @param {number} poiId - POI ID
- * @param {boolean} upcomingOnly - Only return future events
- * @param {string} tz - IANA timezone for date comparison
- */
 export async function getEventsForPoi(pool, poiId, upcomingOnly = true, tz = 'America/New_York') {
   let query = `
     SELECT id, title, description, start_date, end_date, event_type, location_details, source_url, collection_date
@@ -2388,11 +1930,6 @@ export async function getEventsForPoi(pool, poiId, upcomingOnly = true, tz = 'Am
   return eventRows.rows;
 }
 
-/**
- * Get all recent news across all POIs
- * @param {Pool} pool - Database connection pool
- * @param {number} limit - Max items to return
- */
 export async function getRecentNews(pool, limit = 20) {
   const recentNewsRows = await pool.query(`
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
@@ -2407,12 +1944,6 @@ export async function getRecentNews(pool, limit = 20) {
   return recentNewsRows.rows;
 }
 
-/**
- * Get all upcoming events across all POIs
- * @param {Pool} pool - Database connection pool
- * @param {number} daysAhead - How many days ahead to look
- * @param {string} tz - IANA timezone for date comparison
- */
 export async function getUpcomingEvents(pool, daysAhead = 30, tz = 'America/New_York') {
   const upcomingEventRows = await pool.query(`
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
@@ -2428,10 +1959,6 @@ export async function getUpcomingEvents(pool, daysAhead = 30, tz = 'America/New_
   return upcomingEventRows.rows;
 }
 
-/**
- * Get latest job status
- * @param {Pool} pool - Database connection pool
- */
 export async function getLatestJobStatus(pool) {
   const latestJobRows = await pool.query(`
     SELECT * FROM news_job_status
@@ -2442,11 +1969,6 @@ export async function getLatestJobStatus(pool) {
   return latestJobRows.rows[0] || null;
 }
 
-/**
- * Clean up old news (older than specified days)
- * @param {Pool} pool - Database connection pool
- * @param {number} daysOld - Delete news older than this many days
- */
 export async function cleanupOldNews(pool, daysOld = 90) {
   const runId = Math.floor(Date.now() / 1000);
   const deleteOutcome = await pool.query(`
@@ -2459,11 +1981,6 @@ export async function cleanupOldNews(pool, daysOld = 90) {
   return deleteOutcome.rowCount;
 }
 
-/**
- * Clean up past events
- * @param {Pool} pool - Database connection pool
- * @param {number} daysOld - Delete events older than this many days
- */
 export async function cleanupPastEvents(pool, daysOld = 30) {
   const runId = Math.floor(Date.now() / 1000);
   const deleteOutcome = await pool.query(`

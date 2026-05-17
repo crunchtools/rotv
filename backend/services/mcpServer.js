@@ -1,12 +1,3 @@
-/**
- * ROTV Admin MCP Server
- * Provides 31 admin tools for managing ROTV content, moderation queue,
- * jobs, newsletters, and settings via the Model Context Protocol.
- *
- * Transport: Streamable HTTP on a separate port (default 3001)
- * Auth: Bearer token from MCP_ADMIN_TOKEN env var
- */
-
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -44,18 +35,9 @@ import {
   queueNewsletterJob
 } from './jobScheduler.js';
 
-// Dummy admin user ID for MCP operations (no real user session)
 const MCP_ADMIN_USER_ID = null;
 
-/**
- * Register all 30 admin tools on an McpServer instance.
- * Pure metadata registration — no I/O, safe to call per-request.
- */
 function registerTools(server, pool, boss) {
-
-  // ============================================================
-  // POI Tools (7)
-  // ============================================================
 
   server.tool(
     'poi_list',
@@ -97,7 +79,6 @@ function registerTools(server, pool, boss) {
         return { content: [{ type: 'text', text: 'POI not found' }], isError: true };
       }
       const row = poiDetailRows.rows[0];
-      // Strip large binary data from response
       delete row.geometry;
       return { content: [{ type: 'text', text: JSON.stringify(row, null, 2) }] };
     }
@@ -212,10 +193,6 @@ function registerTools(server, pool, boss) {
       return { content: [{ type: 'text', text: `Created POI #${row.id}: ${row.name} (${(row.poi_roles || []).join(', ')})` }] };
     }
   );
-
-  // ============================================================
-  // Queue & Moderation Tools (6)
-  // ============================================================
 
   server.tool(
     'queue_list',
@@ -342,10 +319,6 @@ function registerTools(server, pool, boss) {
     }
   );
 
-  // ============================================================
-  // Content Management Tools (4)
-  // ============================================================
-
   server.tool(
     'content_create',
     'Create news/event/photo manually (published immediately)',
@@ -411,10 +384,6 @@ function registerTools(server, pool, boss) {
     }
   );
 
-  // ============================================================
-  // Jobs & Logs Tools (4)
-  // ============================================================
-
   server.tool(
     'job_list',
     'Recent jobs with status, counts, and timing. Covers all job types: news, trail_status (from status tables), plus moderation, backup, database_backup, research, cleanup, newsletter (from job_logs).',
@@ -446,7 +415,6 @@ function registerTools(server, pool, boss) {
         `, [limit]);
         results.trail_status_jobs = trailJobs.rows;
       }
-      // job_logs-based types: moderation, backup, database_backup, research, cleanup, newsletter
       const logTypes = ['moderation', 'backup', 'database_backup', 'research', 'cleanup', 'newsletter'];
       const matchingLogTypes = type ? logTypes.filter(t => t === type) : logTypes;
       if (matchingLogTypes.length > 0) {
@@ -547,10 +515,6 @@ function registerTools(server, pool, boss) {
     }
   );
 
-  // ============================================================
-  // Newsletter Tools (3)
-  // ============================================================
-
   server.tool(
     'newsletter_list',
     'Recent newsletter emails with processing status',
@@ -589,7 +553,6 @@ function registerTools(server, pool, boss) {
     'Re-queue a newsletter email for reprocessing',
     { id: z.number().describe('Newsletter email ID') },
     async ({ id }) => {
-      // Reset processed flag so it will be picked up again
       await pool.query(
         `UPDATE newsletter_emails SET processed = FALSE, error_message = NULL WHERE id = $1`,
         [id]
@@ -598,10 +561,6 @@ function registerTools(server, pool, boss) {
       return { content: [{ type: 'text', text: `Newsletter email #${id} queued for reprocessing` }] };
     }
   );
-
-  // ============================================================
-  // Admin Settings Tools (2)
-  // ============================================================
 
   server.tool(
     'settings_list',
@@ -635,10 +594,6 @@ function registerTools(server, pool, boss) {
       return { content: [{ type: 'text', text: `Updated setting '${key}' = '${value}'` }] };
     }
   );
-
-  // ============================================================
-  // POI Configuration Tools (2)
-  // ============================================================
 
   server.tool(
     'poi_update_urls',
@@ -688,10 +643,6 @@ function registerTools(server, pool, boss) {
       return { content: [{ type: 'text', text: JSON.stringify(associationRows.rows, null, 2) }] };
     }
   );
-
-  // ============================================================
-  // Content Stats Tools (2)
-  // ============================================================
 
   server.tool(
     'stats_content',
@@ -765,10 +716,6 @@ function registerTools(server, pool, boss) {
     }
   );
 
-  // ============================================================
-  // Admin Actions Tool (1)
-  // ============================================================
-
   server.tool(
     'trigger_collection',
     'Trigger news or trail status collection',
@@ -778,7 +725,6 @@ function registerTools(server, pool, boss) {
     },
     async ({ type, poi_ids }) => {
       if (type === 'news') {
-        // If no POI IDs given, get all active POIs (same as the /news/collect route)
         let targetPoiIds = poi_ids;
         if (!targetPoiIds || targetPoiIds.length === 0) {
           const poisResult = await pool.query(`
@@ -795,7 +741,6 @@ function registerTools(server, pool, boss) {
           targetPoiIds = poisResult.rows.map(r => r.id);
         }
 
-        // Create job record with poi_ids stored (required by processNewsCollectionJob)
         const jobResult = await pool.query(
           `INSERT INTO news_job_status (job_type, status, started_at, created_at, total_pois, poi_ids, processed_poi_ids)
            VALUES ('batch_collection', 'queued', NOW(), NOW(), $1, $2, $3) RETURNING id`,
@@ -817,18 +762,8 @@ function registerTools(server, pool, boss) {
 
 }
 
-/**
- * Start the MCP admin server.
- * Creates a fresh McpServer + transport per HTTP request (stateless mode).
- * Tool registration is pure metadata — no I/O overhead.
- *
- * @param {import('pg').Pool} pool - Database connection pool
- * @param {object} boss - pg-boss instance
- * @param {number} port - Port to listen on (default 3001)
- */
 export function startMcpServer(pool, boss, port = 3001) {
   const httpServer = http.createServer(async (req, res) => {
-    // CORS headers for MCP clients
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
@@ -840,7 +775,6 @@ export function startMcpServer(pool, boss, port = 3001) {
       return;
     }
 
-    // Bearer token auth
     const authHeader = req.headers.authorization;
     const expectedToken = process.env.MCP_ADMIN_TOKEN;
     if (!expectedToken) {
@@ -858,21 +792,19 @@ export function startMcpServer(pool, boss, port = 3001) {
       return;
     }
 
-    // Only handle /mcp path
     if (req.url !== '/mcp') {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
       return;
     }
 
-    // Create fresh server + transport per request (stateless mode).
-    // The MCP SDK's Server.connect() takes exclusive ownership of a transport,
-    // so each request needs its own pair.
+    // MCP SDK's Server.connect() takes exclusive ownership of a transport,
+    // so each stateless HTTP request needs its own server+transport pair
     const server = new McpServer({ name: 'rotv-admin', version: '1.0.0' });
     registerTools(server, pool, boss);
 
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined  // stateless — no session management
+      sessionIdGenerator: undefined
     });
 
     await server.connect(transport);

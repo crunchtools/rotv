@@ -4,7 +4,6 @@ import { formatPublicationDate } from './NewsEventsShared';
 import { FIELD_CONFIGS } from '../hooks/useModeration';
 import ContentFormModal from './ContentFormModal';
 
-// Style helpers (extracted from ModerationInbox)
 const badgeStyle = (bg) => ({
   backgroundColor: bg, color: 'white', padding: '1px 8px', borderRadius: '10px',
   fontSize: '0.72rem', fontWeight: 'bold', textTransform: 'uppercase'
@@ -86,14 +85,9 @@ function renderFieldInput(fc, values, setValues, pois) {
     style={inputStyle} placeholder={fc.label} required={fc.required} lang={lang} />;
 }
 
-/**
- * Shared per-item moderation UI: badges, inline edit form, action buttons, merge UI.
- * Rendered as children of NewsCardBody/EventCardBody.
- */
 export default function ModerationExtras({
   item,
   isPending = false,
-  // From useModeration hook
   editingItem, editFields, setEditFields,
   itemUrls, newUrlInput, setNewUrlInput, addingUrl,
   iaDateItem,
@@ -101,7 +95,6 @@ export default function ModerationExtras({
   confirmDelete, setConfirmDelete,
   selectedItems,
   pois,
-  // Handlers from hook
   onApprove, onReject, onRequeue, onDelete,
   onSave, onIaDate,
   onStartEditing, onCancelEditing,
@@ -114,7 +107,6 @@ export default function ModerationExtras({
 
   return (
     <div onClick={(e) => e.stopPropagation()}>
-      {/* Moderation badges */}
       <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', alignItems: 'center', margin: '10px 0 8px' }}>
         <span style={badgeStyle('#757575')}>#{item.id}</span>
         <span style={badgeStyle(getTypeBadgeColor(item.content_type))}>
@@ -136,7 +128,6 @@ export default function ModerationExtras({
           </span>
         )}
 
-        {/* Triage chips */}
         {item.content_type !== 'photo' && (() => {
           const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
           const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
@@ -155,7 +146,6 @@ export default function ModerationExtras({
           );
         })()}
 
-        {/* Confidence score */}
         {item.confidence_score !== null && item.confidence_score !== undefined && (
           <span style={{
             color: getConfidenceColor(item.confidence_score),
@@ -165,14 +155,12 @@ export default function ModerationExtras({
           </span>
         )}
 
-        {/* Timestamps */}
         <span style={{ fontSize: '0.72rem', color: '#aaa' }}>
           {formatPublicationDate(item.collection_date || item.created_at)}
           {item.moderated_at && ` · Mod: ${formatPublicationDate(item.moderated_at)}`}
         </span>
       </div>
 
-      {/* Edit modal */}
       {isEditing && (
         <ContentFormModal
           mode="edit"
@@ -192,7 +180,6 @@ export default function ModerationExtras({
         />
       )}
 
-      {/* Action buttons */}
       <div style={{ display: 'flex', gap: '3px', flexWrap: 'wrap', marginTop: '6px' }}>
         {isPending && onToggleSelect && (
           <input type="checkbox" checked={selectedItems?.has(itemKey)}
@@ -248,7 +235,6 @@ export default function ModerationExtras({
         )}
       </div>
 
-      {/* Merge candidate selection */}
       {mergingItem && mergingItem.type === item.content_type && mergingItem.id === item.id && (
         <div style={{ marginTop: '8px', padding: '10px', backgroundColor: '#e3f2fd',
           borderRadius: '6px', border: '1px solid #90caf9' }}>
@@ -298,5 +284,4 @@ export default function ModerationExtras({
   );
 }
 
-// Export style helpers for ModerationInbox create form
 export { FIELD_CONFIGS, badgeStyle, actionBtn, btnStyle, inputStyle, renderFieldInput, getConfidenceColor, getTypeBadgeColor, getSourceBadge };

@@ -67,28 +67,24 @@ const { Pool } = pg;
 
 const app = express();
 
-// Configure multer for memory storage (media uploaded to image server)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 10 * 1024 * 1024 // 10MB max
+    fileSize: 10 * 1024 * 1024
   }
 });
 
-// Rate limiter for asset proxy endpoints (DoS mitigation)
-// Fix: Prevent bandwidth exhaustion attacks on image/video proxy (Gemini review)
+// Fix: rate limit asset proxy to prevent bandwidth exhaustion (Gemini review)
 const assetProxyLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  standardHeaders: true, // Return rate limit info in `RateLimit-*` headers
-  legacyHeaders: false, // Disable `X-RateLimit-*` headers
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: { error: 'Too many asset requests, please try again later' }
 });
 
-// In-memory cache for mosaic data (performance optimization)
-// Fix: Reduce database queries for frequently accessed mosaic data (Gemini review)
 const mosaicCache = new Map();
-const MOSAIC_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const MOSAIC_CACHE_TTL = 5 * 60 * 1000;
 
 function getMosaicFromCache(poiId) {
   const cacheKey = `poi:${poiId}`;
@@ -112,7 +108,6 @@ function invalidateMosaicCache(poiId) {
   mosaicCache.delete(cacheKey);
 }
 
-// Trust reverse proxy (for secure cookies behind CloudFlare/Apache)
 app.set('trust proxy', 1);
 
 // Return date/timestamp columns as ISO strings, not JavaScript Date objects.
@@ -120,35 +115,31 @@ app.set('trust proxy', 1);
 // their .toString() format is locale-dependent ("Sat May 31 2025 ...").
 // OID 1082 = date, 1114 = timestamp without tz, 1184 = timestamp with tz
 const { types } = pg;
-types.setTypeParser(1082, (val) => val);   // date → 'YYYY-MM-DD' string
-types.setTypeParser(1114, (val) => val);   // timestamp → string
-types.setTypeParser(1184, (val) => val);   // timestamptz → string
+types.setTypeParser(1082, (val) => val);
+types.setTypeParser(1114, (val) => val);
+types.setTypeParser(1184, (val) => val);
 
 const pool = new Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT || 5432,
   database: process.env.PGDATABASE || 'rotv',
-  user: process.env.PGUSER || 'postgres',  // Use standard PostgreSQL superuser
+  user: process.env.PGUSER || 'postgres',
   password: process.env.PGPASSWORD || 'rotv',
-  // Background jobs use up to 10 concurrent connections
-  // Reserve extra for API requests to prevent blocking
+  // Background jobs use up to 10 concurrent connections; reserve headroom for API requests
   max: 20,
-  // Timeout after 10 seconds if no connection available (fail fast vs hang)
   connectionTimeoutMillis: 10000,
 });
 
-// CORS configuration - allow credentials for session cookies
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 app.use(cors({
   origin: [FRONTEND_URL, 'http://localhost:5173'],
   credentials: true
 }));
 
-// Increase JSON body limit for large GeoJSON geometry in linear features
+// Large GeoJSON geometry in linear features can exceed the default 100kb limit
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Session configuration with PostgreSQL store
 const PgSession = connectPgSimple(session);
 app.use(session({
   store: new PgSession({
@@ -163,33 +154,23 @@ app.use(session({
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
     sameSite: 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    maxAge: 7 * 24 * 60 * 60 * 1000
   }
 }));
 
-// Initialize Passport
 configurePassport(pool);
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Mount auth routes
 app.use('/auth', authRoutes);
-
-// Mount admin routes
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
-
-// Mount newsletter routes
 app.use('/api/newsletter', createNewsletterRouter(pool));
-
-// Mount feedback routes
 app.use('/api/feedback', createFeedbackRouter(pool));
 
-// Import trails and rivers from GeoJSON files into unified pois table
 async function importGeoJSONFeatures(client) {
   const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/public');
   const dataPath = path.join(staticPath, 'data');
 
-  // Helper to consolidate features by name
   function consolidateFeatures(features) {
     const byName = {};
     for (const feature of features) {
@@ -215,7 +196,6 @@ async function importGeoJSONFeatures(client) {
   }
 
   try {
-    // Import trails
     const trailsFile = path.join(dataPath, 'cvnp-trails.geojson');
     const trailsData = JSON.parse(await fs.readFile(trailsFile, 'utf-8'));
     const consolidatedTrails = consolidateFeatures(trailsData.features);
@@ -230,7 +210,6 @@ async function importGeoJSONFeatures(client) {
     }
     console.log(`Imported ${consolidatedTrails.length} trails`);
 
-    // Import rivers
     const riverFile = path.join(dataPath, 'cvnp-river.geojson');
     const riverData = JSON.parse(await fs.readFile(riverFile, 'utf-8'));
     const consolidatedRivers = consolidateFeatures(riverData.features);
@@ -245,7 +224,6 @@ async function importGeoJSONFeatures(client) {
     }
     console.log(`Imported ${consolidatedRivers.length} rivers`);
 
-    // Import boundaries
     const boundaryFile = path.join(dataPath, 'cvnp-boundary.geojson');
     const boundaryData = JSON.parse(await fs.readFile(boundaryFile, 'utf-8'));
 
@@ -265,11 +243,10 @@ async function importGeoJSONFeatures(client) {
   }
 }
 
-// Create tables if not exists
 async function initDatabase() {
   const client = await pool.connect();
   try {
-    // Standardized eras table (must be created before pois for FK constraint)
+    // eras must be created before pois — pois has an FK to eras(id)
     await client.query(`
       CREATE TABLE IF NOT EXISTS eras (
         id SERIAL PRIMARY KEY,
@@ -283,7 +260,6 @@ async function initDatabase() {
       )
     `);
 
-    // Seed default eras if table is empty
     const eraCount = await client.query('SELECT COUNT(*) FROM eras');
     if (parseInt(eraCount.rows[0].count) === 0) {
       await client.query(`
@@ -299,7 +275,6 @@ async function initDatabase() {
       `);
     }
 
-    // Unified POIs table (replaces destinations and linear_features)
     await client.query(`
       CREATE TABLE IF NOT EXISTS pois (
         id SERIAL PRIMARY KEY,
@@ -345,17 +320,14 @@ async function initDatabase() {
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS poi_roles TEXT[] DEFAULT '{}'
     `);
 
-    // Create index for faster lookups by role (GIN index on array)
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_pois_roles ON pois USING GIN(poi_roles)
     `);
 
-    // Create index for owner lookups
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_pois_owner_id ON pois(owner_id)
     `);
 
-    // Drop old poi_type-based constraints/indexes if they exist (cleanup only, no replacement)
     await client.query(`
       DO $$ BEGIN
         IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pois_name_poi_type_key') THEN
@@ -375,7 +347,6 @@ async function initDatabase() {
       END $$;
     `);
 
-    // Migrate data from old tables if they exist
     const destTableExists = await client.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables WHERE table_name = 'destinations'
@@ -383,7 +354,6 @@ async function initDatabase() {
     `);
 
     if (destTableExists.rows[0].exists) {
-      // Migrate destinations to pois table
       const migrated = await client.query(`
         INSERT INTO pois (name, poi_roles, latitude, longitude, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
@@ -411,7 +381,6 @@ async function initDatabase() {
     `);
 
     if (linearTableExists.rows[0].exists) {
-      // Migrate linear_features to pois table
       const migrated = await client.query(`
         INSERT INTO pois (name, poi_roles, geometry, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
@@ -435,7 +404,6 @@ async function initDatabase() {
       }
     }
 
-    // Users table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -456,7 +424,6 @@ async function initDatabase() {
       )
     `);
 
-    // Add oauth_credentials column if it doesn't exist (for existing databases)
     await client.query(`
       DO $$
       BEGIN
@@ -469,7 +436,6 @@ async function initDatabase() {
       END $$;
     `);
 
-    // Admin settings table
     await client.query(`
       CREATE TABLE IF NOT EXISTS admin_settings (
         key VARCHAR(255) PRIMARY KEY,
@@ -490,7 +456,6 @@ async function initDatabase() {
       )
     `);
 
-    // Seed default activities if table is empty
     const activityCount = await client.query('SELECT COUNT(*) FROM activities');
     if (parseInt(activityCount.rows[0].count) === 0) {
       await client.query(`
@@ -514,7 +479,6 @@ async function initDatabase() {
       `);
     }
 
-    // Standardized surfaces table
     await client.query(`
       CREATE TABLE IF NOT EXISTS surfaces (
         id SERIAL PRIMARY KEY,
@@ -526,7 +490,6 @@ async function initDatabase() {
       )
     `);
 
-    // Seed default surfaces if table is empty
     const surfaceCount = await client.query('SELECT COUNT(*) FROM surfaces');
     if (parseInt(surfaceCount.rows[0].count) === 0) {
       await client.query(`
@@ -545,7 +508,6 @@ async function initDatabase() {
       `);
     }
 
-    // Icons table for map icon configuration
     await client.query(`
       CREATE TABLE IF NOT EXISTS icons (
         id SERIAL PRIMARY KEY,
@@ -561,17 +523,14 @@ async function initDatabase() {
       )
     `);
 
-    // Add svg_content column if it doesn't exist (for AI-generated icons)
     await client.query(`
       ALTER TABLE icons ADD COLUMN IF NOT EXISTS svg_content TEXT
     `);
 
-    // Add drive_file_id column for Google Drive storage
     await client.query(`
       ALTER TABLE icons ADD COLUMN IF NOT EXISTS drive_file_id VARCHAR(255)
     `);
 
-    // Drive settings table for folder IDs
     await client.query(`
       CREATE TABLE IF NOT EXISTS drive_settings (
         key VARCHAR(255) PRIMARY KEY,
@@ -580,7 +539,6 @@ async function initDatabase() {
       )
     `);
 
-    // News table for POI-related news items
     await client.query(`
       CREATE TABLE IF NOT EXISTS poi_news (
         id SERIAL PRIMARY KEY,
@@ -597,7 +555,6 @@ async function initDatabase() {
     `);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_poi_id ON poi_news(poi_id)`);
 
-    // Events table for POI-related events
     await client.query(`
       CREATE TABLE IF NOT EXISTS poi_events (
         id SERIAL PRIMARY KEY,
@@ -618,10 +575,6 @@ async function initDatabase() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_poi_id ON poi_events(poi_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_start_date ON poi_events(start_date)`);
 
-    // Junction tables for multiple URLs per news/event item
-    // Schema managed by migration 007_news_multi_url.sql
-
-    // News job status tracking
     await client.query(`
       CREATE TABLE IF NOT EXISTS news_job_status (
         id SERIAL PRIMARY KEY,
@@ -639,7 +592,6 @@ async function initDatabase() {
       )
     `);
 
-    // Add columns if they don't exist (migration for existing tables)
     await client.query(`
       ALTER TABLE news_job_status ADD COLUMN IF NOT EXISTS total_pois INTEGER DEFAULT 0
     `);
@@ -647,19 +599,16 @@ async function initDatabase() {
       ALTER TABLE news_job_status ADD COLUMN IF NOT EXISTS ai_usage TEXT
     `);
 
-    // Add boundary_type and boundary_color columns for multiple boundary support
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_type TEXT
     `);
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_color TEXT DEFAULT '#228B22'
     `);
-    // Set default boundary_type for existing boundaries
     await client.query(`
       UPDATE pois SET boundary_type = 'cvnp' WHERE 'boundary' = ANY(poi_roles) AND boundary_type IS NULL
     `);
 
-    // Add events_url and news_url columns for targeted AI Research
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS events_url TEXT
     `);
@@ -667,17 +616,14 @@ async function initDatabase() {
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS news_url TEXT
     `);
 
-    // Add research_context column for multi-pass AI research
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS research_context TEXT
     `);
 
-    // Add status_url column for MTB Trail Status feature
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS status_url VARCHAR(500)
     `);
 
-    // Create trail_status table for storing trail condition updates
     await client.query(`
       CREATE TABLE IF NOT EXISTS trail_status (
         id SERIAL PRIMARY KEY,
@@ -694,16 +640,13 @@ async function initDatabase() {
       )
     `);
 
-    // Add content_hash column if missing (for existing tables)
     await client.query(`
       ALTER TABLE trail_status ADD COLUMN IF NOT EXISTS content_hash VARCHAR(64)
     `);
 
-    // Create indexes for trail_status
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_poi_id ON trail_status(poi_id)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_updated ON trail_status(last_updated DESC)`);
 
-    // Create trail_status_job_status table for job tracking
     await client.query(`
       CREATE TABLE IF NOT EXISTS trail_status_job_status (
         id SERIAL PRIMARY KEY,
@@ -723,12 +666,10 @@ async function initDatabase() {
       )
     `);
 
-    // Add ai_usage column if missing (for existing tables)
     await client.query(`
       ALTER TABLE trail_status_job_status ADD COLUMN IF NOT EXISTS ai_usage JSONB
     `);
 
-    // Create indexes for job status queries
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_job_status_created ON trail_status_job_status(created_at DESC)`);
 
     // Ensure default icons exist (adds any missing defaults to existing databases)
@@ -752,12 +693,10 @@ async function initDatabase() {
       ON CONFLICT (name) DO NOTHING
     `);
 
-    // Remove icon column from activities if it exists (moved to icons table)
     await client.query(`
       ALTER TABLE activities DROP COLUMN IF EXISTS icon
     `);
 
-    // POI Associations table - for virtual POIs linking to physical POIs
     await client.query(`
       CREATE TABLE IF NOT EXISTS poi_associations (
         id SERIAL PRIMARY KEY,
@@ -777,11 +716,6 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_poi_assoc_physical ON poi_associations(physical_poi_id)
     `);
 
-    // ============================================================
-    // Moderation Queue (#106) — columns, table, views, indexes
-    // ============================================================
-
-    // Moderation columns on poi_news
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) DEFAULT 'published'`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2)`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`);
@@ -795,7 +729,6 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderation_processed BOOLEAN DEFAULT FALSE`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_moderation ON poi_news(moderation_status)`);
 
-    // Moderation columns on poi_events
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) DEFAULT 'published'`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2)`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS ai_reasoning TEXT`);
@@ -809,7 +742,6 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderation_processed BOOLEAN DEFAULT FALSE`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_events_moderation ON poi_events(moderation_status)`);
 
-    // Photo submissions table
     await client.query(`
       CREATE TABLE IF NOT EXISTS photo_submissions (
         id SERIAL PRIMARY KEY,
@@ -831,7 +763,6 @@ async function initDatabase() {
     await client.query(`CREATE INDEX IF NOT EXISTS idx_photo_submissions_status ON photo_submissions(moderation_status)`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_photo_submissions_poi ON photo_submissions(poi_id)`);
 
-    // Unified moderation queue view (DROP first to allow column changes)
     await client.query(`DROP VIEW IF EXISTS moderation_queue CASCADE`);
     await client.query(`
       CREATE VIEW moderation_queue AS
@@ -855,7 +786,6 @@ async function initDatabase() {
         ORDER BY created_at DESC
     `);
 
-    // Newsletter digest view (DROP first to allow column changes)
     await client.query(`DROP VIEW IF EXISTS newsletter_digest CASCADE`);
     await client.query(`
       CREATE VIEW newsletter_digest AS
@@ -882,7 +812,6 @@ async function initDatabase() {
         ORDER BY created_at DESC
     `);
 
-    // Default moderation settings
     await client.query(`
       INSERT INTO admin_settings (key, value, updated_at)
       VALUES
@@ -893,15 +822,12 @@ async function initDatabase() {
       ON CONFLICT (key) DO NOTHING
     `);
 
-    // job_logs table is created by migration 010_add_job_logs.sql
-
     console.log('Database initialized');
   } finally {
     client.release();
   }
 }
 
-// API Routes - About page content (public, markdown stored in admin_settings)
 app.get('/api/about-content', async (req, res) => {
   try {
     const aboutSettings = await pool.query(
@@ -918,7 +844,6 @@ app.get('/api/about-content', async (req, res) => {
   }
 });
 
-// API Routes - Unified POIs
 app.get('/api/pois', async (req, res) => {
   try {
     const { type, role } = req.query;
@@ -982,7 +907,6 @@ app.get('/api/pois/:id', async (req, res) => {
   }
 });
 
-// Serve POI images from image server
 app.get('/api/pois/:id/image', async (req, res) => {
   try {
     const { id } = req.params;
@@ -991,7 +915,6 @@ app.get('/api/pois/:id/image', async (req, res) => {
       return res.status(404).json({ error: 'Image not found' });
     }
 
-    // Get primary asset from image server
     const asset = await imageServerClient.getPrimaryAsset(id);
     if (!asset) {
       return res.status(404).json({ error: 'Image not found' });
@@ -1013,13 +936,12 @@ app.get('/api/pois/:id/image', async (req, res) => {
   }
 });
 
-// Serve thumbnails from image server (pre-generated, no caching needed on ROTV side)
 app.get('/api/pois/:id/thumbnail', async (req, res) => {
   try {
     const { id } = req.params;
-    const size = req.query.size; // small, medium, large — passed through to image server
+    const size = req.query.size;
 
-    // Fix: Query poi_media table for primary image (Gatehouse finding)
+    // Fix: Query poi_media first; fall back to image server lookup (Gatehouse finding)
     const primaryMediaQuery = await pool.query(`
       SELECT image_server_asset_id
       FROM poi_media
@@ -1035,7 +957,6 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     if (primaryMediaQuery.rows.length > 0) {
       assetId = primaryMediaQuery.rows[0].image_server_asset_id;
     } else if (imageServerClient.initialized) {
-      // Fallback: query image server directly for POIs without poi_media records
       const asset = await imageServerClient.getPrimaryAsset(id);
       if (asset) {
         assetId = asset.id;
@@ -1049,7 +970,6 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     const sizeParam = size && ['small', 'medium', 'large'].includes(size) ? `?size=${size}` : '';
 
     if (!imageServerClient.initialized) {
-      // Development fallback: proxy from production asset endpoint when IMAGE_SERVER_URL not configured
       if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
         try {
           const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail${sizeParam}`;
@@ -1066,7 +986,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
           res.setHeader('Cache-Control', 'public, max-age=604800');
           res.setHeader('Access-Control-Allow-Origin', '*');
 
-          // Stream response to avoid memory exhaustion (DoS prevention)
+          // Stream to avoid loading full payload into memory (DoS prevention)
           return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
           console.error(`[Thumbnail] Production fallback failed for POI ${id}, asset ${assetId}:`, fallbackError.message);
@@ -1092,21 +1012,12 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
   }
 });
 
-// ============================================================
-// Multi-Media API Endpoints (Issue #181)
-// ============================================================
-
-/**
- * GET /api/pois/:id/media
- * Get all approved media for a POI (images, videos, YouTube embeds)
- * Returns mosaic array (primary + 2 most liked/recent) and all_media for lightbox
- */
 app.get('/api/pois/:id/media', async (req, res) => {
   try {
     const { id } = req.params;
-    const userId = req.user?.id || null; // Optional authentication
+    const userId = req.user?.id || null;
 
-    // Skip cache if authenticated (user might have pending uploads)
+    // Authenticated users may have pending uploads — bypass shared cache
     if (!userId) {
       const cached = getMosaicFromCache(id);
       if (cached) {
@@ -1114,7 +1025,6 @@ app.get('/api/pois/:id/media', async (req, res) => {
       }
     }
 
-    // Query media: published for everyone, pending only for uploader
     const mediaQuery = await pool.query(`
       SELECT
         id,
@@ -1142,7 +1052,6 @@ app.get('/api/pois/:id/media', async (req, res) => {
 
     const allMedia = [];
 
-    // Enrich media with URLs
     for (const media of mediaQuery.rows) {
       const item = {
         id: media.id,
@@ -1156,7 +1065,6 @@ app.get('/api/pois/:id/media', async (req, res) => {
       };
 
       if (media.media_type === 'youtube') {
-        // Extract video ID and construct URLs
         const videoId = extractYouTubeId(media.youtube_url);
         item.youtube_url = media.youtube_url;
         item.youtube_id = videoId;
@@ -1164,7 +1072,6 @@ app.get('/api/pois/:id/media', async (req, res) => {
         item.medium_url = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
         item.embed_url = `https://www.youtube-nocookie.com/embed/${videoId}`;
       } else {
-        // Image or video from image server
         item.asset_id = media.image_server_asset_id;
         item.thumbnail_url = `/api/assets/${media.image_server_asset_id}/thumbnail?size=small`;
         item.medium_url = `/api/assets/${media.image_server_asset_id}/thumbnail?size=medium`;
@@ -1174,16 +1081,13 @@ app.get('/api/pois/:id/media', async (req, res) => {
       allMedia.push(item);
     }
 
-    // Mosaic: primary image as hero, plus gallery items if there are enough to form a mosaic
-    // If only 1 gallery item exists alongside primary, it's likely a migration duplicate — show hero only
+    // A lone gallery item alongside a primary is usually a migration duplicate — show hero only
     const primaryItems = allMedia.filter(m => m.role === 'primary');
     const galleryItems = allMedia.filter(m => m.role !== 'primary');
     let mosaic;
     if (primaryItems.length > 0 && galleryItems.length <= 1) {
-      // Single hero — show primary only (gallery items available in lightbox)
       mosaic = primaryItems.slice(0, 1);
     } else {
-      // Enough items for a real mosaic
       mosaic = allMedia.slice(0, 3);
     }
 
@@ -1193,7 +1097,6 @@ app.get('/api/pois/:id/media', async (req, res) => {
       total_count: allMedia.length
     };
 
-    // Only cache for anonymous users (authenticated users see their pending uploads)
     if (!userId) {
       setMosaicCache(id, response);
     }
@@ -1205,24 +1108,16 @@ app.get('/api/pois/:id/media', async (req, res) => {
   }
 });
 
-/**
- * POST /api/pois/:id/media
- * Upload media (image/video/YouTube URL)
- * Regular users → moderation queue
- * Media admins → auto-approved
- */
 app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (req, res) => {
   try {
     const { id } = req.params;
     const { media_type, youtube_url, caption } = req.body;
     const user = req.user;
 
-    // Validate media_type
     if (!['image', 'video', 'youtube'].includes(media_type)) {
       return res.status(400).json({ error: 'Invalid media_type' });
     }
 
-    // Check if multi_media is enabled
     const settingResult = await pool.query(
       "SELECT value FROM admin_settings WHERE key = 'multi_media_enabled'"
     );
@@ -1234,7 +1129,6 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
     let youtubeUrlValue = null;
 
     if (media_type === 'youtube') {
-      // Validate YouTube URL
       if (!youtube_url) {
         return res.status(400).json({ error: 'YouTube URL required' });
       }
@@ -1244,12 +1138,10 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
       }
       youtubeUrlValue = youtube_url;
     } else {
-      // Image or video upload
       if (!req.file) {
         return res.status(400).json({ error: 'File required' });
       }
 
-      // Video size validation
       if (media_type === 'video') {
         const maxSizeMB = 10;
         const maxSizeBytes = maxSizeMB * 1024 * 1024;
@@ -1262,14 +1154,12 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
 
       // Fix: Sanitize filename to prevent path traversal (Gatehouse finding)
       const sanitizedFilename = req.file.originalname
-        .replace(/[^a-zA-Z0-9._-]/g, '_') // Replace unsafe chars with underscore
-        .replace(/^\.+/, '') // Remove leading dots
-        .substring(0, 255); // Limit length
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/^\.+/, '')
+        .substring(0, 255);
 
-      // Upload to image server
       let uploadResult;
       if (media_type === 'image') {
-        // uploadImage(imageBuffer, poiId, role, filename, mimeType, options)
         uploadResult = await imageServerClient.uploadImage(
           req.file.buffer,
           parseInt(id),
@@ -1299,9 +1189,8 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
     // (Admin panel uploads can still bypass queue)
     const moderationStatus = 'pending';
     const moderatedAt = null;
-    const moderatedBy = null; // Set during approval, not upload
+    const moderatedBy = null;
 
-    // Create poi_media record
     const insertResult = await pool.query(`
       INSERT INTO poi_media (
         poi_id,
@@ -1331,10 +1220,8 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
 
     const mediaId = insertResult.rows[0].id;
 
-    // All uploads go to moderation queue
     const message = 'Media submitted for review';
 
-    // Invalidate mosaic cache for this POI (new media uploaded)
     invalidateMosaicCache(id);
 
     res.json({
@@ -1349,16 +1236,11 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
   }
 });
 
-/**
- * DELETE /api/pois/:poiId/media/:mediaId
- * Delete media (only allowed for uploader or admin)
- */
 app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) => {
   try {
     const { poiId, mediaId } = req.params;
     const user = req.user;
 
-    // Check if media exists and get ownership info
     const mediaResult = await pool.query(
       'SELECT submitted_by, image_server_asset_id FROM poi_media WHERE id = $1 AND poi_id = $2',
       [mediaId, poiId]
@@ -1370,7 +1252,6 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
 
     const media = mediaResult.rows[0];
 
-    // Check permission: user must be the uploader or an admin
     const isOwner = media.submitted_by === user.id;
     const isAdmin = user.role === 'admin' || user.role === 'media_admin';
 
@@ -1378,13 +1259,10 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
       return res.status(403).json({ error: 'You can only delete your own media' });
     }
 
-    // Transaction: delete media and update POI flag atomically
     await pool.query('BEGIN');
 
-    // Delete from database
     await pool.query('DELETE FROM poi_media WHERE id = $1', [mediaId]);
 
-    // Update POI's has_primary_image flag based on remaining media
     const remainingPrimary = await pool.query(
       `SELECT id FROM poi_media
        WHERE poi_id = $1
@@ -1401,9 +1279,7 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
 
     await pool.query('COMMIT');
 
-    // Delete from image server (if it's an image/video, not YouTube)
-    // NOTE: Eventual consistency - DB transaction already committed
-    // If image server delete fails, orphaned assets logged for cleanup (see #186)
+    // DB transaction already committed; image-server delete failure leaves an orphaned asset (see #186)
     let imageServerDeleted = true;
     if (media.image_server_asset_id) {
       try {
@@ -1415,10 +1291,8 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
       }
     }
 
-    // Invalidate mosaic cache
     invalidateMosaicCache(poiId);
 
-    // Return honest status about partial success
     if (!imageServerDeleted) {
       return res.status(202).json({
         success: true,
@@ -1435,22 +1309,16 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
   }
 });
 
-/**
- * PATCH /api/pois/:poiId/media/:mediaId/set-primary
- * Set media as primary (admins only)
- */
 app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async (req, res) => {
   try {
     const { poiId, mediaId } = req.params;
     const user = req.user;
 
-    // Check admin permission
     const isAdmin = user.role === 'admin' || user.role === 'media_admin';
     if (!isAdmin) {
       return res.status(403).json({ error: 'Only admins can set primary images' });
     }
 
-    // Check if media exists and is published
     const mediaResult = await pool.query(
       'SELECT id, role, moderation_status FROM poi_media WHERE id = $1 AND poi_id = $2',
       [mediaId, poiId]
@@ -1462,20 +1330,16 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
 
     const media = mediaResult.rows[0];
 
-    // Only published/auto-approved media can be primary
     if (!['published', 'auto_approved'].includes(media.moderation_status)) {
       return res.status(400).json({ error: 'Only approved media can be set as primary' });
     }
 
-    // Already primary
     if (media.role === 'primary') {
       return res.json({ success: true, message: 'Already primary' });
     }
 
-    // Transaction: demote old primary to gallery, promote new to primary
     await pool.query('BEGIN');
 
-    // Demote old primary to gallery
     await pool.query(
       `UPDATE poi_media SET role = 'gallery'
        WHERE poi_id = $1 AND role = 'primary'
@@ -1483,13 +1347,11 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
       [poiId]
     );
 
-    // Promote new media to primary
     await pool.query(
       `UPDATE poi_media SET role = 'primary' WHERE id = $1`,
       [mediaId]
     );
 
-    // Update POI's has_primary_image flag
     await pool.query(
       'UPDATE pois SET has_primary_image = true WHERE id = $1',
       [poiId]
@@ -1497,7 +1359,6 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
 
     await pool.query('COMMIT');
 
-    // Invalidate mosaic cache
     invalidateMosaicCache(poiId);
 
     res.json({ success: true, message: 'Primary image updated' });
@@ -1508,14 +1369,10 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
   }
 });
 
-/**
- * GET /api/assets/:assetId/thumbnail
- * Proxy thumbnail from image server
- */
 app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) => {
   try {
     const { assetId } = req.params;
-    const size = req.query.size; // small, medium, large — passed through to image server
+    const size = req.query.size;
     const sizeParam = size && ['small', 'medium', 'large'].includes(size) ? `?size=${size}` : '';
 
     // Fix: Validate assetId format to prevent SSRF (Gatehouse finding)
@@ -1524,7 +1381,6 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
     }
 
     if (!imageServerClient.initialized) {
-      // Development fallback: proxy from production when IMAGE_SERVER_URL not configured
       if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
         try {
           const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/thumbnail${sizeParam}`;
@@ -1545,7 +1401,7 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
           res.setHeader('Cache-Control', 'public, max-age=604800');
           res.setHeader('Access-Control-Allow-Origin', '*');
 
-          // Stream response to avoid memory exhaustion (DoS prevention)
+          // Stream to avoid loading full payload into memory (DoS prevention)
           return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
           console.error(`[Asset Thumbnail] Production fallback failed for asset ${assetId}:`, fallbackError.message);
@@ -1557,8 +1413,7 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
 
     const thumbnailFetch = await imageServerClient.fetchThumbnailData(assetId, size);
     if (!thumbnailFetch.success) {
-      // Fix: Map upstream errors correctly (Gemini review - proxy error handling)
-      // 404 = asset doesn't exist, 502/503 = image server down
+      // Fix: Map upstream errors correctly — 404 = missing asset, 5xx = service down (Gemini review)
       const statusCode = thumbnailFetch.statusCode || 500;
       const message = statusCode === 404 ? 'Asset not found' :
                       statusCode >= 500 ? 'Image service error' :
@@ -1576,10 +1431,6 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
   }
 });
 
-/**
- * GET /api/assets/:assetId/original
- * Proxy original image/video from image server
- */
 app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => {
   try {
     const { assetId } = req.params;
@@ -1590,7 +1441,6 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
     }
 
     if (!imageServerClient.initialized) {
-      // Development fallback: proxy from production when IMAGE_SERVER_URL not configured
       if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
         try {
           const productionUrl = `https://rootsofthevalley.org/api/assets/${assetId}/original`;
@@ -1642,13 +1492,10 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
   }
 });
 
-/**
- * Helper: Extract YouTube video ID from URL
- */
 function extractYouTubeId(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-    /^([a-zA-Z0-9_-]{11})$/ // Direct video ID
+    /^([a-zA-Z0-9_-]{11})$/
   ];
 
   for (const pattern of patterns) {
@@ -1661,12 +1508,8 @@ function extractYouTubeId(url) {
   return null;
 }
 
-// End of Multi-Media API Endpoints
-// ============================================================
-
 app.get('/api/filters', async (req, res) => {
   try {
-    // Get owners from organizations (virtual POIs that are used as owners)
     const owners = await pool.query(`
       SELECT DISTINCT o.id, o.name
       FROM pois o
@@ -1680,9 +1523,9 @@ app.get('/api/filters', async (req, res) => {
 
     res.json({
       owners: owners.rows.map(r => r.name),
-      ownerOrganizations: owners.rows, // Include id and name for new UI
-      eras: eras.rows.map(r => r.name), // Keep backward compatibility
-      erasList: eras.rows, // Include id and name for new UI
+      ownerOrganizations: owners.rows,
+      eras: eras.rows.map(r => r.name),
+      erasList: eras.rows,
       surfaces: surfaces.rows.map(r => r.surface)
     });
   } catch (error) {
@@ -1691,7 +1534,6 @@ app.get('/api/filters', async (req, res) => {
   }
 });
 
-// Get all organizations that can be used as property owners
 app.get('/api/owner-organizations', async (req, res) => {
   try {
     const organizationsQuery = await pool.query(`
@@ -1708,7 +1550,6 @@ app.get('/api/owner-organizations', async (req, res) => {
   }
 });
 
-// POI Associations endpoints
 app.get('/api/pois/:id/associations', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1732,7 +1573,6 @@ app.get('/api/pois/:id/associations', async (req, res) => {
   }
 });
 
-// Get all associations (for frontend state management)
 app.get('/api/associations', async (req, res) => {
   try {
     const associationsQuery = await pool.query(`
@@ -1752,7 +1592,6 @@ app.get('/api/associations', async (req, res) => {
   }
 });
 
-// Get virtual POIs that have associated physical POIs within viewport bounds
 app.get('/api/pois/virtual-in-viewport', async (req, res) => {
   try {
     const { bounds } = req.query;
@@ -1767,7 +1606,6 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
       return res.status(400).json({ error: 'Invalid bounds format' });
     }
 
-    // Find virtual POIs that have at least one associated physical POI within bounds
     const virtualPoisQuery = await pool.query(`
       SELECT DISTINCT vp.id, vp.name, vp.poi_roles, vp.property_owner,
              vp.brief_description, vp.era_id, e.name as era_name, vp.era, vp.historical_description,
@@ -1796,7 +1634,6 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
   }
 });
 
-// Legacy API endpoints for backward compatibility during transition
 app.get('/api/destinations', async (req, res) => {
   try {
     const destinationsQuery = await pool.query(`
@@ -1846,7 +1683,6 @@ app.get('/api/destinations/:id', async (req, res) => {
   }
 });
 
-// Legacy linear-features endpoints for backward compatibility
 app.get('/api/linear-features', async (req, res) => {
   try {
     const linearFeaturesQuery = await pool.query(`
@@ -1903,7 +1739,6 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Public theme configuration endpoint (no auth required)
 app.get('/api/theme-config', async (req, res) => {
   try {
     const themeConfigRow = await pool.query(
@@ -1915,7 +1750,6 @@ app.get('/api/theme-config', async (req, res) => {
         ? JSON.parse(themeConfigRow.rows[0].value)
         : themeConfigRow.rows[0].value;
 
-      // Generate proxy URLs for theme videos via image server
       const themes = config.themes || [];
       const videoUrls = {};
 
@@ -1926,7 +1760,6 @@ app.get('/api/theme-config', async (req, res) => {
           }
         }
 
-        // Also add night video if night mode is enabled
         if (config.nightMode?.enabled) {
           videoUrls['night'] = `/api/theme-video/night`;
         }
@@ -1937,7 +1770,6 @@ app.get('/api/theme-config', async (req, res) => {
         video_urls: videoUrls
       });
     } else {
-      // Return empty config if not set
       res.json({ seasonal_themes: null, video_urls: {} });
     }
   } catch (error) {
@@ -1946,12 +1778,11 @@ app.get('/api/theme-config', async (req, res) => {
   }
 });
 
-// Theme video proxy endpoint - serves videos from image server
 app.get('/api/theme-video/:theme', async (req, res) => {
   try {
     const { theme } = req.params;
 
-    // Validate theme name (prevent path traversal)
+    // Whitelist theme to prevent path traversal
     const validThemes = ['christmas', 'newyears', 'halloween', 'winter', 'spring', 'summer', 'fall', 'night'];
     if (!validThemes.includes(theme)) {
       return res.status(404).json({ error: 'Theme not found' });
@@ -1961,7 +1792,6 @@ app.get('/api/theme-video/:theme', async (req, res) => {
       return res.status(404).json({ error: 'Theme video not available' });
     }
 
-    // Fetch video data from image server
     const themeVideoFetch = await imageServerClient.fetchThemeVideoData(theme);
     if (!themeVideoFetch.success) {
       return res.status(404).json({ error: 'Theme video not available' });
@@ -1977,15 +1807,13 @@ app.get('/api/theme-video/:theme', async (req, res) => {
   }
 });
 
-// Public news and events endpoints
 app.get('/api/pois/:id/tab-counts', async (req, res) => {
   try {
     const id = parseInt(req.params.id, 10);
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
-    // Whitelist tz to IANA-style identifiers (Region/City, optionally Region/City/Subcity)
-    // to avoid feeding arbitrary strings to Postgres AT TIME ZONE (PR #368 review).
+    // Whitelist tz to IANA Region/City format — Postgres AT TIME ZONE accepts arbitrary input (PR #368 review)
     const rawTz = req.query.tz;
     const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
       ? rawTz
@@ -2000,8 +1828,7 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
            AND e.moderation_status IN ('published', 'auto_approved')
            AND (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date) AS events_count
     `, [id, tz]);
-    // The subquery-only SELECT always returns exactly one row, but guard anyway
-    // so a future refactor with a FROM clause doesn't silently break (PR #368 review).
+    // Guard against future refactor adding a FROM clause that could return 0 rows (PR #368 review)
     const row = tabCountsQuery.rows[0] || { news_count: 0, events_count: 0 };
     res.json({
       news_count: parseInt(row.news_count, 10),
@@ -2065,7 +1892,6 @@ app.get('/api/pois/:id/events', async (req, res) => {
   }
 });
 
-// Public permalink API — single news/event item by POI slug + title slug
 app.get('/api/pois/:poiSlug/news/:titleSlug', async (req, res) => {
   try {
     const item = await findItemBySlugs('news', req.params.poiSlug, req.params.titleSlug);
@@ -2090,7 +1916,6 @@ app.get('/api/pois/:poiSlug/events/:titleSlug', async (req, res) => {
   }
 });
 
-// Get trail status for a specific trail (public)
 app.get('/api/pois/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2123,7 +1948,6 @@ app.get('/api/pois/:id/status', async (req, res) => {
   }
 });
 
-// Get all MTB trails with optional status (public)
 app.get('/api/trails/mtb', async (req, res) => {
   try {
     const includeStatus = req.query.includeStatus === 'true';
@@ -2143,7 +1967,6 @@ app.get('/api/trails/mtb', async (req, res) => {
     const trailsQuery = await pool.query(query);
     const trails = trailsQuery.rows;
 
-    // Optionally fetch latest status for each trail
     if (includeStatus) {
       for (const trail of trails) {
         const status = await getLatestTrailStatus(pool, trail.id);
@@ -2166,7 +1989,6 @@ app.get('/api/trails/mtb', async (req, res) => {
   }
 });
 
-// Get results sub-tab configuration (public, for ResultsTab.jsx)
 app.get('/api/results-subtabs', async (req, res) => {
   const DEFAULT_SUBTABS = [
     { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
@@ -2188,7 +2010,6 @@ app.get('/api/results-subtabs', async (req, res) => {
   }
 });
 
-// Get all MTB trails with status data for Status Tab (public)
 app.get('/api/trail-status/mtb-trails', async (req, res) => {
   try {
     const trailStatusQuery = await pool.query(`
@@ -2228,7 +2049,6 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
   }
 });
 
-// All recent news across the park (public)
 app.get('/api/news/recent', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 500;
@@ -2258,10 +2078,8 @@ app.get('/api/news/recent', async (req, res) => {
   }
 });
 
-// All upcoming events across the park (public)
 app.get('/api/events/upcoming', async (req, res) => {
   try {
-    // Use client timezone for "today" calculation (defaults to America/New_York)
     const tz = req.query.tz || 'America/New_York';
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
     const adminColumns = isAdmin
@@ -2288,7 +2106,6 @@ app.get('/api/events/upcoming', async (req, res) => {
   }
 });
 
-// All past events across the park (public)
 app.get('/api/events/past', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
@@ -2319,7 +2136,6 @@ app.get('/api/events/past', async (req, res) => {
   }
 });
 
-// Serve generated icons from database (public endpoint)
 app.get('/api/icons/:name.svg', async (req, res) => {
   try {
     const iconName = req.params.name;
@@ -2341,8 +2157,7 @@ app.get('/api/icons/:name.svg', async (req, res) => {
   }
 });
 
-// Social share endpoints - serve HTML with OpenGraph meta tags for social media
-// These endpoints are scraped by social platforms to get preview info
+// /share/* endpoints serve OG/Twitter meta-tag HTML for social media crawlers (Slack/FB/Twitter previews)
 app.get('/share/destination/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -2361,8 +2176,7 @@ app.get('/share/destination/:id', async (req, res) => {
     const imageUrl = `${baseUrl}/api/pois/${poi.id}/thumbnail`;
     const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
 
-    // Generate HTML with OpenGraph meta tags
-    // Note: No instant redirect - let crawlers read the tags, users click to continue
+    // Delayed (not instant) redirect — crawlers must have time to read meta tags
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2427,8 +2241,7 @@ app.get('/share/linear-feature/:id', async (req, res) => {
     const imageUrl = `${baseUrl}/api/pois/${feature.id}/thumbnail`;
     const description = feature.brief_description || `Explore the ${feature.name} at Cuyahoga Valley National Park`;
 
-    // Generate HTML with OpenGraph meta tags
-    // Note: No instant redirect - let crawlers read the tags, users click to continue
+    // Delayed (not instant) redirect — crawlers must have time to read meta tags
     const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2475,10 +2288,9 @@ app.get('/share/linear-feature/:id', async (req, res) => {
   }
 });
 
-// Serve static frontend files in production
 const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/dist');
 
-// Helper function to generate slug from POI name (matches frontend logic)
+// Must match the frontend slugify logic (frontend/src/utils/slug.js) for permalink lookups to work
 function generateSlug(name) {
   if (!name) return '';
   return name
@@ -2489,14 +2301,12 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');
 }
 
-// Escape HTML special characters for safe injection into meta tags
 function escapeHtml(str) {
   if (!str) return '';
   return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
-// Shared lookup: find a news or event item by POI slug + title slug
 async function findItemBySlugs(type, poiSlug, titleSlug) {
   const poisQuery = await pool.query(
     `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
@@ -2538,21 +2348,18 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   return item ? { ...item, poi_slug: poiSlug, _poi: poi } : null;
 }
 
-// Middleware to inject OpenGraph tags for POI deep links (MUST be before express.static)
-// This allows social media crawlers to get proper previews when users share ?poi= URLs
+// OG-tag injection for ?poi= deep links. MUST be mounted before express.static
+// so it can intercept "/" before the static index.html is served.
 app.use(async (req, res, next) => {
-  // Only handle root path with ?poi= parameter
   if (req.path === '/' && req.query.poi) {
     const poiSlug = req.query.poi;
     try {
-      // Look up POI by matching slug against name
       const poisQuery = await pool.query(`
         SELECT id, name, poi_roles, brief_description
         FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
       `);
 
-      // Find matching POI by slug
       const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
 
       if (poi) {
@@ -2561,17 +2368,14 @@ app.use(async (req, res, next) => {
         const imageUrl = `${baseUrl}/api/pois/${poi.id}/thumbnail`;
         const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
 
-        // Read index.html and inject POI-specific OG tags
         const indexPath = path.join(staticPath, 'index.html');
         let html = await fs.readFile(indexPath, 'utf-8');
 
-        // Replace title
         html = html.replace(
           /<title>.*?<\/title>/,
           `<title>${poi.name} | Roots of The Valley</title>`
         );
 
-        // Replace OpenGraph tags
         html = html.replace(
           /<meta property="og:title" content="[^"]*" \/>/,
           `<meta property="og:title" content="${poi.name} | Roots of The Valley" />`
@@ -2585,13 +2389,11 @@ app.use(async (req, res, next) => {
           `<meta property="og:url" content="${appUrl}" />`
         );
 
-        // Add og:image tag (insert after og:url)
         html = html.replace(
           /(<meta property="og:url" content="[^"]*" \/>)/,
           `$1\n    <meta property="og:image" content="${imageUrl}" />\n    <meta property="og:image:type" content="image/jpeg" />\n    <meta property="og:image:width" content="1200" />\n    <meta property="og:image:height" content="630" />`
         );
 
-        // Replace Twitter tags
         html = html.replace(
           /<meta name="twitter:title" content="[^"]*" \/>/,
           `<meta name="twitter:title" content="${poi.name} | Roots of The Valley" />`
@@ -2600,13 +2402,11 @@ app.use(async (req, res, next) => {
           /<meta name="twitter:description" content="[^"]*" \/>/,
           `<meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />`
         );
-        // Add twitter:image tag (insert after twitter:description)
         html = html.replace(
           /(<meta name="twitter:description" content="[^"]*" \/>)/,
           `$1\n    <meta name="twitter:image" content="${imageUrl}" />`
         );
 
-        // Replace meta description
         html = html.replace(
           /<meta name="description" content="[^"]*" \/>/,
           `<meta name="description" content="${description.replace(/"/g, '&quot;')}" />`
@@ -2617,14 +2417,13 @@ app.use(async (req, res, next) => {
       }
     } catch (error) {
       console.error('Error injecting OG tags:', error);
-      // Fall through to default handling
     }
   }
   next();
 });
 
-// Middleware to inject OpenGraph tags for news/event permalink URLs
-// Matches /:poiSlug/news/:titleSlug and /:poiSlug/events/:titleSlug
+// OG-tag injection for /:poiSlug/news/:titleSlug and /:poiSlug/events/:titleSlug permalinks.
+// MUST be mounted before express.static for the same reason as the ?poi= middleware above.
 app.use(async (req, res, next) => {
   const newsMatch = req.path.match(/^\/([^/]+)\/news\/([^/]+)$/);
   const eventMatch = req.path.match(/^\/([^/]+)\/events\/([^/]+)$/);
@@ -2668,27 +2467,21 @@ app.use(async (req, res, next) => {
 // Serve static files (after OG middlewares)
 app.use(express.static(staticPath));
 
-// SPA fallback - serve index.html for non-API routes
 app.get('*', (req, res) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/auth') && !req.path.startsWith('/share')) {
     res.sendFile(path.join(staticPath, 'index.html'));
   }
 });
 
-// Start server
 const PORT = process.env.PORT || 3001;
 let activeSmtpServer = null;
 
-/**
- * Set up AI search provider defaults
- */
 async function setupAiSearchDefaults() {
   try {
-    // Set default AI search config if not already set
     const defaults = [
       { key: 'ai_search_primary', value: 'gemini' },
       { key: 'ai_search_fallback', value: 'none' },
-      { key: 'ai_search_primary_limit', value: '0' } // 0 = unlimited
+      { key: 'ai_search_primary_limit', value: '0' }
     ];
 
     for (const { key, value } of defaults) {
@@ -2699,7 +2492,6 @@ async function setupAiSearchDefaults() {
       `, [key, value]);
     }
 
-    // Initialize seasonal themes configuration
     const themeCheck = await pool.query(
       "SELECT value FROM admin_settings WHERE key = 'seasonal_themes'"
     );
@@ -2724,7 +2516,6 @@ async function setupAiSearchDefaults() {
       );
     }
 
-    // Ensure last_news_collection column exists for tracking
     await pool.query(`
       ALTER TABLE pois
       ADD COLUMN IF NOT EXISTS last_news_collection TIMESTAMP
@@ -2740,8 +2531,7 @@ async function start() {
   await initDatabase();
   initJobLogger(pool);
 
-  // Normalize any non-canonical content types (e.g., from seed data or legacy AI output).
-  // Checks first so it's a no-op on clean databases — no UPDATE queries run unless needed.
+  // Pre-check first so this is a no-op on clean databases (no UPDATE queries run unless needed)
   try {
     const CANONICAL_EVENT_TYPES = ['hike', 'race', 'concert', 'festival', 'program', 'volunteer', 'arts', 'community', 'alert'];
     const CANONICAL_NEWS_TYPES = ['general', 'alert', 'wildlife', 'infrastructure', 'community'];
@@ -2775,31 +2565,26 @@ async function start() {
 
   imageServerClient.initialize();
 
-  // Ensure news job checkpoint columns exist for resumability
   await ensureNewsJobCheckpointColumns(pool);
 
-  // Set up AI search provider defaults
   await setupAiSearchDefaults();
 
-  // Initialize job scheduler for news collection
   const connectionString = `postgresql://${process.env.PGUSER || 'rotv'}:${process.env.PGPASSWORD || 'rotv'}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'rotv'}`;
 
   try {
     await initJobScheduler(connectionString);
 
-    // Unschedule legacy unified news-collection (replaced by tiered jobs)
     try {
       await unscheduleJob('news-collection');
       console.log('Legacy news-collection schedule removed');
     } catch (e) {
-      // Ignore if already removed
+      // Already removed — harmless
     }
 
-    // Register and schedule tiered news collection (daily/weekly/monthly)
     for (const { tier, cron } of [
-      { tier: 'daily',   cron: '0 6 * * *' },     // Every day at 6 AM Eastern
-      { tier: 'weekly',  cron: '0 5 * * 4' },     // Thursday at 5 AM Eastern
-      { tier: 'monthly', cron: '0 1 1 * *' },     // 1st of month at 1 AM Eastern
+      { tier: 'daily',   cron: '0 6 * * *' },
+      { tier: 'weekly',  cron: '0 5 * * 4' },
+      { tier: 'monthly', cron: '0 1 1 * *' },
     ]) {
       await registerTierNewsCollectionHandler(tier, withJitter(async () => {
         console.log(`Running scheduled ${tier} news collection...`);
@@ -2814,13 +2599,11 @@ async function start() {
       await scheduleTierNewsCollection(tier, cron);
     }
 
-    // Register batch news collection handler (for admin-triggered jobs via pg-boss)
     await registerBatchNewsHandler(async (pgBossJobId, jobData) => {
       console.log(`[pg-boss] Processing batch news job: ${pgBossJobId}`);
       await processNewsCollectionJob(pool, null, pgBossJobId, jobData);
     });
 
-    // Register scheduled trail status collection handler
     await registerTrailStatusHandler(withJitter(async () => {
       console.log('Running scheduled trail status collection for all MTB trails...');
       const { runTrailStatusCollection } = await import('./services/trailStatusService.js');
@@ -2835,20 +2618,17 @@ async function start() {
       }
     }, 'trail-status'));
 
-    // Register batch trail status collection handler
     await registerBatchTrailStatusHandler(async (jobId, poiIds) => {
       console.log(`[pg-boss] Processing batch trail status job: ${jobId}`);
       await processTrailStatusCollectionJob(pool, jobId, poiIds);
     });
 
-    // Schedule trail status collection every 30 minutes (Gemini Flash is essentially free)
+    // Aggressive 30-min cadence is fine because Gemini Flash cost is negligible
     const trailStatusInterval = '*/30 * * * *';
     await scheduleTrailStatusCollection(trailStatusInterval);
 
-    // Register moderation sweep handler (processes all unprocessed items every 15 min)
     await registerModerationSweepHandler(withJitter(async () => {
       await processPendingItems(pool);
-      // Retention: purge job logs older than 30 days
       try {
         const deleted = await pool.query(`DELETE FROM job_logs WHERE created_at < NOW() - INTERVAL '30 days'`);
         if (deleted.rowCount > 0) {
@@ -2859,24 +2639,18 @@ async function start() {
       }
     }, 'moderation-sweep'));
 
-    // Schedule moderation sweep every 15 minutes — relevance voting + promotion
     await scheduleModerationSweep('*/15 * * * *');
 
-    // Register newsletter email processing handler
     await registerNewsletterHandler(async (emailId) => {
       await processNewsletterById(pool, emailId);
     });
 
-    // Register weekly digest handler
     await registerDigestHandler(async (pgBossJobId, _digestPayload) => {
       await sendWeeklyDigest(pool, pgBossJobId);
     });
 
-    // Schedule digest for Fridays at 8 AM EST
     await scheduleDigest('0 8 * * 5');
 
-    // Register image backup handler (nightly backup of image server to Drive)
-    // Shared helper: get authenticated Drive service from admin OAuth credentials
     const getAdminDriveService = async () => {
       const { createDriveServiceWithRefresh } = await import('./services/driveImageService.js');
       const adminResult = await pool.query(
@@ -2903,10 +2677,8 @@ async function start() {
       console.log(`Image backup completed: ${imageBackupResult.uploaded} uploaded, ${imageBackupResult.skipped} skipped, ${imageBackupResult.failed} failed`);
     }, 'image-backup'));
 
-    // Schedule nightly image backup at 2 AM Eastern
     await scheduleImageBackup('0 2 * * *');
 
-    // Register database backup handler (nightly pg_dump to Drive)
     await registerDatabaseBackupHandler(withJitter(async () => {
       console.log('Running scheduled database backup...');
       const { triggerBackup } = await import('./services/backupService.js');
@@ -2915,18 +2687,14 @@ async function start() {
       console.log(`Database backup completed: ${dbBackupResult.filename} (${dbBackupResult.driveFileId})`);
     }, 'database-backup'));
 
-    // Schedule nightly database backup at 3 AM Eastern
     await scheduleDatabaseBackup('0 3 * * *');
 
-    // Make boss available to routes
     app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));
 
-    // Resume any incomplete jobs from before restart
     const incompleteJobs = await findIncompleteJobs(pool);
     if (incompleteJobs.length > 0) {
       console.log(`[pg-boss] Found ${incompleteJobs.length} incomplete job(s) to resume`);
       for (const job of incompleteJobs) {
-        // Parse POI IDs if needed
         let poiIds = job.poi_ids;
         if (typeof poiIds === 'string') {
           poiIds = JSON.parse(poiIds);
@@ -2938,14 +2706,12 @@ async function start() {
       }
     }
   } catch (error) {
+    // Scheduler failure is non-fatal — admin route can still trigger jobs manually
     console.error('Failed to initialize job scheduler:', error.message);
-    // Continue without scheduler - manual triggers still work via admin route
   }
 
-  // Start SMTP server for inbound newsletter emails
   activeSmtpServer = startSmtpServer(pool);
 
-  // Start MCP admin server (only if token is configured)
   if (process.env.MCP_ADMIN_TOKEN) {
     startMcpServer(pool, app.get('boss'), parseInt(process.env.MCP_PORT || '3001'));
   }
@@ -2955,7 +2721,6 @@ async function start() {
   });
 }
 
-// Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
   if (activeSmtpServer) activeSmtpServer.close();

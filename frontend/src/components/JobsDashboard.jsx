@@ -33,7 +33,6 @@ const AI_STATS_ENDPOINTS = {
   trail_status: '/api/admin/trail-status/ai-stats'
 };
 
-// DB stores TIMESTAMP (no tz) — treat bare strings as UTC by appending Z
 function toUtcDate(val) {
   if (!val) return null;
   const s = String(val);
@@ -101,7 +100,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const [expandedRun, setExpandedRun] = useState(null);
   const [runLogs, setRunLogs] = useState([]);
-  const runLogsOffsetRef = useRef(0); // Tracks how many log entries we've fetched — never re-fetches old entries
+  const runLogsOffsetRef = useRef(0);
   const [logDetailsExpanded, setLogDetailsExpanded] = useState(new Set());
   const [expandedPoiGroups, setExpandedPoiGroups] = useState(new Set());
   const autoExpandedPoisRef = useRef(new Set());
@@ -111,12 +110,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const [aiStats, setAiStats] = useState({});
   const [cancellingJob, setCancellingJob] = useState(null);
 
-  // Track recently-completed jobs for dismiss UX
   const [completedJobs, setCompletedJobs] = useState({});
 
   const [loading, setLoading] = useState(true);
 
-  // Track when to auto-expand the newest run after clicking "Run Now"
   const [autoExpandNewestRun, setAutoExpandNewestRun] = useState(null);
 
   const fetchScheduledJobs = useCallback(async () => {
@@ -151,8 +148,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const fetchRunLogs = useCallback(async (jobType, runId, poiId) => {
     try {
-      // Initial load (offset=0): fetch up to 10000 entries to get everything at once.
-      // Subsequent polls: fetch only new entries since last offset.
       const isInitial = runLogsOffsetRef.current === 0;
       const params = new URLSearchParams({
         limit: isInitial ? '10000' : '200',
@@ -189,7 +184,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
             const runId = data.id || data.jobId;
             running[registryId] = { ...data, runId };
 
-            // Fetch active slots
             const slotsEndpoint = SLOTS_ENDPOINTS[registryId];
             if (slotsEndpoint && runId) {
               try {
@@ -199,29 +193,25 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                   const slotsData = await slotsRes.json();
                   if (slotsData.displaySlots) slots[registryId] = slotsData.displaySlots;
                 }
-              } catch { /* ignore */ }
+              } catch { void 0; }
             }
 
-            // Fetch AI stats
             const statsEndpoint = AI_STATS_ENDPOINTS[registryId];
             if (statsEndpoint) {
               try {
                 const statsRes = await fetch(`${API_BASE}${statsEndpoint}`, { credentials: 'include' });
                 if (statsRes.ok) stats[registryId] = await statsRes.json();
-              } catch { /* ignore */ }
+              } catch { void 0; }
             }
           }
         }
-      } catch { /* ignore */ }
+      } catch { void 0; }
     }
 
-    // Detect jobs that just completed (were running, now aren't)
     setRunningJobs(prev => {
       for (const id of Object.keys(prev)) {
         if (!running[id]) {
-          // Job just finished — mark as completed for dismiss UX
           setCompletedJobs(c => ({ ...c, [id]: prev[id] }));
-          // Refresh history for this job
           const job = scheduledJobs.find(j => j.id === id);
           if (job) {
             setJobHistory(h => ({ ...h, [id]: undefined }));
@@ -240,7 +230,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     Promise.all([fetchScheduledJobs(), checkRunningJobs()]).then(() => setLoading(false));
   }, [fetchScheduledJobs, checkRunningJobs]);
 
-  // Auto-expand a specific job card when navigated from another tab
   useEffect(() => {
     if (expandTarget && !scheduledLoading) {
       setExpandedScheduled(expandTarget);
@@ -249,7 +238,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, [expandTarget, scheduledLoading, onExpandTargetConsumed]);
 
-  // Poll faster when jobs are running
   useEffect(() => {
     const hasRunning = Object.keys(runningJobs).length > 0;
     const interval = setInterval(() => {
@@ -259,7 +247,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     return () => clearInterval(interval);
   }, [fetchScheduledJobs, checkRunningJobs, runningJobs]);
 
-  // Also refresh scheduled jobs periodically even when polling running jobs
   useEffect(() => {
     if (Object.keys(runningJobs).length === 0) return;
     const interval = setInterval(fetchScheduledJobs, 15000);
@@ -281,14 +268,11 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, [expandedRun, fetchRunLogs]);
 
-  // Poll logs when a run is expanded and its job is running or recently finished
   useEffect(() => {
     if (!expandedRun) return;
 
-    // Single-POI polling is handled by a separate effect below (to avoid dependency churn)
     if (expandedRun.jobType === 'news_single' || expandedRun.jobType === 'events_single') return;
 
-    // For batch jobs, find the job and check if running
     const job = scheduledJobs.find(j =>
       j.historyTypes && j.historyTypes.includes(expandedRun.jobType)
     );
@@ -298,7 +282,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     const isRunning = !!runningJobs[job.id];
 
     if (isRunning) {
-      // Poll logs every 2 seconds while running; refresh history every 10s so status updates queued→running
       let tick = 0;
       const interval = setInterval(() => {
         fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
@@ -307,12 +290,9 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       return () => clearInterval(interval);
     }
 
-    // Job just finished — do a final fetch to catch in-flight completion logs
     fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
   }, [expandedRun, runningJobs, scheduledJobs, fetchRunLogs]);
 
-  // Separate polling effect for single-POI jobs — minimal dependencies to avoid teardown
-  // Only polls logs (append-only). Refreshes history once on completion.
   useEffect(() => {
     if (!expandedRun) return;
     if (expandedRun.jobType !== 'news_single' && expandedRun.jobType !== 'events_single') return;
@@ -322,17 +302,12 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     const interval = setInterval(async () => {
       await fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
       pollCount++;
-      // Stop after 2 minutes (60 polls at 2s)
       if (pollCount >= 60) clearInterval(interval);
     }, 2000);
-
-    // Check for completion by watching runLogs changes (separate from polling)
-    // This is handled by the effect below
 
     return () => clearInterval(interval);
   }, [expandedRun, fetchRunLogs]);
 
-  // Refresh history once when single-POI job completes (detected from logs)
   useEffect(() => {
     if (!expandedRun) return;
     if (expandedRun.jobType !== 'news_single' && expandedRun.jobType !== 'events_single') return;
@@ -342,8 +317,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, [expandedRun, runLogs]);
 
-  // Auto-expand the most recent POI in the log tree (so user sees live progress),
-  // but only once per POI — user can collapse it and it stays collapsed
   useEffect(() => {
     if (!runLogs || runLogs.length === 0) return;
     const poiLogs = runLogs.filter(l => l.poi_id);
@@ -355,28 +328,23 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, [runLogs]);
 
-  // Auto-expand newest run after clicking "Run Now"
   useEffect(() => {
     if (autoExpandNewestRun && jobHistory[autoExpandNewestRun]) {
       const runs = jobHistory[autoExpandNewestRun];
       if (runs && runs.length > 0) {
-        const newestRun = runs[0]; // Assuming sorted by created_at DESC
+        const newestRun = runs[0];
         setExpandedRun({ jobType: newestRun.job_type, runId: newestRun.id });
         setAutoExpandNewestRun(null);
       }
     }
   }, [jobHistory, autoExpandNewestRun]);
 
-  // Auto-expand job from URL parameters (for single-POI and batch redirects)
-  // Clears URL params after consuming to prevent re-firing on every jobHistory change
   useEffect(() => {
     if (urlJobId && urlJobType && !scheduledLoading) {
-      // For single-POI jobs, expand the News & Events card and the specific run
       if (urlJobType === 'news_single' || urlJobType === 'events_single') {
         setExpandedScheduled('news_daily');
         setExpandedRun({ jobType: urlJobType, runId: urlJobId, poiId: urlPoiId || urlJobId });
 
-        // Clear URL params so this effect doesn't re-fire
         setSearchParams({}, { replace: true });
 
         setTimeout(() => {
@@ -386,7 +354,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
           }
         }, 500);
       } else {
-        // For batch jobs, find the matching run in history
         const runs = Object.values(jobHistory).flat();
         const targetRun = runs.find(r =>
           String(r.id) === urlJobId && r.job_type === urlJobType
@@ -412,9 +379,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     if (expandedRun && `${expandedRun.jobType}-${String(expandedRun.runId)}` === key) {
       setExpandedRun(null); setRunLogs([]);
     } else {
-      // For single-POI jobs, the run's id in history is the runId (timestamp), but logs are queried by poi_id
-      // The history query returns poi_id count as items_total, so we can't get poi_id from there
-      // Instead, query logs by job_id (which is the runId) using the batch endpoint
       setExpandedRun({ jobType, runId: run.id }); setLogDetailsExpanded(new Set()); setExpandedPoiGroups(new Set()); autoExpandedPoisRef.current = new Set();
     }
   };
@@ -445,12 +409,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
         credentials: 'include', body: JSON.stringify({})
       });
       if (res.ok) {
-        // Auto-expand the card so user sees progress
         setExpandedScheduled(job.id);
         await fetchScheduledJobs();
         await checkRunningJobs();
         setJobHistory(prev => ({ ...prev, [job.id]: undefined }));
-        // Mark this job for auto-expanding its newest run
         setAutoExpandNewestRun(job.id);
       } else { const err = await res.json(); alert(err.error || 'Failed to trigger job'); }
     } catch (err) { alert('Failed to trigger job: ' + err.message); }
@@ -501,7 +463,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     );
   };
 
-  // Render the running job progress section (progress bar, counts, AI stats, slots, cancel)
   const renderRunningSection = (job) => {
     const runInfo = runningJobs[job.id];
     const completed = completedJobs[job.id];
@@ -513,7 +474,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     const slots = activeSlots[job.id];
     const stats = aiStats[job.id];
 
-    // Progress values
     const isNews = job.id.startsWith('news');
     const processed = isNews ? (info.pois_processed || 0) : (info.trails_processed || 0);
     const total = isNews ? (info.total_pois || 0) : (info.total_trails || 0);
@@ -542,7 +502,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
           )}
         </div>
 
-        {/* Progress bar */}
+
         {total > 0 && (
           <div className="progress-bar-wrapper" style={{ marginTop: '8px' }}>
             <div className="progress-bar-fill" style={{
@@ -554,7 +514,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
           </div>
         )}
 
-        {/* Count badges */}
+
         <div className="progress-counts" style={{ marginTop: '6px' }}>
           <div className="count-badge">
             <span className="count-icon">{isNews ? '\u{1F4CD}' : '\u{1F6B5}'}</span>
@@ -592,7 +552,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
           )}
         </div>
 
-        {/* Active Slots */}
+
         {slots && (
           <div className="active-slots-table" style={{ marginTop: '8px' }}>
             {slots.some(s => s !== null) && (
@@ -606,7 +566,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                     <div key={idx} className="slots-row empty-slot"><div>Waiting</div><div>--</div></div>
                   );
 
-                  // Map pipeline stages (from NEWS_EVENTS_ARCHITECTURE.md) to display labels
                   let statusLabel = '--';
                   if (slot.status === 'completed') {
                     statusLabel = '✓ Done';
@@ -615,19 +574,19 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                   } else if (slot.phase === 'initializing') {
                     statusLabel = 'Starting';
                   } else if (slot.phase === 'search') {
-                    statusLabel = 'Searching';        // Serper API
+                    statusLabel = 'Searching';
                   } else if (slot.phase === 'classify' || slot.phase === 'classifying_events' || slot.phase === 'classifying_news') {
-                    statusLabel = 'Classifying';      // Gemini page-type detection
+                    statusLabel = 'Classifying';
                   } else if (slot.phase === 'crawl') {
-                    statusLabel = 'Crawling';         // Following listing links
+                    statusLabel = 'Crawling';
                   } else if (slot.phase === 'render') {
-                    statusLabel = 'Rendering';        // Playwright → markdown
+                    statusLabel = 'Rendering';
                   } else if (slot.phase === 'dates') {
-                    statusLabel = 'Dates';            // chrono-node extraction
+                    statusLabel = 'Dates';
                   } else if (slot.phase === 'summarize') {
-                    statusLabel = 'Summarizing';      // Gemini item extraction
+                    statusLabel = 'Summarizing';
                   } else if (slot.phase === 'save') {
-                    statusLabel = 'Saving';           // PostgreSQL persist
+                    statusLabel = 'Saving';
                   } else if (slot.phase === 'processing_results') {
                     statusLabel = 'Processing';
                   } else if (slot.phase === 'complete') {
@@ -699,10 +658,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
                 {expandedScheduled === job.id && (
                   <div className="scheduled-job-detail">
-                    {/* Running/Completed progress */}
+
                     {showProgress && renderRunningSection(job)}
 
-                    {/* Schedule Editor */}
+
                     {job.currentSchedule && (
                       <div className="schedule-editor">
                         {editingSchedule === job.scheduleJobName ? (
@@ -721,7 +680,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                       </div>
                     )}
 
-                    {/* Run Now */}
+
                     {job.triggerEndpoint && !isRunning && (
                       <button className="action-btn primary" onClick={() => handleRunNow(job)} disabled={triggeringJob === job.id}
                         style={{ marginTop: '8px', padding: '4px 12px', fontSize: '0.85rem' }}>
@@ -729,7 +688,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
                       </button>
                     )}
 
-                    {/* Recent Runs */}
+
                     <div className="job-runs-section">
                       <div className="job-runs-header">Recent Runs</div>
                       {historyLoading ? (
@@ -813,7 +772,6 @@ function formatLogLine(entry) {
 }
 
 function PoiLogTree({ logs, expandedPoiGroups, onToggleGroup }) {
-  // Group logs by poi_id (null = job-level entries)
   const groups = new Map();
   const jobLevelLogs = [];
 
@@ -827,7 +785,6 @@ function PoiLogTree({ logs, expandedPoiGroups, onToggleGroup }) {
       }
       const group = groups.get(key);
       group.logs.push(entry);
-      // Last log with "saved" in the message becomes the summary
       if (entry.message && entry.message.includes('saved')) {
         group.summary = entry.message;
       }

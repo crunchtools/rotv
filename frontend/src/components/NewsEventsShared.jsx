@@ -1,11 +1,6 @@
-/**
- * Shared components and utilities for News & Events display
- * Used by NewsSettings, NewsEvents, ParkNews, and ParkEvents
- */
 import React from 'react';
 import ShareButton from './ShareButton';
 
-// Generate URL-friendly slug (must match backend generateSlug)
 function generateSlug(name) {
   if (!name) return '';
   return name
@@ -16,11 +11,6 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');
 }
 
-/**
- * Format a date string for display in US format (MM/DD/YYYY)
- * @param {string} dateString - ISO date string
- * @returns {string} - Formatted date string
- */
 export function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -32,11 +22,6 @@ export function formatDate(dateString) {
   });
 }
 
-/**
- * Format a date with weekday included in US format (Sat, MM/DD/YYYY)
- * @param {string} dateString - ISO date string
- * @returns {string} - Formatted date with weekday
- */
 export function formatDateWithWeekday(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -48,17 +33,9 @@ export function formatDateWithWeekday(dateString) {
   });
 }
 
-/**
- * Format a publication date for display in Eastern time.
- * Date-only values are stored as noon UTC so Eastern conversion never shifts the date.
- * Full UTC timestamps (e.g., from Facebook OG tags) display the correct local date.
- * @param {string} dateString - ISO timestamp or YYYY-MM-DD
- * @returns {string} - Formatted date (e.g., "Mar 15, 2025")
- */
 export function formatPublicationDate(dateString) {
   if (!dateString) return '';
   const str = String(dateString).trim();
-  // Full datetime: contains 'T' or a space after the date part (PostgreSQL format)
   const isFullTimestamp = str.includes('T') || /^\d{4}-\d{2}-\d{2} /.test(str);
   const date = isFullTimestamp ? new Date(str) : new Date(str + 'T12:00:00Z');
   if (isNaN(date.getTime())) return '';
@@ -67,11 +44,6 @@ export function formatPublicationDate(dateString) {
   });
 }
 
-/**
- * Format a date with time in US format (MM/DD/YYYY h:mm AM/PM)
- * @param {string} dateString - ISO date string
- * @returns {string} - Formatted date with time
- */
 export function formatDateTime(dateString) {
   if (!dateString) return 'N/A';
   return new Date(dateString).toLocaleString('en-US', {
@@ -84,9 +56,6 @@ export function formatDateTime(dateString) {
   });
 }
 
-/**
- * News type configuration
- */
 export const NEWS_TYPES = {
   general: { icon: 'N', label: 'General', color: '#6a1b9a' },
   alert: { icon: '!', label: 'Alert', color: '#c62828' },
@@ -107,9 +76,6 @@ export const EVENT_TYPES = {
   'alert': { icon: '!', label: 'Alert', color: '#f44336' }
 };
 
-/**
- * News type icon component
- */
 export function NewsTypeIcon({ type }) {
   const config = NEWS_TYPES[type] || NEWS_TYPES.general;
   return (
@@ -122,9 +88,6 @@ export function NewsTypeIcon({ type }) {
   );
 }
 
-/**
- * Event type icon component
- */
 export function EventTypeIcon({ type }) {
   const config = EVENT_TYPES[type] || EVENT_TYPES.program;
   return (
@@ -137,9 +100,6 @@ export function EventTypeIcon({ type }) {
   );
 }
 
-/**
- * News item card for settings display
- */
 export function NewsItemCard({ item, onDelete, deleting, isAdmin }) {
   return (
     <div className={`news-item-card ${item.news_type || 'general'}`}>
@@ -183,9 +143,6 @@ export function NewsItemCard({ item, onDelete, deleting, isAdmin }) {
   );
 }
 
-/**
- * Event item card for settings display
- */
 export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
   return (
     <div className={`event-item-card ${item.event_type || 'program'}`}>
@@ -207,17 +164,14 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
         {(() => {
           const startStr = String(item.start_date || '');
           const endStr = String(item.end_date || '');
-          // Detect non-midnight time in both ISO ('T') and pg space format
           const _hasTime = (s) => { const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/); return m && m[1] !== '00:00:00'; };
           const _toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
           const endHasTime = _hasTime(endStr);
           const startHasTime = _hasTime(startStr) || endHasTime;
-          // Compare dates in Eastern time, not UTC — evening events can span midnight UTC
           const _localDate = (s) => new Date(_toISO(s)).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
           const sameDay = endStr ? _localDate(startStr) === _localDate(endStr) : true;
 
           if (sameDay && startHasTime) {
-            // Same-day event with times: "Sun, Apr 19, 2026, 10:30 AM – 12:00 PM"
             const startDate = new Date(_toISO(startStr));
             const dateLabel = startDate.toLocaleDateString('en-US', {
               weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York'
@@ -233,10 +187,8 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
             }
             return `${dateLabel}, ${startTime}`;
           } else if (endStr && !sameDay) {
-            // Multi-day event: "Apr 5 – Apr 26, 2026"
             return <>{formatPublicationDate(startStr)} – {formatPublicationDate(endStr)}</>;
           }
-          // Date only or no end date
           return formatPublicationDate(startStr);
         })()}
       </div>
@@ -259,26 +211,17 @@ export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
   );
 }
 
-/**
- * Format event date range for display.
- * Shared between ParkEvents and ModerationInbox.
- */
 export function formatEventDateRange(startDate, endDate) {
   const startStr = String(startDate || '');
   const endStr = String(endDate || '');
   if (!startStr) return '';
-  // Detect non-midnight time in both ISO ('T') and pg space format ("2026-04-22 18:30:00+00")
   const hasNonMidnightTime = (s) => {
     const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/);
     return m && m[1] !== '00:00:00';
   };
-  // Normalize pg space format to ISO for Date parsing
   const toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
   const endHasTime = hasNonMidnightTime(endStr);
-  // If end has a real time, start does too — it just happens to be midnight UTC (e.g. 8 PM EDT)
   const startHasTime = hasNonMidnightTime(startStr) || endHasTime;
-  // Compare dates in Eastern time, not UTC — an evening event (e.g. 9:30 PM–12:30 AM UTC)
-  // can span midnight UTC while being same-day in local time
   const localDate = (s) => new Date(toISO(s)).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
   const sameDay = endStr ? localDate(startStr) === localDate(endStr) : true;
   const fmtTime = (s) => new Date(toISO(s)).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York' });
@@ -295,17 +238,6 @@ export function formatEventDateRange(startDate, endDate) {
   return formatDateWithWeekday(startStr);
 }
 
-/**
- * Shared news card body — single source of truth for news item rendering.
- * Used by ParkNews, ModerationInbox, and anywhere news items appear.
- *
- * Props:
- *   item         - news item data (title, summary/description, news_type, poi_name, source_url, publication_date, source_name, additional_urls)
- *   onSelectPoi  - optional callback when POI name is clicked
- *   children     - optional content rendered below the meta row (moderation extras, action buttons)
- *   className    - optional extra class on the outer div
- *   id           - optional id attribute on the outer div
- */
 export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
   const summary = item.summary || item.description;
   return (
@@ -363,18 +295,6 @@ export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
   );
 }
 
-/**
- * Shared event card body — single source of truth for event item rendering.
- * Used by ParkEvents, ModerationInbox, and anywhere event items appear.
- *
- * Props:
- *   item             - event item data (title, description, event_type, poi_name, start_date, end_date, source_url, location_details, additional_urls)
- *   onSelectPoi      - optional callback when POI name is clicked
- *   calendarButtons  - optional ReactNode for calendar action buttons
- *   children         - optional content rendered below the actions row (moderation extras, action buttons)
- *   className        - optional extra class on the outer div
- *   id               - optional id attribute on the outer div
- */
 export function EventCardBody({ item, onSelectPoi, calendarButtons, children, className, id }) {
   return (
     <div className={`park-event-item ${item.event_type || 'program'}${className ? ' ' + className : ''}`} id={id} tabIndex={0}>
@@ -438,9 +358,6 @@ export function EventCardBody({ item, onSelectPoi, calendarButtons, children, cl
   );
 }
 
-/**
- * Type filter chips component for news
- */
 export function NewsTypeFilters({ filters, onChange }) {
   return (
     <div className="type-filter-chips">
@@ -458,9 +375,6 @@ export function NewsTypeFilters({ filters, onChange }) {
   );
 }
 
-/**
- * Type filter chips component for events
- */
 export function EventTypeFilters({ filters, onChange }) {
   return (
     <div className="type-filter-chips">
