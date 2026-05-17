@@ -3022,21 +3022,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'Specified virtual_poi_id does not have the organization role' });
       }
 
-      const created = [];
-      for (const physical_poi_id of physical_poi_ids) {
-        const associationRow = await pool.query(`
-          INSERT INTO poi_associations (virtual_poi_id, physical_poi_id, association_type)
-          VALUES ($1, $2, $3)
-          ON CONFLICT (virtual_poi_id, physical_poi_id) DO UPDATE
-          SET association_type = EXCLUDED.association_type, updated_at = CURRENT_TIMESTAMP
-          RETURNING *
-        `, [virtual_poi_id, physical_poi_id, association_type || 'manages']);
+      const associationsBatch = await pool.query(`
+        INSERT INTO poi_associations (virtual_poi_id, physical_poi_id, association_type)
+        SELECT $1, unnest($2::int[]), $3
+        ON CONFLICT (virtual_poi_id, physical_poi_id) DO UPDATE
+        SET association_type = EXCLUDED.association_type, updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+      `, [virtual_poi_id, physical_poi_ids, association_type || 'manages']);
 
-        created.push(associationRow.rows[0]);
-      }
-
-      console.log(`Admin ${req.user.email} created ${created.length} associations for virtual POI ${virtual_poi_id}`);
-      res.json({ success: true, created });
+      console.log(`Admin ${req.user.email} created ${associationsBatch.rows.length} associations for virtual POI ${virtual_poi_id}`);
+      res.json({ success: true, created: associationsBatch.rows });
     } catch (error) {
       console.error('Error creating batch POI associations:', error);
       res.status(500).json({ error: 'Failed to create associations' });
