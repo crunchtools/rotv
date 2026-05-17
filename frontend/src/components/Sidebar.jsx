@@ -2703,20 +2703,18 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       setTabCounts({ news_count: null, events_count: null });
       return;
     }
+    // Reset to "loading" so we don't briefly show the prior POI's tabs (#211).
     setTabCounts({ news_count: null, events_count: null });
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    let cancelled = false;
-    fetch(`/api/pois/${poiId}/tab-counts?tz=${encodeURIComponent(tz)}`)
+    const controller = new AbortController();
+    fetch(`/api/pois/${poiId}/tab-counts?tz=${encodeURIComponent(tz)}`, { signal: controller.signal })
       .then(res => (res.ok ? res.json() : { news_count: 0, events_count: 0 }))
-      .then(data => {
-        if (!cancelled) setTabCounts(data);
-      })
-      .catch(() => {
-        if (!cancelled) setTabCounts({ news_count: 0, events_count: 0 });
+      .then(data => setTabCounts(data))
+      .catch(err => {
+        if (err.name === 'AbortError') return;
+        setTabCounts({ news_count: 0, events_count: 0 });
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => controller.abort();
   }, [displayItem?.id]);
 
   // Compute how many associations this POI has (associations is preloaded globally)

@@ -1980,8 +1980,16 @@ app.get('/api/theme-video/:theme', async (req, res) => {
 // Public news and events endpoints
 app.get('/api/pois/:id/tab-counts', async (req, res) => {
   try {
-    const { id } = req.params;
-    const tz = req.query.tz || 'America/New_York';
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid POI id' });
+    }
+    // Whitelist tz to IANA-style identifiers (Region/City, optionally Region/City/Subcity)
+    // to avoid feeding arbitrary strings to Postgres AT TIME ZONE (PR #368 review).
+    const rawTz = req.query.tz;
+    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
+      ? rawTz
+      : 'America/New_York';
     const result = await pool.query(`
       SELECT
         (SELECT COUNT(*) FROM poi_news n
@@ -1992,7 +2000,9 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
            AND e.moderation_status IN ('published', 'auto_approved')
            AND (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date) AS events_count
     `, [id, tz]);
-    const row = result.rows[0];
+    // The subquery-only SELECT always returns exactly one row, but guard anyway
+    // so a future refactor with a FROM clause doesn't silently break (PR #368 review).
+    const row = result.rows[0] || { news_count: 0, events_count: 0 };
     res.json({
       news_count: parseInt(row.news_count, 10),
       events_count: parseInt(row.events_count, 10)
