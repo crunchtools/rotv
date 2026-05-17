@@ -133,50 +133,13 @@ function getActiveSteps(isMobile) {
   });
 }
 
-function computePosition(step, el) {
-  const isHidden = el && (el.offsetParent === null || (el.getBoundingClientRect().width === 0 && el.getBoundingClientRect().height === 0));
-  if (!el || isHidden) {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    return {
-      spotlightRect: null,
-      tooltipStyle: { top: `${vh / 2 - 90}px`, left: `${vw / 2 - 150}px` }
-    };
-  }
+function rectsOverlap(a, b) {
+  return !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+}
 
-  const elRect = el.getBoundingClientRect();
-  const isOffScreen = elRect.top < 0 || elRect.bottom > window.innerHeight;
-  const isInSettingsPanel = el.closest('.settings-content');
-  if (isOffScreen && isInSettingsPanel) {
-    el.scrollIntoView({ behavior: 'instant', block: 'center' });
-  }
-
-  const rect = el.getBoundingClientRect();
-  const padding = step.padding !== undefined ? step.padding : 8;
-  const spotlight = {
-    top: rect.top - padding,
-    left: rect.left - padding,
-    width: rect.width + padding * 2,
-    height: rect.height + padding * 2
-  };
-
-  if (step.position === 'center') {
-    const cvw = window.innerWidth;
-    const cvh = window.innerHeight;
-    return {
-      spotlightRect: spotlight,
-      tooltipStyle: { top: `${cvh / 2 - 90}px`, left: `${cvw / 2 - 150}px` }
-    };
-  }
-
-  const tooltipWidth = 300;
-  const tooltipHeight = 180;
-  const gap = 16;
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
+function placeTooltip(placement, spotlight, tooltipWidth, tooltipHeight, gap, vw, vh) {
   let top, left;
-
-  switch (step.position) {
+  switch (placement) {
     case 'bottom':
       top = spotlight.top + spotlight.height + gap;
       left = spotlight.left + spotlight.width / 2 - tooltipWidth / 2;
@@ -206,15 +169,124 @@ function computePosition(step, el) {
       left = spotlight.left;
   }
 
-  if (top + tooltipHeight > vh - 20) {
-    top = Math.min(spotlight.top + spotlight.height - tooltipHeight - gap, vh - tooltipHeight - 20);
-    top = Math.max(20, top);
-  }
+  if (top + tooltipHeight > vh - 20) top = vh - tooltipHeight - 20;
   if (top < 20) top = 20;
   if (left + tooltipWidth > vw - 20) left = vw - tooltipWidth - 20;
   if (left < 20) left = 20;
 
-  return { spotlightRect: spotlight, tooltipStyle: { top: `${top}px`, left: `${left}px` } };
+  const tooltipRect = { top, left, right: left + tooltipWidth, bottom: top + tooltipHeight };
+  const spotRect = {
+    top: spotlight.top,
+    left: spotlight.left,
+    right: spotlight.left + spotlight.width,
+    bottom: spotlight.top + spotlight.height
+  };
+  const overlaps = rectsOverlap(tooltipRect, spotRect);
+
+  return { top, left, overlaps };
+}
+
+function computePosition(step, el, isMobile) {
+  const isHidden = el && (el.offsetParent === null || (el.getBoundingClientRect().width === 0 && el.getBoundingClientRect().height === 0));
+  if (!el || isHidden) {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    return {
+      spotlightRect: null,
+      tooltipStyle: { top: `${vh / 2 - 90}px`, left: `${vw / 2 - 150}px` },
+      mobilePositionAbove: false
+    };
+  }
+
+  const elRect = el.getBoundingClientRect();
+  const isOffScreen = elRect.top < 0 || elRect.bottom > window.innerHeight;
+  const isInSettingsPanel = el.closest('.settings-content');
+  if (isOffScreen && isInSettingsPanel) {
+    el.scrollIntoView({ behavior: 'instant', block: 'center' });
+  }
+
+  const rect = el.getBoundingClientRect();
+  const padding = step.padding !== undefined ? step.padding : 8;
+  const spotlight = {
+    top: rect.top - padding,
+    left: rect.left - padding,
+    width: rect.width + padding * 2,
+    height: rect.height + padding * 2
+  };
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  if (step.position === 'center') {
+    return {
+      spotlightRect: spotlight,
+      tooltipStyle: { top: `${vh / 2 - 90}px`, left: `${vw / 2 - 150}px` },
+      mobilePositionAbove: false
+    };
+  }
+
+  const tooltipWidth = isMobile ? Math.min(300, vw - 40) : 300;
+  const tooltipHeight = isMobile ? 220 : 180;
+  const gap = 16;
+
+  if (isMobile) {
+    const bottomDocked = {
+      top: vh - tooltipHeight - 20,
+      left: 20,
+      right: vw - 20,
+      bottom: vh - 20
+    };
+    const spotRect = {
+      top: spotlight.top,
+      left: spotlight.left,
+      right: spotlight.left + spotlight.width,
+      bottom: spotlight.top + spotlight.height
+    };
+    const autoCollides = rectsOverlap(bottomDocked, spotRect);
+    const topAboveRaw = spotlight.top - tooltipHeight - gap;
+    const fitsAbove = topAboveRaw >= 20;
+
+    let useAbove = !!step.mobilePositionAbove;
+    if (autoCollides && !useAbove && fitsAbove) {
+      useAbove = true;
+    }
+
+    if (useAbove) {
+      const topAbove = Math.max(20, topAboveRaw);
+      return {
+        spotlightRect: spotlight,
+        tooltipStyle: { top: `${topAbove}px`, left: `${vw / 2 - tooltipWidth / 2}px` },
+        mobilePositionAbove: true
+      };
+    }
+    return {
+      spotlightRect: spotlight,
+      tooltipStyle: { top: `${vh - tooltipHeight - 20}px`, left: `${vw / 2 - tooltipWidth / 2}px` },
+      mobilePositionAbove: false
+    };
+  }
+
+  const tried = new Set();
+  const placements = [step.position, 'bottom', 'top', 'right', 'left'];
+  let chosen = null;
+  let firstAttempt = null;
+  for (const p of placements) {
+    if (tried.has(p)) continue;
+    tried.add(p);
+    const candidate = placeTooltip(p, spotlight, tooltipWidth, tooltipHeight, gap, vw, vh);
+    if (!firstAttempt) firstAttempt = candidate;
+    if (!candidate.overlaps) {
+      chosen = candidate;
+      break;
+    }
+  }
+  if (!chosen) chosen = firstAttempt;
+
+  return {
+    spotlightRect: spotlight,
+    tooltipStyle: { top: `${chosen.top}px`, left: `${chosen.left}px` },
+    mobilePositionAbove: false
+  };
 }
 
 function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
@@ -222,6 +294,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
   const [tooltipStyle, setTooltipStyle] = useState({});
   const [stepReady, setStepReady] = useState(true);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [mobilePositionAbove, setMobilePositionAbove] = useState(false);
   const resizeRef = useRef(null);
   const prevStepRef = useRef(-1);
 
@@ -232,10 +305,11 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
   const applyPosition = useCallback((s) => {
     const spotlightEl = s.spotlightSelector ? document.querySelector(s.spotlightSelector) : null;
     const el = spotlightEl || document.querySelector(s.selector);
-    const result = computePosition(s, el);
+    const result = computePosition(s, el, isMobile);
     setSpotlightRect(result.spotlightRect);
     setTooltipStyle(result.tooltipStyle);
-  }, []);
+    setMobilePositionAbove(result.mobilePositionAbove);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!step) return;
@@ -361,7 +435,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
       )}
 
       <div
-        className={`guided-tour-tooltip ${stepReady ? 'tour-visible' : 'tour-hidden'} ${isMobile && step.mobilePositionAbove ? 'tour-position-above' : ''}`}
+        className={`guided-tour-tooltip ${stepReady ? 'tour-visible' : 'tour-hidden'} ${isMobile && mobilePositionAbove ? 'tour-position-above' : ''}`}
         style={{ ...tooltipStyle, '--tour-top': tooltipStyle.top }}
         role="alertdialog"
         aria-label={step.title}
