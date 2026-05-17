@@ -2423,6 +2423,14 @@ function TrailStatus({ poiId, _poiName, isAdmin, editMode, _selectedFromMtbList,
   );
 }
 
+const SIDEBAR_TAB_LABELS = {
+  view: 'Info',
+  news: 'News',
+  events: 'Events',
+  history: 'History',
+  associations: 'Associations',
+};
+
 function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
@@ -2455,6 +2463,9 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const [, setEventsCount] = useState(0);
   const [, setCollectResult] = useState(null);
   const [trailStatus, setTrailStatus] = useState(null);
+  // Tab-count state for hiding empty sidebar tabs (issue #211).
+  // null = not yet loaded; numbers = confirmed counts.
+  const [tabCounts, setTabCounts] = useState({ news_count: null, events_count: null });
 
   /* const [organizationData, setOrganizationData] = useState({
     name: '',
@@ -2684,6 +2695,58 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const displayItem = linearFeature || destination;
   const isLinearFeature = !!linearFeature;
 
+  // Fetch news/events counts when the selected POI changes, so we can hide
+  // empty tabs for public viewers (#211).
+  useEffect(() => {
+    const poiId = displayItem?.id;
+    if (!poiId) {
+      setTabCounts({ news_count: null, events_count: null });
+      return;
+    }
+    // Reset to "loading" so we don't briefly show the prior POI's tabs (#211).
+    setTabCounts({ news_count: null, events_count: null });
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const controller = new AbortController();
+    fetch(`/api/pois/${poiId}/tab-counts?tz=${encodeURIComponent(tz)}`, { signal: controller.signal })
+      .then(res => (res.ok ? res.json() : { news_count: 0, events_count: 0 }))
+      .then(data => setTabCounts(data))
+      .catch(err => {
+        if (err.name === 'AbortError') return;
+        setTabCounts({ news_count: 0, events_count: 0 });
+      });
+    return () => controller.abort();
+  }, [displayItem?.id]);
+
+  // Compute how many associations this POI has (associations is preloaded globally)
+  const poiAssociationsCount = useMemo(() => {
+    if (!displayItem?.id) return 0;
+    return (associations || []).filter(a =>
+      a.virtual_poi_id === displayItem.id || a.physical_poi_id === displayItem.id
+    ).length;
+  }, [associations, displayItem?.id]);
+
+  // Decide which sidebar tabs to render. Info ('view') is always shown.
+  // Admin users in edit mode see every tab so they can add missing content.
+  // While counts are loading (null), be conservative and hide news/events;
+  // they'll pop in once the counts arrive.
+  const visibleTabs = useMemo(() => {
+    const tabs = ['view'];
+    const adminOverride = isAdmin && editMode;
+    if (adminOverride || (tabCounts.news_count !== null && tabCounts.news_count > 0)) {
+      tabs.push('news');
+    }
+    if (adminOverride || (tabCounts.events_count !== null && tabCounts.events_count > 0)) {
+      tabs.push('events');
+    }
+    if (adminOverride || (displayItem?.historical_description && displayItem.historical_description.trim())) {
+      tabs.push('history');
+    }
+    if (adminOverride || poiAssociationsCount > 0) {
+      tabs.push('associations');
+    }
+    return tabs;
+  }, [isAdmin, editMode, tabCounts.news_count, tabCounts.events_count, displayItem?.historical_description, poiAssociationsCount]);
+
   // Helper to change sidebar tab and update URL
   const handleSidebarTabChange = useCallback((tab) => {
     setSidebarTab(tab);
@@ -2710,6 +2773,16 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       setIsEditing(false);
     }
   }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList]);
+
+  // If the active tab has been filtered out of visibleTabs (e.g. deep-link to
+  // /poi/associations when the POI has no associations), fall back to Info.
+  // Skip while a permalink is active — permalinks force news/events deliberately.
+  useEffect(() => {
+    if (permalinkInfo) return;
+    if (sidebarTab !== 'view' && !visibleTabs.includes(sidebarTab)) {
+      setSidebarTab('view');
+    }
+  }, [visibleTabs, sidebarTab, permalinkInfo]);
 
   // Sync editedData coords when previewCoords changes (from map drag) - only for destinations
   useEffect(() => {
@@ -3222,36 +3295,15 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
         {/* Sidebar Tabs - same as destinations */}
         <div className="sidebar-tabs">
-          <button
-            className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-            onClick={() => handleSidebarTabChange('view')}
-          >
-            Info
-          </button>
-          <button
-            className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-            onClick={() => handleSidebarTabChange('news')}
-          >
-            News
-          </button>
-          <button
-            className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-            onClick={() => handleSidebarTabChange('events')}
-          >
-            Events
-          </button>
-          <button
-            className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-            onClick={() => handleSidebarTabChange('history')}
-          >
-            History
-          </button>
-          <button
-            className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-            onClick={() => handleSidebarTabChange('associations')}
-          >
-            Associations
-          </button>
+          {visibleTabs.map(tab => (
+            <button
+              key={tab}
+              className={`sidebar-tab ${sidebarTab === tab ? 'active' : ''}`}
+              onClick={() => handleSidebarTabChange(tab)}
+            >
+              {SIDEBAR_TAB_LABELS[tab]}
+            </button>
+          ))}
         </div>
 
         {/* Tab Content */}
@@ -3527,38 +3579,17 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         )}
       </div>
 
-      {/* Sidebar Tabs - always shown */}
+      {/* Sidebar Tabs - filtered to non-empty (#211); admins in edit mode see all */}
       <div className="sidebar-tabs">
-        <button
-          className={`sidebar-tab ${sidebarTab === 'view' ? 'active' : ''}`}
-          onClick={() => handleSidebarTabChange('view')}
-        >
-          Info
-        </button>
-        <button
-          className={`sidebar-tab ${sidebarTab === 'news' ? 'active' : ''}`}
-          onClick={() => handleSidebarTabChange('news')}
-        >
-          News
-        </button>
-        <button
-          className={`sidebar-tab ${sidebarTab === 'events' ? 'active' : ''}`}
-          onClick={() => handleSidebarTabChange('events')}
-        >
-          Events
-        </button>
-        <button
-          className={`sidebar-tab ${sidebarTab === 'history' ? 'active' : ''}`}
-          onClick={() => handleSidebarTabChange('history')}
-        >
-          History
-        </button>
-        <button
-          className={`sidebar-tab ${sidebarTab === 'associations' ? 'active' : ''}`}
-          onClick={() => handleSidebarTabChange('associations')}
-        >
-          Associations
-        </button>
+        {visibleTabs.map(tab => (
+          <button
+            key={tab}
+            className={`sidebar-tab ${sidebarTab === tab ? 'active' : ''}`}
+            onClick={() => handleSidebarTabChange(tab)}
+          >
+            {SIDEBAR_TAB_LABELS[tab]}
+          </button>
+        ))}
       </div>
 
       {/* Tab Content */}
