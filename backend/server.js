@@ -1301,33 +1301,46 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
     const moderatedAt = null;
     const moderatedBy = null; // Set during approval, not upload
 
-    // Create poi_media record
-    const insertResult = await pool.query(`
-      INSERT INTO poi_media (
-        poi_id,
+    // Create poi_media record — roll back image-server asset on failure to prevent orphans
+    let insertResult;
+    try {
+      insertResult = await pool.query(`
+        INSERT INTO poi_media (
+          poi_id,
+          media_type,
+          image_server_asset_id,
+          youtube_url,
+          caption,
+          role,
+          moderation_status,
+          submitted_by,
+          moderated_at,
+          moderated_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        RETURNING id
+      `, [
+        parseInt(id),
         media_type,
-        image_server_asset_id,
-        youtube_url,
-        caption,
-        role,
-        moderation_status,
-        submitted_by,
-        moderated_at,
-        moderated_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-      RETURNING id
-    `, [
-      parseInt(id),
-      media_type,
-      assetId,
-      youtubeUrlValue,
-      caption || null,
-      'gallery',
-      moderationStatus,
-      user.id,
-      moderatedAt,
-      moderatedBy
-    ]);
+        assetId,
+        youtubeUrlValue,
+        caption || null,
+        'gallery',
+        moderationStatus,
+        user.id,
+        moderatedAt,
+        moderatedBy
+      ]);
+    } catch (insertErr) {
+      if (assetId) {
+        try {
+          await imageServerClient.deleteAsset(assetId);
+          console.warn(`[upload] Rolled back orphan asset ${assetId} after DB insert failure`);
+        } catch (rollbackErr) {
+          console.error(`[upload] Orphan asset ${assetId} — manual cleanup required:`, rollbackErr);
+        }
+      }
+      throw insertErr;
+    }
 
     const mediaId = insertResult.rows[0].id;
 
@@ -2668,11 +2681,24 @@ app.use(async (req, res, next) => {
 // Serve static files (after OG middlewares)
 app.use(express.static(staticPath));
 
-// SPA fallback - serve index.html for non-API routes
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api') && !req.path.startsWith('/auth') && !req.path.startsWith('/share')) {
-    res.sendFile(path.join(staticPath, 'index.html'));
+// SPA fallback - serve index.html for non-API routes; surface JSON 404 for unmatched API/auth/share
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/share')) {
+    return res.status(404).json({ error: 'Not found', path: req.path });
   }
+  res.sendFile(path.join(staticPath, 'index.html'));
+});
+
+// Global JSON error handler — never let Express's HTML finalhandler surface to clients
+// Fix: prevent "<!DOCTYPE" parse errors in browser fetch() callers (PR for fix/media-upload-html-errors)
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  const status = err.status || err.statusCode || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
+  const message = err.code === 'LIMIT_FILE_SIZE'
+    ? 'File too large (max 10MB)'
+    : (err.expose ? err.message : (status >= 500 ? 'Internal server error' : err.message || 'Request failed'));
+  console.error(`[error] ${req.method} ${req.path} -> ${status}:`, err.message);
+  res.status(status).json({ error: message, code: err.code });
 });
 
 // Start server
