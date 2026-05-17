@@ -1332,9 +1332,14 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
       ]);
     } catch (insertErr) {
       if (assetId) {
+        // Fix: deleteAsset returns {success, error} and does not throw — check both paths (Gemini review)
         try {
-          await imageServerClient.deleteAsset(assetId);
-          console.warn(`[upload] Rolled back orphan asset ${assetId} after DB insert failure`);
+          const rollback = await imageServerClient.deleteAsset(assetId);
+          if (rollback && rollback.success) {
+            console.warn(`[upload] Rolled back orphan asset ${assetId} after DB insert failure`);
+          } else {
+            console.error(`[upload] Orphan asset ${assetId} — manual cleanup required:`, rollback && rollback.error);
+          }
         } catch (rollbackErr) {
           console.error(`[upload] Orphan asset ${assetId} — manual cleanup required:`, rollbackErr);
         }
