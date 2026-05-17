@@ -11,38 +11,8 @@ justification = "Claude Code project instructions require structured summaries f
 
 [[exceptions]]
 check = "summary_litter"
-path = ".specify/memory/constitution.md"
-justification = "Project constitution requires overview sections for governance documentation"
-
-[[exceptions]]
-check = "summary_litter"
-path = ".specify/specs/000-baseline/spec.md"
-justification = "Baseline specification requires summary of current features"
-
-[[exceptions]]
-check = "summary_litter"
-path = ".specify/specs/000-baseline/plan.md"
-justification = "Technical architecture plan requires overview sections"
-
-[[exceptions]]
-check = "summary_litter"
 path = "README.md"
 justification = "Project readme requires summary for repository visitors"
-
-[[exceptions]]
-check = "summary_litter"
-path = "CONTRIBUTING.md"
-justification = "Contribution guide needs overview for new contributors"
-
-[[exceptions]]
-check = "summary_litter"
-path = "frontend/package.json"
-justification = "Package description field is standard npm metadata"
-
-[[exceptions]]
-check = "summary_litter"
-path = "backend/package.json"
-justification = "Package description field is standard npm metadata"
 
 # Random scripts exceptions - legitimate shell scripts
 
@@ -148,11 +118,6 @@ justification = "Integration tests have verbose describe/it blocks for clarity"
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/tests/playwright.integration.test.js"
-justification = "Integration tests have verbose describe/it blocks for clarity"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/tests/authBypass.integration.test.js"
 justification = "Integration tests have verbose describe/it blocks for clarity"
 
 [[exceptions]]
@@ -423,26 +388,6 @@ justification = "OAuth token utility script"
 
 # Boilerplate exceptions - configuration files that follow standard patterns
 
-[[exceptions]]
-check = "boilerplate"
-path = "vite.config.js"
-justification = "Vite configuration follows standard patterns by design"
-
-[[exceptions]]
-check = "boilerplate"
-path = ".pre-commit-config.yaml"
-justification = "Pre-commit configuration follows standard hook patterns"
-
-[[exceptions]]
-check = "boilerplate"
-path = "Containerfile"
-justification = "Container build file follows Dockerfile best practices"
-
-[[exceptions]]
-check = "boilerplate"
-path = "Containerfile.base"
-justification = "Base container build file follows Dockerfile best practices"
-
 # Lint suppression exception - documented intentional suppression
 
 [[exceptions]]
@@ -461,11 +406,6 @@ path = "frontend/src/components/StatusTab.jsx"
 justification = "React useEffect dependency suppression is intentional - line 23 documents that fetchMtbTrails is excluded to only run on component mount"
 
 # Random scripts - test utilities
-
-[[exceptions]]
-check = "random_scripts"
-path = "backend/test-playwright.js"
-justification = "Manual test script for Playwright browser rendering debugging"
 
 # Deferred work false positives - "placeholder" is HTML attribute, not deferred work
 
@@ -506,22 +446,12 @@ check = "random_scripts"
 path = "entrypoint.sh"
 justification = "Container entrypoint script - required by Podman for startup"
 
-[[exceptions]]
-check = "random_scripts"
-path = "scripts/get_google_token.py"
-justification = "OAuth token utility for Google API authentication setup"
-
 # Primitive obsession and state machine - Python OAuth script uses port number
 
 [[exceptions]]
 check = "primitive_obsession"
 path = "scripts/get_google_token.py"
 justification = "Port 8085 is standard OAuth callback port - no benefit to extracting constant"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "scripts/get_google_token.py"
-justification = "Simple OAuth flow script, not a state machine"
 
 # Speculative generality - legitimate fallback logic
 
@@ -531,16 +461,6 @@ path = "backend/services/jsRenderer.js"
 justification = "Comment explains fallback logic: if fetch fails, assume rendering might be needed"
 
 # Linter configuration - JavaScript/Node.js project doesn't use Rust/Python tools
-
-[[exceptions]]
-check = "linter_configuration"
-path = "pyproject.toml"
-justification = "Node.js/JavaScript project - no Python code, therefore no need for pyproject.toml or ruff configuration"
-
-[[exceptions]]
-check = "linter_configuration"
-path = ".pre-commit-config.yaml"
-justification = "Node.js project uses standard pre-commit hooks without cognitive complexity thresholds (JavaScript ecosystem uses ESLint)"
 
 # Single-use helpers - Google Sheets sync operations (legitimate separation of concerns)
 
@@ -613,11 +533,6 @@ justification = "withHardTimeout wraps browser operations with timeout enforceme
 
 # Single-use helpers - Admin routes queue helpers
 
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/routes/admin.js"
-justification = "queueSettingsSync is part of the sync queue helper pattern (matches queuePOISync, queueActivitySync, etc.). Separated for consistency and error handling isolation."
-
 # Generic names - Technical debt to be addressed in future refactoring
 # TODO: Refactor generic variable names like 'result' and 'data' to be more descriptive
 # Tracking issue: Would require renaming ~89 variables across codebase
@@ -676,11 +591,6 @@ justification = "extractContentFromEmail is exported and independently tested in
 check = "deferred_work"
 path = "frontend/src/components/DataCollectionSettings.jsx"
 justification = "HTML placeholder attribute on form inputs — standard HTML syntax, not deferred work"
-
-[[exceptions]]
-check = "deferred_work"
-path = "frontend/src/components/JobsDashboard.jsx"
-justification = "HTML placeholder attribute on input and 'placeholders' data property from collection registry — not deferred work"
 
 [[exceptions]]
 check = "deferred_work"
@@ -874,124 +784,13 @@ path = "backend/services/dateExtractor.js"
 justification = "JSDoc function documentation for date extraction and consensus scoring pipeline"
 
 [[exceptions]]
-check = "verbose_comments"
-path = "backend/services/contentExtractor.js"
-justification = "JSDoc function documentation for page extraction service"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/services/renderPage.js"
-justification = "JSDoc function documentation for render cache service"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "backend/tests/dateExtractor.unit.test.js"
-justification = "Unit tests have verbose describe/it blocks for clarity"
-
-[[exceptions]]
-check = "verbose_comments"
-path = "frontend/src/components/Mosaic.jsx"
-justification = "React component with JSDoc documentation"
-
-[[exceptions]]
 check = "generic_names"
 path = "backend/services/dateExtractor.js"
 justification = "validateDateParts parameter y is year in a date validation context — math-like destructuring of (y, m, d) is idiomatic"
 
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/renderPage.js"
-justification = "Technical debt: renderPage query results use generic variable names. Should be refactored in dedicated code quality PR."
-
-[[exceptions]]
-check = "generic_names"
-path = "backend/services/contentExtractor.js"
-justification = "Technical debt: page.evaluate() callback variables. Should be refactored in dedicated code quality PR."
-
-
 # Image server — implicit_state_machine false positives
 # Gourmand misidentifies Python type annotations (str, int, bool) as boolean state flags.
 # This is a Rust-centric check. All other violations have been fixed in the Python source.
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/scripts/regenerate-thumbnails.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/api.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/config.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/database.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/embedder.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/exif.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/main.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/thumbnails.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/src/image_server/vision.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/tests/conftest.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/tests/test_api.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/tests/test_config.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/tests/test_embedder.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/tests/test_exif.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/tests/test_thumbnails.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
-
-[[exceptions]]
-check = "implicit_state_machine"
-path = "image-server/tests/test_vision.py"
-justification = "Python type annotations misidentified as boolean state flags — Gourmand false positive for non-Rust code"
 
 # Deferred work false positives — HTML placeholder attributes are form input hints, not TODO markers
 

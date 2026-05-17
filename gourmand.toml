@@ -23,6 +23,7 @@ excluded_paths = [
 [checks]
 # Disable checks that don't apply to JavaScript/Node.js projects
 linter_configuration = false  # Expects clippy.toml (Rust) or pyproject.toml (Python)
+implicit_state_machine = false  # Rust-centric check; false-positives on Python type annotations and React idioms like isLoading/isOpen
 
 [severity]
 # Override severity levels for specific checks
