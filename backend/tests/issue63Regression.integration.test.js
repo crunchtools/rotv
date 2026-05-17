@@ -25,7 +25,7 @@ describe('Issue #63 Regression Tests', () => {
       args: ['--no-sandbox', '--disable-setuid-sandbox']
     });
     page = await browser.newPage();
-    // Dismiss tour prompt so the overlay doesn't block pointer events
+    // Dismiss tour prompt so the overlay stops intercepting pointer events
     await page.addInitScript(() => {
       localStorage.setItem('rotv-tour-seen', 'true');
     });

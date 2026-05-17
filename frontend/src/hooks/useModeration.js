@@ -36,7 +36,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
   useEffect(() => {
     fetch('/api/pois', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
-      .then(data => setPois(Array.isArray(data) ? data : []))
+      .then(poisFromApi => setPois(Array.isArray(poisFromApi) ? poisFromApi : []))
       .catch(() => setPois([]));
   }, []);
 
@@ -117,14 +117,14 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
         credentials: 'include'
       });
       if (response.ok) {
-        const data = await response.json();
-        if (data.date) {
+        const iaResponse = await response.json();
+        if (iaResponse.date) {
           const saveResponse = await fetch('/api/admin/moderation/save', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            credentials: 'include', body: JSON.stringify({ type, id, edits: { publication_date: data.date } })
+            credentials: 'include', body: JSON.stringify({ type, id, edits: { publication_date: iaResponse.date } })
           });
           if (saveResponse.ok) {
-            notify('success', `${type} #${id} — date set to ${data.date} (earliest IA snapshot)`);
+            notify('success', `${type} #${id} — date set to ${iaResponse.date} (earliest IA snapshot)`);
             refreshItems();
           } else {
             notify('error', 'IA date found but failed to update item');
@@ -231,14 +231,14 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
         body: JSON.stringify({ type, id, url: newUrlInput.trim() })
       });
       if (response.ok) {
-        const data = await response.json();
-        if (data.added) {
+        const addUrlResponse = await response.json();
+        if (addUrlResponse.added) {
           notify('success', 'URL added');
           setNewUrlInput('');
           fetchItemUrls(type, id);
           refreshItems();
         } else {
-          notify('error', data.reason || 'URL not added');
+          notify('error', addUrlResponse.reason || 'URL not added');
         }
       } else {
         const err = await response.json();
@@ -296,8 +296,8 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
         body: JSON.stringify({ type: mergingItem.type, sourceId: mergingItem.id, targetId })
       });
       if (response.ok) {
-        const data = await response.json();
-        notify('success', `Merged ${mergingItem.type} #${mergingItem.id} into #${targetId} (${data.movedUrls} URLs moved)`);
+        const mergeResponse = await response.json();
+        notify('success', `Merged ${mergingItem.type} #${mergingItem.id} into #${targetId} (${mergeResponse.movedUrls} URLs moved)`);
         setMergingItem(null);
         setMergeCandidates([]);
         refreshItems();
@@ -333,8 +333,8 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
         credentials: 'include', body: JSON.stringify({ items })
       });
       if (response.ok) {
-        const data = await response.json();
-        notify('success', `${data.approved} items approved`);
+        const bulkApproveResponse = await response.json();
+        notify('success', `${bulkApproveResponse.approved} items approved`);
         setSelectedItems(new Set());
         refreshItems();
         if (onCountChange) onCountChange();
