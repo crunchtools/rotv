@@ -60,13 +60,13 @@ export async function generateDigest(pool, tz = 'America/New_York') {
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     h1 {
-      color: #2c5f2d;
-      border-bottom: 3px solid #2c5f2d;
+      color: #2d5016;
+      border-bottom: 3px solid #2d5016;
       padding-bottom: 10px;
       margin-top: 0;
     }
     h2 {
-      color: #2c5f2d;
+      color: #2d5016;
       margin-top: 30px;
       font-size: 1.3em;
     }
@@ -90,7 +90,7 @@ export async function generateDigest(pool, tz = 'America/New_York') {
       margin-bottom: 5px;
     }
     .poi-name {
-      color: #2c5f2d;
+      color: #2d5016;
       font-weight: 500;
       font-size: 0.9em;
     }
@@ -99,7 +99,7 @@ export async function generateDigest(pool, tz = 'America/New_York') {
       color: #555;
     }
     .read-more {
-      color: #2c5f2d;
+      color: #2d5016;
       text-decoration: none;
       font-weight: 500;
     }
@@ -115,19 +115,30 @@ export async function generateDigest(pool, tz = 'America/New_York') {
       text-align: center;
     }
     .footer a {
-      color: #2c5f2d;
+      color: #2d5016;
       text-decoration: none;
     }
     .no-content {
       color: #666;
       font-style: italic;
     }
+    .brand-banner {
+      display: block;
+      width: 100%;
+      max-width: 540px;
+      height: auto;
+      margin: 0 auto 20px;
+      border-radius: 4px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
+    <a href="https://rootsofthevalley.org">
+      <img src="https://rootsofthevalley.org/brand/rotv-header-1200x490.png" alt="Roots of The Valley" class="brand-banner" />
+    </a>
     <h1>What's Happening in the Valley This Weekend</h1>
-    <p>Your weekly digest from <a href="https://rootsofthevalley.org" style="color: #2c5f2d;">Roots of The Valley</a></p>
+    <p>Your weekly digest from <a href="https://rootsofthevalley.org" style="color: #2d5016;">Roots of The Valley</a></p>
 `;
 
   if (events.length > 0) {
@@ -136,10 +147,13 @@ export async function generateDigest(pool, tz = 'America/New_York') {
 `;
     events.forEach(event => {
       const startDate = new Date(event.start_date);
-      const dateStr = startDate.toLocaleDateString('en-US', {
+      const dateStr = startDate.toLocaleString('en-US', {
         weekday: 'long',
         month: 'long',
-        day: 'numeric'
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZone: tz
       });
 
       html += `
