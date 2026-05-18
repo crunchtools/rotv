@@ -164,6 +164,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const { id } = req.params;
     const allowedFields = [
       'name', 'poi_roles', 'latitude', 'longitude', 'geometry', 'geometry_drive_file_id',
+      'navigation_latitude', 'navigation_longitude',
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'research_context',
@@ -220,7 +221,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.put('/destinations/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const allowedFields = [
-      'name', 'latitude', 'longitude', 'property_owner', 'owner_id', 'brief_description',
+      'name', 'latitude', 'longitude', 'navigation_latitude', 'navigation_longitude',
+      'property_owner', 'owner_id', 'brief_description',
       'era', 'era_id', 'historical_description', 'primary_activities', 'surface',
       'pets', 'cell_signal', 'more_info_link', 'events_url', 'news_url', 'research_context', 'status_url',
       'collection_tier', 'news_score_threshold', 'events_score_threshold'
@@ -291,6 +293,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     const allowedFields = [
+      'navigation_latitude', 'navigation_longitude',
       'property_owner', 'owner_id', 'brief_description', 'era_id', 'historical_description',
       'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'status_url',
@@ -356,7 +359,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     const allowedFields = [
-      'poi_roles', 'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
+      'poi_roles', 'navigation_latitude', 'navigation_longitude',
+      'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
       'historical_description', 'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
       'events_url', 'news_url', 'has_primary_image',
       'collection_tier', 'news_score_threshold', 'events_score_threshold',
