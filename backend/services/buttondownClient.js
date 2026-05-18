@@ -204,6 +204,21 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
   });
 }
 
+export async function sendDraftToRecipients(subject, htmlBody, recipients, pool = null) {
+  const apiKey = await getApiKey(pool);
+  const client = createClient(apiKey);
+
+  const createResponse = await client.post('/v1/emails', {
+    subject,
+    body: htmlBody,
+    email_type: 'public'
+  });
+  const emailId = createResponse.data.id;
+
+  await client.post(`/v1/emails/${emailId}/send-draft`, { recipients });
+  return { emailId };
+}
+
 export async function testApiKey(pool = null) {
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);

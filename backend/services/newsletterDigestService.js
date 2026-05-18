@@ -1,13 +1,23 @@
-import { sendEmail } from './buttondownClient.js';
+import { sendEmail, sendDraftToRecipients } from './buttondownClient.js';
 
-export async function generateDigest(pool, tz = 'America/New_York') {
+export function upcomingFridayISO(tz = 'America/New_York') {
+  const now = new Date();
+  const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now);
+  const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const today = dayMap[weekdayShort];
+  const daysAhead = today === 5 ? 0 : (5 - today + 7) % 7;
+  return new Date(now.getTime() + daysAhead * 86400000).toISOString();
+}
+
+export async function generateDigest(pool, tz = 'America/New_York', asOfDate = null) {
+  // asOfDate overrides CURRENT_TIMESTAMP in the date filters. NULL → use real now.
   const eventsQuery = `
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
            e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_events e
     JOIN pois p ON e.poi_id = p.id
-    WHERE (e.start_date AT TIME ZONE $1)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
-      AND (e.start_date AT TIME ZONE $1)::date <= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date + 2
+    WHERE (e.start_date AT TIME ZONE $1)::date >= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date
+      AND (e.start_date AT TIME ZONE $1)::date <= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date + 2
       AND e.moderation_status IN ('published', 'auto_approved')
     ORDER BY e.start_date ASC
     LIMIT 10
@@ -19,14 +29,14 @@ export async function generateDigest(pool, tz = 'America/New_York') {
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
-      AND COALESCE(n.publication_date, n.collection_date) > NOW() - INTERVAL '7 days'
+      AND COALESCE(n.publication_date, n.collection_date) > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
     ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
     LIMIT 5
   `;
 
   const [eventsResult, newsResult] = await Promise.all([
-    pool.query(eventsQuery, [tz]),
-    pool.query(newsQuery)
+    pool.query(eventsQuery, [tz, asOfDate]),
+    pool.query(newsQuery, [asOfDate])
   ]);
 
   const events = eventsResult.rows;
@@ -361,4 +371,21 @@ function escapeHtml(text) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
+}
+
+export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York') {
+  const asOf = upcomingFridayISO(tz);
+  const html = await generateDigest(pool, tz, asOf);
+
+  if (!html) {
+    return { success: true, skipped: true, reason: 'No content for upcoming Friday', asOf };
+  }
+
+  const previewDate = new Date(asOf).toLocaleDateString('en-US', {
+    month: 'long', day: 'numeric', year: 'numeric', timeZone: tz
+  });
+  const subject = `What's Happening in the Valley This Weekend - ${previewDate}`;
+
+  const { emailId } = await sendDraftToRecipients(subject, html, [email], pool);
+  return { success: true, emailId, asOf, recipient: email };
 }
