@@ -2076,11 +2076,16 @@ function AppContent() {
             }
             return next;
           })}
-          onShowAllBoundaries={() => {
-            const boundaryIds = linearFeatures.filter(f => f.poi_roles?.includes('boundary') && !['county', 'state'].includes(f.boundary_type)).map(f => f.id);
-            setVisibleBoundaries(new Set(boundaryIds));
-          }}
-          onHideAllBoundaries={() => setVisibleBoundaries(new Set())}
+          onShowBoundaries={(ids) => setVisibleBoundaries(prev => {
+            const next = new Set(prev);
+            ids.forEach(id => next.add(id));
+            return next;
+          })}
+          onHideBoundaries={(ids) => setVisibleBoundaries(prev => {
+            const next = new Set(prev);
+            ids.forEach(id => next.delete(id));
+            return next;
+          })}
           searchQuery={activeFilters.search}
           onSearchChange={(value) => handleFilterChange('search', value)}
           onNewsRefresh={() => setNewsRefreshTrigger(prev => prev + 1)}

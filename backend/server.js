@@ -606,7 +606,7 @@ async function initDatabase() {
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_color TEXT DEFAULT '#228B22'
     `);
     await client.query(`
-      UPDATE pois SET boundary_type = 'cvnp' WHERE 'boundary' = ANY(poi_roles) AND boundary_type IS NULL
+      UPDATE pois SET boundary_type = 'municipal' WHERE 'boundary' = ANY(poi_roles) AND boundary_type IS NULL
     `);
 
     await client.query(`
