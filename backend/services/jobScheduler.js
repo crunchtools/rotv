@@ -1,33 +1,24 @@
-/**
- * Job Scheduler Service
- * Uses pg-boss for reliable job scheduling with PostgreSQL
- */
-
 import { PgBoss } from 'pg-boss';
 
 let boss = null;
 
 const JOB_NAMES = {
-  NEWS_COLLECTION: 'news-collection',           // Legacy (kept for admin batch + unschedule)
-  NEWS_COLLECTION_DAILY: 'news-collection-daily',     // Tier: daily at 6 AM
-  NEWS_COLLECTION_WEEKLY: 'news-collection-weekly',   // Tier: weekly Thursday 5 AM
-  NEWS_COLLECTION_MONTHLY: 'news-collection-monthly', // Tier: monthly 1st 1 AM
-  NEWS_COLLECTION_POI: 'news-collection-poi',   // Individual POI processing
-  NEWS_BATCH: 'news-batch-collection',          // Admin-triggered batch collection
-  TRAIL_STATUS_COLLECTION: 'trail-status-collection',  // Scheduled trail status collection
-  TRAIL_STATUS_BATCH: 'trail-status-batch-collect',    // Admin-triggered trail status batch
-  CONTENT_MODERATION: 'content-moderation',            // LLM moderation for individual items
-  CONTENT_MODERATION_SWEEP: 'content-moderation-sweep', // Scheduled sweep for unprocessed items
-  NEWSLETTER_PROCESS: 'newsletter-process',              // Process inbound newsletter email
-  NEWSLETTER_DIGEST: 'newsletter-digest',                // Weekly digest send
-  IMAGE_BACKUP: 'image-backup',                           // Scheduled image server backup to Drive
-  DATABASE_BACKUP: 'database-backup'                      // Scheduled database backup to Drive
+  NEWS_COLLECTION: 'news-collection',
+  NEWS_COLLECTION_DAILY: 'news-collection-daily',
+  NEWS_COLLECTION_WEEKLY: 'news-collection-weekly',
+  NEWS_COLLECTION_MONTHLY: 'news-collection-monthly',
+  NEWS_COLLECTION_POI: 'news-collection-poi',
+  NEWS_BATCH: 'news-batch-collection',
+  TRAIL_STATUS_COLLECTION: 'trail-status-collection',
+  TRAIL_STATUS_BATCH: 'trail-status-batch-collect',
+  CONTENT_MODERATION: 'content-moderation',
+  CONTENT_MODERATION_SWEEP: 'content-moderation-sweep',
+  NEWSLETTER_PROCESS: 'newsletter-process',
+  NEWSLETTER_DIGEST: 'newsletter-digest',
+  IMAGE_BACKUP: 'image-backup',
+  DATABASE_BACKUP: 'database-backup'
 };
 
-/**
- * Initialize the job scheduler
- * @param {string} connectionString - PostgreSQL connection string
- */
 export async function initJobScheduler(connectionString) {
   if (boss) {
     return boss;
@@ -43,9 +34,6 @@ export async function initJobScheduler(connectionString) {
   return boss;
 }
 
-/**
- * Get the pg-boss instance
- */
 export function getJobScheduler() {
   if (!boss) {
     throw new Error('Job scheduler not initialized. Call initJobScheduler first.');
@@ -53,14 +41,9 @@ export function getJobScheduler() {
   return boss;
 }
 
-/**
- * Schedule the daily news collection job
- * @param {string} cronExpression - Cron expression (default: 6 AM daily)
- */
 export async function scheduleNewsCollection(cronExpression = '0 6 * * *') {
   const scheduler = getJobScheduler();
 
-  // Create a schedule for the news collection job
   await scheduler.schedule(JOB_NAMES.NEWS_COLLECTION, cronExpression, {}, {
     tz: 'America/New_York'
   });
@@ -68,11 +51,6 @@ export async function scheduleNewsCollection(cronExpression = '0 6 * * *') {
   console.log(`News collection scheduled with cron: ${cronExpression}`);
 }
 
-/**
- * Schedule a tiered news collection job
- * @param {string} tier - 'daily', 'weekly', or 'monthly'
- * @param {string} cronExpression - Cron expression for this tier
- */
 export async function scheduleTierNewsCollection(tier, cronExpression) {
   const jobName = JOB_NAMES[`NEWS_COLLECTION_${tier.toUpperCase()}`];
   if (!jobName) throw new Error(`Invalid tier: ${tier}`);
@@ -81,11 +59,6 @@ export async function scheduleTierNewsCollection(tier, cronExpression) {
   console.log(`${tier} news collection scheduled with cron: ${cronExpression}`);
 }
 
-/**
- * Register handler for a tiered news collection job
- * @param {string} tier - 'daily', 'weekly', or 'monthly'
- * @param {Function} handler - Async function(jobData) to handle the job
- */
 export async function registerTierNewsCollectionHandler(tier, handler) {
   const jobName = JOB_NAMES[`NEWS_COLLECTION_${tier.toUpperCase()}`];
   if (!jobName) throw new Error(`Invalid tier: ${tier}`);
@@ -112,28 +85,18 @@ export async function registerTierNewsCollectionHandler(tier, handler) {
   });
 }
 
-/**
- * Unschedule a job by name (used to remove legacy schedules)
- * @param {string} jobName - The job name to unschedule
- */
 export async function unscheduleJob(jobName) {
   const scheduler = getJobScheduler();
   await scheduler.unschedule(jobName);
 }
 
-/**
- * Register the news collection job handler (legacy — kept for admin batch compatibility)
- * @param {Function} handler - Async function to handle the job
- */
 export async function registerNewsCollectionHandler(handler) {
   const scheduler = getJobScheduler();
 
-  // Create the queue if it doesn't exist (required in pg-boss v12+)
   try {
     await scheduler.createQueue(JOB_NAMES.NEWS_COLLECTION);
     console.log(`Queue '${JOB_NAMES.NEWS_COLLECTION}' created`);
   } catch (error) {
-    // Queue might already exist, that's fine
     if (!error.message?.includes('already exists')) {
       console.log(`Queue '${JOB_NAMES.NEWS_COLLECTION}' may already exist`);
     }
@@ -146,20 +109,16 @@ export async function registerNewsCollectionHandler(handler) {
       console.log('News collection job completed:', job.id);
     } catch (error) {
       console.error('News collection job failed:', error);
-      throw error; // Re-throw to mark job as failed
+      throw error;
     }
   });
 }
 
-/**
- * Register handler for individual POI news collection
- * @param {Function} handler - Async function to handle per-POI collection
- */
 export async function registerPoiNewsHandler(handler) {
   const scheduler = getJobScheduler();
 
   await scheduler.work(JOB_NAMES.NEWS_COLLECTION_POI, {
-    teamSize: 3, // Process 3 POIs concurrently
+    teamSize: 3,
     teamConcurrency: 1
   }, async (job) => {
     try {
@@ -171,9 +130,6 @@ export async function registerPoiNewsHandler(handler) {
   });
 }
 
-/**
- * Manually trigger news collection (for admin use)
- */
 export async function triggerNewsCollection() {
   const scheduler = getJobScheduler();
 
@@ -186,11 +142,6 @@ export async function triggerNewsCollection() {
   return jobId;
 }
 
-/**
- * Queue news collection for a specific POI
- * @param {number} poiId - POI ID
- * @param {string} poiName - POI name for logging
- */
 export async function queuePoiNewsCollection(poiId, poiName) {
   const scheduler = getJobScheduler();
 
@@ -201,23 +152,14 @@ export async function queuePoiNewsCollection(poiId, poiName) {
   });
 }
 
-/**
- * Get job status
- * @param {string} jobId - Job ID to check
- */
 export async function getJobStatus(jobId) {
   const scheduler = getJobScheduler();
   return scheduler.getJobById(jobId);
 }
 
-/**
- * Register handler for admin-triggered batch news collection
- * @param {Function} handler - Async function to handle batch collection
- */
 export async function registerBatchNewsHandler(handler) {
   const scheduler = getJobScheduler();
 
-  // Create the queue if it doesn't exist
   try {
     await scheduler.createQueue(JOB_NAMES.NEWS_BATCH);
     console.log(`Queue '${JOB_NAMES.NEWS_BATCH}' created`);
@@ -228,9 +170,8 @@ export async function registerBatchNewsHandler(handler) {
   }
 
   await scheduler.work(JOB_NAMES.NEWS_BATCH, {
-    newJobCheckIntervalSeconds: 1  // Check for new jobs every second for responsive UI
+    newJobCheckIntervalSeconds: 1
   }, async (jobs) => {
-    // pg-boss v10+ passes an array of jobs
     const jobList = Array.isArray(jobs) ? jobs : [jobs];
     for (const job of jobList) {
       console.log(`[pg-boss] Starting batch news collection job: ${job.id}`);
@@ -239,54 +180,38 @@ export async function registerBatchNewsHandler(handler) {
         console.log(`[pg-boss] Batch news collection job completed: ${job.id}`);
       } catch (error) {
         console.error(`[pg-boss] Batch news collection job failed:`, error);
-        throw error; // Re-throw to mark job as failed in pg-boss
+        throw error;
       }
     }
   });
 }
 
-/**
- * Submit a batch news collection job
- * @param {Object} options - Job options
- * @param {number[]} options.poiIds - Optional array of POI IDs (null = all POIs)
- * @param {boolean} options.triggeredManually - Whether this was manually triggered
- * @returns {string} - pg-boss job ID
- */
 export async function submitBatchNewsJob(options = {}) {
   const scheduler = getJobScheduler();
 
   const pgBossJobId = await scheduler.send(JOB_NAMES.NEWS_BATCH, {
-    jobId: options.jobId,    // news_job_status record ID
+    jobId: options.jobId,
     poiIds: options.poiIds || null,
     triggeredManually: true,
     triggeredAt: new Date().toISOString()
   }, {
-    retryLimit: 2,           // Retry failed jobs up to 2 times
-    retryDelay: 30,          // Wait 30 seconds before retry
-    expireInMinutes: 60      // Job expires after 60 minutes
+    retryLimit: 2,
+    retryDelay: 30,
+    expireInMinutes: 60
   });
 
   console.log(`[pg-boss] Batch news collection job submitted: ${pgBossJobId}`);
   return pgBossJobId;
 }
 
-/**
- * Get the status of a batch news job from pg-boss
- * @param {string} jobId - pg-boss job ID
- */
 export async function getBatchJobStatus(jobId) {
   const scheduler = getJobScheduler();
   return scheduler.getJobById(jobId);
 }
 
-/**
- * Schedule the trail status collection job
- * @param {string} cronExpression - Cron expression (default: every 30 minutes)
- */
 export async function scheduleTrailStatusCollection(cronExpression = '*/30 * * * *') {
   const scheduler = getJobScheduler();
 
-  // Create a schedule for the trail status collection job
   await scheduler.schedule(JOB_NAMES.TRAIL_STATUS_COLLECTION, cronExpression, {}, {
     tz: 'America/New_York'
   });
@@ -294,14 +219,9 @@ export async function scheduleTrailStatusCollection(cronExpression = '*/30 * * *
   console.log(`Trail status collection scheduled with cron: ${cronExpression}`);
 }
 
-/**
- * Register the trail status collection job handler
- * @param {Function} handler - Async function to handle the job
- */
 export async function registerTrailStatusHandler(handler) {
   const scheduler = getJobScheduler();
 
-  // Create the queue if it doesn't exist
   try {
     await scheduler.createQueue(JOB_NAMES.TRAIL_STATUS_COLLECTION);
     console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_COLLECTION}' created`);
@@ -318,19 +238,14 @@ export async function registerTrailStatusHandler(handler) {
       console.log('Trail status collection job completed:', job.id);
     } catch (error) {
       console.error('Trail status collection job failed:', error);
-      throw error; // Re-throw to mark job as failed
+      throw error;
     }
   });
 }
 
-/**
- * Register handler for batch trail status collection
- * @param {Function} handler - Async function to handle batch collection
- */
 export async function registerBatchTrailStatusHandler(handler) {
   const scheduler = getJobScheduler();
 
-  // Create the queue if it doesn't exist
   try {
     await scheduler.createQueue(JOB_NAMES.TRAIL_STATUS_BATCH);
     console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_BATCH}' created`);
@@ -341,7 +256,7 @@ export async function registerBatchTrailStatusHandler(handler) {
   }
 
   await scheduler.work(JOB_NAMES.TRAIL_STATUS_BATCH, {
-    newJobCheckIntervalSeconds: 1  // Check for new jobs every second for responsive UI
+    newJobCheckIntervalSeconds: 1
   }, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs];
     for (const job of jobList) {
@@ -351,16 +266,12 @@ export async function registerBatchTrailStatusHandler(handler) {
         console.log(`[pg-boss] Batch trail status collection job completed: ${job.id}`);
       } catch (error) {
         console.error(`[pg-boss] Batch trail status collection job failed:`, error);
-        throw error; // Re-throw to mark job as failed in pg-boss
+        throw error;
       }
     }
   });
 }
 
-/**
- * Schedule the moderation sweep job (daily at 7 AM after news collection)
- * @param {string} cronExpression - Cron expression
- */
 export async function scheduleModerationSweep(cronExpression = '0 7 * * *') {
   const scheduler = getJobScheduler();
 
@@ -371,10 +282,6 @@ export async function scheduleModerationSweep(cronExpression = '0 7 * * *') {
   console.log(`Moderation sweep scheduled with cron: ${cronExpression}`);
 }
 
-/**
- * Register handler for moderation sweep
- * @param {Function} handler - Async function() to process all pending items
- */
 export async function registerModerationSweepHandler(handler) {
   const scheduler = getJobScheduler();
 
@@ -399,10 +306,6 @@ export async function registerModerationSweepHandler(handler) {
   });
 }
 
-/**
- * Register handler for newsletter email processing
- * @param {Function} handler - async (emailId) => void
- */
 export async function registerNewsletterHandler(handler) {
   const scheduler = getJobScheduler();
 
@@ -428,10 +331,6 @@ export async function registerNewsletterHandler(handler) {
   });
 }
 
-/**
- * Queue a newsletter email for background processing
- * @param {number} emailId - ID of the newsletter_emails row to process
- */
 export async function queueNewsletterJob(emailId) {
   const scheduler = getJobScheduler();
 
@@ -445,10 +344,6 @@ export async function queueNewsletterJob(emailId) {
   });
 }
 
-/**
- * Schedule the nightly image backup job
- * @param {string} cronExpression - Cron expression (default: 2 AM Eastern daily)
- */
 export async function scheduleImageBackup(cronExpression = '0 2 * * *') {
   const scheduler = getJobScheduler();
 
@@ -459,10 +354,6 @@ export async function scheduleImageBackup(cronExpression = '0 2 * * *') {
   console.log(`Image backup scheduled with cron: ${cronExpression}`);
 }
 
-/**
- * Register the image backup job handler
- * @param {Function} handler - Async function to handle the job
- */
 export async function registerImageBackupHandler(handler) {
   const scheduler = getJobScheduler();
 
@@ -487,10 +378,6 @@ export async function registerImageBackupHandler(handler) {
   });
 }
 
-/**
- * Manually submit an image backup job
- * @returns {string} - pg-boss job ID
- */
 export async function submitImageBackupJob() {
   const scheduler = getJobScheduler();
 
@@ -507,10 +394,6 @@ export async function submitImageBackupJob() {
   return jobId;
 }
 
-/**
- * Schedule the nightly database backup job
- * @param {string} cronExpression - Cron expression (default: 3 AM Eastern daily)
- */
 export async function scheduleDatabaseBackup(cronExpression = '0 3 * * *') {
   const scheduler = getJobScheduler();
 
@@ -521,10 +404,6 @@ export async function scheduleDatabaseBackup(cronExpression = '0 3 * * *') {
   console.log(`Database backup scheduled with cron: ${cronExpression}`);
 }
 
-/**
- * Register the database backup job handler
- * @param {Function} handler - Async function to handle the job
- */
 export async function registerDatabaseBackupHandler(handler) {
   const scheduler = getJobScheduler();
 
@@ -549,21 +428,12 @@ export async function registerDatabaseBackupHandler(handler) {
   });
 }
 
-/**
- * Update the cron schedule for any job type (live update via pg-boss)
- * @param {string} jobName - pg-boss job name
- * @param {string} cronExpression - New cron expression
- */
 export async function updateSchedule(jobName, cronExpression) {
   const scheduler = getJobScheduler();
   await scheduler.schedule(jobName, cronExpression, {}, { tz: 'America/New_York' });
   console.log(`Schedule updated: ${jobName} → ${cronExpression}`);
 }
 
-/**
- * Register handler for weekly newsletter digest
- * @param {Function} handler - Async function to handle digest generation and send
- */
 export async function registerDigestHandler(handler) {
   const scheduler = getJobScheduler();
 
@@ -577,7 +447,6 @@ export async function registerDigestHandler(handler) {
   }
 
   await scheduler.work(JOB_NAMES.NEWSLETTER_DIGEST, async (jobs) => {
-    // pg-boss v12+ passes an array of jobs
     const jobList = Array.isArray(jobs) ? jobs : [jobs];
     for (const job of jobList) {
       console.log('Starting newsletter digest job:', job.id);
@@ -592,14 +461,9 @@ export async function registerDigestHandler(handler) {
   });
 }
 
-/**
- * Schedule weekly newsletter digest
- * @param {string} cronExpression - Cron expression (default: every Friday at 8 AM EST)
- */
 export async function scheduleDigest(cronExpression = '0 8 * * 5') {
   const scheduler = getJobScheduler();
 
-  // Every Friday at 8 AM EST
   await scheduler.schedule(JOB_NAMES.NEWSLETTER_DIGEST, cronExpression, {}, {
     tz: 'America/New_York'
   });
@@ -607,10 +471,6 @@ export async function scheduleDigest(cronExpression = '0 8 * * 5') {
   console.log(`Newsletter digest scheduled with cron: ${cronExpression}`);
 }
 
-/**
- * Manually trigger a newsletter digest (for testing)
- * @returns {Promise<string>} Job ID
- */
 export async function triggerDigestManually() {
   const scheduler = getJobScheduler();
 
@@ -623,9 +483,6 @@ export async function triggerDigestManually() {
   return jobId;
 }
 
-/**
- * Stop the job scheduler gracefully
- */
 export async function stopJobScheduler() {
   if (boss) {
     await boss.stop();
@@ -634,15 +491,6 @@ export async function stopJobScheduler() {
   }
 }
 
-/**
- * Wrap a scheduled job handler with random jitter delay (anti-bot detection)
- * Only for cron-scheduled jobs — manual/admin triggers should NOT use this.
- * @param {Function} handler - Async handler to wrap
- * @param {string} jobName - Job name for logging
- * @param {number} minSeconds - Minimum delay in seconds (default: 1)
- * @param {number} maxSeconds - Maximum delay in seconds (default: 60)
- * @returns {Function} Wrapped handler with jitter delay
- */
 export function withJitter(handler, jobName, minSeconds = 1, maxSeconds = 60) {
   return async (...args) => {
     const delay = Math.floor(Math.random() * (maxSeconds - minSeconds + 1)) + minSeconds;

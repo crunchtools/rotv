@@ -6,7 +6,6 @@ function LoginButton() {
   const [showDropdown, setShowDropdown] = useState(false);
   const containerRef = useRef(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     if (!showDropdown) return;
 
@@ -16,7 +15,7 @@ function LoginButton() {
       }
     };
 
-    // Add event listener with slight delay to avoid immediate close
+    // Delay listener registration so the click that opened the dropdown doesn't immediately close it.
     const timeoutId = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
     }, 0);

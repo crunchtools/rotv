@@ -1,15 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 
-/**
- * Shared hook for per-item moderation state and API handlers.
- * Used by both ModerationInbox and ParkNews/ParkEvents.
- *
- * @param {Object} options
- * @param {Function} options.onItemsChanged - Callback to re-fetch items after mutations
- * @param {Function} options.onCountChange - Callback when pending count changes (optional)
- */
 export default function useModeration({ onItemsChanged, onCountChange } = {}) {
-  const [editingItem, setEditingItem] = useState(null); // "news:123" key
+  const [editingItem, setEditingItem] = useState(null);
   const [editFields, setEditFields] = useState({});
   const [notification, setNotification] = useState(null);
   const [pois, setPois] = useState([]);
@@ -25,14 +17,12 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
 
   const notify = useCallback((type, message) => setNotification({ type, message }), []);
 
-  // Auto-dismiss notifications
   useEffect(() => {
     if (!notification) return;
     const timer = setTimeout(() => setNotification(null), 4000);
     return () => clearTimeout(timer);
   }, [notification]);
 
-  // Fetch POIs for PoiSearchSelect
   useEffect(() => {
     fetch('/api/pois', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
@@ -363,7 +353,6 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
   };
 
   return {
-    // State
     editingItem, editFields, setEditFields,
     notification, pois,
     itemUrls, newUrlInput, setNewUrlInput, addingUrl,
@@ -371,7 +360,6 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
     mergingItem, mergeCandidates, merging,
     confirmDelete, setConfirmDelete,
     selectedItems,
-    // Handlers
     notify,
     handleApprove, handleReject, handleRequeue, handleDelete,
     handleSave, handleIaDate,
@@ -382,7 +370,6 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
   };
 }
 
-// Re-export FIELD_CONFIGS so both ModerationExtras and ModerationInbox can use it
 export const FIELD_CONFIGS = {
   news: [
     { key: 'title', label: 'Title', type: 'text', required: true },

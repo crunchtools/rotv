@@ -3,7 +3,6 @@ import MapThumbnail from './MapThumbnail';
 import { StatusBadge } from './StatusBadge';
 import { formatRelativeTime } from '../utils/dateUtils';
 
-// StatusTab component showing all MTB trails with status badges
 const StatusTab = memo(function StatusTab({
   mapState,
   onMapClick,
@@ -32,7 +31,6 @@ const StatusTab = memo(function StatusTab({
         const data = await response.json();
         setTrails(data);
 
-        // Calculate bounds for all MTB trails
         if (data.length > 0 && onMTBTrailsBoundsChange) {
           const bounds = calculateTrailsBounds(data);
           if (bounds) {
@@ -50,20 +48,17 @@ const StatusTab = memo(function StatusTab({
     }
   };
 
-  // Calculate bounds that encompass all MTB trails
   const calculateTrailsBounds = (trails) => {
     let minLat = Infinity, maxLat = -Infinity;
     let minLng = Infinity, maxLng = -Infinity;
 
     trails.forEach(trail => {
       if (trail.latitude && trail.longitude) {
-        // Point POI
         minLat = Math.min(minLat, trail.latitude);
         maxLat = Math.max(maxLat, trail.latitude);
         minLng = Math.min(minLng, trail.longitude);
         maxLng = Math.max(maxLng, trail.longitude);
       } else if (trail.geometry) {
-        // Linear feature - extract coordinates from geometry
         const coords = extractCoordinatesFromGeometry(trail.geometry);
         coords.forEach(([lng, lat]) => {
           minLat = Math.min(minLat, lat);
@@ -79,7 +74,6 @@ const StatusTab = memo(function StatusTab({
     return [[minLng, minLat], [maxLng, maxLat]];
   };
 
-  // Extract coordinates from GeoJSON geometry
   const extractCoordinatesFromGeometry = (geometry) => {
     if (typeof geometry === 'string') {
       geometry = JSON.parse(geometry);
@@ -107,7 +101,6 @@ const StatusTab = memo(function StatusTab({
     return coords;
   };
 
-  // Filter trails by search text
   const filteredTrails = useMemo(() => {
     let filtered = trails;
 
@@ -122,7 +115,6 @@ const StatusTab = memo(function StatusTab({
     return filtered;
   }, [trails, searchText]);
 
-  // Group trails by status
   const trailsByStatus = useMemo(() => {
     const groups = {
       open: [],
@@ -145,23 +137,19 @@ const StatusTab = memo(function StatusTab({
   }, [filteredTrails]);
 
   const handleTrailClick = useCallback((trail) => {
-    // Find the index of this trail in the trails list for navigation
     const currentIndex = trails.findIndex(t => t.id === trail.id);
     const mtbContext = {
       trailsList: trails,
       currentIndex: currentIndex
     };
 
-    // Handle both point POIs and linear features
     if (trail.poi_roles?.includes('point')) {
-      // Find the full destination object
       const fullDestination = destinations?.find(d => d.id === trail.id);
       if (fullDestination) {
         onSelectDestination(fullDestination, mtbContext);
         onMapClick();
       }
     } else {
-      // Find the full linear feature object (trail, river, boundary, etc.)
       const fullTrail = linearFeatures?.find(f => f.id === trail.id);
       if (fullTrail) {
         onSelectLinearFeature(fullTrail, mtbContext);

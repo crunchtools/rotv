@@ -6,40 +6,28 @@ const router = express.Router();
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 
-// Google OAuth - dual-strategy approach for conditional Drive access
-// Standard route: all users authenticate with basic scopes (profile + email)
-// Upgrade route: admin-only Drive scope via incremental authorization
-// Auto-detection: admin users without Drive credentials are redirected to upgrade flow
-// Fix: Only register routes if strategy is configured (prevents "Unknown strategy" error)
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-  // Standard Google OAuth (all users - basic scopes only)
   router.get('/google', passport.authenticate('google'));
 
-  // Drive scope upgrade (admin only - incremental authorization)
   router.get('/google/upgrade', passport.authenticate('google-upgrade', {
     accessType: 'offline',
     prompt: 'consent',
-    state: 'upgrade' // Pass state to identify upgrade flow in callback
+    state: 'upgrade'
   }));
 
-  // Unified callback handler - handles both standard and upgrade flows
   router.get('/google/callback', (req, res, next) => {
-    // Check if this is an upgrade callback (state=upgrade)
     const isUpgrade = req.query.state === 'upgrade';
     const strategy = isUpgrade ? 'google-upgrade' : 'google';
 
     passport.authenticate(strategy, {
       failureRedirect: `${FRONTEND_URL}?auth=failed`
     })(req, res, async () => {
-      // Handle upgrade flow - redirect to Sync Settings
       if (isUpgrade) {
         return res.redirect(`${FRONTEND_URL}/admin?auth=success&tab=sync`);
       }
 
-      // Handle standard flow - auto-detect admin without Drive credentials
       const isAdmin = req.user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
-      // Parse credentials (handles both JSON string and object from pg driver)
       let credentials = null;
       if (req.user.oauth_credentials) {
         try {
@@ -54,16 +42,13 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       const hasCredentials = credentials && credentials.access_token;
 
       if (isAdmin && !hasCredentials) {
-        // Redirect admin to upgrade flow for Drive access
         return res.redirect('/auth/google/upgrade');
       }
 
-      // Standard success redirect
       res.redirect(`${FRONTEND_URL}?auth=success`);
     });
   });
 } else {
-  // Return helpful error when OAuth not configured
   router.get('/google', (req, res) => {
     res.status(501).json({ error: 'Google OAuth not configured. Contact administrator.' });
   });
@@ -72,7 +57,6 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   });
 }
 
-// Facebook OAuth
 if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
   router.get('/facebook', passport.authenticate('facebook', {
     scope: ['email']
@@ -85,7 +69,6 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
     }
   );
 } else {
-  // Return helpful error when OAuth not configured
   router.get('/facebook', (req, res) => {
     res.status(501).json({ error: 'Facebook OAuth not configured. Contact administrator.' });
   });
@@ -94,9 +77,7 @@ if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
   });
 }
 
-// Get current user
 router.get('/user', (req, res) => {
-  // Test bypass for local development
   if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
     return res.json({
       id: 999,
@@ -111,7 +92,6 @@ router.get('/user', (req, res) => {
   }
 
   if (req.isAuthenticated()) {
-    // Return user info without sensitive data (no oauth_credentials)
     const { id, email, name, picture_url, is_admin, role, favorite_destinations, preferences } = req.user;
     res.json({
       id,
@@ -128,7 +108,6 @@ router.get('/user', (req, res) => {
   }
 });
 
-// Logout
 router.post('/logout', (req, res) => {
   req.logout((err) => {
     if (err) {
@@ -144,9 +123,7 @@ router.post('/logout', (req, res) => {
   });
 });
 
-// Check auth status (lightweight)
 router.get('/status', (req, res) => {
-  // Test bypass for local development
   if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
     return res.json({
       authenticated: true,

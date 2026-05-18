@@ -1,16 +1,5 @@
-/**
- * Date Extractor — chrono-node wrapper for deterministic date parsing.
- * Universal post-processor for every date entering the system.
- */
-
 import * as chrono from 'chrono-node';
 
-/**
- * Normalize a single date string to YYYY-MM-DD.
- * @param {string|null} raw - Raw date string
- * @param {string} timezone - IANA timezone (default: America/New_York)
- * @returns {string|null} 'YYYY-MM-DD' or null
- */
 export function parseDate(raw, timezone = 'America/New_York') {
   if (!raw || typeof raw !== 'string') return null;
   const trimmed = raw.trim();
@@ -39,30 +28,19 @@ export function parseDate(raw, timezone = 'America/New_York') {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
-/**
- * Normalize a datetime string to a UTC ISO string (YYYY-MM-DDTHH:MM:SS).
- * Bare strings (no explicit offset) are interpreted in `timezone` (default: Eastern).
- * Strings with explicit offsets (Z, +HH:MM, -HH:MM) are honored as-is.
- * @param {string|null} raw - Raw datetime string
- * @param {string} timezone - IANA timezone for bare strings (default: America/New_York)
- * @returns {string|null} 'YYYY-MM-DDTHH:MM:SS' in UTC, or null
- */
 export function parseDateTime(raw, timezone = 'America/New_York') {
   if (!raw || typeof raw !== 'string') return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
 
-  // Bare ISO strings ("2026-04-22T10:30", "2026-04-22T10:30:00") — no Z, no ±offset.
-  // chrono-node ignores the timezone parameter for these and treats them as UTC.
-  // Use localToUTC instead, which correctly interprets them in the given timezone.
+  // chrono-node ignores the timezone parameter for bare ISO strings (no Z, no ±offset)
+  // and treats them as UTC. Use localToUTC for correct interpretation.
   if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(trimmed) &&
       !/[Zz]/.test(trimmed) &&
       !/[+-]\d{2}(:\d{2})?$/.test(trimmed)) {
     return localToUTC(trimmed, timezone);
   }
 
-  // Everything else: natural language ("April 28 at 6pm"), explicit offsets
-  // ("2026-04-28T18:00:00-04:00"), Z-terminated ("...Z"). chrono handles correctly.
   let parsedDates;
   try {
     parsedDates = chrono.parse(trimmed, { instant: new Date(), timezone });
@@ -73,12 +51,6 @@ export function parseDateTime(raw, timezone = 'America/New_York') {
   return d.toISOString().substring(0, 19);
 }
 
-/**
- * Scan raw text and return all date references found by chrono-node.
- * @param {string} text - Raw page text / rendered markdown
- * @param {string} timezone - IANA timezone
- * @returns {Array<{text: string, start: string, end: string|null, index: number}>}
- */
 const RELATIVE_DATE_WORDS = /^(now|today|tomorrow|yesterday|this morning|this evening|this afternoon|tonight|last night)$/i;
 
 export function extractDatesFromText(text, timezone = 'America/New_York') {
@@ -116,14 +88,6 @@ export function extractDatesFromText(text, timezone = 'America/New_York') {
   });
 }
 
-/**
- * Find the most likely publication date from rendered page text.
- * Checks structured patterns (bylines, metadata), title, then full text scan.
- * @param {string} text - Rendered page content
- * @param {string} title - Item title
- * @param {string} timezone - IANA timezone
- * @returns {string|null} 'YYYY-MM-DD' or null
- */
 export function findPublicationDate(text, title, timezone = 'America/New_York') {
   if (!text) return null;
 
@@ -152,15 +116,6 @@ export function findPublicationDate(text, title, timezone = 'America/New_York') 
   return null;
 }
 
-/**
- * Extract a date from a URL path.
- * Supports multiple patterns:
- *   /YYYY/MM/DD/           — WordPress, news sites (e.g. /2024/03/15/article-slug/)
- *   /YYYYMMDD-             — NPS (e.g. /news/20250929-prescribed-fires.htm)
- *   /YYYY/MMDD             — ANPR (e.g. /release/2026/0109)
- * @param {string} url - The article URL
- * @returns {string|null} 'YYYY-MM-DD' or null
- */
 export function extractUrlDate(url) {
   if (!url) return null;
   let path;
@@ -193,19 +148,6 @@ export function extractUrlDate(url) {
   return null;
 }
 
-/**
- * Normalize raw date strings from all extraction sources to ISO 8601 (YYYY-MM-DD).
- * Unparseable strings are discarded. This is the normalization step between
- * extraction and consensus scoring.
- *
- * @param {Object} rawSources - Raw extracted date strings by source
- * @param {string[]} rawSources.jsonLd   - Raw strings from JSON-LD
- * @param {string[]} rawSources.meta     - Raw strings from meta tags
- * @param {string[]} rawSources.timeTags - Raw strings from <time> elements
- * @param {string|null} rawSources.url   - Raw string from URL pattern
- * @param {string} [timezone]            - IANA timezone for chrono-node parsing
- * @returns {Object} Normalized deterministic sources with only valid YYYY-MM-DD strings
- */
 export function normalizeDateSources(rawSources = {}, timezone = 'America/New_York', mode = 'date') {
   const parser = mode === 'datetime' ? parseDateTime : parseDate;
   const norm = (raw) => {
@@ -223,24 +165,6 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
   };
 }
 
-/**
- * Score deterministic date sources (everything except LLM).
- *
- * Weights:
- *   JSON-LD datePublished / startDate  — 4 pts (most authoritative structured data)
- *   Meta tags (OG, Parsely, DC)         — 1 pt  (common but editable by CMS)
- *   HTML <time datetime>                — 1 pt  (structural HTML, usually reliable)
- *   URL path date                       — 1 pt  (static, never wrong when present)
- *
- * LLM votes are tallied separately in scoreDateConsensus().
- *
- * @param {Object} sources - Normalized date strings by source (from normalizeDateSources)
- * @param {string[]} sources.jsonLd   - ISO dates from JSON-LD (weight 4 each)
- * @param {string[]} sources.meta     - ISO dates from meta tags (weight 1 each)
- * @param {string[]} sources.timeTags - ISO dates from <time> elements (weight 1 each)
- * @param {string|null} sources.url   - ISO date from URL path (weight 1)
- * @returns {{ scores: Object, sourceMap: Object }} Raw per-date scores and source map
- */
 export function scoreDeterministicSources(sources = {}) {
   const today = new Date().toISOString().substring(0, 10);
   const scores = {};
@@ -261,22 +185,6 @@ export function scoreDeterministicSources(sources = {}) {
   return { scores, sourceMap };
 }
 
-/**
- * Combined consensus scoring: deterministic sources + LLM votes.
- * Simple tally — each source adds points to a date, highest total wins.
- * Ties return score 0 (routes to moderation).
- *
- * Points per source:
- *   JSON-LD: 4 per occurrence
- *   Meta tag: 1 per occurrence
- *   Time tag: 1 per occurrence
- *   URL date: 1
- *   LLM vote: 1 per vote
- *
- * @param {Object} deterministicSources - From normalizeDateSources (without llm field)
- * @param {(string|null)[]} llmResults - Array of date strings from multi-vote LLM calls
- * @returns {{ date: string|null, score: number, sourceMap: Object }}
- */
 export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
   const { scores, sourceMap } = scoreDeterministicSources(deterministicSources);
 
@@ -302,13 +210,6 @@ export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
   return { date: sorted[0][0], score: sorted[0][1], sourceMap };
 }
 
-/**
- * Find start/end dates and times for an event from rendered page text.
- * @param {string} text - Rendered page content
- * @param {string} title - Event title
- * @param {string} timezone - IANA timezone
- * @returns {{startDate: string|null, startTime: string|null, endDate: string|null, endTime: string|null}}
- */
 export function findEventDates(text, title, timezone = 'America/New_York') {
   const eventDates = { startDate: null, startTime: null, endDate: null, endTime: null };
   if (!text) return eventDates;
@@ -332,15 +233,6 @@ export function findEventDates(text, title, timezone = 'America/New_York') {
   return eventDates;
 }
 
-/**
- * Convert a datetime-local string (no offset) from a given IANA timezone to UTC ISO.
- * Unlike parseDateTime, this correctly handles ISO-format strings (chrono-node
- * ignores the timezone parameter for ISO strings and treats them as UTC).
- *
- * @param {string} localStr - "YYYY-MM-DDTHH:MM" (datetime-local input value)
- * @param {string} timezone - IANA timezone the value is expressed in (default: America/New_York)
- * @returns {string|null} "YYYY-MM-DDTHH:MM:SS" in UTC, or null
- */
 export function localToUTC(localStr, timezone = 'America/New_York') {
   if (!localStr || !localStr.includes('T')) return null;
   // Eastern is either -04:00 (EDT) or -05:00 (EST). Try both, verify with round-trip.

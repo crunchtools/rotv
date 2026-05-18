@@ -7,7 +7,6 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Fetch current user from server
   const fetchUser = useCallback(async () => {
     try {
       const response = await fetch('/auth/user', {
@@ -28,18 +27,15 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // Initial user fetch
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
 
-  // Check URL for auth callback
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
     if (authStatus === 'success') {
       fetchUser();
-      // Clean URL
       window.history.replaceState({}, '', window.location.pathname);
     } else if (authStatus === 'failed') {
       setError('Authentication failed. Please try again.');
@@ -47,7 +43,6 @@ export function AuthProvider({ children }) {
     }
   }, [fetchUser]);
 
-  // Logout function
   const logout = async () => {
     try {
       const response = await fetch('/auth/logout', {
@@ -63,7 +58,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // Login functions
   const loginWithGoogle = () => {
     window.location.href = '/auth/google';
   };
@@ -72,7 +66,6 @@ export function AuthProvider({ children }) {
     window.location.href = '/auth/facebook';
   };
 
-  // Update user favorites locally
   const updateFavorites = (favorites) => {
     if (user) {
       setUser({ ...user, favorites });

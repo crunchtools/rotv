@@ -1,24 +1,10 @@
-/**
- * CollectionTracker — shared progress + display slot state management
- *
- * Each collection type (news, trail status, etc.) gets its own instance
- * so they can run concurrently without interference. Extracted from
- * duplicated code in newsService.js and trailStatusService.js.
- */
-
 export class CollectionTracker {
-  /**
-   * @param {string} label - Log prefix label (e.g. 'News', 'Trail')
-   */
   constructor(label) {
     this.label = label;
     this.collectionProgress = new Map();
     this.jobDisplaySlots = new Map();
   }
 
-  /**
-   * Update collection progress for a POI/trail
-   */
   updateProgress(poiId, updates) {
     const current = this.collectionProgress.get(poiId) || {
       phase: 'starting',
@@ -30,7 +16,6 @@ export class CollectionTracker {
       jobId: null
     };
 
-    // Track phase transitions — add previous phase to history when phase changes
     if (updates.phase && updates.phase !== current.phase && current.phase !== 'starting') {
       const phaseHistory = [...(current.phaseHistory || [])];
       if (!phaseHistory.includes(current.phase)) {
@@ -42,7 +27,6 @@ export class CollectionTracker {
     const updated = { ...current, ...updates, poiId, lastUpdate: Date.now() };
     this.collectionProgress.set(poiId, updated);
 
-    // Update display slot if slotId and jobId are present
     if (updated.slotId !== null && updated.slotId !== undefined && updated.jobId) {
       this._updateSlotFromProgress(updated.jobId, updated.slotId, updated);
     }
@@ -50,23 +34,14 @@ export class CollectionTracker {
     return updated;
   }
 
-  /**
-   * Get collection progress for a POI
-   */
   getCollectionProgress(poiId) {
     return this.collectionProgress.get(poiId) || null;
   }
 
-  /**
-   * Clear collection progress for a POI
-   */
   clearProgress(poiId) {
     this.collectionProgress.delete(poiId);
   }
 
-  /**
-   * Get all active (non-completed) progress entries
-   */
   getAllActiveProgress() {
     const active = [];
     for (const [poiId, progress] of this.collectionProgress.entries()) {
@@ -83,9 +58,6 @@ export class CollectionTracker {
     return active;
   }
 
-  /**
-   * Initialize display slots for a job — count matches max concurrency
-   */
   initializeSlots(jobId, count = 10) {
     const slots = Array(count).fill(null).map((_, i) => ({
       slotId: i,
@@ -99,10 +71,6 @@ export class CollectionTracker {
     console.log(`[${this.label} Job ${jobId}] Initialized ${count} display slots`);
   }
 
-  /**
-   * Find the first available slot (null or completed)
-   * Returns slot index 0-9
-   */
   findFirstAvailableSlot(jobId) {
     const slots = this.jobDisplaySlots.get(jobId);
     // Fix: return null (not 0) when uninitialized to avoid overwriting slot 0 (PR #168 review)
@@ -112,15 +80,9 @@ export class CollectionTracker {
       !slot.poiId || slot.status === 'completed'
     );
 
-    // Return null if all slots are occupied (maxConcurrency should prevent this,
-    // but returning null lets callers handle the edge case explicitly)
     return availableIndex >= 0 ? availableIndex : null;
   }
 
-  /**
-   * Assign a POI to a display slot
-   * Immediately replaces any old data to prevent stale "completed" status flicker
-   */
   assignPoiToSlot(jobId, slotId, poiId, poiName, provider) {
     const slots = this.jobDisplaySlots.get(jobId);
     if (!slots) return;
@@ -137,9 +99,6 @@ export class CollectionTracker {
     console.log(`[${this.label} Job ${jobId}] Assigned POI ${poiId} (${poiName}) to Slot ${slotId}`);
   }
 
-  /**
-   * Update slot with current progress data (internal)
-   */
   _updateSlotFromProgress(jobId, slotId, progress) {
     const slots = this.jobDisplaySlots.get(jobId);
     if (!slots || slotId === undefined || slotId === null) return;
@@ -154,9 +113,6 @@ export class CollectionTracker {
     };
   }
 
-  /**
-   * Get current display slots for a job
-   */
   getDisplaySlots(jobId) {
     const slots = this.jobDisplaySlots.get(jobId);
     if (!slots) {
@@ -180,18 +136,11 @@ export class CollectionTracker {
     });
   }
 
-  /**
-   * Clear display slots when job completes
-   */
   clearDisplaySlots(jobId) {
     this.jobDisplaySlots.delete(jobId);
     console.log(`[${this.label} Job ${jobId}] Cleared display slots`);
   }
 
-  /**
-   * Request cancellation of an ongoing collection job
-   * @returns {boolean} true if cancellation was requested
-   */
   requestCancellation(poiId) {
     const progress = this.collectionProgress.get(poiId);
     if (progress && !progress.completed) {
@@ -205,9 +154,6 @@ export class CollectionTracker {
     return false;
   }
 
-  /**
-   * Check if cancellation has been requested for a POI
-   */
   isCancellationRequested(poiId) {
     const progress = this.collectionProgress.get(poiId);
     return progress?.cancellationRequested === true;

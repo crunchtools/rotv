@@ -1,26 +1,13 @@
-/**
- * Apify Service
- * Fetches Facebook posts via Apify cloud scrapers.
- * Used by trailStatusService for Facebook URLs that can't be extracted with Playwright.
- *
- * Twitter/X uses Playwright + cookies directly (Apify Twitter actors are unreliable).
- */
-
 const APIFY_BASE_URL = 'https://api.apify.com/v2';
 const FACEBOOK_ACTOR_ID = 'apify~facebook-posts-scraper';
 
-/**
- * Load Apify API token from admin_settings table
- * @param {Pool} pool - Database connection pool
- * @returns {string|null} - API token or null if not configured
- */
 async function getApifyToken(pool) {
   try {
-    const result = await pool.query(
+    const tokenRow = await pool.query(
       `SELECT value FROM admin_settings WHERE key = 'apify_api_token'`
     );
-    if (result.rows.length > 0 && result.rows[0].value) {
-      return result.rows[0].value;
+    if (tokenRow.rows.length > 0 && tokenRow.rows[0].value) {
+      return tokenRow.rows[0].value;
     }
   } catch (err) {
     console.error('[Apify] Error loading API token:', err.message);
@@ -28,13 +15,6 @@ async function getApifyToken(pool) {
   return null;
 }
 
-/**
- * Call Apify actor sync API and return dataset items
- * @param {string} actorId - Apify actor ID
- * @param {Object} input - Actor input payload
- * @param {string} token - Apify API token
- * @returns {Array} - Array of result items
- */
 async function runActorSync(actorId, input, token) {
   const url = `${APIFY_BASE_URL}/acts/${actorId}/run-sync-get-dataset-items?token=${token}`;
 
@@ -42,7 +22,7 @@ async function runActorSync(actorId, input, token) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(input),
-    signal: AbortSignal.timeout(120000) // 2 minute timeout
+    signal: AbortSignal.timeout(120000)
   });
 
   if (!response.ok) {
@@ -53,24 +33,11 @@ async function runActorSync(actorId, input, token) {
   return response.json();
 }
 
-/**
- * Extract Facebook page URL from a status URL
- * Normalizes to https://www.facebook.com/pagename/ format
- * @param {string} url - Facebook URL
- * @returns {string|null} - Normalized page URL, or null
- */
 function extractFacebookPageUrl(url) {
   const match = url.match(/(?:www\.)?facebook\.com\/([A-Za-z0-9._-]+)/);
   return match ? `https://www.facebook.com/${match[1]}/` : null;
 }
 
-/**
- * Fetch recent Facebook posts for a page via Apify
- * @param {Pool} pool - Database connection pool
- * @param {string} statusUrl - Facebook page URL
- * @param {number} maxItems - Maximum number of posts to fetch (default: 10)
- * @returns {Object} - { markdown: string|null, reachable: boolean, reason?: string }
- */
 export async function fetchFacebookPosts(pool, statusUrl, maxItems = 10) {
   const pageUrl = extractFacebookPageUrl(statusUrl);
   if (!pageUrl) {
@@ -97,7 +64,6 @@ export async function fetchFacebookPosts(pool, statusUrl, maxItems = 10) {
       return { markdown: null, reachable: true, reason: 'no posts found' };
     }
 
-    // Concatenate post text with timestamps
     const posts = items
       .map(item => {
         const text = item.text || item.message || item.postText || '';
@@ -121,21 +87,10 @@ export async function fetchFacebookPosts(pool, statusUrl, maxItems = 10) {
   }
 }
 
-/**
- * Check if a URL is a Facebook URL
- * @param {string} url - URL to check
- * @returns {boolean}
- */
 export function isFacebookUrl(url) {
   return url.includes('facebook.com');
 }
 
-/**
- * Test Apify API token validity
- * Makes a simple API call to verify the token works
- * @param {Pool} pool - Database connection pool
- * @returns {Promise<boolean>} - True if token is valid
- */
 export async function testApifyToken(pool) {
   const token = await getApifyToken(pool);
   if (!token) {
@@ -143,11 +98,10 @@ export async function testApifyToken(pool) {
   }
 
   try {
-    // Test with a simple actor list call
     const url = `${APIFY_BASE_URL}/acts?token=${token}&limit=1`;
     const response = await fetch(url, {
       method: 'GET',
-      signal: AbortSignal.timeout(10000) // 10 second timeout
+      signal: AbortSignal.timeout(10000)
     });
 
     return response.ok;

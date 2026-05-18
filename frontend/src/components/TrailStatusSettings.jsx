@@ -14,7 +14,6 @@ function TrailStatusSettings() {
     checkForRunningJob();
   }, []);
 
-  // Poll for active job status and AI stats
   useEffect(() => {
     if (!activeJobId) return;
 
@@ -27,7 +26,6 @@ function TrailStatusSettings() {
           const status = await response.json();
           setLiveProgress(status);
 
-          // Fetch AI stats while job is running
           try {
             const statsResponse = await fetch('/api/admin/trail-status/ai-stats', {
               credentials: 'include'
@@ -184,7 +182,6 @@ function TrailStatusSettings() {
         You can also trigger collection manually below.
       </p>
 
-      {/* Live Progress */}
       {liveProgress && (
         <div className="collection-progress-card">
           <div className="progress-card-header">
@@ -252,14 +249,12 @@ function TrailStatusSettings() {
         </div>
       )}
 
-      {/* Result Message */}
       {result && (
         <div className={`result-message ${result.type}`}>
           {result.message}
         </div>
       )}
 
-      {/* Collection Button */}
       <div className="collection-actions">
         <button
           onClick={handleCollectStatus}
@@ -270,7 +265,6 @@ function TrailStatusSettings() {
         </button>
       </div>
 
-      {/* Last Job Status */}
       {!loading && jobStatus && (
         <div className="last-job-section">
           <h4>Last Collection Job</h4>

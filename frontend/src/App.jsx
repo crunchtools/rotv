@@ -31,10 +31,8 @@ import GuidedTour from './components/GuidedTour';
 import TourPrompt from './components/TourPrompt';
 import { handleRovingKeyDown } from './utils/a11yUtils';
 
-// Default icon type IDs for initializing the filter
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
 
-// Generate URL-friendly slug from POI name
 function generateSlug(name) {
   if (!name) return '';
   return name
@@ -45,9 +43,6 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
 }
 
-// Default park bounds - expanded to include all MTB trailheads
-// Includes: Reagan-Huffman (westernmost), Ohio & Erie Canal (northernmost),
-// East Rim (easternmost), Hampton Hills (southernmost)
 const DEFAULT_PARK_BOUNDS = [
   [41.13, -81.85],  // Southwest corner (expanded west to include Reagan-Huffman at -81.832)
   [41.45, -81.50]   // Northeast corner (expanded to fit all trailheads)
@@ -60,40 +55,30 @@ function AppContent() {
   const [filteredDestinations, setFilteredDestinations] = useState([]);
   const [selectedDestination, setSelectedDestination] = useState(null);
 
-  // POI type visibility filter (shared with Map and News/Events tabs)
-  // Icon configuration for determining POI types
   const [iconConfig, setIconConfig] = useState([]);
 
-  // Initialize visibleTypes from database after iconConfig loads
   const [visibleTypes, setVisibleTypes] = useState(new Set(DEFAULT_ICON_TYPES));
 
-  // POI IDs currently visible in the map viewport (for News/Events filtering)
   const [visiblePoiIds, setVisiblePoiIds] = useState([]);
 
-  // Global visible POI count (single source of truth for all tabs)
   const visiblePoiCount = visiblePoiIds.length;
 
-  // Layer visibility states (lifted from Map component for unified control)
   const [showTrails, setShowTrails] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [visibleBoundaries, setVisibleBoundaries] = useState(new Set()); // Set of boundary IDs
 
-  // Map state for thumbnail display (center, zoom, bounds)
   const [mapState, setMapState] = useState({
     center: [41.26, -81.55],  // Park center default
     zoom: 11,
     bounds: null
   });
 
-  // Linear features (trails and rivers from database)
   const [linearFeatures, setLinearFeatures] = useState([]);
   const [selectedLinearFeature, setSelectedLinearFeature] = useState(null);
 
-  // Virtual POIs and associations state (for Entity: legacy Destination)
   const [virtualPois, setVirtualPois] = useState([]);
   const [associations, setAssociations] = useState([]);
 
-  // Drawing mode for adding associations to existing organization
   const [isDrawingAssociations, setIsDrawingAssociations] = useState(false);
   const [addingAssociationsToOrgId, setAddingAssociationsToOrgId] = useState(null);
 
@@ -107,75 +92,55 @@ function AppContent() {
   const [error, setError] = useState(null);
   const [editMode, setEditMode] = useState(false);
 
-  // Tab state for admin interface: 'view', 'settings'
   const [activeTab, setActiveTab] = useState('view');
 
-  // MTB trails viewport state for focus restoration
   const [boundsToFit, setBoundsToFit] = useState(null);
 
-  // Cache pre-calculated MTB bounds for instant access when switching tabs
   const cachedMtbBoundsRef = useRef(null);
 
-  // Settings sub-tab state: 'general', 'activities', 'news', 'google'
   const [settingsTab, setSettingsTab] = useState('general');
-  // About sub-tab state: 'story', 'tutorial', 'feedback', 'privacy'
   const [aboutTab, setAboutTab] = useState('story');
   const [jobsExpandTarget, setJobsExpandTarget] = useState(null);
 
-  // Moderation queue pending count for badge
   const [moderationCount, setModerationCount] = useState(0);
 
-  // Focus a specific news item in the moderation queue (from Edit link in news tab)
   const [moderationFocusId, setModerationFocusId] = useState(null);
   const [moderationFocusTitle, setModerationFocusTitle] = useState(null);
 
-  // News refresh trigger - increments when news collection completes
   const [newsRefreshTrigger, setNewsRefreshTrigger] = useState(0);
 
-  // Login/account dropdown state
   const [showLoginDropdown, setShowLoginDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
 
-  // Roving tabindex: which tab has keyboard focus highlight (null = none)
   const [kbdFocusIndex, setKbdFocusIndex] = useState(null);
 
-  // When dropdown closes, clear any stale state
   useEffect(() => {
     if (!showLoginDropdown && !showUserDropdown) return;
   }, [showLoginDropdown, showUserDropdown]);
   const [profileImageError, setProfileImageError] = useState(false);
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
 
-  // Tour state
   const [showTourPrompt, setShowTourPrompt] = useState(false);
   const [tourActive, setTourActive] = useState(false);
   const [tourStep, setTourStep] = useState(0);
 
-  // Router hooks
   const location = useLocation();
   const navigate = useNavigate();
 
-  // Track programmatic navigation to avoid effect conflicts
   const isProgrammaticNavigationRef = useRef(false);
   const isLoadingFromUrlRef = useRef(false);
   const prevPathnameRef = useRef(location.pathname);
 
-  // Initial MTB filter state for Results tab (controlled by URL path)
   const [initialShowMtbOnly, setInitialShowMtbOnly] = useState(false);
   const [isInMtbMode, setIsInMtbMode] = useState(false);
   const [selectedFromMtbList, setSelectedFromMtbList] = useState(false);
   const [mtbTrailsList, setMtbTrailsList] = useState([]);
   const [currentMtbIndex, setCurrentMtbIndex] = useState(-1);
 
-  // Organizations mode state for Results tab carousel scrolling (controlled by URL path)
   const [isInOrganizationsMode, setIsInOrganizationsMode] = useState(false);
 
-  // Flag to temporarily show all POIs when transitioning from MTB mode to All Results
-  // This prevents showing only viewport-filtered POIs before the map finishes zooming
   const [bypassViewportFilter, setBypassViewportFilter] = useState(false);
 
-  // Pre-calculate and cache MTB bounds when destinations load
-  // This ensures bounds are available immediately when switching to MTB mode
   useEffect(() => {
     if (destinations && destinations.length > 0) {
       const mtbTrailheads = destinations.filter(d => d.status_url && d.status_url.trim() !== '');
@@ -194,7 +159,6 @@ function AppContent() {
     }
   }, [destinations]);
 
-  // Check URL path for MTB trail status route
   useEffect(() => {
     if (location.pathname.startsWith('/mtb-trail-status')) {
       const pathParts = location.pathname.split('/');
@@ -202,16 +166,12 @@ function AppContent() {
 
       setInitialShowMtbOnly(true);
       setIsInMtbMode(true);
-      // Entering MTB mode - clear bypass flag
       setBypassViewportFilter(false);
 
-      // Use pre-calculated cached MTB bounds for instant availability
-      // This prevents the thumbnail from drawing with old bounds on first render
       if (cachedMtbBoundsRef.current) {
         setBoundsToFit(cachedMtbBoundsRef.current);
       }
 
-      // Only set to results tab if there's no POI slug in URL (otherwise POI loading will handle it)
       if (!poiSlug) {
         setActiveTab('results');
       }
@@ -219,28 +179,21 @@ function AppContent() {
       setIsInMtbMode(false);
       setInitialShowMtbOnly(false);
 
-      // When leaving MTB mode (coming from /mtb-trail-status to /), reset to default park view
       const wasInMtbMode = prevPathnameRef.current.startsWith('/mtb-trail-status');
       const isGoingToRoot = location.pathname === '/';
 
 
       if (wasInMtbMode && isGoingToRoot) {
-        // Set default park bounds IMMEDIATELY before anything else renders
-        // This ensures thumbnail has correct bounds on first render
         setBoundsToFit(DEFAULT_PARK_BOUNDS);
-        // Temporarily bypass viewport filtering until map viewport updates
         setBypassViewportFilter(true);
       } else if (!isGoingToRoot) {
-        // Clear bypass flag when navigating away from root
         setBypassViewportFilter(false);
       }
     }
 
-    // Update previous pathname at the end
     prevPathnameRef.current = location.pathname;
   }, [location.pathname, destinations]);
 
-  // Check URL path for organizations route
   useEffect(() => {
     if (location.pathname.startsWith('/organizations')) {
       const pathParts = location.pathname.split('/');
@@ -248,7 +201,6 @@ function AppContent() {
 
       setIsInOrganizationsMode(true);
 
-      // Only set to results tab if there's no org slug in URL (otherwise org loading will handle it)
       if (!orgSlug) {
         setActiveTab('results');
       }
@@ -257,17 +209,14 @@ function AppContent() {
     }
   }, [location.pathname]);
 
-  // Known main tab paths — used to distinguish tab URLs from POI slugs
   const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'settings', 'privacy']);
   const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
 
-  // Tour handlers
   const startTour = useCallback(() => {
     setShowTourPrompt(false);
     setTourStep(0);
     setTourActive(true);
     localStorage.setItem('rotv-tour-seen', 'true');
-    // Switch to map view for tour start
     setActiveTab('view');
     setSelectedDestination(null);
     setSelectedLinearFeature(null);
@@ -278,7 +227,6 @@ function AppContent() {
   const endTour = useCallback(() => {
     setTourActive(false);
     setTourStep(0);
-    // Return to map view
     setActiveTab('view');
     setSelectedDestination(null);
     setSelectedLinearFeature(null);
@@ -340,7 +288,6 @@ function AppContent() {
         break;
       }
       case 'selectVisitorCenter': {
-        // Select Boston Mill Visitor Center to show sidebar tabs
         setActiveTab('view');
         const visitorCenter = destinations.find(d => d.name === 'Boston Mill Visitor Center');
         if (visitorCenter) {
@@ -361,7 +308,6 @@ function AppContent() {
         break;
       }
       case 'showNewsletter': {
-        // Navigate to Settings -> Newsletter tab
         if (isAuthenticated) {
           setActiveTab('settings');
           if (isAdmin) {
@@ -375,28 +321,21 @@ function AppContent() {
     }
   }, [destinations, isAuthenticated, isAdmin, navigate]);
 
-  // Helper to handle tab changes and clear MTB mode if needed
   const handleTabChange = useCallback((newTab) => {
     const previousActiveTab = activeTab;
     setActiveTab(newTab);
 
-    // If switching TO Results tab FROM another tab
     if (newTab === 'results' && previousActiveTab !== 'results') {
-      // Check if we're in MTB trail status mode
       if (location.pathname.startsWith('/mtb-trail-status')) {
-        // Clear selected destination/feature to show all MTB trails
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
       }
     }
 
-    // If switching away from Results tab, clear bypass filter
     if (newTab !== 'results') {
       setBypassViewportFilter(false);
     }
 
-    // If switching away from Results tab and currently on MTB trail status or organizations page, navigate back to home
-    // BUT: Don't navigate away if switching to View - preserve the selected item
     if (newTab !== 'results' && newTab !== 'view') {
       if (location.pathname.startsWith('/mtb-trail-status')) {
         navigate('/');
@@ -408,46 +347,34 @@ function AppContent() {
       }
     }
 
-    // Update URL to reflect the active main tab
-    // If a POI is selected and we're switching to a content tab (news, events, results),
-    // clear the POI so the URL reflects the main tab
     if (newTab !== 'view') {
       if (selectedDestination || selectedLinearFeature) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
-        // Clear any permalink state
         setPermalinkInfo(null);
         document.title = 'Roots of The Valley';
       }
       isProgrammaticNavigationRef.current = true;
       navigate(`/${newTab}`);
     } else if (!selectedDestination && !selectedLinearFeature) {
-      // Map tab with no POI — go to root
       isProgrammaticNavigationRef.current = true;
       navigate('/');
     }
   }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature]);
 
-  // Sync URL to settings tab (for direct navigation to /admin/jobs)
   useEffect(() => {
     if (location.pathname === '/admin/jobs') {
       setActiveTab('settings');
       setSettingsTab('jobs');
-      // Clear POI selection to prevent updateUrlWithPoi from navigating back to /{slug}
       setSelectedDestination(null);
       setSelectedLinearFeature(null);
-      // JobsDashboard will auto-expand based on URL params (job= and type=)
     }
   }, [location.pathname, location.search]);
 
-  // Handle POI type filter - filters map to show only specified types
-  // typesToShow: array of POI type names, or null to show all
   const handleFilterByTypes = useCallback((typesToShow) => {
     if (typesToShow && typesToShow.length > 0) {
-      // Filtering to specific types
       setVisibleTypes(new Set(typesToShow));
     } else {
-      // Restore to "show all" mode - use database-loaded icon types
       if (iconConfig && iconConfig.length > 0) {
         const allTypes = new Set(
           iconConfig
@@ -455,34 +382,29 @@ function AppContent() {
             .map(icon => icon.name)
         );
         if (!allTypes.has('default')) allTypes.add('default');
-        // Include layer types
         allTypes.add('trail');
         allTypes.add('river');
         allTypes.add('boundary');
         allTypes.add('organization');
         setVisibleTypes(allTypes);
       } else {
-        // Fallback to hardcoded defaults if iconConfig not loaded yet
         setVisibleTypes(new Set(DEFAULT_ICON_TYPES));
       }
     }
   }, [iconConfig]);
 
-  // Reset editMode when user loses admin/poi_admin status (e.g., logout)
   useEffect(() => {
     if (role !== 'admin' && role !== 'poi_admin') {
       setEditMode(false);
     }
   }, [role]);
 
-  // Reset to View tab when user logs out completely
   useEffect(() => {
     if (!isAuthenticated && activeTab === 'settings') {
       setActiveTab('view');
     }
   }, [isAuthenticated, activeTab]);
 
-  // Escape key returns focus from content area to the active tab
   useEffect(() => {
     const handleEscape = (e) => {
       if (e.key !== 'Escape') return;
@@ -496,8 +418,6 @@ function AppContent() {
     return () => document.removeEventListener('keydown', handleEscape);
   }, []);
 
-  // Move focus to main content when tab changes (accessibility)
-  // Skip when arrow-key navigating within the tab bar (focus stays on tabs)
   const prevTabRef = useRef(activeTab);
   const arrowNavRef = useRef(false);
   useEffect(() => {
@@ -514,7 +434,6 @@ function AppContent() {
     }
   }, [activeTab]);
 
-  // Fetch moderation pending count for admin badge
   const refreshModerationCount = useCallback(async () => {
     console.log('[App] Refreshing moderation count...');
     try {
@@ -526,7 +445,6 @@ function AppContent() {
       }
     } catch (err) {
       console.error('[App] Failed to refresh moderation count:', err);
-      // Silently ignore — badge just won't show
     }
   }, []);
 
@@ -535,7 +453,6 @@ function AppContent() {
     refreshModerationCount();
     const interval = setInterval(refreshModerationCount, 5000);
 
-    // Listen for media upload events to refresh count
     const handleCountChanged = () => {
       console.log('[App] Received moderation-count-changed event');
       refreshModerationCount();
@@ -548,16 +465,12 @@ function AppContent() {
     };
   }, [isAdmin, refreshModerationCount]);
 
-  // Preview coordinates for real-time editing sync between Map and Sidebar
   const [previewCoords, setPreviewCoords] = useState(null);
 
-  // New POI being created (temporary, not yet saved)
   const [newPOI, setNewPOI] = useState(null);
 
-  // New organization being created (temporary, not yet saved)
   const [newOrganization, setNewOrganization] = useState(null);
 
-  // Reset preview coords when selection changes or edit mode turns off
   useEffect(() => {
     if (selectedDestination && editMode && selectedDestination.latitude && selectedDestination.longitude) {
       setPreviewCoords({
@@ -571,28 +484,21 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedDestination?.id, editMode]);
 
-  // Store initial POI slug for after data loads
   const [initialPoiSlug, setInitialPoiSlug] = useState(null);
-  // Initial sidebar sub-tab from URL (e.g., /poi-slug/news → 'news')
   const [initialSidebarTab, setInitialSidebarTab] = useState(null);
-  // Permalink state: when set, sidebar shows news/event detail instead of normal tabs
   const [permalinkInfo, setPermalinkInfo] = useState(null); // { type: 'news'|'event', poiSlug, titleSlug }
 
-  // Handle tab query parameter from auth redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const tab = params.get('tab');
     if (tab === 'settings' || tab === 'view') {
       setActiveTab(tab);
-      // Clean URL but keep other params if any
       params.delete('tab');
       const newSearch = params.toString();
       const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
       window.history.replaceState({}, '', newUrl);
     }
 
-    // Check for POI - first check path-based route (/:slug)
-    // Then fall back to query parameter (?poi=slug) for backward compatibility
     let poiSlug = null;
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
@@ -600,25 +506,19 @@ function AppContent() {
     const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
 
     if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
-      // Permalink path: /:poiSlug/news/:titleSlug or /:poiSlug/events/:titleSlug
       poiSlug = pathParts[0];
       setPermalinkInfo({ type: pathParts[1] === 'events' ? 'event' : 'news', poiSlug: pathParts[0], titleSlug: pathParts[2] });
     } else if (pathParts.length === 2 && sidebarSubTabs.includes(pathParts[1])) {
-      // POI sub-tab path: /:poiSlug/:subTab (e.g., /the-rabbit-hole-akron/news)
       poiSlug = pathParts[0];
       setInitialSidebarTab(pathParts[1] === 'info' ? 'view' : pathParts[1]);
     } else if (pathParts.length === 2 && pathParts[0] === 'about' && ['story', 'tutorial', 'feedback', 'privacy'].includes(pathParts[1])) {
-      // About sub-tab path: /about/story, /about/tutorial, etc.
       setActiveTab('about');
       setAboutTab(pathParts[1]);
     } else if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
-      // Main tab path: /news, /events, /results, /edit, /settings
       setActiveTab(pathParts[0]);
     } else if (pathParts.length === 1 && pathParts[0] !== 'mtb-trail-status') {
-      // POI path: /:slug (but not /mtb-trail-status which is the list page)
       poiSlug = pathParts[0];
     } else {
-      // Fall back to query parameter for backward compatibility
       poiSlug = params.get('poi');
     }
 
@@ -627,17 +527,14 @@ function AppContent() {
     }
   }, []);
 
-  // Auto-select POI from URL after data loads (matches by slug)
   useEffect(() => {
     if (initialPoiSlug && !loading && destinations.length > 0) {
       const isOnMtbPage = location.pathname.startsWith('/mtb-trail-status');
 
-      // First check point destinations by slug match
       const destination = destinations.find(d => generateSlug(d.name) === initialPoiSlug);
       if (destination) {
         setSelectedDestination(destination);
         document.title = `${destination.name} | Roots of The Valley`;
-        // If on MTB page, mark as selected from MTB list and switch to view tab
         if (isOnMtbPage) {
           setSelectedFromMtbList(true);
           setActiveTab('view');
@@ -646,12 +543,10 @@ function AppContent() {
         return;
       }
 
-      // Then check virtual POIs (organizations)
       const virtualPoi = virtualPois.find(v => generateSlug(v.name) === initialPoiSlug);
       if (virtualPoi) {
         setSelectedDestination(virtualPoi);
         document.title = `${virtualPoi.name} | Roots of The Valley`;
-        // If on MTB page, mark as selected from MTB list and switch to view tab
         if (isOnMtbPage) {
           setSelectedFromMtbList(true);
           setActiveTab('view');
@@ -660,12 +555,10 @@ function AppContent() {
         return;
       }
 
-      // Then check linear features (trails, rivers, boundaries)
       const linearFeature = linearFeatures.find(f => generateSlug(f.name) === initialPoiSlug);
       if (linearFeature) {
         setSelectedLinearFeature(linearFeature);
         document.title = `${linearFeature.name} | Roots of The Valley`;
-        // If on MTB page, mark as selected from MTB list and switch to view tab
         if (isOnMtbPage) {
           setSelectedFromMtbList(true);
           setActiveTab('view');
@@ -674,29 +567,21 @@ function AppContent() {
         return;
       }
 
-      // POI not found - clear the param
       setInitialPoiSlug(null);
     }
   }, [initialPoiSlug, loading, destinations, linearFeatures, virtualPois, location.pathname]);
 
-  // Handle browser back/forward navigation for all POI paths
   useEffect(() => {
-    // Skip if this is a programmatic navigation (handled by click handler)
     if (isProgrammaticNavigationRef.current) {
       isProgrammaticNavigationRef.current = false;
       return;
     }
 
-    // Only run if data is loaded
     if (loading || destinations.length === 0) {
       return;
     }
 
-    // Check if we're on the MTB trail status list page (no POI slug)
     if (location.pathname === '/mtb-trail-status') {
-      // User navigated to MTB trails list
-      // Clear any selected POI only if one is currently selected
-      // BUT don't clear if we're in the middle of loading from URL
       if (!isLoadingFromUrlRef.current && (selectedDestination || selectedLinearFeature)) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
@@ -706,11 +591,7 @@ function AppContent() {
       return; // MTB list handled, exit early
     }
 
-    // Check if we're on the organizations list page (no POI slug)
     if (location.pathname === '/organizations') {
-      // User navigated to organizations list
-      // Clear any selected POI only if one is currently selected
-      // BUT don't clear if we're in the middle of loading from URL
       if (!isLoadingFromUrlRef.current && (selectedDestination || selectedLinearFeature)) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
@@ -720,7 +601,6 @@ function AppContent() {
       return; // Organizations list handled, exit early
     }
 
-    // Handle root path: "/" should clear any selected POI
     if (location.pathname === '/') {
       if (!isLoadingFromUrlRef.current && (selectedDestination || selectedLinearFeature)) {
         setSelectedDestination(null);
@@ -730,10 +610,8 @@ function AppContent() {
       return;
     }
 
-    // Check path structure
     const pathParts = location.pathname.split('/').filter(Boolean);
 
-    // Handle main tab paths: /results, /news, /events, /settings
     const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
       setActiveTab(pathParts[0]);
@@ -745,7 +623,6 @@ function AppContent() {
       return;
     }
 
-    // Handle About sub-tab paths: /about/story, /about/tutorial, /about/feedback, /about/privacy
     const aboutSubTabs = ['story', 'tutorial', 'feedback', 'privacy'];
     if (pathParts.length === 2 && pathParts[0] === 'about' && aboutSubTabs.includes(pathParts[1])) {
       setActiveTab('about');
@@ -758,7 +635,6 @@ function AppContent() {
       return;
     }
 
-    // Handle POI sub-tab paths: /:poiSlug/:subTab (e.g., /the-rabbit-hole-akron/news)
     const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
     if (pathParts.length === 2 && sidebarSubTabs.includes(pathParts[1])
         && pathParts[0] !== 'mtb-trail-status' && pathParts[0] !== 'organizations' && pathParts[0] !== 'admin') {
@@ -794,27 +670,21 @@ function AppContent() {
       return;
     }
 
-    // Handle /mtb-trail-status/:slug (2 segments)
     if (pathParts.length === 2 && pathParts[0] === 'mtb-trail-status') {
       const poiSlug = pathParts[1];
 
-      // Check if this slug matches currently selected POI
       const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
         : selectedLinearFeature ? generateSlug(selectedLinearFeature.name)
         : null;
 
-      // If already showing the correct POI, don't re-set state
       if (currentSlug === poiSlug) {
         return;
       }
 
-      // Allow map to fly to POI when using browser navigation
       skipNextFlyRef.current = false;
 
-      // Set flag to prevent URL update effect from running
       isLoadingFromUrlRef.current = true;
 
-      // Find and select the POI - search destinations first (MTB trailheads are destinations)
       const destination = destinations.find(d => generateSlug(d.name) === poiSlug);
       if (destination) {
         setSelectedDestination(destination);
@@ -826,7 +696,6 @@ function AppContent() {
         return;
       }
 
-      // Check linear features (in case an MTB trail is a linear feature)
       const linearFeature = linearFeatures.find(f => generateSlug(f.name) === poiSlug);
       if (linearFeature) {
         setSelectedLinearFeature(linearFeature);
@@ -835,7 +704,6 @@ function AppContent() {
         setActiveTab('view');
         document.title = `${linearFeature.name} | Roots of The Valley`;
 
-        // Enable layer visibility
         if (linearFeature.feature_type === 'boundary') {
           setVisibleBoundaries(prev => {
             if (prev.has(linearFeature.id)) return prev;
@@ -852,28 +720,22 @@ function AppContent() {
         return;
       }
 
-      // POI not found - clear flag
       console.warn('[Browser Nav Effect] MTB POI not found for slug:', poiSlug);
       isLoadingFromUrlRef.current = false;
       return;
     }
 
-    // Handle /organizations/:slug (2 segments)
     if (pathParts.length === 2 && pathParts[0] === 'organizations') {
       const orgSlug = pathParts[1];
 
-      // Check if this slug matches currently selected POI
       const currentSlug = selectedDestination ? generateSlug(selectedDestination.name) : null;
 
-      // If already showing the correct organization, don't re-set state
       if (currentSlug === orgSlug) {
         return;
       }
 
-      // Set flag to prevent URL update effect from running
       isLoadingFromUrlRef.current = true;
 
-      // Find and select the organization (virtual POI)
       const virtualPoi = virtualPois.find(v => generateSlug(v.name) === orgSlug);
       if (virtualPoi) {
         setSelectedDestination(virtualPoi);
@@ -884,22 +746,18 @@ function AppContent() {
         return;
       }
 
-      // Organization not found - clear flag
       console.warn('[Browser Nav Effect] Organization not found for slug:', orgSlug);
       isLoadingFromUrlRef.current = false;
       return;
     }
 
-    // Handle /:poiSlug/news/:titleSlug or /:poiSlug/events/:titleSlug (3 segments)
     if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
       const type = pathParts[1] === 'events' ? 'event' : 'news';
       const poiSlug = pathParts[0];
       const titleSlug = pathParts[2];
 
-      // Set permalink info so sidebar shows the detail panel
       setPermalinkInfo({ type, poiSlug, titleSlug });
 
-      // Select the POI if not already selected
       const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
         : selectedLinearFeature ? generateSlug(selectedLinearFeature.name) : null;
       if (currentSlug !== poiSlug) {
@@ -916,35 +774,27 @@ function AppContent() {
       return;
     }
 
-    // Handle /:slug (single segment, not empty)
     if (pathParts.length === 1) {
       const poiSlug = pathParts[0];
 
-      // Check if this slug matches currently selected POI
       const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
         : selectedLinearFeature ? generateSlug(selectedLinearFeature.name)
         : null;
 
-      // If already showing the correct POI, don't re-set state
       if (currentSlug === poiSlug) {
         return;
       }
 
-      // Allow map to fly to POI when using browser navigation
       skipNextFlyRef.current = false;
 
-      // Set flag to prevent URL update effect from running
       isLoadingFromUrlRef.current = true;
 
-      // Find and select the POI
       const destination = destinations.find(d => generateSlug(d.name) === poiSlug);
       if (destination) {
         setSelectedDestination(destination);
         setSelectedLinearFeature(null);
-        // Don't change selectedFromMtbList - preserve state for browser navigation
         setActiveTab('view');
         document.title = `${destination.name} | Roots of The Valley`;
-        // Clear flag after state is set
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
         return;
       }
@@ -953,10 +803,8 @@ function AppContent() {
       if (virtualPoi) {
         setSelectedDestination(virtualPoi);
         setSelectedLinearFeature(null);
-        // Don't change selectedFromMtbList - preserve state for browser navigation
         setActiveTab('view');
         document.title = `${virtualPoi.name} | Roots of The Valley`;
-        // Clear flag after state is set
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
         return;
       }
@@ -965,11 +813,9 @@ function AppContent() {
       if (linearFeature) {
         setSelectedLinearFeature(linearFeature);
         setSelectedDestination(null);
-        // Don't change selectedFromMtbList - preserve state for browser navigation
         setActiveTab('view');
         document.title = `${linearFeature.name} | Roots of The Valley`;
 
-        // Enable layer visibility so feature appears on map
         if (linearFeature.feature_type === 'boundary') {
           setVisibleBoundaries(prev => {
             if (prev.has(linearFeature.id)) return prev;
@@ -982,12 +828,10 @@ function AppContent() {
         } else if (linearFeature.feature_type === 'river') {
           setShowRivers(true);
         }
-        // Clear flag after state is set
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
         return;
       }
 
-      // POI not found - clear flag
       console.warn('[Browser Nav Effect] POI not found for slug:', poiSlug);
       isLoadingFromUrlRef.current = false;
     }
@@ -996,10 +840,7 @@ function AppContent() {
   // NOTE: selectedDestination and selectedLinearFeature are intentionally NOT in dependencies
   // We only want this effect to run on URL changes (browser back/forward), not POI state changes
 
-  // URL updates are now handled directly in click handlers with setTimeout
-  // This avoids race conditions with state updates and navigation
 
-  // Reusable function to fetch all data (used on mount and after sync operations)
   const refreshAllData = React.useCallback(async () => {
     try {
       const [destResponse, linearResponse, iconResponse, virtualPoisResponse, associationsResponse] = await Promise.all([
@@ -1033,19 +874,16 @@ function AppContent() {
     }
   }, []);
 
-  // Fetch destinations, linear features, and icon config on mount
   useEffect(() => {
     refreshAllData();
   }, [refreshAllData]);
 
-  // Show tour prompt for first-time visitors
   useEffect(() => {
     if (!localStorage.getItem('rotv-tour-seen')) {
       setShowTourPrompt(true);
     }
   }, []);
 
-  // Handle /tutorial/stepN URLs for testing
   useEffect(() => {
     const match = location.pathname.match(/^\/tutorial\/step(\d+)$/);
     if (match && !tourActive) {
@@ -1058,9 +896,8 @@ function AppContent() {
       }
     }
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  // tourActive intentionally excluded — only react to URL path changes for /tutorial/stepN deep-links
 
-  // Initialize visibleTypes from iconConfig ONCE after it loads from database
-  // Use a ref to ensure this only runs once, not every time iconConfig changes
   const hasInitializedVisibleTypes = useRef(false);
   useEffect(() => {
     if (iconConfig && iconConfig.length > 0 && !hasInitializedVisibleTypes.current) {
@@ -1069,11 +906,9 @@ function AppContent() {
           .filter(icon => icon.enabled !== false)
           .map(icon => icon.name)
       );
-      // Add 'default' if not present
       if (!enabledTypes.has('default')) {
         enabledTypes.add('default');
       }
-      // Also include layer types that aren't in icon config
       enabledTypes.add('trail');
       enabledTypes.add('river');
       enabledTypes.add('boundary');
@@ -1084,7 +919,6 @@ function AppContent() {
     }
   }, [iconConfig]);
 
-  // Initialize visibleBoundaries to only show CVNP boundary by default
   const hasInitializedBoundaries = useRef(false);
   useEffect(() => {
     if (linearFeatures && linearFeatures.length > 0 && !hasInitializedBoundaries.current) {
@@ -1098,20 +932,16 @@ function AppContent() {
     }
   }, [linearFeatures]);
 
-  // Auto-scroll header tabs to show Login button on mobile
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
     if (isMobile) {
       const headerTabs = document.querySelector('.header-tabs');
       if (headerTabs) {
-        // Scroll to the right to show Login button
         headerTabs.scrollLeft = headerTabs.scrollWidth;
       }
     }
   }, [isAuthenticated]); // Re-run when auth state changes
 
-  // Compute destinations filtered by map viewport visibility (for News/Events tabs)
-  // This uses the actual POI IDs visible on the map (respects zoom, pan, and legend filters)
   const viewportFilteredDestinations = React.useMemo(() => {
     if (!visiblePoiIds || visiblePoiIds.length === 0) return [];
 
@@ -1119,7 +949,6 @@ function AppContent() {
     return destinations.filter(dest => visibleIdSet.has(dest.id));
   }, [destinations, visiblePoiIds]);
 
-  // Compute linear features filtered by map viewport visibility (for News/Events tabs)
   const viewportFilteredLinearFeatures = useMemo(() => {
     if (!visiblePoiIds || visiblePoiIds.length === 0) return [];
 
@@ -1127,18 +956,13 @@ function AppContent() {
     return linearFeatures.filter(feature => visibleIdSet.has(feature.id));
   }, [linearFeatures, visiblePoiIds]);
 
-  // Compute virtual POIs filtered by map viewport visibility
-  // Show virtual POIs when ANY of their associated physical POIs are visible
   const viewportFilteredVirtualPois = useMemo(() => {
     if (!visiblePoiIds || visiblePoiIds.length === 0) return [];
 
-    // Check if we're filtering to show only specific non-organization types
-    // If visibleTypes doesn't include 'organization', don't show virtual POIs
     const showingAllTypes = visibleTypes.size >= DEFAULT_ICON_TYPES.size;
     const includingOrganizations = visibleTypes.has('organization');
 
     if (!showingAllTypes && !includingOrganizations) {
-      // Filtered mode but organizations not included - hide them
       return [];
     }
 
@@ -1151,20 +975,11 @@ function AppContent() {
     });
   }, [virtualPois, associations, visiblePoiIds, visibleTypes]);
 
-  // Navigation state for Results tab swipe navigation
   const [currentPoiIndex, setCurrentPoiIndex] = useState(-1);
 
-  // Ref to skip map fly animation on next selection (for Results/sidebar clicks)
   const skipNextFlyRef = useRef(false);
 
-  // Combined navigation list (destinations + linear features + virtual POIs, sorted alphabetically)
-  // In MTB mode: only MTB trailheads (destinations with status_url), no linear features or virtual POIs
-  // In Organizations mode: only virtual POIs (all of them, not viewport-filtered), no destinations or linear features
-  // This matches the filtering in ResultsTab.jsx for consistency
   const poiNavigationList = useMemo(() => {
-    // In MTB mode: use ALL destinations with status_url (MTB trailheads only)
-    // In Organizations mode: no destinations
-    // In normal mode: use viewport-filtered destinations
     let destSource = isInMtbMode
       ? (destinations || []).filter(d => d.status_url && d.status_url.trim() !== '')
       : isInOrganizationsMode
@@ -1177,9 +992,6 @@ function AppContent() {
       _isVirtual: !d.geometry && !d.latitude
     }));
 
-    // In MTB mode: NO linear features or virtual POIs (only MTB trailheads)
-    // In Organizations mode: NO linear features, use ALL organization POIs
-    // In normal mode: include viewport-filtered linear features and organization POIs
     const linear = (isInMtbMode || isInOrganizationsMode) ? [] : (viewportFilteredLinearFeatures || []).map(f => ({ ...f, _isLinear: true }));
     const virtual = isInMtbMode
       ? []
@@ -1190,10 +1002,8 @@ function AppContent() {
     return [...dests, ...linear, ...virtual].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
   }, [destinations, virtualPois, viewportFilteredDestinations, viewportFilteredLinearFeatures, viewportFilteredVirtualPois, isInMtbMode, isInOrganizationsMode]);
 
-  // Sync currentPoiIndex when selectedDestination changes (for URL loading and direct selection)
   useEffect(() => {
     if (selectedDestination && poiNavigationList.length > 0) {
-      // Convert IDs to strings for comparison to handle number/string mismatches
       const index = poiNavigationList.findIndex(p => !p._isLinear && String(p.id) === String(selectedDestination.id));
       if (index !== -1) {
         setCurrentPoiIndex(index);
@@ -1205,10 +1015,8 @@ function AppContent() {
     }
   }, [selectedDestination, selectedLinearFeature, poiNavigationList]);
 
-  // Sync currentPoiIndex when selectedLinearFeature changes (for URL loading and direct selection)
   useEffect(() => {
     if (selectedLinearFeature && poiNavigationList.length > 0) {
-      // Convert IDs to strings for comparison to handle number/string mismatches
       const index = poiNavigationList.findIndex(p => p._isLinear && String(p.id) === String(selectedLinearFeature.id));
       if (index !== -1) {
         setCurrentPoiIndex(index);
@@ -1223,7 +1031,6 @@ function AppContent() {
     }
   }, [selectedLinearFeature, selectedDestination, poiNavigationList]);
 
-  // Apply filters when activeFilters change
   useEffect(() => {
     let filtered = destinations;
 
@@ -1260,7 +1067,6 @@ function AppContent() {
     }));
   };
 
-  // Handle destination update from admin panel
   const handleDestinationUpdate = (updatedDest) => {
     setDestinations(prev =>
       prev.map(d => d.id === updatedDest.id ? updatedDest : d)
@@ -1270,13 +1076,11 @@ function AppContent() {
     }
   };
 
-  // Handle new destination creation from admin panel
   const handleDestinationCreate = (newDest) => {
     setDestinations(prev => [...prev, newDest]);
     setSelectedDestination(newDest);
   };
 
-  // Handle destination deletion from admin panel (also handles organizations)
   const handleDestinationDelete = (deletedId) => {
     setDestinations(prev => prev.filter(d => d.id !== deletedId));
     setVirtualPois(prev => prev.filter(v => v.id !== deletedId));
@@ -1285,22 +1089,17 @@ function AppContent() {
     }
   };
 
-  // Helper to update URL with POI slug (for shareable links)
-  // Uses path-based routing: /:slug instead of ?poi=slug
   const updateUrlWithPoi = useCallback((poiName) => {
     if (poiName) {
       const slug = generateSlug(poiName);
-      // Set flag to prevent browser nav effect from clearing POI
       isProgrammaticNavigationRef.current = true;
       navigate(`/${slug}`);
     } else {
-      // No POI - navigate to root
       isProgrammaticNavigationRef.current = true;
       navigate('/');
     }
   }, [navigate]);
 
-  // Handle linear feature selection (clears destination selection) - wrapped in useCallback for stable reference
   const handleSelectLinearFeature = useCallback((feature) => {
     setSelectedDestination(null);
     setNewPOI(null);
@@ -1308,17 +1107,13 @@ function AppContent() {
     setSelectedLinearFeature(feature);
     setSelectedFromMtbList(false); // Not from MTB list (map click or other)
     updateUrlWithPoi(feature?.name);
-    // Update document title for sharing
     document.title = feature ? `${feature.name} | Roots of The Valley` : 'Roots of The Valley';
-    // Sync navigation index
     if (feature) {
-      // Convert IDs to strings for comparison to handle number/string mismatches
       const index = poiNavigationList.findIndex(p => p._isLinear && String(p.id) === String(feature.id));
       setCurrentPoiIndex(index);
       if (index === -1) {
         console.warn('[Navigation] Could not find linear feature in list:', feature.name, 'ID:', feature.id);
       }
-      // Auto-enable the layer for the selected feature type so it's visible on the map
       if (feature.feature_type === 'boundary') {
         setVisibleBoundaries(prev => {
           if (prev.has(feature.id)) return prev;
@@ -1331,7 +1126,6 @@ function AppContent() {
       } else if (feature.feature_type === 'river') {
         setShowRivers(true);
       }
-      // On mobile, switch to Results tab when linear feature is clicked from map (unless already in view mode)
       if (window.innerWidth < 768 && activeTab !== 'view') {
         setActiveTab('results');
       }
@@ -1340,23 +1134,18 @@ function AppContent() {
     }
   }, [updateUrlWithPoi, poiNavigationList, activeTab]);
 
-  // Handle destination selection (clears linear feature selection) - wrapped in useCallback for stable reference
   const handleSelectDestination = useCallback((destination) => {
     setSelectedLinearFeature(null);
     setSelectedDestination(destination);
     setSelectedFromMtbList(false); // Not from MTB list (map click or other)
     updateUrlWithPoi(destination?.name);
-    // Update document title for sharing
     document.title = destination ? `${destination.name} | Roots of The Valley` : 'Roots of The Valley';
-    // Sync navigation index
     if (destination) {
-      // Convert IDs to strings for comparison to handle number/string mismatches
       const index = poiNavigationList.findIndex(p => !p._isLinear && String(p.id) === String(destination.id));
       setCurrentPoiIndex(index);
       if (index === -1) {
         console.warn('[Navigation] Could not find destination in list:', destination.name, 'ID:', destination.id);
       }
-      // On mobile, switch to Results tab when POI is clicked from map (unless already in view mode)
       if (window.innerWidth < 768 && activeTab !== 'view') {
         setActiveTab('results');
       }
@@ -1365,20 +1154,16 @@ function AppContent() {
     }
   }, [updateUrlWithPoi, poiNavigationList, activeTab]);
 
-  // Navigate to next/prev POI in the list
   const handleNavigatePoi = useCallback((direction) => {
     if (poiNavigationList.length === 0) return;
 
     let newIndex;
 
-    // Support direct index jump (for carousel clicks to distant items)
     if (typeof direction === 'number') {
       newIndex = direction;
     } else if (currentPoiIndex === -1) {
-      // No current selection, start from beginning or end
       newIndex = direction === 'next' ? 0 : poiNavigationList.length - 1;
     } else {
-      // Calculate new index with wrapping
       newIndex = currentPoiIndex + (direction === 'next' ? 1 : -1);
       if (newIndex < 0) newIndex = poiNavigationList.length - 1;
       if (newIndex >= poiNavigationList.length) newIndex = 0;
@@ -1396,9 +1181,6 @@ function AppContent() {
       } else {
         setSelectedLinearFeature(null);
         setSelectedDestination(poi);
-        // In Organizations mode, use /organizations/{slug} URL pattern
-        // In MTB mode, preserve the /mtb-trail-status/ URL pattern
-        // Otherwise the URL change triggers mode=false and breaks navigation
         if (isInOrganizationsMode) {
           const slug = generateSlug(poi.name);
           isProgrammaticNavigationRef.current = true;
@@ -1416,38 +1198,28 @@ function AppContent() {
     }
   }, [poiNavigationList, currentPoiIndex, updateUrlWithPoi, isInMtbMode, isInOrganizationsMode, navigate]);
 
-  // Stable callbacks for ResultsTab - always switch to view tab to show sidebar with navigation
-  // Skip fly animation when selecting from Results to preserve map view (except in MTB mode where we want to fly to the trail)
   const handleResultsSelectDestination = useCallback((poi, mtbContext) => {
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
 
-      // If MTB context is provided, set up navigation
       if (mtbContext) {
         setMtbTrailsList(mtbContext.trailsList);
         setCurrentMtbIndex(mtbContext.currentIndex);
         setSelectedFromMtbList(true);
       }
 
-      // Set flag FIRST to prevent browser nav effect from clearing POI
       isProgrammaticNavigationRef.current = true;
 
-      // Explicitly allow fly animation
       skipNextFlyRef.current = false;
 
-      // Switch to view tab first, THEN set destination after a delay
-      // This ensures the map container is visible (zIndex=1) before flyTo is called
       setActiveTab('view');
       setSelectedFromMtbList(true);
       document.title = `${poi.name} | Roots of The Valley`;
 
-      // MTB mode: only show MTB trailheads, hide trails and rivers
       setVisibleTypes(new Set(['mtb-trailhead']));
       setShowTrails(false);
       setShowRivers(false);
 
-      // Wait for tab to render and map to be ready, then set destination to trigger zoom
-      // Use requestAnimationFrame to ensure DOM has updated
       requestAnimationFrame(() => {
         setTimeout(() => {
           setSelectedDestination(poi);
@@ -1455,27 +1227,21 @@ function AppContent() {
           setNewPOI(null);
           setPreviewCoords(null);
 
-          // Update navigation index
           const index = poiNavigationList.findIndex(p => !p._isLinear && String(p.id) === String(poi.id));
           setCurrentPoiIndex(index);
 
-          // Navigate after setting destination
           setTimeout(() => {
             navigate(`/mtb-trail-status/${slug}`);
           }, 100);
         }, 100); // Delay to let map visibility handler complete
       });
     } else if (isInOrganizationsMode && poi) {
-      // Organizations mode - preserve /organizations/ URL pattern
       const slug = generateSlug(poi.name);
 
-      // Set flag to prevent browser nav effect from clearing POI
       isProgrammaticNavigationRef.current = true;
 
-      // No fly animation for organizations (they're virtual, no map location)
       skipNextFlyRef.current = true;
 
-      // Set destination and switch to view tab
       setSelectedDestination(poi);
       setSelectedLinearFeature(null);
       setNewPOI(null);
@@ -1483,7 +1249,6 @@ function AppContent() {
       setActiveTab('view');
       document.title = `${poi.name} | Roots of The Valley`;
 
-      // Organizations mode: restore all POI types and show trails/rivers
       if (iconConfig && iconConfig.length > 0) {
         const allTypes = new Set(
           iconConfig
@@ -1499,14 +1264,11 @@ function AppContent() {
       setShowTrails(true);
       setShowRivers(true);
 
-      // Update navigation index
       const index = poiNavigationList.findIndex(p => !p._isLinear && String(p.id) === String(poi.id));
       setCurrentPoiIndex(index);
 
-      // Navigate to organizations URL pattern
       navigate(`/organizations/${slug}`);
     } else {
-      // Normal mode - skip fly to preserve map view
       skipNextFlyRef.current = true;
       handleSelectDestination(poi);
       setSelectedFromMtbList(false);
@@ -1518,55 +1280,43 @@ function AppContent() {
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
 
-      // If MTB context is provided, set up navigation
       if (mtbContext) {
         setMtbTrailsList(mtbContext.trailsList);
         setCurrentMtbIndex(mtbContext.currentIndex);
         setSelectedFromMtbList(true);
       }
 
-      // Set flag FIRST to prevent browser nav effect from clearing POI
       isProgrammaticNavigationRef.current = true;
 
-      // CRITICAL: If this trail isn't in linearFeatures yet (MTB trails are fetched separately),
-      // add it so the map can work with it
       if (!linearFeatures.find(f => String(f.id) === String(poi.id))) {
         setLinearFeatures(prev => [...prev, poi]);
       }
 
-      // Explicitly allow fly animation
       skipNextFlyRef.current = false;
 
-      // Switch to view tab first, THEN set linear feature after a brief delay
-      // This ensures the map container is visible (zIndex=1) before any map operations
       setActiveTab('view');
       if (!mtbContext) {
         setSelectedFromMtbList(true);
       }
       document.title = `${poi.name} | Roots of The Valley`;
 
-      // MTB mode: only show MTB trailheads, hide trails and rivers
       setVisibleTypes(new Set(['mtb-trailhead']));
       setShowTrails(false);
       setShowRivers(false);
 
-      // Wait for tab to render, then set linear feature
       setTimeout(() => {
         setSelectedLinearFeature(poi);
         setSelectedDestination(null);
         setNewPOI(null);
         setPreviewCoords(null);
 
-        // Update navigation index - will be set by the effect after linearFeatures updates
         setCurrentPoiIndex(-1);
 
-        // Navigate after setting linear feature
         setTimeout(() => {
           navigate(`/mtb-trail-status/${slug}`);
         }, 100);
       }, 50); // Small delay to let tab switch complete
     } else {
-      // Normal mode - skip fly to preserve map view
       skipNextFlyRef.current = true;
       handleSelectLinearFeature(poi);
       setSelectedFromMtbList(false);
@@ -1574,7 +1324,6 @@ function AppContent() {
     }
   }, [handleSelectLinearFeature, isInMtbMode, navigate, linearFeatures]);
 
-  // Handle linear feature update - merge instead of replace to preserve geometry
   const handleLinearFeatureUpdate = (updatedFeature) => {
     setLinearFeatures(prev =>
       prev.map(f => f.id === updatedFeature.id ? { ...f, ...updatedFeature } : f)
@@ -1584,7 +1333,6 @@ function AppContent() {
     }
   };
 
-  // Handle linear feature deletion
   const handleLinearFeatureDelete = (deletedId) => {
     setLinearFeatures(prev => prev.filter(f => f.id !== deletedId));
     if (selectedLinearFeature?.id === deletedId) {
@@ -1592,11 +1340,8 @@ function AppContent() {
     }
   };
 
-  // Start creating a new POI at given coordinates
   const handleStartNewPOI = (coords) => {
-    // Clear any existing selection
     setSelectedDestination(null);
-    // Create temporary POI object
     setNewPOI({
       id: 'new-temp',
       name: '',
@@ -1617,19 +1362,16 @@ function AppContent() {
     setPreviewCoords(coords);
   };
 
-  // Cancel new POI creation
   const handleCancelNewPOI = () => {
     setNewPOI(null);
     setPreviewCoords(null);
   };
 
-  // Create new POI from Results tab (defaults based on active sub-tab)
   const handleNewPOIFromResults = (subTab) => {
     setSelectedDestination(null);
     setSelectedLinearFeature(null);
 
     if (subTab === 'organizations') {
-      // Organizations don't need coordinates — open sidebar directly
       setNewPOI({
         id: 'new-temp',
         name: '',
@@ -1642,7 +1384,6 @@ function AppContent() {
       });
       setActiveTab('view');
     } else {
-      // Point-based POIs — switch to map for click-to-place
       const defaults = {
         id: 'new-temp',
         name: '',
@@ -1660,19 +1401,15 @@ function AppContent() {
       };
       setNewPOI(defaults);
       setActiveTab('view');
-      // Map will show "click to place" indicator since newPOI is set but no coords yet
     }
   };
 
-  // Start creating a new organization with found POIs
   const handleStartNewOrganization = (poisInBounds) => {
-    // Clear any existing selection
     setSelectedDestination(null);
     setSelectedLinearFeature(null);
     setNewPOI(null);
     setPreviewCoords(null);
 
-    // Create temporary organization object with found POIs
     setNewOrganization({
       id: 'new-org-temp',
       name: '',
@@ -1687,14 +1424,11 @@ function AppContent() {
     });
   };
 
-  // Cancel new organization creation
   const handleCancelNewOrganization = () => {
     setNewOrganization(null);
   };
 
-  // Save new POI
   const handleSaveNewPOI = async (poiData) => {
-    // Use /api/admin/pois when poi_roles is present (new flow), otherwise legacy /destinations
     const endpoint = poiData.poi_roles ? '/api/admin/pois' : '/api/admin/destinations';
     const response = await fetch(endpoint, {
       method: 'POST',
@@ -1716,9 +1450,7 @@ function AppContent() {
     return newDest;
   };
 
-  // Save new organization
   const handleSaveNewOrganization = async (organizationData, selectedPoiIds) => {
-    // Create virtual POI
     const virtualPoiResponse = await fetch('/api/admin/pois', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1739,7 +1471,6 @@ function AppContent() {
 
     const virtualPoi = await virtualPoiResponse.json();
 
-    // Create associations
     if (selectedPoiIds && selectedPoiIds.length > 0) {
       const associationsResponse = await fetch('/api/admin/poi-associations/batch', {
         method: 'POST',
@@ -1757,7 +1488,6 @@ function AppContent() {
       }
     }
 
-    // Refresh data
     await refreshAllData();
 
     setNewOrganization(null);
@@ -1772,7 +1502,6 @@ function AppContent() {
 
   const handleAddAssociationsFromDrawing = async (orgId, poisInBounds) => {
     try {
-      // Create associations for all POIs found in the rectangle
       if (poisInBounds && poisInBounds.length > 0) {
         await fetch('/api/admin/poi-associations/batch', {
           method: 'POST',
@@ -1786,7 +1515,6 @@ function AppContent() {
         });
       }
 
-      // Refresh associations data
       await refreshAllData();
       setIsDrawingAssociations(false);
       setAddingAssociationsToOrgId(null);
@@ -1869,11 +1597,9 @@ function AppContent() {
                 setKbdFocusIndex(nextIndex);
                 tabs[nextIndex].focus();
               } else if ((e.key === 'Enter' || e.key === ' ') && isMenuButton) {
-                // Toggle dropdown, keep focus + highlight on menu button
                 e.preventDefault();
                 e.target.click();
               } else if (e.key === 'ArrowDown' && isMenuButton) {
-                // Open dropdown if closed, then focus first item
                 e.preventDefault();
                 if (!showLoginDropdown && !showUserDropdown) {
                   e.target.click(); // open it
@@ -1916,7 +1642,6 @@ function AppContent() {
             });
           })()}
 
-          {/* Login/Account button */}
           {(() => {
             const menuIdx = [true, true, true, true, true, isAuthenticated].filter(Boolean).length;
             return isAuthenticated ? (
@@ -2040,7 +1765,6 @@ function AppContent() {
         </div>
       </header>
 
-      {/* Results tab content - only render when active to avoid processing 300+ tiles on every re-render */}
       {activeTab === 'results' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" role="tabpanel">
           <ResultsTab
@@ -2072,7 +1796,6 @@ function AppContent() {
         </main>
       )}
 
-      {/* News tab content */}
       {activeTab === 'news' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkNews
@@ -2104,7 +1827,6 @@ function AppContent() {
         </main>
       )}
 
-      {/* Events tab content */}
       {activeTab === 'events' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <ParkEvents
@@ -2136,7 +1858,6 @@ function AppContent() {
         </main>
       )}
 
-      {/* About tab content */}
       {activeTab === 'about' && (
         <main id="main-content" className="main-content-full" tabIndex="-1">
           <AboutPage onStartTour={startTour} aboutTab={aboutTab} onTabChange={setAboutTab} isAdmin={isAdmin} editMode={editMode} />
@@ -2308,7 +2029,6 @@ function AppContent() {
         </main>
       )}
 
-      {/* Map content - always mounted and visible to Leaflet, layered below Results tab when not active */}
       <main
         id={(activeTab === 'view' || activeTab === 'edit') ? 'main-content' : undefined}
         className={`main-content ${editMode ? 'edit-mode' : ''}`}
@@ -2410,7 +2130,6 @@ function AppContent() {
             const nextTrail = mtbTrailsList[newIndex];
             setCurrentMtbIndex(newIndex);
 
-            // Select the next/previous trail
             if (nextTrail.poi_roles?.includes('point')) {
               const fullDestination = destinations?.find(d => d.id === nextTrail.id);
               if (fullDestination) {
@@ -2433,7 +2152,6 @@ function AppContent() {
             setSelectedFromMtbList(false);
             setCurrentMtbIndex(-1);
             setActiveTab('results');
-            // Navigate back to MTB trails list
             isProgrammaticNavigationRef.current = true;
             navigate('/mtb-trail-status');
           }}
@@ -2474,7 +2192,6 @@ function AppContent() {
         <FeedbackForm onClose={() => setShowFeedbackForm(false)} />
       )}
 
-      {/* Tour prompt for first-time visitors */}
       {showTourPrompt && (
         <TourPrompt
           onStartTour={startTour}
@@ -2485,7 +2202,6 @@ function AppContent() {
         />
       )}
 
-      {/* Guided tour overlay */}
       {tourActive && (
         <GuidedTour
           onEnd={endTour}

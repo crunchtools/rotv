@@ -1,18 +1,13 @@
 import React, { memo } from 'react';
 import { getIconUrlForPOI } from '../utils/iconUtils';
 
-// Individual POI tile for the Results tab
 const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status, showStatusInfo, statusData, iconConfig }) {
-  // Use thumbnail endpoint for fast, cached small images
-  // Include updated_at for cache busting when image changes
   const imageUrl = poi.has_primary_image
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
 
-  // Check if this is an MTB trailhead (has mtb_trail role or status_url)
   const isMtbTrailhead = !isLinear && !isVirtual && (poi.poi_roles?.includes('mtb_trail') || (poi.status_url && poi.status_url.trim() !== ''));
 
-  // Get default thumbnail SVG path based on type
   const getDefaultThumbnail = () => {
     if (isVirtual) return '/icons/thumbnails/virtual.svg';
     if (isLinear) {
@@ -24,7 +19,6 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
     return '/icons/thumbnails/destination.svg';
   };
 
-  // Get POI type for styling and labels
   const getPoiType = () => {
     if (isVirtual) return 'virtual';
     if (!isLinear) {
@@ -45,7 +39,6 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       role="button"
       tabIndex={0}
     >
-      {/* Thumbnail */}
       <div className={`results-tile-image ${isVirtual ? 'virtual-thumbnail' : ''}`}>
         {imageUrl ? (
           <img
@@ -63,11 +56,9 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
         )}
       </div>
 
-      {/* Content */}
       <div className="results-tile-content">
         <div className="results-tile-name">{poi.name}</div>
 
-        {/* Badges row */}
         <div className="results-tile-badges">
           <img
             src={getIconUrlForPOI(poi, iconConfig, poiType)}
@@ -91,7 +82,6 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
           )}
         </div>
 
-        {/* Trail status info (MTB mode) or brief description */}
         {showStatusInfo && statusData ? (
           <div className="results-tile-status-info">
             <div className="status-row">

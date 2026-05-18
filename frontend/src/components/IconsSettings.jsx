@@ -10,7 +10,6 @@ function IconsSettings() {
   const [saving, setSaving] = useState(false);
   const [showGeneratorModal, setShowGeneratorModal] = useState(false);
 
-  // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
@@ -58,7 +57,6 @@ function IconsSettings() {
 
     setSaving(true);
     try {
-      // Find the original icon to preserve svg_filename and svg_content
       const originalIcon = icons.find(i => i.id === id);
       const response = await fetch(`/api/admin/icons/${id}`, {
         method: 'PUT',
@@ -139,7 +137,6 @@ function IconsSettings() {
     }
   };
 
-  // Drag and drop handlers
   const handleDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -184,7 +181,6 @@ function IconsSettings() {
     setDraggedIndex(null);
     setDragOverIndex(null);
 
-    // Save new order to backend
     try {
       await fetch('/api/admin/icons/reorder', {
         method: 'PUT',
@@ -197,13 +193,11 @@ function IconsSettings() {
     }
   };
 
-  // Parse comma-separated keywords into display chips
   const parseKeywords = (keywordsStr) => {
     if (!keywordsStr) return [];
     return keywordsStr.split(',').map(k => k.trim()).filter(k => k);
   };
 
-  // Handle new icon saved from generator
   const handleIconGenerated = (newIcon) => {
     setIcons(prev => [...prev, newIcon]);
   };
@@ -243,7 +237,6 @@ function IconsSettings() {
         />
       )}
 
-      {/* Icons list */}
       <div className="icons-list">
         {icons.length === 0 ? (
           <p className="no-icons">No icons defined yet.</p>

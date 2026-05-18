@@ -1,19 +1,12 @@
 #!/usr/bin/env node
-/**
- * Cleanup script to remove news and events with failed URLs
- * Run with: node scripts/cleanup-failed-urls.js [--dry-run]
- */
-
 import pg from 'pg';
 
 const { Pool } = pg;
 
-// Configuration
 const CONCURRENT_REQUESTS = 5;
-const REQUEST_TIMEOUT = 30000; // 30 seconds
+const REQUEST_TIMEOUT = 30000;
 const DRY_RUN = process.argv.includes('--dry-run');
 
-// Database connection
 const pool = new Pool({
   host: process.env.POSTGRES_HOST || 'localhost',
   port: process.env.POSTGRES_PORT || 5432,
@@ -22,31 +15,22 @@ const pool = new Pool({
   password: process.env.POSTGRES_PASSWORD || 'postgres'
 });
 
-// Patterns that indicate unresolved/broken URLs
 const BROKEN_URL_PATTERNS = [
   'vertexaisearch.cloud.google.com/grounding-api-redirect',
   'google.com/url?',
   'bing.com/ck/a'
 ];
 
-/**
- * Check if URL matches known broken patterns
- */
 function isBrokenUrlPattern(url) {
   if (!url) return true;
   return BROKEN_URL_PATTERNS.some(pattern => url.includes(pattern));
 }
 
-/**
- * Test if a URL is accessible
- * Returns { success: boolean, status?: number, error?: string }
- */
 async function testUrl(url) {
   if (!url || url.trim() === '') {
     return { success: false, error: 'Empty URL' };
   }
 
-  // Check for known broken patterns first
   if (isBrokenUrlPattern(url)) {
     return { success: false, error: 'Unresolved redirect URL' };
   }
@@ -66,12 +50,11 @@ async function testUrl(url) {
 
     clearTimeout(timeout);
 
-    // Consider 2xx and 3xx as success
     if (response.status >= 200 && response.status < 400) {
       return { success: true, status: response.status };
     }
 
-    // Some servers don't support HEAD, try GET for 405
+    // Some servers don't support HEAD; retry with GET on 405
     if (response.status === 405) {
       const controller2 = new AbortController();
       const timeout2 = setTimeout(() => controller2.abort(), REQUEST_TIMEOUT);
@@ -98,7 +81,6 @@ async function testUrl(url) {
     if (error.name === 'AbortError') {
       return { success: false, error: 'Timeout' };
     }
-    // Simplify error message
     let errorMsg = error.message;
     if (error.cause?.code) {
       errorMsg = error.cause.code;
@@ -107,9 +89,6 @@ async function testUrl(url) {
   }
 }
 
-/**
- * Process URLs in batches with concurrency limit
- */
 async function processInBatches(items, processor, concurrency) {
   const results = [];
   for (let i = 0; i < items.length; i += concurrency) {
@@ -117,11 +96,10 @@ async function processInBatches(items, processor, concurrency) {
     const batchResults = await Promise.all(batch.map(processor));
     results.push(...batchResults);
 
-    // Progress update
     const processed = Math.min(i + concurrency, items.length);
     process.stdout.write(`\rProcessed ${processed}/${items.length} URLs...`);
   }
-  console.log(''); // New line after progress
+  console.log('');
   return results;
 }
 
@@ -133,14 +111,12 @@ async function main() {
   console.log('');
 
   try {
-    // Fetch all news URLs
     console.log('Fetching news items with URLs...');
     const newsResult = await pool.query(
       'SELECT id, title, source_url FROM poi_news WHERE source_url IS NOT NULL ORDER BY id'
     );
     console.log(`Found ${newsResult.rows.length} news items with URLs`);
 
-    // Fetch all event URLs
     console.log('Fetching events with URLs...');
     const eventsResult = await pool.query(
       'SELECT id, title, source_url FROM poi_events WHERE source_url IS NOT NULL ORDER BY id'
@@ -148,7 +124,6 @@ async function main() {
     console.log(`Found ${eventsResult.rows.length} events with URLs`);
     console.log('');
 
-    // First pass: Find items with broken URL patterns (instant, no network)
     console.log('Checking for unresolved redirect URLs...');
     const brokenPatternNews = newsResult.rows.filter(item => isBrokenUrlPattern(item.source_url));
     const brokenPatternEvents = eventsResult.rows.filter(item => isBrokenUrlPattern(item.source_url));
@@ -157,11 +132,9 @@ async function main() {
     console.log(`  Events with unresolved redirects: ${brokenPatternEvents.length}`);
     console.log('');
 
-    // Filter out broken patterns for network testing
     const newsToTest = newsResult.rows.filter(item => !isBrokenUrlPattern(item.source_url));
     const eventsToTest = eventsResult.rows.filter(item => !isBrokenUrlPattern(item.source_url));
 
-    // Test remaining news URLs
     console.log(`Testing ${newsToTest.length} news URLs (excluding broken patterns)...`);
     const failedNewsNetwork = [];
 
@@ -173,7 +146,6 @@ async function main() {
       return urlTest;
     }, CONCURRENT_REQUESTS);
 
-    // Test remaining event URLs
     console.log(`Testing ${eventsToTest.length} event URLs (excluding broken patterns)...`);
     const failedEventsNetwork = [];
 
@@ -185,11 +157,9 @@ async function main() {
       return urlTest;
     }, CONCURRENT_REQUESTS);
 
-    // Combine results
     const failedNews = [...brokenPatternNews.map(n => ({...n, error: 'Unresolved redirect URL'})), ...failedNewsNetwork];
     const failedEvents = [...brokenPatternEvents.map(e => ({...e, error: 'Unresolved redirect URL'})), ...failedEventsNetwork];
 
-    // Report results
     console.log('');
     console.log('Results');
     console.log('=======');
@@ -204,7 +174,6 @@ async function main() {
     console.log(`  - Total failed: ${failedEvents.length}`);
     console.log('');
 
-    // Group failures by error type
     const errorGroups = {};
     for (const item of [...failedNews, ...failedEvents]) {
       const key = item.error || 'Unknown';
@@ -218,7 +187,6 @@ async function main() {
     }
     console.log('');
 
-    // Show sample of network failures (not redirect URLs)
     if (failedNewsNetwork.length > 0) {
       console.log('Sample Network Failed News (first 10):');
       console.log('--------------------------------------');
@@ -241,7 +209,6 @@ async function main() {
       console.log('');
     }
 
-    // Delete failed entries
     if (!DRY_RUN && (failedNews.length > 0 || failedEvents.length > 0)) {
       console.log('Deleting failed entries...');
 

@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
 
-// Thumbnail carousel for mobile POI navigation
 function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
   const wrapperRef = useRef(null);
   const carouselRef = useRef(null);
@@ -10,7 +9,6 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
   const [isVisible, setIsVisible] = useState(true);
   const hideTimerRef = useRef(null);
 
-  // Check scroll position to show/hide edge indicators
   const updateScrollIndicators = () => {
     const carousel = carouselRef.current;
     if (!carousel) return;
@@ -20,14 +18,10 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
     const clientWidth = carousel.clientWidth;
     const maxScroll = scrollWidth - clientWidth;
 
-    // Show left indicator if scrolled right (not at start)
     setCanScrollLeft(scrollLeft > 5);
-
-    // Show right indicator if not at end
     setCanScrollRight(scrollLeft < maxScroll - 5);
   };
 
-  // Update indicators on scroll
   useEffect(() => {
     const carousel = carouselRef.current;
     if (!carousel) return;
@@ -35,7 +29,6 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
     updateScrollIndicators();
     carousel.addEventListener('scroll', updateScrollIndicators);
 
-    // Also update on resize
     window.addEventListener('resize', updateScrollIndicators);
 
     return () => {
@@ -44,7 +37,6 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
     };
   }, [pois]);
 
-  // Auto-scroll to keep selected thumbnail visible
   useEffect(() => {
     if (selectedRef.current && carouselRef.current) {
       selectedRef.current.scrollIntoView({
@@ -55,22 +47,17 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
     }
   }, [currentIndex]);
 
-  // Auto-hide carousel after 5 seconds
   useEffect(() => {
-    // Clear any existing timer
     if (hideTimerRef.current) {
       clearTimeout(hideTimerRef.current);
     }
 
-    // Show carousel initially or when currentIndex changes (user is navigating)
     setIsVisible(true);
 
-    // Set timer to hide after 5 seconds
     hideTimerRef.current = setTimeout(() => {
       setIsVisible(false);
     }, 5000);
 
-    // Cleanup timer on unmount or when currentIndex changes
     return () => {
       if (hideTimerRef.current) {
         clearTimeout(hideTimerRef.current);
@@ -81,21 +68,16 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
   const handleThumbnailClick = (index) => {
     if (index === currentIndex) return;
 
-    // For adjacent items (prev/next), navigate with animation
-    // For distant items, jump directly (onNavigate can handle this)
     const distance = Math.abs(index - currentIndex);
 
     if (distance === 1) {
-      // Adjacent - smooth animation
       const direction = index > currentIndex ? 'next' : 'prev';
       onNavigate(direction);
     } else {
-      // Distant - direct jump (pass index directly)
       onNavigate(index);
     }
   };
 
-  // Default icon based on POI type
   const getDefaultThumbnail = (poi) => {
     if (poi._isVirtual) return '/icons/thumbnails/virtual.svg';
     if (poi._isLinear) {
@@ -106,7 +88,6 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
     return '/icons/thumbnails/destination.svg';
   };
 
-  // Get thumbnail image URL or default icon
   const getThumbnailUrl = (poi) => {
     if (poi.has_primary_image) {
       return `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`;

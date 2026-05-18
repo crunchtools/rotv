@@ -1,9 +1,3 @@
-/**
- * Content Extractor
- * Playwright renders → Readability extracts → Turndown converts to markdown.
- * Shared utility for both the news scraper and moderation pipeline.
- */
-
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
@@ -34,18 +28,6 @@ const STEALTH_INIT_SCRIPT = `
   window.chrome = { runtime: {} };
 `;
 
-/**
- * Extract page content as markdown using Playwright + Readability + Turndown.
- * @param {string} url - URL to extract content from
- * @param {Object} options - Extraction options
- * @param {number} options.timeout - Navigation timeout in ms (default: 15000)
- * @param {number} options.hardTimeout - Hard timeout for entire operation (default: 45000)
- * @param {number} options.maxLength - Max markdown length to return (default: 8000)
- * @param {boolean} options.extractLinks - Also extract <a> links with context for deep-link matching (default: false)
- * @param {number} options.dynamicContentWait - Wait time in ms for dynamic content after navigation (default: 2000)
- * @param {Array} options.cookies - Playwright cookies to inject before navigation (e.g., for Twitter auth)
- * @returns {Promise<{markdown: string, title: string, excerpt: string, reachable: boolean, links?: Array, reason?: string}>}
- */
 export async function extractPageContent(url, options = {}) {
   const {
     timeout = 15000,

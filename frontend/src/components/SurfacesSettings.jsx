@@ -9,7 +9,6 @@ function SurfacesSettings() {
   const [editingSurface, setEditingSurface] = useState({ name: '', description: '' });
   const [saving, setSaving] = useState(false);
 
-  // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
@@ -134,7 +133,6 @@ function SurfacesSettings() {
     }
   };
 
-  // Drag and drop handlers
   const handleDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -179,7 +177,6 @@ function SurfacesSettings() {
     setDraggedIndex(null);
     setDragOverIndex(null);
 
-    // Save new order to backend
     try {
       await fetch('/api/admin/surfaces/reorder', {
         method: 'PUT',
@@ -192,12 +189,10 @@ function SurfacesSettings() {
     }
   };
 
-  // Sort alphabetically
   const handleSortAlphabetically = async () => {
     const sorted = [...surfaces].sort((a, b) => a.name.localeCompare(b.name));
     setSurfaces(sorted);
 
-    // Save new order to backend
     try {
       await fetch('/api/admin/surfaces/reorder', {
         method: 'PUT',
@@ -229,7 +224,6 @@ function SurfacesSettings() {
 
       {error && <div className="sync-error">{error}</div>}
 
-      {/* Add new surface form and sort button */}
       <div className="surfaces-toolbar">
         <form className="add-surface-form" onSubmit={handleAddSurface}>
           <input
@@ -262,7 +256,6 @@ function SurfacesSettings() {
         </button>
       </div>
 
-      {/* Surfaces list */}
       <div className="surfaces-list">
         {surfaces.length === 0 ? (
           <p className="no-surfaces">No surfaces defined yet.</p>

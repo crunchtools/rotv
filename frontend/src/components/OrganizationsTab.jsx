@@ -1,7 +1,6 @@
 import React, { useMemo, useCallback, memo, useState } from 'react';
 import ResultsTile from './ResultsTile';
 
-// Organizations tab component showing all organizations (virtual POIs)
 const OrganizationsTab = memo(function OrganizationsTab({
   allVirtualPois,
   selectedDestination,
@@ -10,7 +9,6 @@ const OrganizationsTab = memo(function OrganizationsTab({
 }) {
   const [searchText, setSearchText] = useState('');
 
-  // Sort organizations alphabetically and apply filters
   const { sortedOrgs, orgMap, totalCount } = useMemo(() => {
     const orgs = (allVirtualPois || []).map(v => ({
       ...v,
@@ -19,7 +17,6 @@ const OrganizationsTab = memo(function OrganizationsTab({
     }));
     const total = orgs.length;
 
-    // Apply text search filter
     let filtered = orgs;
     if (searchText.trim()) {
       const search = searchText.toLowerCase();
@@ -29,12 +26,10 @@ const OrganizationsTab = memo(function OrganizationsTab({
       );
     }
 
-    // Sort alphabetically
     const sorted = filtered.sort((a, b) =>
       (a.name || '').localeCompare(b.name || '')
     );
 
-    // Create lookup map for event delegation
     const map = new Map();
     sorted.forEach(org => {
       const key = `virtual-${org.id}`;
@@ -44,7 +39,6 @@ const OrganizationsTab = memo(function OrganizationsTab({
     return { sortedOrgs: sorted, orgMap: map, totalCount: total };
   }, [allVirtualPois, searchText]);
 
-  // Event delegation handler - single handler for all tiles
   const handleListClick = useCallback((e) => {
     const tile = e.target.closest('.results-tile');
     if (!tile) return;
@@ -56,7 +50,6 @@ const OrganizationsTab = memo(function OrganizationsTab({
     onSelectDestination(org);
   }, [orgMap, onSelectDestination]);
 
-  // Memoize selected ID for faster comparison
   const selectedId = selectedDestination?.id;
 
   const orgCount = sortedOrgs.length;

@@ -81,7 +81,6 @@ function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
     setLocalContent(content);
   }, [content]);
 
-  // Standalone route: fetch content directly if not provided as prop
   useEffect(() => {
     if (!inline && !content) {
       fetch('/api/about-content')

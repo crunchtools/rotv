@@ -5,15 +5,12 @@ import { Strategy as FacebookStrategy } from 'passport-facebook';
 export function configurePassport(pool) {
   const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
 
-  // Serialize just the user ID to session
   passport.serializeUser((user, done) => {
     done(null, user.id);
   });
 
-  // Deserialize user from session - load credentials from database
   passport.deserializeUser(async (sessionData, done) => {
     try {
-      // Handle both old format (object with id) and new format (just id)
       const userId = typeof sessionData === 'object' ? sessionData.id : sessionData;
 
       const userQuery = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
@@ -26,7 +23,6 @@ export function configurePassport(pool) {
     }
   });
 
-  // Find or create user in database, store credentials for admins
   async function findOrCreateUser(provider, profile, credentials) {
     const email = profile.emails?.[0]?.value;
     const name = profile.displayName;
@@ -34,18 +30,15 @@ export function configurePassport(pool) {
     const providerId = profile.id;
     const isAdmin = email && email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
-    // Check if user exists
     let userLookup = await pool.query(
       'SELECT * FROM users WHERE oauth_provider = $1 AND oauth_provider_id = $2',
       [provider, providerId]
     );
 
     if (userLookup.rows.length > 0) {
-      // Update existing user - always update credentials for admins
       const updateFields = ['last_login_at = CURRENT_TIMESTAMP', 'picture_url = $1', 'name = $2'];
       const updateValues = [pictureUrl, name];
 
-      // Sync is_admin and role on login (only promote to admin, never demote via login)
       if (isAdmin && !userLookup.rows[0].is_admin) {
         updateFields.push(`is_admin = $${updateValues.length + 1}`);
         updateValues.push(true);
@@ -69,7 +62,6 @@ export function configurePassport(pool) {
       return userLookup.rows[0];
     }
 
-    // Create new user
     const role = isAdmin ? 'admin' : 'viewer';
     const insertResult = await pool.query(
       `INSERT INTO users (email, name, picture_url, oauth_provider, oauth_provider_id, is_admin, role, oauth_credentials, last_login_at)
@@ -81,11 +73,7 @@ export function configurePassport(pool) {
     return insertResult.rows[0];
   }
 
-  // Google OAuth Strategy (dual-strategy approach for conditional Drive access)
-  // Standard strategy - all users get basic profile + email scopes only
-  // Admin users are auto-redirected to upgrade flow if they lack Drive credentials
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    // Standard strategy - basic scopes for all users (no Drive access)
     passport.use('google', new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -93,7 +81,6 @@ export function configurePassport(pool) {
       scope: ['profile', 'email']
     }, async (accessToken, refreshToken, profile, done) => {
       try {
-        // Don't store credentials for standard login (admin will get them via upgrade flow)
         const user = await findOrCreateUser('google', profile, null);
         done(null, user);
       } catch (error) {
@@ -101,8 +88,6 @@ export function configurePassport(pool) {
       }
     }));
 
-    // Upgrade strategy - Drive scope for admin only (incremental authorization)
-    // Uses same callback URL as standard strategy to avoid multiple OAuth app configurations
     passport.use('google-upgrade', new GoogleStrategy({
       clientID: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -110,7 +95,6 @@ export function configurePassport(pool) {
       scope: ['profile', 'email', 'https://www.googleapis.com/auth/drive.file']
     }, async (accessToken, refreshToken, profile, done) => {
       try {
-        // Store Drive credentials for admin
         const credentials = {
           access_token: accessToken,
           refresh_token: refreshToken
@@ -127,7 +111,6 @@ export function configurePassport(pool) {
     console.log('Google OAuth not configured (missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET)');
   }
 
-  // Facebook OAuth Strategy
   if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
     passport.use(new FacebookStrategy({
       clientID: process.env.FACEBOOK_APP_ID,
