@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 function GeoJSONUploader({ geometry, onChange }) {
   const fileInputRef = useRef(null);
@@ -23,7 +23,6 @@ function GeoJSONUploader({ geometry, onChange }) {
       try {
         const parsed = JSON.parse(event.target.result);
 
-        // Extract geometry from GeoJSON
         let geo = null;
         if (parsed.type === 'Feature') {
           geo = parsed.geometry;
@@ -31,14 +30,12 @@ function GeoJSONUploader({ geometry, onChange }) {
           if (parsed.features?.length === 1) {
             geo = parsed.features[0].geometry;
           } else if (parsed.features?.length > 1) {
-            // Merge into a GeometryCollection or take first feature
             geo = {
               type: 'GeometryCollection',
               geometries: parsed.features.map(f => f.geometry).filter(Boolean)
             };
           }
         } else if (parsed.type && parsed.coordinates) {
-          // Raw geometry object
           geo = parsed;
         }
 

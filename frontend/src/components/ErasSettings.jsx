@@ -9,7 +9,6 @@ function ErasSettings() {
   const [editingEra, setEditingEra] = useState({ name: '', year_start: '', year_end: '', description: '' });
   const [saving, setSaving] = useState(false);
 
-  // Drag and drop state
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
@@ -140,7 +139,6 @@ function ErasSettings() {
     }
   };
 
-  // Drag and drop handlers
   const handleDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -185,7 +183,6 @@ function ErasSettings() {
     setDraggedIndex(null);
     setDragOverIndex(null);
 
-    // Save new order to backend
     try {
       await fetch('/api/admin/eras/reorder', {
         method: 'PUT',
@@ -198,10 +195,8 @@ function ErasSettings() {
     }
   };
 
-  // Sort by chronological order (year_start)
   const handleSortChronologically = async () => {
     const sorted = [...eras].sort((a, b) => {
-      // Eras without year_start go to the end
       if (!a.year_start && !b.year_start) return 0;
       if (!a.year_start) return 1;
       if (!b.year_start) return -1;
@@ -209,7 +204,6 @@ function ErasSettings() {
     });
     setEras(sorted);
 
-    // Save new order to backend
     try {
       await fetch('/api/admin/eras/reorder', {
         method: 'PUT',
@@ -248,7 +242,6 @@ function ErasSettings() {
 
       {error && <div className="sync-error">{error}</div>}
 
-      {/* Add new era form and sort button */}
       <div className="eras-toolbar">
         <form className="add-era-form" onSubmit={handleAddEra}>
           <input
@@ -289,7 +282,6 @@ function ErasSettings() {
         </button>
       </div>
 
-      {/* Eras list */}
       <div className="eras-list">
         {eras.length === 0 ? (
           <p className="no-eras">No eras defined yet.</p>

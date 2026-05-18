@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 
-// Color palette for icons
 const COLOR_PALETTE = [
   { name: 'Park Green', hex: '#2d5016' },
   { name: 'Water Blue', hex: '#0288d1' },
@@ -24,10 +23,8 @@ function IconGeneratorModal({ onClose, onSave }) {
   const [generatedSvg, setGeneratedSvg] = useState(null);
   const [error, setError] = useState(null);
 
-  // Convert label to slug format for name
   const handleLabelChange = (newLabel) => {
     setLabel(newLabel);
-    // Auto-generate name from label if name is empty or matches previous auto-generation
     const suggestedName = newLabel.toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
       .replace(/\s+/g, '-')

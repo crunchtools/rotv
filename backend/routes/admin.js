@@ -80,7 +80,6 @@ import { logInfo, logError, flush as flushJobLogs } from '../services/jobLogger.
 const router = express.Router();
 
 export function createAdminRouter(pool, invalidateMosaicCache) {
-  // Update POI coordinates (for point type POIs)
   router.put('/pois/:id/coordinates', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { latitude, longitude } = req.body;
@@ -101,7 +100,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      const result = await pool.query(
+      const poiRow = await pool.query(
         `UPDATE pois
          SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3
@@ -109,19 +108,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [lat, lng, id]
       );
 
-      if (result.rows.length === 0) {
+      if (poiRow.rows.length === 0) {
         return res.status(404).json({ error: 'POI not found' });
       }
 
       console.log(`Admin ${req.user.email} updated coordinates for POI ${id}: ${lat}, ${lng}`);
-      res.json(result.rows[0]);
+      res.json(poiRow.rows[0]);
     } catch (error) {
       console.error('Error updating coordinates:', error);
       res.status(500).json({ error: 'Failed to update coordinates' });
     }
   });
 
-  // Legacy endpoint - redirect to unified POI endpoint
   router.put('/destinations/:id/coordinates', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { latitude, longitude } = req.body;
@@ -142,7 +140,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      const result = await pool.query(
+      const destinationRow = await pool.query(
         `UPDATE pois
          SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3
@@ -150,19 +148,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [lat, lng, id]
       );
 
-      if (result.rows.length === 0) {
+      if (destinationRow.rows.length === 0) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
       console.log(`Admin ${req.user.email} updated coordinates for destination ${id}: ${lat}, ${lng}`);
-      res.json(result.rows[0]);
+      res.json(destinationRow.rows[0]);
     } catch (error) {
       console.error('Error updating coordinates:', error);
       res.status(500).json({ error: 'Failed to update coordinates' });
     }
   });
 
-  // Update POI (all editable fields) - unified endpoint
   router.put('/pois/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const allowedFields = [
@@ -180,7 +177,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     for (const field of allowedFields) {
       if (req.body[field] !== undefined) {
         updates[field] = `$${paramIndex}`;
-        // Handle geometry as JSON
         if (field === 'geometry' && typeof req.body[field] === 'object') {
           values.push(JSON.stringify(req.body[field]));
         } else {
@@ -201,7 +197,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     values.push(id);
 
     try {
-      const result = await pool.query(
+      const poiRow = await pool.query(
         `UPDATE pois
          SET ${setClause}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramIndex}
@@ -209,19 +205,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         values
       );
 
-      if (result.rows.length === 0) {
+      if (poiRow.rows.length === 0) {
         return res.status(404).json({ error: 'POI not found' });
       }
 
       console.log(`Admin ${req.user.email} updated POI ${id}:`, Object.keys(updates).join(', '));
-      res.json(result.rows[0]);
+      res.json(poiRow.rows[0]);
     } catch (error) {
       console.error('Error updating POI:', error);
       res.status(500).json({ error: 'Failed to update POI' });
     }
   });
 
-  // Legacy: Update destination (redirect to pois)
   router.put('/destinations/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const allowedFields = [
@@ -253,7 +248,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     values.push(id);
 
     try {
-      const result = await pool.query(
+      const destinationRow = await pool.query(
         `UPDATE pois
          SET ${setClause}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramIndex}
@@ -261,23 +256,21 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         values
       );
 
-      if (result.rows.length === 0) {
+      if (destinationRow.rows.length === 0) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
       console.log(`Admin ${req.user.email} updated destination ${id}:`, Object.keys(updates).join(', '));
-      res.json(result.rows[0]);
+      res.json(destinationRow.rows[0]);
     } catch (error) {
       console.error('Error updating destination:', error);
       res.status(500).json({ error: 'Failed to update destination' });
     }
   });
 
-  // Create new destination
   router.post('/destinations', isAdmin, async (req, res) => {
     const { name, latitude, longitude } = req.body;
 
-    // Validate required fields
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
@@ -319,7 +312,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
     try {
-      const result = await pool.query(
+      const newDestination = await pool.query(
         `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at)
          VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
@@ -327,18 +320,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created new destination: ${name}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newDestination.rows[0]);
     } catch (error) {
       console.error('Error creating destination:', error);
       res.status(500).json({ error: 'Failed to create destination' });
     }
   });
 
-  // Create POI
   router.post('/pois', isAdmin, async (req, res) => {
     const { name, poi_roles, latitude, longitude } = req.body;
 
-    // Validate required fields
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
@@ -349,7 +340,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       return res.status(400).json({ error: 'Invalid poi_roles. Must include at least one of: point, trail, river, boundary, organization' });
     }
 
-    // Only validate coordinates when geometry is not provided and lat/lon are given
+    // Linear/boundary POIs use geometry instead of lat/lng — skip range check in that case
     const hasCoords = latitude !== undefined && longitude !== undefined;
     if (hasCoords) {
       const lat = parseFloat(latitude);
@@ -381,7 +372,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     for (const field of allowedFields) {
-      if (field === 'poi_roles') continue; // already added
+      if (field === 'poi_roles') continue;
       if (req.body[field] !== undefined && req.body[field] !== null && req.body[field] !== '') {
         fields.push(field);
         values.push(req.body[field]);
@@ -391,7 +382,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
 
     try {
-      const result = await pool.query(
+      const newPoi = await pool.query(
         `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at)
          VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
@@ -399,19 +390,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created new POI (${rolesArray.join(', ')}): ${name}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newPoi.rows[0]);
     } catch (error) {
       console.error('Error creating POI:', error);
       res.status(500).json({ error: 'Failed to create POI' });
     }
   });
 
-  // Delete destination (soft delete)
   router.delete('/destinations/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
-      const result = await pool.query(
+      const deletedDestination = await pool.query(
         `UPDATE pois
          SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1
@@ -419,19 +409,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [id]
       );
 
-      if (result.rows.length === 0) {
+      if (deletedDestination.rows.length === 0) {
         return res.status(404).json({ error: 'Destination not found' });
       }
 
-      console.log(`Admin ${req.user.email} deleted destination ${id}: ${result.rows[0].name}`);
-      res.json({ success: true, deleted: result.rows[0] });
+      console.log(`Admin ${req.user.email} deleted destination ${id}: ${deletedDestination.rows[0].name}`);
+      res.json({ success: true, deleted: deletedDestination.rows[0] });
     } catch (error) {
       console.error('Error deleting destination:', error);
       res.status(500).json({ error: 'Failed to delete destination' });
     }
   });
 
-  // Create manual news item
   router.post('/news', isAdmin, async (req, res) => {
     const { poi_id, title, summary, source_url, source_name, news_type, publication_date } = req.body;
 
@@ -440,7 +429,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      const result = await pool.query(
+      const newsItem = await pool.query(
         `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, content_source, moderation_status, collection_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, 'human', 'published', CURRENT_TIMESTAMP)
          RETURNING *`,
@@ -448,14 +437,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created manual news item: ${title}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newsItem.rows[0]);
     } catch (error) {
       console.error('Error creating news item:', error);
       res.status(500).json({ error: 'Failed to create news item' });
     }
   });
 
-  // Create manual event
   router.post('/events', isAdmin, async (req, res) => {
     const { poi_id, title, start_date, end_date, description, event_type, location_details, source_url, publication_date } = req.body;
 
@@ -464,7 +452,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      const result = await pool.query(
+      const eventItem = await pool.query(
         `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, content_source, moderation_status, collection_date)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'human', 'published', CURRENT_TIMESTAMP)
          RETURNING *`,
@@ -472,27 +460,25 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created manual event: ${title}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(eventItem.rows[0]);
     } catch (error) {
       console.error('Error creating event:', error);
       res.status(500).json({ error: 'Failed to create event' });
     }
   });
 
-  // Get admin settings
   router.get('/settings', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query('SELECT key, value, updated_at FROM admin_settings');
+      const settingsRows = await pool.query('SELECT key, value, updated_at FROM admin_settings');
       const settings = {};
-      for (const row of result.rows) {
-        // For API keys, only indicate if set (don't expose value)
+      for (const row of settingsRows.rows) {
+        // Redact API key/token values; expose isSet flag only
         if (row.key.includes('api_key') || row.key.includes('api_token')) {
           settings[row.key] = {
             isSet: !!row.value,
             updatedAt: row.updated_at
           };
         } else {
-          // For prompts, return the actual value
           settings[row.key] = {
             value: row.value,
             updatedAt: row.updated_at
@@ -506,7 +492,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Update admin setting
   router.put('/settings/:key', isAdmin, async (req, res) => {
     const { key } = req.params;
     const { value } = req.body;
@@ -560,7 +545,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [key, value, req.user.id]
       );
 
-      // Clear Buttondown API key cache when settings change
       if (key === 'buttondown_api_key') {
         const { clearApiKeyCache } = await import('../services/buttondownClient.js');
         clearApiKeyCache();
@@ -575,7 +559,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Test Serper API key
   router.post('/settings/serper-api-key/test', isAdmin, async (req, res) => {
     try {
       const { testSerperApiKey } = await import('../services/serperService.js');
@@ -592,7 +575,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Test Apify API token
   router.post('/settings/apify-api-token/test', isAdmin, async (req, res) => {
     try {
       const { testApifyToken } = await import('../services/apifyService.js');
@@ -611,8 +593,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.post('/settings/github-api-token/test', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query("SELECT value FROM admin_settings WHERE key = 'github_api_token'");
-      const token = result.rows[0]?.value;
+      const tokenRow = await pool.query("SELECT value FROM admin_settings WHERE key = 'github_api_token'");
+      const token = tokenRow.rows[0]?.value;
       if (!token) {
         return res.json({ success: false, message: 'GitHub token is not configured' });
       }
@@ -636,11 +618,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // AI Content Generation Routes (Gemini)
-  // ============================================
-
-  // Get interpolated prompt for preview/editing before generation
   router.post('/ai/prompt-preview', isAdmin, async (req, res) => {
     const { destination, promptType } = req.body;
 
@@ -660,7 +637,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Generate text using custom prompt (with last-mile customization)
   router.post('/ai/generate', isAdmin, async (req, res) => {
     const { customPrompt, destination } = req.body;
 
@@ -683,7 +659,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Test API key validity
   router.post('/ai/test-key', isAdmin, async (req, res) => {
     try {
       const { testApiKey } = await import('../services/geminiService.js');
@@ -702,7 +677,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Research location and fill all fields using AI
   router.post('/ai/research', isAdmin, async (req, res) => {
     const { destination } = req.body;
 
@@ -711,29 +685,27 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Fetch standardized activities list to constrain AI suggestions
+      // Constrain AI output to existing standardized vocabularies
       const activitiesResult = await pool.query(
         'SELECT name FROM activities ORDER BY sort_order, name'
       );
       const availableActivities = activitiesResult.rows.map(row => row.name);
 
-      // Fetch standardized eras list to constrain AI suggestions
       const erasResult = await pool.query(
         'SELECT name FROM eras ORDER BY sort_order, name'
       );
       const availableEras = erasResult.rows.map(row => row.name);
 
-      // Fetch standardized surfaces list to constrain AI suggestions
       const surfacesResult = await pool.query(
         'SELECT name FROM surfaces ORDER BY sort_order, name'
       );
       const availableSurfaces = surfacesResult.rows.map(row => row.name);
 
       const { researchLocation } = await import('../services/geminiService.js');
-      const data = await researchLocation(pool, destination, availableActivities, availableEras, availableSurfaces);
+      const researchData = await researchLocation(pool, destination, availableActivities, availableEras, availableSurfaces);
 
       console.log(`Admin ${req.user.email} researched location: ${destination.name}`);
-      res.json(data);
+      res.json(researchData);
     } catch (error) {
       console.error('Error researching location:', error);
       if (error.message?.includes('API key')) {
@@ -752,10 +724,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Inject admin context into the destination object
       const destWithContext = { ...destination, research_context: adminContext || destination.research_context || '' };
 
-      // Fetch constrained lists
       const activitiesResult = await pool.query('SELECT name FROM activities ORDER BY sort_order, name');
       const availableActivities = activitiesResult.rows.map(row => row.name);
 
@@ -766,10 +736,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const availableSurfaces = surfacesResult.rows.map(row => row.name);
 
       const { researchLocationMultiPass } = await import('../services/geminiService.js');
-      const data = await researchLocationMultiPass(pool, destWithContext, availableActivities, availableEras, availableSurfaces);
+      const researchData = await researchLocationMultiPass(pool, destWithContext, availableActivities, availableEras, availableSurfaces);
 
       console.log(`Admin ${req.user.email} researched (v2) location: ${destination.name}`);
-      res.json({ draft: true, data, destination_id: destination.id });
+      res.json({ draft: true, data: researchData, destination_id: destination.id });
     } catch (error) {
       console.error('Error in multi-pass research:', error);
       if (error.message?.includes('API key')) {
@@ -779,24 +749,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // Activities Management Routes
-  // ============================================
-
-  // Get all activities (public endpoint for POI form)
   router.get('/activities', async (req, res) => {
     try {
-      const result = await pool.query(
+      const activitiesRows = await pool.query(
         'SELECT id, name, sort_order FROM activities ORDER BY sort_order, name'
       );
-      res.json(result.rows);
+      res.json(activitiesRows.rows);
     } catch (error) {
       console.error('Error fetching activities:', error);
       res.status(500).json({ error: 'Failed to fetch activities' });
     }
   });
 
-  // Create new activity (admin only)
   router.post('/activities', isAdmin, async (req, res) => {
     const { name } = req.body;
 
@@ -805,11 +769,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get max sort_order
       const maxOrder = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 as next_order FROM activities');
       const sortOrder = maxOrder.rows[0].next_order;
 
-      const result = await pool.query(
+      const newActivity = await pool.query(
         `INSERT INTO activities (name, sort_order)
          VALUES ($1, $2)
          RETURNING id, name, sort_order`,
@@ -817,7 +780,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created activity: ${name}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newActivity.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Activity with this name already exists' });
@@ -827,7 +790,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Update activity (admin only)
   router.put('/activities/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, sort_order } = req.body;
@@ -837,14 +799,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get the old name first to update POIs
       const oldActivity = await pool.query('SELECT name FROM activities WHERE id = $1', [id]);
       if (oldActivity.rows.length === 0) {
         return res.status(404).json({ error: 'Activity not found' });
       }
       const oldName = oldActivity.rows[0].name;
 
-      const result = await pool.query(
+      const updatedActivity = await pool.query(
         `UPDATE activities
          SET name = $1, sort_order = COALESCE($2, sort_order), updated_at = CURRENT_TIMESTAMP
          WHERE id = $3
@@ -852,12 +813,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [name.trim(), sort_order, id]
       );
 
-      // If name changed, update all destinations that reference this activity
       const newName = name.trim();
       if (oldName !== newName) {
-        // Update primary_activities (comma-separated field) in destinations
-        // Format is "Activity1, Activity2, Activity3" (comma-space separated)
-        // Need to handle: exact match, start of list, middle of list, end of list
+        // pois.primary_activities is a comma-space-separated string ("A, B, C") — handle exact / head / middle / tail positions
         const updateResult = await pool.query(
           `UPDATE pois
            SET primary_activities = CASE
@@ -877,7 +835,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       console.log(`Admin ${req.user.email} updated activity: ${name}`);
-      res.json(result.rows[0]);
+      res.json(updatedActivity.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Activity with this name already exists' });
@@ -887,24 +845,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Delete activity (admin only)
   router.delete('/activities/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
-      // Get activity data before deleting for queue
       const activityData = await pool.query('SELECT * FROM activities WHERE id = $1', [id]);
 
-      const result = await pool.query(
+      const deletedActivity = await pool.query(
         'DELETE FROM activities WHERE id = $1 RETURNING name',
         [id]
       );
 
-      if (result.rows.length === 0) {
+      if (deletedActivity.rows.length === 0) {
         return res.status(404).json({ error: 'Activity not found' });
       }
 
-      console.log(`Admin ${req.user.email} deleted activity: ${result.rows[0].name}`);
+      console.log(`Admin ${req.user.email} deleted activity: ${deletedActivity.rows[0].name}`);
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting activity:', error);
@@ -912,7 +868,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Reorder activities (admin only)
   router.put('/activities/reorder', isAdmin, async (req, res) => {
     const { orderedIds } = req.body;
 
@@ -921,7 +876,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Update sort_order for each activity
       for (let i = 0; i < orderedIds.length; i++) {
         await pool.query(
           'UPDATE activities SET sort_order = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -937,24 +891,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // Eras Management Routes
-  // ============================================
-
-  // Get all eras (public endpoint for POI form)
   router.get('/eras', async (req, res) => {
     try {
-      const result = await pool.query(
+      const erasRows = await pool.query(
         'SELECT id, name, year_start, year_end, description, sort_order FROM eras ORDER BY sort_order, name'
       );
-      res.json(result.rows);
+      res.json(erasRows.rows);
     } catch (error) {
       console.error('Error fetching eras:', error);
       res.status(500).json({ error: 'Failed to fetch eras' });
     }
   });
 
-  // Create new era (admin only)
   router.post('/eras', isAdmin, async (req, res) => {
     const { name, year_start, year_end, description } = req.body;
 
@@ -963,11 +911,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get max sort_order
       const maxOrder = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 as next_order FROM eras');
       const sortOrder = maxOrder.rows[0].next_order;
 
-      const result = await pool.query(
+      const newEra = await pool.query(
         `INSERT INTO eras (name, year_start, year_end, description, sort_order)
          VALUES ($1, $2, $3, $4, $5)
          RETURNING id, name, year_start, year_end, description, sort_order`,
@@ -975,7 +922,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created era: ${name}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newEra.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Era with this name already exists' });
@@ -985,7 +932,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Update era (admin only)
   router.put('/eras/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, year_start, year_end, description, sort_order } = req.body;
@@ -995,14 +941,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get the old name first to update POIs
       const oldEra = await pool.query('SELECT name FROM eras WHERE id = $1', [id]);
       if (oldEra.rows.length === 0) {
         return res.status(404).json({ error: 'Era not found' });
       }
       const oldName = oldEra.rows[0].name;
 
-      const result = await pool.query(
+      const updatedEra = await pool.query(
         `UPDATE eras
          SET name = $1, year_start = $2, year_end = $3, description = $4,
              sort_order = COALESCE($5, sort_order), updated_at = CURRENT_TIMESTAMP
@@ -1012,7 +957,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} updated era: ${name}`);
-      res.json(result.rows[0]);
+      res.json(updatedEra.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Era with this name already exists' });
@@ -1022,24 +967,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Delete era (admin only)
   router.delete('/eras/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
-      // Get era data before deleting for queue
       const eraData = await pool.query('SELECT * FROM eras WHERE id = $1', [id]);
 
-      const result = await pool.query(
+      const deletedEra = await pool.query(
         'DELETE FROM eras WHERE id = $1 RETURNING name',
         [id]
       );
 
-      if (result.rows.length === 0) {
+      if (deletedEra.rows.length === 0) {
         return res.status(404).json({ error: 'Era not found' });
       }
 
-      console.log(`Admin ${req.user.email} deleted era: ${result.rows[0].name}`);
+      console.log(`Admin ${req.user.email} deleted era: ${deletedEra.rows[0].name}`);
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting era:', error);
@@ -1047,7 +990,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Reorder eras (admin only)
   router.put('/eras/reorder', isAdmin, async (req, res) => {
     const { orderedIds } = req.body;
 
@@ -1056,7 +998,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Update sort_order for each era
       for (let i = 0; i < orderedIds.length; i++) {
         await pool.query(
           'UPDATE eras SET sort_order = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -1072,24 +1013,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // Surfaces Management Routes
-  // ============================================
-
-  // Get all surfaces (public endpoint for POI form)
   router.get('/surfaces', async (req, res) => {
     try {
-      const result = await pool.query(
+      const surfacesRows = await pool.query(
         'SELECT id, name, description, sort_order FROM surfaces ORDER BY sort_order, name'
       );
-      res.json(result.rows);
+      res.json(surfacesRows.rows);
     } catch (error) {
       console.error('Error fetching surfaces:', error);
       res.status(500).json({ error: 'Failed to fetch surfaces' });
     }
   });
 
-  // Create new surface (admin only)
   router.post('/surfaces', isAdmin, async (req, res) => {
     const { name, description } = req.body;
 
@@ -1098,11 +1033,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get max sort_order
       const maxOrder = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 as next_order FROM surfaces');
       const sortOrder = maxOrder.rows[0].next_order;
 
-      const result = await pool.query(
+      const newSurface = await pool.query(
         `INSERT INTO surfaces (name, description, sort_order)
          VALUES ($1, $2, $3)
          RETURNING id, name, description, sort_order`,
@@ -1110,7 +1044,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created surface: ${name}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newSurface.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Surface with this name already exists' });
@@ -1120,7 +1054,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Reorder surfaces (admin only) - MUST be before :id routes
+  // MUST be defined before /surfaces/:id — otherwise Express matches "reorder" as :id
   router.put('/surfaces/reorder', isAdmin, async (req, res) => {
     const { orderedIds } = req.body;
 
@@ -1129,7 +1063,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Update sort_order for each surface
       for (let i = 0; i < orderedIds.length; i++) {
         await pool.query(
           'UPDATE surfaces SET sort_order = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -1145,7 +1078,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Update surface (admin only)
   router.put('/surfaces/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, description, sort_order } = req.body;
@@ -1155,14 +1087,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get the old name first to update POIs
       const oldSurface = await pool.query('SELECT name FROM surfaces WHERE id = $1', [id]);
       if (oldSurface.rows.length === 0) {
         return res.status(404).json({ error: 'Surface not found' });
       }
       const oldName = oldSurface.rows[0].name;
 
-      const result = await pool.query(
+      const updatedSurface = await pool.query(
         `UPDATE surfaces
          SET name = $1, description = $2,
              sort_order = COALESCE($3, sort_order), updated_at = CURRENT_TIMESTAMP
@@ -1171,7 +1102,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [name.trim(), description || null, sort_order, id]
       );
 
-      // If name changed, update all destinations that reference this surface
       const newName = name.trim();
       if (oldName !== newName) {
         const updateResult = await pool.query(
@@ -1187,7 +1117,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       console.log(`Admin ${req.user.email} updated surface: ${name}`);
-      res.json(result.rows[0]);
+      res.json(updatedSurface.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Surface with this name already exists' });
@@ -1197,21 +1127,20 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Delete surface (admin only)
   router.delete('/surfaces/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
-      const result = await pool.query(
+      const deletedSurface = await pool.query(
         'DELETE FROM surfaces WHERE id = $1 RETURNING name',
         [id]
       );
 
-      if (result.rows.length === 0) {
+      if (deletedSurface.rows.length === 0) {
         return res.status(404).json({ error: 'Surface not found' });
       }
 
-      console.log(`Admin ${req.user.email} deleted surface: ${result.rows[0].name}`);
+      console.log(`Admin ${req.user.email} deleted surface: ${deletedSurface.rows[0].name}`);
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting surface:', error);
@@ -1219,25 +1148,19 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // Icons Management Routes
-  // ============================================
-
-  // Get all icons (public endpoint for map)
   router.get('/icons', async (req, res) => {
     try {
-      const result = await pool.query(
+      const iconRows = await pool.query(
         'SELECT id, name, label, svg_filename, svg_content, title_keywords, activity_fallbacks, sort_order, enabled, drive_file_id FROM icons ORDER BY sort_order, name'
       );
-      res.json(result.rows);
+      res.json(iconRows.rows);
     } catch (error) {
       console.error('Error fetching icons:', error);
       res.status(500).json({ error: 'Failed to fetch icons' });
     }
   });
 
-  // Create new icon (admin only)
-  // If svg_content is provided and user has OAuth credentials, auto-uploads to Google Drive
+  // svg_content + admin OAuth credentials → auto-upload to Drive (see block below)
   router.post('/icons', isAdmin, async (req, res) => {
     const { name, label, svg_filename, svg_content, title_keywords, activity_fallbacks } = req.body;
 
@@ -1249,11 +1172,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get max sort_order
       const maxOrder = await pool.query('SELECT COALESCE(MAX(sort_order), 0) + 1 as next_order FROM icons');
       const sortOrder = maxOrder.rows[0].next_order;
 
-      // Auto-upload to Google Drive if svg_content is provided and user has OAuth
       let driveFileId = null;
       if (svg_content && req.user.oauth_credentials) {
         try {
@@ -1261,12 +1182,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           driveFileId = await uploadIconToDrive(drive, pool, name.trim(), svg_content);
           console.log(`Uploaded icon ${name} to Google Drive: ${driveFileId}`);
         } catch (driveError) {
+          // Drive upload is best-effort; icon still saved to DB on failure
           console.warn(`Failed to upload icon to Drive (non-fatal):`, driveError.message);
-          // Continue without Drive upload - icon will still be saved to database
         }
       }
 
-      const result = await pool.query(
+      const newIcon = await pool.query(
         `INSERT INTO icons (name, label, svg_filename, svg_content, title_keywords, activity_fallbacks, sort_order, drive_file_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          RETURNING id, name, label, svg_filename, svg_content, title_keywords, activity_fallbacks, sort_order, enabled, drive_file_id`,
@@ -1274,7 +1195,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} created icon: ${name}${driveFileId ? ' (uploaded to Drive)' : ''}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newIcon.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Icon with this name already exists' });
@@ -1284,7 +1205,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Generate icon SVG using AI (admin only)
   router.post('/icons/generate', isAdmin, async (req, res) => {
     const { description, color } = req.body;
 
@@ -1295,7 +1215,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       return res.status(400).json({ error: 'Icon color is required' });
     }
 
-    // Validate color is a hex color
     if (!/^#[0-9A-Fa-f]{6}$/.test(color.trim())) {
       return res.status(400).json({ error: 'Color must be a valid hex color (e.g., #0288d1)' });
     }
@@ -1315,7 +1234,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Reorder icons (admin only) - MUST be before :id routes
+  // MUST be defined before /icons/:id — otherwise Express matches "reorder" as :id
   router.put('/icons/reorder', isAdmin, async (req, res) => {
     const { orderedIds } = req.body;
 
@@ -1324,7 +1243,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Update sort_order for each icon
       for (let i = 0; i < orderedIds.length; i++) {
         await pool.query(
           'UPDATE icons SET sort_order = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
@@ -1340,8 +1258,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Update icon (admin only)
-  // If svg_content changed and user has OAuth credentials, re-uploads to Google Drive
   router.put('/icons/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { name, label, svg_filename, svg_content, title_keywords, activity_fallbacks, sort_order, enabled } = req.body;
@@ -1354,7 +1270,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Get existing icon to check if svg_content changed
       const existing = await pool.query('SELECT svg_content, drive_file_id FROM icons WHERE id = $1', [id]);
       if (existing.rows.length === 0) {
         return res.status(404).json({ error: 'Icon not found' });
@@ -1363,19 +1278,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const existingIcon = existing.rows[0];
       let driveFileId = existingIcon.drive_file_id;
 
-      // Re-upload to Drive if svg_content changed and user has OAuth
       if (svg_content && svg_content !== existingIcon.svg_content && req.user.oauth_credentials) {
         try {
           const drive = createDriveService(req.user.oauth_credentials);
           driveFileId = await uploadIconToDrive(drive, pool, name.trim(), svg_content);
           console.log(`Re-uploaded icon ${name} to Google Drive: ${driveFileId}`);
         } catch (driveError) {
+          // Drive re-upload is best-effort; existing drive_file_id retained on failure
           console.warn(`Failed to re-upload icon to Drive (non-fatal):`, driveError.message);
-          // Keep existing drive_file_id if upload failed
         }
       }
 
-      const result = await pool.query(
+      const updatedIcon = await pool.query(
         `UPDATE icons
          SET name = $1, label = $2, svg_filename = $3, svg_content = $4, title_keywords = $5, activity_fallbacks = $6,
              sort_order = COALESCE($7, sort_order), enabled = COALESCE($8, enabled), drive_file_id = $9, updated_at = CURRENT_TIMESTAMP
@@ -1385,7 +1299,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
 
       console.log(`Admin ${req.user.email} updated icon: ${name}`);
-      res.json(result.rows[0]);
+      res.json(updatedIcon.rows[0]);
     } catch (error) {
       if (error.code === '23505') {
         return res.status(400).json({ error: 'Icon with this name already exists' });
@@ -1395,13 +1309,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Delete icon (admin only)
-  // Also deletes from Google Drive if icon was stored there
   router.delete('/icons/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
 
     try {
-      // Don't allow deleting the default icon
+      // 'default' icon is required as the fallback in the map renderer — refuse deletion
       const checkDefault = await pool.query('SELECT name, drive_file_id FROM icons WHERE id = $1', [id]);
       if (checkDefault.rows.length === 0) {
         return res.status(404).json({ error: 'Icon not found' });
@@ -1412,24 +1324,27 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const driveFileId = checkDefault.rows[0].drive_file_id;
 
-      // Delete from Drive if file exists and user has OAuth
       if (driveFileId && req.user.oauth_credentials) {
         try {
           const drive = createDriveService(req.user.oauth_credentials);
           await deleteFileFromDrive(drive, driveFileId);
           console.log(`Deleted icon from Google Drive: ${driveFileId}`);
         } catch (driveError) {
+          // Drive delete is best-effort; DB delete proceeds regardless
           console.warn(`Failed to delete icon from Drive (non-fatal):`, driveError.message);
-          // Continue with database deletion even if Drive delete fails
         }
       }
 
-      const result = await pool.query(
+      const deletedIcon = await pool.query(
         'DELETE FROM icons WHERE id = $1 RETURNING name',
         [id]
       );
 
-      console.log(`Admin ${req.user.email} deleted icon: ${result.rows[0].name}`);
+      if (deletedIcon.rows.length === 0) {
+        return res.status(404).json({ error: 'Icon not found' });
+      }
+
+      console.log(`Admin ${req.user.email} deleted icon: ${deletedIcon.rows[0].name}`);
       res.json({ success: true });
     } catch (error) {
       console.error('Error deleting icon:', error);
@@ -1437,32 +1352,25 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // Boundaries Management Routes
-  // ============================================
-
-  // Get all boundaries (for admin settings)
   router.get('/boundaries', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query(`
+      const boundaryRows = await pool.query(`
         SELECT id, name, boundary_type, boundary_color
         FROM pois
         WHERE 'boundary' = ANY(poi_roles) AND (deleted IS NULL OR deleted = FALSE)
         ORDER BY name
       `);
-      res.json(result.rows);
+      res.json(boundaryRows.rows);
     } catch (error) {
       console.error('Error fetching boundaries:', error);
       res.status(500).json({ error: 'Failed to fetch boundaries' });
     }
   });
 
-  // Update boundary color/type
   router.put('/boundaries/:id', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { boundary_type, boundary_color } = req.body;
 
-    // Validate hex color format
     if (boundary_color && !/^#[0-9A-Fa-f]{6}$/.test(boundary_color)) {
       return res.status(400).json({ error: 'Color must be a valid hex color (e.g., #228B22)' });
     }
@@ -1490,33 +1398,27 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     values.push(id);
 
     try {
-      const result = await pool.query(`
+      const updatedBoundary = await pool.query(`
         UPDATE pois
         SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP
         WHERE id = $${paramIndex} AND 'boundary' = ANY(poi_roles)
         RETURNING id, name, boundary_type, boundary_color
       `, values);
 
-      if (result.rows.length === 0) {
+      if (updatedBoundary.rows.length === 0) {
         return res.status(404).json({ error: 'Boundary not found' });
       }
 
       console.log(`Admin ${req.user.email} updated boundary ${id}: type=${boundary_type}, color=${boundary_color}`);
-      res.json(result.rows[0]);
+      res.json(updatedBoundary.rows[0]);
     } catch (error) {
       console.error('Error updating boundary:', error);
       res.status(500).json({ error: 'Failed to update boundary' });
     }
   });
 
-  // ============================================
-  // Drive Sync Status Routes
-  // ============================================
-
-  // Get sync status
   router.get('/sync/status', isAdmin, async (req, res) => {
     try {
-      // Parse credentials if stored as string
       let credentials = req.user.oauth_credentials;
       if (typeof credentials === 'string') {
         try {
@@ -1539,7 +1441,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
 
-      // Get Drive folder information
       try {
         const rootFolderId = await getDriveSetting(pool, 'root_folder_id');
         const imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
@@ -1570,7 +1471,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           }
         };
 
-        // Get image backup status
         try {
           const { getImageBackupStatus } = await import('../services/backupService.js');
           status.image_backup = await getImageBackupStatus(pool, drive);
@@ -1582,7 +1482,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         status.drive = { configured: false };
       }
 
-      // Get last database backup info
       try {
         const backupResult = await pool.query(
           "SELECT value FROM admin_settings WHERE key = 'last_backup'"
@@ -1599,11 +1498,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // Backup Routes
-  // ============================================
-
-  // Trigger a database backup to Google Drive
   router.post('/backup/trigger', isAdmin, async (req, res) => {
     try {
       let credentials = req.user.oauth_credentials;
@@ -1616,17 +1510,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
       const { triggerBackup } = await import('../services/backupService.js');
-      const result = await triggerBackup(pool, drive);
+      const backupResult = await triggerBackup(pool, drive);
 
-      console.log(`Admin ${req.user.email} triggered backup: ${result.filename}`);
-      res.json(result);
+      console.log(`Admin ${req.user.email} triggered backup: ${backupResult.filename}`);
+      res.json(backupResult);
     } catch (error) {
       console.error('Error triggering backup:', error);
       res.status(500).json({ error: 'Failed to create backup', message: error.message });
     }
   });
 
-  // Get backup status
   router.get('/backup/status', isAdmin, async (req, res) => {
     try {
       const { getBackupStatus } = await import('../services/backupService.js');
@@ -1638,7 +1531,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // List available backups
   router.get('/backup/list', isAdmin, async (req, res) => {
     try {
       let credentials = req.user.oauth_credentials;
@@ -1659,7 +1551,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Restore database from a backup
   router.post('/backup/restore', isAdmin, async (req, res) => {
     try {
       const { fileId } = req.body;
@@ -1687,7 +1578,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Trigger image backup to Drive
   router.post('/backup/images/trigger', isAdmin, async (req, res) => {
     try {
       let credentials = req.user.oauth_credentials;
@@ -1700,17 +1590,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
       const { triggerImageBackup } = await import('../services/backupService.js');
-      const result = await triggerImageBackup(pool, drive);
+      const imageBackupResult = await triggerImageBackup(pool, drive);
 
-      console.log(`Admin ${req.user.email} triggered image backup: ${result.uploaded} uploaded`);
-      res.json(result);
+      console.log(`Admin ${req.user.email} triggered image backup: ${imageBackupResult.uploaded} uploaded`);
+      res.json(imageBackupResult);
     } catch (error) {
       console.error('Error triggering image backup:', error);
       res.status(500).json({ error: 'Failed to backup images', message: error.message });
     }
   });
 
-  // Get image backup status
   router.get('/backup/images/status', isAdmin, async (req, res) => {
     try {
       let drive = null;
@@ -1731,7 +1620,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Restore images from Drive
   router.post('/backup/images/restore', isAdmin, async (req, res) => {
     try {
       let credentials = req.user.oauth_credentials;
@@ -1744,17 +1632,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
       const { restoreImagesFromDrive } = await import('../services/backupService.js');
-      const result = await restoreImagesFromDrive(pool, drive);
+      const restoreResult = await restoreImagesFromDrive(pool, drive);
 
-      console.log(`Admin ${req.user.email} restored images: ${result.restored} restored`);
-      res.json(result);
+      console.log(`Admin ${req.user.email} restored images: ${restoreResult.restored} restored`);
+      res.json(restoreResult);
     } catch (error) {
       console.error('Error restoring images:', error);
       res.status(500).json({ error: 'Failed to restore images', message: error.message });
     }
   });
 
-  // Wipe the local database
   router.delete('/sync/wipe-database', isAdmin, async (req, res) => {
     try {
       const destResult = await pool.query('DELETE FROM pois RETURNING id');
@@ -1772,15 +1659,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // POI Image Management Routes (unified for all POI types)
-  // ============================================
-
-  // Configure multer for memory storage (images stored on image server + Drive backup)
   const imageUpload = multer({
     storage: multer.memoryStorage(),
     limits: {
-      fileSize: 10 * 1024 * 1024, // 10MB max
+      fileSize: 10 * 1024 * 1024,
     },
     fileFilter: (req, file, cb) => {
       const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -1792,7 +1674,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Upload image for any POI (multipart form)
   router.post('/pois/:id/image', isAdmin, imageUpload.single('image'), async (req, res) => {
     const { id } = req.params;
 
@@ -1808,7 +1689,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const poi = poiCheck.rows[0];
 
-      // Upload to image server (primary storage)
       let imageServerAssetId = null;
       if (imageServerClient.initialized) {
         try {
@@ -1822,15 +1702,15 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           const sanitizedName = poi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           const filename = `${sanitizedName}-${Date.now()}.${ext}`;
 
-          const result = await imageServerClient.uploadImage(
+          const uploadResponse = await imageServerClient.uploadImage(
             req.file.buffer, id, 'primary', filename, req.file.mimetype
           );
 
-          if (result.success) {
-            imageServerAssetId = result.assetId;
+          if (uploadResponse.success) {
+            imageServerAssetId = uploadResponse.assetId;
             console.log(`Uploaded image to image server: ${imageServerAssetId}`);
           } else {
-            console.warn(`Failed to upload to image server (non-fatal):`, result.error);
+            console.warn(`Failed to upload to image server (non-fatal):`, uploadResponse.error);
           }
         } catch (uploadError) {
           console.warn(`Failed to upload image to image server (non-fatal):`, uploadError.message);
@@ -1838,14 +1718,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       if (imageServerAssetId) {
-        // Remove any existing primary media record and create new one atomically
+        // Atomic swap: delete old primary + insert new (admin uploads bypass moderation)
         await pool.query('BEGIN');
         await pool.query(
           `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
           [id]
         );
 
-        // Create poi_media record (auto-approved for admin uploads)
         await pool.query(`
           INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_at)
           VALUES ($1, 'image', $2, 'primary', 'auto_approved', CURRENT_TIMESTAMP)
@@ -1874,7 +1753,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Upload image for any POI (base64 JSON variant)
   router.post('/pois/:id/image-base64', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { imageData, mimeType } = req.body;
@@ -1902,7 +1780,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const poi = poiCheck.rows[0];
 
-      // Upload to image server (primary storage)
       let imageServerAssetId = null;
       if (imageServerClient.initialized) {
         try {
@@ -1916,15 +1793,15 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           const sanitizedName = poi.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
           const filename = `${sanitizedName}-${Date.now()}.${ext}`;
 
-          const result = await imageServerClient.uploadImage(
+          const uploadResponse = await imageServerClient.uploadImage(
             buffer, id, 'primary', filename, mimeType
           );
 
-          if (result.success) {
-            imageServerAssetId = result.assetId;
+          if (uploadResponse.success) {
+            imageServerAssetId = uploadResponse.assetId;
             console.log(`Uploaded image to image server: ${imageServerAssetId}`);
           } else {
-            console.warn(`Failed to upload to image server (non-fatal):`, result.error);
+            console.warn(`Failed to upload to image server (non-fatal):`, uploadResponse.error);
           }
         } catch (uploadError) {
           console.warn('Failed to upload to image server (non-fatal):', uploadError.message);
@@ -1932,14 +1809,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       if (imageServerAssetId) {
-        // Remove any existing primary media record and create new one atomically
+        // Atomic swap: delete old primary + insert new (admin uploads bypass moderation)
         await pool.query('BEGIN');
         await pool.query(
           `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
           [id]
         );
 
-        // Create poi_media record (auto-approved for admin uploads)
         await pool.query(`
           INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_at)
           VALUES ($1, 'image', $2, 'primary', 'auto_approved', CURRENT_TIMESTAMP)
@@ -1965,7 +1841,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Delete image from any POI
   router.delete('/pois/:id/image', isAdmin, async (req, res) => {
     const { id } = req.params;
 
@@ -1977,7 +1852,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const poi = poiCheck.rows[0];
 
-      // Check image server for assets
       let hasImageServerAsset = false;
       if (imageServerClient.initialized) {
         const asset = await imageServerClient.getPrimaryAsset(id);
@@ -2015,11 +1889,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // Google Drive Status Routes
-  // ============================================
-
-  // Get Drive storage status
   router.get('/drive/status', isAdmin, async (req, res) => {
     try {
       if (!req.user.oauth_credentials) {
@@ -2050,7 +1919,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Setup Drive folders (creates if not exists)
   router.post('/drive/setup', isAdmin, async (req, res) => {
     try {
       if (!req.user.oauth_credentials) {
@@ -2077,13 +1945,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Update individual Drive setting (folder ID or spreadsheet ID)
   router.put('/drive/settings/:key', isAdmin, async (req, res) => {
     try {
       const { key } = req.params;
       const { value } = req.body;
 
-      // Validate key - only allow specific Drive-related settings
       const allowedKeys = [
         'root_folder_id',
         'icons_folder_id',
@@ -2115,26 +1981,20 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // LINEAR FEATURES (Trails & Rivers) ENDPOINTS
-  // ============================================
-
-  // Get all linear features (admin view includes all fields)
   router.get('/linear-features', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query(`
+      const linearFeatureRows = await pool.query(`
         SELECT * FROM pois
         WHERE deleted IS NULL OR deleted = FALSE
         ORDER BY feature_type, name
       `);
-      res.json(result.rows);
+      res.json(linearFeatureRows.rows);
     } catch (error) {
       console.error('Error fetching linear features:', error);
       res.status(500).json({ error: 'Failed to fetch linear features' });
     }
   });
 
-  // Create linear feature
   router.post('/linear-features', isAdmin, async (req, res) => {
     try {
       const {
@@ -2151,7 +2011,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'feature_type must be "trail" or "river"' });
       }
 
-      const result = await pool.query(`
+      const newLinearFeature = await pool.query(`
         INSERT INTO pois (
           name, poi_roles, geometry, property_owner, owner_id, brief_description,
           era_id, historical_description, primary_activities, surface, pets,
@@ -2165,7 +2025,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       ]);
 
       console.log(`Admin ${req.user.email} created linear feature: ${name}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(newLinearFeature.rows[0]);
     } catch (error) {
       console.error('Error creating linear feature:', error);
       if (error.code === '23505') {
@@ -2176,7 +2036,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Update linear feature
   router.put('/linear-features/:id', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -2207,8 +2066,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       updates.push(`updated_at = CURRENT_TIMESTAMP`);
       values.push(id);
 
-      // Return all columns except geometry (which can be very large)
-      const result = await pool.query(`
+      // Omit geometry from RETURNING — it's large and the client already has it
+      const updatedLinearFeature = await pool.query(`
         UPDATE pois SET ${updates.join(', ')}
         WHERE id = $${paramIndex}
         RETURNING id, name, poi_roles, latitude, longitude, property_owner,
@@ -2219,52 +2078,48 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
                   deleted, created_at, updated_at
       `, values);
 
-      if (result.rows.length === 0) {
+      if (updatedLinearFeature.rows.length === 0) {
         return res.status(404).json({ error: 'Linear feature not found' });
       }
 
       console.log(`Admin ${req.user.email} updated linear feature ${id}`);
-      res.json(result.rows[0]);
+      res.json(updatedLinearFeature.rows[0]);
     } catch (error) {
       console.error('Error updating linear feature:', error);
       res.status(500).json({ error: 'Failed to update linear feature' });
     }
   });
 
-  // Delete linear feature (soft delete)
   router.delete('/linear-features/:id', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const result = await pool.query(`
+      const deletedLinearFeature = await pool.query(`
         UPDATE pois
         SET deleted = TRUE, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
         RETURNING id, name
       `, [id]);
 
-      if (result.rows.length === 0) {
+      if (deletedLinearFeature.rows.length === 0) {
         return res.status(404).json({ error: 'Linear feature not found' });
       }
 
       console.log(`Admin ${req.user.email} deleted linear feature ${id}`);
-      res.json({ success: true, deleted: result.rows[0] });
+      res.json({ success: true, deleted: deletedLinearFeature.rows[0] });
     } catch (error) {
       console.error('Error deleting linear feature:', error);
       res.status(500).json({ error: 'Failed to delete linear feature' });
     }
   });
 
-  // Import trails and rivers from GeoJSON files
   router.post('/linear-features/import', isAdmin, async (req, res) => {
     try {
-      const { feature_type } = req.body; // 'trail', 'river', or 'all'
-      // Use STATIC_PATH in container, fall back to dev path
+      const { feature_type } = req.body;
       const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../../frontend/public');
       const dataPath = path.join(staticPath, 'data');
 
       const results = { trails: 0, rivers: 0, boundaries: 0, errors: [] };
 
-      // Helper function to consolidate features by name
       function consolidateFeatures(features) {
         const byName = {};
         for (const feature of features) {
@@ -2281,7 +2136,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           if (geometries.length === 1) {
             geometry = geometries[0];
           } else {
-            // Merge into MultiLineString
             const allCoords = geometries.map(g =>
               g.type === 'MultiLineString' ? g.coordinates : [g.coordinates]
             ).flat();
@@ -2292,7 +2146,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return consolidated;
       }
 
-      // Import trails
       if (feature_type === 'trail' || feature_type === 'all') {
         try {
           const trailsFile = path.join(dataPath, 'cvnp-trails.geojson');
@@ -2319,7 +2172,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
-      // Import rivers
       if (feature_type === 'river' || feature_type === 'all') {
         try {
           const riverFile = path.join(dataPath, 'cvnp-river.geojson');
@@ -2346,7 +2198,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
-      // Import boundaries
       if (feature_type === 'boundary' || feature_type === 'all') {
         try {
           const boundaryFile = path.join(dataPath, 'cvnp-boundary.geojson');
@@ -2389,12 +2240,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Configure multer for spatial data file upload
   const spatialUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for GeoJSON files
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
-      // Accept .geojson and .json files
       if (file.originalname.match(/\.(geojson|json)$/i)) {
         cb(null, true);
       } else {
@@ -2403,7 +2252,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Upload and import spatial data from GeoJSON file
   router.post('/spatial/upload', isAdmin, (req, res, next) => {
     spatialUpload.single('file')(req, res, (err) => {
       if (err) {
@@ -2418,12 +2266,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'No file uploaded' });
       }
 
-      const { feature_type } = req.body; // 'trail', 'river', or 'boundary'
+      const { feature_type } = req.body;
       if (!['trail', 'river', 'boundary'].includes(feature_type)) {
         return res.status(400).json({ error: 'Invalid feature type. Must be trail, river, or boundary.' });
       }
 
-      // Parse the GeoJSON file
       let geojsonData;
       try {
         geojsonData = JSON.parse(req.file.buffer.toString('utf-8'));
@@ -2431,7 +2278,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'Invalid JSON format in uploaded file' });
       }
 
-      // Validate GeoJSON structure
       if (!geojsonData.type || !geojsonData.features) {
         return res.status(400).json({ error: 'Invalid GeoJSON: missing type or features' });
       }
@@ -2440,7 +2286,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'GeoJSON must be a FeatureCollection' });
       }
 
-      // Helper function to consolidate features by name
       function consolidateFeatures(features) {
         const byName = {};
         for (const feature of features) {
@@ -2457,7 +2302,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           if (geometries.length === 1) {
             geometry = geometries[0];
           } else {
-            // Merge into MultiLineString or MultiPolygon based on type
             const firstType = geometries[0]?.type;
             if (firstType === 'Polygon' || firstType === 'MultiPolygon') {
               const allCoords = geometries.map(g =>
@@ -2511,7 +2355,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // JSON-based spatial import (no file upload, avoids Chrome issues)
+  // JSON-based import avoids Chrome multipart upload bug — keep parallel to /spatial/upload
   router.post('/spatial/import', isAdmin, async (req, res) => {
     try {
       const { feature_type, geojson, filename } = req.body;
@@ -2524,7 +2368,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'Invalid feature type. Must be trail, river, or boundary.' });
       }
 
-      // Validate GeoJSON structure
       if (!geojson.type || !geojson.features) {
         return res.status(400).json({ error: 'Invalid GeoJSON: missing type or features' });
       }
@@ -2533,7 +2376,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'GeoJSON must be a FeatureCollection' });
       }
 
-      // Helper function to consolidate features by name
       function consolidateFeatures(features) {
         const byName = {};
         for (const feature of features) {
@@ -2603,11 +2445,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================
-  // NEWS & EVENTS ENDPOINTS
-  // ============================================
-
-  // Collect news for a batch of POIs (by IDs) - starts job and returns immediately
   router.post('/news/collect-batch', isAdmin, async (req, res) => {
     try {
       const { poiIds } = req.body;
@@ -2616,17 +2453,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'poiIds array is required' });
       }
 
-      // Limit batch size to prevent overload
       const MAX_BATCH_SIZE = 50;
       const idsToProcess = poiIds.slice(0, MAX_BATCH_SIZE);
 
       console.log(`Admin ${req.user.email} triggered batch news collection for ${idsToProcess.length} POIs`);
 
-      // Create the job record first
       const { jobId, totalPois } = await createNewsCollectionJob(pool, idsToProcess, 'batch');
 
-      // Submit to pg-boss for crash-recoverable processing
-      // The handler will be registered in server.js and has access to pool and sheets
+      // pg-boss enables crash recovery — handler registered in server.js
       await submitBatchNewsJob({ jobId, poiIds: idsToProcess });
 
       res.json({
@@ -2642,14 +2476,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Trigger news collection job manually (all POIs) - starts job and returns immediately
   router.post('/news/collect', isAdmin, async (req, res) => {
     try {
-      const tier = req.query.tier; // optional: 'daily', 'weekly', 'monthly'
+      const tier = req.query.tier;
       const tierLabel = tier ? `${tier} tier` : 'all POIs';
       console.log(`Admin ${req.user.email} triggered news collection for ${tierLabel}`);
 
-      // Check if a job is already running
       const runningJobCheck = await pool.query(`
         SELECT id FROM news_job_status
         WHERE status = 'running'
@@ -2663,7 +2495,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Get POIs — tier-filtered or all
       const poiIds = tier
         ? await getPoisForTierCollection(pool, tier)
         : await getAllPoisForCollection(pool);
@@ -2672,11 +2503,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: `No POIs found for ${tierLabel}` });
       }
 
-      // Create the job record first
       const source = tier ? `manual-${tier}` : 'manual';
       const { jobId, totalPois } = await createNewsCollectionJob(pool, poiIds, source);
 
-      // Submit to pg-boss for crash-recoverable processing
       await submitBatchNewsJob({ jobId, poiIds });
 
       res.json({
@@ -2691,7 +2520,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get job status by ID (for polling progress)
   router.get('/news/job/:jobId', isAdmin, async (req, res) => {
     try {
       const { jobId } = req.params;
@@ -2701,10 +2529,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(404).json({ error: 'Job not found' });
       }
 
-      // Get display slots (exactly 10 slots with stable assignments)
+      // Stable 10-slot display prevents UI churn as POIs cycle through workers
       const displaySlots = getNewsDisplaySlots(status.id);
 
-      // Determine current phase from display slots
       let currentPhase = null;
       let currentMessage = null;
       if (displaySlots.some(s => s.poiId)) {
@@ -2729,7 +2556,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         ...status,
         phase: currentPhase,
         phase_message: currentMessage,
-        displaySlots  // Send exactly 10 slots instead of unbounded activeJobs
+        displaySlots
       });
     } catch (error) {
       console.error('Error getting job status:', error);
@@ -2737,7 +2564,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get collection progress for a POI
   router.get('/pois/:id/collection-progress', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -2747,7 +2573,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.json({ phase: 'idle', message: 'No collection in progress' });
       }
 
-      // Include AI provider stats
       const jobStats = getJobStats();
       res.json({
         ...progress,
@@ -2763,7 +2588,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Cancel an ongoing collection job
   router.post('/pois/:id/collection-cancel', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -2783,12 +2607,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Collect news for a single POI (NEWS ONLY)
   router.post('/pois/:id/news/collect', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
 
-      // Get POI details
       const poiResult = await pool.query(
         'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
         [id]
@@ -2800,7 +2622,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const poi = poiResult.rows[0];
 
-      // Check if collection is already running for this POI
       const existingProgress = getCollectionProgress(parseInt(id));
       if (existingProgress && !existingProgress.completed) {
         console.log(`Admin ${req.user.email} attempted to start NEWS collection, but one is already running for POI: ${poi.name}`);
@@ -2815,21 +2636,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Clear any old completed progress before starting new collection
       clearProgress(parseInt(id));
-
-      // Reset AI usage counter for this single-POI collection
       resetJobUsage();
 
       console.log(`Admin ${req.user.email} triggered NEWS ONLY collection for POI: ${poi.name}`);
 
-      // Get timezone from request body (defaults to America/New_York)
       const timezone = req.body.timezone || 'America/New_York';
 
-      // Generate a unique run ID so each collection attempt is a separate entry in history
+      // Each attempt gets a fresh run_id so re-runs appear as separate history entries, not overwrites
       const runIdResult = await pool.query("SELECT nextval('single_poi_run_id_seq')");
       const runId = parseInt(runIdResult.rows[0].nextval);
-      // Store runId + jobType in progress so collectPoi picks them up for logInfo
       updateProgress(poi.id, { runId, jobId: runId, jobType: 'news_single' });
 
       const urls = [
@@ -2840,8 +2656,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logInfo(runId, 'news_single', poi.id, poi.name, `News collection started (${urls || 'no URLs configured'})`);
       await flushJobLogs();
 
-      // Respond immediately so the frontend can redirect to Jobs dashboard
-      // jobId = runId for history grouping, poiId for log querying
+      // Respond immediately so the frontend can redirect to Jobs dashboard; collection runs after the response
       res.json({
         success: true,
         message: `News collection started for ${poi.name}`,
@@ -2850,8 +2665,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         jobType: 'news_single'
       });
 
-      // Run collection in the background (after response is sent)
-      // Progress callback logs each business phase in real-time
       const onProgress = async (message) => {
         logInfo(runId, 'news_single', poi.id, poi.name, message);
         await flushJobLogs();
@@ -2892,12 +2705,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Collect events for a single POI (EVENTS ONLY)
   router.post('/pois/:id/events/collect', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
 
-      // Get POI details
       const poiResult = await pool.query(
         'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = $1',
         [id]
@@ -2909,7 +2720,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const poi = poiResult.rows[0];
 
-      // Check if collection is already running for this POI
       const existingProgress = getCollectionProgress(parseInt(id));
       if (existingProgress && !existingProgress.completed) {
         console.log(`Admin ${req.user.email} attempted to start EVENTS collection, but one is already running for POI: ${poi.name}`);
@@ -2924,18 +2734,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Clear any old completed progress before starting new collection
       clearProgress(parseInt(id));
-
-      // Reset AI usage counter for this single-POI collection
       resetJobUsage();
 
       console.log(`Admin ${req.user.email} triggered EVENTS ONLY collection for POI: ${poi.name}`);
 
-      // Get timezone from request body (defaults to America/New_York)
       const timezone = req.body.timezone || 'America/New_York';
 
-      // Generate a unique run ID so each collection attempt is a separate entry in history
+      // Each attempt gets a fresh run_id so re-runs appear as separate history entries, not overwrites
       const runIdResult = await pool.query("SELECT nextval('single_poi_run_id_seq')");
       const runId = parseInt(runIdResult.rows[0].nextval);
       updateProgress(poi.id, { runId, jobId: runId, jobType: 'events_single' });
@@ -2948,7 +2754,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logInfo(runId, 'events_single', poi.id, poi.name, `Events collection started (${urls || 'no URLs configured'})`);
       await flushJobLogs();
 
-      // Respond immediately so the frontend can redirect to Jobs dashboard
+      // Respond immediately so the frontend can redirect to Jobs dashboard; collection runs after the response
       res.json({
         success: true,
         message: `Events collection started for ${poi.name}`,
@@ -2957,8 +2763,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         jobType: 'events_single'
       });
 
-      // Run collection in the background (after response is sent)
-      // Progress callback logs each business phase in real-time
       const onProgress = async (message) => {
         logInfo(runId, 'events_single', poi.id, poi.name, message);
         await flushJobLogs();
@@ -2999,7 +2803,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get news collection job status
   router.get('/news/status', isAdmin, async (req, res) => {
     try {
       const status = await getLatestJobStatus(pool);
@@ -3010,24 +2813,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get AI stats for current/most recent job (per-job tracking)
   router.get('/news/ai-stats', isAdmin, async (req, res) => {
     try {
-      // Get the most recent job status
-      const result = await pool.query(`
+      const recentJob = await pool.query(`
         SELECT ai_usage, status
         FROM news_job_status
         ORDER BY created_at DESC
         LIMIT 1
       `);
 
-      if (result.rows.length === 0) {
+      if (recentJob.rows.length === 0) {
         return res.json({ usage: { gemini: 0 }, errors: {}, activeProvider: 'gemini' });
       }
 
-      const job = result.rows[0];
+      const job = recentJob.rows[0];
 
-      // If job is running, use real-time in-memory stats
+      // Live in-memory stats while running; persisted DB values once terminal
       if (job.status === 'running') {
         const liveStats = getJobStats();
         return res.json({
@@ -3037,7 +2838,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // For completed/cancelled jobs, use database values
       let aiUsage = job.ai_usage;
       if (typeof aiUsage === 'string') {
         try {
@@ -3062,25 +2862,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Cancel a running batch job
   router.post('/news/job/:id/cancel', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const jobId = parseInt(id);
 
-      // Get current AI usage before cancelling
+      // Snapshot live AI usage before cancellation so we can persist it to the cancelled row
       const currentUsage = getJobStats();
 
-      // Update job status in database to 'cancelled' (preserve AI usage)
-      const result = await pool.query(`
+      const cancelledJob = await pool.query(`
         UPDATE news_job_status
         SET status = 'cancelled', completed_at = NOW(), ai_usage = $2
         WHERE id = $1 AND status = 'running'
         RETURNING *
       `, [jobId, JSON.stringify(currentUsage)]);
 
-      if (result.rows.length > 0) {
-        // Signal cancellation to all in-flight POIs for this job
+      if (cancelledJob.rows.length > 0) {
         const active = getAllActiveProgress();
         let signalled = 0;
         for (const entry of active) {
@@ -3100,7 +2897,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get all recent news (admin view)
   router.get('/news/recent', isAdmin, async (req, res) => {
     try {
       const limit = parseInt(req.query.limit) || 50;
@@ -3112,7 +2908,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get all upcoming events (admin view)
   router.get('/events/upcoming', isAdmin, async (req, res) => {
     try {
       const daysAhead = parseInt(req.query.days) || 30;
@@ -3124,7 +2919,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Delete a news item
   router.delete('/news/:id', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -3137,7 +2931,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Delete an event
   router.delete('/events/:id', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -3150,7 +2943,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // POI Associations CRUD endpoints (admin only)
   router.post('/poi-associations', isAdmin, async (req, res) => {
     try {
       const { virtual_poi_id, physical_poi_id, association_type } = req.body;
@@ -3159,7 +2951,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'virtual_poi_id and physical_poi_id are required' });
       }
 
-      // Validate that virtual_poi_id has the organization role
       const virtualPoi = await pool.query(
         'SELECT poi_roles FROM pois WHERE id = $1',
         [virtual_poi_id]
@@ -3173,8 +2964,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'Specified virtual_poi_id does not have the organization role' });
       }
 
-      // Create association
-      const result = await pool.query(`
+      const associationRow = await pool.query(`
         INSERT INTO poi_associations (virtual_poi_id, physical_poi_id, association_type)
         VALUES ($1, $2, $3)
         ON CONFLICT (virtual_poi_id, physical_poi_id) DO UPDATE
@@ -3183,7 +2973,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       `, [virtual_poi_id, physical_poi_id, association_type || 'manages']);
 
       console.log(`Admin ${req.user.email} created association between org POI ${virtual_poi_id} and POI ${physical_poi_id}`);
-      res.json(result.rows[0]);
+      res.json(associationRow.rows[0]);
     } catch (error) {
       console.error('Error creating POI association:', error);
       res.status(500).json({ error: 'Failed to create association' });
@@ -3194,12 +2984,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     try {
       const { id } = req.params;
 
-      const result = await pool.query(
+      const deletedAssociation = await pool.query(
         'DELETE FROM poi_associations WHERE id = $1 RETURNING *',
         [id]
       );
 
-      if (result.rows.length === 0) {
+      if (deletedAssociation.rows.length === 0) {
         return res.status(404).json({ error: 'Association not found' });
       }
 
@@ -3211,7 +3001,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Batch create associations (for drawing UI workflow)
   router.post('/poi-associations/batch', isAdmin, async (req, res) => {
     try {
       const { virtual_poi_id, physical_poi_ids, association_type } = req.body;
@@ -3220,7 +3009,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'virtual_poi_id and physical_poi_ids array are required' });
       }
 
-      // Validate organization POI
       const virtualPoi = await pool.query(
         'SELECT poi_roles FROM pois WHERE id = $1',
         [virtual_poi_id]
@@ -3234,36 +3022,26 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'Specified virtual_poi_id does not have the organization role' });
       }
 
-      // Create all associations
-      const created = [];
-      for (const physical_poi_id of physical_poi_ids) {
-        const result = await pool.query(`
-          INSERT INTO poi_associations (virtual_poi_id, physical_poi_id, association_type)
-          VALUES ($1, $2, $3)
-          ON CONFLICT (virtual_poi_id, physical_poi_id) DO UPDATE
-          SET association_type = EXCLUDED.association_type, updated_at = CURRENT_TIMESTAMP
-          RETURNING *
-        `, [virtual_poi_id, physical_poi_id, association_type || 'manages']);
+      const associationsBatch = await pool.query(`
+        INSERT INTO poi_associations (virtual_poi_id, physical_poi_id, association_type)
+        SELECT $1, unnest($2::int[]), $3
+        ON CONFLICT (virtual_poi_id, physical_poi_id) DO UPDATE
+        SET association_type = EXCLUDED.association_type, updated_at = CURRENT_TIMESTAMP
+        RETURNING *
+      `, [virtual_poi_id, physical_poi_ids, association_type || 'manages']);
 
-        created.push(result.rows[0]);
-      }
-
-      console.log(`Admin ${req.user.email} created ${created.length} associations for virtual POI ${virtual_poi_id}`);
-      res.json({ success: true, created });
+      console.log(`Admin ${req.user.email} created ${associationsBatch.rows.length} associations for virtual POI ${virtual_poi_id}`);
+      res.json({ success: true, created: associationsBatch.rows });
     } catch (error) {
       console.error('Error creating batch POI associations:', error);
       res.status(500).json({ error: 'Failed to create associations' });
     }
   });
 
-  // ===== TRAIL STATUS ENDPOINTS =====
-
-  // Collect status for a single MTB trail
   router.post('/pois/:id/status/collect', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
 
-      // Get trail details
       const poiResult = await pool.query(
         'SELECT id, name, poi_roles, status_url, location FROM pois WHERE id = $1',
         [id]
@@ -3279,7 +3057,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'POI does not have a status URL' });
       }
 
-      // Check if collection is already running for this trail
       const existingProgress = getTrailProgress(parseInt(id));
       if (existingProgress && !existingProgress.completed) {
         console.log(`Admin ${req.user.email} attempted to collect trail status, but one is already running for: ${poi.name}`);
@@ -3291,22 +3068,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Clear any old completed progress
       clearTrailProgress(parseInt(id));
-
-      // Reset AI usage counter
       resetJobUsage();
 
       console.log(`Admin ${req.user.email} triggered trail status collection for: ${poi.name}`);
 
-      // Collect trail status
-      const result = await collectTrailStatus(pool, poi, null, 'America/New_York');
+      const trailStatusResult = await collectTrailStatus(pool, poi, null, 'America/New_York');
 
       res.json({
         success: true,
         message: 'Trail status collected',
-        statusFound: result.statusFound,
-        statusSaved: result.statusSaved,
+        statusFound: trailStatusResult.statusFound,
+        statusSaved: trailStatusResult.statusSaved,
         aiUsage: getJobStats()
       });
 
@@ -3316,14 +3089,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Batch collection for multiple trails
   router.post('/trail-status/collect-batch', isAdmin, async (req, res) => {
     try {
       const { poiIds } = req.body;
 
       console.log(`Admin ${req.user.email} triggered batch trail status collection for ${poiIds?.length || 'all'} trails`);
 
-      // Check if a job is already running
       const runningJobCheck = await pool.query(`
         SELECT id FROM trail_status_job_status
         WHERE status = 'running'
@@ -3337,17 +3108,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      const result = await runTrailStatusCollection(pool, req.app.get('boss'), {
+      const batchJobResult = await runTrailStatusCollection(pool, req.app.get('boss'), {
         poiIds: poiIds || null,
         jobType: 'batch_collection'
       });
 
+      // Both camelCase and snake_case to maintain backward compatibility with old frontend builds
       res.json({
         success: true,
-        message: result.message,
-        jobId: result.jobId,
-        totalTrails: result.totalTrails,  // Keep camelCase for backward compatibility
-        total_trails: result.totalTrails  // Add snake_case for frontend
+        message: batchJobResult.message,
+        jobId: batchJobResult.jobId,
+        totalTrails: batchJobResult.totalTrails,
+        total_trails: batchJobResult.totalTrails
       });
 
     } catch (error) {
@@ -3359,18 +3131,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   // Get latest job status (MUST come before /:jobId route)
   router.get('/trail-status/job-status/latest', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query(`
+      const latestJob = await pool.query(`
         SELECT *
         FROM trail_status_job_status
         ORDER BY created_at DESC
         LIMIT 1
       `);
 
-      if (result.rows.length === 0) {
+      if (latestJob.rows.length === 0) {
         return res.json(null);
       }
 
-      const job = result.rows[0];
+      const job = latestJob.rows[0];
       res.json({
         jobId: job.pg_boss_job_id,
         status: job.status,
@@ -3387,7 +3159,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get job status by ID
   router.get('/trail-status/job-status/:jobId', isAdmin, async (req, res) => {
     try {
       const { jobId } = req.params;
@@ -3397,10 +3168,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(404).json({ error: 'Job not found' });
       }
 
-      // Get display slots (exactly 10 slots with stable assignments)
       const displaySlots = getTrailDisplaySlots(status.jobId);
 
-      // Determine current phase from display slots
       let currentPhase = null;
       let currentMessage = null;
       if (displaySlots.some(s => s.poiId)) {
@@ -3421,7 +3190,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
-      // Convert camelCase to snake_case for frontend consistency
       res.json({
         jobId: status.jobId,
         status: status.status,
@@ -3433,7 +3201,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         error_message: status.errorMessage,
         phase: currentPhase,
         phase_message: currentMessage,
-        displaySlots  // Send exactly 10 slots instead of unbounded activeJobs
+        displaySlots
       });
 
     } catch (error) {
@@ -3442,7 +3210,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Cancel batch job
   router.put('/trail-status/batch-collect/:jobId/cancel', isAdmin, async (req, res) => {
     try {
       const { jobId } = req.params;
@@ -3466,24 +3233,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get AI statistics for current/most recent job (per-job tracking)
   router.get('/trail-status/ai-stats', isAdmin, async (req, res) => {
     try {
-      // Get the most recent job status
-      const result = await pool.query(`
+      const recentTrailJob = await pool.query(`
         SELECT ai_usage, status
         FROM trail_status_job_status
         ORDER BY created_at DESC
         LIMIT 1
       `);
 
-      if (result.rows.length === 0) {
+      if (recentTrailJob.rows.length === 0) {
         return res.json({ usage: { gemini: 0 }, errors: {}, activeProvider: 'gemini' });
       }
 
-      const job = result.rows[0];
+      const job = recentTrailJob.rows[0];
 
-      // If job is running, use real-time in-memory stats
+      // Live in-memory stats while running; persisted DB values once terminal
       if (job.status === 'running') {
         const liveStats = getJobStats();
         return res.json({
@@ -3493,7 +3258,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // For completed/cancelled jobs, use database values
       let aiUsage = job.ai_usage;
       if (typeof aiUsage === 'string') {
         try {
@@ -3518,16 +3282,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================================================
-  // Twitter Cookie Authentication
-  // ============================================================================
-
-  /**
-   * Launch browser for manual Twitter login (opens on host machine)
-   */
   router.post('/twitter/login', isAdmin, async (req, res) => {
     try {
-      // Just return instructions - user will log in via their regular browser
       res.json({
         success: true,
         message: 'Please log in to Twitter in your browser and export cookies using the browser extension or DevTools.',
@@ -3542,9 +3298,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  /**
-   * Save manually exported cookies
-   */
   router.post('/twitter/save-cookies', isAdmin, async (req, res) => {
     try {
       const { cookies } = req.body;
@@ -3556,7 +3309,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Parse cookies (could be JSON array or string)
       let cookiesArray;
       if (typeof cookies === 'string') {
         try {
@@ -3571,7 +3323,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         cookiesArray = cookies;
       }
 
-      // Validate it's an array
       if (!Array.isArray(cookiesArray)) {
         return res.status(400).json({
           success: false,
@@ -3579,7 +3330,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Find the auth_token cookie
       const authToken = cookiesArray.find(c => c.name === 'auth_token');
 
       if (!authToken) {
@@ -3589,13 +3339,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Parse expiration date (could be Unix timestamp, ISO string, or missing)
+      // Browser exporters disagree on field name + type: Chrome extensions use expirationDate (Unix int),
+      // others use expires (Unix int or ISO string). Try each in order; fall back to a 60-day estimate.
       let expiresDate = null;
       if (authToken.expirationDate) {
-        // Chrome extension format uses expirationDate (Unix timestamp)
         expiresDate = new Date(authToken.expirationDate * 1000);
       } else if (authToken.expires) {
-        // Could be Unix timestamp or ISO string
         if (typeof authToken.expires === 'number') {
           expiresDate = new Date(authToken.expires * 1000);
         } else if (typeof authToken.expires === 'string') {
@@ -3603,14 +3352,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
-      // If still no valid date, estimate 60 days from now
       if (!expiresDate || isNaN(expiresDate.getTime())) {
         expiresDate = new Date();
         expiresDate.setDate(expiresDate.getDate() + 60);
         console.log('[Twitter Auth] ⚠️ No expiration date found, estimating 60 days');
       }
 
-      // Save cookies to database
       const cookieData = JSON.stringify(cookiesArray);
 
       await pool.query(
@@ -3647,22 +3394,20 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     try {
       const { chromium } = await import('playwright');
 
-      // Get saved cookies from database
-      const result = await pool.query(
+      const cookiesRow = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'twitter_cookies'"
       );
 
-      if (result.rows.length === 0) {
+      if (cookiesRow.rows.length === 0) {
         return res.status(404).json({
           success: false,
           error: 'No saved Twitter cookies found. Please log in first.'
         });
       }
 
-      const cookies = JSON.parse(result.rows[0].value);
+      const cookies = JSON.parse(cookiesRow.rows[0].value);
       console.log('[Twitter Auth] Testing', cookies.length, 'saved cookies...');
 
-      // Launch browser and load cookies
       const browser = await chromium.launch({
         headless: true,
         args: [
@@ -3676,21 +3421,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       });
 
-      // Sanitize cookies for Playwright compatibility
+      // Playwright requires Strict/Lax/None for sameSite and 'expires' (not 'expirationDate')
       const sanitizedCookies = cookies.map(cookie => {
         const sanitized = { ...cookie };
 
-        // Fix sameSite - Playwright only accepts Strict, Lax, or None
         if (sanitized.sameSite && !['Strict', 'Lax', 'None'].includes(sanitized.sameSite)) {
           sanitized.sameSite = 'Lax';
         }
 
-        // Ensure required fields exist
         if (!sanitized.name || !sanitized.value) {
           return null;
         }
 
-        // Convert expirationDate to expires if needed
         if (sanitized.expirationDate && !sanitized.expires) {
           sanitized.expires = sanitized.expirationDate;
         }
@@ -3698,12 +3440,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return sanitized;
       }).filter(c => c !== null);
 
-      // Add cookies to context
       await context.addCookies(sanitizedCookies);
 
       const page = await context.newPage();
 
-      // Try to access Twitter home (should redirect if not logged in)
+      // Logged-out users get redirected to /login from /home — use that to detect auth state
       await page.goto('https://x.com/home', { waitUntil: 'domcontentloaded', timeout: 15000 });
       await page.waitForTimeout(3000);
 
@@ -3713,7 +3454,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       console.log('[Twitter Auth] Test result - URL:', currentUrl);
       console.log('[Twitter Auth] Test result - Title:', pageTitle);
 
-      // Check if still logged in
       const isLoggedIn = currentUrl.includes('/home') && !currentUrl.includes('/login');
 
       await browser.close();
@@ -3741,23 +3481,20 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  /**
-   * Get Twitter authentication status
-   */
   router.get('/twitter/auth-status', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const authStatusRow = await pool.query(
         "SELECT value, updated_at FROM admin_settings WHERE key = 'twitter_cookies'"
       );
 
-      if (result.rows.length === 0) {
+      if (authStatusRow.rows.length === 0) {
         return res.json({
           authenticated: false,
           message: 'No Twitter cookies saved'
         });
       }
 
-      const cookies = JSON.parse(result.rows[0].value);
+      const cookies = JSON.parse(authStatusRow.rows[0].value);
       const authToken = cookies.find(c => c.name === 'auth_token');
 
       if (!authToken) {
@@ -3767,13 +3504,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      // Parse expiration date (could be Unix timestamp, ISO string, or missing)
+      // Browser exporters disagree on field name + type — see /twitter/save-cookies for details
       let expiresDate = null;
       if (authToken.expirationDate) {
-        // Chrome extension format uses expirationDate (Unix timestamp)
         expiresDate = new Date(authToken.expirationDate * 1000);
       } else if (authToken.expires) {
-        // Could be Unix timestamp or ISO string
         if (typeof authToken.expires === 'number') {
           expiresDate = new Date(authToken.expires * 1000);
         } else if (typeof authToken.expires === 'string') {
@@ -3781,10 +3516,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
-      // If no valid date, assume it's valid (session cookie or long-lived)
+      // Missing/invalid date is treated as not-expired (session cookie semantics)
       const isExpired = expiresDate && !isNaN(expiresDate.getTime()) ? expiresDate < new Date() : false;
 
-      // Check consecutive failure count
       let consecutiveFailures = 0;
       try {
         const failResult = await pool.query(
@@ -3799,7 +3533,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         authenticated: !isExpired,
         auth_token_preview: authToken.value.substring(0, 20) + '...',
         expires: expiresDate && !isNaN(expiresDate.getTime()) ? expiresDate.toISOString() : 'Session',
-        saved_at: result.rows[0].updated_at,
+        saved_at: authStatusRow.rows[0].updated_at,
         is_expired: isExpired,
         cookies_count: cookies.length,
         consecutive_failures: consecutiveFailures,
@@ -3812,7 +3546,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Playwright status endpoint - check if browser can be launched
   router.get('/playwright/status', isAdmin, async (req, res) => {
     const startTime = Date.now();
     let browser = null;
@@ -3820,7 +3553,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     try {
       const { chromium } = await import('playwright');
 
-      // Try to launch browser
       browser = await chromium.launch({
         headless: true,
         timeout: 15000
@@ -3829,10 +3561,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const context = await browser.newContext();
       const page = await context.newPage();
 
-      // Navigate to a simple test page
       await page.goto('about:blank', { timeout: 5000 });
 
-      // Get browser version
       const version = browser.version();
 
       await browser.close();
@@ -3851,18 +3581,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       const elapsed = Date.now() - startTime;
 
-      // Clean up browser if it was partially launched
       if (browser) {
         try {
           await browser.close();
         } catch (closeErr) {
-          // Ignore close errors
+          // Best-effort cleanup
         }
       }
 
       console.error('[Playwright Status] Error:', error.message);
 
-      // Determine the type of error
       let errorType = 'unknown';
       let suggestion = 'Check server logs for details';
 
@@ -3888,7 +3616,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Playwright test endpoint - actually render a page and verify content extraction
   router.post('/playwright/test', isAdmin, async (req, res) => {
     const { url = 'https://example.com' } = req.body;
     const startTime = Date.now();
@@ -3896,28 +3623,28 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     try {
       const { renderJavaScriptPage } = await import('../services/jsRenderer.js');
 
-      const result = await renderJavaScriptPage(url, {
+      const renderOutcome = await renderJavaScriptPage(url, {
         timeout: 15000,
         waitTime: 2000
       });
 
       const elapsed = Date.now() - startTime;
 
-      if (result.success) {
+      if (renderOutcome.success) {
         res.json({
           status: 'success',
           message: 'Page rendered successfully',
           url: url,
-          title: result.title,
-          text_length: result.text?.length || 0,
-          links_found: result.links?.length || 0,
+          title: renderOutcome.title,
+          text_length: renderOutcome.text?.length || 0,
+          links_found: renderOutcome.links?.length || 0,
           elapsed_ms: elapsed,
           timestamp: new Date().toISOString()
         });
       } else {
         res.json({
           status: 'failed',
-          message: result.error || 'Failed to render page',
+          message: renderOutcome.error || 'Failed to render page',
           url: url,
           elapsed_ms: elapsed,
           timestamp: new Date().toISOString()
@@ -3938,25 +3665,19 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Test image server connection
   router.post('/test-image-server', isAdmin, async (req, res) => {
     try {
-      const result = await imageServerClient.testConnection();
-      res.json(result);
+      const connectionTest = await imageServerClient.testConnection();
+      res.json(connectionTest);
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }
   });
 
-  // ============================================
-  // Moderation Queue Routes (#106)
-  // ============================================
-
-  // Get paginated moderation queue
   router.get('/moderation/queue', isAdmin, async (req, res) => {
     try {
       const { page = 1, limit = 20, type, status = 'pending', source, search, id, sort } = req.query;
-      const result = await getModerationQueue(pool, {
+      const queueResult = await getModerationQueue(pool, {
         page: parseInt(page),
         limit: parseInt(limit),
         contentType: type || null,
@@ -3966,14 +3687,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         id: id || null,
         sort: sort || 'collected_desc'
       });
-      res.json(result);
+      res.json(queueResult);
     } catch (error) {
       console.error('Error fetching moderation queue:', error);
       res.status(500).json({ error: 'Failed to fetch moderation queue' });
     }
   });
 
-  // Get pending count for badge
   router.get('/moderation/queue/count', isAdmin, async (req, res) => {
     try {
       const count = await getModerationPendingCount(pool);
@@ -3984,7 +3704,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get full item detail with AI reasoning
   router.get('/moderation/item/:type/:id', isAdmin, async (req, res) => {
     try {
       const { type, id } = req.params;
@@ -3999,7 +3718,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Approve a single item
   router.post('/moderation/approve', isAdmin, async (req, res) => {
     try {
       const { type, id } = req.body;
@@ -4014,7 +3732,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Reject a single item
   router.post('/moderation/reject', isAdmin, async (req, res) => {
     try {
       const { type, id, reason } = req.body;
@@ -4029,37 +3746,34 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Bulk approve
   router.post('/moderation/bulk-approve', isAdmin, async (req, res) => {
     try {
       const { items } = req.body;
       if (!items || !Array.isArray(items)) {
         return res.status(400).json({ error: 'items array is required' });
       }
-      const result = await bulkApprove(pool, items, req.user.id);
-      res.json(result);
+      const bulkApproveResult = await bulkApprove(pool, items, req.user.id);
+      res.json(bulkApproveResult);
     } catch (error) {
       console.error('Error bulk approving:', error);
       res.status(500).json({ error: 'Failed to bulk approve' });
     }
   });
 
-  // Bulk reject
   router.post('/moderation/bulk-reject', isAdmin, async (req, res) => {
     try {
       const { items } = req.body;
       if (!items || !Array.isArray(items)) {
         return res.status(400).json({ error: 'items array is required' });
       }
-      const result = await bulkReject(pool, items, req.user.id);
-      res.json(result);
+      const bulkRejectResult = await bulkReject(pool, items, req.user.id);
+      res.json(bulkRejectResult);
     } catch (error) {
       console.error('Error bulk rejecting:', error);
       res.status(500).json({ error: 'Failed to bulk reject' });
     }
   });
 
-  // Edit and publish
   router.post('/moderation/edit-publish', isAdmin, async (req, res) => {
     try {
       const { type, id, edits } = req.body;
@@ -4074,7 +3788,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Save edits without publishing
   router.post('/moderation/save', isAdmin, async (req, res) => {
     try {
       const { type, id, edits } = req.body;
@@ -4092,7 +3805,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Requeue for re-review
   router.post('/moderation/requeue', isAdmin, async (req, res) => {
     try {
       const { type, id } = req.body;
@@ -4107,7 +3819,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Look up earliest Internet Archive snapshot date for a URL
   router.get('/moderation/ia-date', isAdmin, async (req, res) => {
     try {
       const { url } = req.query;
@@ -4126,9 +3837,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         try {
           response = await fetch(cdxUrl, { signal: controller.signal });
           clearTimeout(timeoutId);
-          if (response.ok) break; // success — stop retrying
+          if (response.ok) break;
           lastError = `CDX API returned ${response.status}`;
-          if (attempt < 3) await new Promise(r => setTimeout(r, 2000)); // wait 2s before retry
+          if (attempt < 3) await new Promise(r => setTimeout(r, 2000));
         } catch (err) {
           clearTimeout(timeoutId);
           if (err.name === 'AbortError') {
@@ -4145,17 +3856,17 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(502).json({ error: `Internet Archive unavailable after 3 attempts (${lastError})` });
       }
 
-      let data;
+      let cdxRows;
       try {
-        data = await response.json();
+        cdxRows = await response.json();
       } catch {
         return res.status(502).json({ error: 'Internet Archive returned non-JSON response' });
       }
-      // CDX returns [[header], [row]] — first row after header is the earliest snapshot
-      if (data.length < 2 || !Array.isArray(data[1]) || !data[1][0] || !/^\d{14}$/.test(data[1][0])) {
+      // CDX response shape: [[header], [row]] — first row after header is earliest snapshot
+      if (cdxRows.length < 2 || !Array.isArray(cdxRows[1]) || !cdxRows[1][0] || !/^\d{14}$/.test(cdxRows[1][0])) {
         return res.json({ date: null, message: 'No snapshots found' });
       }
-      const timestamp = data[1][0]; // Format: YYYYMMDDHHmmss
+      const timestamp = cdxRows[1][0];
       const date = `${timestamp.slice(0, 4)}-${timestamp.slice(4, 6)}-${timestamp.slice(6, 8)}`;
       res.json({ date, timestamp, message: `Earliest snapshot: ${date}` });
     } catch (error) {
@@ -4174,15 +3885,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       if (type === 'photo') {
         return res.status(400).json({ error: 'Fix Date is not available for photos' });
       }
-      const result = await fixDate(pool, type, id);
-      res.json({ success: true, ...result });
+      const fixDateResult = await fixDate(pool, type, id);
+      res.json({ success: true, ...fixDateResult });
     } catch (error) {
       console.error('Error fixing date:', error);
       res.status(500).json({ error: error.message || 'Failed to fix date' });
     }
   });
 
-  // Create new content item (admin)
   router.post('/moderation/create', isAdmin, async (req, res) => {
     try {
       const { type, fields } = req.body;
@@ -4200,7 +3910,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Get merge candidates — other items from the same POI
   router.get('/moderation/merge-candidates/:type/:id', isAdmin, async (req, res) => {
     try {
       const { type, id } = req.params;
@@ -4215,7 +3924,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Merge two news/event items (moves source URLs into target, deletes source)
   router.post('/moderation/merge', isAdmin, async (req, res) => {
     try {
       const { type, sourceId, targetId } = req.body;
@@ -4225,51 +3933,45 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       if (!['news', 'event'].includes(type)) {
         return res.status(400).json({ error: 'Merge is only supported for news and event items' });
       }
-      const result = await mergeItems(pool, type, parseInt(sourceId), parseInt(targetId));
-      res.json({ success: true, ...result });
+      const mergeResult = await mergeItems(pool, type, parseInt(sourceId), parseInt(targetId));
+      res.json({ success: true, ...mergeResult });
     } catch (error) {
       console.error('Error merging items:', error);
       res.status(500).json({ error: error.message || 'Failed to merge items' });
     }
   });
 
-  // Add a URL to an existing news/event item
   router.post('/moderation/add-url', isAdmin, async (req, res) => {
     try {
       const { type, id, url, sourceName } = req.body;
       if (!type || !id || !url) {
         return res.status(400).json({ error: 'type, id, and url are required' });
       }
-      const result = await addItemUrl(pool, type, parseInt(id), url, sourceName || null);
-      res.json({ success: true, ...result });
+      const addUrlResult = await addItemUrl(pool, type, parseInt(id), url, sourceName || null);
+      res.json({ success: true, ...addUrlResult });
     } catch (error) {
       console.error('Error adding URL:', error);
       res.status(500).json({ error: error.message || 'Failed to add URL' });
     }
   });
 
-  // Remove a URL from a news/event item
   router.post('/moderation/remove-url', isAdmin, async (req, res) => {
     try {
       const { type, id, urlId } = req.body;
       if (!type || !id || !urlId) {
         return res.status(400).json({ error: 'type, id, and urlId are required' });
       }
-      const result = await removeItemUrl(pool, type, parseInt(id), parseInt(urlId));
-      res.json({ success: true, ...result });
+      const removeUrlResult = await removeItemUrl(pool, type, parseInt(id), parseInt(urlId));
+      res.json({ success: true, ...removeUrlResult });
     } catch (error) {
       console.error('Error removing URL:', error);
       res.status(500).json({ error: error.message || 'Failed to remove URL' });
     }
   });
 
-  // ============================================
-  // Photo Submission Route (public, authenticated)
-  // ============================================
-
   const photoUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+    limits: { fileSize: 10 * 1024 * 1024 },
     fileFilter: (req, file, cb) => {
       if (file.mimetype.startsWith('image/')) {
         cb(null, true);
@@ -4281,7 +3983,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.post('/photos/submit', isAuthenticated, photoUpload.single('file'), async (req, res) => {
     try {
-      // Check if photo submissions are enabled
       const enabledResult = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'photo_submissions_enabled'"
       );
@@ -4295,7 +3996,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'file and poi_id are required' });
       }
 
-      // Upload to image server
       const uploadResult = await imageServerClient.uploadImage(
         req.file.buffer,
         parseInt(poi_id),
@@ -4308,34 +4008,27 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(500).json({ error: 'Failed to upload image: ' + uploadResult.error });
       }
 
-      // Create photo_submissions record
-      const result = await pool.query(
+      const submissionRow = await pool.query(
         `INSERT INTO photo_submissions (poi_id, image_server_asset_id, original_filename, submitted_by, caption)
          VALUES ($1, $2, $3, $4, $5) RETURNING id`,
         [parseInt(poi_id), uploadResult.assetId, req.file.originalname, req.user.id, caption || null]
       );
 
-      res.json({ success: true, submissionId: result.rows[0].id });
+      res.json({ success: true, submissionId: submissionRow.rows[0].id });
     } catch (error) {
       console.error('Error submitting photo:', error);
       res.status(500).json({ error: 'Failed to submit photo' });
     }
   });
 
-  // ============================================================
-  // Jobs Dashboard Routes (#103)
-  // ============================================================
-
-  // Unified job history across all types
   router.get('/jobs/history', isAdmin, async (req, res) => {
     try {
       const type = req.query.type || null;
       const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 20, 100));
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
-      // Perf: date-bound each subquery to avoid full table scans.
-      // Fix: exclude job_id=0 from GROUP BY to prevent collapsing unrelated entries.
-      // Fix: infer 'running' status for jobs with recent activity (within 1 hour).
+      // Date-bound subqueries (perf), exclude job_id=0 from GROUP BY (prevents collapsing unrelated rows),
+      // and infer 'running' from recent activity since job_logs lacks a status column. (Fix)
       let query = `
         SELECT * FROM (
           SELECT id, 'news' AS job_type, job_type AS sub_type, status,
@@ -4385,15 +4078,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       query += ` ORDER BY created_at DESC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
       params.push(limit, offset);
 
-      const result = await pool.query(query, params);
-      res.json(result.rows);
+      const jobHistoryRows = await pool.query(query, params);
+      res.json(jobHistoryRows.rows);
     } catch (error) {
       console.error('Error fetching job history:', error);
       res.status(500).json({ error: 'Failed to fetch job history' });
     }
   });
 
-  // Single-POI job logs (query by poi_id instead of job_id)
   router.get('/jobs/logs', isAdmin, async (req, res) => {
     try {
       const { jobType, poiId } = req.query;
@@ -4414,14 +4106,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         LIMIT $3 OFFSET $4
       `;
 
-      const result = await pool.query(query, [jobType, poiId, limit, offset]);
+      const poiLogRows = await pool.query(query, [jobType, poiId, limit, offset]);
 
       res.json({
         success: true,
         data: {
-          logs: result.rows,
+          logs: poiLogRows.rows,
           pagination: {
-            returned: result.rowCount,
+            returned: poiLogRows.rowCount,
             limit,
             offset
           }
@@ -4433,7 +4125,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Per-job log entries from job_logs table
   router.get('/jobs/:jobType/:jobId/logs', isAdmin, async (req, res) => {
     try {
       const { jobType, jobId } = req.params;
@@ -4458,15 +4149,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       query += ` ORDER BY created_at ASC LIMIT $${paramIdx} OFFSET $${paramIdx + 1}`;
       params.push(limit, offset);
 
-      const result = await pool.query(query, params);
-      res.json(result.rows);
+      const jobLogRows = await pool.query(query, params);
+      res.json(jobLogRows.rows);
     } catch (error) {
       console.error('Error fetching job logs:', error);
       res.status(500).json({ error: 'Failed to fetch job logs' });
     }
   });
 
-  // Live queue status from pg-boss
   router.get('/jobs/queues', isAdmin, async (req, res) => {
     try {
       const boss = getJobScheduler();
@@ -4504,15 +4194,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // GET /admin/jobs/scheduled - List all job types with schedule, queue size, last run, and prompt info
   router.get('/jobs/scheduled', isAdmin, async (req, res) => {
     try {
       const { COLLECTION_TYPES, getDefaultPrompt } = await import('../services/collection/registry.js');
       const boss = getJobScheduler();
 
       const jobs = await Promise.all(COLLECTION_TYPES.map(async (type) => {
-        // Read the actual schedule from pg-boss — single source of truth.
-        // Falls back to registry default only for jobs without a pg-boss schedule.
+        // pg-boss is the source of truth for schedules; registry default only used if no pg-boss row exists
         let currentSchedule = type.schedule;
         if (type.scheduleJobName) {
           try {
@@ -4526,13 +4214,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           } catch { /* pgboss.schedule may not exist on first boot */ }
         }
 
-        // Get queue size
         let queueSize = 0;
         try {
           queueSize = await boss.getQueueSize(type.scheduleJobName) || 0;
         } catch { /* queue may not exist yet */ }
 
-        // Get last job info from status table
         let lastJob = null;
         if (type.statusTable) {
           try {
@@ -4543,7 +4229,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           } catch { /* table may not exist */ }
         }
 
-        // Get prompt info for AI-powered jobs
         let prompts = [];
         if (type.hasPrompt && type.promptKeys.length > 0) {
           for (const pk of type.promptKeys) {
@@ -4582,7 +4267,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         };
       }));
 
-      // Sort jobs alphabetically by label
       jobs.sort((a, b) => a.label.localeCompare(b.label));
 
       res.json(jobs);
@@ -4592,19 +4276,16 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // PUT /admin/jobs/:name/schedule - Update cron schedule for a job
   router.put('/jobs/:name/schedule', isAdmin, async (req, res) => {
     const { name } = req.params;
     const { cronExpression } = req.body;
 
-    // Validate job name exists in registry
     const { COLLECTION_TYPES } = await import('../services/collection/registry.js');
     const jobType = COLLECTION_TYPES.find(t => t.scheduleJobName === name);
     if (!jobType) {
       return res.status(400).json({ error: `Unknown job name: ${name}` });
     }
 
-    // Validate cron expression format (basic check: 5 space-separated fields)
     if (!cronExpression || !cronExpression.trim()) {
       return res.status(400).json({ error: 'cronExpression is required' });
     }
@@ -4614,10 +4295,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      // Update pg-boss schedule immediately
       await updateSchedule(name, cronExpression.trim());
 
-      // Persist to admin_settings so it survives container restarts
+      // Persist to admin_settings — pg-boss schedules are re-registered from this on boot
       await pool.query(
         `INSERT INTO admin_settings (key, value, updated_at, updated_by)
          VALUES ($1, $2, CURRENT_TIMESTAMP, $3)
@@ -4636,33 +4316,27 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Manual log retention cleanup
   router.delete('/jobs/logs/cleanup', isAdmin, async (req, res) => {
     try {
       const days = Math.max(1, parseInt(req.query.days) || 30);
-      const result = await pool.query(
+      const cleanupResult = await pool.query(
         `DELETE FROM job_logs WHERE created_at < NOW() - INTERVAL '1 day' * $1`,
         [days]
       );
-      res.json({ deleted: result.rowCount, days });
+      res.json({ deleted: cleanupResult.rowCount, days });
     } catch (error) {
       console.error('Error cleaning up job logs:', error);
       res.status(500).json({ error: 'Failed to cleanup job logs' });
     }
   });
 
-  // ============================================
-  // Collection Config Routes
-  // ============================================
-
-  // Default sub-tabs configuration (matches current hardcoded tabs in ResultsTab.jsx)
+  // Must stay in sync with hardcoded tabs in frontend ResultsTab.jsx
   const DEFAULT_SUBTABS = [
     { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
     { id: 'mtb', label: 'MTB Trail Status', shortLabel: 'MTB Status', route: '/mtb-trail-status', filterTypes: ['mtb-trailhead'], protected: false },
     { id: 'organizations', label: 'Organizations', shortLabel: 'Orgs', route: '/organizations', filterTypes: ['organization'], protected: false }
   ];
 
-  // GET /admin/collection-types - List registered collection types with last job info
   router.get('/collection-types', isAdmin, async (req, res) => {
     try {
       const { COLLECTION_TYPES } = await import('../services/collection/registry.js');
@@ -4677,7 +4351,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
             lastJob = jobResult.rows[0];
           }
         } catch (err) {
-          // Table might not exist yet
+          // Status table may not exist on first boot
         }
         return { ...type, lastJob };
       }));
@@ -4689,7 +4363,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // GET /admin/prompts - Get all collection prompt templates with current/default values
   router.get('/prompts', isAdmin, async (req, res) => {
     try {
       const { COLLECTION_TYPES, getDefaultPrompt } = await import('../services/collection/registry.js');
@@ -4724,7 +4397,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // PUT /admin/prompts/:key - Update or reset a prompt template
   router.put('/prompts/:key', isAdmin, async (req, res) => {
     const { key } = req.params;
     const { value, reset } = req.body;
@@ -4732,14 +4404,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     try {
       const { COLLECTION_TYPES } = await import('../services/collection/registry.js');
 
-      // Validate key exists in registry
       const validKeys = COLLECTION_TYPES.flatMap(t => t.promptKeys.map(pk => pk.key));
       if (!validKeys.includes(key)) {
         return res.status(400).json({ error: `Invalid prompt key: ${key}` });
       }
 
       if (reset) {
-        // Delete custom value to revert to default
         await pool.query('DELETE FROM admin_settings WHERE key = $1', [key]);
         console.log(`Admin ${req.user.email} reset prompt: ${key}`);
       } else {
@@ -4765,14 +4435,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // GET /admin/results-subtabs - Get sub-tab configuration
   router.get('/results-subtabs', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const subtabsRow = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'results_subtabs_config'"
       );
-      if (result.rows.length > 0 && result.rows[0].value) {
-        res.json(JSON.parse(result.rows[0].value));
+      if (subtabsRow.rows.length > 0 && subtabsRow.rows[0].value) {
+        res.json(JSON.parse(subtabsRow.rows[0].value));
       } else {
         res.json({ subtabs: DEFAULT_SUBTABS });
       }
@@ -4782,7 +4451,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // PUT /admin/results-subtabs - Update sub-tab configuration
   router.put('/results-subtabs', isAdmin, async (req, res) => {
     const { subtabs } = req.body;
 
@@ -4790,7 +4458,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       return res.status(400).json({ error: 'subtabs must be a non-empty array' });
     }
 
-    // Validate first tab is 'all' and protected
     if (subtabs[0].id !== 'all') {
       return res.status(400).json({ error: 'First sub-tab must be "all" (Points of Interest)' });
     }
@@ -4815,18 +4482,13 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================================
-  // User Management
-  // ============================================================
-
-  // GET /users - list all users
   router.get('/users', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query(
+      const userRows = await pool.query(
         `SELECT id, email, name, picture_url, oauth_provider, role, is_admin, last_login_at, created_at
          FROM users ORDER BY last_login_at DESC NULLS LAST`
       );
-      const users = result.rows.map(row => ({
+      const users = userRows.rows.map(row => ({
         id: row.id,
         email: row.email,
         name: row.name,
@@ -4844,7 +4506,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // PUT /users/:id/role - update user role
   router.put('/users/:id/role', isAdmin, async (req, res) => {
     try {
       const userId = parseInt(req.params.id);
@@ -4863,15 +4524,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'Cannot change your own role' });
       }
 
-      // Keep is_admin in sync
       const isAdminValue = role === 'admin';
 
-      const result = await pool.query(
+      const roleUpdate = await pool.query(
         'UPDATE users SET role = $1, is_admin = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
         [role, isAdminValue, userId]
       );
 
-      if (result.rowCount === 0) {
+      if (roleUpdate.rowCount === 0) {
         return res.status(404).json({ error: 'User not found' });
       }
 
@@ -4883,14 +4543,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // ============================================================
-  // POI Media Management (Multi-Image Support - Issue #181)
-  // ============================================================
-
-  /**
-   * GET /admin/poi-media
-   * List all media for management
-   */
   router.get('/poi-media', isAdmin, async (req, res) => {
     try {
       const { poi_id, status } = req.query;
@@ -4931,18 +4583,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       query += ` ORDER BY pm.created_at DESC LIMIT 100`;
 
-      const result = await pool.query(query, params);
-      res.json(result.rows);
+      const mediaRows = await pool.query(query, params);
+      res.json(mediaRows.rows);
     } catch (error) {
       console.error('Error listing poi media:', error);
       res.status(500).json({ error: 'Failed to list media' });
     }
   });
 
-  /**
-   * PATCH /admin/poi-media/:id
-   * Update media metadata (role, sort_order, caption)
-   */
   router.patch('/poi-media/:id', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
@@ -4977,38 +4625,31 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         RETURNING *
       `;
 
-      const result = await pool.query(query, params);
+      const mediaUpdate = await pool.query(query, params);
 
-      if (result.rows.length === 0) {
+      if (mediaUpdate.rows.length === 0) {
         return res.status(404).json({ error: 'Media not found' });
       }
 
-      // Invalidate mosaic cache when media metadata changes
       if (invalidateMosaicCache) {
-        invalidateMosaicCache(result.rows[0].poi_id);
+        invalidateMosaicCache(mediaUpdate.rows[0].poi_id);
       }
 
-      res.json({ success: true, media: result.rows[0] });
+      res.json({ success: true, media: mediaUpdate.rows[0] });
     } catch (error) {
       console.error('Error updating poi media:', error);
       res.status(500).json({ error: 'Failed to update media' });
     }
   });
 
-  /**
-   * DELETE /admin/poi-media/:id
-   * Delete media (soft delete by setting moderation_status to 'deleted')
-   */
   router.delete('/poi-media/:id', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { permanent } = req.query;
 
       if (permanent === 'true') {
-        // Permanent delete - remove from image server first, then database
-        // Fix: Image server delete first to prevent orphaned files (Gemini review PR #182)
-        // Rationale: If image server delete fails, we can retry. If it succeeds but DB fails,
-        // we have a dangling DB record (detectable/fixable) vs orphaned file (unmanageable).
+        // Fix: image server delete BEFORE DB delete — if IS fails we throw (retryable);
+        // reverse order would leak unmanageable orphaned files. (Gemini review PR #182)
         const mediaResult = await pool.query(
           'SELECT * FROM poi_media WHERE id = $1',
           [id]
@@ -5020,25 +4661,20 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
         const media = mediaResult.rows[0];
 
-        // Delete from image server first (if applicable)
         if (media.image_server_asset_id) {
           const imageServerClient = (await import('../services/imageServerClient.js')).default;
           await imageServerClient.deleteAsset(media.image_server_asset_id);
-          // If this fails, it throws and we never reach DB delete (can retry)
         }
 
-        // Then delete from database (only reached if image server delete succeeded)
         await pool.query('DELETE FROM poi_media WHERE id = $1', [id]);
 
-        // Invalidate mosaic cache for this POI (media deleted)
         if (invalidateMosaicCache) {
           invalidateMosaicCache(media.poi_id);
         }
 
         res.json({ success: true, message: 'Media permanently deleted' });
       } else {
-        // Soft delete - set moderation_status to 'rejected'
-        const result = await pool.query(
+        const softDelete = await pool.query(
           `UPDATE poi_media
            SET moderation_status = 'rejected'
            WHERE id = $1
@@ -5046,13 +4682,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           [id]
         );
 
-        if (result.rows.length === 0) {
+        if (softDelete.rows.length === 0) {
           return res.status(404).json({ error: 'Media not found' });
         }
 
-        // Invalidate mosaic cache for this POI (media soft-deleted)
         if (invalidateMosaicCache) {
-          invalidateMosaicCache(result.rows[0].poi_id);
+          invalidateMosaicCache(softDelete.rows[0].poi_id);
         }
 
         res.json({ success: true, message: 'Media deleted' });
@@ -5063,13 +4698,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  /**
-   * GET /admin/moderation/media
-   * Get pending media submissions
-   */
   router.get('/moderation/media', isAdmin, async (req, res) => {
     try {
-      const result = await pool.query(`
+      const pendingMediaRows = await pool.query(`
         SELECT
           pm.id,
           pm.poi_id,
@@ -5090,22 +4721,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         ORDER BY pm.created_at DESC
       `);
 
-      res.json(result.rows);
+      res.json(pendingMediaRows.rows);
     } catch (error) {
       console.error('Error fetching pending media:', error);
       res.status(500).json({ error: 'Failed to fetch pending media' });
     }
   });
 
-  /**
-   * POST /admin/moderation/media/:id/approve
-   * Approve pending media
-   */
   router.post('/moderation/media/:id/approve', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
 
-      const result = await pool.query(
+      const approvedMedia = await pool.query(
         `UPDATE poi_media
          SET moderation_status = 'published',
              moderated_at = NOW(),
@@ -5115,32 +4742,27 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [req.user.id, id]
       );
 
-      if (result.rows.length === 0) {
+      if (approvedMedia.rows.length === 0) {
         return res.status(404).json({ error: 'Pending media not found' });
       }
 
-      // Invalidate mosaic cache when media is approved
       if (invalidateMosaicCache) {
-        invalidateMosaicCache(result.rows[0].poi_id);
+        invalidateMosaicCache(approvedMedia.rows[0].poi_id);
       }
 
-      res.json({ success: true, media: result.rows[0] });
+      res.json({ success: true, media: approvedMedia.rows[0] });
     } catch (error) {
       console.error('Error approving media:', error);
       res.status(500).json({ error: 'Failed to approve media' });
     }
   });
 
-  /**
-   * POST /admin/moderation/media/:id/reject
-   * Reject pending media
-   */
   router.post('/moderation/media/:id/reject', isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
       const { reason } = req.body;
 
-      const result = await pool.query(
+      const rejectedMedia = await pool.query(
         `UPDATE poi_media
          SET moderation_status = 'rejected',
              moderated_at = NOW(),
@@ -5151,30 +4773,21 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [req.user.id, reason || 'Rejected by moderator', id]
       );
 
-      if (result.rows.length === 0) {
+      if (rejectedMedia.rows.length === 0) {
         return res.status(404).json({ error: 'Pending media not found' });
       }
 
-      // Invalidate mosaic cache when media is rejected
       if (invalidateMosaicCache) {
-        invalidateMosaicCache(result.rows[0].poi_id);
+        invalidateMosaicCache(rejectedMedia.rows[0].poi_id);
       }
 
-      res.json({ success: true, media: result.rows[0] });
+      res.json({ success: true, media: rejectedMedia.rows[0] });
     } catch (error) {
       console.error('Error rejecting media:', error);
       res.status(500).json({ error: 'Failed to reject media' });
     }
   });
 
-  // End of POI Media Management
-  // ============================================================
-
-  // ============================================================
-  // Newsletter Management
-  // ============================================================
-
-  // Get newsletter subscriber stats
   router.get('/newsletter/stats', isAdmin, async (req, res) => {
     try {
       const { getSubscriberCount } = await import('../services/buttondownClient.js');
@@ -5186,7 +4799,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         totalSubscribers = await getSubscriberCount(pool);
         source = 'buttondown';
       } catch (error) {
-        // If Buttondown not configured, fall back to local count
         if (error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
           const localResult = await pool.query(
             'SELECT COUNT(DISTINCT email) as total FROM newsletter_subscriptions'
@@ -5197,8 +4809,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
-      // Count new subscriptions in last 7 days from local tracking
-      const result = await pool.query(
+      const newThisWeekRow = await pool.query(
         `SELECT COUNT(*) as new_this_week
          FROM newsletter_subscriptions
          WHERE subscribed_at > NOW() - INTERVAL '7 days'`
@@ -5206,7 +4817,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       res.json({
         total_subscribers: totalSubscribers,
-        new_this_week: parseInt(result.rows[0].new_this_week),
+        new_this_week: parseInt(newThisWeekRow.rows[0].new_this_week),
         source
       });
     } catch (error) {
@@ -5215,16 +4826,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // End of Newsletter Management
-  // ============================================================
-
-  // Moderation Sweep
-  // ============================================================
-
   router.post('/moderation/sweep', isAdmin, async (req, res) => {
     try {
       console.log(`Admin ${req.user.email} triggered manual moderation sweep`);
-      // Fire-and-forget — sweep runs in background, response returns immediately
+      // Fire-and-forget — response must return before sweep completes (can take minutes)
       const { processPendingItems } = await import('../services/moderationService.js');
       processPendingItems(pool).catch(err => {
         console.error('Background moderation sweep error:', err.message);

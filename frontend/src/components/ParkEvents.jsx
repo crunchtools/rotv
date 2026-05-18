@@ -6,13 +6,11 @@ import ContentFormModal from './ContentFormModal';
 import useModeration from '../hooks/useModeration';
 import ModerationExtras from './ModerationExtras';
 
-// Default park bounds - show full park view in mini map
 const DEFAULT_PARK_BOUNDS = [
-  [41.13, -81.85],  // Southwest corner
-  [41.45, -81.50]   // Northeast corner
+  [41.13, -81.85],
+  [41.45, -81.50]
 ];
 
-// Calendar-specific date formatting (local to this component)
 function formatDateForCalendar(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
@@ -43,7 +41,6 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
   });
   const [showNewForm, setShowNewForm] = useState(false);
 
-  // Shared moderation hook (only active when admin)
   const mod = useModeration({
     onItemsChanged: () => { fetchEvents(); fetchPastEvents(); }
   });
@@ -95,17 +92,13 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     }
   };
 
-  // Simple, direct bounds computation - matches ResultsTab pattern
   let currentBounds;
   if (bypassViewportFilter) {
-    // Bypass mode: use default park bounds constant (e.g., after returning from single POI view)
     currentBounds = DEFAULT_PARK_BOUNDS;
   } else {
-    // Normal mode: use current viewport bounds
     currentBounds = mapState?.bounds || DEFAULT_PARK_BOUNDS;
   }
 
-  // Only update stable ref if coordinates actually changed
   const boundsChanged = currentBounds &&
     (!stableBoundsRef.current ||
     currentBounds[0][0] !== stableBoundsRef.current[0][0] ||
@@ -119,24 +112,20 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
 
   const thumbnailBounds = stableBoundsRef.current;
 
-  // Filter events based on visible POIs (destinations, linear features, and organizations)
   const sourceEvents = activeSubTab === 'future' ? events : pastEvents;
   const filteredEvents = React.useMemo(() => {
     const hasDestinations = Array.isArray(filteredDestinations);
     const hasLinearFeatures = Array.isArray(filteredLinearFeatures);
     const hasVirtualPois = Array.isArray(filteredVirtualPois);
 
-    // Start with all events or filter by visible POIs
     let filtered = sourceEvents;
 
-    // If all filters are explicitly empty arrays, show no events (all filters deselected)
     if (hasDestinations && filteredDestinations.length === 0 &&
         hasLinearFeatures && filteredLinearFeatures.length === 0 &&
         hasVirtualPois && filteredVirtualPois.length === 0) {
       filtered = [];
     }
 
-    // Apply text search filter
     if (searchText.trim()) {
       const search = searchText.toLowerCase();
       filtered = filtered.filter(item =>
@@ -147,7 +136,6 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
       );
     }
 
-    // Apply type filter
     filtered = filtered.filter(item => typeFilters[item.event_type || 'program'] !== false);
 
     return filtered;
@@ -164,7 +152,7 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     const startDate = formatDateForCalendar(event.start_date);
     const endDate = event.end_date
       ? formatDateForCalendar(event.end_date)
-      : formatDateForCalendar(new Date(new Date(event.start_date).getTime() + 2 * 60 * 60 * 1000)); // Default 2 hours
+      : formatDateForCalendar(new Date(new Date(event.start_date).getTime() + 2 * 60 * 60 * 1000));
     const description = encodeURIComponent(
       `${event.description || ''}\n\nLocation: ${event.poi_name}\n${event.location_details || ''}\n\nMore info: ${event.source_url || 'Cuyahoga Valley National Park'}`
     );
@@ -267,7 +255,6 @@ END:VCALENDAR`;
         />
       )}
 
-      {/* Sub-tabs */}
       <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
         <button
           className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
@@ -424,7 +411,6 @@ END:VCALENDAR`;
             </div>
           )}
         </div>
-        {/* Map thumbnail sidebar */}
         {mapState && (
           <div className="map-thumbnail-sidebar">
             <MapThumbnail
@@ -437,7 +423,6 @@ END:VCALENDAR`;
           </div>
         )}
       </div>
-      {/* Moderation notification */}
       {editMode && isAdmin && mod.notification && (
         <div className={`result-message ${mod.notification.type}`} style={{ margin: '10px 1rem' }}>
           {mod.notification.message}

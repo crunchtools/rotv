@@ -15,14 +15,12 @@ function SyncSettings({ onDataRefresh, onNavigateToJobs }) {
   const [backupsList, setBackupsList] = useState(null);
   const [showRestoreList, setShowRestoreList] = useState(false);
 
-  // Editable Drive ID states
   const [driveIdEdits, setDriveIdEdits] = useState({
     images: '',
     database: ''
   });
   const [savingDriveId, setSavingDriveId] = useState(null);
 
-  // Fetch sync status
   const fetchStatus = useCallback(async () => {
     try {
       const response = await fetch('/api/admin/sync/status', {
@@ -56,7 +54,6 @@ function SyncSettings({ onDataRefresh, onNavigateToJobs }) {
     };
   }, [fetchStatus]);
 
-  // Initialize editable Drive IDs when syncStatus loads
   useEffect(() => {
     if (syncStatus) {
       setDriveIdEdits({

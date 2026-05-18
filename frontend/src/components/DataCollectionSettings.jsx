@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
 
-// Data collection configuration: AI providers, credentials, moderation, infrastructure, sub-tabs.
-// Job triggering, progress, and history are in the Jobs tab (JobsDashboard.jsx).
 function DataCollectionSettings() {
   const [result, setResult] = useState(null);
   const [geminiResult, setGeminiResult] = useState(null);
@@ -11,19 +9,16 @@ function DataCollectionSettings() {
 
   const [aiConfigLoading, setAiConfigLoading] = useState(false);
 
-  // Twitter credentials state
   const [twitterCredentials, setTwitterCredentials] = useState({ username: '', password: '' });
   const [twitterLoading, setTwitterLoading] = useState(true);
   const [twitterSaving, setTwitterSaving] = useState(false);
 
-  // Twitter authentication state
   const [twitterAuthStatus, setTwitterAuthStatus] = useState(null);
   const [twitterAuthLoading, setTwitterAuthLoading] = useState(false);
   const [twitterAuthTesting, setTwitterAuthTesting] = useState(false);
   const [twitterCookiesJson, setTwitterCookiesJson] = useState('');
   const [showCookieInput, setShowCookieInput] = useState(false);
 
-  // API Keys state
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [geminiApiKeySet, setGeminiApiKeySet] = useState(false);
   const [geminiSaving, setGeminiSaving] = useState(false);
@@ -45,19 +40,16 @@ function DataCollectionSettings() {
   const [githubTesting, setGithubTesting] = useState(false);
   const [githubResult, setGithubResult] = useState(null);
 
-  // Playwright status state
   const [playwrightStatus, setPlaywrightStatus] = useState(null);
   const [playwrightLoading, setPlaywrightLoading] = useState(true);
   const [playwrightTesting, setPlaywrightTesting] = useState(false);
 
-  // Moderation configuration state
   const [moderationConfig, setModerationConfig] = useState({
     enabled: true, autoApproveEnabled: true, newsDateThreshold: 4, photoConfidenceThreshold: 0.9, photoSubmissionsEnabled: false
   });
   const [moderationConfigLoading, setModerationConfigLoading] = useState(true);
   const [moderationConfigSaving, setModerationConfigSaving] = useState(false);
 
-  // Domain lists state
   const [domainLists, setDomainLists] = useState({ trusted: [], competitor: [] });
   const [domainListsLoading, setDomainListsLoading] = useState(true);
   const [domainListsSaving, setDomainListsSaving] = useState(false);
@@ -66,24 +58,20 @@ function DataCollectionSettings() {
   const [trustedEventPaths, setTrustedEventPaths] = useState([]);
   const [newTrustedEventPath, setNewTrustedEventPath] = useState('');
 
-  // Excluded POIs state
-  const [excludedPois, setExcludedPois] = useState([]); // [{id, name}]
+  const [excludedPois, setExcludedPois] = useState([]);
   const [excludedPoisLoading, setExcludedPoisLoading] = useState(true);
   const [excludedPoisSaving, setExcludedPoisSaving] = useState(false);
   const [allPois, setAllPois] = useState([]);
   const [selectedPoiId, setSelectedPoiId] = useState('');
 
-  // Max concurrency state
   const [maxConcurrency, setMaxConcurrency] = useState(10);
   const [maxConcurrencyLoading, setMaxConcurrencyLoading] = useState(true);
   const [maxConcurrencySaving, setMaxConcurrencySaving] = useState(false);
 
-  // Max Serper URLs state
   const [maxSearchUrls, setMaxSearchUrls] = useState(10);
   const [maxSearchUrlsLoading, setMaxSearchUrlsLoading] = useState(true);
   const [maxSearchUrlsSaving, setMaxSearchUrlsSaving] = useState(false);
 
-  // Page pipeline settings state
   const [pageConcurrency, setPageConcurrency] = useState(3);
   const [pageConcurrencyLoading, setPageConcurrencyLoading] = useState(true);
   const [pageConcurrencySaving, setPageConcurrencySaving] = useState(false);
@@ -91,7 +79,6 @@ function DataCollectionSettings() {
   const [pageDelayMsLoading, setPageDelayMsLoading] = useState(true);
   const [pageDelayMsSaving, setPageDelayMsSaving] = useState(false);
 
-  // Results Sub-tabs state
   const [subtabs, setSubtabs] = useState([]);
   const [subtabsLoading, setSubtabsLoading] = useState(true);
   const [subtabsSaving, setSubtabsSaving] = useState(false);
@@ -144,7 +131,6 @@ function DataCollectionSettings() {
     fetchSubtabs();
   }, []);
 
-  // Auto-dismiss result notifications after 5 seconds
   useEffect(() => {
     if (!result) return;
     const timer = setTimeout(() => setResult(null), 5000);
@@ -452,7 +438,6 @@ function DataCollectionSettings() {
         { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) },
         { key: 'trusted_event_paths', value: JSON.stringify(trustedEventPaths) }
       ];
-      // Note: N+1 pattern - acceptable for 2 settings, batch endpoint would be better for scale
       for (const setting of settings) {
         const response = await fetch(`/api/admin/settings/${setting.key}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
@@ -467,7 +452,6 @@ function DataCollectionSettings() {
 
   const handleAddTrustedDomain = () => {
     const domain = newTrustedDomain.trim().toLowerCase();
-    // URL prefix validation: domain optionally followed by a path (e.g., example.com or example.com/path/sub)
     const urlPrefixRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(\/[a-z0-9._~:@!$&'()*+,;=%-]*)*$/;
     if (!domain) return;
     if (!urlPrefixRegex.test(domain)) {
@@ -486,7 +470,6 @@ function DataCollectionSettings() {
 
   const handleAddCompetitorDomain = () => {
     const domain = newCompetitorDomain.trim().toLowerCase().replace(/^https?:\/\//, '');
-    // URL prefix validation: domain optionally followed by a path (e.g., example.com or example.com/path/sub)
     const urlPrefixRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(\/[a-z0-9._~:@!$&'()*+,;=%-]*)*$/;
     if (!domain) return;
     if (!urlPrefixRegex.test(domain)) {
@@ -734,12 +717,12 @@ function DataCollectionSettings() {
         To trigger and monitor jobs, use the <strong>Jobs</strong> tab.
       </p>
 
-      {/* API Keys Section */}
+
       <div className="ai-config-section">
         <h4>API Keys</h4>
         <p className="settings-description">Configure external API keys for data collection services.</p>
 
-        {/* Google Gemini API Key */}
+
         <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
           <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Google Gemini</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
@@ -787,7 +770,7 @@ function DataCollectionSettings() {
           </p>
         </div>
 
-        {/* Serper API Key */}
+
         <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
           <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Serper</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
@@ -835,7 +818,7 @@ function DataCollectionSettings() {
           </p>
         </div>
 
-        {/* Apify API Token */}
+
         <div style={{ marginTop: '1.5rem' }}>
           <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Apify</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
@@ -883,7 +866,7 @@ function DataCollectionSettings() {
           </p>
         </div>
 
-        {/* GitHub API Token */}
+
         <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e0e0e0' , paddingBottom: '1.5rem' }}>
           <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>GitHub</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
@@ -932,7 +915,7 @@ function DataCollectionSettings() {
         </div>
       </div>
 
-      {/* Twitter Credentials Configuration */}
+
       <div className="ai-config-section">
         <h4>Twitter/X Credentials</h4>
         <p className="settings-description">Login credentials for scraping Twitter content (used for Trail Status).</p>
@@ -997,7 +980,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Moderation Configuration */}
+
       <div className="ai-config-section">
         <h4>Content Moderation</h4>
         <p className="settings-description">Configure AI-powered moderation for news, events, and photo submissions.</p>
@@ -1043,7 +1026,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Quality Filter Domain Lists */}
+
       <div className="ai-config-section">
         <h4>Quality Filter Domain Lists</h4>
         <p className="settings-description">Manage trusted domains and blocklist URLs for quality filtering in moderation and phase 2 collection.</p>
@@ -1185,7 +1168,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Excluded POIs from News Collection */}
+
       <div className="ai-config-section">
         <h4>Excluded POIs from News and Events</h4>
         <p className="settings-description">POIs in this list are skipped during automated news collection, and any news or events from these POIs are automatically rejected during moderation. Use for broad geographic entities (e.g. Cuyahoga County, Cleveland) whose feeds pull in irrelevant content.</p>
@@ -1230,7 +1213,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Collection Concurrency */}
+
       <div className="ai-config-section">
         <h4>MAX_CONCURRENCY — Collection Concurrency</h4>
         <p className="settings-description">How many POIs run concurrently during a collection job (news, events, or both). Each slot opens a browser context — higher values finish faster but use more memory. Range: 1–50, default: 10.</p>
@@ -1256,7 +1239,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Max Serper URLs */}
+
       <div className="ai-config-section">
         <h4>MAX_SEARCH_URLS — Phase II URL Crawl Limit</h4>
         <p className="settings-description">How many Serper search result URLs are crawled per POI during Phase II (runs for all collection types). Serper returns up to 10 results; raise this only if you have a paid Serper plan. Range: 1–20, default: 10.</p>
@@ -1282,7 +1265,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Page Concurrency */}
+
       <div className="ai-config-section">
         <h4>PAGE_CONCURRENCY — Per-POI Page Processing</h4>
         <p className="settings-description">How many detail pages are processed concurrently within a single POI crawl (dates + summarize). Lower values reduce browser memory pressure. Range: 1–20, default: 3.</p>
@@ -1308,7 +1291,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Page Delay */}
+
       <div className="ai-config-section">
         <h4>PAGE_DELAY_MS — Stagger Between Pages</h4>
         <p className="settings-description">Milliseconds to wait between dispatching each page for processing. Prevents rate-limiting from external sites and reduces browser contention. Range: 0–10000, default: 2000.</p>
@@ -1335,7 +1318,7 @@ function DataCollectionSettings() {
         )}
       </div>
 
-      {/* Playwright Status */}
+
       <div className="playwright-status-section" style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
           <h4 style={{ margin: 0, fontSize: '1rem' }}>Browser Rendering (Playwright)</h4>
@@ -1372,7 +1355,6 @@ function DataCollectionSettings() {
         ) : <span style={{ color: '#6c757d', fontSize: '0.9rem' }}>Status unknown</span>}
       </div>
 
-      {/* Results Sub-tabs Configuration */}
       <div className="ai-config-section">
         <h4>Results Sub-tabs</h4>
         <p className="settings-description">Configure which sub-tabs appear in the public Results tab.</p>

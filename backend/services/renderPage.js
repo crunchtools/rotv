@@ -1,9 +1,3 @@
-/**
- * Render Page — cached wrapper around extractPageContent.
- * Checks rendered_page_cache before calling Playwright.
- * TTL: detail = forever, listing = 23h, trail_status = 25min.
- */
-
 import { extractPageContent } from './contentExtractor.js';
 
 const TTL_MS = {
@@ -19,16 +13,6 @@ function isCacheFresh(row) {
   return (Date.now() - new Date(row.rendered_at).getTime()) < ttl;
 }
 
-/**
- * Render a page with cache. Checks rendered_page_cache first,
- * calls Playwright on miss or stale, saves result to cache.
- *
- * @param {Pool} pool - Database connection pool
- * @param {string} url - URL to render
- * @param {Object} [options] - Options passed to extractPageContent
- * @param {string} [options.pageType] - Hint for cache TTL ('detail', 'listing', 'trail_status')
- * @returns {Promise<Object>} - Same shape as extractPageContent
- */
 export async function renderPage(pool, url, options = {}) {
   const { pageType, ...extractOptions } = options;
 
@@ -85,13 +69,6 @@ export async function renderPage(pool, url, options = {}) {
   return rendered;
 }
 
-/**
- * Update the page_type for a cached URL (called after classification).
- *
- * @param {Pool} pool - Database connection pool
- * @param {string} url - URL to update
- * @param {string} pageType - 'listing' or 'detail'
- */
 export async function setCachePageType(pool, url, pageType) {
   try {
     await pool.query(
@@ -101,9 +78,6 @@ export async function setCachePageType(pool, url, pageType) {
   } catch { /* non-fatal */ }
 }
 
-/**
- * Save the item count for a cached URL (called after Gemini itemCount).
- */
 export async function setCacheItemCount(pool, url, contentType, count) {
   const col = contentType === 'event' ? 'item_count_events' : 'item_count_news';
   try {

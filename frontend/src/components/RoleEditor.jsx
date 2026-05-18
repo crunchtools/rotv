@@ -15,7 +15,6 @@ function RoleEditor({ roles = [], onChange }) {
   const toggleRole = (roleId) => {
     const updated = new Set(roleSet);
     if (updated.has(roleId)) {
-      // Don't allow removing the last role
       if (updated.size <= 1) return;
       updated.delete(roleId);
     } else {

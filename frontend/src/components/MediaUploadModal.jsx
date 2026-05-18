@@ -115,9 +115,15 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
           })
         });
 
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const text = await response.text();
+          throw new Error(`Request failed (HTTP ${response.status}). Server returned ${contentType || 'unknown content-type'}: ${text.slice(0, 120)}`);
+        }
+
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to add YouTube video');
+          throw new Error(errorData.error || `Failed to add YouTube video (HTTP ${response.status})`);
         }
 
         const result = await response.json();
@@ -146,9 +152,15 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
           body: formData
         });
 
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          const text = await response.text();
+          throw new Error(`Upload failed (HTTP ${response.status}). Server returned ${contentType || 'unknown content-type'}: ${text.slice(0, 120)}`);
+        }
+
         if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.error || 'Failed to upload');
+          throw new Error(errorData.error || `Upload failed (HTTP ${response.status})`);
         }
 
         const result = await response.json();

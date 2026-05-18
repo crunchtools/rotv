@@ -18,7 +18,6 @@ function GeneralSettings() {
   const [saveMessage, setSaveMessage] = useState(null);
 
   useEffect(() => {
-    // Load timezone from localStorage
     const savedTimezone = localStorage.getItem('app-timezone');
     if (savedTimezone) {
       setTimezone(savedTimezone);
@@ -30,7 +29,6 @@ function GeneralSettings() {
     setSaveMessage(null);
 
     try {
-      // Save to localStorage
       localStorage.setItem('app-timezone', timezone);
 
       setSaveMessage({ type: 'success', text: 'Timezone saved successfully!' });

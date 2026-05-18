@@ -18,12 +18,6 @@ function ImageUploader({
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Determine what to show:
-  // 1. If pendingImage.data exists: show preview from data URL
-  // 2. If pendingImage.deleted is true: show placeholder
-  // 3. If hasImage: show thumbnail from server
-  // 4. Otherwise: show upload zone
-
   const cacheParam = updatedAt || Date.now();
   const serverImageUrl = hasImage ? `/api/pois/${destinationId}/thumbnail?size=medium&v=${cacheParam}` : null;
 
@@ -31,30 +25,24 @@ function ImageUploader({
   let showUploadZone = false;
 
   if (pendingImage?.data) {
-    // Show preview from staged data
     imagePreviewUrl = `data:${pendingImage.mimeType};base64,${pendingImage.data}`;
   } else if (pendingImage?.deleted) {
-    // Image marked for deletion, show upload zone
     showUploadZone = true;
   } else if (hasImage) {
-    // Show existing image from server
     imagePreviewUrl = serverImageUrl;
   } else {
-    // No image at all, show upload zone
     showUploadZone = true;
   }
 
   const handleFileSelect = async (file) => {
     if (!file) return;
 
-    // Validate file type
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
     if (!allowedTypes.includes(file.type)) {
       setError('Please select a JPEG, PNG, WebP, or GIF image');
       return;
     }
 
-    // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
       setError('Image must be less than 10MB');
       return;
@@ -63,7 +51,6 @@ function ImageUploader({
     setError(null);
 
     try {
-      // Read file as base64
       const base64Data = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -82,19 +69,16 @@ function ImageUploader({
         reader.readAsDataURL(file);
       });
 
-      // Store in parent's state (staging)
       onPendingImageChange({
         data: base64Data,
         mimeType: file.type
       });
 
-      // Reset file input AFTER successful read
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     } catch (err) {
       setError(err.message);
-      // Reset file input on error too
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -105,10 +89,8 @@ function ImageUploader({
     if (!confirm('Delete this image?')) return;
 
     if (hasImage) {
-      // Mark existing image for deletion
       onPendingImageChange({ deleted: true });
     } else {
-      // Just clear pending image
       onPendingImageChange(null);
     }
   };
@@ -150,7 +132,6 @@ function ImageUploader({
     }
   };
 
-  // Check if user is media_admin or admin
   const isMediaAdmin = user && (user.role === 'media_admin' || user.role === 'admin');
 
   return (
@@ -240,7 +221,6 @@ function ImageUploader({
         disabled={disabled}
       />
 
-      {/* Upload Modal for additional images (admin only) */}
       {uploadModalOpen && poiId && (
         <MediaUploadModal
           poiId={poiId}

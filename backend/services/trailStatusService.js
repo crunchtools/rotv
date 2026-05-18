@@ -1,10 +1,3 @@
-/**
- * Trail Status Collection Service
- * Renders configured status_url with Playwright, extracts content, feeds to Gemini for status extraction.
- *
- * Job execution is managed by pg-boss for crash recovery and resumability.
- * Progress is checkpointed after each trail so jobs can resume after container restarts.
- */
 
 import crypto from 'crypto';
 import { generateTextWithCustomPrompt } from './geminiService.js';
@@ -15,21 +8,15 @@ import { CollectionTracker, runBatch } from './collection/index.js';
 
 const HASH_SKIP_MAX_AGE_HOURS = 48;
 
-// Helper to detect Twitter/X URLs (used in multiple places)
 function isTwitterUrl(url) {
   return url.includes('x.com') || url.includes('twitter.com');
 }
 
-// Dispatch interval: start one new trail job every N milliseconds
 const DISPATCH_INTERVAL_MS = 1500;
-// Maximum number of concurrent jobs in flight
 const MAX_CONCURRENCY = 10;
 
-// Shared progress + slot tracker for trail status collection
 const tracker = new CollectionTracker('Trail');
 
-// Re-export tracker methods under original names for backward compatibility
-// (used by mcpServer.js, admin.js, server.js)
 export const updateProgress = (poiId, updates) => tracker.updateProgress(poiId, updates);
 export const getCollectionProgress = (poiId) => tracker.getCollectionProgress(poiId);
 export const clearProgress = (poiId) => tracker.clearProgress(poiId);
@@ -39,10 +26,6 @@ export const getDisplaySlots = (jobId) => tracker.getDisplaySlots(jobId);
 export const requestCancellation = (poiId) => tracker.requestCancellation(poiId);
 export const isCancellationRequested = (poiId) => tracker.isCancellationRequested(poiId);
 
-/**
- * Track consecutive Twitter collection failures to detect stale cookies.
- * Increments on failure, resets on success. Logs a warning at 3+ failures.
- */
 async function trackTwitterResult(pool, statusUrl, success) {
   if (!isTwitterUrl(statusUrl)) return;
 
@@ -53,23 +36,21 @@ async function trackTwitterResult(pool, statusUrl, success) {
          ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = NOW()`
       );
     } else {
-      const result = await pool.query(
+      const failureCountRow = await pool.query(
         `INSERT INTO admin_settings (key, value, updated_at) VALUES ('twitter_consecutive_failures', '1', NOW())
          ON CONFLICT (key) DO UPDATE SET value = (COALESCE(admin_settings.value, '0')::int + 1)::text, updated_at = NOW()
          RETURNING value`
       );
-      const failures = parseInt(result.rows[0]?.value) || 0;
+      const failures = parseInt(failureCountRow.rows[0]?.value) || 0;
       if (failures >= 3) {
         console.warn(`[Trail Status] WARNING: ${failures} consecutive Twitter failures — cookies may be stale. Refresh at Settings > Data Collection.`);
       }
     }
   } catch (err) {
-    // Non-critical — don't fail the collection over tracking
     console.error('[Trail Status] Error tracking Twitter result:', err.message);
   }
 }
 
-// Prompt template for trail status extraction (exported for registry.js default prompt access)
 export const TRAIL_STATUS_PROMPT = `You are a trail status extractor. Extract the current mountain bike trail status from the following page content.
 
 Trail: "{{name}}"
@@ -104,18 +85,9 @@ Return ONLY valid JSON with this exact structure:
 
 If you cannot find current status, return: {"status": {"status": "unknown", "conditions": null, "last_updated": null, "source_name": null, "source_url": null, "weather_impact": null, "seasonal_closure": false}}`;
 
-/**
- * Collect trail status for a specific trail by rendering its status_url and extracting with Gemini.
- * @param {Pool} pool - Database connection pool
- * @param {Object} poi - POI object with id, name, brief_description, status_url
- * @param {Object} sheets - Optional sheets client for API key restore
- * @param {string} timezone - IANA timezone string (e.g., 'America/New_York')
- * @returns {Object} - { statusFound: number, statusSaved: number }
- */
 export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'America/New_York') {
   console.log(`\n[Trail Status] ======== Collecting status for: ${poi.name} ========`);
 
-  // Skip POIs without a configured status_url
   if (!poi.status_url || !poi.status_url.trim()) {
     console.log(`[Trail Status] No status_url configured, skipping`);
     updateProgress(poi.id, {
@@ -127,7 +99,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     return { statusFound: 0, statusSaved: 0 };
   }
 
-  // Preserve slotId and jobId if they exist (set by job processing loop)
   const existingProgress = tracker.getCollectionProgress(poi.id);
   const slotId = existingProgress?.slotId;
   const jobId = existingProgress?.jobId;
@@ -146,7 +117,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
   const statusUrl = poi.status_url;
 
   try {
-    // Check for cancellation before starting
     if (isCancellationRequested(poi.id)) {
       console.log(`[Trail Status] Cancellation requested, aborting`);
       updateProgress(poi.id, {
@@ -158,7 +128,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    // Route by URL type: Facebook uses Apify, everything else uses Playwright
     let rendered;
 
     if (isFacebookUrl(statusUrl)) {
@@ -170,7 +139,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       });
       rendered = await fetchFacebookPosts(pool, statusUrl);
     } else {
-      // Playwright + Readability extraction (with cookies for Twitter/X)
       let cookies = null;
       if (isTwitterUrl(statusUrl)) {
         try {
@@ -250,7 +218,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       }
     }
 
-    // Check for cancellation after rendering
     if (isCancellationRequested(poi.id)) {
       console.log(`[Trail Status] Cancellation requested after rendering, aborting`);
       updateProgress(poi.id, {
@@ -262,7 +229,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    // Build Gemini prompt with rendered content
     updateProgress(poi.id, {
       phase: 'ai_extraction',
       message: 'Extracting status with Gemini...',
@@ -270,7 +236,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     });
 
     const currentDate = new Date().toISOString().split('T')[0];
-    // Use custom prompt from admin_settings if configured, otherwise fall back to hardcoded default
     const { getPromptTemplate } = await import('./geminiService.js');
     const promptTemplate = await getPromptTemplate(pool, 'trail_status_prompt');
     const basePrompt = promptTemplate || TRAIL_STATUS_PROMPT;
@@ -287,7 +252,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     console.log(`[Trail Status] Received response (${response.length} chars)`);
 
-    // Check for cancellation after AI search
     if (isCancellationRequested(poi.id)) {
       console.log(`[Trail Status] Cancellation requested after extraction, aborting`);
       updateProgress(poi.id, {
@@ -299,7 +263,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    // Parse JSON response
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       console.error('[Trail Status] No JSON found in response');
@@ -335,9 +298,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     console.log(`[Trail Status]   Last Updated: ${status.last_updated || 'N/A'}`);
     await trackTwitterResult(pool, statusUrl, true);
 
-    // Override source_url with the POI's configured status_url
     status.source_url = poi.status_url;
-    // Extract source name from the URL if not already set
     if (isTwitterUrl(poi.status_url)) {
       status.source_name = 'Twitter/X';
     } else if (isFacebookUrl(poi.status_url)) {
@@ -350,7 +311,6 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       status.source_name = 'MTB Project';
     }
 
-    // Save to database with deduplication
     updateProgress(poi.id, {
       phase: 'saving',
       message: 'Saving trail status...',
@@ -383,16 +343,8 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
   }
 }
 
-/**
- * Save trail status to database with deduplication
- * @param {Pool} pool - Database connection pool
- * @param {number} poiId - POI ID
- * @param {Object} status - Status object
- * @returns {boolean} - true if new status was saved, false if duplicate
- */
 async function saveTrailStatus(pool, poiId, status, contentHash = null) {
   try {
-    // Validate that last_updated is not too old (reject status older than 90 days)
     if (status.last_updated) {
       const lastUpdated = new Date(status.last_updated);
       const ninetyDaysAgo = new Date();
@@ -404,7 +356,6 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
       }
     }
 
-    // Check for recent status (last 24 hours)
     const recentResult = await pool.query(`
       SELECT * FROM trail_status
       WHERE poi_id = $1
@@ -416,13 +367,11 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
     if (recentResult.rows.length > 0) {
       const recent = recentResult.rows[0];
 
-      // Check if status has changed
       const statusChanged = recent.status !== status.status;
       const conditionsChanged = recent.conditions !== status.conditions;
       const sourceChanged = recent.source_url !== status.source_url;
 
       if (!statusChanged && !conditionsChanged && !sourceChanged) {
-        // Refresh hash on the prior row so future identical renders hit the skip path
         if (contentHash && recent.content_hash !== contentHash) {
           await pool.query(
             `UPDATE trail_status SET content_hash = $1 WHERE id = $2`,
@@ -434,8 +383,6 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
       }
     }
 
-    // Cap last_updated at current time — Gemini sometimes hallucinates future dates
-    // from phrases like "anticipating opening the week of May 24th"
     let lastUpdated = status.last_updated;
     if (lastUpdated) {
       const parsedDate = new Date(lastUpdated);
@@ -445,7 +392,6 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
       }
     }
 
-    // Insert new status
     await pool.query(`
       INSERT INTO trail_status (
         poi_id,
@@ -479,20 +425,12 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
   }
 }
 
-/**
- * Run batch trail status collection
- * @param {Pool} pool - Database connection pool
- * @param {Object} boss - pg-boss instance
- * @param {Object} options - Collection options
- * @returns {Object} - { jobId, message }
- */
 export async function runTrailStatusCollection(pool, boss, options = {}) {
   const { poiIds = null, jobType = 'batch_collection', sheets = null } = options;
 
   console.log(`\n[Trail Status Collection] Starting ${jobType}...`);
 
   try {
-    // Get trails with status_url configured
     let trails;
     if (poiIds && poiIds.length > 0) {
       const trailsQuery = await pool.query(`
@@ -522,7 +460,6 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
 
     console.log(`[Trail Status Collection] Found ${trails.length} MTB trails to process`);
 
-    // Create job record
     const jobResult = await pool.query(`
       INSERT INTO trail_status_job_status (
         job_type,
@@ -546,14 +483,12 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
     const jobId = jobResult.rows[0].id;
     console.log(`[Trail Status Collection] Created job ${jobId}`);
 
-    // Submit to pg-boss for background processing
     const pgBossJobId = await boss.send('trail-status-batch-collect', {
       jobId,
       poiIds: trails.map(t => t.id),
       jobType
     });
 
-    // Update job record with pg-boss job ID
     await pool.query(`
       UPDATE trail_status_job_status
       SET pg_boss_job_id = $1
@@ -574,22 +509,13 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
   }
 }
 
-/**
- * Process batch trail status collection job (pg-boss worker function)
- * @param {Pool} pool - Database connection pool
- * @param {number} jobId - Job ID from trail_status_job_status table
- * @param {Array} poiIds - Array of POI IDs to process
- * @param {Object} sheets - Optional sheets client
- */
 export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheets = null) {
   console.log(`\n[Trail Status Job ${jobId}] Starting batch processing for ${poiIds.length} trails`);
   logInfo(jobId, 'trail_status', null, null, `Job started: ${poiIds.length} trails`, { total: poiIds.length });
 
-  // Track Gemini calls for this job
   let geminiCalls = 0;
 
   try {
-    // Load job record
     const jobResult = await pool.query(`
       SELECT * FROM trail_status_job_status WHERE id = $1
     `, [jobId]);
@@ -601,17 +527,14 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     const job = jobResult.rows[0];
     const processedPois = new Set(JSON.parse(job.processed_poi_ids || '[]'));
 
-    // Update job status to running
     await pool.query(`
       UPDATE trail_status_job_status
       SET status = 'running', started_at = NOW()
       WHERE id = $1
     `, [jobId]);
 
-    // Initialize display slots for this job
     initializeSlots(jobId);
 
-    // Filter to remaining trails (for resumability)
     const trailsToProcess = poiIds.filter(id => !processedPois.has(id));
     let totalStatusFound = 0;
     let totalStatusSaved = 0;
@@ -626,7 +549,6 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
       dispatchInterval: DISPATCH_INTERVAL_MS,
 
       onItemStart: async (poiId, { slotId, jobId: jid }) => {
-        // Get trail data for slot assignment
         const poiResult = await pool.query(`
           SELECT id, name, poi_roles, status_url, brief_description
           FROM pois WHERE id = $1
@@ -650,7 +572,6 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
       },
 
       collectFn: async (poiId, { index, total }) => {
-        // Get trail data
         const poiResult = await pool.query(`
           SELECT id, name, poi_roles, status_url, brief_description
           FROM pois WHERE id = $1
@@ -673,12 +594,12 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
         return { statusFound: statusCollection.statusFound, statusSaved: statusCollection.statusSaved, poiName: poi.name };
       },
 
-      checkpointFn: async (poiId, result, error) => {
+      checkpointFn: async (poiId, statusOutcome, error) => {
         processedPois.add(poiId);
 
-        if (result && !result.notFound) {
-          totalStatusFound += result.statusFound;
-          totalStatusSaved += result.statusSaved;
+        if (statusOutcome && !statusOutcome.notFound) {
+          totalStatusFound += statusOutcome.statusFound;
+          totalStatusSaved += statusOutcome.statusSaved;
         }
         if (error) {
           logError(jobId, 'trail_status', poiId, null, error.message);
@@ -702,7 +623,6 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
       }
     });
 
-    // Mark job completed
     const finalAiUsage = JSON.stringify({ gemini: geminiCalls });
     await pool.query(`
       UPDATE trail_status_job_status
@@ -722,14 +642,12 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     logInfo(jobId, 'trail_status', null, null, `Job completed: ${processedPois.size} trails, ${totalStatusFound} status found`, { trails_processed: processedPois.size, status_found: totalStatusFound, status_saved: totalStatusSaved, gemini_calls: geminiCalls });
     await flushJobLogs();
 
-    // Don't clear display slots — keep frozen for frontend
 
   } catch (error) {
     console.error(`[Trail Status Job ${jobId}] Failed:`, error.message);
     logError(jobId, 'trail_status', null, null, `Job failed: ${error.message}`);
     await flushJobLogs();
 
-    // Mark job failed
     const failureAiUsage = JSON.stringify({ gemini: geminiCalls });
     await pool.query(`
       UPDATE trail_status_job_status
@@ -744,14 +662,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
   }
 }
 
-/**
- * Get job status
- * @param {Pool} pool - Database connection pool
- * @param {string|number} jobId - Job ID (integer) or pg_boss_job_id (UUID)
- * @returns {Object} - Job status object
- */
 export async function getJobStatus(pool, jobId) {
-  // Check if jobId is a UUID (pg_boss_job_id) or integer (table id)
   const isUuid = typeof jobId === 'string' && jobId.includes('-');
 
   const jobQuery = await pool.query(
@@ -780,12 +691,6 @@ export async function getJobStatus(pool, jobId) {
   };
 }
 
-/**
- * Cancel a running job
- * @param {Pool} pool - Database connection pool
- * @param {number} jobId - Job ID
- * @returns {boolean} - true if cancelled, false if not running
- */
 export async function cancelJob(pool, jobId) {
   const cancelUpdate = await pool.query(`
     UPDATE trail_status_job_status
@@ -798,12 +703,6 @@ export async function cancelJob(pool, jobId) {
   return cancelUpdate.rowCount > 0;
 }
 
-/**
- * Get latest trail status for a POI
- * @param {Pool} pool - Database connection pool
- * @param {number} poiId - POI ID
- * @returns {Object|null} - Latest status or null
- */
 export async function getLatestTrailStatus(pool, poiId) {
   const statusQuery = await pool.query(`
     SELECT * FROM trail_status

@@ -9,12 +9,9 @@ import MediaUploadModal from './MediaUploadModal';
 import RoleEditor from './RoleEditor';
 import GeoJSONUploader from './GeoJSONUploader';
 
-// Sidebar component with tabs: Info, News, Events, History
-// Share Modal Component
 function ShareModal({ isOpen, onClose, poiName, poiDescription }) {
   const [copied, setCopied] = useState(false);
 
-  // Use the current URL directly - server injects OG tags for ?poi= URLs
   const shareUrl = window.location.href;
 
   const shareText = poiDescription
@@ -22,14 +19,12 @@ function ShareModal({ isOpen, onClose, poiName, poiDescription }) {
     : `Check out ${poiName} at Roots of The Valley!`;
 
   const handleCopyLink = async () => {
-    // Copy the regular app URL (not the share endpoint)
     const appUrl = window.location.href;
     try {
       await navigator.clipboard.writeText(appUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
-      // Fallback for older browsers
       const textArea = document.createElement('textarea');
       textArea.value = appUrl;
       document.body.appendChild(textArea);
@@ -211,7 +206,6 @@ function EditableCellSignal({ level, onChange }) {
   );
 }
 
-// Read-only view component - works for both destinations and linear features
 function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, onCollectStatus }) {
   return (
     <div className="view-container">
@@ -219,7 +213,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
 
         <div className="sidebar-content">
         <div className="badges-row">
-          {/* POI type badge - shows for all POI types */}
           {isLinearFeature ? (
             <span className={`poi-type-badge ${destination.feature_type}`}>
               {destination.feature_type === 'river' ? 'River' :
@@ -238,7 +231,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
               Destination
             </span>
           )}
-          {/* Difficulty badge for trails */}
           {isLinearFeature && destination.difficulty && (
             <span className={`difficulty-badge ${destination.difficulty.toLowerCase()}`}>
               {destination.difficulty}
@@ -265,7 +257,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
               Source
             </a>
           )}
-          {/* Share button */}
           {onShare && (
             <button className="share-badge-btn" onClick={onShare} title="Share this location">
               <svg viewBox="0 0 24 24" width="14" height="14">
@@ -276,7 +267,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
           )}
         </div>
 
-        {/* Trail Status section - matches Overview section styling */}
         {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated) && (
           <div className="section">
             <h3>Trail Status {isAdmin && editMode && onCollectStatus && (
@@ -309,7 +299,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
         <div className="section">
           <h3>Visitor Information</h3>
           <div className="details-grid">
-            {/* Trail-specific: length */}
             {isLinearFeature && destination.length_miles && (
               <div className="detail-item">
                 <label>Length</label>
@@ -343,7 +332,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
           </div>
         </div>
 
-        {/* Location - only for point destinations, not linear features */}
         {!isLinearFeature && destination.latitude && destination.longitude && (
           <div className="section">
             <h3>Location</h3>
@@ -352,7 +340,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
         )}
         </div>
 
-        {/* More Information link - at bottom of scrollable content */}
         {moreInfoLink && (
           <div className="more-info-section">
             <a
@@ -373,26 +360,20 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
   );
 }
 
-// Edit view component - works for both destinations and linear features
 function EditView({ destination, editedData, setEditedData, onSave, onCancel, onDelete, saving, deleting, onPreviewCoordsChange, isNewPOI, isNewOrganization, _onImageUpdate, isLinearFeature, showImage }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [aiError, setAiError] = useState(null);
 
-  // Research state
   const [researching, setResearching] = useState(false);
 
-  // Draft approval modal state (multi-pass research v2)
   const [researchDraft, setResearchDraft] = useState(null);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [draftFieldStates, setDraftFieldStates] = useState({});
 
-  // Pending image state (staging area for image uploads until save)
   const [pendingImage, setPendingImage] = useState(null);
 
-  // User state for admin checks
   const [user, setUser] = useState(null);
 
-  // Check authentication status
   useEffect(() => {
     fetch('/api/auth/status', { credentials: 'include' })
       .then(res => res.ok ? res.json() : null)
@@ -400,31 +381,23 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       .catch(() => setUser(null));
   }, []);
 
-  // Callback for media updates from ImageUploader (no-op, just for consistency)
   const handleMediaUpdate = () => {
-    // In edit mode, media updates will be handled by the parent refresh
-    // This is just a placeholder for the ImageUploader interface
   };
 
-  // Handle save with pending image processing
   const handleSaveWithImage = async () => {
     if (!destination?.id) {
-      // For new POIs, just call parent save (image will be handled separately)
       await onSave();
       return;
     }
 
     try {
-      // Handle pending image if exists
       if (pendingImage) {
         if (pendingImage.deleted) {
-          // Delete the image
           await fetch(`/api/admin/pois/${destination.id}/image`, {
             method: 'DELETE',
             credentials: 'include'
           });
         } else if (pendingImage.data) {
-          // Upload new image - always use base64 endpoint for simplicity
           const endpoint = `/api/admin/pois/${destination.id}/image-base64`;
           await fetch(endpoint, {
             method: 'POST',
@@ -436,11 +409,9 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             })
           });
         }
-        // Clear pending image after processing
         setPendingImage(null);
       }
 
-      // Now call parent save for other fields
       await onSave();
     } catch (err) {
       alert(`Error processing image: ${err.message}`);
@@ -448,26 +419,20 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
     }
   };
 
-  // Handle cancel - clear pending image
   const handleCancelWithCleanup = () => {
     setPendingImage(null);
     onCancel();
   };
 
-  // Standardized activities list
   const [availableActivities, setAvailableActivities] = useState([]);
   const [showActivityDropdown, setShowActivityDropdown] = useState(false);
 
-  // Standardized eras list
   const [availableEras, setAvailableEras] = useState([]);
 
-  // Standardized surfaces list
   const [availableSurfaces, setAvailableSurfaces] = useState([]);
 
-  // Owner organizations list
   const [availableOwnerOrgs, setAvailableOwnerOrgs] = useState([]);
 
-  // Fetch activities, eras, surfaces, and owner organizations on mount
   useEffect(() => {
     async function fetchActivities() {
       try {
@@ -531,13 +496,11 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
     fetchOwnerOrgs();
   }, []);
 
-  // Parse current activities from comma-separated string
   const selectedActivities = (editedData.primary_activities || '')
     .split(',')
     .map(a => a.trim())
     .filter(a => a);
 
-  // Toggle activity selection
   const toggleActivity = (activityName) => {
     const current = new Set(selectedActivities);
     if (current.has(activityName)) {
@@ -551,7 +514,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
     }));
   };
 
-  // Research with AI v2 - multi-pass with draft approval
   const handleResearch = async () => {
     setResearching(true);
     setAiError(null);
@@ -574,9 +536,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
       const result = await response.json();
 
-      // Show draft modal for approval instead of directly applying
       setResearchDraft(result.data);
-      // Initialize all fields as accepted by default
       const fields = ['era_id', 'property_owner', 'primary_activities', 'surface', 'pets', 'brief_description', 'historical_description'];
       const initialStates = {};
       for (const field of fields) {
@@ -592,7 +552,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
     }
   };
 
-  // Accept research draft — apply selected fields to editedData, optionally save hero image
   const handleAcceptDraft = async () => {
     const updates = {};
     if (draftFieldStates.era_id && researchDraft.era_id) updates.era_id = researchDraft.era_id;
@@ -613,12 +572,10 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
     setEditedData(prev => ({ ...prev, [field]: value }));
   };
 
-  // Handle coordinate changes - also update preview coords for live map sync
   const handleCoordChange = (field, value) => {
     const numValue = value ? parseFloat(value) : null;
     setEditedData(prev => {
       const updated = { ...prev, [field]: numValue };
-      // Update preview coords if both lat and lng are valid
       if (onPreviewCoordsChange) {
         const lat = field === 'latitude' ? numValue : parseFloat(prev.latitude);
         const lng = field === 'longitude' ? numValue : parseFloat(prev.longitude);
@@ -633,7 +590,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   return (
     <div className="edit-view-container">
       <div className="edit-view-scroll">
-      {/* Image section at top - matches view mode layout (can be hidden if shown elsewhere) */}
       {showImage && (
         !isNewPOI && destination?.id ? (
           <ImageUploader
@@ -669,7 +625,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </div>
       )}
 
-      {/* Research with AI — top of Info tab, right under image */}
       <div className="research-section">
         <button
           className="research-btn"
@@ -703,7 +658,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         />
       </div>
 
-      {/* Role editor - shown for new POIs or when editing existing POIs */}
       {(isNewPOI || isNewOrganization || editedData.poi_roles) && (
         <RoleEditor
           roles={editedData.poi_roles || []}
@@ -711,7 +665,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         />
       )}
 
-      {/* GeoJSON uploader - shown when POI has trail, river, or boundary role */}
       {editedData.poi_roles && (editedData.poi_roles.includes('trail') || editedData.poi_roles.includes('river') || editedData.poi_roles.includes('boundary')) && (
         <GeoJSONUploader
           geometry={editedData.geometry}
@@ -725,7 +678,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
           value={editedData.brief_description || ''}
           onChange={(e) => {
             handleChange('brief_description', e.target.value);
-            // Auto-expand textarea to fit content
             e.target.style.height = 'auto';
             e.target.style.height = e.target.scrollHeight + 'px';
           }}
@@ -738,7 +690,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         />
       </div>
 
-      {/* Hide these fields for organizations/virtual POIs */}
       {!isNewOrganization && !destination?.poi_roles?.includes('organization') && (
         <>
           <div className="edit-row">
@@ -771,7 +722,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
                   const ownerId = e.target.value ? parseInt(e.target.value) : null;
                   const ownerOrg = availableOwnerOrgs.find(o => o.id === ownerId);
                   handleChange('owner_id', ownerId);
-                  // Also update property_owner for backward compatibility
                   handleChange('property_owner', ownerOrg ? ownerOrg.name : null);
                 }}
               >
@@ -861,7 +811,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </>
       )}
 
-      {/* Linear feature specific fields - trails and rivers */}
       {isLinearFeature && editedData.feature_type !== 'boundary' && (
         <>
           <div className="edit-row">
@@ -900,7 +849,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </>
       )}
 
-      {/* Boundary color picker */}
       {isLinearFeature && editedData.feature_type === 'boundary' && (
         <div className="edit-section">
           <label title="Color used to display this boundary on the map">Boundary Color</label>
@@ -939,7 +887,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </div>
       )}
 
-      {/* Lat/long fields - only for point destinations, not for virtual/organizations */}
       {!isLinearFeature && !destination?.poi_roles?.includes('organization') && (
         <div className="edit-row">
           <div className="edit-section half">
@@ -1091,7 +1038,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         </div>
       )}
 
-      {/* Draft Approval Modal — multi-pass research results */}
       {showDraftModal && researchDraft && (
         <div className="prompt-editor-overlay" onClick={() => { setShowDraftModal(false); setResearchDraft(null); }}>
           <div className="draft-approval-dialog" onClick={(e) => e.stopPropagation()}>
@@ -1175,13 +1121,11 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   );
 }
 
-// Generate URL-friendly slug (must match backend generateSlug)
 function generateSlug(name) {
   if (!name) return '';
   return name.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
 
-// POI-specific News component
 function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNews }) {
   const navigate = useNavigate();
   const [news, setNews] = useState([]);
@@ -1213,9 +1157,8 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
   useEffect(() => {
     fetchNews();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiId]);
+  }, [poiId]); // fetchNews intentionally excluded — re-fetch only on POI change, not on function reference churn
 
-  // Collect news for this POI and redirect to Jobs dashboard
   const handleCollectNews = async () => {
     if (!poiId) return;
     setCollecting(true);
@@ -1232,7 +1175,6 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
       if (response.ok) {
         const result = await response.json();
         const targetUrl = `/admin/jobs?job=${result.jobId}&type=${result.jobType}&poi=${result.poiId || result.jobId}`;
-        // Redirect to Jobs dashboard with job identifier
         navigate(targetUrl);
       } else {
         const error = await response.json();
@@ -1322,7 +1264,6 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
   );
 }
 
-// News/Event detail panel — takes over the sidebar when a permalink is active
 function ContentDetail({ permalinkInfo, onBack }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1406,7 +1347,6 @@ function ContentDetail({ permalinkInfo, onBack }) {
   );
 }
 
-// POI-specific Events component
 function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectEvent }) {
   const navigate = useNavigate();
   const [events, setEvents] = useState([]);
@@ -1437,9 +1377,8 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
   useEffect(() => {
     fetchEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiId]);
+  }, [poiId]); // fetchEvents intentionally excluded — re-fetch only on POI change, not on function reference churn
 
-  // Collect events for this POI and redirect to Jobs dashboard
   const handleCollectEvents = async () => {
     if (!poiId) return;
     setCollecting(true);
@@ -1456,7 +1395,6 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
       if (response.ok) {
         const result = await response.json();
         const targetUrl = `/admin/jobs?job=${result.jobId}&type=${result.jobType}&poi=${result.poiId || result.jobId}`;
-        // Redirect to Jobs dashboard with job identifier
         navigate(targetUrl);
       } else {
         const error = await response.json();
@@ -1491,7 +1429,6 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
     const description = encodeURIComponent(event.description || '');
     const location = encodeURIComponent(event.location_details || poiName || '');
 
-    // Format dates for Google Calendar (YYYYMMDDTHHmmss)
     const formatForGoogle = (dateStr) => {
       if (!dateStr) return '';
       const [year, month, day] = dateStr.split('T')[0].split('-');
@@ -1564,28 +1501,23 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
   );
 }
 
-// Associations Modal Component - shows associations in a pop-up
 function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, isAdmin, editMode, onAssociationsChanged }) {
   const [isAdding, setIsAdding] = useState(false);
   const [selectedNewPois, setSelectedNewPois] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
 
-  // Get available POIs for adding (must be before early return to satisfy Rules of Hooks)
   const availablePois = useMemo(() => {
     if (!isOpen || !poi) return [];
 
     const isVirtualPoi = poi.poi_roles?.includes('organization');
     if (!isVirtualPoi) return [];
 
-    // Find associations for this POI
     const poiAssociations = (associations || []).filter(assoc =>
       assoc.virtual_poi_id === poi.id || assoc.physical_poi_id === poi.id
     );
 
-    // Calculate currently associated POI IDs
     const currentIds = new Set();
 
-    // Add associated POIs from associations
     poiAssociations.forEach(assoc => {
       if (isVirtualPoi) {
         currentIds.add(assoc.physical_poi_id);
@@ -1594,7 +1526,6 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
       }
     });
 
-    // Add owned POIs
     (allDestinations || []).forEach(d => {
       if (Number(d.owner_id) === Number(poi.id)) {
         currentIds.add(d.id);
@@ -1606,7 +1537,6 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
       }
     });
 
-    // Add owner org (if this POI is owned by someone)
     if (poi.owner_id) {
       currentIds.add(Number(poi.owner_id));
     }
@@ -1621,18 +1551,14 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
 
   if (!isOpen || !poi) return null;
 
-  // Find associations for this POI
   const poiAssociations = associations.filter(assoc =>
     assoc.virtual_poi_id === poi.id || assoc.physical_poi_id === poi.id
   );
 
-  // Determine if this is an organization POI
   const isVirtualPoi = poi.poi_roles?.includes('organization');
 
-  // Get regular associations
   const regularAssociations = poiAssociations.map(assoc => {
     if (isVirtualPoi) {
-      // This is a virtual POI, show associated physical POIs
       const physicalId = assoc.physical_poi_id;
       let associatedPoi = allDestinations?.find(d => d.id === physicalId);
       if (!associatedPoi) {
@@ -1640,19 +1566,16 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
       }
       return associatedPoi ? { ...associatedPoi, _isLinear: !!allLinearFeatures?.find(f => f.id === physicalId), _isVirtual: false, _assocId: assoc.id } : null;
     } else {
-      // This is a physical POI, show associated virtual POIs
       const virtualId = assoc.virtual_poi_id;
       const associatedPoi = allVirtualPois?.find(v => v.id === virtualId);
       return associatedPoi ? { ...associatedPoi, _isVirtual: true, _isLinear: false, _assocId: assoc.id } : null;
     }
   }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
 
-  // Get owner organization (for physical POIs) - show first in list with Owner badge
   const ownerOrg = !isVirtualPoi && poi.owner_id
     ? allVirtualPois?.find(v => Number(v.id) === Number(poi.owner_id))
     : null;
 
-  // Get owned POIs (for virtual POIs/organizations) - POIs that have this org as their owner
   const ownedPois = isVirtualPoi
     ? [
         ...(allDestinations || []).filter(d => Number(d.owner_id) === Number(poi.id)),
@@ -1665,7 +1588,6 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
       })).sort((a, b) => a.name.localeCompare(b.name))
     : [];
 
-  // Combine: owner first (for physical POIs), owned POIs first (for virtual POIs), then regular associations
   const associatedPoisWithAssocId = [
     ...(ownerOrg ? [{ ...ownerOrg, _isVirtual: true, _isLinear: false, _isOwner: true }] : []),
     ...ownedPois.filter(p => !regularAssociations.some(a => a.id === p.id)),
@@ -1758,13 +1680,10 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
           {associatedPoisWithAssocId.length > 0 ? (
             <div className="associations-modal-list">
               {associatedPoisWithAssocId.map(associatedPoi => {
-                // Use thumbnail endpoint for fast, cached small images
-                // Include updated_at for cache busting when image changes
                 const imageUrl = associatedPoi.has_primary_image
                   ? `/api/pois/${associatedPoi.id}/thumbnail?size=small&v=${associatedPoi.updated_at || Date.now()}`
                   : null;
 
-                // Get default thumbnail SVG path based on type
                 const getDefaultThumbnail = () => {
                   if (associatedPoi._isVirtual) return '/icons/thumbnails/virtual.svg';
                   if (associatedPoi._isLinear) {
@@ -1866,7 +1785,6 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
             <div className="associations-modal-empty">No associations yet.</div>
           )}
 
-          {/* Add associations section */}
           {isAdding && (
             <div className="add-associations-section">
               <h4>Add Associations</h4>
@@ -1924,25 +1842,20 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
   );
 }
 
-// Associations tab content - shows related POIs (virtual or physical)
 function AssociationsTabContent({ poi, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, isAdmin, editMode, onAssociationsChanged, onStartDrawingAssociations }) {
   const [isAdding, setIsAdding] = useState(false);
   const [selectedNewPois, setSelectedNewPois] = useState(new Set());
   const [deleting, setDeleting] = useState(null);
   const [filterText, setFilterText] = useState('');
 
-  // Find associations for this POI
   const poiAssociations = associations.filter(assoc =>
     assoc.virtual_poi_id === poi.id || assoc.physical_poi_id === poi.id
   );
 
-  // Determine if this is an organization POI
   const isVirtualPoi = poi.poi_roles?.includes('organization');
 
-  // Get the associated POIs with association IDs (regular associations from table)
   const regularAssociations = poiAssociations.map(assoc => {
     if (isVirtualPoi) {
-      // This is a virtual POI, show associated physical POIs
       const physicalId = assoc.physical_poi_id;
       let associatedPoi = allDestinations?.find(d => d.id === physicalId);
       if (!associatedPoi) {
@@ -1950,19 +1863,16 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
       }
       return associatedPoi ? { ...associatedPoi, _isLinear: !!allLinearFeatures?.find(f => f.id === physicalId), _isVirtual: false, _assocId: assoc.id } : null;
     } else {
-      // This is a physical POI, show associated virtual POIs
       const virtualId = assoc.virtual_poi_id;
       const associatedPoi = allVirtualPois?.find(v => v.id === virtualId);
       return associatedPoi ? { ...associatedPoi, _isVirtual: true, _isLinear: false, _assocId: assoc.id } : null;
     }
   }).filter(Boolean).sort((a, b) => a.name.localeCompare(b.name));
 
-  // Get owner organization (for physical POIs) - show first in list with Owner badge
   const ownerOrg = !isVirtualPoi && poi.owner_id
     ? allVirtualPois?.find(v => Number(v.id) === Number(poi.owner_id))
     : null;
 
-  // Get owned POIs (for virtual POIs/organizations) - POIs that have this org as their owner
   const ownedPois = useMemo(() => {
     return isVirtualPoi
       ? [
@@ -1977,14 +1887,12 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
       : [];
   }, [isVirtualPoi, poi.id, allDestinations, allLinearFeatures]);
 
-  // Combine: owner first (for physical POIs), owned POIs first (for virtual POIs), then regular associations
   const associatedPoisWithAssocId = useMemo(() => [
     ...(ownerOrg ? [{ ...ownerOrg, _isVirtual: true, _isLinear: false, _isOwner: true }] : []),
     ...ownedPois.filter(p => !regularAssociations.some(a => a.id === p.id)),
     ...regularAssociations.filter(a => (!ownerOrg || a.id !== ownerOrg.id) && !ownedPois.some(p => p.id === a.id))
   ], [ownerOrg, ownedPois, regularAssociations]);
 
-  // Get available POIs for adding (not currently associated)
   const availablePois = useMemo(() => {
     if (!isVirtualPoi) return []; // Only virtual POIs can add associations
 
@@ -2101,13 +2009,10 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
         {associatedPoisWithAssocId.length > 0 ? (
           <div className={`associations-list ${isAdding ? 'compact' : ''}`}>
             {associatedPoisWithAssocId.map(associatedPoi => {
-              // Use thumbnail endpoint for fast, cached small images
-              // Include updated_at for cache busting when image changes
               const imageUrl = associatedPoi.has_primary_image
                 ? `/api/pois/${associatedPoi.id}/thumbnail?size=small&v=${associatedPoi.updated_at || Date.now()}`
                 : null;
 
-              // Get default thumbnail SVG path based on type
               const getDefaultThumbnail = () => {
                 if (associatedPoi._isVirtual) return '/icons/thumbnails/virtual.svg';
                 if (associatedPoi._isLinear) {
@@ -2209,7 +2114,6 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
 
       </div>
 
-      {/* Add associations modal - pop-up overlay */}
       {isAdding && (
         <div className="add-associations-modal-overlay" onClick={() => {
           setIsAdding(false);
@@ -2292,7 +2196,6 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
   );
 }
 
-// POI-specific Trail Status component
 function TrailStatus({ poiId, _poiName, isAdmin, editMode, _selectedFromMtbList, _onBackToMtbList }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -2336,7 +2239,6 @@ function TrailStatus({ poiId, _poiName, isAdmin, editMode, _selectedFromMtbList,
       if (response.ok) {
         await response.json(); // Result not used
 
-        // Refresh status
         await fetchStatus();
       } else {
         const error = await response.json();
@@ -2439,21 +2341,18 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const [deleting, setDeleting] = useState(false);
   const [sidebarTab, setSidebarTab] = useState(initialSidebarTab || 'view');
 
-  // Switch to news/events tab when a permalink is active
   useEffect(() => {
     if (permalinkInfo) {
       setSidebarTab(permalinkInfo.type === 'event' ? 'events' : 'news');
     }
   }, [permalinkInfo]);
 
-  // Apply initialSidebarTab when it changes (e.g., from browser back/forward)
   useEffect(() => {
     if (initialSidebarTab) {
       setSidebarTab(initialSidebarTab);
     }
   }, [initialSidebarTab]);
 
-  // handleSidebarTabChange defined after displayItem (below)
   const [showShareModal, setShowShareModal] = useState(false);
   const [showAssociationsModal, setShowAssociationsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -2463,31 +2362,20 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
   const [, setEventsCount] = useState(0);
   const [, setCollectResult] = useState(null);
   const [trailStatus, setTrailStatus] = useState(null);
-  // Tab-count state for hiding empty sidebar tabs (issue #211).
-  // null = not yet loaded; numbers = confirmed counts.
   const [tabCounts, setTabCounts] = useState({ news_count: null, events_count: null });
 
-  /* const [organizationData, setOrganizationData] = useState({
-    name: '',
-    brief_description: '',
-    property_owner: '',
-    more_info_link: ''
-  }); */
   const [selectedPoiIds, setSelectedPoiIds] = useState(new Set());
 
-  // Initialize organization data when newOrganization changes
   useEffect(() => {
     if (newOrganization) {
       setSelectedPoiIds(newOrganization._selectedPoiIds || new Set());
     }
   }, [newOrganization]);
 
-  // Media state for top-level image/mosaic display
   const [media, setMedia] = useState([]);
   const [allMedia, setAllMedia] = useState([]);
   const [mediaLoading, setMediaLoading] = useState(false);
 
-  // Fetch media for destination/linear feature
   useEffect(() => {
     const poiId = destination?.id || linearFeature?.id;
     if (!poiId) return;
@@ -2508,7 +2396,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       });
   }, [destination?.id, linearFeature?.id]);
 
-  // Listen for media updates from moderation queue
   useEffect(() => {
     const poiId = destination?.id || linearFeature?.id;
     if (!poiId) return;
@@ -2516,7 +2403,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     const handleMediaUpdateEvent = (event) => {
       if (event.detail.poiId === poiId) {
         console.log('[Sidebar] POI media updated for', poiId, '- refreshing...');
-        // Refresh media list
         fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
           .then(res => res.json())
           .then(data => {
@@ -2525,7 +2411,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           })
           .catch(err => console.error('[Sidebar] Failed to refresh media:', err));
 
-        // Refresh POI data to update has_primary_image flag
         fetch(`/api/pois/${poiId}`, { credentials: 'include' })
           .then(res => res.json())
           .then(data => {
@@ -2541,13 +2426,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     return () => window.removeEventListener('poi-media-updated', handleMediaUpdateEvent);
   }, [destination?.id, linearFeature?.id]);
 
-  // Callback for media updates from ImageUploader or Mosaic
   const handleMediaUpdate = () => {
-    // Refresh media after upload
     const poiId = destination?.id || linearFeature?.id;
     if (!poiId) return;
 
-    // Refresh media list
     fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
@@ -2556,7 +2438,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       })
       .catch(err => console.error('Failed to refresh media:', err));
 
-    // Refresh POI data to update has_primary_image flag
     if (destination && onDestinationUpdate) {
       fetch(`/api/pois/${poiId}`, { credentials: 'include' })
         .then(res => res.json())
@@ -2564,19 +2445,12 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         .catch(err => console.error('Failed to refresh POI:', err));
     }
 
-    // Emit event to refresh moderation count (photo uploads go to pending)
     window.dispatchEvent(new CustomEvent('moderation-count-changed'));
   };
 
-  // Determine which POI we're showing
   const activePoi = destination || linearFeature;
 
-  // Check if this POI has associations
-  /* const hasAssociations = activePoi && associations?.some(assoc =>
-    assoc.virtual_poi_id === activePoi.id || assoc.physical_poi_id === activePoi.id
-  ); */
 
-  // Wrapper functions to switch to Info tab when selecting from associations
   const handleSelectDestinationFromAssociations = React.useCallback((poi) => {
     onSelectDestination(poi);
     setSidebarTab('view'); // Switch to Info tab
@@ -2587,13 +2461,11 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     setSidebarTab('view'); // Switch to Info tab
   }, [onSelectLinearFeature]);
 
-  // Touch/swipe handling for mobile navigation
   const touchStartX = React.useRef(null);
   const touchStartY = React.useRef(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwipingHorizontally, setIsSwipingHorizontally] = useState(false);
 
-  // Debounce navigation to prevent race conditions from rapid taps
   const lastNavigationTime = React.useRef(0);
   const NAVIGATION_DEBOUNCE_MS = 300;
 
@@ -2606,22 +2478,18 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     onNavigate(direction);
   };
 
-  // Check for mobile on resize
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Swipe gesture handlers
   const handleTouchStart = (e) => {
-    // Don't start swipe tracking if touch starts on the thumbnail carousel or navigation buttons
     const target = e.target;
     const isCarousel = target.closest('.thumbnail-carousel-wrapper, .thumbnail-carousel');
     const isNavButton = target.closest('.image-nav-btn');
 
     if (isCarousel || isNavButton) {
-      // Let the carousel handle its own scrolling, and let nav buttons handle their own clicks
       touchStartX.current = null;
       touchStartY.current = null;
       return;
@@ -2641,16 +2509,13 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     const deltaX = touchCurrentX - touchStartX.current;
     const deltaY = touchCurrentY - touchStartY.current;
 
-    // Determine if this is a horizontal swipe
     if (!isSwipingHorizontally && Math.abs(deltaX) > 10) {
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         setIsSwipingHorizontally(true);
       }
     }
 
-    // Update swipe offset for visual feedback (only if horizontal swipe)
     if (isSwipingHorizontally || Math.abs(deltaX) > Math.abs(deltaY)) {
-      // Cap the offset at +/- 100px for visual feedback
       const cappedOffset = Math.max(-100, Math.min(100, deltaX * 0.5));
       setSwipeOffset(cappedOffset);
     }
@@ -2665,45 +2530,34 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     const deltaX = touchEndX - touchStartX.current;
     const deltaY = touchEndY - touchStartY.current;
 
-    // Only trigger swipe if horizontal movement is greater than vertical
-    // and the swipe distance is significant (> 50px)
     const minSwipeDistance = 50;
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
       if (deltaX > 0) {
-        // Swiping right = go to previous POI
-        // Check if not at the first POI
         if (currentIndex > 0) {
           onNavigate('prev');
         }
       } else {
-        // Swiping left = go to next POI
-        // Check if not at the last POI
         if (poiNavigationList && currentIndex < poiNavigationList.length - 1) {
           onNavigate('next');
         }
       }
     }
 
-    // Reset swipe state
     touchStartX.current = null;
     touchStartY.current = null;
     setSwipeOffset(0);
     setIsSwipingHorizontally(false);
   };
 
-  // Determine what we're displaying
   const displayItem = linearFeature || destination;
   const isLinearFeature = !!linearFeature;
 
-  // Fetch news/events counts when the selected POI changes, so we can hide
-  // empty tabs for public viewers (#211).
   useEffect(() => {
     const poiId = displayItem?.id;
     if (!poiId) {
       setTabCounts({ news_count: null, events_count: null });
       return;
     }
-    // Reset to "loading" so we don't briefly show the prior POI's tabs (#211).
     setTabCounts({ news_count: null, events_count: null });
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const controller = new AbortController();
@@ -2717,7 +2571,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     return () => controller.abort();
   }, [displayItem?.id]);
 
-  // Compute how many associations this POI has (associations is preloaded globally)
   const poiAssociationsCount = useMemo(() => {
     if (!displayItem?.id) return 0;
     return (associations || []).filter(a =>
@@ -2725,10 +2578,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     ).length;
   }, [associations, displayItem?.id]);
 
-  // Decide which sidebar tabs to render. Info ('view') is always shown.
-  // Admin users in edit mode see every tab so they can add missing content.
-  // While counts are loading (null), be conservative and hide news/events;
-  // they'll pop in once the counts arrive.
   const visibleTabs = useMemo(() => {
     const tabs = ['view'];
     const adminOverride = isAdmin && editMode;
@@ -2747,11 +2596,9 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     return tabs;
   }, [isAdmin, editMode, tabCounts.news_count, tabCounts.events_count, displayItem?.historical_description, poiAssociationsCount]);
 
-  // Helper to change sidebar tab and update URL
   const handleSidebarTabChange = useCallback((tab) => {
     setSidebarTab(tab);
     if (onSidebarTabChange) onSidebarTabChange(tab);
-    // Clear permalink when switching to a different tab (backs out of news/event detail)
     if (permalinkInfo && onClearPermalink) onClearPermalink();
     const poiSlug = generateSlug(displayItem?.name);
     if (poiSlug) {
@@ -2759,24 +2606,17 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   }, [displayItem, navigate, onSidebarTabChange, permalinkInfo, onClearPermalink]);
 
-  // Reset edit state and sidebar tab when selection changes
   useEffect(() => {
     if (displayItem) {
       setEditedData({ ...displayItem });
-      // Auto-enter edit mode if admin and editMode is on, or if creating new POI
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
-      // Always reset to Info tab when selecting a new POI.
-      // Permalink and initialSidebarTab effects will override if needed.
       if (!permalinkInfo) setSidebarTab('view');
     } else {
       setIsEditing(false);
     }
   }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList]);
 
-  // If the active tab has been filtered out of visibleTabs (e.g. deep-link to
-  // /poi/associations when the POI has no associations), fall back to Info.
-  // Skip while a permalink is active — permalinks force news/events deliberately.
   useEffect(() => {
     if (permalinkInfo) return;
     if (sidebarTab !== 'view' && !visibleTabs.includes(sidebarTab)) {
@@ -2784,7 +2624,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   }, [visibleTabs, sidebarTab, permalinkInfo]);
 
-  // Sync editedData coords when previewCoords changes (from map drag) - only for destinations
   useEffect(() => {
     if (previewCoords && isEditing && !isLinearFeature) {
       setEditedData(prev => ({
@@ -2795,7 +2634,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   }, [previewCoords, isEditing, isLinearFeature]);
 
-  // Handle new organization creation - treat like creating a new POI
   useEffect(() => {
     if (isNewOrganization && newOrganization) {
       setIsEditing(true);
@@ -2814,10 +2652,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   }, [isNewOrganization, newOrganization]);
 
-  // Auto-resize textareas when entering edit mode or data changes
   useEffect(() => {
     if (isEditing) {
-      // Small delay to ensure DOM is updated
       setTimeout(() => {
         const textareas = document.querySelectorAll('.edit-section textarea, .history-tab-content textarea');
         textareas.forEach(textarea => {
@@ -2828,22 +2664,17 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   }, [isEditing, editedData.brief_description, editedData.historical_description]);
 
-  // Fetch trail status if POI has status_url
   useEffect(() => {
-    // Clear any existing status first
     setTrailStatus(null);
 
-    // Don't fetch if no displayItem or no ID
     if (!displayItem || !displayItem.id) {
       return;
     }
 
-    // Don't fetch if no status_url
     if (!displayItem.status_url) {
       return;
     }
 
-    // Fetch the trail status
     fetch(`/api/pois/${displayItem.id}/status`)
       .then(response => {
         if (response.ok) {
@@ -2860,7 +2691,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [displayItem?.id, displayItem?.status_url]); // Only depend on specific properties, not whole displayItem object
 
-  // Handler for collecting trail status from the Info tab
   const handleCollectStatusInline = async () => {
     if (!displayItem?.id) return;
     try {
@@ -2869,7 +2699,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         credentials: 'include'
       });
       if (response.ok) {
-        // Refresh status after collection
         const statusResponse = await fetch(`/api/pois/${displayItem.id}/status`);
         if (statusResponse.ok) {
           const data = await statusResponse.json();
@@ -2885,7 +2714,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   };
 
-  // Handler for saving new organization
   const handleSaveNewOrganization = async () => {
     if (!editedData.name?.trim()) {
       alert('Please enter a name for the organization');
@@ -2924,14 +2752,12 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     });
   };
 
-  // Save handler for destinations
   const handleSaveDestination = async () => {
     if (!editedData.name || !editedData.name.trim()) {
       alert('Name is required');
       return;
     }
 
-    // Check for new organization creation
     if (isNewOrganization) {
       await handleSaveNewOrganization();
       return;
@@ -2947,16 +2773,13 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         };
         await onSaveNewPOI(poiData);
       } else {
-        // Process pending image first
         if (pendingImage) {
           if (pendingImage.deleted) {
-            // Delete the image
             await fetch(`/api/admin/pois/${destination.id}/image`, {
               method: 'DELETE',
               credentials: 'include'
             });
           } else if (pendingImage.data) {
-            // Upload new image
             await fetch(`/api/admin/pois/${destination.id}/image-base64`, {
               method: 'POST',
               credentials: 'include',
@@ -2970,7 +2793,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           setPendingImage(null);
         }
 
-        // Then save other fields
         const response = await fetch(`/api/admin/destinations/${destination.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -2996,7 +2818,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   };
 
-  // Save handler for linear features
   const handleSaveLinearFeature = async () => {
     if (!editedData.name || !editedData.name.trim()) {
       alert('Name is required');
@@ -3005,16 +2826,13 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
     setSaving(true);
     try {
-      // Process pending image first
       if (pendingImage) {
         if (pendingImage.deleted) {
-          // Delete the image
           await fetch(`/api/admin/pois/${linearFeature.id}/image`, {
             method: 'DELETE',
             credentials: 'include'
           });
         } else if (pendingImage.data) {
-          // Upload new image
           await fetch(`/api/admin/pois/${linearFeature.id}/image-base64`, {
             method: 'POST',
             credentials: 'include',
@@ -3028,11 +2846,8 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         setPendingImage(null);
       }
 
-      // Exclude geometry from save payload - it's not editable via sidebar
-      // and including it makes the request too large
       const { geometry: _geometry, ...dataWithoutGeometry } = editedData;
 
-      // Then save other fields
       const response = await fetch(`/api/admin/linear-features/${linearFeature.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -3069,7 +2884,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   };
 
-  // Delete handler for destinations
   const handleDeleteDestination = async () => {
     setDeleting(true);
     try {
@@ -3094,7 +2908,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   };
 
-  // Delete handler for linear features
   const handleDeleteLinearFeature = async () => {
     setDeleting(true);
     try {
@@ -3119,20 +2932,15 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     }
   };
 
-  // If no POI selected, don't show sidebar
   if (!displayItem) {
     return null;
   }
 
-  // Render linear feature view - use same components as destinations with tabs
   if (isLinearFeature) {
-    // Use thumbnail service for faster loading
-    // Include updated_at for cache busting when image changes
     const linearImageUrl = linearFeature?.has_primary_image
       ? `/api/pois/${linearFeature.id}/thumbnail?size=medium&v=${linearFeature.updated_at || Date.now()}`
       : null;
 
-    // Get default thumbnail SVG path based on type
     const getLinearDefaultThumbnail = () => {
       if (linearFeature.feature_type === 'river') return '/icons/thumbnails/river.svg';
       if (linearFeature.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
@@ -3146,7 +2954,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
         onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
       >
-        {/* Mobile navigation carousel - above header so it doesn't move when title wraps */}
         {isMobile && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
           <ThumbnailCarousel
             pois={poiNavigationList}
@@ -3155,7 +2962,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           />
         )}
 
-        {/* Swipe direction indicators */}
         {swipeOffset > 10 && currentIndex > 0 && (
           <div className="swipe-indicator swipe-indicator-left">
             <span className="swipe-arrow">‹</span>
@@ -3224,7 +3030,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           </div>
         </div>
 
-        {/* Media section - Mosaic in view mode, ImageUploader in edit mode */}
         <div style={{ position: 'relative' }}>
           {isEditing && linearFeature?.id ? (
             <ImageUploader
@@ -3252,7 +3057,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             </div>
           ) : null}
 
-          {/* Navigation chevrons on image - mobile only, only when image is visible */}
           {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
             <>
               {currentIndex > 0 && (
@@ -3293,7 +3097,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           )}
         </div>
 
-        {/* Sidebar Tabs - same as destinations */}
         <div className="sidebar-tabs">
           {visibleTabs.map(tab => (
             <button
@@ -3306,7 +3109,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           ))}
         </div>
 
-        {/* Tab Content */}
         <div className="sidebar-tab-content">
           {sidebarTab === 'view' && (
             isEditing ? (
@@ -3430,13 +3232,10 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
     );
   }
 
-  // Use thumbnail service for faster loading
-  // Include updated_at for cache busting when image changes
   const imageUrl = destination?.has_primary_image
     ? `/api/pois/${destination.id}/thumbnail?size=medium&v=${destination.updated_at || Date.now()}`
     : null;
 
-  // Render destination view with tabs
   return (
     <div
       className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''}`}
@@ -3444,7 +3243,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
       onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
     >
-      {/* Mobile navigation carousel - above header so it doesn't move when title wraps */}
       {isMobile && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
         <ThumbnailCarousel
           pois={poiNavigationList}
@@ -3453,7 +3251,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         />
       )}
 
-      {/* Swipe direction indicators */}
       {swipeOffset > 10 && currentIndex > 0 && (
         <div className="swipe-indicator swipe-indicator-left">
           <span className="swipe-arrow">‹</span>
@@ -3510,7 +3307,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         </div>
       </div>
 
-      {/* Media section - Mosaic in view mode, ImageUploader in edit mode */}
       <div style={{ position: 'relative' }}>
         {isEditing && destination?.id ? (
           <ImageUploader
@@ -3538,7 +3334,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
           </div>
         ) : null}
 
-        {/* Navigation chevrons on image - mobile only, only when image is visible */}
         {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
           <>
             {currentIndex > 0 && (
@@ -3579,7 +3374,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         )}
       </div>
 
-      {/* Sidebar Tabs - filtered to non-empty (#211); admins in edit mode see all */}
       <div className="sidebar-tabs">
         {visibleTabs.map(tab => (
           <button
@@ -3592,7 +3386,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         ))}
       </div>
 
-      {/* Tab Content */}
       <div className="sidebar-tab-content">
         {sidebarTab === 'view' && (
           isEditing ? (
@@ -3637,7 +3430,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
             permalinkInfo={permalinkInfo}
             onBack={() => {
               if (onClearPermalink) onClearPermalink();
-              // Navigate back to the POI's news/events sub-tab
               const subTab = permalinkInfo?.type === 'event' ? 'events' : 'news';
               if (destination) {
                 navigate(`/${generateSlug(destination.name)}/${subTab}`);
@@ -3689,7 +3481,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
 
         {sidebarTab === 'associations' && destination && (
           isNewOrganization && newOrganization ? (
-            // New organization - show POI selection interface matching existing associations style
             <div className="associations-tab-content" style={{ padding: '1rem' }}>
               <h3 style={{ marginBottom: '1rem' }}>Associated Locations ({selectedPoiIds.size})</h3>
 
@@ -3729,7 +3520,6 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
               )}
             </div>
           ) : associations ? (
-            // Existing POI - show normal associations
             <AssociationsTabContent
               poi={destination}
               associations={associations}

@@ -17,13 +17,11 @@ function NewsSettings() {
     checkForRunningJob();
   }, []);
 
-  // Poll for active job status and AI stats
   useEffect(() => {
     if (!activeJobId) return;
 
     const pollInterval = setInterval(async () => {
       try {
-        // Fetch job status
         const response = await fetch(`/api/admin/news/job/${activeJobId}`, {
           credentials: 'include'
         });
@@ -31,7 +29,6 @@ function NewsSettings() {
           const status = await response.json();
           setLiveProgress(status);
 
-          // Fetch AI stats while job is running
           try {
             const statsResponse = await fetch('/api/admin/news/ai-stats', {
               credentials: 'include'
@@ -68,7 +65,6 @@ function NewsSettings() {
             clearInterval(pollInterval);
             setCollecting(false);
             setActiveJobId(null);
-            // Keep liveProgress visible with cancelled status
             setLiveProgress({
               ...status,
               cancelledMessage: `Job cancelled at ${status.pois_processed}/${status.total_pois} POIs`
@@ -178,7 +174,6 @@ function NewsSettings() {
         You can also trigger collection manually below.
       </p>
 
-      {/* Live Progress - Purple gradient styling */}
       {liveProgress && (
         <div className="collection-progress-card">
           <div className="progress-card-header">
@@ -206,7 +201,6 @@ function NewsSettings() {
             </div>
           </div>
 
-          {/* Cancelled message badge */}
           {liveProgress.cancelledMessage && (
             <div className="cancelled-badge">
               {liveProgress.cancelledMessage}
@@ -253,7 +247,6 @@ function NewsSettings() {
             </div>
           </div>
 
-          {/* Gemini usage */}
           {aiStats?.usage?.gemini > 0 && (
             <div className="ai-stats-table">
               <div className="ai-stats-row gemini active">
@@ -269,7 +262,6 @@ function NewsSettings() {
         </div>
       )}
 
-      {/* Actions */}
       <div className="news-actions-section">
         <h4>Actions</h4>
 
@@ -289,14 +281,12 @@ function NewsSettings() {
 
       </div>
 
-      {/* Result message */}
       {result && (
         <div className={`news-result ${result.type}`}>
           {result.message}
         </div>
       )}
 
-      {/* Last Job Status */}
       <div className="news-status-section">
         <h4>Last Collection Job</h4>
         {loading ? (
@@ -350,7 +340,6 @@ function NewsSettings() {
         )}
       </div>
 
-      {/* Schedule Info */}
       <div className="news-schedule-section">
         <h4>Automatic Schedule</h4>
         <p>

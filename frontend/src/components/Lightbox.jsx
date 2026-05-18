@@ -314,7 +314,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
       </div>
 
       {/* Upload Modal */}
-      {uploadModalOpen && (
+      {uploadModalOpen && poiId && (
         <MediaUploadModal
           poiId={poiId}
           onClose={() => setUploadModalOpen(false)}

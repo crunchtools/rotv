@@ -50,7 +50,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     }
   }, [page, filter, statusFilter, sourceFilter, searchQuery, idFilter, sortOrder]);
 
-  // Shared moderation hook
   const mod = useModeration({
     onItemsChanged: fetchQueue,
     onCountChange
@@ -58,13 +57,11 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
 
   useEffect(() => { fetchQueue(); mod.selectedItems && mod.toggleSelect && null; }, [fetchQueue]);
 
-  // Auto-poll every 5 seconds
   useEffect(() => {
     const interval = setInterval(() => fetchQueue({ silent: true }), 5000);
     return () => clearInterval(interval);
   }, [fetchQueue]);
 
-  // Fetch user for lightbox
   useEffect(() => {
     fetch('/api/user', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
@@ -72,7 +69,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
       .catch(() => setUser(null));
   }, []);
 
-  // Handle focusItemId changes
   const startEditingRef = React.useRef(null);
   useEffect(() => {
     if (!focusItemId) return;
@@ -85,7 +81,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     setPage(1);
   }, [focusItemId, focusItemTitle]);
 
-  // Auto-expand and edit focused item
   useEffect(() => {
     if (!focusItemId || loading || queue.length === 0) return;
     const item = queue.find(i => i.id === focusItemId && i.content_type === 'news');
@@ -93,10 +88,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     if (startEditingRef.current) startEditingRef.current(item);
   }, [focusItemId, loading, queue]);
 
-  // Keep ref current
   useEffect(() => { startEditingRef.current = mod.startEditing; });
 
-  // Scroll focused item into view
   const [expandedItem, setExpandedItem] = useState(null);
   useEffect(() => {
     if (mod.editingItem) setExpandedItem(mod.editingItem);
@@ -109,7 +102,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
 
   const isPending = statusFilter === 'pending';
 
-  // Photo lightbox
   const getThumbnailUrl = (item) => {
     if (!item.media_type) return null;
     if (item.media_type === 'youtube') {
@@ -145,7 +137,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     }
   };
 
-  // Create handler
   const handleCreate = async () => {
     if (!creating) return;
     try {
@@ -166,7 +157,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     } catch (err) { mod.notify('error', err.message); }
   };
 
-  // Bulk reject all
   const handleBulkRejectAll = async () => {
     const pendingItems = queue.filter(q => q.moderation_status === 'pending');
     if (pendingItems.length === 0) return;
@@ -193,7 +183,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     flex: 1, textAlign: 'center'
   });
 
-  // Helper to build ModerationExtras props from the shared hook
   const modExtrasProps = {
     editingItem: mod.editingItem,
     editFields: mod.editFields,
@@ -228,7 +217,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
 
   return (
     <div className="moderation-inbox">
-      {/* Header */}
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
         <h3 style={{ margin: 0 }}>Moderation Queue</h3>
         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
@@ -246,7 +235,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         </div>
       </div>
 
-      {/* Search bar */}
+
       <div style={{ marginBottom: '8px' }}>
         <input type="text" value={searchInput}
           onChange={e => { setSearchInput(e.target.value); if (!e.target.value) { setIdFilter(null); setSearchQuery(''); setPage(1);} }}
@@ -257,7 +246,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         />
       </div>
 
-      {/* Filter rows */}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
         <div style={{ display: 'flex', gap: '3px' }}>
           {[{ label: 'All Types', value: null }, { label: 'News', value: 'news' }, { label: 'Events', value: 'event' }, { label: 'Photos', value: 'photo' }].map(f => (
@@ -293,7 +282,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         </div>
       </div>
 
-      {/* Create form */}
+
       {creating && (
         <div style={{ border: '2px solid #4caf50', borderRadius: '8px', padding: '16px',
           marginBottom: '12px', backgroundColor: '#f9fff9' }}>
@@ -328,7 +317,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         </div>
       )}
 
-      {/* Bulk action bar */}
+
       {isPending && queue.length > 0 && (
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center',
           marginBottom: '10px', padding: '6px 12px',
@@ -345,7 +334,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         </div>
       )}
 
-      {/* Queue items */}
+
       {loading ? (
         <p style={{ color: '#999', textAlign: 'center', padding: '2rem' }}>Loading...</p>
       ) : queue.length === 0 ? (
@@ -372,7 +361,6 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
                 </EventCardBody>
               );
             } else {
-              // Photo — simple inline rendering
               return (
                 <div key={itemKey} id={`moderation-item-${itemKey}`} style={{
                   border: '1px solid #e0e0e0', borderRadius: '8px', padding: '10px 12px',
@@ -409,7 +397,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         </div>
       )}
 
-      {/* Pagination */}
+
       {!loading && Math.ceil(total / LIMIT) > 1 && (
         <div className="pagination-controls">
           <button className="pagination-btn" onClick={() => setPage(p => p - 1)} disabled={page === 1}>Back</button>
@@ -418,14 +406,14 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         </div>
       )}
 
-      {/* Notification */}
+
       {mod.notification && (
         <div className={`result-message ${mod.notification.type}`} style={{ marginTop: '10px' }}>
           {mod.notification.message}
         </div>
       )}
 
-      {/* Lightbox */}
+
       {lightboxMedia && (
         <Lightbox media={lightboxMedia} initialIndex={lightboxIndex} onClose={() => { setLightboxMedia(null); setLightboxIndex(0); setLightboxPoiId(null); }}
           poiId={lightboxPoiId} user={user} onMediaUpdate={handleMediaUpdate} />

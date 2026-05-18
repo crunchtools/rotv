@@ -2,32 +2,22 @@ import axios from 'axios';
 
 const BUTTONDOWN_API_BASE = 'https://api.buttondown.email';
 
-// In-memory cache for API key (refreshed from DB on each call)
 let apiKeyCache = null;
 
-/**
- * Get Buttondown API key from database or environment
- * @param {Pool} pool - Database connection pool
- * @returns {Promise<string>} API key
- */
 async function getApiKey(pool) {
-  // Return cached key if available
   if (apiKeyCache) {
     return apiKeyCache;
   }
 
-  // Try to get from database first
   if (pool) {
     try {
-      const result = await pool.query(
+      const settingRow = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'buttondown_api_key'"
       );
-      if (result.rows.length > 0 && result.rows[0].value) {
-        // Sanitize: keep only printable ASCII characters (no control chars)
-        const rawKey = result.rows[0].value;
+      if (settingRow.rows.length > 0 && settingRow.rows[0].value) {
+        const rawKey = settingRow.rows[0].value;
         apiKeyCache = rawKey.replace(/[^\x20-\x7E]/g, '').trim();
 
-        // Validate format (should be alphanumeric, dashes, underscores only)
         if (!/^[a-zA-Z0-9_-]+$/.test(apiKeyCache)) {
           console.error('API key contains invalid characters. Key length:', apiKeyCache.length);
           console.error('First 10 chars:', apiKeyCache.substring(0, 10));
@@ -41,12 +31,10 @@ async function getApiKey(pool) {
     }
   }
 
-  // Fall back to environment variable
   if (process.env.BUTTONDOWN_API_KEY) {
     const rawKey = process.env.BUTTONDOWN_API_KEY;
     apiKeyCache = rawKey.replace(/[^\x20-\x7E]/g, '').trim();
 
-    // Validate format
     if (!/^[a-zA-Z0-9_-]+$/.test(apiKeyCache)) {
       console.error('Environment API key contains invalid characters');
       throw new Error('Invalid API key format in environment');
@@ -58,17 +46,10 @@ async function getApiKey(pool) {
   throw new Error('BUTTONDOWN_NOT_CONFIGURED');
 }
 
-/**
- * Clear the API key cache (useful when settings change)
- */
 export function clearApiKeyCache() {
   apiKeyCache = null;
 }
 
-/**
- * Create axios client with API key
- * @param {string} apiKey - Buttondown API key
- */
 function createClient(apiKey) {
   return axios.create({
     baseURL: BUTTONDOWN_API_BASE,
@@ -80,9 +61,6 @@ function createClient(apiKey) {
   });
 }
 
-/**
- * Retry helper for API calls
- */
 async function retryRequest(requestFn, maxRetries = 3) {
   let lastError;
 
@@ -103,12 +81,6 @@ async function retryRequest(requestFn, maxRetries = 3) {
   throw lastError;
 }
 
-/**
- * Add a subscriber to Buttondown
- * @param {string} email - Subscriber email address
- * @param {Pool} pool - Database connection pool
- * @returns {Promise<Object>} Subscriber object from Buttondown
- */
 export async function addSubscriber(email, pool = null) {
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);
@@ -121,7 +93,6 @@ export async function addSubscriber(email, pool = null) {
       });
       return response.data;
     } catch (error) {
-      // Log detailed error for debugging
       console.error('Buttondown addSubscriber error:', {
         status: error.response?.status,
         statusText: error.response?.statusText,
@@ -132,7 +103,6 @@ export async function addSubscriber(email, pool = null) {
       const errorCode = error.response?.data?.code;
       const errorDetail = error.response?.data?.detail;
 
-      // Handle already subscribed (both confirmed and unconfirmed)
       if (error.response?.status === 400 && (
         errorCode === 'email_already_exists' ||
         (errorDetail && typeof errorDetail === 'string' && errorDetail.includes('already subscribed'))
@@ -145,7 +115,6 @@ export async function addSubscriber(email, pool = null) {
         };
       }
 
-      // Handle other 400 errors (includes validation, array detail format)
       if (error.response?.status === 400 && Array.isArray(errorDetail) && errorDetail[0]?.msg?.includes('already exists')) {
         console.log(`Subscriber ${email} already exists (array format), ignoring duplicate`);
         return { email, status: 'already_subscribed' };
@@ -156,11 +125,6 @@ export async function addSubscriber(email, pool = null) {
   });
 }
 
-/**
- * Get total subscriber count from Buttondown
- * @param {Pool} pool - Database connection pool
- * @returns {Promise<number>} Total number of active subscribers
- */
 export async function getSubscriberCount(pool = null) {
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);
@@ -176,28 +140,16 @@ export async function getSubscriberCount(pool = null) {
   });
 }
 
-/**
- * Send email broadcast via Buttondown
- * @param {string} subject - Email subject line
- * @param {string} htmlBody - HTML email body
- * @param {Pool} pool - Database connection pool
- * @param {object} [options] - Options
- * @param {string} [options.existingEmailId] - Resume scheduling a previously created draft
- * @param {Function} [options.onDraftCreated] - Callback with (emailId) after draft creation, before scheduling
- * @returns {Promise<Object>} Email object from Buttondown
- */
 export async function sendEmail(subject, htmlBody, pool = null, { existingEmailId, onDraftCreated } = {}) {
   const apiKey = await getApiKey(pool);
 
   let emailId;
 
   if (existingEmailId) {
-    // Resume: skip draft creation, go straight to scheduling
     emailId = existingEmailId;
-    console.log(`📧 Resuming with existing draft: ${emailId}`);
+    console.log(`Resuming with existing draft: ${emailId}`);
   } else {
-    // Step 1: Create draft email (outside retry to avoid duplicate drafts)
-    console.log(`📧 Creating draft email: "${subject}"`);
+    console.log(`Creating draft email: "${subject}"`);
 
     let createResponse;
     try {
@@ -208,37 +160,33 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
         email_type: 'public'
       });
     } catch (error) {
-      console.error(`❌ Draft creation failed:`, error.response?.status, error.response?.data);
+      console.error(`Draft creation failed:`, error.response?.status, error.response?.data);
       throw error;
     }
 
     emailId = createResponse.data.id;
-    console.log(`✓ Created email draft: ${emailId}`);
+    console.log(`Created email draft: ${emailId}`);
 
-    // Notify caller of the draft ID so it can be persisted for retry recovery
     if (onDraftCreated) {
       await onDraftCreated(emailId);
     }
   }
 
-  // Step 2: Schedule for immediate sending (with retry)
   return retryRequest(async () => {
     const payload = {
       publish_date: new Date().toISOString(),
       status: 'scheduled'
     };
 
-    console.log(`🔄 Scheduling email ${emailId} with payload:`, JSON.stringify(payload));
+    console.log(`Scheduling email ${emailId} with payload:`, JSON.stringify(payload));
 
     try {
-      // Create fresh client for each retry attempt
       const scheduleClient = createClient(apiKey);
       const sendResponse = await scheduleClient.patch(`/v1/emails/${emailId}`, payload);
 
-      console.log(`✓ Scheduled email for sending: ${emailId} (status: ${sendResponse.data.status})`);
+      console.log(`Scheduled email for sending: ${emailId} (status: ${sendResponse.data.status})`);
       return sendResponse.data;
     } catch (error) {
-      // Capture full error details for database logging
       const errorDetails = {
         emailId,
         status: error.response?.status,
@@ -248,26 +196,19 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
         requestHeaders: error.config?.headers
       };
 
-      console.error(`❌ Buttondown PATCH failed:`, JSON.stringify(errorDetails, null, 2));
+      console.error(`Buttondown PATCH failed:`, JSON.stringify(errorDetails, null, 2));
 
-      // Attach error details to the error object so they can be logged to database
       error.buttondownDetails = errorDetails;
       throw error;
     }
   });
 }
 
-/**
- * Test Buttondown API key validity
- * @param {Pool} pool - Database connection pool
- * @returns {Promise<Object>} Test result with subscriber count
- */
 export async function testApiKey(pool = null) {
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);
 
   try {
-    // Test by fetching subscriber list (simple GET that requires auth)
     const response = await client.get('/v1/subscribers');
 
     return {

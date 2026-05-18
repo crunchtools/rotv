@@ -64,16 +64,12 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
   const [frozenElapsedTime, setFrozenElapsedTime] = React.useState(null);
   const [, forceUpdate] = React.useReducer(x => x + 1, 0);
 
-  // Calculate elapsed time on each render (unless frozen)
   const elapsed = frozenElapsedTime !== null ? frozenElapsedTime : (Date.now() - startTimeRef.current);
 
   useEffect(() => {
     if (!poiId) {
       return;
     }
-
-    // Don't reset timer here - it's set once on component mount via the ref initialization
-    // Component gets a fresh instance (with fresh timer) when key changes
 
     const fetchProgress = async () => {
       try {
@@ -84,16 +80,13 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
         if (response.ok) {
           const data = await response.json();
 
-          // Only update if we have meaningful progress
           if (data.phase !== 'idle') {
-            // Sync our start time with backend's start time on first fetch
             if (data.startTime && startTimeRef.current > data.startTime) {
               startTimeRef.current = data.startTime;
             }
 
             setProgress(data);
 
-            // If completed, stop polling but keep showing status
             if (data.completed && onComplete) {
               onComplete(data);
             }
@@ -104,19 +97,16 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
       }
     };
 
-    // Poll for progress updates only when collecting
     let progressInterval;
     let finalFetchTimeout;
 
     if (isCollecting) {
       progressInterval = setInterval(fetchProgress, 500);
-      fetchProgress(); // Initial fetch
+      fetchProgress();
     } else if (progress?.completed) {
-      // When collection just completed, fetch one final time to ensure we have complete data
       finalFetchTimeout = setTimeout(fetchProgress, 500);
     }
 
-    // Always update timer display
     const timerInterval = setInterval(() => {
       forceUpdate();
     }, 100);
@@ -128,27 +118,20 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
     };
   }, [isCollecting, poiId, onComplete, progress?.completed]);
 
-  // Accept external final stats from API response
   useEffect(() => {
-    // Capture progress when it completes (even if still collecting)
     if (progress?.completed && !finalStats) {
       const completionTime = Date.now() - startTimeRef.current;
       setFinalStats(progress);
-      setFrozenElapsedTime(completionTime); // Freeze the timer at completion
+      setFrozenElapsedTime(completionTime);
     }
   }, [progress, finalStats]);
 
-  // Show if currently collecting OR if we have completed progress to display
-  // Prioritize finalStats over progress to keep completed state visible
   const displayProgress = finalStats || progress;
 
-  // Don't hide if we have finalStats, even if current progress is 'idle'
   if (!displayProgress || (displayProgress.phase === 'idle' && !finalStats)) {
     return null;
   }
 
-  // Hide old completed progress when a new collection is starting
-  // (isCollecting=true means user just clicked refresh, but we might have fetched old completed progress)
   if (isCollecting && displayProgress.completed && !finalStats) {
     return null;
   }
@@ -158,7 +141,6 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
   const elapsedSeconds = (elapsed / 1000).toFixed(1);
   const isComplete = displayProgress.completed;
 
-  // Determine which phases to show based on collection type (excluding initializing)
   const collectionType = displayProgress.collectionType || 'both';
   let allPhases = [];
 
@@ -170,7 +152,6 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
     allPhases = ['rendering_events', 'rendering_news', 'ai_search', 'matching_links', 'google_news'];
   }
 
-  // Get completed phases from backend
   const completedPhasesList = displayProgress.phaseHistory || [];
   const currentPhase = displayProgress.phase;
 
@@ -196,7 +177,6 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
         <div className="status-message">{displayProgress.message}</div>
       )}
 
-      {/* Gemini usage */}
       {displayProgress.aiStats?.usage?.gemini > 0 && (
         <div className="ai-stats-table">
           <div className="ai-stats-row gemini active">

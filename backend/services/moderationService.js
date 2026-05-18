@@ -1,9 +1,3 @@
-/**
- * Moderation Service
- * LLM-powered content moderation for news, events, and photo submissions.
- * Processes pending items via pg-boss queue, auto-approves high-confidence content.
- */
-
 import { moderateContent, moderatePhoto, generateTextWithCustomPrompt } from './geminiService.js';
 import { renderPage } from './renderPage.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
@@ -19,20 +13,13 @@ function sameOrigin(urlA, urlB) {
 const TABLE_MAP = {
   news: 'poi_news',
   event: 'poi_events',
-  photo: 'poi_media' // Updated for multi-image support (Issue #181)
+  photo: 'poi_media'
 };
 
 const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
 
-/**
- * Determine URL reputation for quality filtering.
- * blocklistSet entries are URL prefixes (domain or domain+path), matched as startsWith.
- * trustedSet entries are hostnames only.
- * @param {string} url - URL to check
- * @param {Set<string>} trustedSet - Set of trusted domains (lowercase, hostname only)
- * @param {Set<string>} blocklistSet - Set of blocklisted URL prefixes (lowercase)
- * @returns {'trusted'|'blocklisted'|'unknown'}
- */
+// blocklistSet entries are URL prefixes (domain or domain+path), matched as startsWith.
+// trustedSet entries are hostnames only.
 export function getDomainReputation(url, trustedSet = new Set(), blocklistSet = new Set()) {
   if (!url) return 'unknown';
   try {
@@ -49,20 +36,14 @@ export function getDomainReputation(url, trustedSet = new Set(), blocklistSet = 
   }
 }
 
-/**
- * Validate that a URL is a safe, public http/https URL.
- * Blocks internal IPs, localhost, metadata endpoints, and non-http schemes.
- */
+// SSRF protection: reject internal IPs, localhost, cloud metadata endpoints, and non-http schemes
 function isSafePublicUrl(urlStr) {
   try {
     const parsed = new URL(urlStr);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
     const hostname = parsed.hostname.toLowerCase();
-    // Block localhost and loopback
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
-    // Block cloud metadata endpoints
     if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return false;
-    // Block private IP ranges (10.x, 172.16-31.x, 192.168.x)
     const parts = hostname.split('.');
     if (parts.length === 4 && parts.every(p => /^\d+$/.test(p))) {
       const [a, b] = parts.map(Number);
@@ -77,10 +58,6 @@ function isSafePublicUrl(urlStr) {
   }
 }
 
-/**
- * Extract and validate publication date fields from AI scoring response.
- * Returns { publicationDate } with safe defaults.
- */
 function extractDateFields(scoring) {
   let publicationDate = null;
 
@@ -94,20 +71,9 @@ function extractDateFields(scoring) {
   return { publicationDate };
 }
 
-/**
- * Apply quality filters to AI scoring before auto-approval decision.
- * Multiplicative penalties for domain reputation, URL quality, and date confidence.
- * @param {Object} scoring - AI scoring object with confidence_score, reasoning, issues
- * @param {string} sourceUrl - Source URL to validate
- * @param {Object} dateInfo - { publicationDate, dateConfidence }
- * @param {Set<string>} trustedSet - Set of trusted domains (lowercase)
- * @param {Set<string>} blocklistSet - Set of blocklisted domains/URLs (lowercase)
- * @returns {Object} Modified scoring object
- */
 export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = new Set(), blocklistSet = new Set()) {
   const { publicationDate, dateConfidence } = dateInfo;
 
-  // Filter 1: Domain reputation
   const reputation = getDomainReputation(sourceUrl, trustedSet, blocklistSet);
   if (reputation === 'blocklisted') {
     scoring.confidence_score *= 0.3;
@@ -118,7 +84,6 @@ export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = n
     scoring.confidence_score *= 0.9;
   }
 
-  // Filter 2: URL validation
   if (isGenericUrl(sourceUrl)) {
     scoring.confidence_score *= 0.6;
     scoring.reasoning += ' Source URL is a bare homepage or generic path.';
@@ -126,7 +91,6 @@ export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = n
     scoring.issues.push('generic_url');
   }
 
-  // Filter 3: Date confidence penalty
   if (!publicationDate || dateConfidence === 'unknown') {
     scoring.confidence_score = Math.min(scoring.confidence_score, 0.7);
     scoring.reasoning += ' No publication date found - capping confidence at 0.70.';
@@ -135,9 +99,6 @@ export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = n
   return scoring;
 }
 
-/**
- * Serialize issues array to JSON string for storage.
- */
 function serializeIssues(scoring) {
   const issues = scoring.issues || [];
   return issues.length > 0 ? JSON.stringify(issues) : null;
@@ -182,10 +143,6 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
   return { scoring, foundIssue };
 }
 
-/**
- * Run LLM content relevance voting — 3 parallel yes/no votes.
- * Returns array of { relevant: boolean, reasoning: string }.
- */
 async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
   const typeLabel = contentType === 'event' ? 'event' : 'news article or announcement';
   const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park and the surrounding region including Cleveland Metroparks, Summit Metro Parks, and other nearby parks, trails, and outdoor recreation areas.
@@ -245,12 +202,6 @@ Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
   return results.filter(Boolean);
 }
 
-/**
- * Process a single moderation item (called by pg-boss worker)
- * @param {Pool} pool - Database connection pool
- * @param {string} contentType - 'news', 'event', or 'photo'
- * @param {number} contentId - ID of the content to moderate
- */
 export async function processItem(pool, contentType, contentId, { forceStatus = null, runId = null } = {}) {
   const itemRunId = runId || Math.floor(Date.now() / 1000);
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
@@ -282,8 +233,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     if (!itemQuery.rows.length) return;
     const row = itemQuery.rows[0];
 
-    // Duplicate check (cheap DB query) — strip leading "The" so
-    // "The David Mayfield Parade" matches "David Mayfield Parade"
+    // Strip leading "The" so "The David Mayfield Parade" matches "David Mayfield Parade"
     const titleNorm = `TRIM(LOWER(REGEXP_REPLACE(title, '^[Tt]he\\s+', '')))`;
     const paramNorm = normalizeTitle(row.title);
     const dupWhere = contentType === 'news'
@@ -307,7 +257,6 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       return;
     }
 
-    // No source URL check
     const requiresUrl = contentType === 'news' || row.content_source !== 'human';
     if (requiresUrl && (!row.source_url || !row.source_url.trim())) {
       await pool.query(
@@ -319,7 +268,6 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       return;
     }
 
-    // Excluded POI check
     const excludedSetting = await pool.query(
       "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
     );
@@ -340,7 +288,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       }
     }
 
-    // Per-POI threshold override: applies only when item came from the POI's configured URL
+    // Per-POI threshold only applies when item came from the POI's configured URL
     const poiConfigUrl = contentType === 'news' ? row.news_url : row.events_url;
     const poiThreshold = contentType === 'news' ? row.news_score_threshold : row.events_score_threshold;
     const fromConfiguredUrl = row.source_url && poiConfigUrl && sameOrigin(row.source_url, poiConfigUrl);
@@ -348,10 +296,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     let dateScore = row.date_consensus_score || 0;
     let newScore = dateScore;
-    let newDate = null;        // only set if a rescore actually produces a date
-    let rescoredDate = false;  // track whether we ran a rescore
+    let newDate = null;
+    let rescoredDate = false;
 
-    // --- Step 1: Date scoring (rescore from cached signals or full extraction) ---
     if (dateScore < effectiveThreshold || forceStatus) {
       console.log(`[Moderation] ${contentType} #${contentId}: rescoring (current score=${dateScore}, threshold=${effectiveThreshold})`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rescoring ${contentType} #${contentId} (score=${dateScore})`);
@@ -394,6 +341,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
         if (consensus.date) {
           // Promote date-only to noon Eastern so TIMESTAMPTZ display never shifts the calendar day
+          // when viewed from any US timezone (worst case: AKST is UTC-9)
           if (/^\d{4}-\d{2}-\d{2}$/.test(consensus.date)) {
             const noon = parseDateTime(consensus.date + 'T12:00:00', 'America/New_York');
             newDate = noon ? noon + 'Z' : consensus.date;
@@ -412,7 +360,6 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       }
     }
 
-    // --- Step 2: Content relevance voting (3 LLM votes) ---
     let relevanceVotes = [];
     try {
       relevanceVotes = await runContentRelevanceVotes(pool, {
@@ -430,15 +377,12 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       logError(itemRunId, 'moderation', null, row.title, `Relevance voting failed: ${err.message}`);
     }
 
-    // --- Step 3: Decision ---
     const yesCount = relevanceVotes.filter(v => v.relevant).length;
     const noCount = relevanceVotes.filter(v => !v.relevant).length;
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
     const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
 
-    // Reject news with future publication dates (only applies when we rescored)
     const isFutureDate = contentType === 'news' && rescoredDate && newDate && new Date(newDate) > new Date();
-    // Effective date: rescored date takes priority, fall back to existing publication_date
     const effectiveDate = newDate || row.publication_date;
 
     let resolvedStatus;
@@ -461,8 +405,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
-    // Only update publication_date if a rescore actually produced a new date —
-    // writing back the existing value unchanged can silently corrupt it.
+    // Only write publication_date when rescore produced a new value — writing the existing
+    // value back through this path can silently corrupt a previously-good timestamp
     if (rescoredDate) {
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
@@ -523,9 +467,6 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     { content_type: contentType, content_id: contentId, score: scoring?.confidence_score, decision });
 }
 
-/**
- * Process all unprocessed pending items (sweep job, runs every 15 minutes)
- */
 export async function processPendingItems(pool) {
   const runId = Math.floor(Date.now() / 1000);
   const enabledQuery = await pool.query(
@@ -591,12 +532,8 @@ export async function processPendingItems(pool) {
   return { processed };
 }
 
-/**
- * After publishing a photo row, ensure the POI's has_primary_image flag is true so
- * the tooltip endpoint will be queried. The thumbnail endpoint falls back to gallery
- * photos when no primary exists, so any published image/video makes the POI "have"
- * a tooltip image. Idempotent: only writes when the flag is currently false.
- */
+// Frontend gates the tooltip image request on pois.has_primary_image, so a published
+// photo must flip the flag true or the (now-available) gallery photo will never load.
 async function bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId) {
   if (contentType !== 'photo') return;
   await pool.query(`
@@ -613,9 +550,6 @@ async function bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId) {
   `, [contentId]);
 }
 
-/**
- * Set moderation_status to 'published' for a content item
- */
 export async function approveItem(pool, contentType, contentId, adminUserId) {
   const table = TABLE_MAP[contentType];
   await pool.query(
@@ -688,11 +622,9 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
         if (!edits[field] || edits[field] === '') {
           values.push(null);
         } else if (edits[field].includes('T')) {
-          // datetime-local value — admin entered in Eastern, convert to UTC
           const utc = localToUTC(edits[field], 'America/New_York');
           values.push(utc ? utc + 'Z' : edits[field]);
         } else {
-          // date-only fallback — noon Eastern
           const utc = parseDateTime(edits[field] + 'T12:00:00', 'America/New_York');
           values.push(utc ? utc + 'Z' : edits[field]);
         }
@@ -703,7 +635,6 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
     }
   }
 
-  // When admin sets publication_date, set high consensus score (only for news/events, not photos)
   if (edits.publication_date && contentType !== 'photo') {
     setClauses.push(`date_consensus_score = 6`);
   }
@@ -755,20 +686,19 @@ export async function purgeRejected(pool, contentType) {
   if (contentType) {
     const table = TABLE_MAP[contentType];
     if (!table) throw new Error(`Unknown content type: ${contentType}`);
-    const result = await pool.query(
+    const purgeResult = await pool.query(
       `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
     );
-    logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${result.rowCount} ${contentType} items`, { completed: true, deleted: result.rowCount, type: contentType });
+    logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${purgeResult.rowCount} ${contentType} items`, { completed: true, deleted: purgeResult.rowCount, type: contentType });
     await flushJobLogs();
-    return { deleted: result.rowCount };
+    return { deleted: purgeResult.rowCount };
   }
-  // Purge all three tables
   let total = 0;
   for (const table of Object.values(TABLE_MAP)) {
-    const result = await pool.query(
+    const purgeResult = await pool.query(
       `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
     );
-    total += result.rowCount;
+    total += purgeResult.rowCount;
   }
   logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${total} items (all types)`, { completed: true, deleted: total, type: 'all' });
   await flushJobLogs();
@@ -787,11 +717,6 @@ export async function requeueItem(pool, contentType, contentId) {
 }
 
 
-/**
- * Fix the publication date for a news/event item.
- * Resets the item's score and re-runs it through processItem, which uses the
- * full consensus pipeline (deterministic sources + LLM multi-vote).
- */
 export async function fixDate(pool, contentType, contentId) {
   if (contentType !== 'news' && contentType !== 'event') {
     throw new Error('Fix Date is only available for news and event items');
@@ -811,7 +736,6 @@ export async function fixDate(pool, contentType, contentId) {
   let consensus;
 
   if (item.date_signals) {
-    // Fast path: rescore from cached signals (no Playwright, no LLM calls)
     console.log(`[Moderation] fixDate ${contentType} #${contentId}: rescoring from cached date_signals`);
     const signals = item.date_signals;
     const deterministicSources = {
@@ -822,7 +746,6 @@ export async function fixDate(pool, contentType, contentId) {
     };
     consensus = scoreDateConsensus(deterministicSources, signals.llmVotes || []);
   } else {
-    // Slow path: no cached signals (human-submitted or legacy) — render + LLM
     console.log(`[Moderation] fixDate ${contentType} #${contentId}: no cached signals, running full extraction`);
     let pageContent = null;
     let ogDates = {};
@@ -851,7 +774,6 @@ export async function fixDate(pool, contentType, contentId) {
     });
   }
 
-  // Update the item — promote date-only to noon Eastern so display never shifts
   let newDate = consensus.date || null;
   if (newDate && /^\d{4}-\d{2}-\d{2}$/.test(newDate)) {
     const noon = parseDateTime(newDate + 'T12:00:00', 'America/New_York');
@@ -966,7 +888,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
   const countQuery = `SELECT COUNT(*) FROM (${baseQuery}) AS q ${whereClause}`;
 
   params.push(limit, offset);
-  const countParams = params.slice(0, -2); // count query doesn't need limit/offset
+  const countParams = params.slice(0, -2);
 
   const [queueItems, countRow] = await Promise.all([
     pool.query(wrappedQuery, params),
@@ -1018,7 +940,6 @@ export async function mergeItems(pool, contentType, sourceId, targetId) {
   const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
   const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
 
-  // Verify both items exist
   const [sourceRow, targetRow] = await Promise.all([
     pool.query(`SELECT id, source_url, source_name FROM ${table} WHERE id = $1`, [sourceId]),
     pool.query(`SELECT id, source_url FROM ${table} WHERE id = $1`, [targetId])
@@ -1031,7 +952,6 @@ export async function mergeItems(pool, contentType, sourceId, targetId) {
   const target = targetRow.rows[0];
   let movedUrls = 0;
 
-  // Move source's primary source_url to target's junction table
   if (source.source_url && source.source_url !== target.source_url) {
     const inserted = await pool.query(
       `INSERT INTO ${urlTable} (${fkColumn}, url, source_name)
@@ -1045,7 +965,6 @@ export async function mergeItems(pool, contentType, sourceId, targetId) {
     movedUrls += inserted.rows.length;
   }
 
-  // Move any of source's junction table URLs to target
   const sourceUrls = await pool.query(
     `SELECT url, source_name FROM ${urlTable} WHERE ${fkColumn} = $1`,
     [sourceId]
@@ -1064,7 +983,6 @@ export async function mergeItems(pool, contentType, sourceId, targetId) {
     movedUrls += ins.rows.length;
   }
 
-  // Delete source item (CASCADE will clean up its junction table entries)
   await pool.query(`DELETE FROM ${table} WHERE id = $1`, [sourceId]);
 
   console.log(`[Moderation] Merged ${contentType} #${sourceId} into #${targetId} (${movedUrls} URLs moved)`);
@@ -1080,13 +998,11 @@ export async function getMergeCandidates(pool, contentType, contentId) {
   const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
   const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
 
-  // Get the POI for this item
   const item = await pool.query(`SELECT poi_id FROM ${table} WHERE id = $1`, [contentId]);
   if (item.rows.length === 0) throw new Error(`${contentType} #${contentId} not found`);
   const poiId = item.rows[0].poi_id;
 
-  // Get all other items from the same POI
-  const result = await pool.query(`
+  const candidatesQuery = await pool.query(`
     SELECT t.id, t.title, t.source_url, t.moderation_status, t.collection_date,
            t.publication_date,
            COUNT(u.id)::int AS additional_url_count
@@ -1098,7 +1014,7 @@ export async function getMergeCandidates(pool, contentType, contentId) {
     LIMIT 50
   `, [poiId, contentId]);
 
-  return result.rows;
+  return candidatesQuery.rows;
 }
 
 export async function addItemUrl(pool, contentType, contentId, url, sourceName) {
@@ -1120,16 +1036,14 @@ export async function addItemUrl(pool, contentType, contentId, url, sourceName) 
   const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
   const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
 
-  // Verify item exists
   const item = await pool.query(`SELECT id, source_url FROM ${table} WHERE id = $1`, [contentId]);
   if (item.rows.length === 0) throw new Error(`${contentType} #${contentId} not found`);
 
-  // Don't add if it matches the primary source_url
   if (item.rows[0].source_url === url) {
     return { added: false, reason: 'URL matches primary source_url' };
   }
 
-  const result = await pool.query(
+  const urlInsert = await pool.query(
     `INSERT INTO ${urlTable} (${fkColumn}, url, source_name)
      SELECT $1, $2, $3
      WHERE NOT EXISTS (
@@ -1139,12 +1053,12 @@ export async function addItemUrl(pool, contentType, contentId, url, sourceName) 
     [contentId, url, sourceName || null]
   );
 
-  if (result.rows.length === 0) {
+  if (urlInsert.rows.length === 0) {
     return { added: false, reason: 'URL already exists' };
   }
 
   console.log(`[Moderation] Added URL to ${contentType} #${contentId}: ${url}`);
-  return { added: true, urlId: result.rows[0].id };
+  return { added: true, urlId: urlInsert.rows[0].id };
 }
 
 export async function removeItemUrl(pool, contentType, contentId, urlId) {
@@ -1154,9 +1068,9 @@ export async function removeItemUrl(pool, contentType, contentId, urlId) {
 
   const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
   const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
-  const result = await pool.query(`DELETE FROM ${urlTable} WHERE id = $1 AND ${fkColumn} = $2 RETURNING id`, [urlId, contentId]);
+  const deleteResult = await pool.query(`DELETE FROM ${urlTable} WHERE id = $1 AND ${fkColumn} = $2 RETURNING id`, [urlId, contentId]);
 
-  if (result.rows.length === 0) throw new Error('URL not found');
+  if (deleteResult.rows.length === 0) throw new Error('URL not found');
 
   console.log(`[Moderation] Removed URL #${urlId} from ${contentType} #${contentId}`);
   return { removed: true };

@@ -1,12 +1,3 @@
-/**
- * ROTV Admin MCP Server
- * Provides 31 admin tools for managing ROTV content, moderation queue,
- * jobs, newsletters, and settings via the Model Context Protocol.
- *
- * Transport: Streamable HTTP on a separate port (default 3001)
- * Auth: Bearer token from MCP_ADMIN_TOKEN env var
- */
-
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
@@ -44,18 +35,9 @@ import {
   queueNewsletterJob
 } from './jobScheduler.js';
 
-// Dummy admin user ID for MCP operations (no real user session)
 const MCP_ADMIN_USER_ID = null;
 
-/**
- * Register all 30 admin tools on an McpServer instance.
- * Pure metadata registration — no I/O, safe to call per-request.
- */
 function registerTools(server, pool, boss) {
-
-  // ============================================================
-  // POI Tools (7)
-  // ============================================================
 
   server.tool(
     'poi_list',
@@ -76,8 +58,8 @@ function registerTools(server, pool, boss) {
         query += ` AND $1 = ANY(p.poi_roles)`;
       }
       query += ` ORDER BY p.poi_roles, p.name`;
-      const result = await pool.query(query, params);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      const poiRows = await pool.query(query, params);
+      return { content: [{ type: 'text', text: JSON.stringify(poiRows.rows, null, 2) }] };
     }
   );
 
@@ -86,18 +68,17 @@ function registerTools(server, pool, boss) {
     'Full POI detail: name, type, location, description, era, activities, URLs',
     { id: z.number().describe('POI ID') },
     async ({ id }) => {
-      const result = await pool.query(`
+      const poiDetailRows = await pool.query(`
         SELECT p.*, e.name as era_name, o.name as owner_name
         FROM pois p
         LEFT JOIN eras e ON p.era_id = e.id
         LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
         WHERE p.id = $1
       `, [id]);
-      if (result.rows.length === 0) {
+      if (poiDetailRows.rows.length === 0) {
         return { content: [{ type: 'text', text: 'POI not found' }], isError: true };
       }
-      const row = result.rows[0];
-      // Strip large binary data from response
+      const row = poiDetailRows.rows[0];
       delete row.geometry;
       return { content: [{ type: 'text', text: JSON.stringify(row, null, 2) }] };
     }
@@ -111,7 +92,7 @@ function registerTools(server, pool, boss) {
       limit: z.number().optional().default(20).describe('Max items to return')
     },
     async ({ poi_id, limit }) => {
-      const result = await pool.query(`
+      const newsRows = await pool.query(`
         SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
                n.moderation_status, n.confidence_score, n.content_source,
                n.publication_date, n.date_consensus_score, n.collection_date,
@@ -123,7 +104,7 @@ function registerTools(server, pool, boss) {
         ORDER BY n.collection_date DESC
         LIMIT $2
       `, [poi_id, limit]);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(newsRows.rows, null, 2) }] };
     }
   );
 
@@ -135,7 +116,7 @@ function registerTools(server, pool, boss) {
       limit: z.number().optional().default(20).describe('Max items to return')
     },
     async ({ poi_id, limit }) => {
-      const result = await pool.query(`
+      const eventRows = await pool.query(`
         SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
                e.location_details, e.source_url, e.moderation_status, e.confidence_score, e.content_source,
                e.publication_date, e.date_consensus_score, e.collection_date,
@@ -147,7 +128,7 @@ function registerTools(server, pool, boss) {
         ORDER BY e.start_date DESC
         LIMIT $2
       `, [poi_id, limit]);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(eventRows.rows, null, 2) }] };
     }
   );
 
@@ -169,7 +150,7 @@ function registerTools(server, pool, boss) {
     'Search POIs by name substring',
     { query: z.string().describe('Name substring to search for') },
     async ({ query }) => {
-      const result = await pool.query(`
+      const poiSearchRows = await pool.query(`
         SELECT id, name, poi_roles, brief_description
         FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
@@ -177,7 +158,7 @@ function registerTools(server, pool, boss) {
         ORDER BY name
         LIMIT 50
       `, [`%${query.toLowerCase()}%`]);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(poiSearchRows.rows, null, 2) }] };
     }
   );
 
@@ -204,18 +185,14 @@ function registerTools(server, pool, boss) {
       const fields = Object.keys(args).filter(key => args[key] !== undefined);
       const values = fields.map(key => args[key]);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-      const result = await pool.query(
+      const insertedPoi = await pool.query(
         `INSERT INTO pois (${fields.join(', ')}) VALUES (${placeholders}) RETURNING id, name, poi_roles`,
         values
       );
-      const row = result.rows[0];
+      const row = insertedPoi.rows[0];
       return { content: [{ type: 'text', text: `Created POI #${row.id}: ${row.name} (${(row.poi_roles || []).join(', ')})` }] };
     }
   );
-
-  // ============================================================
-  // Queue & Moderation Tools (6)
-  // ============================================================
 
   server.tool(
     'queue_list',
@@ -228,14 +205,14 @@ function registerTools(server, pool, boss) {
       limit: z.number().optional().default(20).describe('Items per page')
     },
     async ({ status, content_type, content_source, page, limit }) => {
-      const result = await getQueue(pool, {
+      const queuePage = await getQueue(pool, {
         status,
         contentType: content_type || null,
         contentSource: content_source || null,
         page,
         limit
       });
-      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(queuePage, null, 2) }] };
     }
   );
 
@@ -330,21 +307,17 @@ function registerTools(server, pool, boss) {
       id: z.number().describe('Content item ID')
     },
     async ({ content_type, id }) => {
-      const result = await fixDate(pool, content_type, id);
+      const fixDateOutcome = await fixDate(pool, content_type, id);
       let msg = `Fix date for ${content_type} #${id}: `;
-      if (result.date_updated) {
-        msg += `Date set to ${result.publication_date} (${result.date_consensus_score}).`;
+      if (fixDateOutcome.date_updated) {
+        msg += `Date set to ${fixDateOutcome.publication_date} (${fixDateOutcome.date_consensus_score}).`;
       } else {
         msg += `Could not determine date.`;
       }
-      if (result.reasoning) msg += ` ${result.reasoning}`;
+      if (fixDateOutcome.reasoning) msg += ` ${fixDateOutcome.reasoning}`;
       return { content: [{ type: 'text', text: msg }] };
     }
   );
-
-  // ============================================================
-  // Content Management Tools (4)
-  // ============================================================
 
   server.tool(
     'content_create',
@@ -406,14 +379,10 @@ function registerTools(server, pool, boss) {
       })).describe('Array of {type, id} objects to approve')
     },
     async ({ items }) => {
-      const result = await bulkApprove(pool, items, MCP_ADMIN_USER_ID);
-      return { content: [{ type: 'text', text: `Approved ${result.approved} items` }] };
+      const bulkOutcome = await bulkApprove(pool, items, MCP_ADMIN_USER_ID);
+      return { content: [{ type: 'text', text: `Approved ${bulkOutcome.approved} items` }] };
     }
   );
-
-  // ============================================================
-  // Jobs & Logs Tools (4)
-  // ============================================================
 
   server.tool(
     'job_list',
@@ -446,7 +415,6 @@ function registerTools(server, pool, boss) {
         `, [limit]);
         results.trail_status_jobs = trailJobs.rows;
       }
-      // job_logs-based types: moderation, backup, database_backup, research, cleanup, newsletter
       const logTypes = ['moderation', 'backup', 'database_backup', 'research', 'cleanup', 'newsletter'];
       const matchingLogTypes = type ? logTypes.filter(t => t === type) : logTypes;
       if (matchingLogTypes.length > 0) {
@@ -537,33 +505,29 @@ function registerTools(server, pool, boss) {
       if (level) { conditions.push(`level = $${idx++}`); params.push(level); }
 
       const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-      const result = await pool.query(`
+      const logRows = await pool.query(`
         SELECT id, job_id, job_type, poi_id, poi_name, level, message, details, created_at
         FROM job_logs ${where}
         ORDER BY created_at DESC
         LIMIT $${idx}
       `, [...params, limit]);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(logRows.rows, null, 2) }] };
     }
   );
-
-  // ============================================================
-  // Newsletter Tools (3)
-  // ============================================================
 
   server.tool(
     'newsletter_list',
     'Recent newsletter emails with processing status',
     { limit: z.number().optional().default(20).describe('Max emails to return') },
     async ({ limit }) => {
-      const result = await pool.query(`
+      const newsletterRows = await pool.query(`
         SELECT id, from_address, subject, received_at, processed, processed_at,
                error_message, news_extracted, events_extracted
         FROM newsletter_emails
         ORDER BY received_at DESC
         LIMIT $1
       `, [limit]);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(newsletterRows.rows, null, 2) }] };
     }
   );
 
@@ -572,15 +536,15 @@ function registerTools(server, pool, boss) {
     'Full newsletter email content and extraction results',
     { id: z.number().describe('Newsletter email ID') },
     async ({ id }) => {
-      const result = await pool.query(`
+      const newsletterDetailRows = await pool.query(`
         SELECT *
         FROM newsletter_emails
         WHERE id = $1
       `, [id]);
-      if (result.rows.length === 0) {
+      if (newsletterDetailRows.rows.length === 0) {
         return { content: [{ type: 'text', text: 'Newsletter email not found' }], isError: true };
       }
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows[0], null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(newsletterDetailRows.rows[0], null, 2) }] };
     }
   );
 
@@ -589,7 +553,6 @@ function registerTools(server, pool, boss) {
     'Re-queue a newsletter email for reprocessing',
     { id: z.number().describe('Newsletter email ID') },
     async ({ id }) => {
-      // Reset processed flag so it will be picked up again
       await pool.query(
         `UPDATE newsletter_emails SET processed = FALSE, error_message = NULL WHERE id = $1`,
         [id]
@@ -599,21 +562,17 @@ function registerTools(server, pool, boss) {
     }
   );
 
-  // ============================================================
-  // Admin Settings Tools (2)
-  // ============================================================
-
   server.tool(
     'settings_list',
     'View all admin settings (moderation thresholds, toggles)',
     {},
     async () => {
-      const result = await pool.query(`
+      const settingsRows = await pool.query(`
         SELECT key, value, updated_at
         FROM admin_settings
         ORDER BY key
       `);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(settingsRows.rows, null, 2) }] };
     }
   );
 
@@ -625,20 +584,16 @@ function registerTools(server, pool, boss) {
       value: z.string().describe('New value')
     },
     async ({ key, value }) => {
-      const result = await pool.query(
+      const updateOutcome = await pool.query(
         `UPDATE admin_settings SET value = $1, updated_at = CURRENT_TIMESTAMP WHERE key = $2 RETURNING key`,
         [value, key]
       );
-      if (result.rowCount === 0) {
+      if (updateOutcome.rowCount === 0) {
         return { content: [{ type: 'text', text: `Setting '${key}' not found` }], isError: true };
       }
       return { content: [{ type: 'text', text: `Updated setting '${key}' = '${value}'` }] };
     }
   );
-
-  // ============================================================
-  // POI Configuration Tools (2)
-  // ============================================================
 
   server.tool(
     'poi_update_urls',
@@ -673,7 +628,7 @@ function registerTools(server, pool, boss) {
     'View virtual-to-physical POI associations',
     { id: z.number().describe('POI ID (virtual or physical)') },
     async ({ id }) => {
-      const result = await pool.query(`
+      const associationRows = await pool.query(`
         SELECT a.id, a.virtual_poi_id, a.physical_poi_id, a.association_type,
                vp.name as virtual_poi_name, pp.name as physical_poi_name,
                pp.poi_roles as physical_poi_roles
@@ -685,13 +640,9 @@ function registerTools(server, pool, boss) {
           AND (pp.deleted IS NULL OR pp.deleted = FALSE)
         ORDER BY a.created_at DESC
       `, [id]);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows, null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(associationRows.rows, null, 2) }] };
     }
   );
-
-  // ============================================================
-  // Content Stats Tools (2)
-  // ============================================================
 
   server.tool(
     'stats_content',
@@ -749,7 +700,7 @@ function registerTools(server, pool, boss) {
     'Newsletter ingestion summary stats',
     {},
     async () => {
-      const result = await pool.query(`
+      const newsletterStats = await pool.query(`
         SELECT
           COUNT(*) as total_emails,
           COUNT(*) FILTER (WHERE processed = TRUE) as processed,
@@ -761,13 +712,9 @@ function registerTools(server, pool, boss) {
           MAX(received_at) as latest_email
         FROM newsletter_emails
       `);
-      return { content: [{ type: 'text', text: JSON.stringify(result.rows[0], null, 2) }] };
+      return { content: [{ type: 'text', text: JSON.stringify(newsletterStats.rows[0], null, 2) }] };
     }
   );
-
-  // ============================================================
-  // Admin Actions Tool (1)
-  // ============================================================
 
   server.tool(
     'trigger_collection',
@@ -778,7 +725,6 @@ function registerTools(server, pool, boss) {
     },
     async ({ type, poi_ids }) => {
       if (type === 'news') {
-        // If no POI IDs given, get all active POIs (same as the /news/collect route)
         let targetPoiIds = poi_ids;
         if (!targetPoiIds || targetPoiIds.length === 0) {
           const poisResult = await pool.query(`
@@ -795,7 +741,6 @@ function registerTools(server, pool, boss) {
           targetPoiIds = poisResult.rows.map(r => r.id);
         }
 
-        // Create job record with poi_ids stored (required by processNewsCollectionJob)
         const jobResult = await pool.query(
           `INSERT INTO news_job_status (job_type, status, started_at, created_at, total_pois, poi_ids, processed_poi_ids)
            VALUES ('batch_collection', 'queued', NOW(), NOW(), $1, $2, $3) RETURNING id`,
@@ -806,29 +751,19 @@ function registerTools(server, pool, boss) {
         await submitBatchNewsJob({ jobId, poiIds: targetPoiIds });
         return { content: [{ type: 'text', text: `News collection job #${jobId} started for ${targetPoiIds.length} POIs` }] };
       } else {
-        const result = await runTrailStatusCollection(pool, boss, {
+        const trailJob = await runTrailStatusCollection(pool, boss, {
           poiIds: poi_ids || null,
           jobType: 'mcp_triggered'
         });
-        return { content: [{ type: 'text', text: `Trail status collection started for ${result.totalTrails} trails (job #${result.jobId})` }] };
+        return { content: [{ type: 'text', text: `Trail status collection started for ${trailJob.totalTrails} trails (job #${trailJob.jobId})` }] };
       }
     }
   );
 
 }
 
-/**
- * Start the MCP admin server.
- * Creates a fresh McpServer + transport per HTTP request (stateless mode).
- * Tool registration is pure metadata — no I/O overhead.
- *
- * @param {import('pg').Pool} pool - Database connection pool
- * @param {object} boss - pg-boss instance
- * @param {number} port - Port to listen on (default 3001)
- */
 export function startMcpServer(pool, boss, port = 3001) {
   const httpServer = http.createServer(async (req, res) => {
-    // CORS headers for MCP clients
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
@@ -840,7 +775,6 @@ export function startMcpServer(pool, boss, port = 3001) {
       return;
     }
 
-    // Bearer token auth
     const authHeader = req.headers.authorization;
     const expectedToken = process.env.MCP_ADMIN_TOKEN;
     if (!expectedToken) {
@@ -858,21 +792,19 @@ export function startMcpServer(pool, boss, port = 3001) {
       return;
     }
 
-    // Only handle /mcp path
     if (req.url !== '/mcp') {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
       return;
     }
 
-    // Create fresh server + transport per request (stateless mode).
-    // The MCP SDK's Server.connect() takes exclusive ownership of a transport,
-    // so each request needs its own pair.
+    // MCP SDK's Server.connect() takes exclusive ownership of a transport,
+    // so each stateless HTTP request needs its own server+transport pair
     const server = new McpServer({ name: 'rotv-admin', version: '1.0.0' });
     registerTools(server, pool, boss);
 
     const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined  // stateless — no session management
+      sessionIdGenerator: undefined
     });
 
     await server.connect(transport);

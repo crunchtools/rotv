@@ -2,27 +2,6 @@ import React, { useState, useEffect } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
 import { FIELD_CONFIGS } from '../hooks/useModeration';
 
-/**
- * Unified modal for creating and editing News/Event items.
- * Used by ParkNews, ParkEvents, and ModerationExtras.
- *
- * Props:
- *   mode          - 'create' or 'edit'
- *   contentType   - 'news' or 'event'
- *   fields        - current field values (edit: from startEditing, create: empty)
- *   setFields     - setter for field values
- *   item          - the item being edited (edit mode only, for AI reasoning/status display)
- *   pois          - POI list for PoiSearchSelect
- *   itemUrls      - additional URLs array (edit mode)
- *   newUrlInput   - URL input state
- *   setNewUrlInput - URL input setter
- *   addingUrl     - whether URL is being added
- *   onAddUrl      - handler to add URL
- *   onRemoveUrl   - handler to remove URL
- *   onSave        - save handler (edit mode)
- *   onCreate      - create handler (create mode), receives field values
- *   onClose       - close the modal
- */
 function ContentFormModal({
   mode = 'create',
   contentType = 'news',
@@ -46,11 +25,9 @@ function ContentFormModal({
   const [error, setError] = useState(null);
   const [localPois, setLocalPois] = useState(pois);
 
-  // For create mode, manage fields locally
   const activeFields = isEdit ? fields : localFields;
   const activeSetFields = isEdit ? setFields : setLocalFields;
 
-  // Fetch POIs if not provided
   useEffect(() => {
     if (pois.length > 0) {
       setLocalPois(pois);
@@ -68,7 +45,6 @@ function ContentFormModal({
     e.preventDefault();
     setError(null);
 
-    // Validate required fields
     for (const fc of fieldConfigs) {
       if (fc.required && !activeFields[fc.key]?.toString().trim()) {
         setError(`${fc.label} is required`);
@@ -79,7 +55,6 @@ function ContentFormModal({
     if (isEdit) {
       onSave();
     } else {
-      // Create mode
       if (!activeFields.poi_id) {
         setError('POI is required');
         return;
@@ -157,7 +132,6 @@ function ContentFormModal({
         <form onSubmit={handleSubmit} className="new-content-form">
           {error && <div className="form-error">{error}</div>}
 
-          {/* AI reasoning and status (edit mode only) */}
           {isEdit && item && (item.ai_reasoning || item.moderation_status) && (
             <div className="form-ai-info">
               {item.ai_reasoning && (
@@ -174,7 +148,6 @@ function ContentFormModal({
             </div>
           )}
 
-          {/* Fields driven by FIELD_CONFIGS */}
           {fieldConfigs.map(fc => (
             <div className="form-section" key={fc.key}>
               <label>{fc.label}{fc.required ? ' *' : ''}</label>
@@ -182,7 +155,6 @@ function ContentFormModal({
             </div>
           ))}
 
-          {/* Additional URLs management (edit mode only) */}
           {isEdit && contentType !== 'photo' && (
             <div className="form-section">
               <label>Additional URLs</label>
