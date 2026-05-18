@@ -941,15 +941,27 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     const { id } = req.params;
     const size = req.query.size;
 
-    // Fix: Query poi_media first; fall back to image server lookup (Gatehouse finding)
+    // Pick the tooltip image: newest published primary, else oldest published gallery photo.
+    // Single roundtrip via UNION ALL avoids the extra query on the gallery-fallback path.
     const primaryMediaQuery = await pool.query(`
-      SELECT image_server_asset_id
-      FROM poi_media
-      WHERE poi_id = $1
-        AND role = 'primary'
-        AND media_type IN ('image', 'video')
-        AND moderation_status IN ('published', 'auto_approved')
-      ORDER BY created_at DESC
+      (SELECT image_server_asset_id, 1 AS priority
+       FROM poi_media
+       WHERE poi_id = $1
+         AND role = 'primary'
+         AND media_type IN ('image', 'video')
+         AND moderation_status IN ('published', 'auto_approved')
+       ORDER BY created_at DESC
+       LIMIT 1)
+      UNION ALL
+      (SELECT image_server_asset_id, 2 AS priority
+       FROM poi_media
+       WHERE poi_id = $1
+         AND role = 'gallery'
+         AND media_type IN ('image', 'video')
+         AND moderation_status IN ('published', 'auto_approved')
+       ORDER BY created_at ASC
+       LIMIT 1)
+      ORDER BY priority
       LIMIT 1
     `, [id]);
 
