@@ -1020,7 +1020,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     const size = req.query.size; // small, medium, large — passed through to image server
 
     // Fix: Query poi_media table for primary image (Gatehouse finding)
-    const result = await pool.query(`
+    let result = await pool.query(`
       SELECT image_server_asset_id
       FROM poi_media
       WHERE poi_id = $1
@@ -1030,6 +1030,22 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
       ORDER BY created_at DESC
       LIMIT 1
     `, [id]);
+
+    // Fix: fall back to oldest published gallery photo when no primary exists.
+    // Without this, user-uploaded gallery photos can never become tooltip images
+    // even when the POI's has_primary_image flag is true.
+    if (result.rows.length === 0) {
+      result = await pool.query(`
+        SELECT image_server_asset_id
+        FROM poi_media
+        WHERE poi_id = $1
+          AND role = 'gallery'
+          AND media_type IN ('image', 'video')
+          AND moderation_status IN ('published', 'auto_approved')
+        ORDER BY created_at ASC
+        LIMIT 1
+      `, [id]);
+    }
 
     let assetId;
     if (result.rows.length > 0) {
