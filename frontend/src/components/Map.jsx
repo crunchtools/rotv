@@ -38,11 +38,42 @@ const DEFAULT_ZOOM = 11;
 
 const TOOLTIP_HOVER_DELAY = 250; // ms
 
+function LegendSection({ id, title, count, isOpen, onToggle, showActions, onShowAll, onHideAll, children }) {
+  const bodyId = `legend-section-${id}`;
+  return (
+    <div className="legend-section">
+      <div className="legend-section-header">
+        <button
+          type="button"
+          className="legend-section-toggle"
+          aria-expanded={isOpen}
+          aria-controls={bodyId}
+          onClick={onToggle}
+        >
+          <span className={`legend-section-chevron ${isOpen ? 'open' : ''}`} aria-hidden="true">&#9654;</span>
+          <span className="legend-section-title">{title}</span>
+          <span className="legend-section-count">({count})</span>
+        </button>
+        {showActions && isOpen && (
+          <div className="legend-section-actions">
+            <button type="button" onClick={onShowAll} title={`Show all ${title}`}>All</button>
+            <button type="button" onClick={onHideAll} title={`Hide all ${title}`}>None</button>
+          </div>
+        )}
+      </div>
+      <div id={bodyId} className="legend-section-body" hidden={!isOpen}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
 function Legend({
   showTrails, onToggleTrails,
   showRivers, onToggleRivers,
-  visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries,
-  boundaries, // Array of boundary objects with id, name, boundary_color
+  visibleBoundaries, onToggleBoundary,
+  onShowBoundaries, onHideBoundaries,
+  parkBoundaries = [], municipalBoundaries = [],
   visibleTypes, onToggleType, onShowAll, onHideAll,
   searchQuery, onSearchChange,
   isExpanded, _onClose,
@@ -92,6 +123,24 @@ function Legend({
     return [...poiTypes, ...layerIcons].sort((a, b) => a.label.localeCompare(b.label));
   }, [iconConfig, showTrails, showRivers, onToggleTrails, onToggleRivers]);
 
+  const [openSection, setOpenSection] = useState('poi');
+  const toggleSection = (key) => setOpenSection(prev => (prev === key ? null : key));
+
+  const renderBoundaryChip = (boundary) => (
+    <button
+      key={boundary.id}
+      className={`boundary-chip ${visibleBoundaries.has(boundary.id) ? 'active' : 'inactive'}`}
+      onClick={() => onToggleBoundary(boundary.id)}
+      title={boundary.name}
+    >
+      <span
+        className="boundary-chip-color"
+        style={{ backgroundColor: boundary.boundary_color || '#228B22' }}
+      />
+      <span className="boundary-chip-name">{boundary.name}</span>
+    </button>
+  );
+
   return (
     <div className={`legend ${isExpanded ? 'legend-expanded' : ''} ${editMode ? 'legend-edit-mode' : ''}`}>
       <div className="legend-content">
@@ -105,79 +154,83 @@ function Legend({
           />
         </div>
 
-        <div className="legend-divider"></div>
-
-        <div className="legend-header-row">
-          <h4>Points of Interest</h4>
-          <div className="legend-filter-btns">
-            <button onClick={onShowAll} title="Show All POIs">All</button>
-            <button onClick={onHideAll} title="Hide All POIs">None</button>
+        <LegendSection
+          id="poi"
+          title="Points of Interest"
+          count={iconTypes.length}
+          isOpen={openSection === 'poi'}
+          onToggle={() => toggleSection('poi')}
+          showActions
+          onShowAll={onShowAll}
+          onHideAll={onHideAll}
+        >
+          <div className="legend-icons" role="group" aria-label="Map layer filters">
+            {iconTypes.map(type => {
+              if (type.type === 'layer') {
+                return (
+                  <button
+                    key={type.id}
+                    className={`legend-icon-item ${type.isActive ? 'active' : 'inactive'}`}
+                    onClick={type.onToggle}
+                    aria-pressed={type.isActive}
+                    type="button"
+                  >
+                    <img src={`/icons/layers/${type.id}.svg`} alt="" aria-hidden="true" />
+                    <span>{type.label}</span>
+                  </button>
+                );
+              } else {
+                const isActive = visibleTypes.has(type.id);
+                return (
+                  <button
+                    key={type.id}
+                    className={`legend-icon-item ${isActive ? 'active' : 'inactive'}`}
+                    onClick={() => onToggleType(type.id)}
+                    aria-pressed={isActive}
+                    type="button"
+                  >
+                    {type.svg_content ? (
+                      <div className="legend-icon-svg" aria-hidden="true" dangerouslySetInnerHTML={{ __html: type.svg_content }} />
+                    ) : (
+                      <img src={type.iconUrl || `/icons/${type.svg_filename}`} alt="" aria-hidden="true" />
+                    )}
+                    <span>{type.label}</span>
+                  </button>
+                );
+              }
+            })}
           </div>
-        </div>
+        </LegendSection>
 
-        <div className="legend-icons" role="group" aria-label="Map layer filters">
-          {iconTypes.map(type => {
-            if (type.type === 'layer') {
-              return (
-                <button
-                  key={type.id}
-                  className={`legend-icon-item ${type.isActive ? 'active' : 'inactive'}`}
-                  onClick={type.onToggle}
-                  aria-pressed={type.isActive}
-                  type="button"
-                >
-                  <img src={`/icons/layers/${type.id}.svg`} alt="" aria-hidden="true" />
-                  <span>{type.label}</span>
-                </button>
-              );
-            } else {
-              const isActive = visibleTypes.has(type.id);
-              return (
-                <button
-                  key={type.id}
-                  className={`legend-icon-item ${isActive ? 'active' : 'inactive'}`}
-                  onClick={() => onToggleType(type.id)}
-                  aria-pressed={isActive}
-                  type="button"
-                >
-                  {type.svg_content ? (
-                    <div className="legend-icon-svg" aria-hidden="true" dangerouslySetInnerHTML={{ __html: type.svg_content }} />
-                  ) : (
-                    <img src={type.iconUrl || `/icons/${type.svg_filename}`} alt="" aria-hidden="true" />
-                  )}
-                  <span>{type.label}</span>
-                </button>
-              );
-            }
-          })}
-        </div>
+        <LegendSection
+          id="parks"
+          title="Parks"
+          count={parkBoundaries.length}
+          isOpen={openSection === 'parks'}
+          onToggle={() => toggleSection('parks')}
+          showActions={parkBoundaries.length > 0}
+          onShowAll={() => onShowBoundaries(parkBoundaries.map(b => b.id))}
+          onHideAll={() => onHideBoundaries(parkBoundaries.map(b => b.id))}
+        >
+          <div className="boundary-chips">
+            {parkBoundaries.map(renderBoundaryChip)}
+          </div>
+        </LegendSection>
 
-        <div className="legend-divider"></div>
-        <div className="boundary-chips-header">
-          <h4>Boundaries & Overlays</h4>
-          {boundaries && boundaries.length > 0 && (
-            <div className="boundary-chips-actions">
-              <button onClick={onShowAllBoundaries} title="Show All">All</button>
-              <button onClick={onHideAllBoundaries} title="Hide All">None</button>
-            </div>
-          )}
-        </div>
-        <div className="boundary-chips">
-          {boundaries && boundaries.map(boundary => (
-            <button
-              key={boundary.id}
-              className={`boundary-chip ${visibleBoundaries.has(boundary.id) ? 'active' : 'inactive'}`}
-              onClick={() => onToggleBoundary(boundary.id)}
-              title={boundary.name}
-            >
-              <span
-                className="boundary-chip-color"
-                style={{ backgroundColor: boundary.boundary_color || '#228B22' }}
-              />
-              <span className="boundary-chip-name">{boundary.name}</span>
-            </button>
-          ))}
-        </div>
+        <LegendSection
+          id="municipal"
+          title="Municipal"
+          count={municipalBoundaries.length}
+          isOpen={openSection === 'municipal'}
+          onToggle={() => toggleSection('municipal')}
+          showActions={municipalBoundaries.length > 0}
+          onShowAll={() => onShowBoundaries(municipalBoundaries.map(b => b.id))}
+          onHideAll={() => onHideBoundaries(municipalBoundaries.map(b => b.id))}
+        >
+          <div className="boundary-chips">
+            {municipalBoundaries.map(renderBoundaryChip)}
+          </div>
+        </LegendSection>
 
       </div>
     </div>
@@ -877,7 +930,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowAllBoundaries, onHideAllBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
+function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [useSatellite, setUseSatellite] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState(null); // Just for UI display
@@ -1463,9 +1516,10 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
         onToggleRivers={onToggleRivers}
         visibleBoundaries={visibleBoundaries}
         onToggleBoundary={onToggleBoundary}
-        onShowAllBoundaries={onShowAllBoundaries}
-        onHideAllBoundaries={onHideAllBoundaries}
-        boundaries={linearFeatures.filter(f => f.poi_roles?.includes('boundary') && !['county', 'state'].includes(f.boundary_type))}
+        onShowBoundaries={onShowBoundaries}
+        onHideBoundaries={onHideBoundaries}
+        parkBoundaries={linearFeatures.filter(f => f.poi_roles?.includes('boundary') && f.boundary_type === 'park')}
+        municipalBoundaries={linearFeatures.filter(f => f.poi_roles?.includes('boundary') && ['municipal','city','township','village','county','state'].includes(f.boundary_type))}
         visibleTypes={visibleTypes}
         onToggleType={handleToggleType}
         onShowAll={handleShowAll}
