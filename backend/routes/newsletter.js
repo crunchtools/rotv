@@ -2,6 +2,7 @@ import express from 'express';
 import { isAdmin } from '../middleware/auth.js';
 import { addSubscriber, getSubscriberCount, testApiKey } from '../services/buttondownClient.js';
 import { triggerDigestManually } from '../services/jobScheduler.js';
+import { sendDigestPreviewTo } from '../services/newsletterDigestService.js';
 
 const router = express.Router();
 
@@ -91,6 +92,21 @@ export function createNewsletterRouter(pool) {
     } catch (error) {
       console.error('Newsletter trigger error:', error);
       res.status(500).json({ error: 'Failed to queue digest' });
+    }
+  });
+
+  router.post('/send-preview-test', isAdmin, async (req, res) => {
+    const { email } = req.body;
+    if (!email || !email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+      return res.status(400).json({ error: 'Invalid email address' });
+    }
+    try {
+      const result = await sendDigestPreviewTo(pool, email);
+      res.json(result);
+    } catch (error) {
+      console.error('Newsletter preview send error:', error);
+      const detail = error.response?.data?.detail || error.message;
+      res.status(500).json({ error: detail || 'Failed to send preview' });
     }
   });
 

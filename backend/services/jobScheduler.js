@@ -15,6 +15,7 @@ const JOB_NAMES = {
   CONTENT_MODERATION_SWEEP: 'content-moderation-sweep',
   NEWSLETTER_PROCESS: 'newsletter-process',
   NEWSLETTER_DIGEST: 'newsletter-digest',
+  NEWSLETTER_PREVIEW: 'newsletter-preview',
   IMAGE_BACKUP: 'image-backup',
   DATABASE_BACKUP: 'database-backup'
 };
@@ -469,6 +470,43 @@ export async function scheduleDigest(cronExpression = '0 8 * * 5') {
   });
 
   console.log(`Newsletter digest scheduled with cron: ${cronExpression}`);
+}
+
+export async function registerPreviewHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.NEWSLETTER_PREVIEW);
+    console.log(`Queue '${JOB_NAMES.NEWSLETTER_PREVIEW}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.NEWSLETTER_PREVIEW}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.NEWSLETTER_PREVIEW, async (jobs) => {
+    const jobList = Array.isArray(jobs) ? jobs : [jobs];
+    for (const job of jobList) {
+      console.log('Starting newsletter preview job:', job.id);
+      try {
+        await handler(job.id, job.data);
+        console.log('Newsletter preview sent successfully:', job.id);
+      } catch (error) {
+        console.error('Newsletter preview job failed:', error);
+        throw error;
+      }
+    }
+  });
+}
+
+export async function schedulePreview(cronExpression = '0 8 * * 4') {
+  const scheduler = getJobScheduler();
+
+  await scheduler.schedule(JOB_NAMES.NEWSLETTER_PREVIEW, cronExpression, {}, {
+    tz: 'America/New_York'
+  });
+
+  console.log(`Newsletter preview scheduled with cron: ${cronExpression}`);
 }
 
 export async function triggerDigestManually() {

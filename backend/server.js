@@ -34,6 +34,8 @@ import {
   registerNewsletterHandler,
   registerDigestHandler,
   scheduleDigest,
+  registerPreviewHandler,
+  schedulePreview,
   triggerDigestManually,
   registerImageBackupHandler,
   scheduleImageBackup,
@@ -56,7 +58,7 @@ import {
 } from './services/trailStatusService.js';
 import imageServerClient from './services/imageServerClient.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
-import { sendWeeklyDigest } from './services/newsletterDigestService.js';
+import { sendWeeklyDigest, sendDigestPreviewTo } from './services/newsletterDigestService.js';
 import { startMcpServer } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 
@@ -2699,6 +2701,21 @@ async function start() {
     });
 
     await scheduleDigest('0 8 * * 5');
+
+    await registerPreviewHandler(async (_pgBossJobId, _payload) => {
+      const { rows } = await pool.query(
+        "SELECT value FROM admin_settings WHERE key = 'newsletter_preview_email'"
+      );
+      const email = rows[0]?.value?.trim();
+      if (!email) {
+        console.log('Newsletter preview skipped — newsletter_preview_email setting empty');
+        return;
+      }
+      const result = await sendDigestPreviewTo(pool, email);
+      console.log('Newsletter preview result:', JSON.stringify(result));
+    });
+
+    await schedulePreview('0 8 * * 4');
 
     const getAdminDriveService = async () => {
       const { createDriveServiceWithRefresh } = await import('./services/driveImageService.js');
