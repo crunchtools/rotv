@@ -1,9 +1,5 @@
 import { sendEmail, sendDraftToRecipients } from './buttondownClient.js';
 
-// Return the upcoming Friday in the target TZ as an ISO timestamp.
-// If today is Friday, returns today. Otherwise the next Friday after today.
-// Used so admin preview sends always reflect the same query bounds the
-// production cron will hit on Friday morning.
 export function upcomingFridayISO(tz = 'America/New_York') {
   const now = new Date();
   const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now);
@@ -377,9 +373,6 @@ function escapeHtml(text) {
     .replace(/'/g, '&#039;');
 }
 
-// Generate the digest as it will appear for the upcoming Friday and send it
-// via Buttondown's send-draft endpoint to a single recipient (admin preview),
-// instead of scheduling to all subscribers like sendWeeklyDigest.
 export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York') {
   const asOf = upcomingFridayISO(tz);
   const html = await generateDigest(pool, tz, asOf);

@@ -101,8 +101,8 @@ export function createNewsletterRouter(pool) {
       return res.status(400).json({ error: 'Invalid email address' });
     }
     try {
-      const result = await sendDigestPreviewTo(pool, email);
-      res.json(result);
+      const previewSend = await sendDigestPreviewTo(pool, email);
+      res.json(previewSend);
     } catch (error) {
       console.error('Newsletter preview send error:', error);
       const detail = error.response?.data?.detail || error.message;

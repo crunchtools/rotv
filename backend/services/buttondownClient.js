@@ -204,9 +204,6 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
   });
 }
 
-// Create a draft and immediately fan it out to a small recipient list via
-// Buttondown's send-draft endpoint. Used for admin preview sends — does NOT
-// schedule the draft to subscribers like sendEmail() does.
 export async function sendDraftToRecipients(subject, htmlBody, recipients, pool = null) {
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);

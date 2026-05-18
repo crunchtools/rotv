@@ -2711,8 +2711,8 @@ async function start() {
         console.log('Newsletter preview skipped — newsletter_preview_email setting empty');
         return;
       }
-      const result = await sendDigestPreviewTo(pool, email);
-      console.log('Newsletter preview result:', JSON.stringify(result));
+      const previewSend = await sendDigestPreviewTo(pool, email);
+      console.log('Newsletter preview result:', JSON.stringify(previewSend));
     });
 
     await schedulePreview('0 8 * * 4');
