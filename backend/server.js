@@ -1019,33 +1019,32 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     const { id } = req.params;
     const size = req.query.size; // small, medium, large — passed through to image server
 
-    // Fix: Query poi_media table for primary image (Gatehouse finding)
-    let result = await pool.query(`
-      SELECT image_server_asset_id
-      FROM poi_media
-      WHERE poi_id = $1
-        AND role = 'primary'
-        AND media_type IN ('image', 'video')
-        AND moderation_status IN ('published', 'auto_approved')
-      ORDER BY created_at DESC
+    // Fix: Query poi_media for primary image; fall back to oldest published gallery photo
+    // when no primary exists (so user-uploaded gallery photos surface as tooltip images).
+    // Single roundtrip via UNION ALL: priority=1 is primary (newest wins), priority=2 is
+    // gallery (oldest wins so the tooltip image doesn't churn on each new approval).
+    // (Gatehouse finding: collapsed prior two-query fallback into one. Performance Check.)
+    const result = await pool.query(`
+      (SELECT image_server_asset_id, 1 AS priority
+       FROM poi_media
+       WHERE poi_id = $1
+         AND role = 'primary'
+         AND media_type IN ('image', 'video')
+         AND moderation_status IN ('published', 'auto_approved')
+       ORDER BY created_at DESC
+       LIMIT 1)
+      UNION ALL
+      (SELECT image_server_asset_id, 2 AS priority
+       FROM poi_media
+       WHERE poi_id = $1
+         AND role = 'gallery'
+         AND media_type IN ('image', 'video')
+         AND moderation_status IN ('published', 'auto_approved')
+       ORDER BY created_at ASC
+       LIMIT 1)
+      ORDER BY priority
       LIMIT 1
     `, [id]);
-
-    // Fix: fall back to oldest published gallery photo when no primary exists.
-    // Without this, user-uploaded gallery photos can never become tooltip images
-    // even when the POI's has_primary_image flag is true.
-    if (result.rows.length === 0) {
-      result = await pool.query(`
-        SELECT image_server_asset_id
-        FROM poi_media
-        WHERE poi_id = $1
-          AND role = 'gallery'
-          AND media_type IN ('image', 'video')
-          AND moderation_status IN ('published', 'auto_approved')
-        ORDER BY created_at ASC
-        LIMIT 1
-      `, [id]);
-    }
 
     let assetId;
     if (result.rows.length > 0) {
