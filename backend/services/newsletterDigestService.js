@@ -78,33 +78,26 @@ export async function generateDigest(pool, tz = 'America/New_York') {
     .event:last-child, .news-item:last-child {
       border-bottom: none;
     }
-    .event-title, .news-title {
+    h3.event-title, h3.news-title {
       font-size: 1.1em;
       font-weight: bold;
-      margin-bottom: 5px;
+      margin: 0 0 5px;
       color: #1a1a1a;
     }
-    .event-date {
+    p.event-date {
       color: #666;
       font-size: 0.9em;
-      margin-bottom: 5px;
+      margin: 0 0 5px;
     }
-    .poi-name {
+    p.poi-name {
       color: #2d5016;
       font-weight: 500;
       font-size: 0.9em;
+      margin: 0 0 5px;
     }
-    .description, .summary {
-      margin-top: 8px;
+    p.description, p.summary {
+      margin: 8px 0 0;
       color: #555;
-    }
-    .read-more {
-      color: #2d5016;
-      text-decoration: none;
-      font-weight: 500;
-    }
-    .read-more:hover {
-      text-decoration: underline;
     }
     .footer {
       margin-top: 40px;
@@ -138,8 +131,10 @@ export async function generateDigest(pool, tz = 'America/New_York') {
       <img src="https://rootsofthevalley.org/brand/rotv-header-1200x490.png" alt="Roots of The Valley" class="brand-banner" />
     </a>
     <h1>What's Happening in the Valley This Weekend</h1>
-    <p>Your weekly digest from <a href="https://rootsofthevalley.org" style="color: #2d5016;">Roots of The Valley</a></p>
+    <p>Your weekly digest from <a href="https://rootsofthevalley.org" style="color: #2d5016 !important; text-decoration: underline;">Roots of The Valley</a></p>
 `;
+
+  const linkStyle = 'color: #2d5016 !important; text-decoration: underline; font-weight: 500;';
 
   if (events.length > 0) {
     html += `
@@ -147,26 +142,25 @@ export async function generateDigest(pool, tz = 'America/New_York') {
 `;
     events.forEach(event => {
       const startDate = new Date(event.start_date);
-      const dateStr = startDate.toLocaleString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZone: tz
+      const dateOnly = startDate.toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', timeZone: tz
       });
+      const timeOnly = startDate.toLocaleString('en-US', {
+        hour: 'numeric', minute: '2-digit', timeZone: tz
+      });
+      const dateStr = (timeOnly === '12:00 AM') ? dateOnly : `${dateOnly} at ${timeOnly}`;
 
       html += `
     <div class="event">
-      <div class="event-title">${escapeHtml(event.title)}</div>
-      <div class="event-date">📅 ${dateStr}</div>
-      <div class="poi-name">📍 ${escapeHtml(event.poi_name)}</div>
+      <h3 class="event-title">${escapeHtml(event.title)}</h3>
+      <p class="event-date">📅 ${dateStr}</p>
+      <p class="poi-name">📍 ${escapeHtml(event.poi_name)}</p>
 `;
       if (event.description) {
-        html += `      <div class="description">${escapeHtml(event.description)}</div>\n`;
+        html += `      <p class="description">${escapeHtml(event.description)}</p>\n`;
       }
       if (event.source_url) {
-        html += `      <div><a href="${escapeHtml(event.source_url)}" class="read-more">Learn more →</a></div>\n`;
+        html += `      <p><a href="${escapeHtml(event.source_url)}" style="${linkStyle}">Learn more →</a></p>\n`;
       }
       html += `    </div>\n`;
     });
@@ -179,14 +173,14 @@ export async function generateDigest(pool, tz = 'America/New_York') {
     news.forEach(item => {
       html += `
     <div class="news-item">
-      <div class="news-title">${escapeHtml(item.title)}</div>
-      <div class="poi-name">${escapeHtml(item.poi_name)}</div>
+      <h3 class="news-title">${escapeHtml(item.title)}</h3>
+      <p class="poi-name">📍 ${escapeHtml(item.poi_name)}</p>
 `;
       if (item.summary) {
-        html += `      <div class="summary">${escapeHtml(item.summary)}</div>\n`;
+        html += `      <p class="summary">${escapeHtml(item.summary)}</p>\n`;
       }
       if (item.source_url) {
-        html += `      <div><a href="${escapeHtml(item.source_url)}" class="read-more">Read full article →</a></div>\n`;
+        html += `      <p><a href="${escapeHtml(item.source_url)}" style="${linkStyle}">Read full article →</a></p>\n`;
       }
       html += `    </div>\n`;
     });
@@ -201,7 +195,7 @@ export async function generateDigest(pool, tz = 'America/New_York') {
   html += `
     <div class="footer">
       <p>Roots of The Valley is an open-source community project for the Cuyahoga Valley.</p>
-      <p><a href="https://rootsofthevalley.org">Visit rootsofthevalley.org</a></p>
+      <p><a href="https://rootsofthevalley.org" style="color: #2d5016 !important; text-decoration: underline;">Visit rootsofthevalley.org</a></p>
     </div>
   </div>
 </body>
