@@ -4,10 +4,37 @@ import ImageUploader from './ImageUploader';
 import ThumbnailCarousel from './ThumbnailCarousel';
 import { formatDateTime, formatPublicationDate, NewsTypeIcon, EventTypeIcon } from './NewsEventsShared';
 import ShareButton from './ShareButton';
+import NavigateButton from './NavigateButton';
 import Mosaic from './Mosaic';
 import MediaUploadModal from './MediaUploadModal';
 import RoleEditor from './RoleEditor';
 import GeoJSONUploader from './GeoJSONUploader';
+import { firstGeometryPoint } from '../utils/geo';
+
+function getNavigationStops(poi, isLinearFeature) {
+  if (!poi) return null;
+
+  const navLat = poi.navigation_latitude != null ? Number(poi.navigation_latitude) : null;
+  const navLng = poi.navigation_longitude != null ? Number(poi.navigation_longitude) : null;
+  if (Number.isFinite(navLat) && Number.isFinite(navLng)) {
+    return [{ lat: navLat, lng: navLng }];
+  }
+
+  if (isLinearFeature) {
+    if (poi.feature_type === 'trail' || poi.poi_roles?.includes('trail')) {
+      const point = firstGeometryPoint(poi.geometry);
+      return point ? [point] : null;
+    }
+    return null;
+  }
+
+  const lat = poi.latitude != null ? Number(poi.latitude) : null;
+  const lng = poi.longitude != null ? Number(poi.longitude) : null;
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return [{ lat, lng }];
+  }
+  return null;
+}
 
 function ShareModal({ isOpen, onClose, poiName, poiDescription }) {
   const [copied, setCopied] = useState(false);
@@ -265,6 +292,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
               Share
             </button>
           )}
+          <NavigateButton stops={getNavigationStops(destination, isLinearFeature)} />
         </div>
 
         {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated) && (
@@ -907,6 +935,33 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
               onChange={(e) => handleCoordChange('longitude', e.target.value)}
             />
           </div>
+        </div>
+      )}
+
+      <div className="edit-row">
+        <div className="edit-section half">
+          <label title="Optional override for Google Maps navigation. Set to a parking lot or visitor entrance if the main coordinates are off-road. Leave blank to use main coordinates (or first trail geometry point for trails).">Nav Latitude (optional)</label>
+          <input
+            type="number"
+            step="0.000001"
+            value={editedData.navigation_latitude ?? ''}
+            onChange={(e) => handleChange('navigation_latitude', e.target.value === '' ? null : parseFloat(e.target.value))}
+          />
+        </div>
+        <div className="edit-section half">
+          <label title="Optional override for Google Maps navigation.">Nav Longitude (optional)</label>
+          <input
+            type="number"
+            step="0.000001"
+            value={editedData.navigation_longitude ?? ''}
+            onChange={(e) => handleChange('navigation_longitude', e.target.value === '' ? null : parseFloat(e.target.value))}
+          />
+        </div>
+      </div>
+      {((editedData.navigation_latitude != null && editedData.navigation_latitude !== '') !==
+        (editedData.navigation_longitude != null && editedData.navigation_longitude !== '')) && (
+        <div className="edit-section" style={{ color: '#b00', fontSize: '0.85rem', marginTop: '-0.5rem' }}>
+          Set both Nav Latitude and Nav Longitude, or leave both blank.
         </div>
       )}
 

@@ -850,6 +850,7 @@ app.get('/api/pois', async (req, res) => {
 
     let query = `
       SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+             p.navigation_latitude, p.navigation_longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -885,6 +886,7 @@ app.get('/api/pois/:id', async (req, res) => {
   try {
     const poiQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+             p.navigation_latitude, p.navigation_longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -1668,6 +1670,7 @@ app.get('/api/destinations', async (req, res) => {
   try {
     const destinationsQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude,
+             p.navigation_latitude, p.navigation_longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -1692,6 +1695,7 @@ app.get('/api/destinations/:id', async (req, res) => {
   try {
     const destinationQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude,
+             p.navigation_latitude, p.navigation_longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
@@ -1717,6 +1721,7 @@ app.get('/api/linear-features', async (req, res) => {
   try {
     const linearFeaturesQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_roles, p.geometry,
+             p.navigation_latitude, p.navigation_longitude,
              p.poi_roles[1] as feature_type,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
@@ -1742,6 +1747,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
   try {
     const linearFeatureQuery = await pool.query(`
       SELECT p.id, p.name, p.poi_roles, p.geometry,
+             p.navigation_latitude, p.navigation_longitude,
              p.poi_roles[1] as feature_type,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
