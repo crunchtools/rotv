@@ -521,6 +521,18 @@ export async function triggerDigestManually() {
   return jobId;
 }
 
+export async function triggerPreviewManually() {
+  const scheduler = getJobScheduler();
+
+  const jobId = await scheduler.send(JOB_NAMES.NEWSLETTER_PREVIEW, {
+    triggeredManually: true,
+    triggeredAt: new Date().toISOString()
+  });
+
+  console.log('Manual preview send triggered, job ID:', jobId);
+  return jobId;
+}
+
 export async function stopJobScheduler() {
   if (boss) {
     await boss.stop();
