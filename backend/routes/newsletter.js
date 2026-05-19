@@ -1,7 +1,7 @@
 import express from 'express';
 import { isAdmin } from '../middleware/auth.js';
 import { addSubscriber, getSubscriberCount, testApiKey } from '../services/buttondownClient.js';
-import { triggerDigestManually } from '../services/jobScheduler.js';
+import { triggerDigestManually, triggerPreviewManually } from '../services/jobScheduler.js';
 import { sendDigestPreviewTo } from '../services/newsletterDigestService.js';
 
 const router = express.Router();
@@ -92,6 +92,16 @@ export function createNewsletterRouter(pool) {
     } catch (error) {
       console.error('Newsletter trigger error:', error);
       res.status(500).json({ error: 'Failed to queue digest' });
+    }
+  });
+
+  router.post('/trigger-preview', isAdmin, async (_req, res) => {
+    try {
+      const jobId = await triggerPreviewManually();
+      res.json({ success: true, message: 'Newsletter preview queued', jobId });
+    } catch (error) {
+      console.error('Newsletter preview trigger error:', error);
+      res.status(500).json({ error: 'Failed to queue preview' });
     }
   });
 

@@ -373,19 +373,68 @@ function escapeHtml(text) {
     .replace(/'/g, '&#039;');
 }
 
-export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York') {
-  const asOf = upcomingFridayISO(tz);
-  const html = await generateDigest(pool, tz, asOf);
+export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York', pgBossJobId = null) {
+  // job_logs.job_id is int32 — hash the pg-boss UUID into that range (mirrors sendWeeklyDigest)
+  let jobId = 0;
+  if (pgBossJobId) {
+    let hash = 0;
+    for (let i = 0; i < pgBossJobId.length; i++) {
+      hash = ((hash << 5) - hash) + pgBossJobId.charCodeAt(i);
+      hash = hash & 0x7FFFFFFF;
+    }
+    jobId = hash;
+  }
+  const jobType = 'newsletter-preview';
 
-  if (!html) {
-    return { success: true, skipped: true, reason: 'No content for upcoming Friday', asOf };
+  if (jobId > 0) {
+    await pool.query(
+      'INSERT INTO job_logs (job_id, job_type, level, message) VALUES ($1, $2, $3, $4)',
+      [jobId, jobType, 'info', `Starting newsletter preview for ${email}`]
+    );
   }
 
-  const previewDate = new Date(asOf).toLocaleDateString('en-US', {
-    month: 'long', day: 'numeric', year: 'numeric', timeZone: tz
-  });
-  const subject = `What's Happening in the Valley This Weekend - ${previewDate}`;
+  try {
+    const asOf = upcomingFridayISO(tz);
+    const html = await generateDigest(pool, tz, asOf);
 
-  const { emailId } = await sendDraftToRecipients(subject, html, [email], pool);
-  return { success: true, emailId, asOf, recipient: email };
+    if (!html) {
+      if (jobId > 0) {
+        await pool.query(
+          `INSERT INTO job_logs (job_id, job_type, level, message, details)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [jobId, jobType, 'info', 'No content available for preview',
+           JSON.stringify({ completed: true, skipped: true, asOf })]
+        );
+      }
+      return { success: true, skipped: true, reason: 'No content for upcoming Friday', asOf };
+    }
+
+    const previewDate = new Date(asOf).toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric', timeZone: tz
+    });
+    const subject = `What's Happening in the Valley This Weekend - ${previewDate}`;
+
+    const { emailId } = await sendDraftToRecipients(subject, html, [email], pool);
+
+    if (jobId > 0) {
+      await pool.query(
+        `INSERT INTO job_logs (job_id, job_type, level, message, details)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [jobId, jobType, 'info', `Preview sent to ${email}`,
+         JSON.stringify({ completed: true, skipped: false, asOf, buttondownEmailId: emailId, recipient: email })]
+      );
+    }
+
+    return { success: true, emailId, asOf, recipient: email };
+  } catch (error) {
+    if (jobId > 0) {
+      await pool.query(
+        `INSERT INTO job_logs (job_id, job_type, level, message, details)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [jobId, jobType, 'error', error.message || 'Failed to send preview',
+         JSON.stringify({ completed: false, error: error.message, recipient: email })]
+      );
+    }
+    throw error;
+  }
 }

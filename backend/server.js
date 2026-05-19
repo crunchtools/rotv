@@ -2702,7 +2702,7 @@ async function start() {
 
     await scheduleDigest('0 8 * * 5');
 
-    await registerPreviewHandler(async (_pgBossJobId, _payload) => {
+    await registerPreviewHandler(async (pgBossJobId, _payload) => {
       const { rows } = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'newsletter_preview_email'"
       );
@@ -2711,7 +2711,7 @@ async function start() {
         console.log('Newsletter preview skipped — newsletter_preview_email setting empty');
         return;
       }
-      const previewSend = await sendDigestPreviewTo(pool, email);
+      const previewSend = await sendDigestPreviewTo(pool, email, 'America/New_York', pgBossJobId);
       console.log('Newsletter preview result:', JSON.stringify(previewSend));
     });
 

@@ -103,8 +103,8 @@ export const COLLECTION_TYPES = [
   },
   {
     id: 'newsletter_digest',
-    label: 'Newsletter Digest',
-    description: 'Weekly email digest sent every Friday at 8 AM',
+    label: 'Newsletter Digest (Production)',
+    description: 'Weekly email digest sent every Friday at 8 AM to all subscribers',
     icon: '\u{1F4E7}',
     promptKeys: [],
     scheduleJobName: 'newsletter-digest',
@@ -112,6 +112,20 @@ export const COLLECTION_TYPES = [
     statusTable: null,
     historyTypes: ['newsletter-digest'],
     triggerEndpoint: '/api/newsletter/send-digest',
+    manualTriggerMethod: 'POST',
+    hasPrompt: false
+  },
+  {
+    id: 'newsletter_preview',
+    label: 'Newsletter Digest (Preview)',
+    description: 'Thursday morning preview to the admin email in newsletter_preview_email — same content as Friday production send, 24 hours earlier',
+    icon: '\u{1F4E7}',
+    promptKeys: [],
+    scheduleJobName: 'newsletter-preview',
+    schedule: '0 8 * * 4',
+    statusTable: null,
+    historyTypes: ['newsletter-preview'],
+    triggerEndpoint: '/api/newsletter/trigger-preview',
     manualTriggerMethod: 'POST',
     hasPrompt: false
   },
