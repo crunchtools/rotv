@@ -20,10 +20,6 @@ export default function TripBuilder({ onOpenMyTrips }) {
   const [saveError, setSaveError] = useState(null);
   const [confirmClear, setConfirmClear] = useState(false);
 
-  // The dock is *visible as a handle* whenever a trip has any stops.
-  // The body inside the dock is *expanded* per showBuilder. Adding a
-  // stop expands automatically (set in TripContext.addStop); the user
-  // can collapse with the chevron without losing the trip.
   useEffect(() => {
     if (trip.stops.length === 0) setConfirmClear(false);
   }, [trip.stops.length]);
@@ -58,8 +54,6 @@ export default function TripBuilder({ onOpenMyTrips }) {
     setConfirmClear(false);
   };
 
-  // Saved trips (have an id) live in My Trips, so X just clears the
-  // current view. Unsaved trips need a confirm — losing them is destructive.
   const handleClose = () => {
     if (trip.id) {
       clear();

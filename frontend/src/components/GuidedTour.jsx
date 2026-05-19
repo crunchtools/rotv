@@ -248,9 +248,6 @@ function placeTooltip(placement, spotlight, tooltipWidth, tooltipHeight, gap, vw
 }
 
 function computePosition(step, el, isMobile) {
-  // offsetParent is null for position:fixed elements in Chrome even when
-  // they're fully visible (this broke the .trip-builder spotlight). Use
-  // dimensions as the visibility signal instead.
   const elRectForHidden = el ? el.getBoundingClientRect() : null;
   const isHidden = el && elRectForHidden.width === 0 && elRectForHidden.height === 0;
   if (!el || isHidden) {
@@ -291,9 +288,6 @@ function computePosition(step, el, isMobile) {
   }
 
   const tooltipWidth = isMobile ? Math.min(300, vw - 40) : 300;
-  // Per-step override lets steps with long descriptions reserve enough
-  // space so placeTooltip doesn't position the tooltip overlapping the
-  // spotlight. Default values match short-description steps.
   const tooltipHeight = step.tooltipHeight !== undefined
     ? step.tooltipHeight
     : (isMobile ? 220 : 180);

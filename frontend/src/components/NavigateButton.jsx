@@ -16,9 +16,6 @@ export function buildGoogleMapsUrl(stops) {
   const fmt = ({ lat, lng }) => `${lat},${lng}`;
   const base = 'https://www.google.com/maps/dir/?api=1';
 
-  // Omit &origin= so Google Maps starts from the user's current location.
-  // The last stop is the destination; everything before it is a waypoint.
-  // Google Maps URL spec supports up to 9 waypoints.
   const destination = valid[valid.length - 1];
   const waypoints = valid.slice(0, -1);
 

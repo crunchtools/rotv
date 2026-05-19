@@ -3,8 +3,6 @@ import rateLimit from 'express-rate-limit';
 import { isAuthenticated, optionalAuth } from '../middleware/auth.js';
 import { slugifyWithSuffix } from '../utils/slug.js';
 
-// Cap at 9 so the user's current location can be the Google Maps origin.
-// We send 8 waypoints + 1 destination and let Maps default origin to GPS.
 const MAX_STOPS = 9;
 
 const tripWriteLimiter = rateLimit({
@@ -45,40 +43,17 @@ function isAdminUser(user) {
   return !!(user && (user.is_admin || user.role === 'admin'));
 }
 
-async function loadTripBySlug(pool, slug) {
-  const tripResult = await pool.query(
-    `SELECT id, user_id, name, description, slug, is_featured, is_public,
-            is_approved, moderated_by, moderated_at,
-            created_at, updated_at
-       FROM trips WHERE slug = $1`,
-    [slug]
-  );
-  if (tripResult.rows.length === 0) return null;
-  const trip = tripResult.rows[0];
-  const stops = await pool.query(
-    `SELECT ts.position, ts.poi_id, ts.label, ts.latitude, ts.longitude,
-            p.name AS poi_name
-       FROM trip_stops ts
-       LEFT JOIN pois p ON p.id = ts.poi_id
-      WHERE ts.trip_id = $1
-      ORDER BY ts.position ASC`,
-    [trip.id]
-  );
-  trip.stops = stops.rows;
-  return trip;
-}
-
 async function loadTripById(pool, id) {
-  const tripResult = await pool.query(
+  const tripRows = await pool.query(
     `SELECT id, user_id, name, description, slug, is_featured, is_public,
             is_approved, moderated_by, moderated_at,
             created_at, updated_at
        FROM trips WHERE id = $1`,
     [id]
   );
-  if (tripResult.rows.length === 0) return null;
-  const trip = tripResult.rows[0];
-  const stops = await pool.query(
+  if (tripRows.rows.length === 0) return null;
+  const trip = tripRows.rows[0];
+  const stopRows = await pool.query(
     `SELECT ts.position, ts.poi_id, ts.label, ts.latitude, ts.longitude,
             p.name AS poi_name
        FROM trip_stops ts
@@ -87,7 +62,7 @@ async function loadTripById(pool, id) {
       ORDER BY ts.position ASC`,
     [trip.id]
   );
-  trip.stops = stops.rows;
+  trip.stops = stopRows.rows;
   return trip;
 }
 
@@ -112,16 +87,16 @@ async function insertTripWithSlugRetry(client, fields, maxAttempts = 5) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const slug = slugifyWithSuffix(fields.name);
     try {
-      const result = await client.query(
+      const inserted = await client.query(
         `INSERT INTO trips (user_id, name, description, slug, is_featured, is_public)
          VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *`,
         [fields.user_id, fields.name, fields.description, slug, fields.is_featured, fields.is_public]
       );
-      return result.rows[0];
+      return inserted.rows[0];
     } catch (err) {
       if (err.code === '23505' && err.constraint && err.constraint.includes('slug')) {
-        continue; // unique violation on slug → retry with new suffix
+        continue;
       }
       throw err;
     }
@@ -132,10 +107,9 @@ async function insertTripWithSlugRetry(client, fields, maxAttempts = 5) {
 export function createTripsRouter(pool) {
   const router = express.Router();
 
-  // ---- Featured (public) ----
   router.get('/featured', async (_req, res) => {
     try {
-      const result = await pool.query(
+      const featuredRows = await pool.query(
         `SELECT id, user_id, name, description, slug, is_featured, is_public,
                 is_approved, created_at, updated_at,
                 (SELECT COUNT(*) FROM trip_stops WHERE trip_id = trips.id) AS stop_count
@@ -143,18 +117,17 @@ export function createTripsRouter(pool) {
           WHERE is_featured = TRUE
           ORDER BY updated_at DESC`
       );
-      res.json(result.rows);
+      res.json(featuredRows.rows);
     } catch (err) {
       console.error('GET /api/trips/featured failed:', err);
       res.status(500).json({ error: 'Failed to load featured trips' });
     }
   });
 
-  // ---- Discover (featured + approved public from others) ----
   router.get('/discover', optionalAuth, async (req, res) => {
     try {
       const currentUserId = req.user && req.user.id ? req.user.id : 0;
-      const result = await pool.query(
+      const discoverRows = await pool.query(
         `SELECT t.id, t.user_id, t.name, t.description, t.slug, t.is_featured,
                 t.is_public, t.is_approved, t.created_at, t.updated_at,
                 u.name AS owner_name,
@@ -167,20 +140,19 @@ export function createTripsRouter(pool) {
           ORDER BY t.is_featured DESC, t.updated_at DESC`,
         [currentUserId]
       );
-      res.json(result.rows);
+      res.json(discoverRows.rows);
     } catch (err) {
       console.error('GET /api/trips/discover failed:', err);
       res.status(500).json({ error: 'Failed to load trips' });
     }
   });
 
-  // ---- Pending moderation (admin only) ----
   router.get('/pending', isAuthenticated, async (req, res) => {
     if (!isAdminUser(req.user)) {
       return res.status(403).json({ error: 'Admin access required' });
     }
     try {
-      const result = await pool.query(
+      const pendingRows = await pool.query(
         `SELECT t.id, t.user_id, t.name, t.description, t.slug, t.is_featured,
                 t.is_public, t.is_approved, t.created_at, t.updated_at,
                 u.name AS owner_name, u.email AS owner_email,
@@ -190,14 +162,13 @@ export function createTripsRouter(pool) {
           WHERE t.is_public = TRUE AND t.is_approved = FALSE
           ORDER BY t.updated_at ASC`
       );
-      res.json(result.rows);
+      res.json(pendingRows.rows);
     } catch (err) {
       console.error('GET /api/trips/pending failed:', err);
       res.status(500).json({ error: 'Failed to load pending trips' });
     }
   });
 
-  // ---- Moderate (admin only) ----
   router.post('/:id/moderate', isAuthenticated, async (req, res) => {
     if (!isAdminUser(req.user)) {
       return res.status(403).json({ error: 'Admin access required' });
@@ -226,7 +197,6 @@ export function createTripsRouter(pool) {
           [req.user.id, id]
         );
       } else {
-        // reject: take the trip off the public list. Owner can re-enable.
         await pool.query(
           `UPDATE trips
               SET is_public = FALSE,
@@ -246,10 +216,9 @@ export function createTripsRouter(pool) {
     }
   });
 
-  // ---- Mine (auth required) ----
   router.get('/mine', isAuthenticated, async (req, res) => {
     try {
-      const result = await pool.query(
+      const mineRows = await pool.query(
         `SELECT id, user_id, name, description, slug, is_featured, is_public,
                 is_approved, created_at, updated_at,
                 (SELECT COUNT(*) FROM trip_stops WHERE trip_id = trips.id) AS stop_count
@@ -258,21 +227,26 @@ export function createTripsRouter(pool) {
           ORDER BY updated_at DESC`,
         [req.user.id]
       );
-      res.json(result.rows);
+      res.json(mineRows.rows);
     } catch (err) {
       console.error('GET /api/trips/mine failed:', err);
       res.status(500).json({ error: 'Failed to load your trips' });
     }
   });
 
-  // ---- One by slug or numeric id (public if featured/public, else owner-only) ----
   router.get('/:idOrSlug', optionalAuth, async (req, res) => {
     try {
       const param = req.params.idOrSlug;
       const asNumber = Number(param);
-      const trip = Number.isInteger(asNumber) && asNumber > 0 && String(asNumber) === param
-        ? await loadTripById(pool, asNumber)
-        : await loadTripBySlug(pool, param);
+      let id;
+      if (Number.isInteger(asNumber) && asNumber > 0 && String(asNumber) === param) {
+        id = asNumber;
+      } else {
+        const slugLookup = await pool.query('SELECT id FROM trips WHERE slug = $1', [param]);
+        if (slugLookup.rows.length === 0) return res.status(404).json({ error: 'Trip not found' });
+        id = slugLookup.rows[0].id;
+      }
+      const trip = await loadTripById(pool, id);
       if (!trip) return res.status(404).json({ error: 'Trip not found' });
       const isOwner = req.user && req.user.id === trip.user_id;
       const canView = trip.is_featured || trip.is_public || isOwner;
@@ -284,7 +258,6 @@ export function createTripsRouter(pool) {
     }
   });
 
-  // ---- Create ----
   router.post('/', isAuthenticated, tripWriteLimiter, async (req, res) => {
     const { name, description, is_public, is_featured, stops } = req.body || {};
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -319,7 +292,6 @@ export function createTripsRouter(pool) {
     }
   });
 
-  // ---- Update ----
   router.put('/:id', isAuthenticated, tripWriteLimiter, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -367,8 +339,6 @@ export function createTripsRouter(pool) {
         updates.push(`is_featured = $${i++}`);
         values.push(!!is_featured);
       }
-      // Owner edits send a public trip back through moderation. Admins
-      // editing their own trips skip this — admin == implicit moderator.
       if (!isAdminUser(req.user)) {
         updates.push(`is_approved = FALSE`);
       }
@@ -404,7 +374,6 @@ export function createTripsRouter(pool) {
     }
   });
 
-  // ---- Delete ----
   router.delete('/:id', isAuthenticated, tripWriteLimiter, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
@@ -426,7 +395,6 @@ export function createTripsRouter(pool) {
     }
   });
 
-  // ---- Duplicate ----
   router.post('/:id/duplicate', isAuthenticated, tripWriteLimiter, async (req, res) => {
     const sourceId = Number(req.params.id);
     if (!Number.isInteger(sourceId) || sourceId <= 0) {

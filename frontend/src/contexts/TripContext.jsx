@@ -3,9 +3,6 @@ import React, { createContext, useState, useEffect, useCallback, useRef } from '
 export const TripContext = createContext(null);
 
 const STORAGE_KEY = 'rotv.tripInProgress.v1';
-// Cap at 9 so the user's current location can be the starting point.
-// Google Maps' URL spec allows up to 9 waypoints; we send 8 waypoints +
-// 1 destination and let Maps default the origin to current location.
 export const MAX_STOPS = 9;
 
 function loadFromStorage() {

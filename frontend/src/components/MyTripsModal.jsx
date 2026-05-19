@@ -108,7 +108,6 @@ export default function MyTripsModal({ open, onClose }) {
     try {
       const res = await fetch(`/api/trips/${id}`, { method: 'DELETE', credentials: 'include' });
       if (!res.ok) throw new Error('Could not delete trip');
-      // If the trip currently open in the dock just got deleted, drop it.
       if (activeTrip && activeTrip.id === id) clear();
       await refreshMine();
     } catch (err) {
@@ -124,7 +123,6 @@ export default function MyTripsModal({ open, onClose }) {
         await navigator.clipboard.writeText(url);
         ok = true;
       } else {
-        // Fallback for non-secure contexts (clipboard API unavailable)
         const ta = document.createElement('textarea');
         ta.value = url;
         ta.style.position = 'fixed';

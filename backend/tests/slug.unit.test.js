@@ -1,44 +1,41 @@
 import { describe, it, expect } from 'vitest';
-import { slugify, slugifyWithSuffix } from '../utils/slug.js';
+import { slugifyWithSuffix } from '../utils/slug.js';
 
-describe('slugify', () => {
+const HEX_SUFFIX = /-[0-9a-f]{8}$/;
+function baseOf(slug) {
+  return slug.replace(HEX_SUFFIX, '');
+}
+
+describe('slugifyWithSuffix', () => {
   it('lowercases, strips punctuation, replaces spaces with hyphens', () => {
-    expect(slugify('Cuyahoga Waterfalls Tour!')).toBe('cuyahoga-waterfalls-tour');
+    expect(baseOf(slugifyWithSuffix('Cuyahoga Waterfalls Tour!'))).toBe('cuyahoga-waterfalls-tour');
   });
 
   it('collapses repeated whitespace and hyphens', () => {
-    expect(slugify('  Cuyahoga   Valley  ---  Tour ')).toBe('cuyahoga-valley-tour');
+    expect(baseOf(slugifyWithSuffix('  Cuyahoga   Valley  ---  Tour '))).toBe('cuyahoga-valley-tour');
   });
 
   it('trims leading and trailing hyphens', () => {
-    expect(slugify('---trail---')).toBe('trail');
+    expect(baseOf(slugifyWithSuffix('---trail---'))).toBe('trail');
   });
 
-  it('returns empty string for null or empty input', () => {
-    expect(slugify('')).toBe('');
-    expect(slugify(null)).toBe('');
-    expect(slugify(undefined)).toBe('');
+  it('falls back to "trip" for null or empty input', () => {
+    expect(baseOf(slugifyWithSuffix(''))).toBe('trip');
+    expect(baseOf(slugifyWithSuffix(null))).toBe('trip');
+    expect(baseOf(slugifyWithSuffix(undefined))).toBe('trip');
   });
 
-  it('caps the slug at 60 characters', () => {
+  it('caps the base slug at 60 characters', () => {
     const long = 'a'.repeat(120);
-    expect(slugify(long).length).toBe(60);
+    expect(baseOf(slugifyWithSuffix(long)).length).toBe(60);
   });
 
   it('strips characters that arent alphanumeric or spaces or hyphens', () => {
-    expect(slugify('Towpath: River & Trail @ Stop #1')).toBe('towpath-river-trail-stop-1');
-  });
-});
-
-describe('slugifyWithSuffix', () => {
-  it('appends a hex suffix after the base slug', () => {
-    const s = slugifyWithSuffix('Brandywine Falls');
-    expect(s).toMatch(/^brandywine-falls-[0-9a-f]{8}$/);
+    expect(baseOf(slugifyWithSuffix('Towpath: River & Trail @ Stop #1'))).toBe('towpath-river-trail-stop-1');
   });
 
-  it('falls back to "trip" when name is empty', () => {
-    const s = slugifyWithSuffix('');
-    expect(s).toMatch(/^trip-[0-9a-f]{8}$/);
+  it('appends an 8-character hex suffix', () => {
+    expect(slugifyWithSuffix('Brandywine Falls')).toMatch(/^brandywine-falls-[0-9a-f]{8}$/);
   });
 
   it('produces distinct slugs for the same input on repeated calls', () => {
