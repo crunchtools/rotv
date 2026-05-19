@@ -3,6 +3,34 @@ import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents
 import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
+import { useTrip } from '../hooks/useTrip';
+
+function createTripStopIcon(n) {
+  return L.divIcon({
+    className: 'trip-stop-icon',
+    html: `<div class="trip-stop-marker">${n}</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14]
+  });
+}
+
+function TripStopMarkers() {
+  const { trip } = useTrip();
+  if (!trip || !Array.isArray(trip.stops) || trip.stops.length === 0) return null;
+  return (
+    <>
+      {trip.stops.map((stop, i) => (
+        <Marker
+          key={`trip-stop-${i}`}
+          position={[Number(stop.latitude), Number(stop.longitude)]}
+          icon={createTripStopIcon(i + 1)}
+          interactive={false}
+          zIndexOffset={1000}
+        />
+      ))}
+    </>
+  );
+}
 
 const createIcon = (iconUrl) => L.icon({
   iconUrl,
@@ -1487,6 +1515,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
             }}
           />
         )}
+        <TripStopMarkers />
       </MapContainer>
 
       <button

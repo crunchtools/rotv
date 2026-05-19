@@ -1,7 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
+import { TripProvider } from './contexts/TripContext';
 import { useAuth } from './hooks/useAuth';
+import { useTrip } from './hooks/useTrip';
+import TripBuilder from './components/TripBuilder';
+import MyTripsModal from './components/MyTripsModal';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
 import Map from './components/Map';
 import Sidebar from './components/Sidebar';
@@ -27,7 +31,7 @@ import EventPermalink from './components/EventPermalink';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
-import GuidedTour from './components/GuidedTour';
+import GuidedTour, { TRIP_TOUR_STEPS } from './components/GuidedTour';
 import TourPrompt from './components/TourPrompt';
 import { handleRovingKeyDown } from './utils/a11yUtils';
 
@@ -111,6 +115,14 @@ function AppContent() {
 
   const [showLoginDropdown, setShowLoginDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showMyTrips, setShowMyTrips] = useState(false);
+  const [tourVariant, setTourVariant] = useState('default');
+  const {
+    loadFromSlug: loadTripFromSlug,
+    addStop: tripAddStop,
+    clear: tripClear,
+    setShowBuilder: tripSetShowBuilder
+  } = useTrip();
 
   const [kbdFocusIndex, setKbdFocusIndex] = useState(null);
 
@@ -195,6 +207,15 @@ function AppContent() {
   }, [location.pathname, destinations]);
 
   useEffect(() => {
+    if (!location.pathname.startsWith('/trip/')) return;
+    const slug = location.pathname.split('/')[2];
+    if (!slug) return;
+    loadTripFromSlug(slug)
+      .catch(() => {})
+      .finally(() => navigate('/', { replace: true }));
+  }, [location.pathname, loadTripFromSlug, navigate]);
+
+  useEffect(() => {
     if (location.pathname.startsWith('/organizations')) {
       const pathParts = location.pathname.split('/');
       const orgSlug = pathParts[2]; // /organizations/org-name -> 'org-name'
@@ -215,6 +236,7 @@ function AppContent() {
   const startTour = useCallback(() => {
     setShowTourPrompt(false);
     setTourStep(0);
+    setTourVariant('default');
     setTourActive(true);
     localStorage.setItem('rotv-tour-seen', 'true');
     setActiveTab('view');
@@ -224,15 +246,43 @@ function AppContent() {
     navigate('/');
   }, [navigate]);
 
+  const startTripTour = useCallback(() => {
+    setShowTourPrompt(false);
+    setTourStep(0);
+    setTourVariant('trips');
+    setTourActive(true);
+    setActiveTab('view');
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+    // Pre-populate a demo trip so the Trip Builder dock is mounted in the
+    // DOM before steps 2-4 poll for it. Using a label without a poi_id so
+    // the VC selected in step 1 still shows "+ Add to Trip" rather than
+    // "✓ In Trip" (hasStop() matches by poi_id).
+    tripClear();
+    tripAddStop({
+      poi_id: null,
+      label: 'Brandywine Falls',
+      latitude: 41.276,
+      longitude: -81.538
+    });
+    tripSetShowBuilder(true);
+    isProgrammaticNavigationRef.current = true;
+    navigate('/');
+  }, [navigate, tripClear, tripAddStop, tripSetShowBuilder]);
+
   const endTour = useCallback(() => {
     setTourActive(false);
     setTourStep(0);
     setActiveTab('view');
     setSelectedDestination(null);
     setSelectedLinearFeature(null);
+    if (tourVariant === 'trips') {
+      tripClear();
+    }
+    setTourVariant('default');
     isProgrammaticNavigationRef.current = true;
     navigate('/');
-  }, [navigate]);
+  }, [navigate, tourVariant, tripClear]);
 
   const handleTourStepAction = useCallback((action) => {
     switch (action) {
@@ -318,8 +368,33 @@ function AppContent() {
         }
         break;
       }
+      case 'tripTourAddDemoStop': {
+        // Demo a stop so the Trip Builder appears for the next steps.
+        // Coords are Boston Mill Visitor Center (picked by selectVisitorCenter).
+        const vc = destinations.find(d => d.name === 'Boston Mill Visitor Center');
+        const lat = vc && vc.latitude != null ? Number(vc.latitude) : 41.273;
+        const lng = vc && vc.longitude != null ? Number(vc.longitude) : -81.566;
+        tripAddStop({
+          poi_id: vc ? vc.id : null,
+          label: vc ? vc.name : 'Sample Stop',
+          latitude: lat,
+          longitude: lng
+        });
+        tripSetShowBuilder(true);
+        break;
+      }
+      case 'tripTourExpandBuilder': {
+        tripSetShowBuilder(true);
+        break;
+      }
+      case 'tripTourEndDemo': {
+        // Open the user dropdown so the My Trips item is spotlight-able.
+        setSelectedDestination(null);
+        setShowUserDropdown(true);
+        break;
+      }
     }
-  }, [destinations, isAuthenticated, isAdmin, navigate]);
+  }, [destinations, isAuthenticated, isAdmin, navigate, tripAddStop, tripSetShowBuilder]);
 
   const handleTabChange = useCallback((newTab) => {
     const previousActiveTab = activeTab;
@@ -1686,6 +1761,12 @@ function AppContent() {
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
                     <button
+                      className="dropdown-item-inline my-trips-menu-item"
+                      onClick={() => { setShowUserDropdown(false); setShowMyTrips(true); }}
+                    >
+                      My Trips
+                    </button>
+                    <button
                       className="dropdown-item-inline settings-item-inline"
                       onClick={() => { setShowUserDropdown(false); handleTabChange('settings'); }}
                     >
@@ -1860,7 +1941,7 @@ function AppContent() {
 
       {activeTab === 'about' && (
         <main id="main-content" className="main-content-full" tabIndex="-1">
-          <AboutPage onStartTour={startTour} aboutTab={aboutTab} onTabChange={setAboutTab} isAdmin={isAdmin} editMode={editMode} />
+          <AboutPage onStartTour={startTour} onStartTripTour={startTripTour} aboutTab={aboutTab} onTabChange={setAboutTab} isAdmin={isAdmin} editMode={editMode} />
         </main>
       )}
 
@@ -2197,6 +2278,9 @@ function AppContent() {
         <FeedbackForm onClose={() => setShowFeedbackForm(false)} />
       )}
 
+      <TripBuilder onOpenMyTrips={() => setShowMyTrips(true)} />
+      <MyTripsModal open={showMyTrips} onClose={() => setShowMyTrips(false)} />
+
       {showTourPrompt && (
         <TourPrompt
           onStartTour={startTour}
@@ -2213,6 +2297,7 @@ function AppContent() {
           currentStep={tourStep}
           setCurrentStep={setTourStep}
           onStepAction={handleTourStepAction}
+          steps={tourVariant === 'trips' ? TRIP_TOUR_STEPS : undefined}
         />
       )}
     </div>
@@ -2222,7 +2307,9 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <TripProvider>
+        <AppContent />
+      </TripProvider>
     </AuthProvider>
   );
 }

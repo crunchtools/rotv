@@ -16,6 +16,7 @@ import authRoutes from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createNewsletterRouter } from './routes/newsletter.js';
 import { createFeedbackRouter } from './routes/feedback.js';
+import { createTripsRouter } from './routes/trips.js';
 import { isAuthenticated } from './middleware/auth.js';
 import {
   initJobScheduler,
@@ -166,6 +167,7 @@ app.use('/auth', authRoutes);
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 app.use('/api/newsletter', createNewsletterRouter(pool));
 app.use('/api/feedback', createFeedbackRouter(pool));
+app.use('/api/trips', createTripsRouter(pool));
 
 async function importGeoJSONFeatures(client) {
   const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/public');
@@ -831,7 +833,7 @@ async function initDatabase() {
 app.get('/api/about-content', async (req, res) => {
   try {
     const aboutSettings = await pool.query(
-      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_privacy_md')`
+      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_trip_tutorial_md', 'about_privacy_md')`
     );
     const content = {};
     for (const row of aboutSettings.rows) {

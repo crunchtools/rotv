@@ -14411,6 +14411,12 @@ button.feedback-link-inline {
   background: #1b4332;
 }
 
+.about-tutorial + .about-tutorial {
+  margin-top: 2.5rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
 /* Markdown-rendered content inherits about-story styles */
 .about-story .markdown-content h2 {
   color: #2d6a4f;

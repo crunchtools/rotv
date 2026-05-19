@@ -5,6 +5,7 @@ import ThumbnailCarousel from './ThumbnailCarousel';
 import { formatDateTime, formatPublicationDate, NewsTypeIcon, EventTypeIcon } from './NewsEventsShared';
 import ShareButton from './ShareButton';
 import NavigateButton from './NavigateButton';
+import AddToTripButton from './AddToTripButton';
 import Mosaic from './Mosaic';
 import MediaUploadModal from './MediaUploadModal';
 import RoleEditor from './RoleEditor';
@@ -293,6 +294,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
             </button>
           )}
           <NavigateButton stops={getNavigationStops(destination, isLinearFeature)} />
+          <AddToTripButton poi={destination} stops={getNavigationStops(destination, isLinearFeature)} />
         </div>
 
         {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated) && (

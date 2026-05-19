@@ -1,5 +1,66 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 
+export const TRIP_TOUR_STEPS = [
+  {
+    selector: '.add-to-trip-btn',
+    title: 'Add to Trip',
+    description: 'Open any point of interest and look for the "+ Add to Trip" badge next to Share and Navigate. Tap it to drop the stop into a new day-trip.',
+    position: 'left',
+    action: 'selectVisitorCenter',
+    delay: 450,
+    spotlightSelector: '.add-to-trip-btn',
+    mobile: {
+      action: 'collapseLegendThenSelectVisitorCenter',
+      delay: 700,
+      position: 'top',
+      mobilePositionAbove: true
+    }
+  },
+  {
+    selector: '.trip-builder',
+    title: 'Trip Builder',
+    description: 'When you add a stop, a small card appears at the bottom with your trip. Tap the chevron on the left to expand or collapse it without losing your stops. The × on the right discards the trip.',
+    position: 'top',
+    action: 'tripTourExpandBuilder',
+    delay: 300,
+    spotlightSelector: '.trip-builder',
+    tooltipHeight: 260,
+    mobile: { mobilePositionAbove: true }
+  },
+  {
+    selector: '.trip-stop-row',
+    title: 'Stops in Order',
+    description: 'Reorder with ▲/▼ or remove a stop with ×. Trips are capped at 9 stops so Google Maps can start the route from your current location.',
+    position: 'top',
+    action: 'tripTourExpandBuilder',
+    spotlightSelector: '.trip-stop-row',
+    delay: 300,
+    tooltipHeight: 240,
+    mobile: { mobilePositionAbove: true }
+  },
+  {
+    selector: '.trip-builder-actions-primary',
+    title: 'Navigate · Save · My Trips',
+    description: 'Three green buttons: Navigate hands the route to Google Maps. Save stores the trip to your account. My Trips opens your library and Find Trips — Featured Routes from admins and trips other users have shared.',
+    position: 'top',
+    action: 'tripTourExpandBuilder',
+    spotlightSelector: '.trip-builder-actions-primary',
+    delay: 200,
+    tooltipHeight: 260,
+    mobile: { mobilePositionAbove: true }
+  },
+  {
+    selector: '.my-trips-menu-item',
+    title: 'My Trips Anywhere',
+    description: 'Your trip library is reachable any time from the user menu too. Sign in to save trips, share them publicly (after a quick review), or — if you’re an admin — feature them for everyone.',
+    position: 'left',
+    action: 'tripTourEndDemo',
+    spotlightSelector: '.my-trips-menu-item',
+    delay: 400,
+    mobile: { position: 'top', mobilePositionAbove: true }
+  }
+];
+
 const TOUR_STEPS = [
   {
     selector: '.leaflet-container',
@@ -125,8 +186,8 @@ function getEffectiveStep(step, isMobile) {
   return { ...step, ...step.mobile };
 }
 
-function getActiveSteps(isMobile) {
-  return TOUR_STEPS.filter(s => {
+function getActiveSteps(isMobile, allSteps = TOUR_STEPS) {
+  return allSteps.filter(s => {
     if (s.mobileOnly && !isMobile) return false;
     if (s.desktopOnly && isMobile) return false;
     return true;
@@ -187,7 +248,11 @@ function placeTooltip(placement, spotlight, tooltipWidth, tooltipHeight, gap, vw
 }
 
 function computePosition(step, el, isMobile) {
-  const isHidden = el && (el.offsetParent === null || (el.getBoundingClientRect().width === 0 && el.getBoundingClientRect().height === 0));
+  // offsetParent is null for position:fixed elements in Chrome even when
+  // they're fully visible (this broke the .trip-builder spotlight). Use
+  // dimensions as the visibility signal instead.
+  const elRectForHidden = el ? el.getBoundingClientRect() : null;
+  const isHidden = el && elRectForHidden.width === 0 && elRectForHidden.height === 0;
   if (!el || isHidden) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
@@ -226,7 +291,12 @@ function computePosition(step, el, isMobile) {
   }
 
   const tooltipWidth = isMobile ? Math.min(300, vw - 40) : 300;
-  const tooltipHeight = isMobile ? 220 : 180;
+  // Per-step override lets steps with long descriptions reserve enough
+  // space so placeTooltip doesn't position the tooltip overlapping the
+  // spotlight. Default values match short-description steps.
+  const tooltipHeight = step.tooltipHeight !== undefined
+    ? step.tooltipHeight
+    : (isMobile ? 220 : 180);
   const gap = 16;
 
   if (isMobile) {
@@ -289,7 +359,7 @@ function computePosition(step, el, isMobile) {
   };
 }
 
-function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
+function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: stepsProp }) {
   const [spotlightRect, setSpotlightRect] = useState(null);
   const [tooltipStyle, setTooltipStyle] = useState({});
   const [stepReady, setStepReady] = useState(true);
@@ -298,7 +368,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
   const resizeRef = useRef(null);
   const prevStepRef = useRef(-1);
 
-  const activeSteps = useMemo(() => getActiveSteps(isMobile), [isMobile]);
+  const activeSteps = useMemo(() => getActiveSteps(isMobile, stepsProp || TOUR_STEPS), [isMobile, stepsProp]);
   const baseStep = activeSteps[currentStep];
   const step = useMemo(() => getEffectiveStep(baseStep, isMobile), [baseStep, isMobile]);
 
@@ -418,7 +488,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction }) {
         <div
           className="guided-tour-backdrop"
           style={{
-            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.3) inset',
+            boxShadow: '0 0 0 4px rgba(45, 106, 79, 1), 0 0 16px 6px rgba(45, 106, 79, 0.55), 0 0 0 9999px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.4) inset',
             position: 'fixed',
             top: `${spotlightRect.top}px`,
             left: `${spotlightRect.left}px`,

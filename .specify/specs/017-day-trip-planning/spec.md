@@ -44,9 +44,9 @@ Acceptance Criteria:
 
 Acceptance Criteria:
 - [ ] Open in Google Maps button uses `buildGoogleMapsUrl(stops)` from `NavigateButton.jsx`
-- [ ] The resulting URL has the first stop as `origin`, the last as `destination`, and the middle stops as `waypoints` in order
+- [ ] The URL omits `origin` so Google Maps starts from the user's current location; the last stop is `destination` and earlier stops are `waypoints` in order
 - [ ] On mobile, the Google Maps app opens if installed; web falls back otherwise (inherited behavior)
-- [ ] Stop count of 10+ shows a soft warning; the 26th stop is hard-rejected (Google Maps web ceiling)
+- [ ] Stops are hard-capped at 9 (Google Maps URL spec allows 9 waypoints, leaving the origin slot for current location); the Add to Trip badge becomes "Trip full" at the cap
 
 ### Saving Trips (Logged-In Users)
 
@@ -74,20 +74,37 @@ Acceptance Criteria:
 
 Acceptance Criteria:
 - [ ] Each saved trip has an `is_public` toggle in its editor
-- [ ] When enabled, `/trip/<slug>` is reachable by anonymous viewers
+- [ ] When the toggle is first enabled, the trip enters the moderation queue (`is_approved = FALSE`)
+- [ ] My Trips shows "⏳ Pending review" on the row until an admin approves; afterwards it shows "🌐 Shared"
+- [ ] `/trip/<slug>` is reachable by anonymous viewers once approved (or for featured trips, immediately)
 - [ ] Copy share link copies the URL to the clipboard
 - [ ] When `is_public` is off, anonymous access returns 404 and the link does not work
+- [ ] Owner edits to a public trip reset it to `is_approved = FALSE` (must be re-reviewed); admin edits do not reset
+
+### Moderation (Admin)
+
+**US-017-MOD: Review pending public trips**
+> As an admin, I want a queue of user trips awaiting moderation so that I can vet trips before they appear in Find Trips, the same way News, Events, and Photos are reviewed.
+
+Acceptance Criteria:
+- [ ] My Trips modal shows a "Pending Review" entry point only when the user is an admin
+- [ ] The pending list shows trip name, owner, stop count, and submission date
+- [ ] Admin can Preview, Approve, or Reject each trip
+- [ ] Approving sets `is_approved = TRUE` and records `moderated_by` / `moderated_at`; the trip appears in Find Trips
+- [ ] Rejecting sets `is_public = FALSE` (taking it out of the queue); the owner can re-enable sharing to resubmit
+- [ ] Featured trips bypass the queue — admin curation is itself the moderation
 
 ### Featured Trips
 
-**US-017-7: Discover curated trips**
-> As a visitor or logged-in user, I want to browse admin-curated Featured Trips so that I can find suggested day-trips like the Canalway Scenic Byway.
+**US-017-7: Discover shared and curated trips**
+> As a visitor or logged-in user, I want to browse Featured Trips (admin-curated) and trips other users have shared so that I can find suggested day-trips like the Canalway Scenic Byway.
 
 Acceptance Criteria:
-- [ ] Inside the My Trips modal there is an **+ Add Featured Trip** button
-- [ ] Tapping it lists all `is_featured = true` trips with name, description, stop count
-- [ ] Anonymous viewers can view the same list at `/trip/<slug>` for any Featured Trip
-- [ ] Logged-in viewers can clone a Featured Trip into their own My Trips with one tap; the clone has `is_featured = false` and the user's `user_id`
+- [ ] Inside the My Trips modal there is a **Find Trips** button
+- [ ] Tapping it lists every trip where `is_featured = true` OR (`is_public = true` AND `is_approved = true`), excluding the caller's own trips
+- [ ] Each row shows the owner's name (or "⭐ Featured" for admin trips), stop count, and description
+- [ ] Anonymous viewers can view shared/featured trips at `/trip/<slug>`
+- [ ] Logged-in viewers can clone a trip into their own My Trips with one tap; the clone has `is_featured = false`, `is_public = false`, and the user's `user_id`
 
 **US-017-8: Admin curates a Featured Trip**
 > As an admin, I want to flag a trip I built as Featured so that all users can find and adopt it — without leaving the same trip editor every user uses.
@@ -108,6 +125,11 @@ Acceptance Criteria:
 |-------|-------------|
 | `trips` | One row per saved trip. Owned by a user. May be flagged featured (admin only) and/or public (owner choice). |
 | `trip_stops` | Ordered stops belonging to a trip. Stop-position is the ordering key. |
+
+### Migrations
+
+- `054_add_trips.sql` — schema below
+- `055_add_trip_moderation.sql` — adds `is_approved`, `moderated_by`, `moderated_at` to `trips`
 
 ### Migration `054_add_trips.sql`
 
@@ -149,6 +171,9 @@ Lat/lng are cached on the stop so a trip survives the underlying POI being renam
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/api/trips/featured` | none | Public list of `is_featured = true` trips |
+| `GET` | `/api/trips/discover` | `optionalAuth` | Featured + approved-public trips, excluding the caller's own. Powers "Find Trips" |
+| `GET` | `/api/trips/pending` | `isAdmin` | Admin queue of `is_public = true AND is_approved = false` trips |
+| `POST` | `/api/trips/:id/moderate` | `isAdmin` | Approve (`is_approved = true`) or reject (`is_public = false`) a pending trip |
 | `GET` | `/api/trips/mine` | `isAuthenticated` | Current user's saved trips |
 | `GET` | `/api/trips/:slug` | `optionalAuth` | One trip. Public if `is_featured` or `is_public`; otherwise owner-only |
 | `POST` | `/api/trips` | `isAuthenticated` | Create a trip. `is_featured` silently ignored unless `req.user.is_admin`. Rate-limited (30/hr per user). |
@@ -174,7 +199,7 @@ Lat/lng are cached on the stop so a trip survives the underlying POI being renam
 ### Validation
 - `name`: required, 1–200 chars
 - `slug`: server-generated from `name` (kebab-case, ≤60 chars, suffixed with short random hash for collision safety). Not accepted in request body.
-- `stops`: required, 1–25 entries (Google Maps web ceiling). Each entry needs valid finite `latitude` / `longitude`.
+- `stops`: required, 1–9 entries. The cap matches the Google Maps URL spec (≤9 waypoints) so the trip handoff can use the user's current location as origin. Each entry needs valid finite `latitude` / `longitude`.
 - `is_featured`: silently coerced to `false` if requester isn't admin
 
 ---
@@ -213,8 +238,8 @@ While a trip-in-progress has stops, the map shows numbered markers (1, 2, 3 …)
 - Write endpoints (POST/PUT/DELETE/duplicate) limited to 30/hr per authenticated user
 
 **NFR-017-3: Stop limits**
-- Soft warning at > 9 stops (Google Maps web preferred ceiling)
-- Hard reject at > 25 stops, both client- and server-side
+- Hard cap of 9 stops, enforced both client- and server-side
+- Matches Google Maps URL spec (≤9 waypoints), leaving the origin slot for the user's current location
 
 **NFR-017-4: Authorization edges**
 - Server silently ignores `is_featured: true` from non-admin requests; never errors
