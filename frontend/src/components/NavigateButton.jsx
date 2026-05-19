@@ -16,16 +16,10 @@ export function buildGoogleMapsUrl(stops) {
   const fmt = ({ lat, lng }) => `${lat},${lng}`;
   const base = 'https://www.google.com/maps/dir/?api=1';
 
-  if (valid.length === 1) {
-    return `${base}&destination=${encodeURIComponent(fmt(valid[0]))}`;
-  }
-
-  const origin = valid[0];
   const destination = valid[valid.length - 1];
-  const waypoints = valid.slice(1, -1);
+  const waypoints = valid.slice(0, -1);
 
-  let url = `${base}&origin=${encodeURIComponent(fmt(origin))}`;
-  url += `&destination=${encodeURIComponent(fmt(destination))}`;
+  let url = `${base}&destination=${encodeURIComponent(fmt(destination))}`;
   if (waypoints.length > 0) {
     url += `&waypoints=${encodeURIComponent(waypoints.map(fmt).join('|'))}`;
   }

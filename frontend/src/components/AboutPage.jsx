@@ -100,7 +100,7 @@ function AboutStory({ content, isAdmin, editMode }) {
   );
 }
 
-function AboutTutorial({ onStartTour, content, isAdmin, editMode }) {
+function AboutTutorial({ onStartTour, content, contentKey = 'about_tutorial_md', buttonLabel = 'Take a Tour', isAdmin, editMode }) {
   const [editing, setEditing] = useState(false);
   const [localContent, setLocalContent] = useState(content);
 
@@ -119,18 +119,18 @@ function AboutTutorial({ onStartTour, content, isAdmin, editMode }) {
         <button className="about-edit-btn" onClick={() => setEditing(true)}>Edit</button>
       )}
       {editing ? (
-        <AboutEditor contentKey="about_tutorial_md" content={localContent} onSave={handleSave} />
+        <AboutEditor contentKey={contentKey} content={localContent} onSave={handleSave} />
       ) : (
         <MarkdownRenderer content={localContent} className="about-tutorial-content" />
       )}
       <button className="about-tour-btn" onClick={onStartTour}>
-        Take a Tour
+        {buttonLabel}
       </button>
     </div>
   );
 }
 
-function AboutPage({ onStartTour, aboutTab, onTabChange, isAdmin, editMode }) {
+function AboutPage({ onStartTour, onStartTripTour, aboutTab, onTabChange, isAdmin, editMode }) {
   const [aboutContent, setAboutContent] = useState({});
 
   useEffect(() => {
@@ -160,7 +160,7 @@ function AboutPage({ onStartTour, aboutTab, onTabChange, isAdmin, editMode }) {
             role="tab"
             aria-selected={aboutTab === 'tutorial'}
           >
-            Tutorial
+            Tutorials
           </button>
           <button
             className={`settings-tab-btn about-tab-btn ${aboutTab === 'feedback' ? 'active' : ''}`}
@@ -188,7 +188,24 @@ function AboutPage({ onStartTour, aboutTab, onTabChange, isAdmin, editMode }) {
           <AboutStory content={aboutContent.about_story_md} isAdmin={isAdmin} editMode={editMode} />
         )}
         {aboutTab === 'tutorial' && (
-          <AboutTutorial onStartTour={onStartTour} content={aboutContent.about_tutorial_md} isAdmin={isAdmin} editMode={editMode} />
+          <>
+            <AboutTutorial
+              onStartTour={onStartTour}
+              content={aboutContent.about_tutorial_md}
+              contentKey="about_tutorial_md"
+              buttonLabel="Take a Tour"
+              isAdmin={isAdmin}
+              editMode={editMode}
+            />
+            <AboutTutorial
+              onStartTour={onStartTripTour}
+              content={aboutContent.about_trip_tutorial_md}
+              contentKey="about_trip_tutorial_md"
+              buttonLabel="Take the Trip Planning Tour"
+              isAdmin={isAdmin}
+              editMode={editMode}
+            />
+          </>
         )}
         {aboutTab === 'feedback' && <FeedbackForm inline />}
         {aboutTab === 'privacy' && (
