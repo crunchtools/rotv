@@ -49,6 +49,26 @@ describe('Open Graph share images', () => {
     expect(ogImages.length).toBe(1);
   }, 15000);
 
+  it('injects POI og:image for the bare-path permalink', async () => {
+    const poi = poiWithPhoto || pois[0];
+    const slug = generateSlug(poi.name);
+    const res = await request(BASE_URL).get(`/${slug}`).expect(200);
+
+    const ogImages = metaContent(res.text, 'property', 'og:image');
+    expect(ogImages.length).toBe(1);
+    const [ogUrl] = metaContent(res.text, 'property', 'og:url');
+    expect(ogUrl.endsWith(`/${slug}`)).toBe(true);
+    if (poiWithPhoto) {
+      expect(ogImages[0]).toMatch(new RegExp(`/api/pois/${poiWithPhoto.id}/thumbnail\\?size=large$`));
+    }
+  }, 15000);
+
+  it('does not hijack reserved single-segment routes', async () => {
+    const res = await request(BASE_URL).get('/about').expect(200);
+    const [ogUrl] = metaContent(res.text, 'property', 'og:url');
+    expect(ogUrl.endsWith('/about')).toBe(false);
+  }, 15000);
+
   it('uses the POI primary photo at size=large when a photo exists', async () => {
     if (!poiWithPhoto) {
       console.warn('[og-share] No POI with a photo in seed — skipping primary-photo assertion');

@@ -2405,11 +2405,24 @@ async function resolvePoiOgImage(poiId, baseUrl) {
   return `${baseUrl}${OG_FALLBACK_IMAGE}`;
 }
 
-// OG-tag injection for ?poi= deep links. MUST be mounted before express.static
-// so it can intercept "/" before the static index.html is served.
+// OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
+// permalink — the form share buttons produce). MUST be mounted before
+// express.static so it can intercept the request before index.html is served.
+const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status']);
 app.use(async (req, res, next) => {
+  let poiSlug = null;
+  let canonicalPath = null;
   if (req.path === '/' && req.query.poi) {
-    const poiSlug = req.query.poi;
+    poiSlug = req.query.poi;
+    canonicalPath = `/?poi=${poiSlug}`;
+  } else {
+    const match = req.path.match(/^\/([a-z0-9-]+)\/?$/);
+    if (match && !OG_RESERVED_PATHS.has(match[1])) {
+      poiSlug = match[1];
+      canonicalPath = `/${poiSlug}`;
+    }
+  }
+  if (poiSlug) {
     try {
       const poisQuery = await pool.query(`
         SELECT id, name, poi_roles, brief_description
@@ -2421,7 +2434,7 @@ app.use(async (req, res, next) => {
 
       if (poi) {
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-        const appUrl = `${baseUrl}/?poi=${poiSlug}`;
+        const appUrl = `${baseUrl}${canonicalPath}`;
         const imageUrl = await resolvePoiOgImage(poi.id, baseUrl);
         const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
         // Fix: HTML-escape interpolated content (PR #382 review)
