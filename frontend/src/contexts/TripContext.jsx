@@ -1,6 +1,16 @@
 import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
+import { useAuth } from '../hooks/useAuth';
+import { addTrip as addLocalTrip } from '../utils/anonSettings';
 
 export const TripContext = createContext(null);
+
+function generateAnonSlug(name) {
+  const base = (name || 'untitled-trip')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return `${base || 'untitled-trip'}-${Date.now().toString(36)}`;
+}
 
 const STORAGE_KEY = 'rotv.tripInProgress.v1';
 export const MAX_STOPS = 9;
@@ -42,6 +52,7 @@ function stopKey(s) {
 }
 
 export function TripProvider({ children }) {
+  const { isAuthenticated } = useAuth();
   const [trip, setTrip] = useState(() => loadFromStorage());
   const [showBuilder, setShowBuilder] = useState(false);
   const persistTimer = useRef(null);
@@ -141,6 +152,25 @@ export function TripProvider({ children }) {
       is_featured: trip.is_featured,
       stops: trip.stops
     };
+
+    // Anonymous visitors save trips to localStorage. On first successful
+    // sign-in, syncAnonSettings flushes these to /api/trips. See spec
+    // 018-anon-user-settings.
+    if (!isAuthenticated) {
+      const slug = trip.slug || generateAnonSlug(payload.name);
+      const localTrip = {
+        ...payload,
+        id: null,
+        slug,
+        is_public: false,
+        is_featured: false,
+        isAnonymous: true
+      };
+      addLocalTrip(localTrip);
+      loadTrip(localTrip);
+      return localTrip;
+    }
+
     const url = trip.id ? `/api/trips/${trip.id}` : '/api/trips';
     const method = trip.id ? 'PUT' : 'POST';
     const res = await fetch(url, {
@@ -156,7 +186,7 @@ export function TripProvider({ children }) {
     const saved = await res.json();
     loadTrip(saved);
     return saved;
-  }, [trip, loadTrip]);
+  }, [trip, loadTrip, isAuthenticated]);
 
   const hasStop = useCallback((poi_id) => {
     if (!poi_id) return false;

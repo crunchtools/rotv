@@ -57,7 +57,10 @@ export const TRIP_TOUR_STEPS = [
     action: 'tripTourEndDemo',
     spotlightSelector: '.my-trips-menu-item',
     delay: 400,
-    mobile: { position: 'top', mobilePositionAbove: true }
+    // The My Trips item lives in a dropdown near the top of the screen, so on
+    // mobile the tooltip must dock below it — positioning above would clamp to
+    // the top edge and overlap the spotlight. Fix: #379
+    mobile: { position: 'bottom' }
   }
 ];
 

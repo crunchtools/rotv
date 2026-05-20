@@ -2390,7 +2390,7 @@ const SIDEBAR_TAB_LABELS = {
   associations: 'Associations',
 };
 
-function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
+function Sidebar({ tourActive, destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
   const navigate = useNavigate();
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
@@ -3011,7 +3011,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
         onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
         onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
       >
-        {isMobile && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
+        {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
           <ThumbnailCarousel
             pois={poiNavigationList}
             currentIndex={currentIndex}
@@ -3300,7 +3300,7 @@ function Sidebar({ destination, isNewPOI, newOrganization, isNewOrganization, on
       onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
       onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
     >
-      {isMobile && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
+      {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
         <ThumbnailCarousel
           pois={poiNavigationList}
           currentIndex={currentIndex}

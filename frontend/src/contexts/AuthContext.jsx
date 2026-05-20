@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
+import { syncAnonSettings } from '../utils/anonSettings';
 
 export const AuthContext = createContext(null);
 
@@ -35,7 +36,10 @@ export function AuthProvider({ children }) {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
     if (authStatus === 'success') {
-      fetchUser();
+      // Flush any anonymous localStorage settings (timezone, newsletter,
+      // saved trips) to the backend now that a session exists. Spec
+      // 018-anon-user-settings. Best-effort; failure is a no-op.
+      fetchUser().then(() => syncAnonSettings());
       window.history.replaceState({}, '', window.location.pathname);
     } else if (authStatus === 'failed') {
       setError('Authentication failed. Please try again.');

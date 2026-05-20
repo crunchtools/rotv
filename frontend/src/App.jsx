@@ -265,7 +265,11 @@ function AppContent() {
       latitude: 41.276,
       longitude: -81.538
     });
-    tripSetShowBuilder(true);
+    // Keep the builder collapsed at step 1 so the expanded panel (a bottom
+    // sheet on mobile) doesn't cover the "+ Add to Trip" badge the step
+    // highlights. addStop auto-expands, so collapse explicitly. Step 2's
+    // tripTourExpandBuilder action expands it. Fix: #379
+    tripSetShowBuilder(false);
     isProgrammaticNavigationRef.current = true;
     navigate('/');
   }, [navigate, tripClear, tripAddStop, tripSetShowBuilder]);
@@ -358,14 +362,13 @@ function AppContent() {
         break;
       }
       case 'showNewsletter': {
-        if (isAuthenticated) {
-          setActiveTab('settings');
-          if (isAdmin) {
-            setSettingsTab('newsletter');
-          }
-          isProgrammaticNavigationRef.current = true;
-          navigate('/settings');
-        }
+        // Works for anon, regular users, and admins. Admin nav uses
+        // settingsTab='newsletter' to show the admin NewsletterSettings;
+        // UserSettings reads the same value to open its Newsletter tab.
+        setActiveTab('settings');
+        setSettingsTab('newsletter');
+        isProgrammaticNavigationRef.current = true;
+        navigate('/settings');
         break;
       }
       case 'tripTourAddDemoStop': {
@@ -388,9 +391,15 @@ function AppContent() {
         break;
       }
       case 'tripTourEndDemo': {
-        // Open the user dropdown so the My Trips item is spotlight-able.
+        // Open the menu holding the My Trips item so it is spotlight-able.
+        // Anon visitors get it in the Login dropdown; authed users in the
+        // account dropdown.
         setSelectedDestination(null);
-        setShowUserDropdown(true);
+        if (isAuthenticated) {
+          setShowUserDropdown(true);
+        } else {
+          setShowLoginDropdown(true);
+        }
         break;
       }
     }
@@ -474,11 +483,8 @@ function AppContent() {
     }
   }, [role]);
 
-  useEffect(() => {
-    if (!isAuthenticated && activeTab === 'settings') {
-      setActiveTab('view');
-    }
-  }, [isAuthenticated, activeTab]);
+  // Anonymous visitors can use /settings for user-level preferences (timezone,
+  // newsletter, saved trips). Spec: 018-anon-user-settings. Issue: #379.
 
   useEffect(() => {
     const handleEscape = (e) => {
@@ -1821,6 +1827,19 @@ function AppContent() {
                       items[next]?.focus();
                     }
                   }}>
+                    <button
+                      className="dropdown-item-inline my-trips-menu-item"
+                      onClick={() => { setShowLoginDropdown(false); setShowMyTrips(true); }}
+                    >
+                      My Trips
+                    </button>
+                    <button
+                      className="dropdown-item-inline settings-item-inline"
+                      onClick={() => { setShowLoginDropdown(false); handleTabChange('settings'); }}
+                    >
+                      Settings
+                    </button>
+                    <div className="tab-dropdown-divider" />
                     <button className="oauth-btn-inline google-btn" onClick={loginWithGoogle}>
                       <svg viewBox="0 0 24 24" width="18" height="18">
                         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -2104,7 +2123,7 @@ function AppContent() {
             </div>
             </>
             ) : (
-              <UserSettings user={user} />
+              <UserSettings user={user} initialTab={settingsTab === 'newsletter' ? 'newsletter' : 'general'} />
             )}
           </div>
         </main>
@@ -2184,6 +2203,7 @@ function AppContent() {
         />
 
         <Sidebar
+          tourActive={tourActive}
           destination={newPOI || newOrganization || selectedDestination}
           isNewPOI={!!newPOI}
           newOrganization={newOrganization}

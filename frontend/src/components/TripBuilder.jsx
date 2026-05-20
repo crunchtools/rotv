@@ -175,8 +175,8 @@ export default function TripBuilder({ onOpenMyTrips }) {
               type="button"
               className="primary"
               onClick={handleSave}
-              disabled={!isAuthenticated || saving}
-              title={isAuthenticated ? '' : 'Sign in to save this trip'}
+              disabled={saving}
+              title={isAuthenticated ? '' : 'Saved to this browser until you sign in'}
             >
               {saving ? 'Saving…' : 'Save'}
             </button>
