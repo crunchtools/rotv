@@ -375,20 +375,34 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
     setMobilePositionAbove(result.mobilePositionAbove);
   }, [isMobile]);
 
+  // Keep latest values in refs so the step-change effect doesn't re-run on
+  // every parent render. Parent renders (e.g., showResults navigating tabs)
+  // used to retrigger the effect, reset the spotlight, and re-poll — causing
+  // visible flicker on step 3. Fix: #379
+  const stepRef = useRef(step);
+  const onStepActionRef = useRef(onStepAction);
+  const applyPositionRef = useRef(applyPosition);
   useEffect(() => {
-    if (!step) return;
+    stepRef.current = step;
+    onStepActionRef.current = onStepAction;
+    applyPositionRef.current = applyPosition;
+  });
+
+  useEffect(() => {
+    const s = stepRef.current;
+    if (!s) return;
     let cancelled = false;
     const timers = [];
 
     if (prevStepRef.current !== currentStep) {
       prevStepRef.current = currentStep;
 
-      if (step.action && onStepAction) {
-        onStepAction(step.action);
+      if (s.action && onStepActionRef.current) {
+        onStepActionRef.current(s.action);
       }
     }
 
-    if (step.delay) {
+    if (s.delay) {
       setStepReady(false);
       setSpotlightRect(null);
 
@@ -397,7 +411,8 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
       let stableCount = 0;
       const poll = () => {
         if (cancelled) return;
-        const targetSelector = step.spotlightSelector || step.selector;
+        const cur = stepRef.current;
+        const targetSelector = cur.spotlightSelector || cur.selector;
         const el = document.querySelector(targetSelector);
         if (el) {
           const rect = el.getBoundingClientRect();
@@ -408,7 +423,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
           }
           lastTop = rect.top;
           if (stableCount >= 2) {
-            applyPosition(step);
+            applyPositionRef.current(cur);
             setStepReady(true);
             return;
           }
@@ -417,31 +432,35 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
           retryCount++;
           timers.push(setTimeout(poll, 50));
         } else {
-          applyPosition(step);
+          applyPositionRef.current(stepRef.current);
           setStepReady(true);
         }
       };
-      timers.push(setTimeout(poll, step.delay));
+      timers.push(setTimeout(poll, s.delay));
     } else {
       setStepReady(true);
-      applyPosition(step);
+      applyPositionRef.current(s);
     }
 
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768);
       if (resizeRef.current) cancelAnimationFrame(resizeRef.current);
-      resizeRef.current = requestAnimationFrame(() => applyPosition(step));
+      resizeRef.current = requestAnimationFrame(() => {
+        if (!cancelled) applyPositionRef.current(stepRef.current);
+      });
     };
     window.addEventListener('resize', handleResize);
 
     const handleScroll = () => {
       if (resizeRef.current) cancelAnimationFrame(resizeRef.current);
-      resizeRef.current = requestAnimationFrame(() => applyPosition(step));
+      resizeRef.current = requestAnimationFrame(() => {
+        if (!cancelled) applyPositionRef.current(stepRef.current);
+      });
     };
     window.addEventListener('scroll', handleScroll, { capture: true, passive: true });
 
     const repositionInterval = setInterval(() => {
-      if (!cancelled) applyPosition(step);
+      if (!cancelled) applyPositionRef.current(stepRef.current);
     }, 250);
 
     return () => {
@@ -452,7 +471,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
       window.removeEventListener('scroll', handleScroll, { capture: true });
       if (resizeRef.current) cancelAnimationFrame(resizeRef.current);
     };
-  }, [currentStep, step, onStepAction, applyPosition, isMobile]);
+  }, [currentStep, isMobile]);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
