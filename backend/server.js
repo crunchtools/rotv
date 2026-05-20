@@ -2400,7 +2400,7 @@ async function resolvePoiOgImage(poiId, baseUrl) {
         return `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
       }
     } catch (error) {
-      console.error('Error resolving POI OG image:', error.message);
+      console.error('Error resolving POI OG image:', error);
     }
   }
   return `${baseUrl}${OG_FALLBACK_IMAGE}`;
@@ -2425,22 +2425,25 @@ app.use(async (req, res, next) => {
         const appUrl = `${baseUrl}/?poi=${poiSlug}`;
         const imageUrl = await resolvePoiOgImage(poi.id, baseUrl);
         const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
+        // Fix: fully HTML-escape interpolated content, not just quotes (PR #382 review)
+        const safeName = escapeHtml(`${poi.name} | Roots of The Valley`);
+        const safeDescription = escapeHtml(description);
 
         const indexPath = path.join(staticPath, 'index.html');
         let html = await fs.readFile(indexPath, 'utf-8');
 
         html = html.replace(
           /<title>.*?<\/title>/,
-          `<title>${poi.name} | Roots of The Valley</title>`
+          `<title>${safeName}</title>`
         );
 
         html = html.replace(
           /<meta property="og:title" content="[^"]*" \/>/,
-          `<meta property="og:title" content="${poi.name} | Roots of The Valley" />`
+          `<meta property="og:title" content="${safeName}" />`
         );
         html = html.replace(
           /<meta property="og:description" content="[^"]*" \/>/,
-          `<meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />`
+          `<meta property="og:description" content="${safeDescription}" />`
         );
         html = html.replace(
           /<meta property="og:url" content="[^"]*" \/>/,
@@ -2456,11 +2459,11 @@ app.use(async (req, res, next) => {
 
         html = html.replace(
           /<meta name="twitter:title" content="[^"]*" \/>/,
-          `<meta name="twitter:title" content="${poi.name} | Roots of The Valley" />`
+          `<meta name="twitter:title" content="${safeName}" />`
         );
         html = html.replace(
           /<meta name="twitter:description" content="[^"]*" \/>/,
-          `<meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />`
+          `<meta name="twitter:description" content="${safeDescription}" />`
         );
         html = html.replace(
           /<meta name="twitter:image" content="[^"]*" \/>/,
@@ -2469,7 +2472,7 @@ app.use(async (req, res, next) => {
 
         html = html.replace(
           /<meta name="description" content="[^"]*" \/>/,
-          `<meta name="description" content="${description.replace(/"/g, '&quot;')}" />`
+          `<meta name="description" content="${safeDescription}" />`
         );
 
         res.setHeader('Content-Type', 'text/html');
