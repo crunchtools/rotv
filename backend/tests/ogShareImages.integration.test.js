@@ -1,13 +1,9 @@
-// Regression coverage: sharing a POI/news/event must emit exactly one og:image,
-// sourced from the POI's primary photo at size=large, with a branded fallback.
-// Hits the running container; photo-dependent checks skip when seed lacks media.
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:8080';
 const FALLBACK_IMAGE_PATH = '/brand/rotv-og-share-1200x630.jpg';
 
-// Must match generateSlug in backend/server.js / frontend/src/utils/slug.js
 function generateSlug(name) {
   if (!name) return '';
   return name
@@ -19,7 +15,6 @@ function generateSlug(name) {
 }
 
 function metaContent(html, attr, value) {
-  // Returns all content="" values for <meta {attr}="{value}" content="...">
   const re = new RegExp(`<meta ${attr}="${value}" content="([^"]*)"`, 'g');
   const out = [];
   let m;
@@ -36,7 +31,6 @@ describe('Open Graph share images', () => {
     const res = await request(BASE_URL).get('/api/pois').expect(200);
     pois = Array.isArray(res.body) ? res.body : (res.body.pois || []);
 
-    // Discover one POI with a published photo and one without (bounded scan).
     for (const poi of pois.slice(0, 80)) {
       if (poiWithPhoto && poiWithoutPhoto) break;
       const media = await request(BASE_URL).get(`/api/pois/${poi.id}/media`);
@@ -67,7 +61,7 @@ describe('Open Graph share images', () => {
     const [twitterImage] = metaContent(res.text, 'name', 'twitter:image');
 
     expect(ogImage).toMatch(new RegExp(`/api/pois/${poiWithPhoto.id}/thumbnail\\?size=large$`));
-    expect(twitterImage).toBe(ogImage); // twitter mirrors og
+    expect(twitterImage).toBe(ogImage);
   }, 15000);
 
   it('falls back to the branded card when a POI has no photo', async () => {
@@ -84,7 +78,6 @@ describe('Open Graph share images', () => {
   }, 15000);
 
   it('uses the associated POI photo for a news permalink', async () => {
-    // Find a POI that has both a photo and a published news item.
     let target = null;
     for (const poi of (poiWithPhoto ? [poiWithPhoto, ...pois] : pois).slice(0, 80)) {
       const news = await request(BASE_URL).get(`/api/pois/${poi.id}/news`);
