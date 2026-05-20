@@ -1,69 +1,21 @@
 import express from 'express';
 import { isAuthenticated } from '../middleware/auth.js';
-import { slugifyWithSuffix } from '../utils/slug.js';
+import { validateStops, insertStops, insertTripWithSlugRetry } from './trips.js';
 import { addSubscriber } from '../services/buttondownClient.js';
 
-const MAX_STOPS = 9;
-// Upper bound on trips accepted in a single sign-in sync, to bound work and
-// guard against a tampered/oversized localStorage payload. Generous — a real
-// anonymous session won't approach it.
 const MAX_SYNC_TRIPS = 50;
 
-function isFiniteNumber(v) {
-  const n = typeof v === 'string' ? Number(v) : v;
-  return typeof n === 'number' && Number.isFinite(n);
-}
-
-function validStops(stops) {
-  if (!Array.isArray(stops) || stops.length === 0 || stops.length > MAX_STOPS) {
-    return false;
-  }
-  return stops.every(s => s && typeof s === 'object'
-    && isFiniteNumber(s.latitude) && isFiniteNumber(s.longitude));
-}
-
-async function insertTripWithStops(client, userId, trip) {
-  // Prefer the client-provided slug on the first attempt so re-syncs dedup
-  // reliably by slug. Fall back to a freshly generated slug on collision
-  // (the trips.slug column is globally unique).
-  let inserted = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = (attempt === 0 && typeof trip.slug === 'string' && trip.slug.trim())
-      ? trip.slug.trim().substring(0, 220)
-      : slugifyWithSuffix(trip.name);
-    try {
-      const row = await client.query(
-        `INSERT INTO trips (user_id, name, description, slug, is_featured, is_public)
-         VALUES ($1, $2, $3, $4, FALSE, FALSE)
-         RETURNING id`,
-        [userId, trip.name, trip.description || null, slug]
-      );
-      inserted = row.rows[0];
-      break;
-    } catch (err) {
-      if (err.code === '23505' && err.constraint && err.constraint.includes('slug')) {
-        continue;
-      }
-      throw err;
-    }
-  }
-  if (!inserted) throw new Error('slug collision after retries');
-
-  for (const [i, s] of trip.stops.entries()) {
-    await client.query(
-      `INSERT INTO trip_stops (trip_id, position, poi_id, label, latitude, longitude)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [inserted.id, i + 1, s.poi_id || null, s.label || null, Number(s.latitude), Number(s.longitude)]
-    );
-  }
-  return inserted.id;
-}
-
-// POST /api/user/settings/sync
-// Flushes a freshly-signed-in user's anonymous localStorage state to the
-// backend. Server-wins fill-gaps: timezone only set when currently NULL,
-// newsletter subscribe is idempotent server-side, trips inserted only when
-// the user has no trip with a matching name (avoids duplicates on re-sync).
+/**
+ * Router for /api/user/settings/sync.
+ *
+ * Flushes a freshly-signed-in user's anonymous localStorage state to the
+ * backend. Server-wins fill-gaps semantics: timezone is set only when the
+ * account's value is still NULL/empty; newsletter subscribe is idempotent
+ * server-side; a trip is inserted only when the user has no trip with the
+ * same slug, so re-syncs never duplicate. The client persists a stable slug
+ * per trip and it is reused server-side via insertTripWithSlugRetry's
+ * preferredSlug, keeping client and server slugs aligned for dedup.
+ */
 export function createUserSettingsRouter(pool) {
   const router = express.Router();
 
@@ -72,17 +24,15 @@ export function createUserSettingsRouter(pool) {
     const synced = { timezone: false, newsletter: false, trips: 0 };
 
     try {
-      // Timezone — only fill when not already set on the account.
       if (typeof timezone === 'string' && timezone.trim()) {
-        const result = await pool.query(
+        const tzUpdate = await pool.query(
           `UPDATE users SET timezone = $1
             WHERE id = $2 AND (timezone IS NULL OR timezone = '')`,
           [timezone.trim(), req.user.id]
         );
-        synced.timezone = result.rowCount > 0;
+        synced.timezone = tzUpdate.rowCount > 0;
       }
 
-      // Newsletter — idempotent subscribe (Buttondown handles already-subscribed).
       if (newsletter && newsletter.subscribed && typeof newsletter.email === 'string'
           && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newsletter.email)) {
         try {
@@ -91,19 +41,14 @@ export function createUserSettingsRouter(pool) {
             `INSERT INTO newsletter_subscriptions (email, source) VALUES ($1, $2)`,
             [newsletter.email, 'web']
           ).catch(err => {
-            // 23505 = unique_violation (already subscribed) — ignore.
             if (err.code !== '23505') throw err;
           });
           synced.newsletter = true;
         } catch (err) {
-          // Newsletter is best-effort during sync; don't fail the whole call.
           console.error('settings/sync newsletter failed:', err.message);
         }
       }
 
-      // Trips — insert only those this user doesn't already have. Dedup by
-      // slug (the client persists a stable slug per trip), which is reliable
-      // across re-syncs; insertTripWithStops reuses that slug server-side.
       if (Array.isArray(trips) && trips.length > 0) {
         const client = await pool.connect();
         try {
@@ -111,20 +56,26 @@ export function createUserSettingsRouter(pool) {
           let count = 0;
           for (const trip of trips.slice(0, MAX_SYNC_TRIPS)) {
             if (!trip || typeof trip.name !== 'string' || !trip.name.trim()) continue;
-            if (!validStops(trip.stops)) continue;
-            if (typeof trip.slug === 'string' && trip.slug.trim()) {
+            if (validateStops(trip.stops)) continue;
+            const slug = (typeof trip.slug === 'string' && trip.slug.trim())
+              ? trip.slug.trim().substring(0, 220)
+              : null;
+            if (slug) {
               const existing = await client.query(
                 `SELECT id FROM trips WHERE user_id = $1 AND slug = $2 LIMIT 1`,
-                [req.user.id, trip.slug.trim().substring(0, 220)]
+                [req.user.id, slug]
               );
               if (existing.rows.length > 0) continue;
             }
-            await insertTripWithStops(client, req.user.id, {
+            const created = await insertTripWithSlugRetry(client, {
+              user_id: req.user.id,
               name: trip.name.trim().substring(0, 200),
-              description: trip.description,
-              slug: trip.slug,
-              stops: trip.stops
+              description: trip.description || null,
+              is_featured: false,
+              is_public: false,
+              preferredSlug: slug
             });
+            await insertStops(client, created.id, trip.stops);
             count++;
           }
           await client.query('COMMIT');

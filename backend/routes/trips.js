@@ -19,7 +19,7 @@ function isFiniteNumber(v) {
   return typeof n === 'number' && Number.isFinite(n);
 }
 
-function validateStops(stops) {
+export function validateStops(stops) {
   if (!Array.isArray(stops) || stops.length === 0) {
     return 'stops must be a non-empty array';
   }
@@ -66,7 +66,7 @@ async function loadTripById(pool, id) {
   return trip;
 }
 
-async function insertStops(client, tripId, stops) {
+export async function insertStops(client, tripId, stops) {
   for (const [i, s] of stops.entries()) {
     await client.query(
       `INSERT INTO trip_stops (trip_id, position, poi_id, label, latitude, longitude)
@@ -83,9 +83,11 @@ async function insertStops(client, tripId, stops) {
   }
 }
 
-async function insertTripWithSlugRetry(client, fields, maxAttempts = 5) {
+export async function insertTripWithSlugRetry(client, fields, maxAttempts = 5) {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const slug = slugifyWithSuffix(fields.name);
+    const slug = (attempt === 0 && fields.preferredSlug)
+      ? fields.preferredSlug
+      : slugifyWithSuffix(fields.name);
     try {
       const inserted = await client.query(
         `INSERT INTO trips (user_id, name, description, slug, is_featured, is_public)

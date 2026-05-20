@@ -265,10 +265,6 @@ function AppContent() {
       latitude: 41.276,
       longitude: -81.538
     });
-    // Keep the builder collapsed at step 1 so the expanded panel (a bottom
-    // sheet on mobile) doesn't cover the "+ Add to Trip" badge the step
-    // highlights. addStop auto-expands, so collapse explicitly. Step 2's
-    // tripTourExpandBuilder action expands it. Fix: #379
     tripSetShowBuilder(false);
     isProgrammaticNavigationRef.current = true;
     navigate('/');
@@ -362,9 +358,6 @@ function AppContent() {
         break;
       }
       case 'showNewsletter': {
-        // Works for anon, regular users, and admins. Admin nav uses
-        // settingsTab='newsletter' to show the admin NewsletterSettings;
-        // UserSettings reads the same value to open its Newsletter tab.
         setActiveTab('settings');
         setSettingsTab('newsletter');
         isProgrammaticNavigationRef.current = true;
@@ -391,9 +384,6 @@ function AppContent() {
         break;
       }
       case 'tripTourEndDemo': {
-        // Open the menu holding the My Trips item so it is spotlight-able.
-        // Anon visitors get it in the Login dropdown; authed users in the
-        // account dropdown.
         setSelectedDestination(null);
         if (isAuthenticated) {
           setShowUserDropdown(true);
@@ -483,8 +473,6 @@ function AppContent() {
     }
   }, [role]);
 
-  // Anonymous visitors can use /settings for user-level preferences (timezone,
-  // newsletter, saved trips). Spec: 018-anon-user-settings. Issue: #379.
 
   useEffect(() => {
     const handleEscape = (e) => {

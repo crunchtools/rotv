@@ -153,9 +153,6 @@ export function TripProvider({ children }) {
       stops: trip.stops
     };
 
-    // Anonymous visitors save trips to localStorage. On first successful
-    // sign-in, syncAnonSettings flushes these to /api/trips. See spec
-    // 018-anon-user-settings.
     if (!isAuthenticated) {
       const slug = trip.slug || generateAnonSlug(payload.name);
       const localTrip = {

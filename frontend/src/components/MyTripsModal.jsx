@@ -33,7 +33,6 @@ export default function MyTripsModal({ open, onClose }) {
   const [copiedId, setCopiedId] = useState(null);
 
   const refreshMine = useCallback(async () => {
-    // Anonymous visitors: trips live in localStorage, not the backend.
     if (!isAuthenticated) {
       setMine(readLocalTrips().map(t => ({
         ...t,

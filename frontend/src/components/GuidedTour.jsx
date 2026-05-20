@@ -57,9 +57,6 @@ export const TRIP_TOUR_STEPS = [
     action: 'tripTourEndDemo',
     spotlightSelector: '.my-trips-menu-item',
     delay: 400,
-    // The My Trips item lives in a dropdown near the top of the screen, so on
-    // mobile the tooltip must dock below it — positioning above would clamp to
-    // the top edge and overlap the spotlight. Fix: #379
     mobile: { position: 'bottom' }
   }
 ];
@@ -378,10 +375,6 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
     setMobilePositionAbove(result.mobilePositionAbove);
   }, [isMobile]);
 
-  // Keep latest values in refs so the step-change effect doesn't re-run on
-  // every parent render. Parent renders (e.g., showResults navigating tabs)
-  // used to retrigger the effect, reset the spotlight, and re-poll — causing
-  // visible flicker on step 3. Fix: #379
   const stepRef = useRef(step);
   const onStepActionRef = useRef(onStepAction);
   const applyPositionRef = useRef(applyPosition);

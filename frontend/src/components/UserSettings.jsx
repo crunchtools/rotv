@@ -21,7 +21,6 @@ function UserSettings({ user, initialTab }) {
   const handleEmailChange = (e) => {
     const value = e.target.value;
     setEmail(value);
-    // Persist anon input so a reload before submit doesn't lose it.
     if (!user?.email) {
       writeEmail(value);
     }

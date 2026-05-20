@@ -1,7 +1,9 @@
-// LocalStorage-backed customizations for anonymous (not-logged-in) visitors.
-// On first successful sign-in, syncAnonSettings() POSTs accumulated state to
-// /api/user/settings/sync (server-wins fill-gaps) and clears synced keys.
-// See .specify/specs/018-anon-user-settings/ for the architecture.
+/**
+ * LocalStorage-backed customizations for anonymous (not-logged-in) visitors.
+ * On first successful sign-in, syncAnonSettings() POSTs accumulated state to
+ * /api/user/settings/sync (server-wins fill-gaps) and clears synced keys.
+ * See .specify/specs/018-anon-user-settings/ for the architecture.
+ */
 
 const KEY_TIMEZONE = 'app-timezone';
 const KEY_NEWSLETTER_EMAIL = 'rotv-newsletter-email';
@@ -20,7 +22,7 @@ function safeWrite(key, value) {
   try {
     localStorage.setItem(key, value);
   } catch {
-    // localStorage may be unavailable (private mode, quota); ignore
+    return;
   }
 }
 
@@ -28,12 +30,8 @@ function safeRemove(key) {
   try {
     localStorage.removeItem(key);
   } catch {
-    // ignore
+    return;
   }
-}
-
-export function readTimezone() {
-  return safeRead(KEY_TIMEZONE);
 }
 
 export function readEmail() {
@@ -42,10 +40,6 @@ export function readEmail() {
 
 export function writeEmail(value) {
   safeWrite(KEY_NEWSLETTER_EMAIL, value);
-}
-
-export function readSubscribed() {
-  return safeRead(KEY_NEWSLETTER_SUBSCRIBED) === 'true';
 }
 
 export function writeSubscribed(value) {
@@ -68,32 +62,33 @@ export function writeTrips(trips) {
 }
 
 export function addTrip(trip) {
-  const trips = readTrips();
-  // Dedup by slug — overwrites a same-slug local trip (last-write-wins locally)
-  const filtered = trips.filter(t => t.slug !== trip.slug);
-  filtered.push({ ...trip, savedAt: new Date().toISOString() });
-  writeTrips(filtered);
+  const trips = readTrips().filter(t => t.slug !== trip.slug);
+  trips.push({ ...trip, savedAt: new Date().toISOString() });
+  writeTrips(trips);
 }
 
 export function removeTrip(slug) {
   writeTrips(readTrips().filter(t => t.slug !== slug));
 }
 
-// Flushes all accumulated anonymous state to the backend on first successful
-// sign-in. Server-wins semantics: backend only fills NULL timezone, only
-// inserts newsletter subscriptions/trips that don't already exist for the
-// user. Safe to call repeatedly — no-op when no anon state is present.
+/**
+ * Flush accumulated anonymous state to the backend on first successful
+ * sign-in. Server-wins semantics: the backend only fills a NULL timezone and
+ * only inserts newsletter subscriptions / trips that don't already exist for
+ * the user. Safe to call repeatedly — a no-op when no anon state is present.
+ *
+ * The timezone key is intentionally NOT cleared after sync: the logged-in
+ * client (GeneralSettings) still reads timezone from localStorage. The server
+ * column is canonical for future cross-device use, but the client does not yet
+ * refetch it, so clearing here would drop the user's timezone.
+ */
 export async function syncAnonSettings() {
-  const timezone = readTimezone();
-  const email = readEmail();
-  const subscribed = readSubscribed();
+  const timezone = safeRead(KEY_TIMEZONE);
+  const email = safeRead(KEY_NEWSLETTER_EMAIL) || '';
+  const subscribed = safeRead(KEY_NEWSLETTER_SUBSCRIBED) === 'true';
   const trips = readTrips();
 
-  const hasState =
-    timezone ||
-    (email && subscribed) ||
-    trips.length > 0;
-
+  const hasState = timezone || (email && subscribed) || trips.length > 0;
   if (!hasState) return { synced: false };
 
   const payload = {};
@@ -110,11 +105,6 @@ export async function syncAnonSettings() {
     });
     if (!res.ok) return { synced: false, status: res.status };
 
-    // Clear synced keys for newsletter and trips. The timezone key
-    // ('app-timezone') is intentionally NOT cleared: the logged-in client
-    // (GeneralSettings) still reads timezone from localStorage. The server
-    // column is canonical for future cross-device use, but the client does
-    // not yet refetch it, so clearing here would drop the user's timezone.
     if (email && subscribed) {
       safeRemove(KEY_NEWSLETTER_EMAIL);
       safeRemove(KEY_NEWSLETTER_SUBSCRIBED);

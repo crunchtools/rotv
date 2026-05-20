@@ -36,9 +36,6 @@ export function AuthProvider({ children }) {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
     if (authStatus === 'success') {
-      // Flush any anonymous localStorage settings (timezone, newsletter,
-      // saved trips) to the backend now that a session exists. Spec
-      // 018-anon-user-settings. Best-effort; failure is a no-op.
       fetchUser().then(() => syncAnonSettings());
       window.history.replaceState({}, '', window.location.pathname);
     } else if (authStatus === 'failed') {
