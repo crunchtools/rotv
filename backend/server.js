@@ -2447,7 +2447,7 @@ app.use(async (req, res, next) => {
         );
         html = html.replace(
           /<meta property="og:url" content="[^"]*" \/>/,
-          `<meta property="og:url" content="${appUrl}" />`
+          `<meta property="og:url" content="${escapeHtml(appUrl)}" />` // Fix: escape URL in attribute (PR #382 review)
         );
 
         // Replace the static default image rather than appending — a second
@@ -2513,7 +2513,7 @@ app.use(async (req, res, next) => {
     html = html.replace(/<title>.*?<\/title>/, `<title>${safeTitle} | Roots of The Valley</title>`);
     html = html.replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${safeTitle}" />`);
     html = html.replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${safeDesc}" />`);
-    html = html.replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${canonicalUrl}" />`);
+    html = html.replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`); // Fix: escape URL in attribute (PR #382 review)
     html = html.replace(/<meta property="og:type" content="[^"]*" \/>/, `<meta property="og:type" content="article" />`);
     html = html.replace(/<meta property="og:image" content="[^"]*" \/>/, `<meta property="og:image" content="${ogImage}" />`);
     html = html.replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${safeTitle}" />`);
