@@ -8,7 +8,7 @@ const CONCURRENCY = 5;
 const REQUEST_TIMEOUT = 15000;
 const DRY_RUN = process.argv.includes('--dry-run');
 
-// Reads standard PG* env vars (PGHOST/PGUSER/PGPASSWORD/...); no hardcoded credentials.
+/** Reads standard PG* env vars (PGHOST/PGUSER/PGPASSWORD/...); no hardcoded credentials. */
 const pool = new Pool();
 
 function decodeEntities(s) {
@@ -27,7 +27,6 @@ function extractOgImage(html, pageUrl) {
     if (m && m[1]) {
       try {
         const url = new URL(decodeEntities(m[1].trim()), pageUrl).href;
-        // Skip signed/expiring CDN URLs — they break after days; POI photo is more stable.
         if (EXPIRING_HOST.test(url)) return null;
         return url;
       } catch {

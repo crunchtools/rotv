@@ -180,7 +180,6 @@ export async function extractPageContent(url, options = {}) {
           || null;
         try { return raw ? new URL(raw, document.baseURI).href : null; } catch { return null; }
       });
-      // Skip expiring CDN hosts at the source so we never store URLs that 404 in days.
       const ogImage = (rawOgImage && !EXPIRING_HOST.test(rawOgImage)) ? rawOgImage : null;
 
       let links = [];

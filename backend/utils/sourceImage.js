@@ -1,13 +1,11 @@
-// Signed/expiring CDN hosts (Facebook/Instagram) whose image URLs 404 after a few
-// days. We skip them for share images and fall back to the stable POI photo.
+/** Signed/expiring CDN hosts (Facebook/Instagram) whose image URLs 404 after days; skip for share images. */
 export const EXPIRING_HOST = /(fbcdn\.net|cdninstagram\.com|lookaside\.[a-z0-9-]+\.(?:facebook|fbcdn)\.com)/i;
 
 export function isUsableSourceImage(url) {
   return /^https?:\/\//i.test(url || '') && !EXPIRING_HOST.test(url);
 }
 
-// SSRF guard for backfill fetches: reject non-public hosts (localhost, internal
-// TLDs, private/loopback/link-local IP literals). Does not resolve DNS.
+/** SSRF guard: reject non-public hosts (localhost, internal TLDs, private/loopback/link-local IP literals). No DNS resolution. */
 export function isPublicHttpUrl(url) {
   let u;
   try { u = new URL(url); } catch { return false; }
