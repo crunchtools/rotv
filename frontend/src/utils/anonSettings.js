@@ -110,9 +110,11 @@ export async function syncAnonSettings() {
     });
     if (!res.ok) return { synced: false, status: res.status };
 
-    // Clear synced keys. Timezone is intentionally retained because the
-    // logged-in client still reads it from the same key for now (server
-    // column is canonical, but client doesn't refetch yet).
+    // Clear synced keys for newsletter and trips. The timezone key
+    // ('app-timezone') is intentionally NOT cleared: the logged-in client
+    // (GeneralSettings) still reads timezone from localStorage. The server
+    // column is canonical for future cross-device use, but the client does
+    // not yet refetch it, so clearing here would drop the user's timezone.
     if (email && subscribed) {
       safeRemove(KEY_NEWSLETTER_EMAIL);
       safeRemove(KEY_NEWSLETTER_SUBSCRIBED);

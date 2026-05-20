@@ -4,6 +4,9 @@ import { slugifyWithSuffix } from '../utils/slug.js';
 import { addSubscriber } from '../services/buttondownClient.js';
 
 const MAX_STOPS = 9;
+// Upper bound on trips accepted in a single sign-in sync, to bound work and
+// guard against a tampered/oversized localStorage payload. Generous — a real
+// anonymous session won't approach it.
 const MAX_SYNC_TRIPS = 50;
 
 function isFiniteNumber(v) {
@@ -20,9 +23,14 @@ function validStops(stops) {
 }
 
 async function insertTripWithStops(client, userId, trip) {
+  // Prefer the client-provided slug on the first attempt so re-syncs dedup
+  // reliably by slug. Fall back to a freshly generated slug on collision
+  // (the trips.slug column is globally unique).
   let inserted = null;
   for (let attempt = 0; attempt < 5; attempt++) {
-    const slug = slugifyWithSuffix(trip.name);
+    const slug = (attempt === 0 && typeof trip.slug === 'string' && trip.slug.trim())
+      ? trip.slug.trim().substring(0, 220)
+      : slugifyWithSuffix(trip.name);
     try {
       const row = await client.query(
         `INSERT INTO trips (user_id, name, description, slug, is_featured, is_public)
@@ -83,7 +91,8 @@ export function createUserSettingsRouter(pool) {
             `INSERT INTO newsletter_subscriptions (email, source) VALUES ($1, $2)`,
             [newsletter.email, 'web']
           ).catch(err => {
-            if (!err.message?.includes('duplicate key')) throw err;
+            // 23505 = unique_violation (already subscribed) — ignore.
+            if (err.code !== '23505') throw err;
           });
           synced.newsletter = true;
         } catch (err) {
@@ -92,7 +101,9 @@ export function createUserSettingsRouter(pool) {
         }
       }
 
-      // Trips — insert only those without a same-named trip for this user.
+      // Trips — insert only those this user doesn't already have. Dedup by
+      // slug (the client persists a stable slug per trip), which is reliable
+      // across re-syncs; insertTripWithStops reuses that slug server-side.
       if (Array.isArray(trips) && trips.length > 0) {
         const client = await pool.connect();
         try {
@@ -101,14 +112,17 @@ export function createUserSettingsRouter(pool) {
           for (const trip of trips.slice(0, MAX_SYNC_TRIPS)) {
             if (!trip || typeof trip.name !== 'string' || !trip.name.trim()) continue;
             if (!validStops(trip.stops)) continue;
-            const existing = await client.query(
-              `SELECT id FROM trips WHERE user_id = $1 AND name = $2 LIMIT 1`,
-              [req.user.id, trip.name.trim().substring(0, 200)]
-            );
-            if (existing.rows.length > 0) continue;
+            if (typeof trip.slug === 'string' && trip.slug.trim()) {
+              const existing = await client.query(
+                `SELECT id FROM trips WHERE user_id = $1 AND slug = $2 LIMIT 1`,
+                [req.user.id, trip.slug.trim().substring(0, 220)]
+              );
+              if (existing.rows.length > 0) continue;
+            }
             await insertTripWithStops(client, req.user.id, {
               name: trip.name.trim().substring(0, 200),
               description: trip.description,
+              slug: trip.slug,
               stops: trip.stops
             });
             count++;
