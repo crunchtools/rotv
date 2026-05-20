@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import pg from 'pg';
+import { EXPIRING_HOST, isPublicHttpUrl } from '../utils/sourceImage.js';
 
 const { Pool } = pg;
 
@@ -7,15 +8,8 @@ const CONCURRENCY = 5;
 const REQUEST_TIMEOUT = 15000;
 const DRY_RUN = process.argv.includes('--dry-run');
 
-const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: process.env.POSTGRES_PORT || 5432,
-  database: process.env.POSTGRES_DB || 'rotv',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres'
-});
-
-const EXPIRING_HOST = /(fbcdn\.net|cdninstagram\.com|lookaside\.[a-z0-9-]+\.(?:facebook|fbcdn)\.com)/i;
+// Reads standard PG* env vars (PGHOST/PGUSER/PGPASSWORD/...); no hardcoded credentials.
+const pool = new Pool();
 
 function decodeEntities(s) {
   return s.replace(/&amp;/gi, '&').replace(/&#0*38;/g, '&').replace(/&#x0*26;/gi, '&');
@@ -45,7 +39,7 @@ function extractOgImage(html, pageUrl) {
 }
 
 async function fetchOgImage(url) {
-  if (!/^https?:\/\//i.test(url || '')) return null;
+  if (!isPublicHttpUrl(url)) return null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
   try {
@@ -59,7 +53,8 @@ async function fetchOgImage(url) {
     if (!ct.includes('text/html')) return null;
     const html = (await res.text()).slice(0, 200000);
     return extractOgImage(html, url);
-  } catch {
+  } catch (err) {
+    console.warn(`[fetch] ${url} -> ${err.message}`);
     return null;
   } finally {
     clearTimeout(timer);

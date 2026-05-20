@@ -1,6 +1,7 @@
 import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
+import { EXPIRING_HOST } from '../utils/sourceImage.js';
 import { acquireBrowser, releaseBrowser } from './browserPool.js';
 
 const turndown = new TurndownService({
@@ -170,14 +171,17 @@ export async function extractPageContent(url, options = {}) {
         };
       });
 
-      const ogImage = await page.evaluate(() => {
+      const rawOgImage = await page.evaluate(() => {
         const pick = (sel) => document.querySelector(sel)?.content?.trim() || null;
-        return pick('meta[property="og:image"]')
+        const raw = pick('meta[property="og:image"]')
           || pick('meta[name="og:image"]')
           || pick('meta[name="twitter:image"]')
           || pick('meta[property="twitter:image"]')
           || null;
+        try { return raw ? new URL(raw, document.baseURI).href : null; } catch { return null; }
       });
+      // Skip expiring CDN hosts at the source so we never store URLs that 404 in days.
+      const ogImage = (rawOgImage && !EXPIRING_HOST.test(rawOgImage)) ? rawOgImage : null;
 
       let links = [];
       if (extractLinks) {

@@ -59,6 +59,7 @@ import {
   processTrailStatusCollectionJob
 } from './services/trailStatusService.js';
 import imageServerClient from './services/imageServerClient.js';
+import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { sendWeeklyDigest, sendDigestPreviewTo } from './services/newsletterDigestService.js';
 import { startMcpServer } from './services/mcpServer.js';
@@ -2516,11 +2517,7 @@ app.use(async (req, res, next) => {
     const safeTitle = escapeHtml(`${item.title} | ${item._poi.name}`);
     const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
     // Image priority: source article image, then POI primary photo, then brand.
-    // Reject signed/expiring CDN hosts (fbcdn/cdninstagram/lookaside) — they 404 after
-    // a few days, which is worse than falling back to a stable POI photo.
-    const candidate = item.image_url || '';
-    const isExpiringHost = /(fbcdn\.net|cdninstagram\.com|lookaside\.[a-z0-9-]+\.(?:facebook|fbcdn)\.com)/i.test(candidate);
-    const sourceImage = (/^https?:\/\//i.test(candidate) && !isExpiringHost) ? candidate : null;
+    const sourceImage = isUsableSourceImage(item.image_url) ? item.image_url : null;
     const ogImage = escapeHtml(sourceImage || await resolvePoiOgImage(item.poi_id, baseUrl));
 
     const indexPath = path.join(staticPath, 'index.html');
