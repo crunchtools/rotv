@@ -308,6 +308,11 @@ check = "single_use_helpers"
 path = "backend/scripts/cleanup-failed-urls.js"
 justification = "Top-level main() entry point at line 128 — a 150-line orchestration body (fetch URLs → test in batches → report → conditionally delete) for a maintenance CLI. Inlining to module scope would mix top-level execution with import declarations and lose the try/finally that closes the DB pool"
 
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/scripts/backfill-news-images.js"
+justification = "Maintenance CLI for a one-off og:image backfill. Flagged helpers (decodeEntities, extractOgImage, fetchOgImage, main) are discrete named stages of a fetch→parse→store pipeline; main() is the top-level entry point whose try/finally closes the DB pool. Inlining would mix top-level execution with imports and obscure the per-stage failure handling each one isolates"
+
 # Single-use helpers - Manual debugging scripts (top-level async wrappers)
 
 [[exceptions]]
