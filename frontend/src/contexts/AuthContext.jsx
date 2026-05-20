@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
+import { syncAnonSettings } from '../utils/anonSettings';
 
 export const AuthContext = createContext(null);
 
@@ -35,7 +36,7 @@ export function AuthProvider({ children }) {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
     if (authStatus === 'success') {
-      fetchUser();
+      fetchUser().then(() => syncAnonSettings());
       window.history.replaceState({}, '', window.location.pathname);
     } else if (authStatus === 'failed') {
       setError('Authentication failed. Please try again.');

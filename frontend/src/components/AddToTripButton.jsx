@@ -9,7 +9,7 @@ export default function AddToTripButton({ poi, stops, className = 'share-badge-b
   if (!primary || typeof primary.lat !== 'number' || typeof primary.lng !== 'number') return null;
 
   const poiId = poi && poi.id ? poi.id : null;
-  const inTrip = poiId ? hasStop(poiId) : false;
+  const inTrip = !!poiId && hasStop(poiId);
   const atLimit = trip.stops.length >= MAX_STOPS;
 
   const handleClick = (e) => {

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTrip } from '../hooks/useTrip';
 import { useAuth } from '../hooks/useAuth';
+import { readTrips as readLocalTrips, removeTrip as removeLocalTrip } from '../utils/anonSettings';
 import './MyTripsModal.css';
 
 function formatDate(iso) {
@@ -22,7 +23,7 @@ function shareStatusLabel(trip) {
 
 export default function MyTripsModal({ open, onClose }) {
   const { trip: activeTrip, loadTrip, clear } = useTrip();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isAuthenticated } = useAuth();
   const [mine, setMine] = useState([]);
   const [discover, setDiscover] = useState([]);
   const [pending, setPending] = useState([]);
@@ -32,6 +33,14 @@ export default function MyTripsModal({ open, onClose }) {
   const [copiedId, setCopiedId] = useState(null);
 
   const refreshMine = useCallback(async () => {
+    if (!isAuthenticated) {
+      setMine(readLocalTrips().map(t => ({
+        ...t,
+        stop_count: t.stops?.length || 0,
+        updated_at: t.savedAt
+      })));
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -43,7 +52,7 @@ export default function MyTripsModal({ open, onClose }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const refreshDiscover = useCallback(async () => {
     setLoading(true);
@@ -82,6 +91,16 @@ export default function MyTripsModal({ open, onClose }) {
   if (!open) return null;
 
   const handleOpen = async (slug) => {
+    if (!isAuthenticated) {
+      const local = readLocalTrips().find(t => t.slug === slug);
+      if (local) {
+        loadTrip(local);
+        onClose();
+      } else {
+        setError('Could not load trip');
+      }
+      return;
+    }
     try {
       const res = await fetch(`/api/trips/${encodeURIComponent(slug)}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Could not load trip');
@@ -113,6 +132,13 @@ export default function MyTripsModal({ open, onClose }) {
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  const handleDeleteLocal = (slug) => {
+    if (!window.confirm('Delete this trip?')) return;
+    removeLocalTrip(slug);
+    if (activeTrip && activeTrip.slug === slug) clear();
+    refreshMine();
   };
 
   const handleCopyLink = async (trip) => {
@@ -188,13 +214,20 @@ export default function MyTripsModal({ open, onClose }) {
             <>
               <div className="my-trips-actions-row">
                 <button className="primary" onClick={() => { clear(); onClose(); }}>+ New Trip</button>
-                <button onClick={() => { setView('discover'); refreshDiscover(); }}>Find Trips</button>
+                {isAuthenticated && (
+                  <button onClick={() => { setView('discover'); refreshDiscover(); }}>Find Trips</button>
+                )}
                 {isAdmin && (
                   <button onClick={() => { setView('pending'); refreshPending(); }}>
                     Pending Review
                   </button>
                 )}
               </div>
+              {!isAuthenticated && mine.length > 0 && (
+                <p className="my-trips-anon-hint">
+                  These trips are saved to this browser. Sign in to keep them on your account and share them.
+                </p>
+              )}
               {loading ? (
                 <div className="my-trips-empty">Loading…</div>
               ) : mine.length === 0 ? (
@@ -204,24 +237,32 @@ export default function MyTripsModal({ open, onClose }) {
                   {mine.map(trip => {
                     const status = shareStatusLabel(trip);
                     return (
-                      <li key={trip.id} className="my-trips-row">
+                      <li key={trip.id || trip.slug} className="my-trips-row">
                         <div className="my-trips-row-info">
                           <span className="my-trips-row-name">
                             {trip.name}{status ? ` · ${status}` : ''}
                           </span>
                           <span className="my-trips-row-meta">
-                            {trip.stop_count} stop{Number(trip.stop_count) === 1 ? '' : 's'} · edited {formatDate(trip.updated_at)}
+                            {trip.stop_count} stop{Number(trip.stop_count) === 1 ? '' : 's'}
+                            {trip.updated_at ? ` · edited ${formatDate(trip.updated_at)}` : ''}
                           </span>
                         </div>
                         <div className="my-trips-row-actions">
                           <button onClick={() => handleOpen(trip.slug)}>Open</button>
-                          <button onClick={() => handleDuplicate(trip.id)}>Duplicate</button>
-                          {(trip.is_featured || trip.is_public) && (
+                          {isAuthenticated && (
+                            <button onClick={() => handleDuplicate(trip.id)}>Duplicate</button>
+                          )}
+                          {isAuthenticated && (trip.is_featured || trip.is_public) && (
                             <button onClick={() => handleCopyLink(trip)}>
                               {copiedId === trip.id ? 'Copied!' : 'Copy link'}
                             </button>
                           )}
-                          <button className="danger" onClick={() => handleDelete(trip.id)}>Delete</button>
+                          <button
+                            className="danger"
+                            onClick={() => isAuthenticated ? handleDelete(trip.id) : handleDeleteLocal(trip.slug)}
+                          >
+                            Delete
+                          </button>
                         </div>
                       </li>
                     );

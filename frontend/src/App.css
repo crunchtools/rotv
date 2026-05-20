@@ -348,6 +348,16 @@ body {
   color: #333;
 }
 
+.my-trips-menu-item {
+  color: #333;
+}
+
+.tab-dropdown-divider {
+  height: 1px;
+  margin: 0.25rem 0;
+  background: #eee;
+}
+
 /* Filter Bar */
 .filter-bar {
   background: white;

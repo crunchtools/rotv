@@ -1,0 +1,99 @@
+import express from 'express';
+import { isAuthenticated } from '../middleware/auth.js';
+import { validateStops, insertStops, insertTripWithSlugRetry } from './trips.js';
+import { addSubscriber } from '../services/buttondownClient.js';
+
+const MAX_SYNC_TRIPS = 50;
+
+/**
+ * Router for /api/user/settings/sync.
+ *
+ * Flushes a freshly-signed-in user's anonymous localStorage state to the
+ * backend. Server-wins fill-gaps semantics: timezone is set only when the
+ * account's value is still NULL/empty; newsletter subscribe is idempotent
+ * server-side; a trip is inserted only when the user has no trip with the
+ * same slug, so re-syncs never duplicate. The client persists a stable slug
+ * per trip and it is reused server-side via insertTripWithSlugRetry's
+ * preferredSlug, keeping client and server slugs aligned for dedup.
+ */
+export function createUserSettingsRouter(pool) {
+  const router = express.Router();
+
+  router.post('/sync', isAuthenticated, async (req, res) => {
+    const { timezone, newsletter, trips } = req.body || {};
+    const synced = { timezone: false, newsletter: false, trips: 0 };
+
+    try {
+      if (typeof timezone === 'string' && timezone.trim()) {
+        const tzUpdate = await pool.query(
+          `UPDATE users SET timezone = $1
+            WHERE id = $2 AND (timezone IS NULL OR timezone = '')`,
+          [timezone.trim(), req.user.id]
+        );
+        synced.timezone = tzUpdate.rowCount > 0;
+      }
+
+      if (newsletter && newsletter.subscribed && typeof newsletter.email === 'string'
+          && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newsletter.email)) {
+        try {
+          await addSubscriber(newsletter.email, pool);
+          await pool.query(
+            `INSERT INTO newsletter_subscriptions (email, source) VALUES ($1, $2)`,
+            [newsletter.email, 'web']
+          ).catch(err => {
+            if (err.code !== '23505') throw err;
+          });
+          synced.newsletter = true;
+        } catch (err) {
+          console.error('settings/sync newsletter failed:', err.message);
+        }
+      }
+
+      if (Array.isArray(trips) && trips.length > 0) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          let count = 0;
+          for (const trip of trips.slice(0, MAX_SYNC_TRIPS)) {
+            if (!trip || typeof trip.name !== 'string' || !trip.name.trim()) continue;
+            if (validateStops(trip.stops)) continue;
+            const slug = (typeof trip.slug === 'string' && trip.slug.trim())
+              ? trip.slug.trim().substring(0, 220)
+              : null;
+            if (slug) {
+              const existing = await client.query(
+                `SELECT id FROM trips WHERE user_id = $1 AND slug = $2 LIMIT 1`,
+                [req.user.id, slug]
+              );
+              if (existing.rows.length > 0) continue;
+            }
+            const created = await insertTripWithSlugRetry(client, {
+              user_id: req.user.id,
+              name: trip.name.trim().substring(0, 200),
+              description: trip.description || null,
+              is_featured: false,
+              is_public: false,
+              preferredSlug: slug
+            });
+            await insertStops(client, created.id, trip.stops);
+            count++;
+          }
+          await client.query('COMMIT');
+          synced.trips = count;
+        } catch (err) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw err;
+        } finally {
+          client.release();
+        }
+      }
+
+      res.json({ synced });
+    } catch (err) {
+      console.error('POST /api/user/settings/sync failed:', err);
+      res.status(500).json({ error: 'Failed to sync settings' });
+    }
+  });
+
+  return router;
+}
