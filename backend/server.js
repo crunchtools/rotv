@@ -2380,6 +2380,32 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   return item ? { ...item, poi_slug: poiSlug, _poi: poi } : null;
 }
 
+// Resolves the og:image for a POI: its own primary photo at size=large (1200px —
+// smaller thumbnails are rejected by Facebook as too small) when one exists, else
+// the branded fallback card so a share never points at a 404. Mirrors the
+// "does a usable image exist?" logic of GET /api/pois/:id/thumbnail.
+const OG_FALLBACK_IMAGE = '/brand/rotv-og-share-1200x630.jpg';
+async function resolvePoiOgImage(poiId, baseUrl) {
+  if (poiId) {
+    try {
+      const { rows } = await pool.query(`
+        SELECT 1 FROM poi_media
+        WHERE poi_id = $1
+          AND media_type IN ('image', 'video')
+          AND role IN ('primary', 'gallery')
+          AND moderation_status IN ('published', 'auto_approved')
+        LIMIT 1
+      `, [poiId]);
+      if (rows.length > 0 || (imageServerClient.initialized && await imageServerClient.getPrimaryAsset(poiId))) {
+        return `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
+      }
+    } catch (error) {
+      console.error('Error resolving POI OG image:', error.message);
+    }
+  }
+  return `${baseUrl}${OG_FALLBACK_IMAGE}`;
+}
+
 // OG-tag injection for ?poi= deep links. MUST be mounted before express.static
 // so it can intercept "/" before the static index.html is served.
 app.use(async (req, res, next) => {
@@ -2397,7 +2423,7 @@ app.use(async (req, res, next) => {
       if (poi) {
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
         const appUrl = `${baseUrl}/?poi=${poiSlug}`;
-        const imageUrl = `${baseUrl}/api/pois/${poi.id}/thumbnail`;
+        const imageUrl = await resolvePoiOgImage(poi.id, baseUrl);
         const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
 
         const indexPath = path.join(staticPath, 'index.html');
@@ -2421,9 +2447,11 @@ app.use(async (req, res, next) => {
           `<meta property="og:url" content="${appUrl}" />`
         );
 
+        // Replace the static default image rather than appending — a second
+        // og:image tag confuses crawlers and breaks the unfurl.
         html = html.replace(
-          /(<meta property="og:url" content="[^"]*" \/>)/,
-          `$1\n    <meta property="og:image" content="${imageUrl}" />\n    <meta property="og:image:type" content="image/jpeg" />\n    <meta property="og:image:width" content="1200" />\n    <meta property="og:image:height" content="630" />`
+          /<meta property="og:image" content="[^"]*" \/>/,
+          `<meta property="og:image" content="${imageUrl}" />`
         );
 
         html = html.replace(
@@ -2435,8 +2463,8 @@ app.use(async (req, res, next) => {
           `<meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />`
         );
         html = html.replace(
-          /(<meta name="twitter:description" content="[^"]*" \/>)/,
-          `$1\n    <meta name="twitter:image" content="${imageUrl}" />`
+          /<meta name="twitter:image" content="[^"]*" \/>/,
+          `<meta name="twitter:image" content="${imageUrl}" />`
         );
 
         html = html.replace(
@@ -2473,7 +2501,8 @@ app.use(async (req, res, next) => {
     const description = (isEvent ? item.description : item.summary) || '';
     const safeTitle = escapeHtml(`${item.title} | ${item._poi.name}`);
     const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
-    const ogImage = `${baseUrl}/brand/rotv-og-share-1200x630.jpg`;
+    // News/events have no image of their own; share the associated POI's primary photo.
+    const ogImage = await resolvePoiOgImage(item.poi_id, baseUrl);
 
     const indexPath = path.join(staticPath, 'index.html');
     let html = await fs.readFile(indexPath, 'utf-8');
@@ -2486,6 +2515,7 @@ app.use(async (req, res, next) => {
     html = html.replace(/<meta property="og:image" content="[^"]*" \/>/, `<meta property="og:image" content="${ogImage}" />`);
     html = html.replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${safeTitle}" />`);
     html = html.replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${safeDesc}" />`);
+    html = html.replace(/<meta name="twitter:image" content="[^"]*" \/>/, `<meta name="twitter:image" content="${ogImage}" />`);
     html = html.replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${safeDesc}" />`);
 
     res.setHeader('Content-Type', 'text/html');
