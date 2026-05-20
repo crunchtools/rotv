@@ -2380,10 +2380,7 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   return item ? { ...item, poi_slug: poiSlug, _poi: poi } : null;
 }
 
-// Resolves the og:image for a POI: its own primary photo at size=large (1200px —
-// smaller thumbnails are rejected by Facebook as too small) when one exists, else
-// the branded fallback card so a share never points at a 404. Mirrors the
-// "does a usable image exist?" logic of GET /api/pois/:id/thumbnail.
+// og:image for a POI: primary photo at size=large (smaller is rejected by Facebook), else branded fallback.
 const OG_FALLBACK_IMAGE = '/brand/rotv-og-share-1200x630.jpg';
 async function resolvePoiOgImage(poiId, baseUrl) {
   if (poiId) {
@@ -2425,7 +2422,7 @@ app.use(async (req, res, next) => {
         const appUrl = `${baseUrl}/?poi=${poiSlug}`;
         const imageUrl = await resolvePoiOgImage(poi.id, baseUrl);
         const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
-        // Fix: fully HTML-escape interpolated content, not just quotes (PR #382 review)
+        // Fix: HTML-escape interpolated content (PR #382 review)
         const safeName = escapeHtml(`${poi.name} | Roots of The Valley`);
         const safeDescription = escapeHtml(description);
 
@@ -2450,8 +2447,7 @@ app.use(async (req, res, next) => {
           `<meta property="og:url" content="${escapeHtml(appUrl)}" />` // Fix: escape URL in attribute (PR #382 review)
         );
 
-        // Replace the static default image rather than appending — a second
-        // og:image tag confuses crawlers and breaks the unfurl.
+        // Replace, don't append — a second og:image tag breaks the unfurl.
         html = html.replace(
           /<meta property="og:image" content="[^"]*" \/>/,
           `<meta property="og:image" content="${imageUrl}" />`
