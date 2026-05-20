@@ -585,6 +585,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
 
     item.source_url = url;
     item.rendered_content = renderedContent;
+    item.image_url = page.ogImage || null;
     items.push(item);
   }
 
@@ -705,7 +706,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       }
 
       if (classification.pageType === 'detail') {
-        collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
+        collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, ogImage: extracted.ogImage, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
       } else if (classification.pageType === 'listing') {
         const validLinks = shortestUrlDedup(filterDetailLinks(classification.detailLinks, url, basePath, trustedEventPaths));
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
@@ -1289,8 +1290,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 
       const dateScore = item.date_consensus_score || 0;
       await pool.query(`
-        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       `, [
         effectivePoiId,
         item.title,
@@ -1302,7 +1303,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         dateScore,
         'pending',
         item.rendered_content || null,
-        item.date_signals ? JSON.stringify(item.date_signals) : null
+        item.date_signals ? JSON.stringify(item.date_signals) : null,
+        item.image_url || null
       ]);
       savedCount++;
       if (log) log(`[Save] Saved (pending): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
@@ -1405,8 +1407,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
 
       const dateScore = item.date_consensus_score || 0;
       await pool.query(`
-        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       `, [
         effectivePoiId,
         item.title,
@@ -1420,7 +1422,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         dateScore,
         'pending',
         item.rendered_content || null,
-        item.date_signals ? JSON.stringify(item.date_signals) : null
+        item.date_signals ? JSON.stringify(item.date_signals) : null,
+        item.image_url || null
       ]);
       savedCount++;
       if (log) log(`[Save] Saved event (pending): "${item.title}" (${item.start_date}, score=${dateScore}) → ${resolvedUrl}`);

@@ -2352,7 +2352,7 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   if (type === 'event') {
     const q = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, e.publication_date, e.collection_date,
+             e.location_details, e.source_url, e.publication_date, e.collection_date, e.image_url,
              p.name AS poi_name, p.id AS poi_id,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
@@ -2366,7 +2366,7 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   } else {
     const q = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.publication_date, n.collection_date, p.name AS poi_name, p.id AS poi_id,
+             n.publication_date, n.collection_date, n.image_url, p.name AS poi_name, p.id AS poi_id,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
@@ -2515,8 +2515,13 @@ app.use(async (req, res, next) => {
     const description = (isEvent ? item.description : item.summary) || '';
     const safeTitle = escapeHtml(`${item.title} | ${item._poi.name}`);
     const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
-    // News/events have no image of their own; share the associated POI's primary photo.
-    const ogImage = await resolvePoiOgImage(item.poi_id, baseUrl);
+    // Image priority: source article image, then POI primary photo, then brand.
+    // Reject signed/expiring CDN hosts (fbcdn/cdninstagram/lookaside) — they 404 after
+    // a few days, which is worse than falling back to a stable POI photo.
+    const candidate = item.image_url || '';
+    const isExpiringHost = /(fbcdn\.net|cdninstagram\.com|lookaside\.[a-z0-9-]+\.(?:facebook|fbcdn)\.com)/i.test(candidate);
+    const sourceImage = (/^https?:\/\//i.test(candidate) && !isExpiringHost) ? candidate : null;
+    const ogImage = escapeHtml(sourceImage || await resolvePoiOgImage(item.poi_id, baseUrl));
 
     const indexPath = path.join(staticPath, 'index.html');
     let html = await fs.readFile(indexPath, 'utf-8');

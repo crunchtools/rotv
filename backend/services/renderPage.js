@@ -28,6 +28,7 @@ export async function renderPage(pool, url, options = {}) {
         rawText: row.raw_text,
         title: row.title,
         ogDates: row.og_dates || {},
+        ogImage: row.og_image || null,
         links: row.links || [],
         reachable: true,
         excerpt: row.markdown ? row.markdown.slice(0, 200) : null,
@@ -44,12 +45,13 @@ export async function renderPage(pool, url, options = {}) {
   if (rendered.reachable && rendered.markdown) {
     try {
       await pool.query(`
-        INSERT INTO rendered_page_cache (url, markdown, raw_text, og_dates, title, links, page_type, rendered_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+        INSERT INTO rendered_page_cache (url, markdown, raw_text, og_dates, og_image, title, links, page_type, rendered_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
         ON CONFLICT (url) DO UPDATE SET
           markdown = EXCLUDED.markdown,
           raw_text = EXCLUDED.raw_text,
           og_dates = EXCLUDED.og_dates,
+          og_image = EXCLUDED.og_image,
           title = EXCLUDED.title,
           links = EXCLUDED.links,
           page_type = COALESCE(EXCLUDED.page_type, rendered_page_cache.page_type),
@@ -59,6 +61,7 @@ export async function renderPage(pool, url, options = {}) {
         rendered.markdown,
         rendered.rawText || null,
         JSON.stringify(rendered.ogDates || {}),
+        rendered.ogImage || null,
         rendered.title || null,
         JSON.stringify(rendered.links || []),
         pageType || null

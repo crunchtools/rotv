@@ -170,6 +170,15 @@ export async function extractPageContent(url, options = {}) {
         };
       });
 
+      const ogImage = await page.evaluate(() => {
+        const pick = (sel) => document.querySelector(sel)?.content?.trim() || null;
+        return pick('meta[property="og:image"]')
+          || pick('meta[name="og:image"]')
+          || pick('meta[name="twitter:image"]')
+          || pick('meta[property="twitter:image"]')
+          || null;
+      });
+
       let links = [];
       if (extractLinks) {
         links = await page.evaluate(() => {
@@ -254,6 +263,7 @@ export async function extractPageContent(url, options = {}) {
           excerpt: fallbackText.slice(0, 200),
           reachable: true,
           ogDates,
+          ogImage,
           rawText,
           ...(extractLinks && { links })
         };
@@ -268,6 +278,7 @@ export async function extractPageContent(url, options = {}) {
         excerpt: article.excerpt || markdown.slice(0, 200),
         reachable: true,
         ogDates,
+        ogImage,
         rawText,
         ...(extractLinks && { links })
       };
