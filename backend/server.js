@@ -1099,15 +1099,7 @@ app.get('/api/pois/:id/media', async (req, res) => {
       allMedia.push(item);
     }
 
-    // A lone gallery item alongside a primary is usually a migration duplicate — show hero only
-    const primaryItems = allMedia.filter(m => m.role === 'primary');
-    const galleryItems = allMedia.filter(m => m.role !== 'primary');
-    let mosaic;
-    if (primaryItems.length > 0 && galleryItems.length <= 1) {
-      mosaic = primaryItems.slice(0, 1);
-    } else {
-      mosaic = allMedia.slice(0, 3);
-    }
+    const mosaic = allMedia.slice(0, 3);
 
     const response = {
       mosaic,
@@ -1530,7 +1522,7 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
 
 function extractYouTubeId(url) {
   const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([^&\n?#]+)/,
     /^([a-zA-Z0-9_-]{11})$/
   ];
 
