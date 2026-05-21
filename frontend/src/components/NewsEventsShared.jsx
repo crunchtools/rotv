@@ -77,8 +77,9 @@ export const EVENT_TYPES = {
 };
 
 export function DetailImage({ imageUrl, poiId, alt }) {
+  const isSafeUrl = (u) => typeof u === 'string' && (/^https?:\/\//i.test(u) || u.startsWith('/'));
   const sources = [];
-  if (imageUrl) sources.push(imageUrl);
+  if (isSafeUrl(imageUrl)) sources.push(imageUrl);
   if (poiId) sources.push(`/api/pois/${poiId}/thumbnail?size=large`);
   sources.push('/brand/rotv-logo.png');
 
