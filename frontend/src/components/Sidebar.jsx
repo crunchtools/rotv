@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from './ImageUploader';
 import ThumbnailCarousel from './ThumbnailCarousel';
-import { formatDateTime, formatPublicationDate, NewsTypeIcon, EventTypeIcon } from './NewsEventsShared';
+import { formatDateTime, formatPublicationDate, NewsTypeIcon, EventTypeIcon, DetailImage } from './NewsEventsShared';
 import ShareButton from './ShareButton';
 import NavigateButton from './NavigateButton';
 import AddToTripButton from './AddToTripButton';
@@ -1321,7 +1321,7 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
   );
 }
 
-function ContentDetail({ permalinkInfo, onBack }) {
+function ContentDetail({ permalinkInfo, onBack, onItemLoaded }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -1335,9 +1335,9 @@ function ContentDetail({ permalinkInfo, onBack }) {
         if (!res.ok) throw new Error(res.status === 404 ? 'Not found' : 'Failed to load');
         return res.json();
       })
-      .then(data => { setItem(data); setLoading(false); })
+      .then(data => { setItem(data); setLoading(false); if (onItemLoaded) onItemLoaded(data); })
       .catch(err => { setError(err.message); setLoading(false); });
-  }, [permalinkInfo]);
+  }, [permalinkInfo, onItemLoaded]);
 
   if (loading) return <div className="sidebar-tab-loading">Loading...</div>;
   if (error || !item) return (
@@ -2397,8 +2397,10 @@ function Sidebar({ tourActive, destination, isNewPOI, newOrganization, isNewOrga
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [sidebarTab, setSidebarTab] = useState(initialSidebarTab || 'view');
+  const [permalinkItem, setPermalinkItem] = useState(null);
 
   useEffect(() => {
+    setPermalinkItem(null);
     if (permalinkInfo) {
       setSidebarTab(permalinkInfo.type === 'event' ? 'events' : 'news');
     }
@@ -3114,7 +3116,7 @@ function Sidebar({ tourActive, destination, isNewPOI, newOrganization, isNewOrga
             </div>
           ) : null}
 
-          {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
+          {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
             <>
               {currentIndex > 0 && (
                 <button
@@ -3365,7 +3367,13 @@ function Sidebar({ tourActive, destination, isNewPOI, newOrganization, isNewOrga
       </div>
 
       <div style={{ position: 'relative' }}>
-        {isEditing && destination?.id ? (
+        {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
+          permalinkItem ? (
+            <DetailImage key={permalinkItem.id} imageUrl={permalinkItem.image_url} poiId={permalinkItem.poi_id} alt={permalinkItem.title} />
+          ) : (
+            <div style={{ height: '180px', marginBottom: '12px' }} />
+          )
+        ) : isEditing && destination?.id ? (
           <ImageUploader
             destinationId={destination.id}
             hasImage={!!destination.has_primary_image}
@@ -3391,7 +3399,7 @@ function Sidebar({ tourActive, destination, isNewPOI, newOrganization, isNewOrga
           </div>
         ) : null}
 
-        {isMobile && !isEditing && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
+        {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
           <>
             {currentIndex > 0 && (
               <button
@@ -3485,6 +3493,7 @@ function Sidebar({ tourActive, destination, isNewPOI, newOrganization, isNewOrga
         {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') && (
           <ContentDetail
             permalinkInfo={permalinkInfo}
+            onItemLoaded={setPermalinkItem}
             onBack={() => {
               if (onClearPermalink) onClearPermalink();
               const subTab = permalinkInfo?.type === 'event' ? 'events' : 'news';
