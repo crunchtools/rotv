@@ -12,12 +12,14 @@ import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { Readable } from 'node:stream';
 import { configurePassport } from './config/passport.js';
-import authRoutes from './routes/auth.js';
+import { createAuthRouter } from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createNewsletterRouter } from './routes/newsletter.js';
 import { createFeedbackRouter } from './routes/feedback.js';
 import { createTripsRouter } from './routes/trips.js';
 import { createUserSettingsRouter } from './routes/userSettings.js';
+import { createFavoritesRouter } from './routes/favorites.js';
+import { createNotificationsRouter } from './routes/notifications.js';
 import { isAuthenticated } from './middleware/auth.js';
 import {
   initJobScheduler,
@@ -60,7 +62,7 @@ import {
 } from './services/trailStatusService.js';
 import imageServerClient from './services/imageServerClient.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
-import { sendWeeklyDigest, sendDigestPreviewTo } from './services/newsletterDigestService.js';
+import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
 import { startMcpServer } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 
@@ -166,12 +168,14 @@ configurePassport(pool);
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use('/auth', authRoutes);
+app.use('/auth', createAuthRouter(pool));
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 app.use('/api/newsletter', createNewsletterRouter(pool));
 app.use('/api/feedback', createFeedbackRouter(pool));
 app.use('/api/trips', createTripsRouter(pool));
 app.use('/api/user/settings', createUserSettingsRouter(pool));
+app.use('/api/favorites', createFavoritesRouter(pool));
+app.use('/api/notifications', createNotificationsRouter(pool));
 
 async function importGeoJSONFeatures(client) {
   const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/public');
@@ -2694,6 +2698,7 @@ async function start() {
 
     await registerDigestHandler(async (pgBossJobId, _digestPayload) => {
       await sendWeeklyDigest(pool, pgBossJobId);
+      await sendPersonalizedDigests(pool, pgBossJobId);
     });
 
     await scheduleDigest('0 8 * * 5');

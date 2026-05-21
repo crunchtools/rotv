@@ -1,5 +1,10 @@
 import React, { createContext, useState, useEffect, useCallback } from 'react';
-import { syncAnonSettings } from '../utils/anonSettings';
+import {
+  syncAnonSettings,
+  readFavorites,
+  addFavorite as addAnonFavorite,
+  removeFavorite as removeAnonFavorite
+} from '../utils/anonSettings';
 
 export const AuthContext = createContext(null);
 
@@ -7,6 +12,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [favorites, setFavorites] = useState(() => readFavorites());
 
   const fetchUser = useCallback(async () => {
     try {
@@ -15,14 +21,22 @@ export function AuthProvider({ children }) {
       });
       if (response.ok) {
         const userData = await response.json();
-        setUser(userData);
+        if (userData) {
+          setUser(userData);
+          setFavorites(userData.favorites || []);
+        } else {
+          setUser(null);
+          setFavorites(readFavorites());
+        }
       } else {
         setUser(null);
+        setFavorites(readFavorites());
       }
     } catch (err) {
       console.error('Failed to fetch user:', err);
       setError(err.message);
       setUser(null);
+      setFavorites(readFavorites());
     } finally {
       setLoading(false);
     }
@@ -36,7 +50,7 @@ export function AuthProvider({ children }) {
     const params = new URLSearchParams(window.location.search);
     const authStatus = params.get('auth');
     if (authStatus === 'success') {
-      fetchUser().then(() => syncAnonSettings());
+      fetchUser().then(() => syncAnonSettings()).then(() => fetchUser());
       window.history.replaceState({}, '', window.location.pathname);
     } else if (authStatus === 'failed') {
       setError('Authentication failed. Please try again.');
@@ -52,6 +66,7 @@ export function AuthProvider({ children }) {
       });
       if (response.ok) {
         setUser(null);
+        setFavorites(readFavorites());
       }
     } catch (err) {
       console.error('Logout failed:', err);
@@ -67,11 +82,35 @@ export function AuthProvider({ children }) {
     window.location.href = '/auth/facebook';
   };
 
-  const updateFavorites = (favorites) => {
+  const isFavorited = useCallback(
+    (poiId) => favorites.includes(poiId),
+    [favorites]
+  );
+
+  const toggleFavorite = useCallback(async (poiId) => {
+    const wasFavorited = favorites.includes(poiId);
+    const next = wasFavorited
+      ? favorites.filter(id => id !== poiId)
+      : [...favorites, poiId];
+    setFavorites(next);
+
     if (user) {
-      setUser({ ...user, favorites });
+      try {
+        const res = await fetch(`/api/favorites/${poiId}`, {
+          method: wasFavorited ? 'DELETE' : 'POST',
+          credentials: 'include'
+        });
+        if (!res.ok) throw new Error('Request failed');
+      } catch (err) {
+        setFavorites(favorites);
+      }
+    } else if (wasFavorited) {
+      removeAnonFavorite(poiId);
+    } else {
+      addAnonFavorite(poiId);
     }
-  };
+    return !wasFavorited;
+  }, [favorites, user]);
 
   const value = {
     user,
@@ -80,10 +119,12 @@ export function AuthProvider({ children }) {
     isAuthenticated: !!user,
     isAdmin: user?.isAdmin || false,
     role: user?.role || 'viewer',
+    favorites,
+    isFavorited,
+    toggleFavorite,
     logout,
     loginWithGoogle,
     loginWithFacebook,
-    updateFavorites,
     refreshUser: fetchUser
   };
 

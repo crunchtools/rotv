@@ -20,8 +20,8 @@ export function createUserSettingsRouter(pool) {
   const router = express.Router();
 
   router.post('/sync', isAuthenticated, async (req, res) => {
-    const { timezone, newsletter, trips } = req.body || {};
-    const synced = { timezone: false, newsletter: false, trips: 0 };
+    const { timezone, newsletter, trips, favorites } = req.body || {};
+    const synced = { timezone: false, newsletter: false, trips: 0, favorites: 0 };
 
     try {
       if (typeof timezone === 'string' && timezone.trim()) {
@@ -46,6 +46,23 @@ export function createUserSettingsRouter(pool) {
           synced.newsletter = true;
         } catch (err) {
           console.error('settings/sync newsletter failed:', err.message);
+        }
+      }
+
+      if (Array.isArray(favorites) && favorites.length > 0) {
+        const poiIds = favorites
+          .map(Number)
+          .filter(n => Number.isInteger(n) && n > 0)
+          .slice(0, 500);
+        if (poiIds.length > 0) {
+          const favInsert = await pool.query(
+            `INSERT INTO user_poi_favorites (user_id, poi_id)
+             SELECT $1, p FROM UNNEST($2::int[]) AS p
+             WHERE EXISTS (SELECT 1 FROM pois WHERE id = p AND deleted IS NOT TRUE)
+             ON CONFLICT DO NOTHING`,
+            [req.user.id, poiIds]
+          );
+          synced.favorites = favInsert.rowCount;
         }
       }
 

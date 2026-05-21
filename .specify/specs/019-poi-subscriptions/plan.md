@@ -144,3 +144,4 @@ constraint is the real safety net; the watermark just bounds the scan.
 | Date | Changes |
 |------|---------|
 | 2026-05-20 | Initial plan |
+| 2026-05-20 | Pivot to anonymous-first + client-side unread (see spec 0.2.0). Removed `user_notifications` table, `notificationService.js` fan-out, and the `NOTIFICATION_FANOUT` job. Added public `GET /api/notifications/feed`, anon favorites in `anonSettings.js` + sync, centralized favorites in `AuthContext` (`toggleFavorite`). Header: Map/Results toggle, login dot, bell for all. |

@@ -8,13 +8,22 @@
 
 ## Overview
 
-Lets signed-in users favorite ("subscribe to") individual POIs and stay informed
-when new news or events appear at those places. Subscriptions drive three
-surfaces: a Facebook-style in-app notification bell with an unread badge and a
-notification feed, a Favorites section in Settings that aggregates news/events
-from subscribed POIs, and a per-user customized weekly email digest scoped to the
-user's favorited POIs. Concrete, user-requested subset of the UX 1.0 plan (#141,
-Phases 2 and 4); validates real demand from Robbie Schneider's feedback (#213).
+Lets visitors favorite ("subscribe to") individual POIs and stay informed when
+new news or events appear at those places. Subscriptions drive three surfaces: a
+Facebook-style in-app notification bell with an unread badge and a feed, a
+Favorites section in Settings that aggregates news/events from subscribed POIs,
+and a per-user customized weekly email digest scoped to a logged-in user's
+favorited POIs. Concrete, user-requested subset of the UX 1.0 plan (#141, Phases
+2 and 4); validates real demand from Robbie Schneider's feedback (#213).
+
+**Anonymous-first:** following a POI and the notification bell work for
+not-logged-in visitors too, consistent with the rest of the app's anonymous UX
+(spec 018). Anonymous favorites live in localStorage and flush to the account on
+first sign-in via `/api/user/settings/sync`. The bell computes unread state
+**client-side** (favorited POIs' recent content vs. a last-seen timestamp), so
+there is no server-side notifications table or fan-out job — the same code path
+serves anonymous and logged-in users. The personalized weekly email remains a
+logged-in feature (it needs a server-side account + email).
 
 ---
 
@@ -80,13 +89,15 @@ Acceptance Criteria:
 
 | Table | Description |
 |-------|-------------|
-| `user_poi_favorites` | Join table: which user subscribes to which POI, with timestamp. Source of truth for favorites. |
-| `user_notifications` | One row per (user, content item) notification, with read state. |
+| `user_poi_favorites` | Join table: which logged-in user subscribes to which POI, with timestamp. Source of truth for logged-in favorites; also backs the personalized email. |
+
+There is **no** server-side notifications table: unread state is computed
+client-side. Anonymous favorites live in browser localStorage (`rotv-favorites`)
+until the user signs in.
 
 ### Schema Changes
 
 ```sql
--- Favorites join table (replaces the unused users.favorite_destinations array as source of truth)
 CREATE TABLE IF NOT EXISTS user_poi_favorites (
   user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   poi_id     INTEGER NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
@@ -94,22 +105,11 @@ CREATE TABLE IF NOT EXISTS user_poi_favorites (
   PRIMARY KEY (user_id, poi_id)
 );
 
--- In-app notifications
-CREATE TABLE IF NOT EXISTS user_notifications (
-  id           SERIAL PRIMARY KEY,
-  user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  poi_id       INTEGER NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
-  content_type TEXT    NOT NULL CHECK (content_type IN ('news','event')),
-  content_id   INTEGER NOT NULL,
-  read_at      TIMESTAMPTZ,
-  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (user_id, content_type, content_id)
-);
-
 -- Backfill favorites from the legacy array column (idempotent)
 INSERT INTO user_poi_favorites (user_id, poi_id)
 SELECT u.id, p
 FROM users u, UNNEST(u.favorite_destinations) AS p
+WHERE p IS NOT NULL
 ON CONFLICT DO NOTHING;
 ```
 
@@ -124,13 +124,14 @@ source of truth; `/auth/user` derives `favorites` from `user_poi_favorites`.
 
 | Method | Path | Description | Auth |
 |--------|------|-------------|------|
-| GET | `/api/favorites` | List the current user's favorited POIs (id, name, slug) | User |
+| GET | `/api/favorites` | List the current user's favorited POIs (id, name) | User |
 | POST | `/api/favorites/:poiId` | Subscribe to a POI (idempotent) | User |
 | DELETE | `/api/favorites/:poiId` | Unsubscribe from a POI | User |
-| GET | `/api/favorites/feed` | Aggregated recent news + upcoming events for favorited POIs | User |
-| GET | `/api/notifications` | Paginated notification list (newest first) | User |
-| GET | `/api/notifications/unread-count` | Unread count for the badge | User |
-| POST | `/api/notifications/read` | Mark all (or given ids) read | User |
+| GET | `/api/notifications/feed` | Recent news + upcoming events for favorited POIs. Logged-in: server favorites. Anonymous: `?pois=1,2,3`. | Optional |
+| POST | `/api/user/settings/sync` | (extended) Flushes anonymous favorites to `user_poi_favorites` on sign-in | User |
+
+Unread counts and read state are computed client-side from `/api/notifications/feed`
+plus a `rotv-notifications-last-seen` localStorage timestamp — no server endpoints.
 
 ---
 
@@ -196,3 +197,4 @@ Settings tabs:  [ General ] [ Favorites ] [ Newsletter ]
 | Version | Date | Changes |
 |---------|------|---------|
 | 0.1.0 | 2026-05-20 | Initial draft |
+| 0.2.0 | 2026-05-20 | Anonymous-first: favorites + bell work logged-out (localStorage + sync). Unified on client-side unread; removed server `user_notifications` table and hourly fan-out job in favor of public `/api/notifications/feed`. Header: Map/Results collapsed into one toggle, anon login shown as a dot, bell visible to all (mobile space). |
