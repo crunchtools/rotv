@@ -6,6 +6,7 @@ import { formatDateTime, formatPublicationDate, NewsTypeIcon, EventTypeIcon, Det
 import ShareButton from './ShareButton';
 import NavigateButton from './NavigateButton';
 import AddToTripButton from './AddToTripButton';
+import FavoriteToggle from './FavoriteToggle';
 import Mosaic from './Mosaic';
 import MediaUploadModal from './MediaUploadModal';
 import RoleEditor from './RoleEditor';
@@ -295,6 +296,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
           )}
           <NavigateButton stops={getNavigationStops(destination, isLinearFeature)} />
           <AddToTripButton poi={destination} stops={getNavigationStops(destination, isLinearFeature)} />
+          <FavoriteToggle poi={destination} />
         </div>
 
         {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated) && (

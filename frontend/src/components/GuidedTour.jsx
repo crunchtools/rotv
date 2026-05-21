@@ -98,7 +98,7 @@ const TOUR_STEPS = [
   },
   {
     selector: '.tab-btn:nth-child(3)',
-    title: 'Park News',
+    title: 'News',
     description: 'News updates with the map too \u2014 curated from local sources about the valley.',
     position: 'bottom',
     padding: 2,

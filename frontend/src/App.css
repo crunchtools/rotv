@@ -2926,7 +2926,7 @@ body {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE/Edge */
-    justify-content: center;
+    justify-content: space-between;
     align-items: center;
     padding: 0.25rem 0.5rem;
     position: relative;
@@ -14859,5 +14859,204 @@ button.feedback-link-inline {
   .guided-tour-tooltip.tour-position-above {
     bottom: auto !important;
     top: var(--tour-top) !important;
+  }
+}
+
+/* ── POI subscriptions: favorite toggle, notification bell, favorites tab ── */
+.favorite-toggle-btn.favorited {
+  background: #c8941a;
+}
+.favorite-toggle-btn.favorited:hover {
+  background: #b07f12;
+}
+
+.notification-bell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.notification-bell-btn {
+  position: relative;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 50%;
+}
+.notification-bell-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.notification-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #d9342b;
+  color: #fff;
+  font-size: 0.7rem;
+  line-height: 16px;
+  text-align: center;
+  font-weight: 700;
+}
+.notification-dropdown {
+  position: absolute;
+  top: 110%;
+  right: var(--panel-right, 0);
+  width: 320px;
+  max-height: 420px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  z-index: 10001;
+}
+.notification-dropdown-header {
+  padding: 0.75rem 1rem;
+  font-weight: 700;
+  color: #2d5016;
+  border-bottom: 1px solid #eee;
+}
+.notification-empty {
+  padding: 1rem;
+  color: #666;
+  font-size: 0.9rem;
+}
+.notification-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.notification-item {
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid #f0f0f0;
+}
+.notification-item.unread {
+  background: #f3f8ee;
+}
+.notification-icon {
+  flex-shrink: 0;
+}
+.notification-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.notification-title a {
+  color: #2d5016;
+  text-decoration: none;
+}
+.notification-title a:hover {
+  text-decoration: underline;
+}
+.notification-meta {
+  font-size: 0.78rem;
+  color: #777;
+  margin-top: 2px;
+}
+
+.favorites-list {
+  list-style: none;
+  margin: 0 0 0.5rem;
+  padding: 0;
+}
+.favorites-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #eee;
+}
+.favorites-poi-name {
+  font-weight: 600;
+}
+.favorites-remove-btn {
+  background: none;
+  border: 1px solid #c0392b;
+  color: #c0392b;
+  border-radius: 12px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.favorites-remove-btn:hover {
+  background: #c0392b;
+  color: #fff;
+}
+.favorites-feed {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+.favorites-feed li {
+  padding: 0.35rem 0;
+  font-size: 0.9rem;
+}
+.favorites-feed a {
+  color: #2d5016;
+  text-decoration: none;
+}
+.favorites-feed a:hover {
+  text-decoration: underline;
+}
+.favorites-feed-poi {
+  color: #777;
+  font-size: 0.82rem;
+}
+
+/* ── POI subscriptions: icon tabs + login dot ── */
+.tab-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Desktop shows the word; mobile swaps to the symbol (max-width:768px block). */
+.nav-tab-icon {
+  display: none;
+}
+.nav-tab-label {
+  display: inline;
+}
+.tab-login-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.login-dot-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@media (max-width: 768px) {
+  /* Symbols instead of words on mobile */
+  .nav-tab-icon {
+    display: block;
+  }
+  .nav-tab-label {
+    display: none;
+  }
+  /* Less dead space at the menu bar edges */
+  .header {
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+  }
+  /* The mobile tab strip uses overflow-y:hidden, which clips an absolutely
+     positioned dropdown to a thin bar. Pin the panel to the viewport instead. */
+  .notification-dropdown {
+    position: fixed;
+    top: var(--bell-bottom, 5.75rem);
+    left: 0.5rem;
+    right: 0.5rem;
+    width: auto;
+    max-height: 70vh;
   }
 }
