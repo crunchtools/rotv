@@ -9,6 +9,7 @@ const KEY_TIMEZONE = 'app-timezone';
 const KEY_NEWSLETTER_EMAIL = 'rotv-newsletter-email';
 const KEY_NEWSLETTER_SUBSCRIBED = 'rotv-newsletter-subscribed';
 const KEY_SAVED_TRIPS = 'rotv-saved-trips';
+const KEY_FAVORITES = 'rotv-favorites';
 
 function safeRead(key) {
   try {
@@ -71,6 +72,32 @@ export function removeTrip(slug) {
   writeTrips(readTrips().filter(t => t.slug !== slug));
 }
 
+export function readFavorites() {
+  const raw = safeRead(KEY_FAVORITES);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter(n => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function writeFavorites(poiIds) {
+  safeWrite(KEY_FAVORITES, JSON.stringify(poiIds));
+}
+
+export function addFavorite(poiId) {
+  const favorites = readFavorites();
+  if (!favorites.includes(poiId)) {
+    writeFavorites([...favorites, poiId]);
+  }
+}
+
+export function removeFavorite(poiId) {
+  writeFavorites(readFavorites().filter(id => id !== poiId));
+}
+
 /**
  * Flush accumulated anonymous state to the backend on first successful
  * sign-in. Server-wins semantics: the backend only fills a NULL timezone and
@@ -87,14 +114,16 @@ export async function syncAnonSettings() {
   const email = safeRead(KEY_NEWSLETTER_EMAIL) || '';
   const subscribed = safeRead(KEY_NEWSLETTER_SUBSCRIBED) === 'true';
   const trips = readTrips();
+  const favorites = readFavorites();
 
-  const hasState = timezone || (email && subscribed) || trips.length > 0;
+  const hasState = timezone || (email && subscribed) || trips.length > 0 || favorites.length > 0;
   if (!hasState) return { synced: false };
 
   const payload = {};
   if (timezone) payload.timezone = timezone;
   if (email && subscribed) payload.newsletter = { email, subscribed };
   if (trips.length > 0) payload.trips = trips;
+  if (favorites.length > 0) payload.favorites = favorites;
 
   try {
     const res = await fetch('/api/user/settings/sync', {
@@ -111,6 +140,9 @@ export async function syncAnonSettings() {
     }
     if (trips.length > 0) {
       safeRemove(KEY_SAVED_TRIPS);
+    }
+    if (favorites.length > 0) {
+      safeRemove(KEY_FAVORITES);
     }
 
     return { synced: true };

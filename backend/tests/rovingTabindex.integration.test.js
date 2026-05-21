@@ -125,9 +125,11 @@ describe('Roving Tabindex - Header Tab Navigation', () => {
     const dropdownVisible = await page.locator('.tab-dropdown').isVisible();
     expect(dropdownVisible).toBe(true);
 
-    // Focus should STILL be on the Login button
+    // Focus should STILL be on the Login button (icon-only dot has empty text)
     const focusedText = await page.evaluate(() => document.activeElement?.textContent?.trim().substring(0, 10));
-    expect(['Login', 'T']).toContain(focusedText);
+    expect(['Login', 'T', '']).toContain(focusedText);
+    const focusedIsLogin = await page.evaluate(() => document.activeElement?.classList.contains('tab-login-dot'));
+    expect(focusedIsLogin).toBe(true);
 
     // Login button should still have kbd-focus highlight
     const hasKbdFocus = await page.evaluate(() => document.activeElement?.classList.contains('kbd-focus'));
@@ -212,7 +214,7 @@ describe('Roving Tabindex - Header Tab Navigation', () => {
       text: document.activeElement?.textContent?.trim().substring(0, 10),
       hasKbdFocus: document.activeElement?.classList.contains('kbd-focus'),
     }));
-    expect(['Login', 'T']).toContain(result.text);
+    expect(['Login', 'T', '']).toContain(result.text);
     expect(result.hasKbdFocus).toBe(true);
   }, 30000);
 

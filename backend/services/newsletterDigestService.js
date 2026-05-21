@@ -10,7 +10,11 @@ export function upcomingFridayISO(tz = 'America/New_York') {
 }
 
 export async function generateDigest(pool, tz = 'America/New_York', asOfDate = null) {
-  // asOfDate overrides CURRENT_TIMESTAMP in the date filters. NULL → use real now.
+  const { events, news } = await fetchDigestContent(pool, tz, asOfDate);
+  return renderDigestHtml(events, news, tz);
+}
+
+async function fetchDigestContent(pool, tz, asOfDate) {
   const eventsQuery = `
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
            e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
@@ -39,9 +43,10 @@ export async function generateDigest(pool, tz = 'America/New_York', asOfDate = n
     pool.query(newsQuery, [asOfDate])
   ]);
 
-  const events = eventsResult.rows;
-  const news = newsResult.rows;
+  return { events: eventsResult.rows, news: newsResult.rows };
+}
 
+function renderDigestHtml(events, news, tz = 'America/New_York') {
   if (events.length === 0 && news.length === 0) {
     return '';
   }
@@ -437,4 +442,118 @@ export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York', 
     }
     throw error;
   }
+}
+
+// Send each newsletter subscriber who has favorited POIs a digest scoped to
+// those POIs (spec 019-poi-subscriptions). Runs after the general broadcast in
+// the Friday digest job. Subscription (newsletter_subscriptions) is the email
+// opt-in; favoriting alone does not trigger email. Content for every subscriber
+// is fetched in two batched queries and grouped in memory to avoid an N+1.
+export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
+  let jobId = 0;
+  if (pgBossJobId) {
+    let hash = 0;
+    for (let i = 0; i < pgBossJobId.length; i++) {
+      hash = ((hash << 5) - hash) + pgBossJobId.charCodeAt(i);
+      hash = hash & 0x7FFFFFFF;
+    }
+    jobId = hash;
+  }
+  const jobType = 'newsletter-personalized';
+
+  const targets = await pool.query(
+    `SELECT u.id, u.email, u.timezone, ARRAY_AGG(f.poi_id) AS poi_ids
+       FROM users u
+       JOIN user_poi_favorites f ON f.user_id = u.id
+      WHERE u.email IS NOT NULL
+        AND EXISTS (SELECT 1 FROM newsletter_subscriptions s WHERE s.email = u.email)
+      GROUP BY u.id, u.email, u.timezone`
+  );
+
+  if (targets.rows.length === 0) {
+    return { success: true, sent: 0, skipped: 0, candidates: 0 };
+  }
+
+  const allPoiIds = [...new Set(targets.rows.flatMap(t => t.poi_ids))];
+
+  const [newsResult, eventsResult] = await Promise.all([
+    pool.query(
+      `SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
+              n.publication_date, n.collection_date, p.id AS poi_id, p.name AS poi_name, p.poi_roles
+         FROM poi_news n
+         JOIN pois p ON p.id = n.poi_id
+        WHERE n.poi_id = ANY($1::int[])
+          AND n.moderation_status IN ('published', 'auto_approved')
+          AND COALESCE(n.publication_date, n.collection_date) > NOW() - INTERVAL '7 days'
+        ORDER BY COALESCE(n.publication_date, n.collection_date) DESC`,
+      [allPoiIds]
+    ),
+    pool.query(
+      `SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
+              e.location_details, e.source_url, p.id AS poi_id, p.name AS poi_name, p.poi_roles
+         FROM poi_events e
+         JOIN pois p ON p.id = e.poi_id
+        WHERE e.poi_id = ANY($1::int[])
+          AND e.moderation_status IN ('published', 'auto_approved')
+          AND e.start_date >= NOW() - INTERVAL '1 day'
+          AND e.start_date <= NOW() + INTERVAL '4 days'
+        ORDER BY e.start_date ASC`,
+      [allPoiIds]
+    )
+  ]);
+
+  let sent = 0;
+  let skipped = 0;
+  for (const user of targets.rows) {
+    const tz = user.timezone || 'America/New_York';
+    const poiSet = new Set(user.poi_ids);
+    const dayInTz = (d) => new Intl.DateTimeFormat('en-CA', {
+      timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date(d));
+
+    const asOf = upcomingFridayISO(tz);
+    const friday = dayInTz(asOf);
+    const sunday = dayInTz(new Date(new Date(asOf).getTime() + 2 * 86400000));
+
+    const userNews = newsResult.rows.filter(n => poiSet.has(n.poi_id)).slice(0, 5);
+    const userEvents = eventsResult.rows
+      .filter(e => poiSet.has(e.poi_id))
+      .filter(e => {
+        const day = dayInTz(e.start_date);
+        return day >= friday && day <= sunday;
+      })
+      .slice(0, 10);
+
+    const html = renderDigestHtml(userEvents, userNews, tz);
+    if (!html) {
+      skipped++;
+      continue;
+    }
+
+    const dateStr = new Date(asOf).toLocaleDateString('en-US', {
+      month: 'long', day: 'numeric', year: 'numeric', timeZone: tz
+    });
+    const subject = `Your Favorite Places This Weekend - ${dateStr}`;
+    try {
+      await sendDraftToRecipients(subject, html, [user.email], pool);
+      sent++;
+    } catch (error) {
+      console.error(`Personalized digest failed for user ${user.id}:`, error.message);
+      if (error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
+        break;
+      }
+    }
+  }
+
+  console.log(`Personalized digests: ${sent} sent, ${skipped} skipped (no content)`);
+  if (jobId > 0) {
+    await pool.query(
+      `INSERT INTO job_logs (job_id, job_type, level, message, details)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [jobId, jobType, 'info', 'Personalized digests processed',
+       JSON.stringify({ completed: true, sent, skipped, candidates: targets.rows.length })]
+    );
+  }
+
+  return { success: true, sent, skipped, candidates: targets.rows.length };
 }

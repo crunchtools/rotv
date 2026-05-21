@@ -48,7 +48,7 @@ describe('Header Button Visibility Tests', () => {
     }, 30000);
 
     it('should display Login button when not authenticated', async () => {
-      const loginButton = page.locator('button:has-text("Login")').first();
+      const loginButton = page.locator('button.tab-login-dot').first();
 
       // Wait for button to be visible with a timeout
       await loginButton.waitFor({ state: 'visible', timeout: 10000 });
@@ -63,7 +63,7 @@ describe('Header Button Visibility Tests', () => {
     }, TEST_TIMEOUT);
 
     it('should have enabled and clickable Login button', async () => {
-      const loginButton = page.locator('button:has-text("Login")').first();
+      const loginButton = page.locator('button.tab-login-dot').first();
 
       const isEnabled = await loginButton.isEnabled();
       expect(isEnabled).toBe(true);
@@ -82,7 +82,7 @@ describe('Header Button Visibility Tests', () => {
     }, 30000);
 
     it('should display Login button on narrow mobile screen', async () => {
-      const loginButton = page.locator('button:has-text("Login")').first();
+      const loginButton = page.locator('button.tab-login-dot').first();
       await loginButton.waitFor({ state: 'visible', timeout: 10000 });
 
       const isVisible = await loginButton.isVisible();
@@ -98,7 +98,7 @@ describe('Header Button Visibility Tests', () => {
     }, TEST_TIMEOUT);
 
     it('should have enabled and clickable Login button on mobile', async () => {
-      const loginButton = page.locator('button:has-text("Login")').first();
+      const loginButton = page.locator('button.tab-login-dot').first();
 
       const isEnabled = await loginButton.isEnabled();
       expect(isEnabled).toBe(true);
@@ -117,7 +117,7 @@ describe('Header Button Visibility Tests', () => {
     }, 30000);
 
     it('should display Login button on tablet', async () => {
-      const loginButton = page.locator('button:has-text("Login")').first();
+      const loginButton = page.locator('button.tab-login-dot').first();
 
       const isVisible = await loginButton.isVisible();
       expect(isVisible).toBe(true);

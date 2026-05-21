@@ -110,7 +110,7 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
   if (loading) {
     return (
       <div className="park-news-tab">
-        <h2>Park News</h2>
+        <h2>News</h2>
         <div className="loading-indicator">Loading news...</div>
       </div>
     );
@@ -119,7 +119,7 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
   if (error) {
     return (
       <div className="park-news-tab">
-        <h2>Park News</h2>
+        <h2>News</h2>
         <div className="error-message">{error}</div>
       </div>
     );
@@ -129,7 +129,7 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
     <div className="park-news-tab">
       <div className="news-events-header tab-header-with-new">
         <div>
-          <h2>Park News</h2>
+          <h2>News</h2>
           <p className="tab-subtitle">Recent news from across Cuyahoga Valley National Park</p>
         </div>
         {editMode && isAdmin && (

@@ -1,6 +1,7 @@
 import { formatDateTime } from '../NewsEventsShared';
 import NavigateButton from '../NavigateButton';
 import AddToTripButton from '../AddToTripButton';
+import FavoriteToggle from '../FavoriteToggle';
 import CellSignal from './CellSignal';
 import { getNavigationStops, getOwnerClass, formatCoordinate } from './helpers';
 
@@ -65,6 +66,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
           )}
           <NavigateButton stops={getNavigationStops(destination, isLinearFeature)} />
           <AddToTripButton poi={destination} stops={getNavigationStops(destination, isLinearFeature)} />
+          <FavoriteToggle poi={destination} />
         </div>
 
         {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated) && (

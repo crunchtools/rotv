@@ -9,6 +9,7 @@ import MyTripsModal from './components/MyTripsModal';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
 import Map from './components/Map';
 import Sidebar from './components/Sidebar';
+import NotificationBell from './components/NotificationBell';
 import SyncSettings from './components/SyncSettings';
 import AISettings from './components/AISettings';
 import GeneralSettings from './components/GeneralSettings';
@@ -1759,31 +1760,39 @@ function AppContent() {
           {(() => {
             let idx = 0;
             const navTabs = [
-              { id: 'view', label: 'Map', show: true },
-              { id: 'results', label: 'Results', show: true },
-              { id: 'news', label: 'News', show: true },
-              { id: 'events', label: 'Events', show: true },
-              { id: 'about', label: 'About', show: true },
+              { id: 'view', label: 'Map', icon: 'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z' },
+              { id: 'results', label: 'Results', icon: 'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z' },
+              { id: 'news', label: 'News', icon: 'M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 4H7v2h10V7zm0 4H7v2h10v-2zm-3 4H7v2h7v-2z' },
+              { id: 'events', label: 'Events', icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z' },
+              { id: 'about', label: 'About', icon: 'M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z' },
             ];
-            return navTabs.filter(t => t.show).map(tab => {
+            return navTabs.map(tab => {
               const i = idx++;
               return (
                 <button
                   key={tab.id}
-                  className={`tab-btn ${activeTab === tab.id ? 'active' : ''} ${kbdFocusIndex === i ? 'kbd-focus' : ''}`}
+                  className={`tab-btn tab-icon-btn ${activeTab === tab.id ? 'active' : ''} ${kbdFocusIndex === i ? 'kbd-focus' : ''}`}
                   onClick={() => handleTabChange(tab.id)}
                   aria-current={activeTab === tab.id ? 'page' : undefined}
+                  aria-label={tab.label}
+                  title={tab.label}
                   tabIndex={activeTab === tab.id ? 0 : -1}
                 >
-                  {tab.label}
+                  <svg className="nav-tab-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                    <path fill="currentColor" d={tab.icon} />
+                  </svg>
+                  <span className="nav-tab-label">{tab.label}</span>
                 </button>
               );
             });
           })()}
 
           {(() => {
-            const menuIdx = [true, true, true, true, true, isAuthenticated].filter(Boolean).length;
-            return isAuthenticated ? (
+            const menuIdx = 5;
+            return (
+            <>
+            <NotificationBell />
+            {isAuthenticated ? (
             <div className="tab-account-container">
               <button
                 className={`tab-btn tab-account ${kbdFocusIndex === menuIdx ? 'kbd-focus' : ''}`}
@@ -1861,16 +1870,22 @@ function AppContent() {
                 </>
               )}
             </div>
-          ) : (
+            ) : (
             <div className="tab-account-container">
               <button
-                className={`tab-btn ${kbdFocusIndex === menuIdx ? 'kbd-focus' : ''}`}
+                className={`tab-btn tab-account tab-login-dot ${kbdFocusIndex === menuIdx ? 'kbd-focus' : ''}`}
                 onClick={() => setShowLoginDropdown(!showLoginDropdown)}
                 tabIndex={-1}
                 aria-expanded={showLoginDropdown}
                 aria-haspopup="true"
+                aria-label="Sign in"
+                title="Sign in"
               >
-                Login
+                <div className="tab-user-avatar-placeholder login-dot-placeholder">
+                  <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                    <path fill="currentColor" d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                  </svg>
+                </div>
               </button>
               {showLoginDropdown && (
                 <>
@@ -1917,6 +1932,8 @@ function AppContent() {
                 </>
               )}
             </div>
+            )}
+            </>
           );
           })()}
           </nav>

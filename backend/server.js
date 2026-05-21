@@ -12,12 +12,14 @@ import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { Readable } from 'node:stream';
 import { configurePassport } from './config/passport.js';
-import authRoutes from './routes/auth.js';
+import { createAuthRouter } from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createNewsletterRouter } from './routes/newsletter.js';
 import { createFeedbackRouter } from './routes/feedback.js';
 import { createTripsRouter } from './routes/trips.js';
 import { createUserSettingsRouter } from './routes/userSettings.js';
+import { createFavoritesRouter } from './routes/favorites.js';
+import { createNotificationsRouter } from './routes/notifications.js';
 import { isAuthenticated } from './middleware/auth.js';
 import {
   initJobScheduler,
@@ -61,7 +63,7 @@ import {
 import imageServerClient from './services/imageServerClient.js';
 import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
-import { sendWeeklyDigest, sendDigestPreviewTo } from './services/newsletterDigestService.js';
+import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
 import { startMcpServer } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 
@@ -167,12 +169,14 @@ configurePassport(pool);
 app.use(passport.initialize());
 app.use(passport.session());
 
-app.use('/auth', authRoutes);
+app.use('/auth', createAuthRouter(pool));
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 app.use('/api/newsletter', createNewsletterRouter(pool));
 app.use('/api/feedback', createFeedbackRouter(pool));
 app.use('/api/trips', createTripsRouter(pool));
 app.use('/api/user/settings', createUserSettingsRouter(pool));
+app.use('/api/favorites', createFavoritesRouter(pool));
+app.use('/api/notifications', createNotificationsRouter(pool));
 
 async function importGeoJSONFeatures(client) {
   const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/public');
@@ -2385,7 +2389,18 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
 
 // og:image for a POI: primary photo at size=large (smaller is rejected by Facebook), else branded fallback.
 const OG_FALLBACK_IMAGE = '/brand/rotv-og-share-1200x630.jpg';
+// Crawlers re-hit the same permalinks repeatedly; cache the resolution so each
+// request doesn't repeat a DB lookup + image-server probe.
+const ogImageCache = new Map();
+const OG_IMAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 async function resolvePoiOgImage(poiId, baseUrl) {
+  const cacheKey = `${baseUrl}|${poiId}`;
+  const cached = ogImageCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.url;
+  }
+
+  let url = null;
   if (poiId) {
     try {
       const { rows } = await pool.query(`
@@ -2397,13 +2412,17 @@ async function resolvePoiOgImage(poiId, baseUrl) {
         LIMIT 1
       `, [poiId]);
       if (rows.length > 0 || (imageServerClient.initialized && await imageServerClient.getPrimaryAsset(poiId))) {
-        return `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
+        url = `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
       }
     } catch (error) {
       console.error('Error resolving POI OG image:', error);
     }
   }
-  return `${baseUrl}${OG_FALLBACK_IMAGE}`;
+  if (!url) {
+    url = `${baseUrl}${OG_FALLBACK_IMAGE}`;
+  }
+  ogImageCache.set(cacheKey, { url, expires: Date.now() + OG_IMAGE_CACHE_TTL_MS });
+  return url;
 }
 
 // OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
@@ -2738,6 +2757,7 @@ async function start() {
 
     await registerDigestHandler(async (pgBossJobId, _digestPayload) => {
       await sendWeeklyDigest(pool, pgBossJobId);
+      await sendPersonalizedDigests(pool, pgBossJobId);
     });
 
     await scheduleDigest('0 8 * * 5');
