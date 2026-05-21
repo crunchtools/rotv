@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import GeneralSettings from './GeneralSettings';
 import { useAuth } from '../hooks/useAuth';
 import { readEmail, writeEmail, writeSubscribed } from '../utils/anonSettings';
+import { safeHttpUrl } from '../utils/url';
 
 function UserSettings({ user, initialTab }) {
   const { toggleFavorite } = useAuth();
@@ -195,8 +196,8 @@ function UserSettings({ user, initialTab }) {
                     <ul className="favorites-feed">
                       {feed.events.map(e => (
                         <li key={`e-${e.id}`}>
-                          {e.source_url ? (
-                            <a href={e.source_url} target="_blank" rel="noopener noreferrer">{e.title}</a>
+                          {safeHttpUrl(e.source_url) ? (
+                            <a href={safeHttpUrl(e.source_url)} target="_blank" rel="noopener noreferrer">{e.title}</a>
                           ) : e.title}
                           <span className="favorites-feed-poi"> · {e.poi_name}</span>
                         </li>
@@ -210,8 +211,8 @@ function UserSettings({ user, initialTab }) {
                     <ul className="favorites-feed">
                       {feed.news.map(n => (
                         <li key={`n-${n.id}`}>
-                          {n.source_url ? (
-                            <a href={n.source_url} target="_blank" rel="noopener noreferrer">{n.title}</a>
+                          {safeHttpUrl(n.source_url) ? (
+                            <a href={safeHttpUrl(n.source_url)} target="_blank" rel="noopener noreferrer">{n.title}</a>
                           ) : n.title}
                           <span className="favorites-feed-poi"> · {n.poi_name}</span>
                         </li>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { safeHttpUrl } from '../utils/url';
 
 const POLL_MS = 60000;
 const LAST_SEEN_KEY = 'rotv-notifications-last-seen';
@@ -157,8 +158,8 @@ export default function NotificationBell() {
                   <span className="notification-icon">{item.type === 'event' ? '📅' : '📰'}</span>
                   <div className="notification-body">
                     <div className="notification-title">
-                      {item.url ? (
-                        <a href={item.url} target="_blank" rel="noopener noreferrer">{item.title}</a>
+                      {safeHttpUrl(item.url) ? (
+                        <a href={safeHttpUrl(item.url)} target="_blank" rel="noopener noreferrer">{item.title}</a>
                       ) : item.title}
                     </div>
                     <div className="notification-meta">
