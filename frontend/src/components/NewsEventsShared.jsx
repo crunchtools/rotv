@@ -76,6 +76,39 @@ export const EVENT_TYPES = {
   'alert': { icon: '!', label: 'Alert', color: '#f44336' }
 };
 
+export function DetailImage({ imageUrl, poiId, alt }) {
+  const sources = [];
+  if (imageUrl) sources.push(imageUrl);
+  if (poiId) sources.push(`/api/pois/${poiId}/thumbnail?size=large`);
+  sources.push('/brand/rotv-logo.png');
+
+  const [idx, setIdx] = React.useState(0);
+  React.useEffect(() => { setIdx(0); }, [imageUrl, poiId]);
+
+  const isLogo = idx === sources.length - 1;
+  return (
+    <div style={{
+      width: '100%', height: '180px', marginBottom: '12px', borderRadius: '8px',
+      overflow: 'hidden', background: '#eef2ea', display: 'flex',
+      alignItems: 'center', justifyContent: 'center'
+    }}>
+      <img
+        src={sources[idx]}
+        alt={alt || ''}
+        loading="lazy"
+        onError={() => setIdx(i => (i < sources.length - 1 ? i + 1 : i))}
+        style={{
+          width: isLogo ? 'auto' : '100%',
+          height: '100%',
+          objectFit: isLogo ? 'contain' : 'cover',
+          padding: isLogo ? '28px' : 0,
+          boxSizing: 'border-box'
+        }}
+      />
+    </div>
+  );
+}
+
 export function NewsTypeIcon({ type }) {
   const config = NEWS_TYPES[type] || NEWS_TYPES.general;
   return (
