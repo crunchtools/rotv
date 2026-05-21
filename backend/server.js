@@ -2389,7 +2389,18 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
 
 // og:image for a POI: primary photo at size=large (smaller is rejected by Facebook), else branded fallback.
 const OG_FALLBACK_IMAGE = '/brand/rotv-og-share-1200x630.jpg';
+// Crawlers re-hit the same permalinks repeatedly; cache the resolution so each
+// request doesn't repeat a DB lookup + image-server probe.
+const ogImageCache = new Map();
+const OG_IMAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 async function resolvePoiOgImage(poiId, baseUrl) {
+  const cacheKey = `${baseUrl}|${poiId}`;
+  const cached = ogImageCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.url;
+  }
+
+  let url = null;
   if (poiId) {
     try {
       const { rows } = await pool.query(`
@@ -2401,13 +2412,17 @@ async function resolvePoiOgImage(poiId, baseUrl) {
         LIMIT 1
       `, [poiId]);
       if (rows.length > 0 || (imageServerClient.initialized && await imageServerClient.getPrimaryAsset(poiId))) {
-        return `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
+        url = `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
       }
     } catch (error) {
       console.error('Error resolving POI OG image:', error);
     }
   }
-  return `${baseUrl}${OG_FALLBACK_IMAGE}`;
+  if (!url) {
+    url = `${baseUrl}${OG_FALLBACK_IMAGE}`;
+  }
+  ogImageCache.set(cacheKey, { url, expires: Date.now() + OG_IMAGE_CACHE_TTL_MS });
+  return url;
 }
 
 // OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path

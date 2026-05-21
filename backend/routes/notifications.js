@@ -7,7 +7,15 @@ export function createNotificationsRouter(pool) {
   const router = express.Router();
 
   router.get('/feed', optionalAuth, async (req, res) => {
-    const tz = req.query.tz || 'America/New_York';
+    let tz = 'America/New_York';
+    if (typeof req.query.tz === 'string' && req.query.tz) {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: req.query.tz });
+        tz = req.query.tz;
+      } catch (e) {
+        tz = 'America/New_York';
+      }
+    }
     try {
       let poiIds;
       if (req.user && req.user.id) {
@@ -46,7 +54,7 @@ export function createNotificationsRouter(pool) {
            JOIN pois p ON p.id = e.poi_id
           WHERE e.poi_id = ANY($1::int[])
             AND e.moderation_status IN ('published', 'auto_approved')
-            AND (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+            AND e.start_date >= ((CURRENT_TIMESTAMP AT TIME ZONE $2)::date)::timestamp AT TIME ZONE $2
           ORDER BY e.start_date ASC
           LIMIT 30`,
         [poiIds, tz]

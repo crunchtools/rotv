@@ -1,4 +1,4 @@
--- 058_add_poi_subscriptions.sql
+-- 059_add_poi_subscriptions.sql
 -- POI subscriptions / favorites (spec 019-poi-subscriptions, issue #213).
 -- Logged-in users favorite POIs here; this table also backs the personalized
 -- weekly email digest. The in-app notification bell computes unread state
