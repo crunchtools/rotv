@@ -794,16 +794,16 @@ function AppContent() {
         setActiveTab('view');
         document.title = `${linearFeature.name} | Roots of The Valley`;
 
-        if (linearFeature.feature_type === 'boundary') {
+        if (linearFeature.poi_roles?.includes('boundary')) {
           setVisibleBoundaries(prev => {
             if (prev.has(linearFeature.id)) return prev;
             const next = new Set(prev);
             next.add(linearFeature.id);
             return next;
           });
-        } else if (linearFeature.feature_type === 'trail') {
+        } else if (linearFeature.poi_roles?.includes('trail')) {
           setShowTrails(true);
-        } else if (linearFeature.feature_type === 'river') {
+        } else if (linearFeature.poi_roles?.includes('river')) {
           setShowRivers(true);
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
@@ -906,16 +906,16 @@ function AppContent() {
         setActiveTab('view');
         document.title = `${linearFeature.name} | Roots of The Valley`;
 
-        if (linearFeature.feature_type === 'boundary') {
+        if (linearFeature.poi_roles?.includes('boundary')) {
           setVisibleBoundaries(prev => {
             if (prev.has(linearFeature.id)) return prev;
             const next = new Set(prev);
             next.add(linearFeature.id);
             return next;
           });
-        } else if (linearFeature.feature_type === 'trail') {
+        } else if (linearFeature.poi_roles?.includes('trail')) {
           setShowTrails(true);
-        } else if (linearFeature.feature_type === 'river') {
+        } else if (linearFeature.poi_roles?.includes('river')) {
           setShowRivers(true);
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
@@ -1013,7 +1013,7 @@ function AppContent() {
   useEffect(() => {
     if (linearFeatures && linearFeatures.length > 0 && !hasInitializedBoundaries.current) {
       const cvnpBoundary = linearFeatures.find(
-        f => f.feature_type === 'boundary' && f.name === 'Cuyahoga Valley National Park'
+        f => f.poi_roles?.includes('boundary') && f.name === 'Cuyahoga Valley National Park'
       );
       if (cvnpBoundary) {
         setVisibleBoundaries(new Set([cvnpBoundary.id]));
@@ -1204,16 +1204,16 @@ function AppContent() {
       if (index === -1) {
         console.warn('[Navigation] Could not find linear feature in list:', feature.name, 'ID:', feature.id);
       }
-      if (feature.feature_type === 'boundary') {
+      if (feature.poi_roles?.includes('boundary')) {
         setVisibleBoundaries(prev => {
           if (prev.has(feature.id)) return prev;
           const next = new Set(prev);
           next.add(feature.id);
           return next;
         });
-      } else if (feature.feature_type === 'trail') {
+      } else if (feature.poi_roles?.includes('trail')) {
         setShowTrails(true);
-      } else if (feature.feature_type === 'river') {
+      } else if (feature.poi_roles?.includes('river')) {
         setShowRivers(true);
       }
       if (window.innerWidth < 768 && activeTab !== 'view') {
