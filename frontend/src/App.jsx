@@ -57,7 +57,6 @@ function AppContent() {
   const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
-  const [selectedDestination, setSelectedDestination] = useState(null);
 
   const [iconConfig, setIconConfig] = useState([]);
 
@@ -78,10 +77,59 @@ function AppContent() {
   });
 
   const [linearFeatures, setLinearFeatures] = useState([]);
-  const [selectedLinearFeature, setSelectedLinearFeature] = useState(null);
+
+  // Unified POI selection. The backend serves a single role-based `pois` model
+  // (spec 005-poi-roles); the frontend now holds a single `selectedPoi` slot.
+  // `selectedDestination` (point/organization, no geometry) and
+  // `selectedLinearFeature` (trail/river/boundary, has geometry) are derived
+  // views over that one slot, so an inconsistent dual-selection is structurally
+  // impossible. Geometry presence is the discriminator, per NFR-019-03.
+  const [selectedPoi, setSelectedPoi] = useState(null);
+  const poiHasGeometry = (poi) => !!(poi && poi.geometry);
+  const selectedDestination = poiHasGeometry(selectedPoi) ? null : selectedPoi;
+  const selectedLinearFeature = poiHasGeometry(selectedPoi) ? selectedPoi : null;
+  const setSelectedDestination = useCallback((value) => {
+    setSelectedPoi((prev) => {
+      const next = typeof value === 'function'
+        ? value(poiHasGeometry(prev) ? null : prev)
+        : value;
+      // Selecting a destination replaces everything; clearing it preserves any
+      // linear-feature selection (matching the old independent-slot behavior).
+      if (next == null) return poiHasGeometry(prev) ? prev : null;
+      return next;
+    });
+  }, []);
+  const setSelectedLinearFeature = useCallback((value) => {
+    setSelectedPoi((prev) => {
+      const next = typeof value === 'function'
+        ? value(poiHasGeometry(prev) ? prev : null)
+        : value;
+      if (next == null) return poiHasGeometry(prev) ? null : prev;
+      return next;
+    });
+  }, []);
 
   const [virtualPois, setVirtualPois] = useState([]);
   const [associations, setAssociations] = useState([]);
+
+  // Single role-based POI collection merged client-side from the three fetches
+  // (destinations, linear-features, organizations) — all read the same backend
+  // `pois` table. Deduped by id; first occurrence wins. Used for slug/id lookups
+  // so selection resolution has one source of truth instead of three sequential
+  // `.find()` chains.
+  const pois = useMemo(() => {
+    const byId = new Map();
+    for (const list of [destinations, linearFeatures, virtualPois]) {
+      for (const poi of list) {
+        if (poi && poi.id != null && !byId.has(poi.id)) byId.set(poi.id, poi);
+      }
+    }
+    return Array.from(byId.values());
+  }, [destinations, linearFeatures, virtualPois]);
+  const findPoiBySlug = useCallback(
+    (slug) => pois.find((poi) => generateSlug(poi.name) === slug) || null,
+    [pois]
+  );
 
   const [isDrawingAssociations, setIsDrawingAssociations] = useState(false);
   const [addingAssociationsToOrgId, setAddingAssociationsToOrgId] = useState(null);
@@ -600,45 +648,18 @@ function AppContent() {
     if (initialPoiSlug && !loading && destinations.length > 0) {
       const isOnMtbPage = location.pathname.startsWith('/mtb-trail-status');
 
-      const destination = destinations.find(d => generateSlug(d.name) === initialPoiSlug);
-      if (destination) {
-        setSelectedDestination(destination);
-        document.title = `${destination.name} | Roots of The Valley`;
+      const poi = findPoiBySlug(initialPoiSlug);
+      if (poi) {
+        setSelectedPoi(poi);
+        document.title = `${poi.name} | Roots of The Valley`;
         if (isOnMtbPage) {
           setSelectedFromMtbList(true);
           setActiveTab('view');
         }
-        setInitialPoiSlug(null); // Clear so it doesn't re-trigger
-        return;
       }
-
-      const virtualPoi = virtualPois.find(v => generateSlug(v.name) === initialPoiSlug);
-      if (virtualPoi) {
-        setSelectedDestination(virtualPoi);
-        document.title = `${virtualPoi.name} | Roots of The Valley`;
-        if (isOnMtbPage) {
-          setSelectedFromMtbList(true);
-          setActiveTab('view');
-        }
-        setInitialPoiSlug(null);
-        return;
-      }
-
-      const linearFeature = linearFeatures.find(f => generateSlug(f.name) === initialPoiSlug);
-      if (linearFeature) {
-        setSelectedLinearFeature(linearFeature);
-        document.title = `${linearFeature.name} | Roots of The Valley`;
-        if (isOnMtbPage) {
-          setSelectedFromMtbList(true);
-          setActiveTab('view');
-        }
-        setInitialPoiSlug(null);
-        return;
-      }
-
-      setInitialPoiSlug(null);
+      setInitialPoiSlug(null); // Clear so it doesn't re-trigger
     }
-  }, [initialPoiSlug, loading, destinations, linearFeatures, virtualPois, location.pathname]);
+  }, [initialPoiSlug, loading, findPoiBySlug, location.pathname]);
 
   useEffect(() => {
     if (isProgrammaticNavigationRef.current) {
