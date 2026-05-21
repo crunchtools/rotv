@@ -1444,6 +1444,22 @@ function AppContent() {
     }
   };
 
+  // Unified POI update/delete for the Sidebar (spec 019). Update dispatches by
+  // geometry; delete only carries an id, so both array filters run (the id lives
+  // in exactly one collection, and the selection-clear shims are no-ops otherwise).
+  const handlePoiUpdate = (updated) => {
+    if (updated && updated.geometry) {
+      handleLinearFeatureUpdate(updated);
+    } else {
+      handleDestinationUpdate(updated);
+    }
+  };
+
+  const handlePoiDelete = (deletedId) => {
+    handleDestinationDelete(deletedId);
+    handleLinearFeatureDelete(deletedId);
+  };
+
   const handleStartNewPOI = (coords) => {
     setSelectedDestination(null);
     setNewPOI({
@@ -2225,7 +2241,7 @@ function AppContent() {
 
         <Sidebar
           tourActive={tourActive}
-          destination={newPOI || newOrganization || selectedDestination}
+          poi={newPOI || newOrganization || selectedPoi}
           isNewPOI={!!newPOI}
           newOrganization={newOrganization}
           isNewOrganization={!!newOrganization}
@@ -2285,17 +2301,14 @@ function AppContent() {
           isAdmin={isAdmin}
           user={user}
           editMode={editMode}
-          onDestinationUpdate={handleDestinationUpdate}
-          onDestinationDelete={handleDestinationDelete}
+          onPoiUpdate={handlePoiUpdate}
+          onPoiDelete={handlePoiDelete}
           onSaveNewPOI={handleSaveNewPOI}
           onCancelNewPOI={handleCancelNewPOI}
           onSaveNewOrganization={handleSaveNewOrganization}
           onCancelNewOrganization={handleCancelNewOrganization}
           previewCoords={previewCoords}
           onPreviewCoordsChange={setPreviewCoords}
-          linearFeature={selectedLinearFeature}
-          onLinearFeatureUpdate={handleLinearFeatureUpdate}
-          onLinearFeatureDelete={handleLinearFeatureDelete}
           onNavigate={handleNavigatePoi}
           currentIndex={currentPoiIndex}
           totalCount={poiNavigationList.length}
@@ -2304,8 +2317,7 @@ function AppContent() {
           allDestinations={destinations}
           allLinearFeatures={linearFeatures}
           allVirtualPois={virtualPois}
-          onSelectDestination={handleSelectDestination}
-          onSelectLinearFeature={handleSelectLinearFeature}
+          onSelectPoi={handleSelectPoi}
           onAssociationsChanged={refreshAllData}
           onStartDrawingAssociations={handleStartDrawingAssociations}
           permalinkInfo={permalinkInfo}

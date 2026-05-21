@@ -2390,8 +2390,21 @@ const SIDEBAR_TAB_LABELS = {
   associations: 'Associations',
 };
 
-function Sidebar({ tourActive, destination, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onDestinationUpdate, onDestinationDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, linearFeature, onLinearFeatureUpdate, onLinearFeatureDelete, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectDestination, onSelectLinearFeature, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
+function Sidebar({ tourActive, poi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
   const navigate = useNavigate();
+
+  // Unified POI prop (spec 019). The backend serves one role-based model; the
+  // sidebar takes a single `poi`. Legacy split locals are derived from geometry
+  // presence so the existing body keeps working unchanged, and `isLinearFeature`
+  // (= !!linearFeature, below) is now correctly geometry-driven.
+  const linearFeature = poi && poi.geometry ? poi : null;
+  const destination = poi && !poi.geometry ? poi : null;
+  const onDestinationUpdate = onPoiUpdate;
+  const onLinearFeatureUpdate = onPoiUpdate;
+  const onDestinationDelete = onPoiDelete;
+  const onLinearFeatureDelete = onPoiDelete;
+  const onSelectDestination = onSelectPoi;
+  const onSelectLinearFeature = onSelectPoi;
   const [isEditing, setIsEditing] = useState(false);
   const [editedData, setEditedData] = useState({});
   const [saving, setSaving] = useState(false);
