@@ -117,14 +117,20 @@ function AppContent() {
   // `pois` table. Deduped by id; first occurrence wins. Used for slug/id lookups
   // so selection resolution has one source of truth instead of three sequential
   // `.find()` chains.
+  // NOTE: `Map` is the imported map component in this module, so the built-in
+  // Map constructor is shadowed — dedupe with a Set of seen ids instead.
   const pois = useMemo(() => {
-    const byId = new Map();
+    const seen = new Set();
+    const result = [];
     for (const list of [destinations, linearFeatures, virtualPois]) {
       for (const poi of list) {
-        if (poi && poi.id != null && !byId.has(poi.id)) byId.set(poi.id, poi);
+        if (poi && poi.id != null && !seen.has(poi.id)) {
+          seen.add(poi.id);
+          result.push(poi);
+        }
       }
     }
-    return Array.from(byId.values());
+    return result;
   }, [destinations, linearFeatures, virtualPois]);
   const findPoiBySlug = useCallback(
     (slug) => pois.find((poi) => generateSlug(poi.name) === slug) || null,
