@@ -8,16 +8,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
 
   const isMtbTrailhead = !isLinear && !isVirtual && (poi.poi_roles?.includes('mtb_trail') || (poi.status_url && poi.status_url.trim() !== ''));
 
-  const getDefaultThumbnail = () => {
-    if (isVirtual) return '/icons/thumbnails/virtual.svg';
-    if (isLinear) {
-      if (poi.feature_type === 'river') return '/icons/thumbnails/river.svg';
-      if (poi.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
-      return '/icons/thumbnails/trail.svg';
-    }
-    if (isMtbTrailhead) return '/icons/thumbnails/mtb.svg';
-    return '/icons/thumbnails/destination.svg';
-  };
+  const getDefaultThumbnail = () => '/brand/rotv-logo.png';
 
   const getPoiType = () => {
     if (isVirtual) return 'virtual';

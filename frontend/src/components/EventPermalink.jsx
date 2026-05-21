@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { formatDateWithWeekday, EventTypeIcon } from './NewsEventsShared';
+import { formatDateWithWeekday, EventTypeIcon, DetailImage } from './NewsEventsShared';
 import ShareButton from './ShareButton';
 
 function generateSlug(name) {
@@ -61,6 +61,8 @@ export default function EventPermalink({ poiSlug, titleSlug }) {
             &larr; Back to Map
           </button>
         </div>
+
+        <DetailImage imageUrl={item.image_url} poiId={item.poi_id} alt={item.title} />
 
         <div className="permalink-header">
           <EventTypeIcon type={item.event_type} />

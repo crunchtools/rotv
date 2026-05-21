@@ -61,6 +61,7 @@ import {
   processTrailStatusCollectionJob
 } from './services/trailStatusService.js';
 import imageServerClient from './services/imageServerClient.js';
+import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
 import { startMcpServer } from './services/mcpServer.js';
@@ -2356,7 +2357,7 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   if (type === 'event') {
     const q = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, e.publication_date, e.collection_date,
+             e.location_details, e.source_url, e.publication_date, e.collection_date, e.image_url,
              p.name AS poi_name, p.id AS poi_id,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
@@ -2370,7 +2371,7 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   } else {
     const q = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-             n.publication_date, n.collection_date, p.name AS poi_name, p.id AS poi_id,
+             n.publication_date, n.collection_date, n.image_url, p.name AS poi_name, p.id AS poi_id,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
@@ -2386,11 +2387,47 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
   return item ? { ...item, poi_slug: poiSlug, _poi: poi } : null;
 }
 
-// OG-tag injection for ?poi= deep links. MUST be mounted before express.static
-// so it can intercept "/" before the static index.html is served.
+// og:image for a POI: primary photo at size=large (smaller is rejected by Facebook), else branded fallback.
+const OG_FALLBACK_IMAGE = '/brand/rotv-og-share-1200x630.jpg';
+async function resolvePoiOgImage(poiId, baseUrl) {
+  if (poiId) {
+    try {
+      const { rows } = await pool.query(`
+        SELECT 1 FROM poi_media
+        WHERE poi_id = $1
+          AND media_type IN ('image', 'video')
+          AND role IN ('primary', 'gallery')
+          AND moderation_status IN ('published', 'auto_approved')
+        LIMIT 1
+      `, [poiId]);
+      if (rows.length > 0 || (imageServerClient.initialized && await imageServerClient.getPrimaryAsset(poiId))) {
+        return `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
+      }
+    } catch (error) {
+      console.error('Error resolving POI OG image:', error);
+    }
+  }
+  return `${baseUrl}${OG_FALLBACK_IMAGE}`;
+}
+
+// OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
+// permalink — the form share buttons produce). MUST be mounted before
+// express.static so it can intercept the request before index.html is served.
+const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status']);
 app.use(async (req, res, next) => {
+  let poiSlug = null;
+  let canonicalPath = null;
   if (req.path === '/' && req.query.poi) {
-    const poiSlug = req.query.poi;
+    poiSlug = req.query.poi;
+    canonicalPath = `/?poi=${poiSlug}`;
+  } else {
+    const match = req.path.match(/^\/([a-z0-9-]+)\/?$/);
+    if (match && !OG_RESERVED_PATHS.has(match[1])) {
+      poiSlug = match[1];
+      canonicalPath = `/${poiSlug}`;
+    }
+  }
+  if (poiSlug) {
     try {
       const poisQuery = await pool.query(`
         SELECT id, name, poi_roles, brief_description
@@ -2402,52 +2439,56 @@ app.use(async (req, res, next) => {
 
       if (poi) {
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
-        const appUrl = `${baseUrl}/?poi=${poiSlug}`;
-        const imageUrl = `${baseUrl}/api/pois/${poi.id}/thumbnail`;
+        const appUrl = `${baseUrl}${canonicalPath}`;
+        const imageUrl = await resolvePoiOgImage(poi.id, baseUrl);
         const description = poi.brief_description || `Explore ${poi.name} at Cuyahoga Valley National Park`;
+        // Fix: HTML-escape interpolated content (PR #382 review)
+        const safeName = escapeHtml(`${poi.name} | Roots of The Valley`);
+        const safeDescription = escapeHtml(description);
 
         const indexPath = path.join(staticPath, 'index.html');
         let html = await fs.readFile(indexPath, 'utf-8');
 
         html = html.replace(
           /<title>.*?<\/title>/,
-          `<title>${poi.name} | Roots of The Valley</title>`
+          `<title>${safeName}</title>`
         );
 
         html = html.replace(
           /<meta property="og:title" content="[^"]*" \/>/,
-          `<meta property="og:title" content="${poi.name} | Roots of The Valley" />`
+          `<meta property="og:title" content="${safeName}" />`
         );
         html = html.replace(
           /<meta property="og:description" content="[^"]*" \/>/,
-          `<meta property="og:description" content="${description.replace(/"/g, '&quot;')}" />`
+          `<meta property="og:description" content="${safeDescription}" />`
         );
         html = html.replace(
           /<meta property="og:url" content="[^"]*" \/>/,
-          `<meta property="og:url" content="${appUrl}" />`
+          `<meta property="og:url" content="${escapeHtml(appUrl)}" />` // Fix: escape URL in attribute (PR #382 review)
         );
 
+        // Replace, don't append — a second og:image tag breaks the unfurl.
         html = html.replace(
-          /(<meta property="og:url" content="[^"]*" \/>)/,
-          `$1\n    <meta property="og:image" content="${imageUrl}" />\n    <meta property="og:image:type" content="image/jpeg" />\n    <meta property="og:image:width" content="1200" />\n    <meta property="og:image:height" content="630" />`
+          /<meta property="og:image" content="[^"]*" \/>/,
+          `<meta property="og:image" content="${imageUrl}" />`
         );
 
         html = html.replace(
           /<meta name="twitter:title" content="[^"]*" \/>/,
-          `<meta name="twitter:title" content="${poi.name} | Roots of The Valley" />`
+          `<meta name="twitter:title" content="${safeName}" />`
         );
         html = html.replace(
           /<meta name="twitter:description" content="[^"]*" \/>/,
-          `<meta name="twitter:description" content="${description.replace(/"/g, '&quot;')}" />`
+          `<meta name="twitter:description" content="${safeDescription}" />`
         );
         html = html.replace(
-          /(<meta name="twitter:description" content="[^"]*" \/>)/,
-          `$1\n    <meta name="twitter:image" content="${imageUrl}" />`
+          /<meta name="twitter:image" content="[^"]*" \/>/,
+          `<meta name="twitter:image" content="${imageUrl}" />`
         );
 
         html = html.replace(
           /<meta name="description" content="[^"]*" \/>/,
-          `<meta name="description" content="${description.replace(/"/g, '&quot;')}" />`
+          `<meta name="description" content="${safeDescription}" />`
         );
 
         res.setHeader('Content-Type', 'text/html');
@@ -2479,7 +2520,9 @@ app.use(async (req, res, next) => {
     const description = (isEvent ? item.description : item.summary) || '';
     const safeTitle = escapeHtml(`${item.title} | ${item._poi.name}`);
     const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
-    const ogImage = `${baseUrl}/brand/rotv-og-share-1200x630.jpg`;
+    // Image priority: source article image, then POI primary photo, then brand.
+    const sourceImage = isUsableSourceImage(item.image_url) ? item.image_url : null;
+    const ogImage = escapeHtml(sourceImage || await resolvePoiOgImage(item.poi_id, baseUrl));
 
     const indexPath = path.join(staticPath, 'index.html');
     let html = await fs.readFile(indexPath, 'utf-8');
@@ -2487,11 +2530,12 @@ app.use(async (req, res, next) => {
     html = html.replace(/<title>.*?<\/title>/, `<title>${safeTitle} | Roots of The Valley</title>`);
     html = html.replace(/<meta property="og:title" content="[^"]*" \/>/, `<meta property="og:title" content="${safeTitle}" />`);
     html = html.replace(/<meta property="og:description" content="[^"]*" \/>/, `<meta property="og:description" content="${safeDesc}" />`);
-    html = html.replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${canonicalUrl}" />`);
+    html = html.replace(/<meta property="og:url" content="[^"]*" \/>/, `<meta property="og:url" content="${escapeHtml(canonicalUrl)}" />`); // Fix: escape URL in attribute (PR #382 review)
     html = html.replace(/<meta property="og:type" content="[^"]*" \/>/, `<meta property="og:type" content="article" />`);
     html = html.replace(/<meta property="og:image" content="[^"]*" \/>/, `<meta property="og:image" content="${ogImage}" />`);
     html = html.replace(/<meta name="twitter:title" content="[^"]*" \/>/, `<meta name="twitter:title" content="${safeTitle}" />`);
     html = html.replace(/<meta name="twitter:description" content="[^"]*" \/>/, `<meta name="twitter:description" content="${safeDesc}" />`);
+    html = html.replace(/<meta name="twitter:image" content="[^"]*" \/>/, `<meta name="twitter:image" content="${ogImage}" />`);
     html = html.replace(/<meta name="description" content="[^"]*" \/>/, `<meta name="description" content="${safeDesc}" />`);
 
     res.setHeader('Content-Type', 'text/html');
