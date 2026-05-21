@@ -1244,6 +1244,20 @@ function AppContent() {
     }
   }, [updateUrlWithPoi, poiNavigationList, activeTab]);
 
+  // Unified map selection entry point. Dispatches by geometry to the existing
+  // destination/linear handlers (which carry distinct side effects), and fully
+  // clears the single selection slot on null.
+  const handleSelectPoi = useCallback((poi) => {
+    if (poi && poi.geometry) {
+      handleSelectLinearFeature(poi);
+    } else if (poi) {
+      handleSelectDestination(poi);
+    } else {
+      handleSelectDestination(null);
+      handleSelectLinearFeature(null);
+    }
+  }, [handleSelectDestination, handleSelectLinearFeature]);
+
   const handleNavigatePoi = useCallback((direction) => {
     if (poiNavigationList.length === 0) return;
 
@@ -2151,8 +2165,8 @@ function AppContent() {
       >
         <Map
           destinations={filteredDestinations}
-          selectedDestination={selectedDestination}
-          onSelectDestination={handleSelectDestination}
+          selectedPoi={selectedPoi}
+          onSelectPoi={handleSelectPoi}
           isAdmin={isAdmin}
           onDestinationUpdate={handleDestinationUpdate}
           onDestinationCreate={handleDestinationCreate}
@@ -2165,8 +2179,6 @@ function AppContent() {
           newOrganization={newOrganization}
           onStartNewOrganization={handleStartNewOrganization}
           linearFeatures={linearFeatures}
-          selectedLinearFeature={selectedLinearFeature}
-          onSelectLinearFeature={handleSelectLinearFeature}
           visibleTypes={visibleTypes}
           onVisibleTypesChange={setVisibleTypes}
           onVisiblePoisChange={setVisiblePoiIds}
