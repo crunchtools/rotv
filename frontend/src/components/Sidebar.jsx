@@ -11,6 +11,7 @@ import MediaUploadModal from './MediaUploadModal';
 import RoleEditor from './RoleEditor';
 import GeoJSONUploader from './GeoJSONUploader';
 import { firstGeometryPoint } from '../utils/geo';
+import usePoiMedia from '../hooks/usePoiMedia';
 
 function getNavigationStops(poi, isLinearFeature) {
   if (!poi) return null;
@@ -22,7 +23,7 @@ function getNavigationStops(poi, isLinearFeature) {
   }
 
   if (isLinearFeature) {
-    if (poi.feature_type === 'trail' || poi.poi_roles?.includes('trail')) {
+    if (poi.poi_roles?.includes('trail')) {
       const point = firstGeometryPoint(poi.geometry);
       return point ? [point] : null;
     }
@@ -242,9 +243,9 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
         <div className="sidebar-content">
         <div className="badges-row">
           {isLinearFeature ? (
-            <span className={`poi-type-badge ${destination.feature_type}`}>
-              {destination.feature_type === 'river' ? 'River' :
-               destination.feature_type === 'boundary' ? 'Boundary' : 'Trail'}
+            <span className={`poi-type-badge ${destination.poi_roles?.includes('river') ? 'river' : destination.poi_roles?.includes('boundary') ? 'boundary' : 'trail'}`}>
+              {destination.poi_roles?.includes('river') ? 'River' :
+               destination.poi_roles?.includes('boundary') ? 'Boundary' : 'Trail'}
             </span>
           ) : destination.poi_roles?.includes('organization') ? (
             <span className="poi-type-badge virtual">
@@ -638,8 +639,8 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
           <div className="sidebar-image">
             {(() => {
               const thumbUrl = isLinearFeature
-                ? (destination?.feature_type === 'river' ? '/icons/thumbnails/river.svg'
-                  : destination?.feature_type === 'boundary' ? '/icons/thumbnails/boundary.svg'
+                ? (destination?.poi_roles?.includes('river') ? '/icons/thumbnails/river.svg'
+                  : destination?.poi_roles?.includes('boundary') ? '/icons/thumbnails/boundary.svg'
                   : '/icons/thumbnails/trail.svg')
                 : '/icons/thumbnails/destination.svg';
               return <img src={thumbUrl} alt={destination?.name || 'New POI'} className="default-thumbnail" />;
@@ -1600,7 +1601,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
 
     const allPhysicalPois = [
       ...(allDestinations || []).map(d => ({ ...d, _type: 'point' })),
-      ...(allLinearFeatures || []).map(f => ({ ...f, _type: f.feature_type || 'trail' }))
+      ...(allLinearFeatures || []).map(f => ({ ...f, _type: f.poi_roles?.find(r => ['trail', 'river', 'boundary'].includes(r)) || 'trail' }))
     ];
 
     return allPhysicalPois.filter(p => !currentIds.has(p.id));
@@ -1744,8 +1745,8 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                 const getDefaultThumbnail = () => {
                   if (associatedPoi._isVirtual) return '/icons/thumbnails/virtual.svg';
                   if (associatedPoi._isLinear) {
-                    if (associatedPoi.feature_type === 'river') return '/icons/thumbnails/river.svg';
-                    if (associatedPoi.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
+                    if (associatedPoi.poi_roles?.includes('river')) return '/icons/thumbnails/river.svg';
+                    if (associatedPoi.poi_roles?.includes('boundary')) return '/icons/thumbnails/boundary.svg';
                     return '/icons/thumbnails/trail.svg';
                   }
                   return '/icons/thumbnails/destination.svg';
@@ -1755,7 +1756,7 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                                       (associatedPoi.poi_roles?.includes('mtb_trail') || (associatedPoi.status_url && associatedPoi.status_url.trim() !== ''));
                 const poiType = associatedPoi._isVirtual ? 'virtual' :
                                 !associatedPoi._isLinear ? (isMtbTrailhead ? 'mtb' : 'destination') :
-                                associatedPoi.feature_type || 'trail';
+                                (associatedPoi.poi_roles?.find(r => ['trail', 'river', 'boundary'].includes(r)) || 'trail');
 
                 return (
                   <div
@@ -1806,8 +1807,8 @@ function AssociationsModal({ isOpen, onClose, poi, associations, allDestinations
                             {associatedPoi._isVirtual ? 'O' :
                              isMtbTrailhead ? 'M' :
                              !associatedPoi._isLinear ? 'D' :
-                             associatedPoi.feature_type === 'river' ? 'R' :
-                             associatedPoi.feature_type === 'boundary' ? 'B' : 'T'}
+                             associatedPoi.poi_roles?.includes('river') ? 'R' :
+                             associatedPoi.poi_roles?.includes('boundary') ? 'B' : 'T'}
                           </span>
                           {associatedPoi._isOwner && (
                             <span className="owner-badge-small">Owner</span>
@@ -1956,7 +1957,7 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
     const currentIds = new Set(associatedPoisWithAssocId.map(p => p.id));
     const allPhysicalPois = [
       ...(allDestinations || []).map(d => ({ ...d, _type: 'point' })),
-      ...(allLinearFeatures || []).map(f => ({ ...f, _type: f.feature_type || 'trail' }))
+      ...(allLinearFeatures || []).map(f => ({ ...f, _type: f.poi_roles?.find(r => ['trail', 'river', 'boundary'].includes(r)) || 'trail' }))
     ];
 
     return allPhysicalPois.filter(p => !currentIds.has(p.id));
@@ -2073,8 +2074,8 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
               const getDefaultThumbnail = () => {
                 if (associatedPoi._isVirtual) return '/icons/thumbnails/virtual.svg';
                 if (associatedPoi._isLinear) {
-                  if (associatedPoi.feature_type === 'river') return '/icons/thumbnails/river.svg';
-                  if (associatedPoi.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
+                  if (associatedPoi.poi_roles?.includes('river')) return '/icons/thumbnails/river.svg';
+                  if (associatedPoi.poi_roles?.includes('boundary')) return '/icons/thumbnails/boundary.svg';
                   return '/icons/thumbnails/trail.svg';
                 }
                 return '/icons/thumbnails/destination.svg';
@@ -2084,7 +2085,7 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                                     associatedPoi.status_url && associatedPoi.status_url.trim() !== '';
               const poiType = associatedPoi._isVirtual ? 'virtual' :
                               !associatedPoi._isLinear ? (isMtbTrailhead ? 'mtb' : 'destination') :
-                              associatedPoi.feature_type || 'trail';
+                              (associatedPoi.poi_roles?.find(r => ['trail', 'river', 'boundary'].includes(r)) || 'trail');
 
               return (
                 <div
@@ -2133,8 +2134,8 @@ function AssociationsTabContent({ poi, associations, allDestinations, allLinearF
                           {associatedPoi._isVirtual ? 'O' :
                            isMtbTrailhead ? 'M' :
                            !associatedPoi._isLinear ? 'D' :
-                           associatedPoi.feature_type === 'river' ? 'R' :
-                           associatedPoi.feature_type === 'boundary' ? 'B' : 'T'}
+                           associatedPoi.poi_roles?.includes('river') ? 'R' :
+                           associatedPoi.poi_roles?.includes('boundary') ? 'B' : 'T'}
                         </span>
                         {associatedPoi._isOwner && (
                           <span className="owner-badge-small">Owner</span>
@@ -2444,81 +2445,7 @@ function Sidebar({ tourActive, poi, isNewPOI, newOrganization, isNewOrganization
     }
   }, [newOrganization]);
 
-  const [media, setMedia] = useState([]);
-  const [allMedia, setAllMedia] = useState([]);
-  const [mediaLoading, setMediaLoading] = useState(false);
-
-  useEffect(() => {
-    const poiId = destination?.id || linearFeature?.id;
-    if (!poiId) return;
-
-    setMediaLoading(true);
-    fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
-      .then(res => res.ok ? res.json() : { mosaic: [], all_media: [] })
-      .then(data => {
-        setMedia(data.mosaic || []);
-        setAllMedia(data.all_media || []);
-        setMediaLoading(false);
-      })
-      .catch(err => {
-        console.error('Failed to load media:', err);
-        setMedia([]);
-        setAllMedia([]);
-        setMediaLoading(false);
-      });
-  }, [destination?.id, linearFeature?.id]);
-
-  useEffect(() => {
-    const poiId = destination?.id || linearFeature?.id;
-    if (!poiId) return;
-
-    const handleMediaUpdateEvent = (event) => {
-      if (event.detail.poiId === poiId) {
-        console.log('[Sidebar] POI media updated for', poiId, '- refreshing...');
-        fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
-          .then(res => res.json())
-          .then(data => {
-            setMedia(data.mosaic || []);
-            setAllMedia(data.all_media || []);
-          })
-          .catch(err => console.error('[Sidebar] Failed to refresh media:', err));
-
-        fetch(`/api/pois/${poiId}`, { credentials: 'include' })
-          .then(res => res.json())
-          .then(data => {
-            if (destination && onDestinationUpdate) {
-              onDestinationUpdate(data);
-            }
-          })
-          .catch(err => console.error('[Sidebar] Failed to refresh POI:', err));
-      }
-    };
-
-    window.addEventListener('poi-media-updated', handleMediaUpdateEvent);
-    return () => window.removeEventListener('poi-media-updated', handleMediaUpdateEvent);
-  }, [destination?.id, linearFeature?.id]);
-
-  const handleMediaUpdate = () => {
-    const poiId = destination?.id || linearFeature?.id;
-    if (!poiId) return;
-
-    fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
-      .then(res => res.json())
-      .then(data => {
-        setMedia(data.mosaic || []);
-        setAllMedia(data.all_media || []);
-      })
-      .catch(err => console.error('Failed to refresh media:', err));
-
-    if (destination && onDestinationUpdate) {
-      fetch(`/api/pois/${poiId}`, { credentials: 'include' })
-        .then(res => res.json())
-        .then(data => onDestinationUpdate(data))
-        .catch(err => console.error('Failed to refresh POI:', err));
-    }
-
-    window.dispatchEvent(new CustomEvent('moderation-count-changed'));
-  };
+  const { media, allMedia, mediaLoading, refreshMedia: handleMediaUpdate } = usePoiMedia(poi, onPoiUpdate);
 
   const activePoi = destination || linearFeature;
 
@@ -3014,8 +2941,8 @@ function Sidebar({ tourActive, poi, isNewPOI, newOrganization, isNewOrganization
       : null;
 
     const getLinearDefaultThumbnail = () => {
-      if (linearFeature.feature_type === 'river') return '/icons/thumbnails/river.svg';
-      if (linearFeature.feature_type === 'boundary') return '/icons/thumbnails/boundary.svg';
+      if (linearFeature.poi_roles?.includes('river')) return '/icons/thumbnails/river.svg';
+      if (linearFeature.poi_roles?.includes('boundary')) return '/icons/thumbnails/boundary.svg';
       return '/icons/thumbnails/trail.svg';
     };
 
