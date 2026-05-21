@@ -78,34 +78,47 @@ function AppContent() {
 
   const [linearFeatures, setLinearFeatures] = useState([]);
 
-  // Unified POI selection. The backend serves a single role-based `pois` model
-  // (spec 005-poi-roles); the frontend now holds a single `selectedPoi` slot.
-  // `selectedDestination` (point/organization, no geometry) and
-  // `selectedLinearFeature` (trail/river/boundary, has geometry) are derived
-  // views over that one slot, so an inconsistent dual-selection is structurally
-  // impossible. Geometry presence is the discriminator, per NFR-019-03.
-  const [selectedPoi, setSelectedPoi] = useState(null);
-  const poiHasGeometry = (poi) => !!(poi && poi.geometry);
-  const selectedDestination = poiHasGeometry(selectedPoi) ? null : selectedPoi;
-  const selectedLinearFeature = poiHasGeometry(selectedPoi) ? selectedPoi : null;
+  // Unified POI selection (spec 005/019). One slot carries the selected POI plus
+  // the "kind" it was selected as: 'destination' (point/organization) vs 'linear'
+  // (trail/river/boundary). Kind comes from the SELECTION PATH (which setter was
+  // called), NOT geometry — a dual-role POI such as City of Akron (organization +
+  // boundary) carries geometry yet can be selected as either, so geometry is the
+  // wrong discriminator (the PR #348 lesson). `selectedDestination`/
+  // `selectedLinearFeature` are derived views keyed on kind.
+  const [selection, setSelection] = useState({ poi: null, kind: null });
+  const selectedPoi = selection.poi;
+  const selectedKind = selection.kind;
+  const selectedDestination = selection.kind === 'destination' ? selection.poi : null;
+  const selectedLinearFeature = selection.kind === 'linear' ? selection.poi : null;
   const setSelectedDestination = useCallback((value) => {
-    setSelectedPoi((prev) => {
+    setSelection((prev) => {
       const next = typeof value === 'function'
-        ? value(poiHasGeometry(prev) ? null : prev)
+        ? value(prev.kind === 'destination' ? prev.poi : null)
         : value;
-      // Selecting a destination replaces everything; clearing it preserves any
-      // linear-feature selection (matching the old independent-slot behavior).
-      if (next == null) return poiHasGeometry(prev) ? prev : null;
-      return next;
+      // Clearing the destination slot leaves a linear selection intact.
+      if (next == null) return prev.kind === 'linear' ? prev : { poi: null, kind: null };
+      return { poi: next, kind: 'destination' };
     });
   }, []);
   const setSelectedLinearFeature = useCallback((value) => {
-    setSelectedPoi((prev) => {
+    setSelection((prev) => {
       const next = typeof value === 'function'
-        ? value(poiHasGeometry(prev) ? prev : null)
+        ? value(prev.kind === 'linear' ? prev.poi : null)
         : value;
-      if (next == null) return poiHasGeometry(prev) ? null : prev;
-      return next;
+      if (next == null) return prev.kind === 'destination' ? prev : { poi: null, kind: null };
+      return { poi: next, kind: 'linear' };
+    });
+  }, []);
+  // Generic setter (initial URL load): organizations render as destinations even
+  // when they carry boundary geometry; otherwise geometry decides the kind.
+  const setSelectedPoi = useCallback((value) => {
+    setSelection((prev) => {
+      const next = typeof value === 'function' ? value(prev.poi) : value;
+      if (next == null) return { poi: null, kind: null };
+      const kind = next.poi_roles?.includes('organization')
+        ? 'destination'
+        : (next.geometry ? 'linear' : 'destination');
+      return { poi: next, kind };
     });
   }, []);
 
@@ -2188,6 +2201,7 @@ function AppContent() {
         <Map
           destinations={filteredDestinations}
           selectedPoi={selectedPoi}
+          selectedIsLinear={selectedKind === 'linear'}
           onSelectPoi={handleSelectPoi}
           isAdmin={isAdmin}
           onDestinationUpdate={handleDestinationUpdate}
@@ -2248,6 +2262,7 @@ function AppContent() {
         <Sidebar
           tourActive={tourActive}
           poi={newPOI || newOrganization || selectedPoi}
+          isLinearPoi={!newPOI && !newOrganization && selectedKind === 'linear'}
           isNewPOI={!!newPOI}
           newOrganization={newOrganization}
           isNewOrganization={!!newOrganization}

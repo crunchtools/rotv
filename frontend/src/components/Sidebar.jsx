@@ -25,15 +25,16 @@ const SIDEBAR_TAB_LABELS = {
   associations: 'Associations',
 };
 
-function Sidebar({ tourActive, poi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
+function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
   const navigate = useNavigate();
 
-  // Unified POI prop (spec 019). The backend serves one role-based model; the
-  // sidebar takes a single `poi`. Legacy split locals are derived from geometry
-  // presence so the existing body keeps working unchanged, and `isLinearFeature`
-  // (= !!linearFeature, below) is now correctly geometry-driven.
-  const linearFeature = poi && poi.geometry ? poi : null;
-  const destination = poi && !poi.geometry ? poi : null;
+  // Unified POI prop (spec 019). The sidebar takes a single `poi` plus
+  // `isLinearPoi`, the selection KIND from App — NOT geometry, so a dual-role
+  // organization+boundary selected as an organization renders as a destination
+  // even though it has geometry (PR #348). Legacy split locals are derived from
+  // that flag so the existing body keeps working unchanged.
+  const linearFeature = poi && isLinearPoi ? poi : null;
+  const destination = poi && !isLinearPoi ? poi : null;
   const onDestinationUpdate = onPoiUpdate;
   const onLinearFeatureUpdate = onPoiUpdate;
   const onDestinationDelete = onPoiDelete;

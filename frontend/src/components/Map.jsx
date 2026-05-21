@@ -958,12 +958,13 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
-  // Geometry presence is the discriminator — features with geometry
-  // (trail/river/boundary) render as paths/overlays, points render as markers.
-  const selectedDestination = selectedPoi && !selectedPoi.geometry ? selectedPoi : null;
-  const selectedLinearFeature = selectedPoi && selectedPoi.geometry ? selectedPoi : null;
+  // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
+  // dual-role organization+boundary may be selected as a destination yet still
+  // carry geometry, so kind is the correct discriminator (PR #348).
+  const selectedDestination = selectedPoi && !selectedIsLinear ? selectedPoi : null;
+  const selectedLinearFeature = selectedPoi && selectedIsLinear ? selectedPoi : null;
   const onSelectDestination = onSelectPoi;
   const onSelectLinearFeature = onSelectPoi;
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
