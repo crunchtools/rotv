@@ -66,10 +66,16 @@ const DEFAULT_ZOOM = 11;
 
 const TOOLTIP_HOVER_DELAY = 250; // ms
 
+// All park boundaries render in CVNP's forest green for a consistent "park" look;
+// municipal/county/state keep their own per-row boundary_color. (#396 follow-up)
+const PARK_BOUNDARY_COLOR = '#228B22';
+const boundaryDisplayColor = (b) =>
+  b.boundary_type === 'park' ? PARK_BOUNDARY_COLOR : (b.boundary_color || PARK_BOUNDARY_COLOR);
+
 function LegendSection({ id, title, count, isOpen, onToggle, showActions, onShowAll, onHideAll, children }) {
   const bodyId = `legend-section-${id}`;
   return (
-    <div className="legend-section">
+    <div className={`legend-section ${isOpen ? 'open' : ''}`}>
       <div className="legend-section-header">
         <button
           type="button"
@@ -163,7 +169,7 @@ function Legend({
     >
       <span
         className="boundary-chip-color"
-        style={{ backgroundColor: boundary.boundary_color || '#228B22' }}
+        style={{ backgroundColor: boundaryDisplayColor(boundary) }}
       />
       <span className="boundary-chip-name">{boundary.name}</span>
     </button>
@@ -345,25 +351,36 @@ function MapVisibilityHandler({ activeTab }) {
   return null;
 }
 
-function BoundsFitter({ boundsToFit }) {
+function BoundsFitter({ boundsToFit, fitNonce }) {
   const map = useMap();
   const prevBounds = useRef(null);
+  const prevNonce = useRef(fitNonce);
 
   useEffect(() => {
-    if (boundsToFit && JSON.stringify(boundsToFit) !== JSON.stringify(prevBounds.current)) {
+    if (!boundsToFit) return;
 
+    // Re-fit when an explicit user action bumped the nonce (even if the target
+    // bounds are unchanged, e.g. re-enabling the same boundary), or when the
+    // bounds themselves changed. (#396 follow-up)
+    const nonceChanged = fitNonce !== undefined && fitNonce !== prevNonce.current;
+    const boundsChanged = JSON.stringify(boundsToFit) !== JSON.stringify(prevBounds.current);
+    if (nonceChanged || boundsChanged) {
       const latRange = boundsToFit[1][0] - boundsToFit[0][0];
       const lngRange = boundsToFit[1][1] - boundsToFit[0][1];
       const geoSize = Math.max(latRange, lngRange);
 
+      // Clamp how far we zoom in for a tight cluster / single point so a one-POI
+      // type (or a tiny boundary) doesn't slam to max zoom.
       const padding = geoSize >= 0.3 ? [20, 20] : [50, 50];
-      const maxZoom = geoSize >= 0.3 ? 12 : undefined; // Limit zoom for large areas
-
+      let maxZoom;
+      if (geoSize >= 0.3) maxZoom = 12;       // large areas
+      else if (geoSize < 0.02) maxZoom = 15;  // very small / single point
 
       map.fitBounds(boundsToFit, { padding, maxZoom });
       prevBounds.current = boundsToFit;
+      prevNonce.current = fitNonce;
     }
-  }, [boundsToFit, map]);
+  }, [boundsToFit, fitNonce, map]);
 
   return null;
 }
@@ -958,7 +975,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
   // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
   // dual-role organization+boundary may be selected as a destination yet still
@@ -1012,17 +1029,42 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   const [saving, setSaving] = useState(false);
 
 
+  // Fit the map to all visible POIs of the given icon type(s). (#396 follow-up)
+  const fitToTypes = useCallback((typeIds) => {
+    if (!onFitBounds) return;
+    const typeSet = typeIds instanceof Set ? typeIds : new Set(typeIds);
+    let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity;
+    for (const dest of destinations) {
+      if (!dest.latitude || !dest.longitude) continue;
+      if (!typeSet.has(getDestinationIconType(dest))) continue;
+      const lat = parseFloat(dest.latitude);
+      const lng = parseFloat(dest.longitude);
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+    }
+    if (minLat === Infinity) {
+      if (defaultBounds) onFitBounds(defaultBounds);
+      return;
+    }
+    onFitBounds([[minLat, minLng], [maxLat, maxLng]]);
+  }, [destinations, getDestinationIconType, onFitBounds, defaultBounds]);
+
   const handleToggleType = (typeId) => {
-    if (onVisibleTypesChange) {
-      onVisibleTypesChange(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(typeId)) {
-          newSet.delete(typeId);
-        } else {
-          newSet.add(typeId);
-        }
-        return newSet;
-      });
+    if (!onVisibleTypesChange) return;
+    const willEnable = !visibleTypes.has(typeId);
+    onVisibleTypesChange(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(typeId)) newSet.delete(typeId); else newSet.add(typeId);
+      return newSet;
+    });
+    // Enabling a type: zoom to fit all POIs of that type. Disabling the last visible
+    // type: zoom back to the default view. (#396 follow-up)
+    if (willEnable) {
+      fitToTypes([typeId]);
+    } else if (visibleTypes.size === 1 && visibleTypes.has(typeId) && onFitBounds && defaultBounds) {
+      onFitBounds(defaultBounds);
     }
   };
 
@@ -1030,12 +1072,14 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     if (onVisibleTypesChange) onVisibleTypesChange(new Set(allIconTypes));
     onToggleTrails(true);
     onToggleRivers(true);
+    fitToTypes(allIconTypes); // fit to every POI now shown
   };
 
   const handleHideAll = () => {
     if (onVisibleTypesChange) onVisibleTypesChange(new Set());
     onToggleTrails(false);
     onToggleRivers(false);
+    if (onFitBounds && defaultBounds) onFitBounds(defaultBounds);
   };
 
   const handleFileSelect = (e) => {
@@ -1163,7 +1207,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         color: isSelected ? (editMode ? editSelectedColor : viewSelectedColor) : '#1E90FF'
       };
     } else if (feature.poi_roles?.includes('boundary')) {
-      const boundaryColor = feature.boundary_color || '#228B22';
+      const boundaryColor = boundaryDisplayColor(feature);
       const selectedStrokeColor = editMode ? editSelectedColor : viewSelectedColor;
 
       return {
@@ -1409,7 +1453,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
 
         <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />
         <MapVisibilityHandler activeTab={activeTab} />
-        <BoundsFitter boundsToFit={boundsToFit} />
+        <BoundsFitter boundsToFit={boundsToFit} fitNonce={fitNonce} />
         <MapBoundsTracker
           destinations={destinations}
           visibleTypes={visibleTypes}

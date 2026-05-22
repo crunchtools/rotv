@@ -2624,6 +2624,14 @@ body {
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  /* Fix: flex column so the open section can scroll within the panel (PR for #396) */
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fix: pin the search box so only the open section scrolls (#396) */
+.legend-search {
+  flex: 0 0 auto;
 }
 
 .legend h4 {
@@ -2665,11 +2673,35 @@ body {
 .legend-section {
   border-top: 1px solid #e0e0e0;
   padding: 0.5rem 0;
+  /* Fix: flex column so the open section's body can grow + scroll (#396) */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .legend-section:first-of-type {
   border-top: none;
   padding-top: 0;
+}
+
+/* Fix: the open section claims remaining panel height; its body scrolls (#396) */
+.legend-section.open {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.legend-section.open .legend-section-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* Overlay/transparent scrolling: scroll without a visible scrollbar,
+     matching .poi-news-list-content above. (#396) */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+}
+
+.legend-section.open .legend-section-body::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 .legend-section-header {
@@ -2775,13 +2807,14 @@ body {
 }
 
 .boundary-chips {
-  display: flex;
-  flex-wrap: wrap;
+  /* Two-column grid to match the Points of Interest layout (#396 follow-up) */
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 0.35rem;
 }
 
 .boundary-chip {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.35rem;
   padding: 0.25rem 0.5rem;
@@ -2791,6 +2824,8 @@ body {
   border: 1px solid #ddd;
   background: white;
   transition: all 0.15s ease;
+  /* Allow the name to truncate within its grid column */
+  min-width: 0;
 }
 
 .boundary-chip.active {
@@ -2824,7 +2859,9 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 100px;
+  /* Fill the grid column and truncate to fit instead of a fixed cap (#396 follow-up) */
+  flex: 1;
+  min-width: 0;
 }
 
 .legend-toggle {
