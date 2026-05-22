@@ -1038,7 +1038,7 @@ function DataCollectionSettings() {
 
       <div className="ai-config-section">
         <h4>News &amp; Events Filters</h4>
-        <p className="settings-description">Allow lists (green) and block lists (red) that govern what gets collected and what passes moderation. Add to each list independently, then Save Filters once to apply everything.</p>
+        <p className="settings-description">Allow lists (green) and deny lists (red) that govern what gets collected and what passes moderation. Add to each list independently, then Save Filters once to apply everything.</p>
         {(domainListsLoading || excludedPoisLoading) ? <p>Loading filters...</p> : (
           <>
             <FilterList
@@ -1054,18 +1054,6 @@ function DataCollectionSettings() {
               disabled={filtersSaving}
             />
             <FilterList
-              title="URL Block List"
-              type="block"
-              hint="Source domains or URLs that are rejected during moderation and skipped in phase 2 collection."
-              items={domainLists.competitor}
-              value={newCompetitorDomain}
-              onValueChange={setNewCompetitorDomain}
-              onAdd={handleAddCompetitorDomain}
-              onRemove={handleRemoveCompetitorDomain}
-              placeholder="scam-site.com"
-              disabled={filtersSaving}
-            />
-            <FilterList
               title="Content Path Allow List"
               type="allow"
               hint="URL path patterns the content crawler may follow beyond the listing page (e.g., /event, /events, iteminfo.html)."
@@ -1077,16 +1065,28 @@ function DataCollectionSettings() {
               placeholder="/event"
               disabled={filtersSaving}
             />
+            <FilterList
+              title="URL Deny List"
+              type="deny"
+              hint="Source domains or URLs that are rejected during moderation and skipped in phase 2 collection."
+              items={domainLists.competitor}
+              value={newCompetitorDomain}
+              onValueChange={setNewCompetitorDomain}
+              onAdd={handleAddCompetitorDomain}
+              onRemove={handleRemoveCompetitorDomain}
+              placeholder="scam-site.com"
+              disabled={filtersSaving}
+            />
 
             <div style={{ marginBottom: '1.5rem' }}>
-              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: FILTER_COLORS.block.heading }}>POI Block List</h5>
+              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: FILTER_COLORS.deny.heading }}>POI Deny List</h5>
               <p className="config-hint" style={{ marginBottom: '0.75rem' }}>POIs skipped during collection. Any news or events from them are rejected on every moderation run. Use for broad geographic entities (e.g. Cuyahoga County) whose feeds pull in irrelevant content.</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 {excludedPois.length === 0 && (
-                  <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>No POIs blocked.</p>
+                  <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>No POIs denied.</p>
                 )}
                 {excludedPois.map(poi => (
-                  <FilterChip key={poi.id} label={poi.name} type="block" onRemove={() => handleRemoveExcludedPoi(poi.id)} />
+                  <FilterChip key={poi.id} label={poi.name} type="deny" onRemove={() => handleRemoveExcludedPoi(poi.id)} />
                 ))}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1094,7 +1094,7 @@ function DataCollectionSettings() {
                   pois={allPois.filter(p => !excludedPois.some(e => e.id === p.id))}
                   value={selectedPoiId}
                   onChange={(id) => setSelectedPoiId(id || '')}
-                  placeholder="Search POIs to block..."
+                  placeholder="Search POIs to deny..."
                   disabled={filtersSaving}
                   style={{ flex: 1 }}
                 />
@@ -1103,8 +1103,8 @@ function DataCollectionSettings() {
             </div>
 
             <FilterList
-              title="Content Block List"
-              type="block"
+              title="Content Deny List"
+              type="deny"
               hint="Reject any news or event whose title or description contains one of these phrases. Use for organizations that are not POIs (e.g., Cuyahoga Valley Art Center) whose events attach to the venue POI. Applied on every moderation run."
               items={contentBlocklist}
               value={newContentPhrase}

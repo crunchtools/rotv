@@ -1,8 +1,8 @@
 // Shared editor for the News & Events filter lists. `type` drives the color:
-// allow lists are green, block lists are red, consistently across the section.
+// allow lists are green, deny lists are red, consistently across the section.
 export const FILTER_COLORS = {
   allow: { heading: '#28a745', chipBg: '#d4edda', chipText: '#155724' },
-  block: { heading: '#dc3545', chipBg: '#f8d7da', chipText: '#721c24' }
+  deny: { heading: '#dc3545', chipBg: '#f8d7da', chipText: '#721c24' }
 };
 
 export function FilterChip({ label, type, onRemove }) {
