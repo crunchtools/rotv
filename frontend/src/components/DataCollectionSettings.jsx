@@ -55,6 +55,8 @@ function DataCollectionSettings() {
   const [domainListsSaving, setDomainListsSaving] = useState(false);
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
   const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
+  const [contentBlocklist, setContentBlocklist] = useState([]);
+  const [newContentPhrase, setNewContentPhrase] = useState('');
   const [trustedEventPaths, setTrustedEventPaths] = useState([]);
   const [newTrustedEventPath, setNewTrustedEventPath] = useState('');
 
@@ -409,10 +411,13 @@ function DataCollectionSettings() {
         const trusted = settings.moderation_trusted_domains?.value || '[]';
         const blocklist = settings.blocklist_urls?.value || '[]';
         const eventPaths = settings.trusted_event_paths?.value || '[]';
+        const contentBlock = settings.event_content_blocklist?.value || '[]';
         try {
           const parsedTrusted = JSON.parse(trusted);
           const parsedBlocklist = JSON.parse(blocklist);
           const parsedEventPaths = JSON.parse(eventPaths);
+          const parsedContentBlock = JSON.parse(contentBlock);
+          setContentBlocklist(Array.isArray(parsedContentBlock) ? parsedContentBlock.filter(p => typeof p === 'string') : []);
           setDomainLists({
             trusted: Array.isArray(parsedTrusted) ? parsedTrusted.filter(d => typeof d === 'string') : [],
             competitor: Array.isArray(parsedBlocklist) ? parsedBlocklist.filter(d => typeof d === 'string') : []
@@ -436,7 +441,8 @@ function DataCollectionSettings() {
       const settings = [
         { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
         { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) },
-        { key: 'trusted_event_paths', value: JSON.stringify(trustedEventPaths) }
+        { key: 'trusted_event_paths', value: JSON.stringify(trustedEventPaths) },
+        { key: 'event_content_blocklist', value: JSON.stringify(contentBlocklist) }
       ];
       for (const setting of settings) {
         const response = await fetch(`/api/admin/settings/${setting.key}`, {
@@ -484,6 +490,19 @@ function DataCollectionSettings() {
 
   const handleRemoveCompetitorDomain = (domain) => {
     setDomainLists({ ...domainLists, competitor: domainLists.competitor.filter(d => d !== domain) });
+  };
+
+  const handleAddContentPhrase = () => {
+    const phrase = newContentPhrase.trim();
+    if (!phrase) return;
+    if (!contentBlocklist.some(p => p.toLowerCase() === phrase.toLowerCase())) {
+      setContentBlocklist([...contentBlocklist, phrase]);
+      setNewContentPhrase('');
+    }
+  };
+
+  const handleRemoveContentPhrase = (phrase) => {
+    setContentBlocklist(contentBlocklist.filter(p => p !== phrase));
   };
 
   const handleAddTrustedEventPath = () => {
@@ -1158,6 +1177,49 @@ function DataCollectionSettings() {
                   disabled={domainListsSaving}
                 />
                 <button className="action-btn secondary" onClick={handleAddTrustedEventPath} disabled={domainListsSaving || !newTrustedEventPath.trim()}>Add</button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#dc3545' }}>Content Blocklist</h5>
+              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>Reject any news/event whose title or description contains one of these phrases — use for organizations that aren&apos;t POIs (e.g., &quot;Cuyahoga Valley Art Center&quot;) whose events otherwise attach to the venue POI. Case-insensitive substring match.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                {contentBlocklist.map(phrase => (
+                  <span key={phrase} style={{
+                    padding: '0.25rem 0.5rem',
+                    backgroundColor: '#f8d7da',
+                    color: '#721c24',
+                    borderRadius: '4px',
+                    fontSize: '0.85rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}>
+                    {phrase}
+                    <button onClick={() => handleRemoveContentPhrase(phrase)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: '#721c24',
+                        cursor: 'pointer',
+                        padding: '0',
+                        fontSize: '1rem',
+                        lineHeight: '1'
+                      }}>×</button>
+                  </span>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <input
+                  type="text"
+                  value={newContentPhrase}
+                  onChange={e => setNewContentPhrase(e.target.value)}
+                  onKeyPress={e => e.key === 'Enter' && handleAddContentPhrase()}
+                  placeholder="Cuyahoga Valley Art Center"
+                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
+                  disabled={domainListsSaving}
+                />
+                <button className="action-btn secondary" onClick={handleAddContentPhrase} disabled={domainListsSaving || !newContentPhrase.trim()}>Add</button>
               </div>
             </div>
 

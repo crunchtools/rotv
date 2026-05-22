@@ -527,6 +527,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'page_delay_ms',
       'news_collection_excluded_pois',
       'blocklist_urls',
+      'event_content_blocklist',
       'moderation_trusted_domains',
       'trusted_event_paths',
       'github_api_token',

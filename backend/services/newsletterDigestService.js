@@ -23,8 +23,8 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     WHERE (e.start_date AT TIME ZONE $1)::date >= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date
       AND (e.start_date AT TIME ZONE $1)::date <= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date + 2
       AND e.moderation_status IN ('published', 'auto_approved')
-    ORDER BY e.start_date ASC
-    LIMIT 10
+    ORDER BY e.start_date ASC, e.id ASC
+    LIMIT 15
   `;
 
   const newsQuery = `
@@ -34,7 +34,7 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
       AND COALESCE(n.publication_date, n.collection_date) > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
-    ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
+    ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.id DESC
     LIMIT 5
   `;
 
@@ -390,6 +390,25 @@ export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York', 
     jobId = hash;
   }
   const jobType = 'newsletter-preview';
+
+  // Idempotency for scheduled/triggered previews: don't send the same recipient
+  // a preview twice in one day. Manual test sends (send-preview-test, no
+  // pgBossJobId) are exempt so admins can re-send on demand. Fixes the duplicate
+  // preview emails caused by the job firing more than once.
+  if (pgBossJobId) {
+    const today = new Date().toISOString().split('T')[0];
+    const alreadySent = await pool.query(
+      `SELECT id FROM job_logs
+       WHERE job_type = $1 AND level = 'info' AND message = $2
+         AND created_at::date = $3::date
+       LIMIT 1`,
+      [jobType, `Preview sent to ${email}`, today]
+    );
+    if (alreadySent.rows.length > 0) {
+      console.log(`Preview already sent to ${email} today, skipping duplicate`);
+      return { success: true, skipped: true, reason: 'already_sent_today', recipient: email };
+    }
+  }
 
   if (jobId > 0) {
     await pool.query(
