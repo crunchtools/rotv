@@ -38,13 +38,20 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
   }, [pois]);
 
   useEffect(() => {
-    if (selectedRef.current && carouselRef.current) {
-      selectedRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-        inline: 'center'
-      });
-    }
+    const carousel = carouselRef.current;
+    const selected = selectedRef.current;
+    if (!carousel || !selected) return;
+
+    // Center the selected thumbnail in the carousel's own horizontal scroll.
+    // scrollIntoView is unreliable here — it can scroll an ancestor instead of
+    // the carousel, so the highlight drifts off-screen without it following.
+    const carouselRect = carousel.getBoundingClientRect();
+    const selectedRect = selected.getBoundingClientRect();
+    const delta = (selectedRect.left + selectedRect.width / 2)
+      - (carouselRect.left + carouselRect.width / 2);
+    const maxScroll = carousel.scrollWidth - carousel.clientWidth;
+    const target = Math.max(0, Math.min(carousel.scrollLeft + delta, maxScroll));
+    carousel.scrollTo({ left: target, behavior: 'smooth' });
   }, [currentIndex]);
 
   useEffect(() => {
