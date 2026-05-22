@@ -4,6 +4,7 @@ import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
+import { denyReason, sweepDenyLists } from './filterLists.js';
 
 function sameOrigin(urlA, urlB) {
   try { return new URL(urlA).origin === new URL(urlB).origin; }
@@ -268,24 +269,16 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       return;
     }
 
-    const excludedSetting = await pool.query(
-      "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
-    );
-    if (excludedSetting.rows.length > 0 && excludedSetting.rows[0].value) {
-      try {
-        const excludedIds = JSON.parse(excludedSetting.rows[0].value);
-        if (Array.isArray(excludedIds) && excludedIds.includes(row.poi_id)) {
-          await pool.query(
-            `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-            [`Rejected: POI is on the excluded list`, contentId]
-          );
-          console.log(`[Moderation] ${contentType} #${contentId}: rejected (excluded POI ${row.poi_id})`);
-          logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: excluded POI ${row.poi_id}`, { completed: true });
-          return;
-        }
-      } catch (e) {
-        console.error('[Moderation] Failed to parse news_collection_excluded_pois:', e.message);
-      }
+    // Hard-reject deny lists (POI deny list, content deny list) — see filterLists.js.
+    const reason = await denyReason(pool, contentType, row);
+    if (reason) {
+      await pool.query(
+        `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        [reason, contentId]
+      );
+      console.log(`[Moderation] ${contentType} #${contentId}: ${reason}`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: ${reason}`, { completed: true });
+      return;
     }
 
     // Per-POI threshold only applies when item came from the POI's configured URL
@@ -475,6 +468,14 @@ export async function processPendingItems(pool) {
   if (enabledQuery.rows.length && enabledQuery.rows[0].value === 'false') {
     console.log('[Moderation] Moderation disabled, skipping sweep');
     return { processed: 0 };
+  }
+
+  // Retroactively reject stored items matching any deny list (POI, content), so
+  // adding to a list cleans up already-approved items, not just new ones.
+  try {
+    await sweepDenyLists(pool, { runId, logInfo });
+  } catch (e) {
+    console.error('[Moderation] Deny-list sweep failed:', e.message);
   }
 
   const pendingNews = await pool.query(
