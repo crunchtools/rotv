@@ -24,6 +24,11 @@ excluded_paths = [
 # Disable checks that don't apply to JavaScript/Node.js projects
 linter_configuration = false  # Expects clippy.toml (Rust) or pyproject.toml (Python)
 implicit_state_machine = false  # Rust-centric check; false-positives on Python type annotations and React idioms like isLoading/isOpen
+# These false-positive on standard JS/React/HTML idioms (confirmed during the
+# #184 sidebar extraction, which relocated pre-existing gourmand-clean code):
+deferred_work = false  # Matches "todo" inside "Mastodon" and HTML placeholder="..." attributes
+lint_suppression = false  # Flags intentional `eslint-disable-next-line react-hooks/exhaustive-deps`
+verbose_comments = false  # Counts single-line eslint-disable directives as comment blocks (max 0 on new files)
 
 [severity]
 # Override severity levels for specific checks

@@ -58,7 +58,6 @@ function AppContent() {
   const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
-  const [selectedDestination, setSelectedDestination] = useState(null);
 
   const [iconConfig, setIconConfig] = useState([]);
 
@@ -79,10 +78,74 @@ function AppContent() {
   });
 
   const [linearFeatures, setLinearFeatures] = useState([]);
-  const [selectedLinearFeature, setSelectedLinearFeature] = useState(null);
+
+  // One selection slot: the POI plus the "kind" it was selected as. Kind comes
+  // from the selection path, not geometry — a dual-role org+boundary (City of
+  // Akron) has geometry but can be selected either way (PR #348).
+  const [selection, setSelection] = useState({ poi: null, kind: null });
+  const selectedPoi = selection.poi;
+  const selectedKind = selection.kind;
+  const selectedDestination = selection.kind === 'destination' ? selection.poi : null;
+  const selectedLinearFeature = selection.kind === 'linear' ? selection.poi : null;
+  const setSelectedDestination = useCallback((value) => {
+    setSelection((prev) => {
+      const next = typeof value === 'function'
+        ? value(prev.kind === 'destination' ? prev.poi : null)
+        : value;
+      // Clearing the destination slot leaves a linear selection intact.
+      if (next == null) return prev.kind === 'linear' ? prev : { poi: null, kind: null };
+      return { poi: next, kind: 'destination' };
+    });
+  }, []);
+  const setSelectedLinearFeature = useCallback((value) => {
+    setSelection((prev) => {
+      const next = typeof value === 'function'
+        ? value(prev.kind === 'linear' ? prev.poi : null)
+        : value;
+      if (next == null) return prev.kind === 'destination' ? prev : { poi: null, kind: null };
+      return { poi: next, kind: 'linear' };
+    });
+  }, []);
+  // Generic setter (initial URL load): organizations render as destinations even
+  // when they carry boundary geometry; otherwise geometry decides the kind.
+  const setSelectedPoi = useCallback((value) => {
+    setSelection((prev) => {
+      const next = typeof value === 'function' ? value(prev.poi) : value;
+      if (next == null) return { poi: null, kind: null };
+      const kind = next.poi_roles?.includes('organization')
+        ? 'destination'
+        : (next.geometry ? 'linear' : 'destination');
+      return { poi: next, kind };
+    });
+  }, []);
 
   const [virtualPois, setVirtualPois] = useState([]);
   const [associations, setAssociations] = useState([]);
+
+  // Single role-based POI collection merged client-side from the three fetches
+  // (destinations, linear-features, organizations) — all read the same backend
+  // `pois` table. Deduped by id; first occurrence wins. Used for slug/id lookups
+  // so selection resolution has one source of truth instead of three sequential
+  // `.find()` chains.
+  // NOTE: `Map` is the imported map component in this module, so the built-in
+  // Map constructor is shadowed — dedupe with a Set of seen ids instead.
+  const pois = useMemo(() => {
+    const seen = new Set();
+    const result = [];
+    for (const list of [destinations, linearFeatures, virtualPois]) {
+      for (const poi of list) {
+        if (poi && poi.id != null && !seen.has(poi.id)) {
+          seen.add(poi.id);
+          result.push(poi);
+        }
+      }
+    }
+    return result;
+  }, [destinations, linearFeatures, virtualPois]);
+  const findPoiBySlug = useCallback(
+    (slug) => pois.find((poi) => generateSlug(poi.name) === slug) || null,
+    [pois]
+  );
 
   const [isDrawingAssociations, setIsDrawingAssociations] = useState(false);
   const [addingAssociationsToOrgId, setAddingAssociationsToOrgId] = useState(null);
@@ -601,45 +664,18 @@ function AppContent() {
     if (initialPoiSlug && !loading && destinations.length > 0) {
       const isOnMtbPage = location.pathname.startsWith('/mtb-trail-status');
 
-      const destination = destinations.find(d => generateSlug(d.name) === initialPoiSlug);
-      if (destination) {
-        setSelectedDestination(destination);
-        document.title = `${destination.name} | Roots of The Valley`;
+      const poi = findPoiBySlug(initialPoiSlug);
+      if (poi) {
+        setSelectedPoi(poi);
+        document.title = `${poi.name} | Roots of The Valley`;
         if (isOnMtbPage) {
           setSelectedFromMtbList(true);
           setActiveTab('view');
         }
-        setInitialPoiSlug(null); // Clear so it doesn't re-trigger
-        return;
       }
-
-      const virtualPoi = virtualPois.find(v => generateSlug(v.name) === initialPoiSlug);
-      if (virtualPoi) {
-        setSelectedDestination(virtualPoi);
-        document.title = `${virtualPoi.name} | Roots of The Valley`;
-        if (isOnMtbPage) {
-          setSelectedFromMtbList(true);
-          setActiveTab('view');
-        }
-        setInitialPoiSlug(null);
-        return;
-      }
-
-      const linearFeature = linearFeatures.find(f => generateSlug(f.name) === initialPoiSlug);
-      if (linearFeature) {
-        setSelectedLinearFeature(linearFeature);
-        document.title = `${linearFeature.name} | Roots of The Valley`;
-        if (isOnMtbPage) {
-          setSelectedFromMtbList(true);
-          setActiveTab('view');
-        }
-        setInitialPoiSlug(null);
-        return;
-      }
-
-      setInitialPoiSlug(null);
+      setInitialPoiSlug(null); // Clear so it doesn't re-trigger
     }
-  }, [initialPoiSlug, loading, destinations, linearFeatures, virtualPois, location.pathname]);
+  }, [initialPoiSlug, loading, findPoiBySlug, location.pathname]);
 
   useEffect(() => {
     if (isProgrammaticNavigationRef.current) {
@@ -774,16 +810,16 @@ function AppContent() {
         setActiveTab('view');
         document.title = `${linearFeature.name} | Roots of The Valley`;
 
-        if (linearFeature.feature_type === 'boundary') {
+        if (linearFeature.poi_roles?.includes('boundary')) {
           setVisibleBoundaries(prev => {
             if (prev.has(linearFeature.id)) return prev;
             const next = new Set(prev);
             next.add(linearFeature.id);
             return next;
           });
-        } else if (linearFeature.feature_type === 'trail') {
+        } else if (linearFeature.poi_roles?.includes('trail')) {
           setShowTrails(true);
-        } else if (linearFeature.feature_type === 'river') {
+        } else if (linearFeature.poi_roles?.includes('river')) {
           setShowRivers(true);
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
@@ -886,16 +922,16 @@ function AppContent() {
         setActiveTab('view');
         document.title = `${linearFeature.name} | Roots of The Valley`;
 
-        if (linearFeature.feature_type === 'boundary') {
+        if (linearFeature.poi_roles?.includes('boundary')) {
           setVisibleBoundaries(prev => {
             if (prev.has(linearFeature.id)) return prev;
             const next = new Set(prev);
             next.add(linearFeature.id);
             return next;
           });
-        } else if (linearFeature.feature_type === 'trail') {
+        } else if (linearFeature.poi_roles?.includes('trail')) {
           setShowTrails(true);
-        } else if (linearFeature.feature_type === 'river') {
+        } else if (linearFeature.poi_roles?.includes('river')) {
           setShowRivers(true);
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
@@ -993,7 +1029,7 @@ function AppContent() {
   useEffect(() => {
     if (linearFeatures && linearFeatures.length > 0 && !hasInitializedBoundaries.current) {
       const cvnpBoundary = linearFeatures.find(
-        f => f.feature_type === 'boundary' && f.name === 'Cuyahoga Valley National Park'
+        f => f.poi_roles?.includes('boundary') && f.name === 'Cuyahoga Valley National Park'
       );
       if (cvnpBoundary) {
         setVisibleBoundaries(new Set([cvnpBoundary.id]));
@@ -1184,16 +1220,16 @@ function AppContent() {
       if (index === -1) {
         console.warn('[Navigation] Could not find linear feature in list:', feature.name, 'ID:', feature.id);
       }
-      if (feature.feature_type === 'boundary') {
+      if (feature.poi_roles?.includes('boundary')) {
         setVisibleBoundaries(prev => {
           if (prev.has(feature.id)) return prev;
           const next = new Set(prev);
           next.add(feature.id);
           return next;
         });
-      } else if (feature.feature_type === 'trail') {
+      } else if (feature.poi_roles?.includes('trail')) {
         setShowTrails(true);
-      } else if (feature.feature_type === 'river') {
+      } else if (feature.poi_roles?.includes('river')) {
         setShowRivers(true);
       }
       if (window.innerWidth < 768 && activeTab !== 'view') {
@@ -1223,6 +1259,20 @@ function AppContent() {
       setCurrentPoiIndex(-1);
     }
   }, [updateUrlWithPoi, poiNavigationList, activeTab]);
+
+  // Unified map selection entry point. Dispatches by geometry to the existing
+  // destination/linear handlers (which carry distinct side effects), and fully
+  // clears the single selection slot on null.
+  const handleSelectPoi = useCallback((poi) => {
+    if (poi && poi.geometry) {
+      handleSelectLinearFeature(poi);
+    } else if (poi) {
+      handleSelectDestination(poi);
+    } else {
+      handleSelectDestination(null);
+      handleSelectLinearFeature(null);
+    }
+  }, [handleSelectDestination, handleSelectLinearFeature]);
 
   const handleNavigatePoi = useCallback((direction) => {
     if (poiNavigationList.length === 0) return;
@@ -1408,6 +1458,22 @@ function AppContent() {
     if (selectedLinearFeature?.id === deletedId) {
       setSelectedLinearFeature(null);
     }
+  };
+
+  // Unified POI update/delete for the Sidebar (spec 019). Update dispatches by
+  // geometry; delete only carries an id, so both array filters run (the id lives
+  // in exactly one collection, and the selection-clear shims are no-ops otherwise).
+  const handlePoiUpdate = (updated) => {
+    if (updated && updated.geometry) {
+      handleLinearFeatureUpdate(updated);
+    } else {
+      handleDestinationUpdate(updated);
+    }
+  };
+
+  const handlePoiDelete = (deletedId) => {
+    handleDestinationDelete(deletedId);
+    handleLinearFeatureDelete(deletedId);
   };
 
   const handleStartNewPOI = (coords) => {
@@ -2147,8 +2213,9 @@ function AppContent() {
       >
         <Map
           destinations={filteredDestinations}
-          selectedDestination={selectedDestination}
-          onSelectDestination={handleSelectDestination}
+          selectedPoi={selectedPoi}
+          selectedIsLinear={selectedKind === 'linear'}
+          onSelectPoi={handleSelectPoi}
           isAdmin={isAdmin}
           onDestinationUpdate={handleDestinationUpdate}
           onDestinationCreate={handleDestinationCreate}
@@ -2161,8 +2228,6 @@ function AppContent() {
           newOrganization={newOrganization}
           onStartNewOrganization={handleStartNewOrganization}
           linearFeatures={linearFeatures}
-          selectedLinearFeature={selectedLinearFeature}
-          onSelectLinearFeature={handleSelectLinearFeature}
           visibleTypes={visibleTypes}
           onVisibleTypesChange={setVisibleTypes}
           onVisiblePoisChange={setVisiblePoiIds}
@@ -2209,7 +2274,8 @@ function AppContent() {
 
         <Sidebar
           tourActive={tourActive}
-          destination={newPOI || newOrganization || selectedDestination}
+          poi={newPOI || newOrganization || selectedPoi}
+          isLinearPoi={!newPOI && !newOrganization && selectedKind === 'linear'}
           isNewPOI={!!newPOI}
           newOrganization={newOrganization}
           isNewOrganization={!!newOrganization}
@@ -2269,17 +2335,14 @@ function AppContent() {
           isAdmin={isAdmin}
           user={user}
           editMode={editMode}
-          onDestinationUpdate={handleDestinationUpdate}
-          onDestinationDelete={handleDestinationDelete}
+          onPoiUpdate={handlePoiUpdate}
+          onPoiDelete={handlePoiDelete}
           onSaveNewPOI={handleSaveNewPOI}
           onCancelNewPOI={handleCancelNewPOI}
           onSaveNewOrganization={handleSaveNewOrganization}
           onCancelNewOrganization={handleCancelNewOrganization}
           previewCoords={previewCoords}
           onPreviewCoordsChange={setPreviewCoords}
-          linearFeature={selectedLinearFeature}
-          onLinearFeatureUpdate={handleLinearFeatureUpdate}
-          onLinearFeatureDelete={handleLinearFeatureDelete}
           onNavigate={handleNavigatePoi}
           currentIndex={currentPoiIndex}
           totalCount={poiNavigationList.length}
@@ -2288,8 +2351,7 @@ function AppContent() {
           allDestinations={destinations}
           allLinearFeatures={linearFeatures}
           allVirtualPois={virtualPois}
-          onSelectDestination={handleSelectDestination}
-          onSelectLinearFeature={handleSelectLinearFeature}
+          onSelectPoi={handleSelectPoi}
           onAssociationsChanged={refreshAllData}
           onStartDrawingAssociations={handleStartDrawingAssociations}
           permalinkInfo={permalinkInfo}

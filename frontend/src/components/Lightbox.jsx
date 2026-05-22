@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import MediaUploadModal from './MediaUploadModal';
 import './Lightbox.css';
@@ -44,6 +44,46 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
       document.body.style.overflow = 'auto';
     };
   }, []);
+
+  // Swipe to navigate photos. stopPropagation keeps the gesture from bubbling
+  // through the React tree to the sidebar's swipe-to-change-POI handler (the
+  // lightbox is portaled to <body> but is still a React child of the sidebar).
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const handleTouchStart = (e) => {
+    e.stopPropagation();
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const handleTouchEnd = (e) => {
+    e.stopPropagation();
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) handlePrevious();
+      else handleNext();
+    }
+  };
+
+  // Keep the active thumbnail centered in the strip as the photo changes, so it
+  // never drifts off-screen (same behavior as the POI carousel).
+  const thumbnailsRef = useRef(null);
+  const activeThumbRef = useRef(null);
+  useEffect(() => {
+    const strip = thumbnailsRef.current;
+    const active = activeThumbRef.current;
+    if (!strip || !active) return;
+    const stripRect = strip.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    const delta = (activeRect.left + activeRect.width / 2)
+      - (stripRect.left + stripRect.width / 2);
+    const maxScroll = strip.scrollWidth - strip.clientWidth;
+    const target = Math.max(0, Math.min(strip.scrollLeft + delta, maxScroll));
+    strip.scrollTo({ left: target, behavior: 'smooth' });
+  }, [currentIndex]);
 
   if (!media || media.length === 0) {
     return null;
@@ -170,7 +210,13 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
   };
 
   return createPortal(
-    <div className="lightbox-overlay" onClick={onClose}>
+    <div
+      className="lightbox-overlay"
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
         {/* Close Button */}
         <button
@@ -207,10 +253,11 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
             {currentIndex + 1} / {media.length}
           </div>
           {media.length > 1 && (
-            <div className="lightbox-thumbnails">
+            <div className="lightbox-thumbnails" ref={thumbnailsRef}>
               {media.map((item, index) => (
                 <div
                   key={item.id}
+                  ref={index === currentIndex ? activeThumbRef : null}
                   className={`lightbox-thumbnail ${
                     index === currentIndex ? 'active' : ''
                   }`}

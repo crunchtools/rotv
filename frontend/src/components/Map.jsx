@@ -517,9 +517,9 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
       if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
         linearFeatures.forEach(feature => {
           let isLayerVisible = false;
-          if (feature.feature_type === 'trail') {
+          if (feature.poi_roles?.includes('trail')) {
             isLayerVisible = showTrails;
-          } else if (feature.feature_type === 'river') {
+          } else if (feature.poi_roles?.includes('river')) {
             isLayerVisible = showRivers;
           } else if (feature.poi_roles?.includes('boundary')) {
             isLayerVisible = visibleBoundaries.has(feature.id);
@@ -958,7 +958,15 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, selectedLinearFeature, onSelectLinearFeature, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, visiblePoiCount, iconConfig }) {
+  // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
+  // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
+  // dual-role organization+boundary may be selected as a destination yet still
+  // carry geometry, so kind is the correct discriminator (PR #348).
+  const selectedDestination = selectedPoi && !selectedIsLinear ? selectedPoi : null;
+  const selectedLinearFeature = selectedPoi && selectedIsLinear ? selectedPoi : null;
+  const onSelectDestination = onSelectPoi;
+  const onSelectLinearFeature = onSelectPoi;
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [useSatellite, setUseSatellite] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState(null); // Just for UI display
@@ -1148,7 +1156,7 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
     const editSelectedColor = '#FF8C00';
     const viewSelectedColor = '#0066CC';
 
-    if (feature.feature_type === 'river') {
+    if (feature.poi_roles?.includes('river')) {
       return {
         weight: isSelected ? 3 : 2,  // Thinner than base: 2 normal, 3 selected
         opacity: isSelected ? 1 : 0.8,
@@ -1206,8 +1214,8 @@ function Map({ destinations, selectedDestination, onSelectDestination, isAdmin, 
 
 
         {linearFeatures && linearFeatures.map(feature => {
-          const isVisible = (feature.feature_type === 'trail' && showTrails) ||
-                           (feature.feature_type === 'river' && showRivers) ||
+          const isVisible = (feature.poi_roles?.includes('trail') && showTrails) ||
+                           (feature.poi_roles?.includes('river') && showRivers) ||
                            (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id));
           if (!isVisible) return null;
 
