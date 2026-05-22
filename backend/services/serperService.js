@@ -52,11 +52,11 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
   const prefix = contentType === 'events' ? 'Upcoming events' : 'Latest news';
 
   const maxResultsRow = await pool.query(
-    "SELECT value FROM admin_settings WHERE key = 'serper_max_results'"
+    "SELECT value FROM admin_settings WHERE key = 'max_search_urls'"
   );
   const maxResults = maxResultsRow.rows.length
-    ? Math.min(10, Math.max(1, parseInt(maxResultsRow.rows[0].value, 10) || 3))
-    : 3;
+    ? Math.min(20, Math.max(1, parseInt(maxResultsRow.rows[0].value, 10) || 10))
+    : 10;
 
   const boundaries = await getContainingBoundaries(pool, poi.id);
 
@@ -68,32 +68,48 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
       ? `${prefix} for ${poi.name} in ${context}`
       : `${prefix} for ${poi.name}`;
 
-  console.log(`[Serper] Query: "${query}" (grounded: ${!!context})`);
+  /* News pulls from both Google web search and Google News and merges the two;
+     events use web search only. */
+  const endpoints = contentType === 'events' ? ['search'] : ['search', 'news'];
+  console.log(`[Serper] Query: "${query}" (grounded: ${!!context}, endpoints: ${endpoints.join('+')})`);
 
-  const response = await fetch('https://google.serper.dev/search', {
-    method: 'POST',
-    headers: {
-      'X-API-KEY': apiKey,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ q: query, num: maxResults })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Serper API error: ${response.status} - ${errorText}`);
-  }
-
-  const searchResults = await response.json();
-
-  const urls = (searchResults.organic || []).map(r => ({
-    url: r.link,
-    title: r.title,
-    snippet: r.snippet,
-    date: r.date || null
+  const perEndpoint = await Promise.all(endpoints.map(async endpoint => {
+    const response = await fetch(`https://google.serper.dev/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'X-API-KEY': apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ q: query, num: maxResults })
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Serper API error (${endpoint}): ${response.status} - ${errorText}`);
+    }
+    const searchResults = await response.json();
+    const rawResults = endpoint === 'news' ? (searchResults.news || []) : (searchResults.organic || []);
+    return {
+      items: rawResults.map(r => ({ url: r.link, title: r.title, snippet: r.snippet, date: r.date || null })),
+      credits: searchResults.credits || 1
+    };
   }));
 
-  console.log(`[Serper] Found ${urls.length} external ${contentType} URLs (${urls.filter(u => u.date).length} with dates)`);
+  const seen = new Set();
+  const urls = [];
+  let credits = 0;
+  for (const { items, credits: endpointCredits } of perEndpoint) {
+    credits += endpointCredits;
+    for (const item of items) {
+      let key;
+      try { const u = new URL(item.url); key = (u.origin + u.pathname).toLowerCase().replace(/\/+$/, ''); }
+      catch { key = (item.url || '').toLowerCase().replace(/\/+$/, ''); }
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      urls.push(item);
+    }
+  }
+
+  console.log(`[Serper] Found ${urls.length} external ${contentType} URLs (${urls.filter(u => u.date).length} with dates) from ${endpoints.join('+')}`);
 
   return {
     query,
@@ -101,7 +117,7 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
     groundingContext: context,
     boundaries,
     urls,
-    credits: searchResults.credits || 1
+    credits: credits || 1
   };
 }
 
