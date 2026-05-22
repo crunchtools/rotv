@@ -76,6 +76,20 @@ function geometryBounds(geometries) {
   return [[minLat, minLng], [maxLat, maxLng]];
 }
 
+// Combine a list of Leaflet bounds into one enclosing bounds, or null if empty.
+function unionBounds(boundsList) {
+  let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity;
+  for (const b of boundsList) {
+    if (!b) continue;
+    if (b[0][0] < minLat) minLat = b[0][0];
+    if (b[0][1] < minLng) minLng = b[0][1];
+    if (b[1][0] > maxLat) maxLat = b[1][0];
+    if (b[1][1] > maxLng) maxLng = b[1][1];
+  }
+  if (minLat === Infinity) return null;
+  return [[minLat, minLng], [maxLat, maxLng]];
+}
+
 function AppContent() {
   const { isAuthenticated, isAdmin, role, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
   const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
@@ -198,14 +212,24 @@ function AppContent() {
     setFitNonce(n => n + 1);
   }, []);
 
-  // Fit the map to the union of the given boundary ids' geometry; falls back to the
-  // default park view when none have geometry.
+  // Pre-compute each boundary's bounds once per data load so toggles don't re-walk
+  // geometry on every click. (PR #401 review)
+  const boundaryBoundsById = useMemo(() => {
+    const byId = new Map();
+    for (const f of linearFeatures) {
+      if (!f.geometry) continue;
+      const b = geometryBounds([f.geometry]);
+      if (b) byId.set(f.id, b);
+    }
+    return byId;
+  }, [linearFeatures]);
+
+  // Fit the map to the union of the given boundary ids (from cached bounds); falls
+  // back to the default park view when none have geometry.
   const fitToBoundaries = useCallback((ids) => {
-    const geoms = linearFeatures
-      .filter(f => ids.includes(f.id) && f.geometry)
-      .map(f => f.geometry);
-    requestFit(geometryBounds(geoms) || DEFAULT_PARK_BOUNDS);
-  }, [linearFeatures, requestFit]);
+    const bounds = ids.map(id => boundaryBoundsById.get(id)).filter(Boolean);
+    requestFit(unionBounds(bounds) || DEFAULT_PARK_BOUNDS);
+  }, [boundaryBoundsById, requestFit]);
 
   const cachedMtbBoundsRef = useRef(null);
 

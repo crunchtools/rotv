@@ -1029,27 +1029,48 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   const [saving, setSaving] = useState(false);
 
 
-  // Fit the map to all visible POIs of the given icon type(s). (#396 follow-up)
+  // Pre-compute each icon type's POI bounds once per data load, so toggling a type
+  // doesn't re-scan every POI on each click. Stored as [minLat,minLng,maxLat,maxLng].
+  // (PR #401 review)
+  const typeBoundsById = useMemo(() => {
+    const byType = new Map();
+    for (const dest of destinations) {
+      if (!dest.latitude || !dest.longitude) continue;
+      const t = getDestinationIconType(dest);
+      const lat = parseFloat(dest.latitude);
+      const lng = parseFloat(dest.longitude);
+      const cur = byType.get(t);
+      if (!cur) {
+        byType.set(t, [lat, lng, lat, lng]);
+      } else {
+        if (lat < cur[0]) cur[0] = lat;
+        if (lng < cur[1]) cur[1] = lng;
+        if (lat > cur[2]) cur[2] = lat;
+        if (lng > cur[3]) cur[3] = lng;
+      }
+    }
+    return byType;
+  }, [destinations, getDestinationIconType]);
+
+  // Fit the map to all POIs of the given icon type(s), from cached per-type bounds.
   const fitToTypes = useCallback((typeIds) => {
     if (!onFitBounds) return;
     const typeSet = typeIds instanceof Set ? typeIds : new Set(typeIds);
     let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity;
-    for (const dest of destinations) {
-      if (!dest.latitude || !dest.longitude) continue;
-      if (!typeSet.has(getDestinationIconType(dest))) continue;
-      const lat = parseFloat(dest.latitude);
-      const lng = parseFloat(dest.longitude);
-      if (lat < minLat) minLat = lat;
-      if (lat > maxLat) maxLat = lat;
-      if (lng < minLng) minLng = lng;
-      if (lng > maxLng) maxLng = lng;
+    for (const t of typeSet) {
+      const b = typeBoundsById.get(t);
+      if (!b) continue;
+      if (b[0] < minLat) minLat = b[0];
+      if (b[1] < minLng) minLng = b[1];
+      if (b[2] > maxLat) maxLat = b[2];
+      if (b[3] > maxLng) maxLng = b[3];
     }
     if (minLat === Infinity) {
       if (defaultBounds) onFitBounds(defaultBounds);
       return;
     }
     onFitBounds([[minLat, minLng], [maxLat, maxLng]]);
-  }, [destinations, getDestinationIconType, onFitBounds, defaultBounds]);
+  }, [typeBoundsById, onFitBounds, defaultBounds]);
 
   const handleToggleType = (typeId) => {
     if (!onVisibleTypesChange) return;
