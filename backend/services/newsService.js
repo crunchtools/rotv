@@ -346,7 +346,7 @@ Return ONLY valid JSON:
   }
 }
 
-function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = []) {
+function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = [], allowedDomains = null) {
   if (!detailLinks?.length) return [];
   let sourceOrigin;
   try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
@@ -361,7 +361,9 @@ function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEvent
         parsed.pathname.includes(pattern)
       );
       if (parsed.origin !== sourceOrigin) {
-        if (!matchesTrusted) return false;
+        const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+        const ownDomain = allowedDomains && allowedDomains.has(host);
+        if (!matchesTrusted && !ownDomain) return false;
       } else if (basePath && !parsed.pathname.startsWith(basePath)) {
         if (!matchesTrusted) return false;
       }
@@ -655,6 +657,13 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
     }
   } catch { /* use empty list */ }
 
+  const allowedDomains = new Set();
+  for (const u of [poi.more_info_link, poi.news_url, poi.events_url]) {
+    try {
+      if (u) allowedDomains.add(new URL(u).hostname.replace(/^www\./, '').toLowerCase());
+    } catch { /* skip unparseable */ }
+  }
+
   async function processLevel(urls, depth) {
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
 
@@ -695,7 +704,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         if (extracted.pageType === 'listing') {
           const resolvedCachedLinks = await resolveTrackerLinks((extracted.links || []).map(l => l.url));
           classification.detailLinks = shortestUrlDedup(filterDetailLinks(
-            resolvedCachedLinks, url, basePath, trustedEventPaths
+            resolvedCachedLinks, url, basePath, trustedEventPaths, allowedDomains
           ));
         }
       } else {
@@ -709,7 +718,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, ogImage: extracted.ogImage, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
       } else if (classification.pageType === 'listing') {
         const resolvedLinks = await resolveTrackerLinks(classification.detailLinks);
-        const validLinks = shortestUrlDedup(filterDetailLinks(resolvedLinks, url, basePath, trustedEventPaths));
+        const validLinks = shortestUrlDedup(filterDetailLinks(resolvedLinks, url, basePath, trustedEventPaths, allowedDomains));
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
