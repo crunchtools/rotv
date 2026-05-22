@@ -539,6 +539,39 @@ export async function processPendingItems(pool) {
     console.error('[Moderation] Excluded-POI sweep failed:', e.message);
   }
 
+  // Retroactively reject stored items matching the content blocklist, so adding
+  // a phrase cleans up already-approved items too (parity with the POI sweep).
+  try {
+    const cb = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'event_content_blocklist'"
+    );
+    const phrases = (cb.rows[0]?.value ? JSON.parse(cb.rows[0].value) : [])
+      .filter((p) => typeof p === 'string' && p.trim());
+    if (phrases.length > 0) {
+      const reason = 'Rejected: matches content blocklist';
+      const params = phrases.map((p) => `%${p.trim()}%`);
+      const eventConds = phrases.map((_, i) => `title ILIKE $${i + 1} OR description ILIKE $${i + 1}`).join(' OR ');
+      const newsConds = phrases.map((_, i) => `title ILIKE $${i + 1} OR summary ILIKE $${i + 1}`).join(' OR ');
+      const reasonIdx = phrases.length + 1;
+      const ev = await pool.query(
+        `UPDATE poi_events SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $${reasonIdx}
+         WHERE moderation_status <> 'rejected' AND (${eventConds})`,
+        [...params, reason]
+      );
+      const nw = await pool.query(
+        `UPDATE poi_news SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $${reasonIdx}
+         WHERE moderation_status <> 'rejected' AND (${newsConds})`,
+        [...params, reason]
+      );
+      if (ev.rowCount + nw.rowCount > 0) {
+        console.log(`[Moderation] Content-blocklist sweep rejected ${ev.rowCount} events, ${nw.rowCount} news`);
+        logInfo(runId, 'moderation', null, null, `Content-blocklist sweep: rejected ${ev.rowCount} events, ${nw.rowCount} news`);
+      }
+    }
+  } catch (e) {
+    console.error('[Moderation] Content-blocklist sweep failed:', e.message);
+  }
+
   const pendingNews = await pool.query(
     `SELECT id FROM poi_news WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT 20`
   );
