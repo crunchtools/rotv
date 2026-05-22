@@ -8,6 +8,10 @@ import { searchNewsUrls, testSerperApiKey } from '../services/serperService.js';
 import fetch from 'node-fetch';
 
 describe('Serper Service', () => {
+  beforeEach(() => {
+    fetch.mockClear();
+  });
+
   describe('searchNewsUrls', () => {
     const mockPoi = {
       id: 123,
@@ -17,7 +21,7 @@ describe('Serper Service', () => {
       poi_roles: ['trail']
     };
 
-    it('should construct grounded query with single boundary', async () => {
+    it('should merge web search and news results for a grounded news query', async () => {
       const mockPool = {
         query: vi.fn()
           .mockResolvedValueOnce({
@@ -29,16 +33,21 @@ describe('Serper Service', () => {
           })
       };
 
-      fetch.mockResolvedValue({
+      fetch.mockImplementation((url) => Promise.resolve({
         ok: true,
-        json: async () => ({
-          organic: [
-            { link: 'https://example.com/news1', title: 'News 1', snippet: 'Snippet 1', date: '2026-04-01' },
-            { link: 'https://example.com/news2', title: 'News 2', snippet: 'Snippet 2' }
-          ],
-          credits: 1
-        })
-      });
+        json: async () => url.endsWith('/news')
+          ? {
+              news: [{ link: 'https://example.com/news3', title: 'News 3', snippet: 'Snippet 3', date: '2026-04-02' }],
+              credits: 1
+            }
+          : {
+              organic: [
+                { link: 'https://example.com/news1', title: 'News 1', snippet: 'Snippet 1', date: '2026-04-01' },
+                { link: 'https://example.com/news2', title: 'News 2', snippet: 'Snippet 2' }
+              ],
+              credits: 1
+            }
+      }));
 
       const result = await searchNewsUrls(mockPool, mockPoi);
 
@@ -46,12 +55,18 @@ describe('Serper Service', () => {
       expect(result.grounded).toBe(true);
       expect(result.groundingContext).toBe('Cuyahoga Valley National Park');
       expect(result.boundaries).toEqual(['Cuyahoga Valley National Park']);
-      expect(result.urls).toHaveLength(2);
-      expect(result.urls[0].url).toBe('https://example.com/news1');
+      expect(result.urls).toHaveLength(3);
+      expect(result.urls.map(u => u.url)).toEqual([
+        'https://example.com/news1',
+        'https://example.com/news2',
+        'https://example.com/news3'
+      ]);
       expect(result.urls[0].date).toBe('2026-04-01');
       expect(result.urls[1].date).toBeNull();
-      expect(result.credits).toBe(1);
+      expect(result.urls[2].date).toBe('2026-04-02');
+      expect(result.credits).toBe(2);
 
+      expect(fetch).toHaveBeenCalledTimes(2);
       expect(fetch).toHaveBeenCalledWith(
         'https://google.serper.dev/search',
         expect.objectContaining({
@@ -60,9 +75,34 @@ describe('Serper Service', () => {
             'X-API-KEY': 'test-api-key-123',
             'Content-Type': 'application/json'
           }),
-          body: JSON.stringify({ q: 'Latest news for Ledges Trail in Cuyahoga Valley National Park', num: 3 })
+          body: JSON.stringify({ q: 'Latest news for Ledges Trail in Cuyahoga Valley National Park', num: 10 })
         })
       );
+      expect(fetch).toHaveBeenCalledWith(
+        'https://google.serper.dev/news',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    it('should dedupe a URL returned by both endpoints', async () => {
+      const mockPool = {
+        query: vi.fn()
+          .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
+          .mockResolvedValueOnce({ rows: [] })
+          .mockResolvedValueOnce({ rows: [{ name: 'Cuyahoga Valley National Park' }] })
+      };
+
+      fetch.mockImplementation((url) => Promise.resolve({
+        ok: true,
+        json: async () => url.endsWith('/news')
+          ? { news: [{ link: 'https://example.com/shared/?utm=x', title: 'Shared', snippet: 'S', date: '2026-04-02' }], credits: 1 }
+          : { organic: [{ link: 'https://example.com/shared', title: 'Shared', snippet: 'S' }], credits: 1 }
+      }));
+
+      const result = await searchNewsUrls(mockPool, mockPoi);
+
+      expect(result.urls).toHaveLength(1);
+      expect(result.urls[0].url).toBe('https://example.com/shared');
     });
 
     it('should construct multi-boundary grounded query (smallest area first)', async () => {
@@ -122,7 +162,7 @@ describe('Serper Service', () => {
       expect(result.query).toBe('Upcoming events at Ledges Trail (Cuyahoga Valley National Park)');
     });
 
-    it('should include num: 3 in Serper API call body', async () => {
+    it('should use max_search_urls (default 10) for the Serper num', async () => {
       const mockPool = {
         query: vi.fn()
           .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
@@ -137,7 +177,25 @@ describe('Serper Service', () => {
       await searchNewsUrls(mockPool, mockPoi);
 
       const callBody = JSON.parse(fetch.mock.calls[0][1].body);
-      expect(callBody.num).toBe(3);
+      expect(callBody.num).toBe(10);
+    });
+
+    it('should honor a configured max_search_urls value for the Serper num', async () => {
+      const mockPool = {
+        query: vi.fn()
+          .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
+          .mockResolvedValueOnce({ rows: [{ value: '5' }] })
+      };
+
+      fetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ organic: [], credits: 1 })
+      });
+
+      await searchNewsUrls(mockPool, mockPoi);
+
+      const callBody = JSON.parse(fetch.mock.calls[0][1].body);
+      expect(callBody.num).toBe(5);
     });
 
     it('should construct ungrounded query when POI is outside boundaries', async () => {
@@ -214,7 +272,7 @@ describe('Serper Service', () => {
       });
 
       await expect(searchNewsUrls(mockPool, mockPoi)).rejects.toThrow(
-        'Serper API error: 401'
+        'Serper API error (search): 401'
       );
     });
 
@@ -236,7 +294,7 @@ describe('Serper Service', () => {
       const result = await searchNewsUrls(mockPool, mockPoi);
 
       expect(result.urls).toHaveLength(0);
-      expect(result.credits).toBe(1);
+      expect(result.credits).toBe(2);
     });
   });
 

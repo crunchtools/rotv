@@ -67,19 +67,11 @@ function DataCollectionSettings() {
   const [selectedPoiId, setSelectedPoiId] = useState('');
 
   const [maxConcurrency, setMaxConcurrency] = useState(10);
-  const [maxConcurrencyLoading, setMaxConcurrencyLoading] = useState(true);
-  const [maxConcurrencySaving, setMaxConcurrencySaving] = useState(false);
-
   const [maxSearchUrls, setMaxSearchUrls] = useState(10);
-  const [maxSearchUrlsLoading, setMaxSearchUrlsLoading] = useState(true);
-  const [maxSearchUrlsSaving, setMaxSearchUrlsSaving] = useState(false);
-
   const [pageConcurrency, setPageConcurrency] = useState(3);
-  const [pageConcurrencyLoading, setPageConcurrencyLoading] = useState(true);
-  const [pageConcurrencySaving, setPageConcurrencySaving] = useState(false);
   const [pageDelayMs, setPageDelayMs] = useState(2000);
-  const [pageDelayMsLoading, setPageDelayMsLoading] = useState(true);
-  const [pageDelayMsSaving, setPageDelayMsSaving] = useState(false);
+  const [contentCollectionLoading, setContentCollectionLoading] = useState(true);
+  const [contentCollectionSaving, setContentCollectionSaving] = useState(false);
 
   const [subtabs, setSubtabs] = useState([]);
   const [subtabsLoading, setSubtabsLoading] = useState(true);
@@ -126,10 +118,7 @@ function DataCollectionSettings() {
     fetchModerationConfig();
     fetchDomainLists();
     fetchExcludedPois();
-    fetchMaxConcurrency();
-    fetchMaxSearchUrls();
-    fetchPageConcurrency();
-    fetchPageDelayMs();
+    fetchContentCollection();
     fetchSubtabs();
   }, []);
 
@@ -565,104 +554,43 @@ function DataCollectionSettings() {
     setExcludedPois(excludedPois.filter(p => p.id !== id));
   };
 
-  const fetchMaxConcurrency = async () => {
+  const fetchContentCollection = async () => {
     try {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
       if (response.ok) {
         const settings = await response.json();
-        const val = parseInt(settings.max_concurrency?.value, 10);
-        setMaxConcurrency(Number.isFinite(val) && val >= 1 ? val : 10);
+        const concurrency = parseInt(settings.max_concurrency?.value, 10);
+        const searchUrls = parseInt(settings.max_search_urls?.value, 10);
+        const pageConc = parseInt(settings.page_concurrency?.value, 10);
+        const delay = parseInt(settings.page_delay_ms?.value, 10);
+        setMaxConcurrency(Number.isFinite(concurrency) && concurrency >= 1 ? concurrency : 10);
+        setMaxSearchUrls(Number.isFinite(searchUrls) && searchUrls >= 1 ? searchUrls : 10);
+        setPageConcurrency(Number.isFinite(pageConc) && pageConc >= 1 ? pageConc : 3);
+        setPageDelayMs(Number.isFinite(delay) && delay >= 0 ? delay : 2000);
       }
-    } catch (err) { console.error('Error fetching max concurrency:', err); }
-    finally { setMaxConcurrencyLoading(false); }
+    } catch (err) { console.error('Error fetching content collection settings:', err); }
+    finally { setContentCollectionLoading(false); }
   };
 
-  const handleSaveMaxConcurrency = async () => {
-    setMaxConcurrencySaving(true); setResult(null);
+  const handleSaveContentCollection = async () => {
+    setContentCollectionSaving(true); setResult(null);
     try {
-      const response = await fetch('/api/admin/settings/max_concurrency', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: String(maxConcurrency) })
-      });
-      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
-      setResult({ type: 'success', message: 'Max concurrency saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save max concurrency: ${err.message}` }); }
-    finally { setMaxConcurrencySaving(false); }
-  };
-
-  const fetchMaxSearchUrls = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        const val = parseInt(settings.max_search_urls?.value, 10);
-        setMaxSearchUrls(Number.isFinite(val) && val >= 1 ? val : 10);
+      const updates = [
+        ['max_concurrency', maxConcurrency],
+        ['max_search_urls', maxSearchUrls],
+        ['page_concurrency', pageConcurrency],
+        ['page_delay_ms', pageDelayMs]
+      ];
+      for (const [key, value] of updates) {
+        const response = await fetch(`/api/admin/settings/${key}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+          body: JSON.stringify({ value: String(value) })
+        });
+        if (!response.ok) { const err = await response.json(); throw new Error(err.error || `Failed to save ${key}`); }
       }
-    } catch (err) { console.error('Error fetching max Serper URLs:', err); }
-    finally { setMaxSearchUrlsLoading(false); }
-  };
-
-  const handleSaveMaxSearchUrls = async () => {
-    setMaxSearchUrlsSaving(true); setResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/max_search_urls', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: String(maxSearchUrls) })
-      });
-      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
-      setResult({ type: 'success', message: 'Max Serper URLs saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save max Serper URLs: ${err.message}` }); }
-    finally { setMaxSearchUrlsSaving(false); }
-  };
-
-  const fetchPageConcurrency = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        const val = parseInt(settings.page_concurrency?.value, 10);
-        setPageConcurrency(Number.isFinite(val) && val >= 1 ? val : 3);
-      }
-    } catch (err) { console.error('Error fetching page concurrency:', err); }
-    finally { setPageConcurrencyLoading(false); }
-  };
-
-  const handleSavePageConcurrency = async () => {
-    setPageConcurrencySaving(true); setResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/page_concurrency', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: String(pageConcurrency) })
-      });
-      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
-      setResult({ type: 'success', message: 'Page concurrency saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save page concurrency: ${err.message}` }); }
-    finally { setPageConcurrencySaving(false); }
-  };
-
-  const fetchPageDelayMs = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        const val = parseInt(settings.page_delay_ms?.value, 10);
-        setPageDelayMs(Number.isFinite(val) && val >= 0 ? val : 2000);
-      }
-    } catch (err) { console.error('Error fetching page delay:', err); }
-    finally { setPageDelayMsLoading(false); }
-  };
-
-  const handleSavePageDelayMs = async () => {
-    setPageDelayMsSaving(true); setResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/page_delay_ms', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: String(pageDelayMs) })
-      });
-      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
-      setResult({ type: 'success', message: 'Page delay saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save page delay: ${err.message}` }); }
-    finally { setPageDelayMsSaving(false); }
+      setResult({ type: 'success', message: 'Content collection settings saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save content collection settings: ${err.message}` }); }
+    finally { setContentCollectionSaving(false); }
   };
 
   const handleTestPlaywright = async () => {
@@ -925,66 +853,79 @@ function DataCollectionSettings() {
       </div>
 
 
-      <div className="ai-config-section">
-        <h4>Twitter/X Credentials</h4>
-        <p className="settings-description">Login credentials for scraping Twitter content (used for Trail Status).</p>
-        {twitterLoading ? <p>Loading credentials...</p> : (
-          <>
-            <div style={{ marginTop: '0.5rem' }}>
-              <h5 style={{ marginBottom: '0.5rem' }}>Authentication Status</h5>
-              <p className="settings-description" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
-                Twitter authentication uses browser cookies. Log in to Twitter in your browser, then export cookies below. Cookies last 30-90 days.
-              </p>
-              {twitterAuthStatus && (
-                <div className="config-row" style={{ marginBottom: '1rem' }}>
-                  <label>Status:</label>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    {twitterAuthStatus.authenticated ? (
-                      <>
-                        <span style={{ color: '#4caf50', fontWeight: 'bold' }}>Authenticated</span>
-                        <span style={{ fontSize: '0.85rem', color: '#666' }}>Expires: {new Date(twitterAuthStatus.expires).toLocaleDateString()}</span>
-                      </>
-                    ) : (
-                      <span style={{ color: '#f44336', fontWeight: 'bold' }}>Not Authenticated</span>
-                    )}
+      <div className="playwright-status-section" style={{ padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <h4 style={{ margin: 0, fontSize: '1rem' }}>Browser Rendering (Playwright)</h4>
+          <button className="action-btn secondary" onClick={handleTestPlaywright} disabled={playwrightLoading || playwrightTesting}
+            style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}>
+            {playwrightTesting ? 'Testing...' : 'Test'}
+          </button>
+        </div>
+        <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.75rem' }}>Required for Twitter/X status pages and JavaScript-heavy websites.</p>
+        {playwrightLoading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="pulse" style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ffc107' }}></span>
+            <span style={{ fontSize: '0.9rem' }}>Checking Playwright status...</span>
+          </div>
+        ) : playwrightStatus ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+            {playwrightStatus.status === 'working' ? (
+              <>
+                <span style={{ color: '#28a745', fontWeight: 'bold', fontSize: '0.95rem' }}>Working</span>
+                <span style={{ fontSize: '0.85rem', color: '#666' }}>Chromium {playwrightStatus.browser_version} - Launch: {playwrightStatus.launch_time_ms}ms</span>
+              </>
+            ) : (
+              <>
+                <span style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '0.95rem' }}>Not Working</span>
+                <span style={{ fontSize: '0.85rem', color: '#666' }}>{playwrightStatus.message}</span>
+                {playwrightStatus.suggestion && (
+                  <div style={{ width: '100%', marginTop: '0.5rem', padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px', fontSize: '0.85rem' }}>
+                    <strong>Fix:</strong> {playwrightStatus.suggestion}
                   </div>
-                </div>
-              )}
-              {twitterAuthStatus && twitterAuthStatus.cookies_possibly_stale && (
-                <div style={{ padding: '0.75rem', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
-                  <strong>Cookies may be stale.</strong> Trail status collection has failed {twitterAuthStatus.consecutive_failures} times in a row.
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '0.5rem' }}>
-              <button className="action-btn primary" onClick={handleTwitterLogin} disabled={twitterAuthLoading}>Login to Twitter</button>
-              {twitterAuthStatus && twitterAuthStatus.authenticated && (
-                <button className="action-btn secondary" onClick={handleTestTwitterAuth} disabled={twitterAuthTesting}>
-                  {twitterAuthTesting ? 'Testing...' : 'Test Authentication'}
-                </button>
-              )}
-            </div>
-            {showCookieInput && (
-              <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
-                <h5 style={{ marginBottom: '0.5rem', fontSize: '0.95rem' }}>Export Cookies from Browser</h5>
-                <ol style={{ fontSize: '0.85rem', marginBottom: '1rem', paddingLeft: '1.5rem' }}>
-                  <li>Install browser extension: <a href="https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm" target="_blank" rel="noopener noreferrer">Cookie-Editor for Chrome</a> or <a href="https://addons.mozilla.org/en-US/firefox/addon/cookie-editor/" target="_blank" rel="noopener noreferrer">Firefox</a></li>
-                  <li>Log in to Twitter in the opened tab</li>
-                  <li>Click the Cookie-Editor extension icon</li>
-                  <li>Click &quot;Export&quot; &gt; &quot;JSON&quot; format</li>
-                  <li>Paste the JSON below</li>
-                </ol>
-                <textarea value={twitterCookiesJson} onChange={e => setTwitterCookiesJson(e.target.value)}
-                  placeholder='Paste cookies JSON here...' rows="6"
-                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.8rem', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '4px', marginBottom: '1rem' }} />
-                <div style={{ display: 'flex', gap: '10px' }}>
-                  <button className="action-btn primary" onClick={handleSaveCookies} disabled={twitterAuthLoading || !twitterCookiesJson.trim()}>
-                    {twitterAuthLoading ? 'Saving...' : 'Save Cookies'}
-                  </button>
-                  <button className="action-btn secondary" onClick={() => { setShowCookieInput(false); setTwitterCookiesJson(''); }}>Cancel</button>
-                </div>
-              </div>
+                )}
+              </>
             )}
+          </div>
+        ) : <span style={{ color: '#6c757d', fontSize: '0.9rem' }}>Status unknown</span>}
+      </div>
+
+
+      <div className="ai-config-section">
+        <h4>Content Collection</h4>
+        <p className="settings-description">Tune how aggressively collection jobs crawl. These apply to every news and events run.</p>
+        {contentCollectionLoading ? <p>Loading...</p> : (
+          <>
+            <div className="config-row">
+              <label>Places collected at once</label>
+              <input type="number" min="1" max="50" value={maxConcurrency}
+                onChange={e => setMaxConcurrency(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }} disabled={contentCollectionSaving} />
+              <span className="config-hint">How many places are collected in parallel. Higher finishes faster but uses more memory. (1–50, default 10)</span>
+            </div>
+            <div className="config-row">
+              <label>Search results per place</label>
+              <input type="number" min="1" max="20" value={maxSearchUrls}
+                onChange={e => setMaxSearchUrls(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }} disabled={contentCollectionSaving} />
+              <span className="config-hint">How many web and news search results to gather and crawl per place when looking beyond its own pages. (1–20, default 10)</span>
+            </div>
+            <div className="config-row">
+              <label>Pages processed at once</label>
+              <input type="number" min="1" max="20" value={pageConcurrency}
+                onChange={e => setPageConcurrency(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }} disabled={contentCollectionSaving} />
+              <span className="config-hint">How many pages are processed in parallel within a single place. Lower eases memory pressure. (1–20, default 3)</span>
+            </div>
+            <div className="config-row">
+              <label>Delay between pages (ms)</label>
+              <input type="number" min="0" max="10000" step="100" value={pageDelayMs}
+                onChange={e => setPageDelayMs(Math.max(0, Math.min(10000, parseInt(e.target.value, 10) || 0)))}
+                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }} disabled={contentCollectionSaving} />
+              <span className="config-hint">Pause between dispatching each page, to avoid rate-limiting and browser contention. (0–10000, default 2000)</span>
+            </div>
+            <button className="action-btn primary" onClick={handleSaveContentCollection} disabled={contentCollectionSaving}>
+              {contentCollectionSaving ? 'Saving...' : 'Save'}
+            </button>
           </>
         )}
       </div>
@@ -1124,147 +1065,6 @@ function DataCollectionSettings() {
 
 
       <div className="ai-config-section">
-        <h4>MAX_CONCURRENCY — Collection Concurrency</h4>
-        <p className="settings-description">How many POIs run concurrently during a collection job (news, events, or both). Each slot opens a browser context — higher values finish faster but use more memory. Range: 1–50, default: 10.</p>
-        {maxConcurrencyLoading ? <p>Loading...</p> : (
-          <>
-            <div className="config-row">
-              <label>MAX_CONCURRENCY</label>
-              <input
-                type="number"
-                min="1"
-                max="50"
-                value={maxConcurrency}
-                onChange={e => setMaxConcurrency(Math.max(1, Math.min(50, parseInt(e.target.value, 10) || 1)))}
-                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
-                disabled={maxConcurrencySaving}
-              />
-              <span className="config-hint">Range: 1–50 (default: 10)</span>
-            </div>
-            <button className="action-btn primary" onClick={handleSaveMaxConcurrency} disabled={maxConcurrencySaving}>
-              {maxConcurrencySaving ? 'Saving...' : 'Save'}
-            </button>
-          </>
-        )}
-      </div>
-
-
-      <div className="ai-config-section">
-        <h4>MAX_SEARCH_URLS — Phase II URL Crawl Limit</h4>
-        <p className="settings-description">How many Serper search result URLs are crawled per POI during Phase II (runs for all collection types). Serper returns up to 10 results; raise this only if you have a paid Serper plan. Range: 1–20, default: 10.</p>
-        {maxSearchUrlsLoading ? <p>Loading...</p> : (
-          <>
-            <div className="config-row">
-              <label>MAX_SEARCH_URLS</label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={maxSearchUrls}
-                onChange={e => setMaxSearchUrls(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
-                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
-                disabled={maxSearchUrlsSaving}
-              />
-              <span className="config-hint">Range: 1–20 (default: 10)</span>
-            </div>
-            <button className="action-btn primary" onClick={handleSaveMaxSearchUrls} disabled={maxSearchUrlsSaving}>
-              {maxSearchUrlsSaving ? 'Saving...' : 'Save'}
-            </button>
-          </>
-        )}
-      </div>
-
-
-      <div className="ai-config-section">
-        <h4>PAGE_CONCURRENCY — Per-POI Page Processing</h4>
-        <p className="settings-description">How many detail pages are processed concurrently within a single POI crawl (dates + summarize). Lower values reduce browser memory pressure. Range: 1–20, default: 3.</p>
-        {pageConcurrencyLoading ? <p>Loading...</p> : (
-          <>
-            <div className="config-row">
-              <label>PAGE_CONCURRENCY</label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={pageConcurrency}
-                onChange={e => setPageConcurrency(Math.max(1, Math.min(20, parseInt(e.target.value, 10) || 1)))}
-                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
-                disabled={pageConcurrencySaving}
-              />
-              <span className="config-hint">Range: 1–20 (default: 3)</span>
-            </div>
-            <button className="action-btn primary" onClick={handleSavePageConcurrency} disabled={pageConcurrencySaving}>
-              {pageConcurrencySaving ? 'Saving...' : 'Save'}
-            </button>
-          </>
-        )}
-      </div>
-
-
-      <div className="ai-config-section">
-        <h4>PAGE_DELAY_MS — Stagger Between Pages</h4>
-        <p className="settings-description">Milliseconds to wait between dispatching each page for processing. Prevents rate-limiting from external sites and reduces browser contention. Range: 0–10000, default: 2000.</p>
-        {pageDelayMsLoading ? <p>Loading...</p> : (
-          <>
-            <div className="config-row">
-              <label>PAGE_DELAY_MS</label>
-              <input
-                type="number"
-                min="0"
-                max="10000"
-                step="100"
-                value={pageDelayMs}
-                onChange={e => setPageDelayMs(Math.max(0, Math.min(10000, parseInt(e.target.value, 10) || 0)))}
-                style={{ width: '80px', padding: '0.4rem', fontSize: '0.95rem' }}
-                disabled={pageDelayMsSaving}
-              />
-              <span className="config-hint">Range: 0–10000ms (default: 2000)</span>
-            </div>
-            <button className="action-btn primary" onClick={handleSavePageDelayMs} disabled={pageDelayMsSaving}>
-              {pageDelayMsSaving ? 'Saving...' : 'Save'}
-            </button>
-          </>
-        )}
-      </div>
-
-
-      <div className="playwright-status-section" style={{ marginTop: '2rem', padding: '1rem', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <h4 style={{ margin: 0, fontSize: '1rem' }}>Browser Rendering (Playwright)</h4>
-          <button className="action-btn secondary" onClick={handleTestPlaywright} disabled={playwrightLoading || playwrightTesting}
-            style={{ padding: '0.25rem 0.75rem', fontSize: '0.85rem' }}>
-            {playwrightTesting ? 'Testing...' : 'Test'}
-          </button>
-        </div>
-        <p style={{ fontSize: '0.85rem', color: '#666', marginBottom: '0.75rem' }}>Required for Twitter/X status pages and JavaScript-heavy websites.</p>
-        {playwrightLoading ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span className="pulse" style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', backgroundColor: '#ffc107' }}></span>
-            <span style={{ fontSize: '0.9rem' }}>Checking Playwright status...</span>
-          </div>
-        ) : playwrightStatus ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-            {playwrightStatus.status === 'working' ? (
-              <>
-                <span style={{ color: '#28a745', fontWeight: 'bold', fontSize: '0.95rem' }}>Working</span>
-                <span style={{ fontSize: '0.85rem', color: '#666' }}>Chromium {playwrightStatus.browser_version} - Launch: {playwrightStatus.launch_time_ms}ms</span>
-              </>
-            ) : (
-              <>
-                <span style={{ color: '#dc3545', fontWeight: 'bold', fontSize: '0.95rem' }}>Not Working</span>
-                <span style={{ fontSize: '0.85rem', color: '#666' }}>{playwrightStatus.message}</span>
-                {playwrightStatus.suggestion && (
-                  <div style={{ width: '100%', marginTop: '0.5rem', padding: '0.5rem', backgroundColor: '#fff3cd', borderRadius: '4px', fontSize: '0.85rem' }}>
-                    <strong>Fix:</strong> {playwrightStatus.suggestion}
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        ) : <span style={{ color: '#6c757d', fontSize: '0.9rem' }}>Status unknown</span>}
-      </div>
-
-      <div className="ai-config-section">
         <h4>Results Sub-tabs</h4>
         <p className="settings-description">Configure which sub-tabs appear in the public Results tab.</p>
         {subtabsLoading ? <p>Loading sub-tabs...</p> : (
@@ -1350,6 +1150,71 @@ function DataCollectionSettings() {
                 {subtabsSaving ? 'Saving...' : 'Save Sub-tab Configuration'}
               </button>
             </div>
+          </>
+        )}
+      </div>
+
+
+      <div className="ai-config-section">
+        <h4>Twitter/X Credentials</h4>
+        <p className="settings-description">Login credentials for scraping Twitter content (used for Trail Status).</p>
+        {twitterLoading ? <p>Loading credentials...</p> : (
+          <>
+            <div style={{ marginTop: '0.5rem' }}>
+              <h5 style={{ marginBottom: '0.5rem' }}>Authentication Status</h5>
+              <p className="settings-description" style={{ fontSize: '0.85rem', marginBottom: '1rem' }}>
+                Twitter authentication uses browser cookies. Log in to Twitter in your browser, then export cookies below. Cookies last 30-90 days.
+              </p>
+              {twitterAuthStatus && (
+                <div className="config-row" style={{ marginBottom: '1rem' }}>
+                  <label>Status:</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    {twitterAuthStatus.authenticated ? (
+                      <>
+                        <span style={{ color: '#4caf50', fontWeight: 'bold' }}>Authenticated</span>
+                        <span style={{ fontSize: '0.85rem', color: '#666' }}>Expires: {new Date(twitterAuthStatus.expires).toLocaleDateString()}</span>
+                      </>
+                    ) : (
+                      <span style={{ color: '#f44336', fontWeight: 'bold' }}>Not Authenticated</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {twitterAuthStatus && twitterAuthStatus.cookies_possibly_stale && (
+                <div style={{ padding: '0.75rem', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+                  <strong>Cookies may be stale.</strong> Trail status collection has failed {twitterAuthStatus.consecutive_failures} times in a row.
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '10px', marginTop: '0.5rem' }}>
+              <button className="action-btn primary" onClick={handleTwitterLogin} disabled={twitterAuthLoading}>Login to Twitter</button>
+              {twitterAuthStatus && twitterAuthStatus.authenticated && (
+                <button className="action-btn secondary" onClick={handleTestTwitterAuth} disabled={twitterAuthTesting}>
+                  {twitterAuthTesting ? 'Testing...' : 'Test Authentication'}
+                </button>
+              )}
+            </div>
+            {showCookieInput && (
+              <div style={{ marginTop: '1.5rem', padding: '1rem', backgroundColor: '#f9f9f9', borderRadius: '4px' }}>
+                <h5 style={{ marginBottom: '0.5rem', fontSize: '0.95rem' }}>Export Cookies from Browser</h5>
+                <ol style={{ fontSize: '0.85rem', marginBottom: '1rem', paddingLeft: '1.5rem' }}>
+                  <li>Install browser extension: <a href="https://chrome.google.com/webstore/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm" target="_blank" rel="noopener noreferrer">Cookie-Editor for Chrome</a> or <a href="https://addons.mozilla.org/en-US/firefox/addon/cookie-editor/" target="_blank" rel="noopener noreferrer">Firefox</a></li>
+                  <li>Log in to Twitter in the opened tab</li>
+                  <li>Click the Cookie-Editor extension icon</li>
+                  <li>Click &quot;Export&quot; &gt; &quot;JSON&quot; format</li>
+                  <li>Paste the JSON below</li>
+                </ol>
+                <textarea value={twitterCookiesJson} onChange={e => setTwitterCookiesJson(e.target.value)}
+                  placeholder='Paste cookies JSON here...' rows="6"
+                  style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.8rem', padding: '0.75rem', border: '1px solid #ccc', borderRadius: '4px', marginBottom: '1rem' }} />
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button className="action-btn primary" onClick={handleSaveCookies} disabled={twitterAuthLoading || !twitterCookiesJson.trim()}>
+                    {twitterAuthLoading ? 'Saving...' : 'Save Cookies'}
+                  </button>
+                  <button className="action-btn secondary" onClick={() => { setShowCookieInput(false); setTwitterCookiesJson(''); }}>Cancel</button>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>

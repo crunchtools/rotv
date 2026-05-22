@@ -265,7 +265,7 @@ function shortestUrlDedup(urls) {
   return [...byUrl.keys()];
 }
 
-async function classifyPage(pool, markdown, links, url, contentType, sheets, trustedEventPaths = []) {
+async function classifyPage(pool, markdown, links, url, contentType, sheets, trustedEventPaths = [], poiName = '') {
   let sourceOrigin;
   try { sourceOrigin = new URL(url).pathname; } catch { sourceOrigin = ''; }
   const contentLinks = (links || []).filter(l => {
@@ -309,13 +309,16 @@ async function classifyPage(pool, markdown, links, url, contentType, sheets, tru
   const otherLinks = dedup(links.filter(l => !seen.has(l.url)).filter(notSelfRef));
   const rankedLinks = [...filteredContentLinks, ...otherLinks].slice(0, 30);
 
-  const prompt = `Classify this web page. Based on the content, is it:
+  const detailDesc = contentType === 'news'
+    ? `a single news item — an article, announcement, or press release about ${poiName || 'this place'} or the surrounding area`
+    : `a single ${contentType} with dates/descriptions/details`;
+  const prompt = `Classify this web page${poiName ? ` about "${poiName}"` : ''}. Based on the content, is it:
 A) LISTING — lists multiple ${contentType}s with links to individual pages
-B) DETAIL — describes a single ${contentType} with dates/descriptions/details
+B) DETAIL — ${detailDesc}
 C) NEITHER — not a ${contentType} page at all (e.g., about page, contact form, login, navigation, store/shop, generic info)
 
 PAGE URL: ${url}
-CONTENT (first 3000 chars):
+CONTENT (first 5000 chars):
 ${markdown.substring(0, 5000)}
 
 Return ONLY valid JSON:
@@ -705,7 +708,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         }
       } else {
         updateProgress(poi.id, { phase: 'classify', message: url });
-        classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets, trustedEventPaths);
+        classification = await classifyPage(pool, extracted.markdown, extracted.links || [], url, contentType, sheets, trustedEventPaths, poi?.name || '');
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Classify] ${url} → ${classification.pageType} (${classification.reasoning})`);
         await setCachePageType(pool, url, classification.pageType);
       }
@@ -961,13 +964,14 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             } catch { return false; }
           });
 
-          const urlsToProcessRaw = externalUrls.slice(0, MAX_SEARCH_URLS);
-          if (externalUrls.length > MAX_SEARCH_URLS) {
-            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${externalUrls.length} external of ${serperResult.urls.length} total)`);
-          }
-
-          const urlsToProcess = await filterKnownPages(pool, urlsToProcessRaw, 'news',
+          /* Filter already-collected URLs BEFORE the cap so the crawl budget is
+             spent on fresh URLs, not consumed by ones we have already processed. */
+          const freshUrls = await filterKnownPages(pool, externalUrls, 'news',
             { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II' });
+          const urlsToProcess = freshUrls.slice(0, MAX_SEARCH_URLS);
+          if (freshUrls.length > MAX_SEARCH_URLS) {
+            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${freshUrls.length} fresh of ${serperResult.urls.length} total)`);
+          }
 
           let renderedCount = 0;
           let phase2PagesCollected = 0;
@@ -996,6 +1000,34 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
               const items = await processPage(pool, page, poi, 'news', { phase: 'Phase II', jobId, jobType: 'collectionPhaseTwo', timezone });
               pageItems.push(...(items.news || []));
               phase2PagesCollected++;
+            }
+
+            /* Recovery: if a dated search result yielded no item (e.g. the page blocked
+               rendering or returned no content), keep the article using the search
+               snippet so it still reaches moderation instead of being lost. */
+            if (pageItems.length === 0 && urlData.date && urlData.title && urlData.snippet) {
+              const snippetText = `${urlData.title}\n${urlData.snippet}`;
+              const llmVotes = await runLlmDateVotes(pool, snippetText.substring(0, 2000));
+              const consensus = await scoreDate(pool, {
+                title: urlData.title, description: urlData.snippet, pageContent: snippetText,
+                sources: { jsonLd: [], meta: [urlData.date], timeTags: [], url: extractUrlDate(urlData.url) },
+                timezone, llmVotes
+              });
+              let sourceName;
+              try { sourceName = new URL(urlData.url).hostname.replace(/^www\./, ''); } catch { sourceName = 'External source'; }
+              pageItems.push({
+                title: urlData.title,
+                summary: urlData.snippet,
+                source_name: sourceName,
+                news_type: 'general',
+                published_date: consensus.date,
+                date_consensus_score: consensus.score,
+                date_signals: consensus.rawSignals,
+                source_url: urlData.url,
+                rendered_content: urlData.snippet,
+                image_url: null
+              });
+              logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Snippet] Recovered dated search result (render produced no item): ${urlData.url}`);
             }
             return pageItems;
           }), pageConcurrency, pageDelayMs);
