@@ -1,17 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-// Shared POI media state for the sidebar (spec 019). Loads the mosaic/all-media
-// for a POI, refreshes on the global `poi-media-updated` event, and exposes a
-// manual refresh. Works identically for every POI type (point, trail, river,
-// boundary, organization) — the old sidebar only refreshed the POI object for
-// destinations, which is the linear-feature media bug called out in issue #184.
+// Shared POI media for the sidebar: load, refresh on `poi-media-updated`, and a
+// manual refresh. Refreshes the POI object for every type, not just points,
+// fixing the linear-feature media bug in #184.
 export default function usePoiMedia(poi, onPoiUpdate) {
   const [media, setMedia] = useState([]);
   const [allMedia, setAllMedia] = useState([]);
   const [mediaLoading, setMediaLoading] = useState(false);
   const poiId = poi?.id;
 
-  // Keep the latest callback in a ref so effects depend only on poiId.
   const onPoiUpdateRef = useRef(onPoiUpdate);
   useEffect(() => {
     onPoiUpdateRef.current = onPoiUpdate;
@@ -23,9 +20,9 @@ export default function usePoiMedia(poi, onPoiUpdate) {
     setMediaLoading(true);
     fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
       .then(res => res.ok ? res.json() : { mosaic: [], all_media: [] })
-      .then(data => {
-        setMedia(data.mosaic || []);
-        setAllMedia(data.all_media || []);
+      .then(mediaResponse => {
+        setMedia(mediaResponse.mosaic || []);
+        setAllMedia(mediaResponse.all_media || []);
         setMediaLoading(false);
       })
       .catch(err => {
@@ -44,16 +41,16 @@ export default function usePoiMedia(poi, onPoiUpdate) {
         console.log('[Sidebar] POI media updated for', poiId, '- refreshing...');
         fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
           .then(res => res.json())
-          .then(data => {
-            setMedia(data.mosaic || []);
-            setAllMedia(data.all_media || []);
+          .then(mediaResponse => {
+            setMedia(mediaResponse.mosaic || []);
+            setAllMedia(mediaResponse.all_media || []);
           })
           .catch(err => console.error('[Sidebar] Failed to refresh media:', err));
 
         fetch(`/api/pois/${poiId}`, { credentials: 'include' })
           .then(res => res.json())
-          .then(data => {
-            if (onPoiUpdateRef.current) onPoiUpdateRef.current(data);
+          .then(updatedPoi => {
+            if (onPoiUpdateRef.current) onPoiUpdateRef.current(updatedPoi);
           })
           .catch(err => console.error('[Sidebar] Failed to refresh POI:', err));
       }
@@ -68,16 +65,16 @@ export default function usePoiMedia(poi, onPoiUpdate) {
 
     fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
       .then(res => res.json())
-      .then(data => {
-        setMedia(data.mosaic || []);
-        setAllMedia(data.all_media || []);
+      .then(mediaResponse => {
+        setMedia(mediaResponse.mosaic || []);
+        setAllMedia(mediaResponse.all_media || []);
       })
       .catch(err => console.error('Failed to refresh media:', err));
 
     if (onPoiUpdateRef.current) {
       fetch(`/api/pois/${poiId}`, { credentials: 'include' })
         .then(res => res.json())
-        .then(data => onPoiUpdateRef.current(data))
+        .then(updatedPoi => onPoiUpdateRef.current(updatedPoi))
         .catch(err => console.error('Failed to refresh POI:', err));
     }
 

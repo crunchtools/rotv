@@ -79,13 +79,9 @@ function AppContent() {
 
   const [linearFeatures, setLinearFeatures] = useState([]);
 
-  // Unified POI selection (spec 005/019). One slot carries the selected POI plus
-  // the "kind" it was selected as: 'destination' (point/organization) vs 'linear'
-  // (trail/river/boundary). Kind comes from the SELECTION PATH (which setter was
-  // called), NOT geometry — a dual-role POI such as City of Akron (organization +
-  // boundary) carries geometry yet can be selected as either, so geometry is the
-  // wrong discriminator (the PR #348 lesson). `selectedDestination`/
-  // `selectedLinearFeature` are derived views keyed on kind.
+  // One selection slot: the POI plus the "kind" it was selected as. Kind comes
+  // from the selection path, not geometry — a dual-role org+boundary (City of
+  // Akron) has geometry but can be selected either way (PR #348).
   const [selection, setSelection] = useState({ poi: null, kind: null });
   const selectedPoi = selection.poi;
   const selectedKind = selection.kind;
