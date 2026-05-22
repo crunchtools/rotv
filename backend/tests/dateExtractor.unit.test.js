@@ -89,6 +89,11 @@ describe('normalizeDateSources', () => {
     const result = normalizeDateSources({});
     expect(result).not.toHaveProperty('llm');
   });
+
+  it('keeps and parses the searchDate source (Serper publisher date)', () => {
+    const result = normalizeDateSources({ searchDate: 'March 9, 2026' });
+    expect(result.searchDate).toBe('2026-03-09');
+  });
 });
 
 describe('scoreDateConsensus', () => {
@@ -180,6 +185,27 @@ describe('scoreDateConsensus', () => {
       [null, null, null]
     );
     expect(result.date).toBe('2024-05-20');
+    expect(result.score).toBe(4);
+  });
+
+  it('scores searchDate (Serper publisher date) alone at 3 pts', () => {
+    const result = scoreDateConsensus({ searchDate: '2026-03-09' }, []);
+    expect(result.date).toBe('2026-03-09');
+    expect(result.score).toBe(3);
+    expect(result.sourceMap['2026-03-09']).toContain('search-date');
+  });
+
+  it('searchDate outweighs a disagreeing weak signal (the #1557 fix)', () => {
+    // Before: the Serper date sat in `meta` (1 pt) and lost to noise. Now it is a
+    // first-class deterministic source (3 pts) and wins over a single weak signal.
+    const result = scoreDateConsensus({ searchDate: '2026-03-09', meta: ['2026-05-22'] }, []);
+    expect(result.date).toBe('2026-03-09');
+    expect(result.score).toBe(3);
+  });
+
+  it('on-page JSON-LD still outranks searchDate on conflict', () => {
+    const result = scoreDateConsensus({ jsonLd: ['2026-03-09'], searchDate: '2026-05-22' }, []);
+    expect(result.date).toBe('2026-03-09');
     expect(result.score).toBe(4);
   });
 });

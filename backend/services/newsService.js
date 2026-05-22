@@ -78,6 +78,7 @@ export async function scoreDate(pool, { title, description, pageContent, sources
       meta: normalizedSources.meta || [],
       timeTags: normalizedSources.timeTags || [],
       url: normalizedSources.url || null,
+      searchDate: normalizedSources.searchDate || null,
       llmVotes: normalizedVotes
     }
   };
@@ -1007,11 +1008,13 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
                snippet so it still reaches moderation instead of being lost. */
             if (pageItems.length === 0 && urlData.date && urlData.title && urlData.snippet) {
               const snippetText = `${urlData.title}\n${urlData.snippet}`;
-              const llmVotes = await runLlmDateVotes(pool, snippetText.substring(0, 2000));
+              /* The Serper publisher date is the authoritative deterministic date here;
+                 a 1-2 line snippet has no date content, so LLM date-voting on it only
+                 hallucinates "today" — skip it (llmVotes: []) and trust searchDate. */
               const consensus = await scoreDate(pool, {
                 title: urlData.title, description: urlData.snippet, pageContent: snippetText,
-                sources: { jsonLd: [], meta: [urlData.date], timeTags: [], url: extractUrlDate(urlData.url) },
-                timezone, llmVotes
+                sources: { url: extractUrlDate(urlData.url), searchDate: urlData.date },
+                timezone, llmVotes: []
               });
               let sourceName;
               try { sourceName = new URL(urlData.url).hostname.replace(/^www\./, ''); } catch { sourceName = 'External source'; }

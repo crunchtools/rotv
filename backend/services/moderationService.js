@@ -375,8 +375,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
     const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
 
-    const isFutureDate = contentType === 'news' && rescoredDate && newDate && new Date(newDate) > new Date();
     const effectiveDate = newDate || row.publication_date;
+    const isFutureDate = contentType === 'news' && effectiveDate && new Date(effectiveDate) > new Date();
 
     let resolvedStatus;
     let reasoning;
@@ -384,8 +384,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       resolvedStatus = forceStatus;
       reasoning = `Forced to ${forceStatus}`;
     } else if (isFutureDate) {
-      resolvedStatus = 'rejected';
-      reasoning = `Rejected: future publication date ${newDate}`;
+      resolvedStatus = 'pending';
+      reasoning = `Pending: future publication date ${effectiveDate} — needs review`;
     } else if (unanimousNo) {
       resolvedStatus = 'rejected';
       reasoning = `Rejected: relevance vote unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})`;
