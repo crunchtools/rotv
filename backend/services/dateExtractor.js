@@ -158,10 +158,11 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
   const normList = (arr) => (arr || []).map(norm).filter(Boolean);
 
   return {
-    jsonLd:   normList(rawSources.jsonLd),
-    meta:     normList(rawSources.meta),
-    timeTags: normList(rawSources.timeTags),
-    url:      norm(rawSources.url)
+    jsonLd:    normList(rawSources.jsonLd),
+    meta:      normList(rawSources.meta),
+    timeTags:  normList(rawSources.timeTags),
+    url:       norm(rawSources.url),
+    searchDate: norm(rawSources.searchDate)
   };
 }
 
@@ -181,6 +182,7 @@ export function scoreDeterministicSources(sources = {}) {
   for (const d of (sources.meta || [])) add(d, 1, 'meta');
   for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
   add(sources.url, 1, 'url');
+  add(sources.searchDate, 3, 'search-date');
 
   return { scores, sourceMap };
 }
