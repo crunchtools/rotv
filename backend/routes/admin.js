@@ -529,7 +529,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'blocklist_urls',
       'event_content_blocklist',
       'moderation_trusted_domains',
-      'trusted_event_paths',
+      'trusted_content_paths',
       'github_api_token',
       'about_story_md',
       'about_tutorial_md',

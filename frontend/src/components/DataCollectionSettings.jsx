@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
+import FilterList, { FilterChip, FILTER_COLORS } from './FilterList';
 
 function DataCollectionSettings() {
   const [result, setResult] = useState(null);
@@ -52,18 +53,16 @@ function DataCollectionSettings() {
 
   const [domainLists, setDomainLists] = useState({ trusted: [], competitor: [] });
   const [domainListsLoading, setDomainListsLoading] = useState(true);
-  const [domainListsSaving, setDomainListsSaving] = useState(false);
+  const [filtersSaving, setFiltersSaving] = useState(false);
   const [newTrustedDomain, setNewTrustedDomain] = useState('');
   const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
   const [contentBlocklist, setContentBlocklist] = useState([]);
   const [newContentPhrase, setNewContentPhrase] = useState('');
-  const [contentBlocklistSaving, setContentBlocklistSaving] = useState(false);
   const [trustedEventPaths, setTrustedEventPaths] = useState([]);
   const [newTrustedEventPath, setNewTrustedEventPath] = useState('');
 
   const [excludedPois, setExcludedPois] = useState([]);
   const [excludedPoisLoading, setExcludedPoisLoading] = useState(true);
-  const [excludedPoisSaving, setExcludedPoisSaving] = useState(false);
   const [allPois, setAllPois] = useState([]);
   const [selectedPoiId, setSelectedPoiId] = useState('');
 
@@ -411,7 +410,7 @@ function DataCollectionSettings() {
         const settings = await response.json();
         const trusted = settings.moderation_trusted_domains?.value || '[]';
         const blocklist = settings.blocklist_urls?.value || '[]';
-        const eventPaths = settings.trusted_event_paths?.value || '[]';
+        const eventPaths = settings.trusted_content_paths?.value || '[]';
         const contentBlock = settings.event_content_blocklist?.value || '[]';
         try {
           const parsedTrusted = JSON.parse(trusted);
@@ -436,13 +435,17 @@ function DataCollectionSettings() {
     finally { setDomainListsLoading(false); }
   };
 
-  const handleSaveDomainLists = async () => {
-    setDomainListsSaving(true); setResult(null);
+  // Single save for the unified News & Events Filters section — persists all
+  // five allow/block lists in one click.
+  const handleSaveAllFilters = async () => {
+    setFiltersSaving(true); setResult(null);
     try {
       const settings = [
         { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
         { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) },
-        { key: 'trusted_event_paths', value: JSON.stringify(trustedEventPaths) }
+        { key: 'trusted_content_paths', value: JSON.stringify(trustedEventPaths) },
+        { key: 'news_collection_excluded_pois', value: JSON.stringify(excludedPois.map(p => p.id)) },
+        { key: 'event_content_blocklist', value: JSON.stringify(contentBlocklist) }
       ];
       for (const setting of settings) {
         const response = await fetch(`/api/admin/settings/${setting.key}`, {
@@ -451,9 +454,9 @@ function DataCollectionSettings() {
         });
         if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to save setting'); }
       }
-      setResult({ type: 'success', message: 'Domain lists saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save domain lists: ${err.message}` }); }
-    finally { setDomainListsSaving(false); }
+      setResult({ type: 'success', message: 'Filters saved' });
+    } catch (err) { setResult({ type: 'error', message: `Failed to save filters: ${err.message}` }); }
+    finally { setFiltersSaving(false); }
   };
 
   const handleAddTrustedDomain = () => {
@@ -505,19 +508,6 @@ function DataCollectionSettings() {
     setContentBlocklist(contentBlocklist.filter(p => p !== phrase));
   };
 
-  const handleSaveContentBlocklist = async () => {
-    setContentBlocklistSaving(true); setResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/event_content_blocklist', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: JSON.stringify(contentBlocklist) })
-      });
-      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
-      setResult({ type: 'success', message: 'Content blocklist saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save content blocklist: ${err.message}` }); }
-    finally { setContentBlocklistSaving(false); }
-  };
-
   const handleAddTrustedEventPath = () => {
     const path = newTrustedEventPath.trim().toLowerCase();
     if (!path) return;
@@ -558,19 +548,6 @@ function DataCollectionSettings() {
       }
     } catch (err) { console.error('Error fetching excluded POIs:', err); }
     finally { setExcludedPoisLoading(false); }
-  };
-
-  const handleSaveExcludedPois = async () => {
-    setExcludedPoisSaving(true); setResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/news_collection_excluded_pois', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: JSON.stringify(excludedPois.map(p => p.id)) })
-      });
-      if (!response.ok) { const err = await response.json(); throw new Error(err.error || 'Failed to save'); }
-      setResult({ type: 'success', message: 'Excluded POIs saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save excluded POIs: ${err.message}` }); }
-    finally { setExcludedPoisSaving(false); }
   };
 
   const handleAddExcludedPoi = () => {
@@ -1060,237 +1037,86 @@ function DataCollectionSettings() {
 
 
       <div className="ai-config-section">
-        <h4>Quality Filter Domain Lists</h4>
-        <p className="settings-description">Manage trusted domains and blocklist URLs for quality filtering in moderation and phase 2 collection.</p>
-        {domainListsLoading ? <p>Loading domain lists...</p> : (
+        <h4>News &amp; Events Filters</h4>
+        <p className="settings-description">Allow lists (green) and block lists (red) that govern what gets collected and what passes moderation. Add to each list independently, then Save Filters once to apply everything.</p>
+        {(domainListsLoading || excludedPoisLoading) ? <p>Loading filters...</p> : (
           <>
+            <FilterList
+              title="Domain Allow List"
+              type="allow"
+              hint="Trusted source domains. Items from these bypass quality penalties in moderation and phase 2 collection."
+              items={domainLists.trusted}
+              value={newTrustedDomain}
+              onValueChange={setNewTrustedDomain}
+              onAdd={handleAddTrustedDomain}
+              onRemove={handleRemoveTrustedDomain}
+              placeholder="example.com"
+              disabled={filtersSaving}
+            />
+            <FilterList
+              title="URL Block List"
+              type="block"
+              hint="Source domains or URLs that are rejected during moderation and skipped in phase 2 collection."
+              items={domainLists.competitor}
+              value={newCompetitorDomain}
+              onValueChange={setNewCompetitorDomain}
+              onAdd={handleAddCompetitorDomain}
+              onRemove={handleRemoveCompetitorDomain}
+              placeholder="scam-site.com"
+              disabled={filtersSaving}
+            />
+            <FilterList
+              title="Content Path Allow List"
+              type="allow"
+              hint="URL path patterns the content crawler may follow beyond the listing page (e.g., /event, /events, iteminfo.html)."
+              items={trustedEventPaths}
+              value={newTrustedEventPath}
+              onValueChange={setNewTrustedEventPath}
+              onAdd={handleAddTrustedEventPath}
+              onRemove={handleRemoveTrustedEventPath}
+              placeholder="/event"
+              disabled={filtersSaving}
+            />
+
             <div style={{ marginBottom: '1.5rem' }}>
-              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#28a745' }}>Trusted Domains</h5>
-              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>These domains are considered reliable news sources and receive no penalty.</p>
+              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: FILTER_COLORS.block.heading }}>POI Block List</h5>
+              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>POIs skipped during collection. Any news or events from them are rejected on every moderation run. Use for broad geographic entities (e.g. Cuyahoga County) whose feeds pull in irrelevant content.</p>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                {domainLists.trusted.map(domain => (
-                  <span key={domain} style={{
-                    padding: '0.25rem 0.5rem',
-                    backgroundColor: '#d4edda',
-                    color: '#155724',
-                    borderRadius: '4px',
-                    fontSize: '0.85rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    {domain}
-                    <button onClick={() => handleRemoveTrustedDomain(domain)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#155724',
-                        cursor: 'pointer',
-                        padding: '0',
-                        fontSize: '1rem',
-                        lineHeight: '1'
-                      }}>×</button>
-                  </span>
+                {excludedPois.length === 0 && (
+                  <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>No POIs blocked.</p>
+                )}
+                {excludedPois.map(poi => (
+                  <FilterChip key={poi.id} label={poi.name} type="block" onRemove={() => handleRemoveExcludedPoi(poi.id)} />
                 ))}
               </div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  value={newTrustedDomain}
-                  onChange={e => setNewTrustedDomain(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && handleAddTrustedDomain()}
-                  placeholder="example.com"
-                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
-                  disabled={domainListsSaving}
+                <PoiSearchSelect
+                  pois={allPois.filter(p => !excludedPois.some(e => e.id === p.id))}
+                  value={selectedPoiId}
+                  onChange={(id) => setSelectedPoiId(id || '')}
+                  placeholder="Search POIs to block..."
+                  disabled={filtersSaving}
+                  style={{ flex: 1 }}
                 />
-                <button className="action-btn secondary" onClick={handleAddTrustedDomain} disabled={domainListsSaving || !newTrustedDomain.trim()}>Add</button>
+                <button className="action-btn secondary" onClick={handleAddExcludedPoi} disabled={filtersSaving || !selectedPoiId}>Add</button>
               </div>
             </div>
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#dc3545' }}>Blocklist URLs</h5>
-              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>These domains receive a severe penalty (×0.3 confidence score).</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                {domainLists.competitor.map(domain => (
-                  <span key={domain} style={{
-                    padding: '0.25rem 0.5rem',
-                    backgroundColor: '#f8d7da',
-                    color: '#721c24',
-                    borderRadius: '4px',
-                    fontSize: '0.85rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    {domain}
-                    <button onClick={() => handleRemoveCompetitorDomain(domain)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#721c24',
-                        cursor: 'pointer',
-                        padding: '0',
-                        fontSize: '1rem',
-                        lineHeight: '1'
-                      }}>×</button>
-                  </span>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  value={newCompetitorDomain}
-                  onChange={e => setNewCompetitorDomain(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && handleAddCompetitorDomain()}
-                  placeholder="scam-site.com"
-                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
-                  disabled={domainListsSaving}
-                />
-                <button className="action-btn secondary" onClick={handleAddCompetitorDomain} disabled={domainListsSaving || !newCompetitorDomain.trim()}>Add</button>
-              </div>
-            </div>
+            <FilterList
+              title="Content Block List"
+              type="block"
+              hint="Reject any news or event whose title or description contains one of these phrases. Use for organizations that are not POIs (e.g., Cuyahoga Valley Art Center) whose events attach to the venue POI. Applied on every moderation run."
+              items={contentBlocklist}
+              value={newContentPhrase}
+              onValueChange={setNewContentPhrase}
+              onAdd={handleAddContentPhrase}
+              onRemove={handleRemoveContentPhrase}
+              placeholder="Cuyahoga Valley Art Center"
+              disabled={filtersSaving}
+            />
 
-            <div style={{ marginBottom: '1.5rem' }}>
-              <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem', color: '#17a2b8' }}>Trusted Event Paths</h5>
-              <p className="config-hint" style={{ marginBottom: '0.75rem' }}>URL path patterns the events crawler can follow beyond the listing page path (e.g., /event, /events, iteminfo.html).</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                {trustedEventPaths.map(path => (
-                  <span key={path} style={{
-                    padding: '0.25rem 0.5rem',
-                    backgroundColor: '#d1ecf1',
-                    color: '#0c5460',
-                    borderRadius: '4px',
-                    fontSize: '0.85rem',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}>
-                    {path}
-                    <button onClick={() => handleRemoveTrustedEventPath(path)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#0c5460',
-                        cursor: 'pointer',
-                        padding: '0',
-                        fontSize: '1rem',
-                        lineHeight: '1'
-                      }}>×</button>
-                  </span>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <input
-                  type="text"
-                  value={newTrustedEventPath}
-                  onChange={e => setNewTrustedEventPath(e.target.value)}
-                  onKeyPress={e => e.key === 'Enter' && handleAddTrustedEventPath()}
-                  placeholder="/event"
-                  style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
-                  disabled={domainListsSaving}
-                />
-                <button className="action-btn secondary" onClick={handleAddTrustedEventPath} disabled={domainListsSaving || !newTrustedEventPath.trim()}>Add</button>
-              </div>
-            </div>
-
-            <button className="action-btn primary" onClick={handleSaveDomainLists} disabled={domainListsSaving}>
-              {domainListsSaving ? 'Saving...' : 'Save Domain Lists'}
-            </button>
-          </>
-        )}
-      </div>
-
-
-      <div className="ai-config-section">
-        <h4>Excluded POIs from News and Events</h4>
-        <p className="settings-description">POIs in this list are skipped during automated news collection, and any news or events from these POIs are automatically rejected during moderation. Use for broad geographic entities (e.g. Cuyahoga County, Cleveland) whose feeds pull in irrelevant content.</p>
-        {excludedPoisLoading ? <p>Loading...</p> : (
-          <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              {excludedPois.length === 0 && (
-                <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>No POIs excluded.</p>
-              )}
-              {excludedPois.map(poi => (
-                <span key={poi.id} style={{
-                  padding: '0.25rem 0.5rem',
-                  backgroundColor: '#fff3cd',
-                  color: '#856404',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}>
-                  {poi.name}
-                  <button onClick={() => handleRemoveExcludedPoi(poi.id)}
-                    style={{ background: 'none', border: 'none', color: '#856404', cursor: 'pointer', padding: '0', fontSize: '1rem', lineHeight: '1' }}>×</button>
-                </span>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-              <PoiSearchSelect
-                pois={allPois.filter(p => !excludedPois.some(e => e.id === p.id))}
-                value={selectedPoiId}
-                onChange={(id) => setSelectedPoiId(id || '')}
-                placeholder="Search POIs to exclude..."
-                disabled={excludedPoisSaving}
-                style={{ flex: 1 }}
-              />
-              <button className="action-btn secondary" onClick={handleAddExcludedPoi} disabled={excludedPoisSaving || !selectedPoiId}>Add</button>
-            </div>
-            <button className="action-btn primary" onClick={handleSaveExcludedPois} disabled={excludedPoisSaving}>
-              {excludedPoisSaving ? 'Saving...' : 'Save Excluded POIs'}
-            </button>
-          </>
-        )}
-      </div>
-
-
-      <div className="ai-config-section">
-        <h4>Content Blocklist for News and Events</h4>
-        <p className="settings-description">Reject any news or event whose title or description contains one of these phrases. Use it for organizations that aren&apos;t POIs (e.g., &quot;Cuyahoga Valley Art Center&quot;) whose events otherwise attach to whatever venue POI hosts them. Case-insensitive substring match, applied on every moderation run.</p>
-        {domainListsLoading ? <p>Loading content blocklist...</p> : (
-          <>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              {contentBlocklist.map(phrase => (
-                <span key={phrase} style={{
-                  padding: '0.25rem 0.5rem',
-                  backgroundColor: '#f8d7da',
-                  color: '#721c24',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '0.5rem'
-                }}>
-                  {phrase}
-                  <button onClick={() => handleRemoveContentPhrase(phrase)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#721c24',
-                      cursor: 'pointer',
-                      padding: '0',
-                      fontSize: '1rem',
-                      lineHeight: '1'
-                    }}>×</button>
-                </span>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <input
-                type="text"
-                value={newContentPhrase}
-                onChange={e => setNewContentPhrase(e.target.value)}
-                onKeyPress={e => e.key === 'Enter' && handleAddContentPhrase()}
-                placeholder="Cuyahoga Valley Art Center"
-                style={{ flex: 1, padding: '0.5rem', fontSize: '0.85rem' }}
-                disabled={contentBlocklistSaving}
-              />
-              <button className="action-btn secondary" onClick={handleAddContentPhrase} disabled={contentBlocklistSaving || !newContentPhrase.trim()}>Add</button>
-            </div>
-            <button className="action-btn primary" onClick={handleSaveContentBlocklist} disabled={contentBlocklistSaving}>
-              {contentBlocklistSaving ? 'Saving...' : 'Save Content Blocklist'}
+            <button className="action-btn primary" onClick={handleSaveAllFilters} disabled={filtersSaving}>
+              {filtersSaving ? 'Saving...' : 'Save Filters'}
             </button>
           </>
         )}

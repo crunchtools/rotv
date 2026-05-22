@@ -648,7 +648,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
   if (contentType === 'event') {
     try {
       const tepResult = await pool.query(
-        "SELECT value FROM admin_settings WHERE key = 'trusted_event_paths'"
+        "SELECT value FROM admin_settings WHERE key = 'trusted_content_paths'"
       );
       if (tepResult.rows.length) {
         trustedEventPaths = JSON.parse(tepResult.rows[0].value);
