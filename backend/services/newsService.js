@@ -347,7 +347,7 @@ Return ONLY valid JSON:
   }
 }
 
-function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = []) {
+function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = [], allowedDomains = null) {
   if (!detailLinks?.length) return [];
   let sourceOrigin;
   try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
@@ -357,12 +357,15 @@ function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEvent
   }).filter(link => {
     try {
       const parsed = new URL(link);
-      if (parsed.origin !== sourceOrigin) return false;
       if (isNoiseLink(link, sourceUrl)) return false;
-      if (basePath && !parsed.pathname.startsWith(basePath)) {
-        const matchesTrusted = trustedEventPaths.some(pattern =>
-          parsed.pathname.includes(pattern)
-        );
+      const matchesTrusted = trustedEventPaths.some(pattern =>
+        parsed.pathname.includes(pattern)
+      );
+      if (parsed.origin !== sourceOrigin) {
+        const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
+        const ownDomain = allowedDomains && allowedDomains.has(host);
+        if (!matchesTrusted && !ownDomain) return false;
+      } else if (basePath && !parsed.pathname.startsWith(basePath)) {
         if (!matchesTrusted) return false;
       }
       if (seen.has(link)) return false;
@@ -650,6 +653,13 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
     trustedEventPaths = await loadListSetting(pool, 'trusted_content_paths');
   }
 
+  const allowedDomains = new Set();
+  for (const u of [poi.more_info_link, poi.news_url, poi.events_url]) {
+    try {
+      if (u) allowedDomains.add(new URL(u).hostname.replace(/^www\./, '').toLowerCase());
+    } catch { /* skip unparseable */ }
+  }
+
   async function processLevel(urls, depth) {
     if (depth > maxDepth || totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
 
@@ -688,8 +698,9 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         classification = { pageType: extracted.pageType, detailLinks: [], reasoning: 'cached' };
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Cache] Classify skip — already ${extracted.pageType}: ${url}`);
         if (extracted.pageType === 'listing') {
+          const resolvedCachedLinks = await resolveTrackerLinks((extracted.links || []).map(l => l.url));
           classification.detailLinks = shortestUrlDedup(filterDetailLinks(
-            (extracted.links || []).map(l => l.url), url, basePath, trustedEventPaths
+            resolvedCachedLinks, url, basePath, trustedEventPaths, allowedDomains
           ));
         }
       } else {
@@ -702,7 +713,8 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       if (classification.pageType === 'detail') {
         collectedPages.push({ url, markdown: extracted.markdown, rawText: extracted.rawText, ogDates: extracted.ogDates, ogImage: extracted.ogImage, title: extracted.title, itemCountNews: extracted.itemCountNews, itemCountEvents: extracted.itemCountEvents });
       } else if (classification.pageType === 'listing') {
-        const validLinks = shortestUrlDedup(filterDetailLinks(classification.detailLinks, url, basePath, trustedEventPaths));
+        const resolvedLinks = await resolveTrackerLinks(classification.detailLinks);
+        const validLinks = shortestUrlDedup(filterDetailLinks(resolvedLinks, url, basePath, trustedEventPaths, allowedDomains));
         updateProgress(poi.id, { phase: 'crawl', message: `${validLinks.length} links from ${url}` });
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Crawl] Following ${validLinks.length} detail links from ${url}`);
         await processLevel(validLinks, depth + 1);
@@ -716,7 +728,8 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
   return { pages: collectedPages, totalPagesRendered, totalDetailPages: collectedPages.length };
 }
 
-export async function collectPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null) {
+export async function collectPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null, options = {}) {
+  const { skipPhaseTwo = false } = options;
   const collectibleRoles = ['point', 'organization', 'river'];
   const poiRoles = poi.poi_roles || [];
   if (!poiRoles.some(r => collectibleRoles.includes(r))) {
@@ -913,7 +926,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : 10;
     })();
 
-    if (collectionType !== 'events') {
+    if (collectionType !== 'events' && !skipPhaseTwo) {
       try {
         updateProgress(poi.id, {
           phase: 'search',
@@ -1010,7 +1023,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       }
     }
 
-    if (collectionType !== 'news') {
+    if (collectionType !== 'news' && !skipPhaseTwo) {
       try {
         updateProgress(poi.id, {
           phase: 'search',
@@ -1157,7 +1170,8 @@ async function resolveRedirectUrl(url) {
 
   const isRedirect = url.includes('grounding-api-redirect') ||
                      url.includes('redirect') ||
-                     url.includes('vertexaisearch.cloud.google.com');
+                     url.includes('vertexaisearch.cloud.google.com') ||
+                     /\.rs6\.net\//i.test(url);
 
   if (!isRedirect) {
     return url; // Not a redirect, return direct URL as-is
@@ -1183,6 +1197,18 @@ async function resolveRedirectUrl(url) {
     console.log(`[Search] ✗ Failed to resolve: ${url.substring(0, 50)}... (${error.message})`);
     return null; // Don't save broken redirects
   }
+}
+
+const TRACKER_LINK_RE = /\.rs6\.net\//i;
+
+async function resolveTrackerLinks(urls) {
+  return Promise.all((urls || []).map(async (u) => {
+    if (typeof u === 'string' && TRACKER_LINK_RE.test(u)) {
+      const resolved = await resolveRedirectUrl(u);
+      return resolved || u;
+    }
+    return u;
+  }));
 }
 
 export function normalizeTitle(title) {
@@ -1215,7 +1241,7 @@ function normalizeUrl(url) {
 export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
-  const { log = null, domainOwnershipMap = null } = options;
+  const { log = null, domainOwnershipMap = null, contentSource = 'ai' } = options;
 
   for (const item of newsItems) {
     try {
@@ -1284,8 +1310,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 
       const dateScore = item.date_consensus_score || 0;
       await pool.query(`
-        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url, content_source)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `, [
         effectivePoiId,
         item.title,
@@ -1298,7 +1324,8 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         'pending',
         item.rendered_content || null,
         item.date_signals ? JSON.stringify(item.date_signals) : null,
-        item.image_url || null
+        item.image_url || null,
+        contentSource
       ]);
       savedCount++;
       if (log) log(`[Save] Saved (pending): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
@@ -1314,7 +1341,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
-  const { log = null, domainOwnershipMap = null } = options;
+  const { log = null, domainOwnershipMap = null, contentSource = 'ai' } = options;
 
   for (const item of eventItems) {
     try {
@@ -1401,8 +1428,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
 
       const dateScore = item.date_consensus_score || 0;
       await pool.query(`
-        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url, content_source)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
       `, [
         effectivePoiId,
         item.title,
@@ -1417,7 +1444,8 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
         'pending',
         item.rendered_content || null,
         item.date_signals ? JSON.stringify(item.date_signals) : null,
-        item.image_url || null
+        item.image_url || null,
+        contentSource
       ]);
       savedCount++;
       if (log) log(`[Save] Saved event (pending): "${item.title}" (${item.start_date}, score=${dateScore}) → ${resolvedUrl}`);

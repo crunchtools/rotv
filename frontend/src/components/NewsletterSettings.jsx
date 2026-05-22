@@ -13,12 +13,19 @@ function NewsletterSettings({ user }) {
   const [testing, setTesting] = useState(false);
   const [testMessage, setTestMessage] = useState(null);
 
+  const [inbound, setInbound] = useState([]);
+  const [pois, setPois] = useState([]);
+  const [assignSel, setAssignSel] = useState({});
+  const [inboundMsg, setInboundMsg] = useState(null);
+
   useEffect(() => {
     if (user?.email) {
       setEmail(user.email);
     }
     loadAdminSettings();
     loadStats();
+    loadInbound();
+    loadPois();
   }, [user]);
 
   const loadAdminSettings = async () => {
@@ -53,6 +60,61 @@ function NewsletterSettings({ user }) {
       }
     } catch (err) {
       console.error('Failed to load newsletter stats:', err);
+    }
+  };
+
+  const loadInbound = async () => {
+    try {
+      const res = await fetch('/api/newsletter/inbound', { credentials: 'include' });
+      if (res.ok) setInbound(await res.json());
+    } catch (err) {
+      console.error('Failed to load inbound newsletters:', err);
+    }
+  };
+
+  const loadPois = async () => {
+    try {
+      const res = await fetch('/api/pois', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setPois((data || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')));
+      }
+    } catch (err) {
+      console.error('Failed to load POIs:', err);
+    }
+  };
+
+  const handleReprocess = async (id) => {
+    setInboundMsg(null);
+    try {
+      const res = await fetch(`/api/newsletter/inbound/${id}/reprocess`, { method: 'POST', credentials: 'include' });
+      const data = await res.json();
+      setInboundMsg(res.ok ? { type: 'success', text: data.message } : { type: 'error', text: data.error });
+      setTimeout(loadInbound, 1500);
+    } catch (err) {
+      setInboundMsg({ type: 'error', text: 'Reprocess failed' });
+    }
+  };
+
+  const handleAssign = async (id) => {
+    const sel = assignSel[id] || {};
+    if (!sel.poiId) {
+      setInboundMsg({ type: 'error', text: 'Pick a POI first' });
+      return;
+    }
+    setInboundMsg(null);
+    try {
+      const res = await fetch(`/api/newsletter/inbound/${id}/assign-poi`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poi_id: parseInt(sel.poiId, 10), from_pattern: sel.pattern || undefined }),
+        credentials: 'include'
+      });
+      const data = await res.json();
+      setInboundMsg(res.ok ? { type: 'success', text: data.message } : { type: 'error', text: data.error });
+      setTimeout(loadInbound, 1500);
+    } catch (err) {
+      setInboundMsg({ type: 'error', text: 'Assign failed' });
     }
   };
 
@@ -324,6 +386,72 @@ function NewsletterSettings({ user }) {
             </div>
           )}
         </div>
+      </div>
+
+      <div className="settings-divider"></div>
+
+      {/* Admin Section - Inbound Newsletters */}
+      <div className="settings-section">
+        <h3>📥 Inbound Newsletters</h3>
+        <p className="settings-description">
+          Newsletters forwarded to news@rootsofthevalley.org are crawled through the standard
+          collection pipeline and scoped to one POI by sender. Unassigned senders are quarantined
+          here until you map them to a POI.
+        </p>
+
+        {inboundMsg && (
+          <div className={`save-message ${inboundMsg.type}`} style={{ marginBottom: '12px' }}>
+            {inboundMsg.type === 'success' ? '✓' : '✗'} {inboundMsg.text}
+          </div>
+        )}
+
+        {inbound.length === 0 ? (
+          <p style={{ color: '#666' }}>No inbound newsletters yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            {inbound.map((item) => {
+              const unassigned = !item.poi_id;
+              const sel = assignSel[item.id] || {};
+              return (
+                <div key={item.id} style={{
+                  border: '1px solid #ddd',
+                  borderRadius: '6px',
+                  padding: '12px',
+                  backgroundColor: unassigned ? '#fff8e1' : '#fff'
+                }}>
+                  <div style={{ fontWeight: 'bold' }}>{item.subject || '(no subject)'}</div>
+                  <div style={{ fontSize: '0.85rem', color: '#666' }}>{item.from_address}</div>
+                  <div style={{ fontSize: '0.85rem', marginTop: '4px' }}>
+                    {unassigned ? (
+                      <span style={{ color: '#b8860b' }}>⚠ Unassigned — map a POI to ingest</span>
+                    ) : (
+                      <span>POI: <strong>{item.poi_name}</strong> · {item.news_extracted ?? 0} news, {item.events_extracted ?? 0} events</span>
+                    )}
+                    {item.error_message && <span style={{ color: '#721c24' }}> · {item.error_message}</span>}
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <select
+                      value={sel.poiId ?? (item.poi_id || '')}
+                      onChange={(ev) => setAssignSel({ ...assignSel, [item.id]: { ...sel, poiId: ev.target.value } })}
+                    >
+                      <option value="">Select POI…</option>
+                      {pois.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      placeholder="match pattern (optional)"
+                      value={sel.pattern ?? ''}
+                      onChange={(ev) => setAssignSel({ ...assignSel, [item.id]: { ...sel, pattern: ev.target.value } })}
+                      style={{ flex: '1', minWidth: '160px' }}
+                    />
+                    <button className="save-settings-btn" onClick={() => handleAssign(item.id)}>Assign &amp; Reprocess</button>
+                    <button className="save-settings-btn" onClick={() => handleReprocess(item.id)}>Reprocess</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="settings-divider"></div>
