@@ -6,7 +6,7 @@ import io
 import logging
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from .config import THUMBNAIL_SIZES, get_config
 
@@ -14,6 +14,17 @@ logger = logging.getLogger(__name__)
 
 JPEG_QUALITY = 85
 RGBA_MODES = ("RGBA", "P")
+
+
+def _normalize_orientation(img: Image.Image) -> Image.Image:
+    """Bake EXIF orientation into the pixels.
+
+    Phones store portrait photos as landscape pixels plus an EXIF orientation
+    tag. Pillow's thumbnail/save drops that tag, so without this the resized
+    JPEG renders sideways (issue #393). exif_transpose rotates the pixels and
+    strips the now-redundant tag.
+    """
+    return ImageOps.exif_transpose(img)
 
 
 def generate_thumbnail(source_path: Path, dest_path: Path) -> tuple[int, int]:
@@ -25,6 +36,7 @@ def generate_thumbnail(source_path: Path, dest_path: Path) -> tuple[int, int]:
     max_dim = cfg.thumbnail_size
 
     with Image.open(source_path) as img:
+        img = _normalize_orientation(img)
         if img.mode in RGBA_MODES:
             img = img.convert("RGB")
 
@@ -46,6 +58,7 @@ def generate_thumbnail_from_bytes(
     max_dim = cfg.thumbnail_size
 
     with Image.open(io.BytesIO(image_bytes)) as img:
+        img = _normalize_orientation(img)
         if img.mode in RGBA_MODES:
             img = img.convert("RGB")
 
@@ -61,6 +74,7 @@ def generate_all_thumbnails_from_bytes(image_bytes: bytes, file_uuid: str) -> No
     base = Path(cfg.media_path) / "thumbnails"
 
     with Image.open(io.BytesIO(image_bytes)) as img:
+        img = _normalize_orientation(img)
         if img.mode in RGBA_MODES:
             img = img.convert("RGB")
 
@@ -88,6 +102,7 @@ def generate_all_thumbnails_from_path(source_path: Path, file_uuid: str) -> None
 
 
 def get_image_dimensions(image_bytes: bytes) -> tuple[int, int]:
-    """Get width and height from image bytes without fully decoding."""
+    """Get display width and height from image bytes, honoring EXIF orientation."""
     with Image.open(io.BytesIO(image_bytes)) as img:
+        img = _normalize_orientation(img)
         return img.width, img.height
