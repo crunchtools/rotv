@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import MediaUploadModal from './MediaUploadModal';
 import './Lightbox.css';
@@ -44,6 +44,29 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
       document.body.style.overflow = 'auto';
     };
   }, []);
+
+  // Swipe to navigate photos. stopPropagation keeps the gesture from bubbling
+  // through the React tree to the sidebar's swipe-to-change-POI handler (the
+  // lightbox is portaled to <body> but is still a React child of the sidebar).
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const handleTouchStart = (e) => {
+    e.stopPropagation();
+    touchStartX.current = e.touches[0].clientX;
+    touchStartY.current = e.touches[0].clientY;
+  };
+  const handleTouchEnd = (e) => {
+    e.stopPropagation();
+    if (touchStartX.current === null) return;
+    const dx = e.changedTouches[0].clientX - touchStartX.current;
+    const dy = e.changedTouches[0].clientY - touchStartY.current;
+    touchStartX.current = null;
+    touchStartY.current = null;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx > 0) handlePrevious();
+      else handleNext();
+    }
+  };
 
   if (!media || media.length === 0) {
     return null;
@@ -170,7 +193,13 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
   };
 
   return createPortal(
-    <div className="lightbox-overlay" onClick={onClose}>
+    <div
+      className="lightbox-overlay"
+      onClick={onClose}
+      onTouchStart={handleTouchStart}
+      onTouchMove={(e) => e.stopPropagation()}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
         {/* Close Button */}
         <button
