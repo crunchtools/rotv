@@ -53,6 +53,43 @@ const DEFAULT_PARK_BOUNDS = [
   [41.45, -81.50]   // Northeast corner (expanded to fit all trailheads)
 ];
 
+// Feature: auto-zoom legend toggles to what was just enabled (#396 follow-up).
+// Walk arbitrarily-nested GeoJSON coordinate arrays ([lng, lat] order) and return
+// Leaflet bounds [[swLat, swLng], [neLat, neLng]], or null if no coordinates found.
+function geometryBounds(geometries) {
+  let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity;
+  const visit = (coords) => {
+    if (typeof coords[0] === 'number') {
+      const [lng, lat] = coords;
+      if (lat < minLat) minLat = lat;
+      if (lat > maxLat) maxLat = lat;
+      if (lng < minLng) minLng = lng;
+      if (lng > maxLng) maxLng = lng;
+    } else {
+      for (const c of coords) visit(c);
+    }
+  };
+  for (const g of geometries) {
+    if (g && Array.isArray(g.coordinates)) visit(g.coordinates);
+  }
+  if (minLat === Infinity) return null;
+  return [[minLat, minLng], [maxLat, maxLng]];
+}
+
+// Combine a list of Leaflet bounds into one enclosing bounds, or null if empty.
+function unionBounds(boundsList) {
+  let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity;
+  for (const b of boundsList) {
+    if (!b) continue;
+    if (b[0][0] < minLat) minLat = b[0][0];
+    if (b[0][1] < minLng) minLng = b[0][1];
+    if (b[1][0] > maxLat) maxLat = b[1][0];
+    if (b[1][1] > maxLng) maxLng = b[1][1];
+  }
+  if (minLat === Infinity) return null;
+  return [[minLat, minLng], [maxLat, maxLng]];
+}
+
 function AppContent() {
   const { isAuthenticated, isAdmin, role, loginWithGoogle, loginWithFacebook, logout, user } = useAuth();
   const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
@@ -163,6 +200,38 @@ function AppContent() {
   const [activeTab, setActiveTab] = useState('view');
 
   const [boundsToFit, setBoundsToFit] = useState(null);
+  // Bumped on every explicit user-driven fit so BoundsFitter re-zooms even when the
+  // target bounds are identical to the previous fit (e.g. re-enabling the same
+  // boundary). (#396 follow-up)
+  const [fitNonce, setFitNonce] = useState(0);
+
+  // Request a guaranteed map fit to the given bounds (always re-zooms).
+  const requestFit = useCallback((bounds) => {
+    if (!bounds) return;
+    setBoundsToFit(bounds);
+    setFitNonce(n => n + 1);
+  }, []);
+
+  // Pre-compute each boundary's bounds once per data load so toggles don't re-walk
+  // geometry on every click. (PR #401 review)
+  const boundaryBoundsById = useMemo(() => {
+    // globalThis.Map: the bare name `Map` resolves to our imported <Map> component
+    // in this module, so `new Map()` would construct the component. (PR #401 review)
+    const byId = new globalThis.Map();
+    for (const f of linearFeatures) {
+      if (!f.geometry) continue;
+      const b = geometryBounds([f.geometry]);
+      if (b) byId.set(f.id, b);
+    }
+    return byId;
+  }, [linearFeatures]);
+
+  // Fit the map to the union of the given boundary ids (from cached bounds); falls
+  // back to the default park view when none have geometry.
+  const fitToBoundaries = useCallback((ids) => {
+    const bounds = ids.map(id => boundaryBoundsById.get(id)).filter(Boolean);
+    requestFit(unionBounds(bounds) || DEFAULT_PARK_BOUNDS);
+  }, [boundaryBoundsById, requestFit]);
 
   const cachedMtbBoundsRef = useRef(null);
 
@@ -2237,30 +2306,47 @@ function AppContent() {
           showRivers={showRivers}
           onToggleRivers={setShowRivers}
           visibleBoundaries={visibleBoundaries}
-          onToggleBoundary={(id) => setVisibleBoundaries(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-              next.delete(id);
-            } else {
-              next.add(id);
+          onToggleBoundary={(id) => {
+            const willEnable = !visibleBoundaries.has(id);
+            setVisibleBoundaries(prev => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id); else next.add(id);
+              return next;
+            });
+            // Enabling: zoom to the boundary just enabled. Disabling the last visible
+            // boundary: zoom back to the default view. (#396 follow-up)
+            if (willEnable) {
+              fitToBoundaries([id]);
+            } else if (visibleBoundaries.size === 1 && visibleBoundaries.has(id)) {
+              requestFit(DEFAULT_PARK_BOUNDS);
             }
-            return next;
-          })}
-          onShowBoundaries={(ids) => setVisibleBoundaries(prev => {
-            const next = new Set(prev);
-            ids.forEach(id => next.add(id));
-            return next;
-          })}
-          onHideBoundaries={(ids) => setVisibleBoundaries(prev => {
-            const next = new Set(prev);
-            ids.forEach(id => next.delete(id));
-            return next;
-          })}
+          }}
+          onShowBoundaries={(ids) => {
+            setVisibleBoundaries(prev => {
+              const next = new Set(prev);
+              ids.forEach(id => next.add(id));
+              return next;
+            });
+            fitToBoundaries(ids); // fit to the whole set just shown
+          }}
+          onHideBoundaries={(ids) => {
+            setVisibleBoundaries(prev => {
+              const next = new Set(prev);
+              ids.forEach(id => next.delete(id));
+              return next;
+            });
+            const remaining = new Set(visibleBoundaries);
+            ids.forEach(id => remaining.delete(id));
+            if (remaining.size === 0) requestFit(DEFAULT_PARK_BOUNDS);
+          }}
           searchQuery={activeFilters.search}
           onSearchChange={(value) => handleFilterChange('search', value)}
           onNewsRefresh={() => setNewsRefreshTrigger(prev => prev + 1)}
           skipFlyRef={skipNextFlyRef}
           boundsToFit={boundsToFit}
+          fitNonce={fitNonce}
+          onFitBounds={requestFit}
+          defaultBounds={DEFAULT_PARK_BOUNDS}
           visiblePoiCount={visiblePoiCount}
           iconConfig={iconConfig}
           isDrawingAssociations={isDrawingAssociations}
