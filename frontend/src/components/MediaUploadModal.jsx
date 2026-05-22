@@ -68,6 +68,7 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
     const remaining = imageLimit - selectedImages.length;
     const accepted = [];
     let rejectedForCap = 0;
+    let firstValidationError = null;
 
     for (const file of files) {
       if (accepted.length >= remaining) {
@@ -76,14 +77,23 @@ function MediaUploadModal({ poiId, onClose, onSuccess }) {
       }
       const validationError = validateFile(file);
       if (validationError) {
-        setError(validationError);
+        if (!firstValidationError) {
+          firstValidationError = validationError;
+        }
         continue;
       }
       accepted.push(file);
     }
 
+    const messages = [];
+    if (firstValidationError) {
+      messages.push(firstValidationError);
+    }
     if (rejectedForCap > 0 && Number.isFinite(imageLimit)) {
-      setError(`You can upload up to ${imageLimit} images at once.`);
+      messages.push(`You can upload up to ${imageLimit} images at once.`);
+    }
+    if (messages.length > 0) {
+      setError(messages.join(' '));
     }
 
     if (accepted.length === 0) return;
