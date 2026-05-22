@@ -118,6 +118,7 @@ export class BrowserOverloadError extends Error {
 }
 import { searchNewsUrls } from './serperService.js';
 import { getDomainReputation } from './moderationService.js';
+import { loadListSetting } from './filterLists.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -646,14 +647,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
 
   let trustedEventPaths = [];
   if (contentType === 'event') {
-    try {
-      const tepResult = await pool.query(
-        "SELECT value FROM admin_settings WHERE key = 'trusted_content_paths'"
-      );
-      if (tepResult.rows.length) {
-        trustedEventPaths = JSON.parse(tepResult.rows[0].value);
-      }
-    } catch { /* use empty list */ }
+    trustedEventPaths = await loadListSetting(pool, 'trusted_content_paths');
   }
 
   async function processLevel(urls, depth) {
@@ -1787,18 +1781,8 @@ function checkDomainOwnership(sourceUrl, currentPoiId, domainMap) {
 }
 
 export async function getAllPoisForCollection(pool) {
-  const settingResult = await pool.query(
-    "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
-  );
-  let excludedIds = [];
-  if (settingResult.rows.length > 0 && settingResult.rows[0].value) {
-    try {
-      const parsed = JSON.parse(settingResult.rows[0].value);
-      excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
-    } catch (e) {
-      console.error('[newsService] Failed to parse news_collection_excluded_pois:', e.message);
-    }
-  }
+  const excludedIds = (await loadListSetting(pool, 'news_collection_excluded_pois'))
+    .filter(id => Number.isInteger(id));
 
   const collectionPoiRows = await pool.query(
     `SELECT id FROM pois
@@ -1818,18 +1802,8 @@ export async function getAllPoisForCollection(pool) {
 }
 
 export async function getPoisForTierCollection(pool, tier) {
-  const settingResult = await pool.query(
-    "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
-  );
-  let excludedIds = [];
-  if (settingResult.rows.length > 0 && settingResult.rows[0].value) {
-    try {
-      const parsed = JSON.parse(settingResult.rows[0].value);
-      excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
-    } catch (e) {
-      console.error('[newsService] Failed to parse news_collection_excluded_pois:', e.message);
-    }
-  }
+  const excludedIds = (await loadListSetting(pool, 'news_collection_excluded_pois'))
+    .filter(id => Number.isInteger(id));
 
   const validTiers = ['daily', 'weekly', 'monthly'];
   if (!validTiers.includes(tier)) {

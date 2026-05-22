@@ -4,6 +4,7 @@ import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
+import { denyReason, sweepDenyLists } from './filterLists.js';
 
 function sameOrigin(urlA, urlB) {
   try { return new URL(urlA).origin === new URL(urlB).origin; }
@@ -268,57 +269,16 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       return;
     }
 
-    const excludedSetting = await pool.query(
-      "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
-    );
-    if (excludedSetting.rows.length > 0 && excludedSetting.rows[0].value) {
-      try {
-        const excludedIds = JSON.parse(excludedSetting.rows[0].value);
-        if (Array.isArray(excludedIds) && excludedIds.includes(row.poi_id)) {
-          await pool.query(
-            `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-            [`Rejected: POI is on the excluded list`, contentId]
-          );
-          console.log(`[Moderation] ${contentType} #${contentId}: rejected (excluded POI ${row.poi_id})`);
-          logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: excluded POI ${row.poi_id}`, { completed: true });
-          return;
-        }
-      } catch (e) {
-        console.error('[Moderation] Failed to parse news_collection_excluded_pois:', e.message);
-      }
-    }
-
-    // Content blocklist: reject items whose text matches a blocked phrase — e.g.
-    // an organization that isn't (and shouldn't be) a POI, like "Cuyahoga Valley
-    // Art Center", whose events otherwise attach to whatever venue POI they're
-    // hosted at. Lets us stop recurring leaks without excluding the venue POI.
-    if (contentType === 'news' || contentType === 'event') {
-      const blocklistSetting = await pool.query(
-        "SELECT value FROM admin_settings WHERE key = 'event_content_blocklist'"
+    // Hard-reject deny lists (POI deny list, content deny list) — see filterLists.js.
+    const reason = await denyReason(pool, contentType, row);
+    if (reason) {
+      await pool.query(
+        `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
+        [reason, contentId]
       );
-      if (blocklistSetting.rows.length > 0 && blocklistSetting.rows[0].value) {
-        try {
-          const phrases = JSON.parse(blocklistSetting.rows[0].value);
-          if (Array.isArray(phrases) && phrases.length > 0) {
-            const haystack = [row.title, row.description, row.summary, row.location_details]
-              .filter(Boolean).join(' ').toLowerCase();
-            const hit = phrases.find(
-              (p) => typeof p === 'string' && p.trim() && haystack.includes(p.trim().toLowerCase())
-            );
-            if (hit) {
-              await pool.query(
-                `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-                [`Rejected: matches content blocklist ("${hit}")`, contentId]
-              );
-              console.log(`[Moderation] ${contentType} #${contentId}: rejected (content blocklist "${hit}")`);
-              logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: content blocklist "${hit}"`, { completed: true });
-              return;
-            }
-          }
-        } catch (e) {
-          console.error('[Moderation] Failed to parse event_content_blocklist:', e.message);
-        }
-      }
+      console.log(`[Moderation] ${contentType} #${contentId}: ${reason}`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: ${reason}`, { completed: true });
+      return;
     }
 
     // Per-POI threshold only applies when item came from the POI's configured URL
@@ -510,66 +470,12 @@ export async function processPendingItems(pool) {
     return { processed: 0 };
   }
 
-  // Retroactively reject any stored item whose POI is on the excluded list, not
-  // just newly-collected ones. Exclusion used to be forward-only, so items
-  // collected before a POI was excluded kept leaking into the digest.
+  // Retroactively reject stored items matching any deny list (POI, content), so
+  // adding to a list cleans up already-approved items, not just new ones.
   try {
-    const excl = await pool.query(
-      "SELECT value FROM admin_settings WHERE key = 'news_collection_excluded_pois'"
-    );
-    const excludedIds = excl.rows[0]?.value ? JSON.parse(excl.rows[0].value) : [];
-    if (Array.isArray(excludedIds) && excludedIds.length > 0) {
-      const reason = 'Rejected: POI is on the excluded list';
-      const ev = await pool.query(
-        `UPDATE poi_events SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $2
-         WHERE poi_id = ANY($1) AND moderation_status <> 'rejected'`,
-        [excludedIds, reason]
-      );
-      const nw = await pool.query(
-        `UPDATE poi_news SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $2
-         WHERE poi_id = ANY($1) AND moderation_status <> 'rejected'`,
-        [excludedIds, reason]
-      );
-      if (ev.rowCount + nw.rowCount > 0) {
-        console.log(`[Moderation] Excluded-POI sweep rejected ${ev.rowCount} events, ${nw.rowCount} news`);
-        logInfo(runId, 'moderation', null, null, `Excluded-POI sweep: rejected ${ev.rowCount} events, ${nw.rowCount} news`);
-      }
-    }
+    await sweepDenyLists(pool, { runId, logInfo });
   } catch (e) {
-    console.error('[Moderation] Excluded-POI sweep failed:', e.message);
-  }
-
-  // Retroactively reject stored items matching the content blocklist, so adding
-  // a phrase cleans up already-approved items too (parity with the POI sweep).
-  try {
-    const cb = await pool.query(
-      "SELECT value FROM admin_settings WHERE key = 'event_content_blocklist'"
-    );
-    const phrases = (cb.rows[0]?.value ? JSON.parse(cb.rows[0].value) : [])
-      .filter((p) => typeof p === 'string' && p.trim());
-    if (phrases.length > 0) {
-      const reason = 'Rejected: matches content blocklist';
-      const params = phrases.map((p) => `%${p.trim()}%`);
-      const eventConds = phrases.map((_, i) => `title ILIKE $${i + 1} OR description ILIKE $${i + 1}`).join(' OR ');
-      const newsConds = phrases.map((_, i) => `title ILIKE $${i + 1} OR summary ILIKE $${i + 1}`).join(' OR ');
-      const reasonIdx = phrases.length + 1;
-      const ev = await pool.query(
-        `UPDATE poi_events SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $${reasonIdx}
-         WHERE moderation_status <> 'rejected' AND (${eventConds})`,
-        [...params, reason]
-      );
-      const nw = await pool.query(
-        `UPDATE poi_news SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $${reasonIdx}
-         WHERE moderation_status <> 'rejected' AND (${newsConds})`,
-        [...params, reason]
-      );
-      if (ev.rowCount + nw.rowCount > 0) {
-        console.log(`[Moderation] Content-blocklist sweep rejected ${ev.rowCount} events, ${nw.rowCount} news`);
-        logInfo(runId, 'moderation', null, null, `Content-blocklist sweep: rejected ${ev.rowCount} events, ${nw.rowCount} news`);
-      }
-    }
-  } catch (e) {
-    console.error('[Moderation] Content-blocklist sweep failed:', e.message);
+    console.error('[Moderation] Deny-list sweep failed:', e.message);
   }
 
   const pendingNews = await pool.query(
