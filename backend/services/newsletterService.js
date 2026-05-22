@@ -1,7 +1,9 @@
 /**
  * Newsletter Ingestion Service
- * Receives inbound emails via built-in SMTP server (port 25).
- * Extracts news/events using Gemini, matches to POIs, inserts into moderation queue.
+ * Receives inbound emails via the built-in SMTP server (port 25), maps the
+ * sender to a POI, and runs the email through the standard collection pipeline
+ * (collectPoi) twice — once for news, once for events — so URLs, dates, POI
+ * matching and dedup are handled identically to Phase I/II collection (spec 020).
  */
 
 import { SMTPServer } from 'smtp-server';
@@ -9,10 +11,9 @@ import { simpleParser } from 'mailparser';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import nodemailer from 'nodemailer';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import { GEMINI_MODEL } from './geminiService.js';
+import { collectPoi, saveNewsItems, saveEventItems } from './newsService.js';
 import { queueNewsletterJob } from './jobScheduler.js';
-import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
+import { logInfo, flush as flushJobLogs } from './jobLogger.js';
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -60,339 +61,55 @@ export function extractContentFromEmail(html, text) {
   return text || '';
 }
 
-/**
- * Match extracted items to POIs by name/keyword overlap
- * @param {Pool} pool - Database pool
- * @param {Array} items - Items with title and description
- * @returns {Array} Items with poi_id added where matched
- */
-export async function matchItemsToPois(pool, items) {
-  if (!items || items.length === 0) return [];
-
-  const poiRows = await pool.query(`
-    SELECT id, name FROM pois
-    WHERE (deleted IS NULL OR deleted = FALSE)
-    ORDER BY name
-  `);
-  const pois = poiRows.rows;
-
-  return items.map(item => {
-    const searchText = `${item.title || ''} ${item.description || ''} ${item.summary || ''} ${item.location_details || ''}`.toLowerCase();
-
-    const sortedPois = [...pois].sort((a, b) => b.name.length - a.name.length);
-
-    for (const poi of sortedPois) {
-      if (searchText.includes(poi.name.toLowerCase())) {
-        return { ...item, poi_id: poi.id };
-      }
-    }
-
-    return { ...item, poi_id: null };
-  });
-}
+const VIEW_IN_BROWSER_RE = /view\s+(this\s+)?(email\s+)?(as\s+a\s+)?(web\s?page|in\s+(your\s+)?browser|online)|having\s+trouble\s+viewing/i;
 
 /**
- * Follow a URL via HEAD request with redirect: follow.
- * @param {string} url - URL to follow
- * @returns {string|null} Final URL after HTTP redirects, or null on failure
+ * Parse a newsletter email into the shape the collection pipeline consumes:
+ * the cleaned markdown, every absolute anchor, and the "view in browser" link.
+ * Links/VIB are read from the raw HTML (no noise removal) so the preheader
+ * "view as webpage" link survives.
+ * @param {string} html - Raw email HTML
+ * @returns {{markdown: string, links: Array<{url: string, text: string}>, viewInBrowserUrl: string|null}}
  */
-async function followRedirects(url) {
+function extractEmailParts(html) {
+  const markdown = extractContentFromEmail(html, '');
+  if (!html) return { markdown, links: [], viewInBrowserUrl: null };
+
+  let doc;
   try {
-    const response = await fetch(url, {
-      method: 'HEAD',
-      redirect: 'follow',
-      signal: AbortSignal.timeout(10000)
-    });
-    return response.url || url;
-  } catch (error) {
-    console.log(`[Newsletter] HEAD failed for ${url.substring(0, 60)}... (${error.message})`);
-    return null;
+    doc = new JSDOM(html).window.document;
+  } catch {
+    return { markdown, links: [], viewInBrowserUrl: null };
   }
+
+  const anchors = [...doc.querySelectorAll('a[href]')];
+  let viewInBrowserUrl = null;
+  for (const a of anchors) {
+    if (/^https?:/i.test(a.href) && VIEW_IN_BROWSER_RE.test((a.textContent || '').trim())) {
+      viewInBrowserUrl = a.href;
+      break;
+    }
+  }
+
+  const links = anchors
+    .map(a => ({ url: a.href, text: (a.textContent || '').trim() }))
+    .filter(l => /^https?:/i.test(l.url));
+
+  return { markdown, links, viewInBrowserUrl };
 }
 
 /**
- * Resolve all source URLs in extracted items, following redirect chains
- * and stripping tracking parameters.
- * @param {Array} items - Items with source_url fields
- * @returns {Array} Items with resolved source URLs
- */
-async function resolveItemUrls(items) {
-  if (!items || items.length === 0) return [];
-
-  const trackingPrefixes = ['utm_', 'h_sid', 'h_slt', 'h_', 'mc_', 'fbclid', 'gclid', 'ref', 'trk'];
-
-  const resolved = [];
-  for (const item of items) {
-    if (!item.source_url) {
-      resolved.push(item);
-      continue;
-    }
-
-    let dest = await followRedirects(item.source_url);
-    if (!dest) {
-      resolved.push({ ...item, source_url: null });
-      continue;
-    }
-
-    try {
-      const parsed = new URL(dest);
-      if (parsed.pathname.includes('js-redirect') || parsed.pathname.includes('js_redirect')) {
-        const nextUrl = parsed.searchParams.get('next_url')
-          || parsed.searchParams.get('next')
-          || parsed.searchParams.get('url')
-          || parsed.searchParams.get('redirect_url');
-        if (nextUrl) {
-          new URL(nextUrl);
-          console.log(`[Newsletter] JS redirect hop: ${dest.substring(0, 50)}... -> ${nextUrl.substring(0, 80)}`);
-          dest = nextUrl;
-        }
-      }
-    } catch { /* expected */ }
-
-    if (dest !== item.source_url) {
-      const finalHop = await followRedirects(dest);
-      if (finalHop && finalHop !== dest) {
-        console.log(`[Newsletter] Final hop: ${dest.substring(0, 50)}... -> ${finalHop.substring(0, 80)}`);
-        dest = finalHop;
-      }
-    }
-
-    try {
-      const parsed = new URL(dest);
-      const host = parsed.hostname.toLowerCase();
-      if ((host === 'www.google.com' || host === 'google.com') && (parsed.pathname === '/' || parsed.pathname === '')) {
-        console.log(`[Newsletter] Dead-end URL dropped: ${dest.substring(0, 80)}`);
-        resolved.push({ ...item, source_url: null });
-        continue;
-      }
-      if (host.includes('hive.co') || host.includes('mail-tracking.')) {
-        console.log(`[Newsletter] Dead-end URL dropped: ${dest.substring(0, 80)}`);
-        resolved.push({ ...item, source_url: null });
-        continue;
-      }
-
-      const keysToRemove = [];
-      for (const key of parsed.searchParams.keys()) {
-        if (trackingPrefixes.some(prefix => key.startsWith(prefix))) {
-          keysToRemove.push(key);
-        }
-      }
-      for (const key of keysToRemove) {
-        parsed.searchParams.delete(key);
-      }
-      dest = parsed.toString();
-    } catch { /* expected */ }
-
-    if (dest !== item.source_url) {
-      console.log(`[Newsletter] URL resolved: ${item.source_url.substring(0, 50)}... -> ${dest.substring(0, 80)}`);
-    }
-
-    resolved.push({ ...item, source_url: dest });
-  }
-  return resolved;
-}
-
-/**
- * Main newsletter processing function.
- * Called by the webhook endpoint.
- * @param {Pool} pool - Database pool
- * @param {Object} emailData - { from, subject, html, text, raw, receivedAt }
- * @returns {Object} Processing result summary
- */
-export async function processNewsletter(pool, emailData) {
-  const { from, subject, html, text, receivedAt } = emailData;
-
-  console.log(`[Newsletter] Processing: "${subject}" from ${from}`);
-
-  const markdown = extractContentFromEmail(html, text);
-
-  if (!markdown || markdown.length < 50) {
-    console.log('[Newsletter] Insufficient content, skipping');
-
-    await pool.query(`
-      INSERT INTO newsletter_emails (from_address, subject, body_html, body_text, body_markdown, processed, error_message, received_at)
-      VALUES ($1, $2, $3, $4, $5, TRUE, 'Insufficient content', $6)
-    `, [from, subject, html || null, text || null, markdown, receivedAt || new Date()]);
-
-    return { success: false, error: 'Insufficient content', newsExtracted: 0, eventsExtracted: 0 };
-  }
-
-  const emailInsert = await pool.query(`
-    INSERT INTO newsletter_emails (from_address, subject, body_html, body_text, body_markdown, received_at)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    RETURNING id
-  `, [from, subject, html || null, text || null, markdown, receivedAt || new Date()]);
-
-  const emailId = emailInsert.rows[0].id;
-
-  try {
-    const apiKeyRow = await pool.query(
-      "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
-    );
-    const apiKey = apiKeyRow.rows[0]?.value || process.env.GOOGLE_AI_API_KEY;
-    if (!apiKey) {
-      throw new Error('No Gemini API key configured');
-    }
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: GEMINI_MODEL,
-      generationConfig: { temperature: 0 }
-    });
-
-    const prompt = `You are a content curator for Roots of The Valley, a guide to Cuyahoga Valley National Park and surrounding communities in Northeast Ohio.
-
-Extract news items and events from this newsletter that are relevant to the Cuyahoga Valley region.
-
-Newsletter subject: "${subject}"
-
-Newsletter content:
-${markdown.substring(0, 30000)}
-
-RELEVANCE CRITERIA:
-- Nature, trails, outdoor recreation, conservation
-- Local history, ecology, wildlife
-- Community stewardship, scenic railroads, canal towpath heritage
-- Arts/culture organizations that serve the valley
-- Events at or near Cuyahoga Valley National Park
-- Skip generic urban news, restaurant openings, unrelated entertainment
-
-Return a JSON object with this exact structure:
-{
-  "news": [
-    {
-      "title": "News headline",
-      "summary": "2-3 sentence summary",
-      "source_name": "Newsletter name or organization",
-      "source_url": "URL if mentioned in newsletter, or null",
-      "published_date": "YYYY-MM-DD if known, or null",
-      "news_type": "general|alert|wildlife|infrastructure|community"
-    }
-  ],
-  "events": [
-    {
-      "title": "Event name",
-      "description": "Brief description",
-      "start_date": "YYYY-MM-DD",
-      "end_date": "YYYY-MM-DD or null",
-      "event_type": "hike|race|concert|festival|program|volunteer|arts|community|alert",
-      "location_details": "Venue or location name",
-      "source_url": "URL if available, or null"
-    }
-  ]
-}
-
-IMPORTANT:
-- Only include items relevant to the Cuyahoga Valley region
-- All dates in ISO 8601 format (YYYY-MM-DD)
-- Skip past events — only include upcoming/current events
-- Return {"news": [], "events": []} if nothing relevant found
-- Return ONLY the JSON, no additional text`;
-
-    const generation = await model.generateContent(prompt);
-    const response = generation.response.text();
-
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.log('[Newsletter] No JSON in Gemini response');
-      return { success: true, emailId, newsExtracted: 0, eventsExtracted: 0 };
-    }
-
-    const extracted = JSON.parse(jsonMatch[0]);
-    console.log(`[Newsletter] Gemini extracted: ${extracted.news?.length || 0} news, ${extracted.events?.length || 0} events`);
-
-    const resolvedNews = await resolveItemUrls(extracted.news || []);
-    const resolvedEvents = await resolveItemUrls(extracted.events || []);
-
-    const matchedNews = await matchItemsToPois(pool, resolvedNews);
-    const matchedEvents = await matchItemsToPois(pool, resolvedEvents);
-
-    let newsInserted = 0;
-    let eventsInserted = 0;
-
-    for (const item of matchedNews) {
-      try {
-        const newsInsert = await pool.query(`
-          INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date,
-                                moderation_status, content_source)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending', 'newsletter')
-          RETURNING id
-        `, [
-          item.poi_id, item.title, item.summary,
-          item.source_url || null, item.source_name || null,
-          item.news_type || 'general', item.published_date || null
-        ]);
-
-        newsInserted++;
-      } catch (err) {
-        console.error(`[Newsletter] Failed to insert news "${item.title}":`, err.message);
-      }
-    }
-
-    for (const item of matchedEvents) {
-      if (!item.start_date) continue;
-
-      try {
-        const eventInsert = await pool.query(`
-          INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type,
-                                  location_details, source_url, moderation_status, content_source)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', 'newsletter')
-          RETURNING id
-        `, [
-          item.poi_id, item.title, item.description,
-          item.start_date, item.end_date || null,
-          item.event_type || null, item.location_details || null,
-          item.source_url || null
-        ]);
-
-        eventsInserted++;
-      } catch (err) {
-        console.error(`[Newsletter] Failed to insert event "${item.title}":`, err.message);
-      }
-    }
-
-    await pool.query(`
-      UPDATE newsletter_emails
-      SET processed = TRUE, news_extracted = $1, events_extracted = $2, processed_at = CURRENT_TIMESTAMP
-      WHERE id = $3
-    `, [newsInserted, eventsInserted, emailId]);
-
-    console.log(`[Newsletter] Complete: ${newsInserted} news, ${eventsInserted} events inserted from "${subject}"`);
-    logInfo(emailId, 'newsletter', null, null, `${newsInserted} news, ${eventsInserted} events extracted from "${subject}"`, { from, news_inserted: newsInserted, events_inserted: eventsInserted });
-    await flushJobLogs();
-
-    return {
-      success: true,
-      emailId,
-      newsExtracted: newsInserted,
-      eventsExtracted: eventsInserted,
-      unmatchedNews: matchedNews.filter(n => !n.poi_id).length,
-      unmatchedEvents: matchedEvents.filter(e => !e.poi_id).length
-    };
-  } catch (error) {
-    console.error(`[Newsletter] Processing failed for email #${emailId}:`, error);
-
-    await pool.query(`
-      UPDATE newsletter_emails
-      SET processed = TRUE, error_message = $1, processed_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `, [error.message, emailId]);
-
-    logError(emailId, 'newsletter', null, null, `Processing failed: ${error.message}`, { from, subject });
-    await flushJobLogs();
-    return { success: false, emailId, error: error.message, newsExtracted: 0, eventsExtracted: 0 };
-  }
-}
-
-/**
- * Process a newsletter email by its database ID (called by pg-boss worker).
- * Reads raw email from newsletter_emails, runs processNewsletter().
+ * Process a newsletter email by its database ID (called by the pg-boss worker).
+ * Maps the sender to a POI, picks an entry page (view-in-browser link, or the
+ * stored email body pre-seeded into the render cache), then runs the standard
+ * collection pipeline twice (news, then events). Unmapped senders are
+ * quarantined for admin assignment.
  * @param {Pool} pool - Database pool
  * @param {number} emailId - ID of the newsletter_emails row
  */
 export async function processNewsletterById(pool, emailId) {
   const emailRow = await pool.query(
-    'SELECT from_address, subject, body_html, body_text, received_at FROM newsletter_emails WHERE id = $1',
+    'SELECT from_address, subject, body_html FROM newsletter_emails WHERE id = $1',
     [emailId]
   );
 
@@ -402,13 +119,84 @@ export async function processNewsletterById(pool, emailId) {
   }
 
   const email = emailRow.rows[0];
-  await processNewsletter(pool, {
-    from: email.from_address,
-    subject: email.subject,
-    html: email.body_html,
-    text: email.body_text,
-    receivedAt: email.received_at
-  });
+  const from = email.from_address || '';
+  const subject = email.subject || '(no subject)';
+
+  const poiResult = await pool.query(
+    `SELECT p.* FROM poi_newsletter_sources s
+       JOIN pois p ON p.id = s.poi_id
+      WHERE POSITION(LOWER(s.from_pattern) IN LOWER($1)) > 0
+      ORDER BY LENGTH(s.from_pattern) DESC
+      LIMIT 1`,
+    [from]
+  );
+
+  if (poiResult.rows.length === 0) {
+    await pool.query(
+      `UPDATE newsletter_emails
+         SET processed = FALSE, error_message = $1, processed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [`unassigned: no POI mapped for sender ${from}`, emailId]
+    );
+    console.log(`[Newsletter] Quarantined #${emailId} — no POI mapping for "${from}"`);
+    return;
+  }
+
+  const poi = poiResult.rows[0];
+  const { markdown, links, viewInBrowserUrl } = extractEmailParts(email.body_html || '');
+
+  let entryUrl = viewInBrowserUrl;
+  if (!entryUrl) {
+    if (!markdown || markdown.length < 50) {
+      await pool.query(
+        `UPDATE newsletter_emails
+           SET processed = TRUE, error_message = 'Insufficient content',
+               news_extracted = 0, events_extracted = 0, processed_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [emailId]
+      );
+      return;
+    }
+    entryUrl = `https://newsletter.local/email/${emailId}`;
+    await pool.query(
+      `INSERT INTO rendered_page_cache (url, markdown, raw_text, og_dates, og_image, title, links, page_type, rendered_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, NOW())
+       ON CONFLICT (url) DO UPDATE SET
+         markdown = EXCLUDED.markdown, raw_text = EXCLUDED.raw_text,
+         links = EXCLUDED.links, page_type = NULL, rendered_at = NOW()`,
+      [entryUrl, markdown, markdown, JSON.stringify({}), null, subject, JSON.stringify(links)]
+    );
+  }
+
+  const transientPoi = { ...poi, news_url: entryUrl, events_url: entryUrl };
+  const opts = { skipPhaseTwo: true };
+
+  try {
+    const newsRun = await collectPoi(pool, transientPoi, null, 'America/New_York', 'news', null, opts);
+    const eventRun = await collectPoi(pool, transientPoi, null, 'America/New_York', 'events', null, opts);
+
+    const newsSaved = await saveNewsItems(pool, poi.id, newsRun.news || [], { contentSource: 'newsletter' });
+    const eventsSaved = await saveEventItems(pool, poi.id, eventRun.events || [], { contentSource: 'newsletter' });
+
+    await pool.query(
+      `UPDATE newsletter_emails
+         SET processed = TRUE, news_extracted = $1, events_extracted = $2,
+             error_message = NULL, processed_at = CURRENT_TIMESTAMP
+       WHERE id = $3`,
+      [newsSaved, eventsSaved, emailId]
+    );
+    logInfo(emailId, 'newsletter', poi.id, poi.name,
+      `${newsSaved} news, ${eventsSaved} events from "${subject}"`, { from, poiId: poi.id });
+    await flushJobLogs();
+  } catch (err) {
+    await pool.query(
+      `UPDATE newsletter_emails
+         SET processed = TRUE, error_message = $1, processed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [err.message, emailId]
+    );
+    console.error(`[Newsletter] Processing failed for #${emailId}:`, err.message);
+  }
 }
 
 /**

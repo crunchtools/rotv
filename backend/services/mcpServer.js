@@ -563,6 +563,34 @@ function registerTools(server, pool, boss) {
   );
 
   server.tool(
+    'newsletter_assign_poi',
+    'Map a newsletter sender to a POI so its emails are scoped to that POI, then reprocess the email',
+    {
+      id: z.number().describe('Newsletter email ID'),
+      poi_id: z.number().describe('POI id to attribute this sender to'),
+      from_pattern: z.string().optional().describe("Sender match pattern (substring of From:). Defaults to the email's full from_address.")
+    },
+    async ({ id, poi_id, from_pattern }) => {
+      const emailRow = await pool.query('SELECT from_address FROM newsletter_emails WHERE id = $1', [id]);
+      if (emailRow.rows.length === 0) {
+        return { content: [{ type: 'text', text: 'Newsletter email not found' }], isError: true };
+      }
+      const pattern = (from_pattern && from_pattern.trim()) || emailRow.rows[0].from_address;
+      if (!pattern) {
+        return { content: [{ type: 'text', text: 'No sender pattern available to map' }], isError: true };
+      }
+      await pool.query(
+        `INSERT INTO poi_newsletter_sources (poi_id, from_pattern)
+         VALUES ($1, $2) ON CONFLICT (poi_id, from_pattern) DO NOTHING`,
+        [poi_id, pattern]
+      );
+      await pool.query(`UPDATE newsletter_emails SET processed = FALSE, error_message = NULL WHERE id = $1`, [id]);
+      await queueNewsletterJob(id);
+      return { content: [{ type: 'text', text: `Mapped "${pattern}" → POI ${poi_id}; queued email #${id} for reprocessing` }] };
+    }
+  );
+
+  server.tool(
     'settings_list',
     'View all admin settings (moderation thresholds, toggles)',
     {},
