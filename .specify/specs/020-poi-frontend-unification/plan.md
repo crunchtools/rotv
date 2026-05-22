@@ -1,6 +1,6 @@
 # Implementation Plan: POI Frontend Unification
 
-> **Spec ID:** 019-poi-frontend-unification
+> **Spec ID:** 020-poi-frontend-unification
 > **Status:** Planning
 > **Last Updated:** 2026-05-21
 > **Estimated Effort:** L
@@ -82,7 +82,7 @@ setter is a paired `setSelectedX(v); setSelectedY(null)`. Collapsing to one
 ### Phase D: Cleanup
 
 - [ ] Remove now-dead `selectedDestination`/`selectedLinearFeature` props/derivations across the three files.
-- [ ] Grep-confirm no remaining `feature_type` or `poi_roles[<index>]` branches (NFR-019-02).
+- [ ] Grep-confirm no remaining `feature_type` or `poi_roles[<index>]` branches (NFR-020-02).
 - [ ] Update any affected Playwright/Vitest selectors.
 
 ---
@@ -132,7 +132,7 @@ None. The three existing endpoints (`/api/destinations`, `/api/linear-features`,
 - [ ] Existing Vitest + Playwright suites must pass unchanged (`./run.sh test`, run by `/deploy` after merge).
 - [ ] Add a small unit test for the merge/dedupe helper if extracted as a pure function.
 
-### Manual (behavior-parity gate, NFR-019-01)
+### Manual (behavior-parity gate, NFR-020-01)
 
 Verify identical behavior before/after for each POI shape:
 1. Point destination — select from map + from results list + via permalink

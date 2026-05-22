@@ -1,6 +1,6 @@
 # Specification: POI Frontend Unification
 
-> **Spec ID:** 019-poi-frontend-unification
+> **Spec ID:** 020-poi-frontend-unification
 > **Status:** Draft
 > **Version:** 0.1.0
 > **Author:** Scott McCarty
@@ -18,7 +18,7 @@ This is a **refactor with no user-visible behavior change** (PATCH). Every exist
 
 ### Data Model (Frontend State)
 
-**US-019-01: Single selected-POI state**
+**US-020-01: Single selected-POI state**
 > As a developer, I want one `selectedPoi` state value instead of parallel `selectedDestination` / `selectedLinearFeature` so that selection logic is not duplicated across App, Map, and Sidebar.
 
 Acceptance Criteria:
@@ -27,7 +27,7 @@ Acceptance Criteria:
 - [ ] `Sidebar.jsx` receives one `poi` prop (replacing `destination` + `linearFeature`)
 - [ ] URL/permalink load and back-button behavior are preserved exactly
 
-**US-019-02: Single POI collection**
+**US-020-02: Single POI collection**
 > As a developer, I want one POI list in frontend state instead of separate `destinations`, `linearFeatures`, and organization arrays so that there is one source of truth matching the backend.
 
 Acceptance Criteria:
@@ -37,7 +37,7 @@ Acceptance Criteria:
 
 ### Rendering
 
-**US-019-03: Geometry-driven rendering**
+**US-020-03: Geometry-driven rendering**
 > As a developer, I want map rendering decided by geometry shape, not by a type/role flag, matching backend NFR-005-02.
 
 Acceptance Criteria:
@@ -45,7 +45,7 @@ Acceptance Criteria:
 - [ ] A POI with no geometry is never rendered on the map (organization-only POIs)
 - [ ] `isLinearFeature` / `isVirtual` boolean derivations are removed in favor of geometry checks and `poi_roles.includes(...)`
 
-**US-019-04: Role-driven content, not type-driven**
+**US-020-04: Role-driven content, not type-driven**
 > As a developer, I want sidebar content sections gated on `poi_roles` (via `.includes()`) rather than `feature_type` / derived type flags, matching the dual-role lesson from PR #348.
 
 Acceptance Criteria:
@@ -54,7 +54,7 @@ Acceptance Criteria:
 
 ### Component Structure
 
-**US-019-05: Modular Sidebar**
+**US-020-05: Modular Sidebar**
 > As a developer, I want the monolithic `Sidebar.jsx` split into focused files so that shared logic (media, tabs, save, events) is defined once.
 
 Acceptance Criteria:
@@ -109,16 +109,16 @@ All three read the same unified `pois` table.
 
 ## Non-Functional Requirements
 
-**NFR-019-01: Behavior parity**
+**NFR-020-01: Behavior parity**
 - No user-visible behavior change. Verified by manual browser walkthrough of all POI types (point destination, trail/linear, organization-only, dual-role boundary+org) plus permalink load, edit mode, media, news/events tabs, associations, and MTB mode.
 
-**NFR-019-02: Role/geometry checks only**
+**NFR-020-02: Role/geometry checks only**
 - No new code may branch on `feature_type` or `poi_roles[index]`. Use `poi_roles.includes(...)` and geometry-shape checks, per the PR #348 lesson.
 
-**NFR-019-03: Incremental & reversible**
+**NFR-020-03: Incremental & reversible**
 - Delivered in phases that each build and pass tests, so the refactor can be paused/verified between steps rather than as one big-bang merge.
 
-**NFR-019-04: No backend changes**
+**NFR-020-04: No backend changes**
 - Database schema, migrations, and API contracts are untouched (unless the plan explicitly elects the optional endpoint consolidation, which would be called out separately).
 
 ---
