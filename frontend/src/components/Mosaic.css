@@ -63,17 +63,6 @@
   display: block;
 }
 
-/* Single primary image: show the whole image and pad tall/skinny ones with
-   brand green instead of cropping or rotating them (issue #393). Multi-image
-   grids keep object-fit: cover so their tiles stay filled. */
-.mosaic-1 .mosaic-item {
-  background-color: #2d5016;
-}
-
-.mosaic-1 .mosaic-image {
-  object-fit: contain;
-}
-
 /* Video/YouTube Indicators */
 .mosaic-video-indicator,
 .mosaic-youtube-indicator {
