@@ -1033,7 +1033,9 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   // doesn't re-scan every POI on each click. Stored as [minLat,minLng,maxLat,maxLng].
   // (PR #401 review)
   const typeBoundsById = useMemo(() => {
-    const byType = new Map();
+    // globalThis.Map: the bare name `Map` is this file's <Map> component, so
+    // `new Map()` would construct the component. (PR #401 review)
+    const byType = new globalThis.Map();
     for (const dest of destinations) {
       if (!dest.latitude || !dest.longitude) continue;
       const t = getDestinationIconType(dest);

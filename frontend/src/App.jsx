@@ -215,7 +215,9 @@ function AppContent() {
   // Pre-compute each boundary's bounds once per data load so toggles don't re-walk
   // geometry on every click. (PR #401 review)
   const boundaryBoundsById = useMemo(() => {
-    const byId = new Map();
+    // globalThis.Map: the bare name `Map` resolves to our imported <Map> component
+    // in this module, so `new Map()` would construct the component. (PR #401 review)
+    const byId = new globalThis.Map();
     for (const f of linearFeatures) {
       if (!f.geometry) continue;
       const b = geometryBounds([f.geometry]);
