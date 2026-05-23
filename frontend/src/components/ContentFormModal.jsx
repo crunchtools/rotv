@@ -122,7 +122,7 @@ function ContentFormModal({
     : `Create ${contentType === 'news' ? 'News Item' : 'Event'}`;
 
   return (
-    <div className="new-content-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="new-content-overlay">
       <div className="new-content-modal">
         <div className="new-content-header">
           <h3>{title}</h3>
