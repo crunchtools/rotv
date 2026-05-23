@@ -689,6 +689,8 @@ function AppContent() {
 
   const [initialPoiSlug, setInitialPoiSlug] = useState(null);
   const [initialSidebarTab, setInitialSidebarTab] = useState(null);
+  // River Levels carousel (#92): the gauge currently shown, so the map can highlight + fly to it
+  const [activeGauge, setActiveGauge] = useState(null);
   const [permalinkInfo, setPermalinkInfo] = useState(null); // { type: 'news'|'event', poiSlug, titleSlug }
 
   useEffect(() => {
@@ -706,7 +708,7 @@ function AppContent() {
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
     const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
-    const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
+    const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations', 'river_levels'];
 
     if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
       poiSlug = pathParts[0];
@@ -811,7 +813,7 @@ function AppContent() {
       return;
     }
 
-    const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations'];
+    const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations', 'river_levels'];
     if (pathParts.length === 2 && sidebarSubTabs.includes(pathParts[1])
         && pathParts[0] !== 'mtb-trail-status' && pathParts[0] !== 'organizations' && pathParts[0] !== 'admin') {
       const poiSlug = pathParts[0];
@@ -1225,12 +1227,9 @@ function AppContent() {
     }
 
     if (activeFilters.search) {
+      // Title-only match: typing a name shows only items whose title contains it.
       const searchLower = activeFilters.search.toLowerCase();
-      filtered = filtered.filter(d =>
-        d.name?.toLowerCase().includes(searchLower) ||
-        d.brief_description?.toLowerCase().includes(searchLower) ||
-        d.historical_description?.toLowerCase().includes(searchLower)
-      );
+      filtered = filtered.filter(d => d.name?.toLowerCase().includes(searchLower));
     }
 
     setFilteredDestinations(filtered);
@@ -1334,6 +1333,8 @@ function AppContent() {
   // destination/linear handlers (which carry distinct side effects), and fully
   // clears the single selection slot on null.
   const handleSelectPoi = useCallback((poi) => {
+    // Clear any pending deep-link subtab intent so it doesn't stick to a newly picked POI
+    setInitialSidebarTab(null);
     if (poi && poi.geometry) {
       handleSelectLinearFeature(poi);
     } else if (poi) {
@@ -2350,6 +2351,7 @@ function AppContent() {
           defaultBounds={DEFAULT_PARK_BOUNDS}
           visiblePoiCount={visiblePoiCount}
           iconConfig={iconConfig}
+          activeGauge={activeGauge}
           isLegendExpanded={isLegendExpanded}
           setIsLegendExpanded={setIsLegendExpanded}
           isDrawingAssociations={isDrawingAssociations}
@@ -2448,6 +2450,7 @@ function AppContent() {
           onClearPermalink={() => setPermalinkInfo(null)}
           initialSidebarTab={initialSidebarTab}
           onSidebarTabChange={(tab) => setInitialSidebarTab(null)}
+          onActiveGaugeChange={setActiveGauge}
         />
       </main>
       {showFeedbackForm && (

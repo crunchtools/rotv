@@ -74,6 +74,7 @@ function formatCronHuman(cron) {
   const ordinal = (d) => { const n = parseInt(d, 10); return (n > 3 && n < 21) ? d + 'th' : d + ['th','st','nd','rd'][n % 10] || d + 'th'; };
 
   if (cron.startsWith('*/')) return `Every ${min.slice(2)} minutes`;
+  if (hour === '*' && min !== '*' && dom === '*' && dow === '*') return `Hourly at :${min.padStart(2, '0')}`;
   if (dom !== '*' && hour !== '*') return `${ordinal(dom)} of month at ${time}`;
   if (dow !== '*' && hour !== '*') return `${DAYS[dow] || dow} at ${time}`;
   if (hour !== '*' && min !== '*' && dom === '*' && dow === '*') return `Daily at ${time}`;

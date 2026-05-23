@@ -75,6 +75,7 @@ import {
   getDisplaySlots as getTrailDisplaySlots
 } from '../services/trailStatusService.js';
 import imageServerClient from '../services/imageServerClient.js';
+import { runRiverLevelsCollection } from '../services/riverLevelsService.js';
 import { logInfo, logError, flush as flushJobLogs } from '../services/jobLogger.js';
 
 const router = express.Router();
@@ -3090,6 +3091,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
     } catch (error) {
       console.error('Error collecting trail status:', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // River levels (#92): manually trigger a USGS gauge collection pass
+  router.post('/river-levels/collect', isAdmin, async (req, res) => {
+    try {
+      console.log(`Admin ${req.user.email} triggered river levels collection`);
+      const collectionSummary = await runRiverLevelsCollection(pool, {});
+      res.json({ success: true, message: 'River levels collected', ...collectionSummary });
+    } catch (error) {
+      console.error('Error collecting river levels:', error);
       res.status(500).json({ error: error.message });
     }
   });

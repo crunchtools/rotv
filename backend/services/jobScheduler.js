@@ -11,6 +11,7 @@ const JOB_NAMES = {
   NEWS_BATCH: 'news-batch-collection',
   TRAIL_STATUS_COLLECTION: 'trail-status-collection',
   TRAIL_STATUS_BATCH: 'trail-status-batch-collect',
+  RIVER_LEVELS_COLLECTION: 'river-levels-collection',
   CONTENT_MODERATION: 'content-moderation',
   CONTENT_MODERATION_SWEEP: 'content-moderation-sweep',
   NEWSLETTER_PROCESS: 'newsletter-process',
@@ -271,6 +272,52 @@ export async function registerBatchTrailStatusHandler(handler) {
       }
     }
   });
+}
+
+export async function scheduleRiverLevelsCollection(cronExpression = '0 * * * *') {
+  const scheduler = getJobScheduler();
+
+  await scheduler.schedule(JOB_NAMES.RIVER_LEVELS_COLLECTION, cronExpression, {}, {
+    tz: 'America/New_York'
+  });
+
+  console.log(`River levels collection scheduled with cron: ${cronExpression}`);
+}
+
+export async function registerRiverLevelsHandler(handler) {
+  const scheduler = getJobScheduler();
+
+  try {
+    await scheduler.createQueue(JOB_NAMES.RIVER_LEVELS_COLLECTION);
+    console.log(`Queue '${JOB_NAMES.RIVER_LEVELS_COLLECTION}' created`);
+  } catch (error) {
+    if (!error.message?.includes('already exists')) {
+      console.log(`Queue '${JOB_NAMES.RIVER_LEVELS_COLLECTION}' may already exist`);
+    }
+  }
+
+  await scheduler.work(JOB_NAMES.RIVER_LEVELS_COLLECTION, async (job) => {
+    console.log('Starting river levels collection job:', job.id);
+    try {
+      await handler(job.data);
+      console.log('River levels collection job completed:', job.id);
+    } catch (error) {
+      console.error('River levels collection job failed:', error);
+      throw error;
+    }
+  });
+}
+
+export async function triggerRiverLevelsCollection() {
+  const scheduler = getJobScheduler();
+
+  const jobId = await scheduler.send(JOB_NAMES.RIVER_LEVELS_COLLECTION, {
+    triggeredManually: true,
+    triggeredAt: new Date().toISOString()
+  });
+
+  console.log('Manual river levels collection triggered, job ID:', jobId);
+  return jobId;
 }
 
 export async function scheduleModerationSweep(cronExpression = '0 7 * * *') {

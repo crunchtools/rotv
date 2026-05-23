@@ -289,6 +289,13 @@ check = "single_use_helpers"
 path = "backend/services/trailStatusService.js"
 justification = "Flagged: collectTrailStatus (line 115) and saveTrailStatus (line 393) — each is a discrete phase in the slot-based concurrency pipeline. collectTrailStatus isolates the Gemini call + timeout from the slot scheduler so a hung LLM call can't deadlock the slot pool; saveTrailStatus isolates the cache-write transaction so a DB failure doesn't poison the slot reservation. Inlining either would entangle slot lifecycle with I/O error handling"
 
+# Single-use helpers - River levels service (pure parser kept separate for unit testing)
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/riverLevelsService.js"
+justification = "parseUsgsResponse is a pure, side-effect-free parser unit-tested directly in tests/riverLevels.unit.test.js (USGS JSON → readings, no-data sentinel handling, timestamp merging). Gourmand only counts internal call sites, so the test caller is invisible — a false positive. Keeping the parse step separate from the network/DB I/O in runRiverLevelsCollection is what makes the parsing logic testable without mocking fetch or Postgres"
+
 # Single-use helpers - News service (batch collection orchestration)
 
 [[exceptions]]
