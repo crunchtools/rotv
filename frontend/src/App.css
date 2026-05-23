@@ -2588,6 +2588,10 @@ body {
   flex-direction: column;
 }
 
+.legend-close-btn {
+  display: none;
+}
+
 /* Desktop popup mode when expanded */
 .legend.legend-expanded {
   position: fixed;
@@ -2604,20 +2608,6 @@ body {
 }
 
 /* Legend backdrop when shown as popup */
-.legend-backdrop {
-  display: none;
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 1999;
-}
-
-.legend-backdrop.visible {
-  display: block;
-}
 
 /* Legend content wrapper - always visible on desktop */
 .legend-content {
@@ -3157,6 +3147,25 @@ body {
 
   .legend-content {
     display: block;
+  }
+
+  .legend-close-btn {
+    display: block;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    line-height: 1;
+    cursor: pointer;
+    color: #666;
+    padding: 0.25rem 0.5rem;
+    z-index: 1;
+  }
+
+  .legend-expanded .legend-search {
+    padding-right: 2rem;
   }
 
   /* POI count chip - tighter spacing on mobile */

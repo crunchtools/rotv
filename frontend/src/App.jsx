@@ -285,6 +285,7 @@ function AppContent() {
   const [isInOrganizationsMode, setIsInOrganizationsMode] = useState(false);
 
   const [bypassViewportFilter, setBypassViewportFilter] = useState(false);
+  const [isLegendExpanded, setIsLegendExpanded] = useState(false);
 
   useEffect(() => {
     if (destinations && destinations.length > 0) {
@@ -2351,6 +2352,8 @@ function AppContent() {
           visiblePoiCount={visiblePoiCount}
           iconConfig={iconConfig}
           activeGauge={activeGauge}
+          isLegendExpanded={isLegendExpanded}
+          setIsLegendExpanded={setIsLegendExpanded}
           isDrawingAssociations={isDrawingAssociations}
           addingAssociationsToOrgId={addingAssociationsToOrgId}
           onAddAssociationsFromDrawing={handleAddAssociationsFromDrawing}
