@@ -33,6 +33,8 @@ import {
   scheduleTrailStatusCollection,
   registerTrailStatusHandler,
   registerBatchTrailStatusHandler,
+  scheduleRiverLevelsCollection,
+  registerRiverLevelsHandler,
   registerModerationSweepHandler,
   scheduleModerationSweep,
   registerNewsletterHandler,
@@ -60,6 +62,12 @@ import {
   getLatestTrailStatus,
   processTrailStatusCollectionJob
 } from './services/trailStatusService.js';
+import {
+  runRiverLevelsCollection,
+  getAllGaugesWithLatest,
+  getGaugesForPoi,
+  getGaugeReadings
+} from './services/riverLevelsService.js';
 import imageServerClient from './services/imageServerClient.js';
 import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
@@ -682,6 +690,33 @@ async function initDatabase() {
     `);
 
     await client.query(`CREATE INDEX IF NOT EXISTS idx_trail_status_job_status_created ON trail_status_job_status(created_at DESC)`);
+
+    // River gauges (#92) — mirrors migration 061 so fresh/test DBs have the schema
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS river_gauges (
+        id SERIAL PRIMARY KEY,
+        usgs_site_id VARCHAR(20) NOT NULL UNIQUE,
+        name VARCHAR(200),
+        river_poi_id INTEGER REFERENCES pois(id) ON DELETE SET NULL,
+        latitude DOUBLE PRECISION,
+        longitude DOUBLE PRECISION,
+        enabled BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS river_gauge_readings (
+        id SERIAL PRIMARY KEY,
+        gauge_id INTEGER NOT NULL REFERENCES river_gauges(id) ON DELETE CASCADE,
+        reading_time TIMESTAMPTZ NOT NULL,
+        gage_height_ft NUMERIC,
+        discharge_cfs NUMERIC,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        UNIQUE (gauge_id, reading_time)
+      )
+    `);
+    await client.query(`CREATE INDEX IF NOT EXISTS idx_river_gauge_readings_gauge_time ON river_gauge_readings(gauge_id, reading_time DESC)`);
 
     // Ensure default icons exist (adds any missing defaults to existing databases)
     // ON CONFLICT DO NOTHING means existing icons won't be overwritten
@@ -1987,6 +2022,40 @@ app.get('/api/pois/:id/status', async (req, res) => {
   }
 });
 
+// River gauges (#92): all enabled gauges with their latest reading — powers map markers
+app.get('/api/river-gauges', async (req, res) => {
+  try {
+    const gauges = await getAllGaugesWithLatest(pool);
+    res.json(gauges);
+  } catch (error) {
+    console.error('Error fetching river gauges:', error);
+    res.status(500).json({ error: 'Failed to fetch river gauges' });
+  }
+});
+
+// Gauges associated with a river POI — powers the River Levels sidebar tab
+app.get('/api/pois/:id/river-gauges', async (req, res) => {
+  try {
+    const gauges = await getGaugesForPoi(pool, req.params.id);
+    res.json(gauges);
+  } catch (error) {
+    console.error('Error fetching POI river gauges:', error);
+    res.status(500).json({ error: 'Failed to fetch river gauges' });
+  }
+});
+
+// Time-series readings for a single gauge — powers the chart
+app.get('/api/river-gauges/:id/readings', async (req, res) => {
+  try {
+    const days = req.query.days || 7;
+    const readings = await getGaugeReadings(pool, req.params.id, days);
+    res.json({ gauge_id: Number(req.params.id), readings });
+  } catch (error) {
+    console.error('Error fetching gauge readings:', error);
+    res.status(500).json({ error: 'Failed to fetch gauge readings' });
+  }
+});
+
 app.get('/api/trails/mtb', async (req, res) => {
   try {
     const includeStatus = req.query.includeStatus === 'true';
@@ -2736,6 +2805,14 @@ async function start() {
     // Aggressive 30-min cadence is fine because Gemini Flash cost is negligible
     const trailStatusInterval = '*/30 * * * *';
     await scheduleTrailStatusCollection(trailStatusInterval);
+
+    // River gauge levels (#92): hourly fetch from USGS — no AI, no rendering, just polite polling
+    await registerRiverLevelsHandler(withJitter(async (jobData) => {
+      console.log('Running scheduled river levels collection...');
+      const summary = await runRiverLevelsCollection(pool, { jobId: jobData?.jobId || 0 });
+      console.log(`River levels collection: ${summary.gaugesProcessed}/${summary.totalGauges} gauges, ${summary.readingsInserted} new readings`);
+    }, 'river-levels'));
+    await scheduleRiverLevelsCollection('*/30 * * * *');
 
     await registerModerationSweepHandler(withJitter(async () => {
       await processPendingItems(pool);

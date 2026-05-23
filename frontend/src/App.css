@@ -15096,3 +15096,123 @@ button.feedback-link-inline {
     max-height: 70vh;
   }
 }
+
+/* River levels (#92) */
+.river-gauge-marker { background: none; border: none; }
+.river-gauge-pin {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transform: translate(-6px, -6px);
+}
+.river-gauge-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #1e6fb8;
+  border: 2px solid #fff;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+  flex: 0 0 auto;
+}
+.river-gauge-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #1e6fb8;
+  background: rgba(255, 255, 255, 0.9);
+  padding: 1px 5px;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+/* Highlighted gauge — the one currently shown in the River Levels carousel.
+   Uses the same pulsing blue ring as a selected POI (.marker-highlight.view-highlight). */
+.river-gauge-marker.active .river-gauge-dot {
+  position: relative;
+  background: #1E90FF;
+}
+.river-gauge-marker.active .river-gauge-dot::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(30, 144, 255, 0.3);
+  border: 3px solid #1E90FF;
+  animation: pulse-ring 1.5s ease-out infinite;
+}
+
+.river-levels-tab { padding: 0.5rem 0; }
+.river-gauge-card {
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+.river-gauge-name { margin: 0 0 0.35rem; font-size: 1rem; }
+.river-gauge-current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.river-gauge-value { font-weight: 700; color: #1e6fb8; }
+.river-gauge-sep { color: #999; }
+.river-gauge-time { color: #666; font-size: 0.85rem; }
+.river-gauge-metric-toggle { display: flex; gap: 0; margin-bottom: 0.5rem; }
+.river-gauge-metric-toggle button {
+  flex: 1;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--border-color, #ccc);
+  background: #f6f6f6;
+  cursor: pointer;
+}
+.river-gauge-metric-toggle button:first-child { border-radius: 6px 0 0 6px; }
+.river-gauge-metric-toggle button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
+.river-gauge-metric-toggle button.active { background: #1e6fb8; color: #fff; border-color: #1e6fb8; }
+.river-gauge-metric-toggle button:disabled { opacity: 0.4; cursor: not-allowed; }
+.river-gauge-link { display: inline-block; margin-top: 0.4rem; font-size: 0.85rem; }
+.river-levels-empty { color: #777; font-style: italic; padding: 0.5rem 0; }
+
+/* River Levels carousel nav */
+.river-gauge-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+.river-gauge-arrow {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  font-size: 1.4rem;
+  line-height: 1;
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 50%;
+  background: #fff;
+  color: #1e6fb8;
+  cursor: pointer;
+}
+.river-gauge-arrow:hover { background: #1e6fb8; color: #fff; border-color: #1e6fb8; }
+.river-gauge-pager { font-size: 0.85rem; color: #666; }
+.river-gauge-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.6rem;
+}
+.river-gauge-dot-btn {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border-radius: 50%;
+  border: none;
+  background: #c5c5c5;
+  cursor: pointer;
+}
+.river-gauge-dot-btn.active { background: #1e6fb8; }

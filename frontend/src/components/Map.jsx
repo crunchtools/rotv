@@ -4,6 +4,29 @@ import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 import { useTrip } from '../hooks/useTrip';
+import { useNavigate } from 'react-router-dom';
+import { generateSlug } from './sidebar/helpers';
+
+// River gauge marker (#92): a labeled pin showing the latest discharge (cfs)
+function createGaugeIcon(label, active) {
+  return L.divIcon({
+    className: `river-gauge-marker${active ? ' active' : ''}`,
+    html: `<div class="river-gauge-pin"><span class="river-gauge-dot"></span><span class="river-gauge-label">${label}</span></div>`,
+    iconSize: [0, 0],
+    iconAnchor: [6, 6]
+  });
+}
+
+// Pans/zooms the map to the gauge currently shown in the River Levels carousel (#92)
+function GaugeFocuser({ activeGauge }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (!activeGauge || activeGauge.latitude == null || activeGauge.longitude == null) return;
+    const targetZoom = Math.max(map.getZoom(), 13);
+    map.flyTo([activeGauge.latitude, activeGauge.longitude], targetZoom, { animate: true, duration: 0.6 });
+  }, [activeGauge, map]);
+  return null;
+}
 
 function createTripStopIcon(n) {
   return L.divIcon({
@@ -498,8 +521,9 @@ function ZoomTooltipHider() {
   return null;
 }
 
-function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries }) {
+function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries, searchQuery }) {
   const map = useMap();
+  const search = (searchQuery || '').toLowerCase();
 
   const updateVisiblePois = useCallback(() => {
     try {
@@ -512,8 +536,10 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
         destinations.forEach(dest => {
           if (!dest.latitude || !dest.longitude) return;
 
+          // While searching, destinations are already title-filtered upstream — count
+          // them regardless of category; otherwise honor the category toggles.
           const iconType = getDestinationIconType(dest);
-          if (!visibleTypes.has(iconType)) {
+          if (!search && !visibleTypes.has(iconType)) {
             return;
           }
 
@@ -526,7 +552,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
       }
 
       const isFilteredMode = visibleTypes.size < 10; // Small specific set means filtered mode
-      const includeLinearFeatures = !isFilteredMode ||
+      const includeLinearFeatures = !!search || !isFilteredMode ||
                                     visibleTypes.has('trail') ||
                                     visibleTypes.has('river') ||
                                     visibleTypes.has('boundary');
@@ -534,7 +560,10 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
       if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
         linearFeatures.forEach(feature => {
           let isLayerVisible = false;
-          if (feature.poi_roles?.includes('trail')) {
+          if (search) {
+            // Title search matches across all linear types, ignoring layer toggles
+            isLayerVisible = feature.name?.toLowerCase().includes(search);
+          } else if (feature.poi_roles?.includes('trail')) {
             isLayerVisible = showTrails;
           } else if (feature.poi_roles?.includes('river')) {
             isLayerVisible = showRivers;
@@ -572,7 +601,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
       }
     } catch {
     }
-  }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries]);
+  }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries, search]);
 
   useMapEvents({
     moveend: updateVisiblePois,
@@ -975,7 +1004,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
   // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
   // dual-role organization+boundary may be selected as a destination yet still
@@ -984,6 +1013,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   const selectedLinearFeature = selectedPoi && selectedIsLinear ? selectedPoi : null;
   const onSelectDestination = onSelectPoi;
   const onSelectLinearFeature = onSelectPoi;
+  const navigate = useNavigate();
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
   const [useSatellite, setUseSatellite] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState(null); // Just for UI display
@@ -997,6 +1027,16 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
 
   const [mapMoveCount, setMapMoveCount] = useState(0);
 
+  // River gauges (#92): fetched once; rendered as labeled markers tied to the Rivers layer
+  const [riverGauges, setRiverGauges] = useState([]);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/river-gauges')
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => { if (!cancelled) setRiverGauges(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setRiverGauges([]); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleVisiblePoisChange = useCallback((visibleIds) => {
     setVisiblePoiIds(visibleIds);
@@ -1280,10 +1320,49 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         )}
 
 
+        {/* River gauge markers (#92) — shown with the Rivers layer, or while the
+            River Levels carousel is open so its highlighted gauge is visible */}
+        {(showRivers || activeGauge || searchQuery) && riverGauges.map(gauge => {
+          if (gauge.latitude == null || gauge.longitude == null) return null;
+          // When a title search is active, only show gauges on the matching river
+          if (searchQuery && !(gauge.river_name || '').toLowerCase().includes(searchQuery.toLowerCase())) return null;
+          const cfs = gauge.latest?.discharge_cfs;
+          const ft = gauge.latest?.gage_height_ft;
+          const label = cfs != null
+            ? `${Number(cfs).toLocaleString(undefined, { maximumFractionDigits: 0 })} cfs`
+            : (ft != null ? `${ft} ft` : '—');
+          const isActive = activeGauge?.id === gauge.id;
+          return (
+            <Marker
+              key={`gauge-${gauge.id}-${isActive}`}
+              position={[gauge.latitude, gauge.longitude]}
+              icon={createGaugeIcon(label, isActive)}
+              zIndexOffset={isActive ? 1000 : 0}
+              eventHandlers={{
+                click: () => {
+                  const slug = generateSlug(gauge.river_name || '');
+                  if (slug) navigate(`/${slug}/river_levels?gauge=${gauge.id}`);
+                }
+              }}
+            >
+              {!activeGauge && (
+                <Tooltip direction="top" offset={[0, -8]}>
+                  <strong>{gauge.name || gauge.usgs_site_id}</strong>
+                  <br />{label}{cfs != null && ft != null ? ` • ${ft} ft` : ''}
+                </Tooltip>
+              )}
+            </Marker>
+          );
+        })}
+
         {linearFeatures && linearFeatures.map(feature => {
-          const isVisible = (feature.poi_roles?.includes('trail') && showTrails) ||
-                           (feature.poi_roles?.includes('river') && showRivers) ||
-                           (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id));
+          // A title search matches across all types — show a matching linear feature
+          // regardless of its layer toggle, and hide non-matches.
+          const isVisible = searchQuery
+            ? feature.name?.toLowerCase().includes(searchQuery.toLowerCase())
+            : ((feature.poi_roles?.includes('trail') && showTrails) ||
+               (feature.poi_roles?.includes('river') && showRivers) ||
+               (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id)));
           if (!isVisible) return null;
 
           const isSelected = selectedLinearFeature?.id === feature.id;
@@ -1475,6 +1554,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         })}
 
         <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />
+        <GaugeFocuser activeGauge={activeGauge} />
         <MapVisibilityHandler activeTab={activeTab} />
         <BoundsFitter boundsToFit={boundsToFit} fitNonce={fitNonce} />
         <MapBoundsTracker
@@ -1487,6 +1567,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           showTrails={showTrails}
           showRivers={showRivers}
           visibleBoundaries={visibleBoundaries}
+          searchQuery={searchQuery}
         />
         <MapMoveTracker onMapMove={() => setMapMoveCount(c => c + 1)} />
         <ZoomTooltipHider />
@@ -1526,8 +1607,10 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         {iconConfig.length > 0 && destinations.map((dest) => {
           if (!dest.latitude || !dest.longitude) return null;
 
+          // When a title search is active, App has already narrowed destinations to
+          // name matches — show them regardless of the category toggles.
           const iconType = getDestinationIconType(dest);
-          if (!visibleTypes.has(iconType)) return null;
+          if (!searchQuery && !visibleTypes.has(iconType)) return null;
 
           const isSelected = selectedDestination?.id === dest.id;
           const icon = getDestinationIcon(dest);

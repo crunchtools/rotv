@@ -16,6 +16,7 @@ import PoiEvents from './sidebar/PoiEvents';
 import AssociationsModal from './sidebar/AssociationsModal';
 import AssociationsTabContent from './sidebar/AssociationsTabContent';
 import TrailStatus from './sidebar/TrailStatus';
+import RiverLevels from './sidebar/RiverLevels';
 
 const SIDEBAR_TAB_LABELS = {
   view: 'Info',
@@ -23,9 +24,10 @@ const SIDEBAR_TAB_LABELS = {
   events: 'Events',
   history: 'History',
   associations: 'Associations',
+  river_levels: 'Water Levels',
 };
 
-function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange }) {
+function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange, onActiveGaugeChange }) {
   const navigate = useNavigate();
 
   // Unified POI prop (spec 019). The sidebar takes a single `poi` plus
@@ -71,6 +73,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [, setCollectResult] = useState(null);
   const [trailStatus, setTrailStatus] = useState(null);
   const [tabCounts, setTabCounts] = useState({ news_count: null, events_count: null });
+  const [hasGauges, setHasGauges] = useState(null);
 
   const [selectedPoiIds, setSelectedPoiIds] = useState(new Set());
 
@@ -205,6 +208,21 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     return () => controller.abort();
   }, [displayItem?.id]);
 
+  // River gauges (#92): only river-role POIs can have associated gauges.
+  // Tristate: null = still loading (don't reset a deep-linked river_levels tab yet),
+  // false = none, true = has gauges.
+  useEffect(() => {
+    const poiId = displayItem?.id;
+    if (!poiId || !displayItem?.poi_roles?.includes('river')) { setHasGauges(false); return undefined; }
+    setHasGauges(null);
+    const controller = new AbortController();
+    fetch(`/api/pois/${poiId}/river-gauges`, { signal: controller.signal })
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => setHasGauges(Array.isArray(data) && data.length > 0))
+      .catch(err => { if (err.name !== 'AbortError') setHasGauges(false); });
+    return () => controller.abort();
+  }, [displayItem?.id, displayItem?.poi_roles]);
+
   const poiAssociationsCount = useMemo(() => {
     if (!displayItem?.id) return 0;
     return (associations || []).filter(a =>
@@ -227,8 +245,11 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     if (adminOverride || poiAssociationsCount > 0) {
       tabs.push('associations');
     }
+    if (displayItem?.poi_roles?.includes('river') && hasGauges) {
+      tabs.push('river_levels');
+    }
     return tabs;
-  }, [isAdmin, editMode, tabCounts.news_count, tabCounts.events_count, displayItem?.historical_description, poiAssociationsCount]);
+  }, [isAdmin, editMode, tabCounts.news_count, tabCounts.events_count, displayItem?.historical_description, poiAssociationsCount, displayItem?.poi_roles, hasGauges]);
 
   const handleSidebarTabChange = useCallback((tab) => {
     setSidebarTab(tab);
@@ -245,18 +266,22 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       setEditedData({ ...displayItem });
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
-      if (!permalinkInfo) setSidebarTab('view');
+      // Respect a deep-linked subtab (e.g. /poi/river_levels) instead of forcing Info.
+      if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
       setIsEditing(false);
     }
-  }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList]);
+  }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList, initialSidebarTab, permalinkInfo]);
 
   useEffect(() => {
     if (permalinkInfo) return;
+    // Honoring a deep-linked subtab (e.g. /poi/river_levels): don't auto-reset to Info
+    // while its tab data (gauges, news/event counts, associations) is still loading.
+    if (initialSidebarTab) return;
     if (sidebarTab !== 'view' && !visibleTabs.includes(sidebarTab)) {
       setSidebarTab('view');
     }
-  }, [visibleTabs, sidebarTab, permalinkInfo]);
+  }, [visibleTabs, sidebarTab, permalinkInfo, initialSidebarTab]);
 
   useEffect(() => {
     if (previewCoords && isEditing && !isLinearFeature) {
@@ -789,6 +814,10 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           {sidebarTab === 'events' && linearFeature && (
             <PoiEvents poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount}
               onSelectEvent={(info) => onSetPermalink && onSetPermalink(info)} />
+          )}
+
+          {sidebarTab === 'river_levels' && linearFeature && (
+            <RiverLevels poiId={linearFeature.id} onActiveGaugeChange={onActiveGaugeChange} />
           )}
 
           {sidebarTab === 'history' && linearFeature && (

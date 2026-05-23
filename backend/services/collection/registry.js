@@ -74,6 +74,20 @@ export const COLLECTION_TYPES = [
     hasPrompt: true
   },
   {
+    id: 'river_levels',
+    label: 'River Levels',
+    description: 'Fetches USGS gauge readings (gage height + discharge) for river POIs',
+    icon: '\u{1F30A}',
+    promptKeys: [],
+    scheduleJobName: 'river-levels-collection',
+    schedule: '*/30 * * * *',
+    statusTable: null,
+    historyTypes: ['river_levels'],
+    triggerEndpoint: '/api/admin/river-levels/collect',
+    manualTriggerMethod: 'POST',
+    hasPrompt: false
+  },
+  {
     id: 'moderation_sweep',
     label: 'Content Moderation',
     description: 'Scores pending content with Gemini (every 15 min)',

@@ -1,0 +1,202 @@
+import { useState, useEffect, useCallback, useRef } from 'react';
+import LevelChart from '../LevelChart';
+
+/**
+ * "River Levels" sidebar tab (#92).
+ * A carousel of the USGS gauges along a river — one gauge at a time, navigable by the
+ * left/right arrow keys, swiping, the prev/next arrows, or the dots. The gauge in view is
+ * published via onActiveGaugeChange so the map can highlight it and zoom to it. Discharge
+ * (cfs) is the default series; gauges with no discharge (e.g. lake-influenced sites) fall
+ * back to gage height.
+ */
+
+function relativeTime(iso) {
+  if (!iso) return 'no data';
+  const then = new Date(iso).getTime();
+  const mins = Math.round((Date.now() - then) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  const days = Math.round(hours / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
+function fmt(value, unit) {
+  if (value == null) return '—';
+  return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`;
+}
+
+function GaugeCard({ gauge }) {
+  const [readings, setReadings] = useState(null);
+  const [error, setError] = useState(false);
+  const [metric, setMetric] = useState(
+    gauge.latest?.discharge_cfs != null ? 'discharge_cfs' : 'gage_height_ft'
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    setReadings(null);
+    setError(false);
+    fetch(`/api/river-gauges/${gauge.id}/readings?days=7`)
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error('fetch failed'))))
+      .then(data => { if (!cancelled) setReadings(data.readings || []); })
+      .catch(() => { if (!cancelled) setError(true); });
+    return () => { cancelled = true; };
+  }, [gauge.id]);
+
+  const dischargeAvailable = readings
+    ? readings.some(r => r.discharge_cfs != null)
+    : gauge.latest?.discharge_cfs != null;
+  const heightAvailable = readings
+    ? readings.some(r => r.gage_height_ft != null)
+    : gauge.latest?.gage_height_ft != null;
+
+  // If the chosen metric has no data for this gauge, switch to the one that does.
+  useEffect(() => {
+    if (readings === null) return;
+    if (metric === 'discharge_cfs' && !dischargeAvailable && heightAvailable) setMetric('gage_height_ft');
+    else if (metric === 'gage_height_ft' && !heightAvailable && dischargeAvailable) setMetric('discharge_cfs');
+  }, [readings, metric, dischargeAvailable, heightAvailable]);
+
+  const latest = gauge.latest;
+
+  return (
+    <div className="river-gauge-card">
+      <h3 className="river-gauge-name">{gauge.name || gauge.usgs_site_id}</h3>
+      <div className="river-gauge-current">
+        <span className="river-gauge-value">{fmt(latest?.discharge_cfs, 'cfs')}</span>
+        <span className="river-gauge-sep">•</span>
+        <span className="river-gauge-value">{fmt(latest?.gage_height_ft, 'ft')}</span>
+        <span className="river-gauge-sep">•</span>
+        <span className="river-gauge-time">{relativeTime(latest?.reading_time)}</span>
+      </div>
+
+      <div className="river-gauge-metric-toggle" role="group" aria-label="Chart metric">
+        <button
+          className={metric === 'discharge_cfs' ? 'active' : ''}
+          disabled={!dischargeAvailable}
+          onClick={() => setMetric('discharge_cfs')}
+        >Discharge</button>
+        <button
+          className={metric === 'gage_height_ft' ? 'active' : ''}
+          disabled={!heightAvailable}
+          onClick={() => setMetric('gage_height_ft')}
+        >Gage height</button>
+      </div>
+
+      {error ? (
+        <p className="river-levels-empty">Couldn’t load readings.</p>
+      ) : readings === null ? (
+        <p className="river-levels-empty">Loading…</p>
+      ) : (
+        <LevelChart readings={readings} metric={metric} />
+      )}
+
+      <a className="river-gauge-link" href={gauge.usgs_url} target="_blank" rel="noopener noreferrer">
+        View on USGS ↗
+      </a>
+    </div>
+  );
+}
+
+function RiverLevels({ poiId, onActiveGaugeChange }) {
+  const [gauges, setGauges] = useState(null);
+  const [index, setIndex] = useState(0);
+  const touchStartX = useRef(null);
+
+  useEffect(() => {
+    if (!poiId) return undefined;
+    let cancelled = false;
+    fetch(`/api/pois/${poiId}/river-gauges`)
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => {
+        if (cancelled) return;
+        setGauges(data);
+        // Focus a specific gauge if a map marker linked here with ?gauge=<id>
+        const focusId = new URLSearchParams(window.location.search).get('gauge');
+        if (focusId) {
+          const i = data.findIndex(g => String(g.id) === String(focusId));
+          if (i >= 0) setIndex(i);
+        }
+      })
+      .catch(() => { if (!cancelled) setGauges([]); });
+    return () => { cancelled = true; };
+  }, [poiId]);
+
+  const count = gauges?.length || 0;
+  const go = useCallback((delta) => {
+    setIndex(prev => (count ? (prev + delta + count) % count : 0));
+  }, [count]);
+
+  // Left/right arrow keys move between gauges (ignored while typing in a field)
+  useEffect(() => {
+    if (count <= 1) return undefined;
+    const onKey = (e) => {
+      const tag = e.target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target?.isContentEditable) return;
+      if (e.key === 'ArrowLeft') { e.preventDefault(); go(-1); }
+      else if (e.key === 'ArrowRight') { e.preventDefault(); go(1); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [count, go]);
+
+  const safeIndex = gauges ? Math.min(index, Math.max(count - 1, 0)) : 0;
+  const current = gauges && count > 0 ? gauges[safeIndex] : null;
+
+  // Publish the gauge in view so the map can highlight it and fly to it.
+  useEffect(() => {
+    if (onActiveGaugeChange && current) onActiveGaugeChange(current);
+  }, [current?.id, onActiveGaugeChange, current]);
+
+  // Clear the map highlight when the tab closes.
+  useEffect(() => () => { if (onActiveGaugeChange) onActiveGaugeChange(null); }, [onActiveGaugeChange]);
+
+  if (gauges === null) {
+    return <div className="river-levels-tab"><p className="river-levels-empty">Loading…</p></div>;
+  }
+  if (count === 0) {
+    return <div className="river-levels-tab"><p className="river-levels-empty">No gauge data yet for this river.</p></div>;
+  }
+
+  const onTouchStart = (e) => { touchStartX.current = e.touches[0]?.clientX ?? null; };
+  const onTouchEnd = (e) => {
+    if (touchStartX.current == null) return;
+    const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
+    if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
+    touchStartX.current = null;
+  };
+
+  return (
+    <div className="river-levels-tab" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+      <p className="tab-subtitle">Official USGS gauge readings for kayakers</p>
+
+      {count > 1 && (
+        <div className="river-gauge-nav">
+          <button className="river-gauge-arrow" onClick={() => go(-1)} aria-label="Previous gauge">‹</button>
+          <span className="river-gauge-pager">{safeIndex + 1} of {count} gauges</span>
+          <button className="river-gauge-arrow" onClick={() => go(1)} aria-label="Next gauge">›</button>
+        </div>
+      )}
+
+      <GaugeCard key={current.id} gauge={current} />
+
+      {count > 1 && (
+        <div className="river-gauge-dots" role="tablist" aria-label="Select gauge">
+          {gauges.map((g, i) => (
+            <button
+              key={g.id}
+              className={`river-gauge-dot-btn ${i === safeIndex ? 'active' : ''}`}
+              onClick={() => setIndex(i)}
+              aria-label={g.name || g.usgs_site_id}
+              aria-selected={i === safeIndex}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default RiverLevels;
