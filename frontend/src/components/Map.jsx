@@ -110,7 +110,7 @@ function Legend({
   parkBoundaries = [], municipalBoundaries = [],
   visibleTypes, onToggleType, onShowAll, onHideAll,
   searchQuery, onSearchChange,
-  isExpanded, _onClose,
+  isExpanded, onClose, innerRef,
   editMode,
   _activeTab, iconConfig, _onOpenAdmin,
   _onFileSelect, _selectedFileName, _importType, _onImportTypeChange,
@@ -176,7 +176,10 @@ function Legend({
   );
 
   return (
-    <div className={`legend ${isExpanded ? 'legend-expanded' : ''} ${editMode ? 'legend-edit-mode' : ''}`}>
+    <div ref={innerRef} className={`legend ${isExpanded ? 'legend-expanded' : ''} ${editMode ? 'legend-edit-mode' : ''}`}>
+      {isExpanded && onClose && (
+        <button className="legend-close-btn" onClick={onClose} aria-label="Close legend">&times;</button>
+      )}
       <div className="legend-content">
         <div className="legend-search">
           <input
@@ -975,7 +978,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, isLegendExpanded, setIsLegendExpanded }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
   // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
   // dual-role organization+boundary may be selected as a destination yet still
@@ -984,7 +987,21 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   const selectedLinearFeature = selectedPoi && selectedIsLinear ? selectedPoi : null;
   const onSelectDestination = onSelectPoi;
   const onSelectLinearFeature = onSelectPoi;
-  const [isLegendExpanded, setIsLegendExpanded] = useState(false);
+  // isLegendExpanded + setIsLegendExpanded come from props (lifted to App)
+  const legendRef = useRef(null);
+  const legendChipRef = useRef(null);
+
+  useEffect(() => {
+    if (!isLegendExpanded) return;
+    function handlePointerDown(e) {
+      if (legendRef.current?.contains(e.target)) return;
+      if (legendChipRef.current?.contains(e.target)) return;
+      setIsLegendExpanded(false);
+    }
+    document.addEventListener('pointerdown', handlePointerDown, true);
+    return () => document.removeEventListener('pointerdown', handlePointerDown, true);
+  }, [isLegendExpanded, setIsLegendExpanded]);
+
   const [useSatellite, setUseSatellite] = useState(false);
   const [selectedFileName, setSelectedFileName] = useState(null); // Just for UI display
   const [importType, setImportType] = useState('trail');
@@ -1594,6 +1611,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
       </MapContainer>
 
       <button
+        ref={legendChipRef}
         className={`map-poi-count ${(selectedDestination || selectedLinearFeature || newPOI || newOrganization) ? 'sidebar-open' : ''}`}
         onClick={() => setIsLegendExpanded(!isLegendExpanded)}
       >
@@ -1607,11 +1625,6 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           <button className="dismiss-btn" onClick={() => setRefreshResult(null)}>×</button>
         </div>
       )}
-
-      <div
-        className={`legend-backdrop ${isLegendExpanded ? 'visible' : ''}`}
-        onClick={() => setIsLegendExpanded(false)}
-      />
 
       <Legend
         showTrails={showTrails}
@@ -1632,6 +1645,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         onSearchChange={onSearchChange}
         isExpanded={isLegendExpanded}
         onClose={() => setIsLegendExpanded(false)}
+        innerRef={legendRef}
         editMode={editMode}
         activeTab={activeTab}
         iconConfig={iconConfig}
