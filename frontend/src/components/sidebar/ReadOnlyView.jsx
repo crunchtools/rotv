@@ -13,8 +13,9 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
         <div className="sidebar-content">
         <div className="badges-row">
           {isLinearFeature ? (
-            <span className={`poi-type-badge ${destination.poi_roles?.includes('river') ? 'river' : destination.poi_roles?.includes('boundary') ? 'boundary' : 'trail'}`}>
+            <span className={`poi-type-badge ${destination.poi_roles?.includes('river') ? 'river' : destination.poi_roles?.includes('water_taxi') ? 'water-taxi' : destination.poi_roles?.includes('boundary') ? 'boundary' : 'trail'}`}>
               {destination.poi_roles?.includes('river') ? 'River' :
+               destination.poi_roles?.includes('water_taxi') ? 'Water Taxi' :
                destination.poi_roles?.includes('boundary') ? 'Boundary' : 'Trail'}
             </span>
           ) : destination.poi_roles?.includes('organization') ? (
@@ -33,6 +34,21 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
           {isLinearFeature && destination.difficulty && (
             <span className={`difficulty-badge ${destination.difficulty.toLowerCase()}`}>
               {destination.difficulty}
+            </span>
+          )}
+          {destination.is_seasonal && (
+            <span className="service-badge seasonal" title="Seasonal service — does not run in winter">
+              Seasonal
+            </span>
+          )}
+          {destination.is_ada_accessible && (
+            <span className="service-badge ada" title="ADA accessible">
+              ADA
+            </span>
+          )}
+          {destination.is_bike_friendly && (
+            <span className="service-badge bike" title="Bike-friendly">
+              Bike-friendly
             </span>
           )}
           {destination.era_name && !destination.poi_roles?.includes('organization') && (
@@ -141,6 +157,22 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
           </div>
         )}
         </div>
+
+        {destination.live_tracker_url && (
+          <div className="more-info-section">
+            <a
+              href={destination.live_tracker_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="more-info-link live-tracker-link"
+            >
+              Live Tracker
+              <svg viewBox="0 0 24 24" width="16" height="16" style={{ marginLeft: '8px' }}>
+                <path fill="currentColor" d="M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z" />
+              </svg>
+            </a>
+          </div>
+        )}
 
         {moreInfoLink && (
           <div className="more-info-section">

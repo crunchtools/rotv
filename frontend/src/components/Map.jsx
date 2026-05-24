@@ -128,6 +128,7 @@ function LegendSection({ id, title, count, isOpen, onToggle, showActions, onShow
 function Legend({
   showTrails, onToggleTrails,
   showRivers, onToggleRivers,
+  showWaterTaxis, onToggleWaterTaxis,
   visibleBoundaries, onToggleBoundary,
   onShowBoundaries, onHideBoundaries,
   parkBoundaries = [], municipalBoundaries = [],
@@ -174,11 +175,12 @@ function Legend({
 
     const layerIcons = [
       { id: 'trails', label: 'Trails', type: 'layer', isActive: showTrails, onToggle: () => onToggleTrails(!showTrails) },
-      { id: 'rivers', label: 'Rivers', type: 'layer', isActive: showRivers, onToggle: () => onToggleRivers(!showRivers) }
+      { id: 'rivers', label: 'Rivers', type: 'layer', isActive: showRivers, onToggle: () => onToggleRivers(!showRivers) },
+      { id: 'water-taxis', label: 'Water Taxis', type: 'layer', isActive: showWaterTaxis, onToggle: () => onToggleWaterTaxis(!showWaterTaxis) }
     ];
 
     return [...poiTypes, ...layerIcons].sort((a, b) => a.label.localeCompare(b.label));
-  }, [iconConfig, showTrails, showRivers, onToggleTrails, onToggleRivers]);
+  }, [iconConfig, showTrails, showRivers, showWaterTaxis, onToggleTrails, onToggleRivers, onToggleWaterTaxis]);
 
   const [openSection, setOpenSection] = useState('poi');
   const toggleSection = (key) => setOpenSection(prev => (prev === key ? null : key));
@@ -524,7 +526,7 @@ function ZoomTooltipHider() {
   return null;
 }
 
-function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries, searchQuery }) {
+function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery }) {
   const map = useMap();
   const search = (searchQuery || '').toLowerCase();
 
@@ -558,6 +560,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
       const includeLinearFeatures = !!search || !isFilteredMode ||
                                     visibleTypes.has('trail') ||
                                     visibleTypes.has('river') ||
+                                    visibleTypes.has('water_taxi') ||
                                     visibleTypes.has('boundary');
 
       if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
@@ -570,6 +573,8 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
             isLayerVisible = showTrails;
           } else if (feature.poi_roles?.includes('river')) {
             isLayerVisible = showRivers;
+          } else if (feature.poi_roles?.includes('water_taxi')) {
+            isLayerVisible = showWaterTaxis;
           } else if (feature.poi_roles?.includes('boundary')) {
             isLayerVisible = visibleBoundaries.has(feature.id);
           }
@@ -604,7 +609,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
       }
     } catch {
     }
-  }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, visibleBoundaries, search]);
+  }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search]);
 
   useMapEvents({
     moveend: updateVisiblePois,
@@ -621,7 +626,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
 
   useEffect(() => {
     updateVisiblePois();
-  }, [destinations, linearFeatures, showTrails, showRivers, visibleBoundaries, updateVisiblePois]);
+  }, [destinations, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, updateVisiblePois]);
 
   return null;
 }
@@ -1007,7 +1012,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, showWaterTaxis, onToggleWaterTaxis, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
   // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
   // dual-role organization+boundary may be selected as a destination yet still
@@ -1286,6 +1291,13 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         opacity: isSelected ? 1 : 0.8,
         color: isSelected ? (editMode ? editSelectedColor : viewSelectedColor) : '#1E90FF'
       };
+    } else if (feature.poi_roles?.includes('water_taxi')) {
+      return {
+        weight: isSelected ? 4 : 3,
+        opacity: isSelected ? 1 : 0.85,
+        dashArray: '10, 8',
+        color: isSelected ? (editMode ? editSelectedColor : viewSelectedColor) : '#0E9E9E'
+      };
     } else if (feature.poi_roles?.includes('boundary')) {
       const boundaryColor = boundaryDisplayColor(feature);
       const selectedStrokeColor = editMode ? editSelectedColor : viewSelectedColor;
@@ -1379,6 +1391,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             ? feature.name?.toLowerCase().includes(searchQuery.toLowerCase())
             : ((feature.poi_roles?.includes('trail') && showTrails) ||
                (feature.poi_roles?.includes('river') && showRivers) ||
+               (feature.poi_roles?.includes('water_taxi') && showWaterTaxis) ||
                (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id)));
           if (!isVisible) return null;
 
@@ -1583,6 +1596,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           linearFeatures={linearFeatures}
           showTrails={showTrails}
           showRivers={showRivers}
+          showWaterTaxis={showWaterTaxis}
           visibleBoundaries={visibleBoundaries}
           searchQuery={searchQuery}
         />
@@ -1714,6 +1728,8 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         onToggleTrails={onToggleTrails}
         showRivers={showRivers}
         onToggleRivers={onToggleRivers}
+        showWaterTaxis={showWaterTaxis}
+        onToggleWaterTaxis={onToggleWaterTaxis}
         visibleBoundaries={visibleBoundaries}
         onToggleBoundary={onToggleBoundary}
         onShowBoundaries={onShowBoundaries}
