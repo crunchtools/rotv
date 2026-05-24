@@ -86,8 +86,10 @@ ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_seasonal       BOOLEAN DEFAULT FALS
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_ada_accessible BOOLEAN DEFAULT FALSE;
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_bike_friendly  BOOLEAN DEFAULT FALSE;
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS live_tracker_url  VARCHAR(500);
+ALTER TABLE pois ADD COLUMN IF NOT EXISTS stops             JSONB;
 
--- Seed services guarded by NOT EXISTS on (name, 'water_taxi' = ANY(poi_roles)).
+-- Seed services guarded by NOT EXISTS on (name, 'water_taxi' = ANY(poi_roles)),
+-- then load OSM ferry geometry + stops via guarded UPDATEs.
 ```
 
 ---
