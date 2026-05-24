@@ -33,7 +33,7 @@ function LevelChart({ readings, metric }) {
 
   return (
     <ResponsiveContainer width="100%" height={160}>
-      <LineChart data={data} margin={{ top: 8, right: 12, bottom: 4, left: 4 }}>
+      <LineChart data={data} margin={{ top: 8, right: 40, bottom: 4, left: 28 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
         <XAxis
           dataKey="t"
