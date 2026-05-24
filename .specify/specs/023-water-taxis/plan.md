@@ -22,7 +22,9 @@ Add a `water_taxi` POI role and four generic POI columns (seasonal, ADA, bike-fr
 
 ### Geometry loading decision
 
-The river feature uses a separate `load-river-geometry.js` script (its OSM geometries are large KB-scale MultiLineStrings) run manually at deploy. We instead embed the two small water taxi LineStrings directly in the SQL migration because: (a) the geometry is tiny (7 and 12 points), and (b) the dev (`entrypoint.sh`, unix-socket) and prod (`rotv-init.sh`, systemd) startup paths run only the numbered `*.sql` migrations and connect differently — a JS loader would need wiring into both and would not run on a plain `run.sh start`. Embedding in SQL gives one source of truth that loads automatically everywhere, with no manual deploy step. Coordinates are sampled from the Cuyahoga River centerline already in the DB so the lines sit on the water.
+The river feature uses a separate `load-river-geometry.js` script (its OSM geometries are large KB-scale MultiLineStrings) run manually at deploy. We instead embed the water taxi geometry directly in the SQL migration because: (a) the geometry is small (eLCee2 4 points, Harbor Hopper 69 points), and (b) the dev (`entrypoint.sh`, unix-socket) and prod (`rotv-init.sh`, systemd) startup paths run only the numbered `*.sql` migrations and connect differently — a JS loader would need wiring into both and would not run on a plain `run.sh start`. Embedding in SQL gives one source of truth that loads automatically everywhere, with no manual deploy step.
+
+Geometry and stops are sourced from OpenStreetMap: `route=ferry` ways (eLCee2 way 978606820; Harbor Hopper ways 1417965570/71/72 chained end-to-end) and `amenity=ferry_terminal` nodes for the named stops. Stops live in a `pois.stops` JSONB column and render as labeled circle markers along the route; selecting a water_taxi feature flies the map to fit its route bounds (`MapUpdater`).
 
 ---
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
@@ -356,6 +356,15 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef }) 
     if (selectedLinearFeature && selectedLinearFeature.geometry) {
       if (skipFlyRef && skipFlyRef.current) {
         skipFlyRef.current = false;
+        return;
+      }
+      // Water taxi routes are small and easy to miss; fit the map to the route on select.
+      if (selectedLinearFeature.poi_roles?.includes('water_taxi')) {
+        const b = getGeometryBounds(selectedLinearFeature.geometry);
+        if (b) {
+          map.invalidateSize();
+          map.flyToBounds([[b.south, b.west], [b.north, b.east]], { padding: [60, 60], maxZoom: 16, duration: 0.6 });
+        }
       }
     }
   }, [selectedLinearFeature, map, skipFlyRef]);
@@ -1581,6 +1590,24 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
               />
             </React.Fragment>
           );
+        })}
+
+        {linearFeatures && linearFeatures.map(feature => {
+          if (!feature.poi_roles?.includes('water_taxi') || !Array.isArray(feature.stops)) return null;
+          const stopsVisible = searchQuery
+            ? feature.name?.toLowerCase().includes(searchQuery.toLowerCase())
+            : showWaterTaxis;
+          if (!stopsVisible) return null;
+          return feature.stops.map((stop, i) => (
+            <CircleMarker
+              key={`wt-stop-${feature.id}-${i}`}
+              center={[stop.lat, stop.lng]}
+              radius={5}
+              pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#0E9E9E', fillOpacity: 1 }}
+            >
+              <Tooltip direction="top" offset={[0, -4]}>{stop.name}</Tooltip>
+            </CircleMarker>
+          ));
         })}
 
         <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />

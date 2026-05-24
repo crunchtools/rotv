@@ -902,7 +902,7 @@ app.get('/api/pois', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id
@@ -939,7 +939,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id
@@ -1768,7 +1768,7 @@ app.get('/api/linear-features', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
@@ -1795,7 +1795,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)

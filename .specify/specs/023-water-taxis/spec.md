@@ -64,6 +64,7 @@ ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_seasonal       BOOLEAN DEFAULT FALS
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_ada_accessible BOOLEAN DEFAULT FALSE;
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_bike_friendly  BOOLEAN DEFAULT FALSE;
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS live_tracker_url  VARCHAR(500);
+ALTER TABLE pois ADD COLUMN IF NOT EXISTS stops             JSONB;  -- [{name,lat,lng}] ordered transit stops
 ```
 
 - New `poi_roles` value: `water_taxi` (rendered as a dashed transit line; toggled by the "Water Taxis" legend layer).
@@ -119,7 +120,7 @@ Photos called for by the issue (East Bank dock signage; eLCee2 vs. Harbor Hopper
 
 ## Open Questions
 
-1. ~~**Geometry source/accuracy**~~ **RESOLVED:** Coordinates are snapped to the Cuyahoga River `geometry` LineString already loaded in the ROTV database (river-role POI), so dock markers and route lines sit on the water exactly as OSM renders it. Approximate dock anchors from the issue (East Bank under Main Ave Bridge; West Bank near the Old River Bed; Harbor Hopper stops at Collision Bend, BrewDog, Main Ave) are matched to the nearest point on that river line.
+1. ~~**Geometry source/accuracy**~~ **RESOLVED:** Route geometry and stop locations come from OpenStreetMap `route=ferry` ways and `amenity=ferry_terminal` nodes (eLCee2: way 978606820 + East/West Bank docks; Harbor Hopper: ways 1417965570/71/72 chained, with stops Cleveland Water Taxi Main Hub, Flats East Bank, Collision Bend Brewing, BrewDog Outpost). Stops are stored in a new `pois.stops` JSONB column and rendered as labeled markers along the route.
 2. ~~**One POI vs. one-per-stop**~~ **RESOLVED:** One POI per service carrying the full route geometry.
 3. ~~**Live tracker URL**~~ **RESOLVED:** Harbor Hopper's live tracker is `https://trackmyshuttle.com/a/5799` (TrackMyShuttle, linked as "Taxi Tracker" from the official clevelandwatertaxi.com) — seeded in migration 062. eLCee2 is the free Cleveland Metroparks boat and has no commercial tracker, so its `live_tracker_url` stays NULL. The button is scheme-validated (http/https only) before rendering.
 
