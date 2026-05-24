@@ -32,7 +32,7 @@ FROM (VALUES
     'Harbor Hopper',
     'Seasonal commercial water taxi making stops around the Flats (Collision Bend, BrewDog, Main Avenue), shuttling visitors across and along the Cuyahoga.',
     'Mirrors the old "bumboat" and ferry traffic that shuttled sailors and workers across the Cuyahoga in the 1800s.',
-    TRUE, FALSE, FALSE, NULL::varchar
+    TRUE, FALSE, FALSE, 'https://trackmyshuttle.com/a/5799'::varchar
   )
 ) AS v(name, brief, hist, seasonal, ada, bike, tracker)
 WHERE NOT EXISTS (
@@ -52,6 +52,12 @@ UPDATE pois
 SET geometry = '{"type":"LineString","coordinates":[[-81.69876,41.49043],[-81.69897,41.48926],[-81.70010,41.48835],[-81.70078,41.48832],[-81.70238,41.48863],[-81.70404,41.48966],[-81.70463,41.49075],[-81.70416,41.49265],[-81.70277,41.49490],[-81.70202,41.49643],[-81.70326,41.49761],[-81.70568,41.49872]]}'::jsonb,
     updated_at = NOW()
 WHERE name = 'Harbor Hopper' AND 'water_taxi' = ANY(poi_roles) AND geometry IS NULL;
+
+-- 4. Backfill the Harbor Hopper live GPS tracker (TrackMyShuttle, linked from
+--    clevelandwatertaxi.com) for any DB seeded before the URL was known.
+UPDATE pois
+SET live_tracker_url = 'https://trackmyshuttle.com/a/5799', updated_at = NOW()
+WHERE name = 'Harbor Hopper' AND 'water_taxi' = ANY(poi_roles) AND live_tracker_url IS NULL;
 
 COMMENT ON COLUMN pois.is_seasonal      IS 'Service does not operate year-round (e.g. water taxis, closed in winter) (#28)';
 COMMENT ON COLUMN pois.is_ada_accessible IS 'POI/service is ADA-accessible (#28)';

@@ -121,7 +121,7 @@ Photos called for by the issue (East Bank dock signage; eLCee2 vs. Harbor Hopper
 
 1. ~~**Geometry source/accuracy**~~ **RESOLVED:** Coordinates are snapped to the Cuyahoga River `geometry` LineString already loaded in the ROTV database (river-role POI), so dock markers and route lines sit on the water exactly as OSM renders it. Approximate dock anchors from the issue (East Bank under Main Ave Bridge; West Bank near the Old River Bed; Harbor Hopper stops at Collision Bend, BrewDog, Main Ave) are matched to the nearest point on that river line.
 2. ~~**One POI vs. one-per-stop**~~ **RESOLVED:** One POI per service carrying the full route geometry.
-3. **Live tracker URL** — `live_tracker_url` is nullable; the "Live Tracker" button renders only when a URL is set. The real Harbor Hopper GPS-app URL could not be confirmed during spec research (web search tooling was degraded) and will be entered via admin edit once verified. eLCee2 likely has none.
+3. ~~**Live tracker URL**~~ **RESOLVED:** Harbor Hopper's live tracker is `https://trackmyshuttle.com/a/5799` (TrackMyShuttle, linked as "Taxi Tracker" from the official clevelandwatertaxi.com) — seeded in migration 062. eLCee2 is the free Cleveland Metroparks boat and has no commercial tracker, so its `live_tracker_url` stays NULL. The button is scheme-validated (http/https only) before rendering.
 
 ---
 
