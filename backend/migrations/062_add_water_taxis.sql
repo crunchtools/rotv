@@ -15,7 +15,7 @@ ALTER TABLE pois ADD COLUMN IF NOT EXISTS is_bike_friendly  BOOLEAN DEFAULT FALS
 ALTER TABLE pois ADD COLUMN IF NOT EXISTS live_tracker_url  VARCHAR(500);
 
 -- 2. Seed the two water taxi services. Each is one POI carrying the full route
---    as a dashed linear feature (geometry loaded by the companion JS script).
+--    as a dashed linear feature (route geometry is loaded in step 3 below).
 --    Guarded by NOT EXISTS on (name, water_taxi role) so re-runs are no-ops.
 INSERT INTO pois (name, poi_roles, brief_description, historical_description,
                   is_seasonal, is_ada_accessible, is_bike_friendly, live_tracker_url)
