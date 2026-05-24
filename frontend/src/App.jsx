@@ -106,6 +106,7 @@ function AppContent() {
 
   const [showTrails, setShowTrails] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
+  const [showWaterTaxis, setShowWaterTaxis] = useState(true);
   const [visibleBoundaries, setVisibleBoundaries] = useState(new Set()); // Set of boundary IDs
 
   const [mapState, setMapState] = useState({
@@ -893,6 +894,8 @@ function AppContent() {
           setShowTrails(true);
         } else if (linearFeature.poi_roles?.includes('river')) {
           setShowRivers(true);
+        } else if (linearFeature.poi_roles?.includes('water_taxi')) {
+          setShowWaterTaxis(true);
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
         return;
@@ -1005,6 +1008,8 @@ function AppContent() {
           setShowTrails(true);
         } else if (linearFeature.poi_roles?.includes('river')) {
           setShowRivers(true);
+        } else if (linearFeature.poi_roles?.includes('water_taxi')) {
+          setShowWaterTaxis(true);
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
         return;
@@ -2307,6 +2312,8 @@ function AppContent() {
           onToggleTrails={setShowTrails}
           showRivers={showRivers}
           onToggleRivers={setShowRivers}
+          showWaterTaxis={showWaterTaxis}
+          onToggleWaterTaxis={setShowWaterTaxis}
           visibleBoundaries={visibleBoundaries}
           onToggleBoundary={(id) => {
             const willEnable = !visibleBoundaries.has(id);

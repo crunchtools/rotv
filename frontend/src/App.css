@@ -11348,6 +11348,35 @@ body {
   color: #ff9800;
 }
 
+.poi-type-badge.water-taxi {
+  background: #e0f2f1;
+  color: #00695c;
+}
+
+/* Service attribute badges (seasonal / accessibility) — #28 */
+.service-badge {
+  display: inline-block;
+  padding: 0.3rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.service-badge.seasonal {
+  background: #fff8e1;
+  color: #b26a00;
+}
+
+.service-badge.ada {
+  background: #e3f2fd;
+  color: #1565c0;
+}
+
+.service-badge.bike {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+
 .poi-type-badge .poi-type-icon {
   width: 18px;
   height: 18px;
