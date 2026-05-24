@@ -6,6 +6,10 @@ import CellSignal from './CellSignal';
 import { getNavigationStops, getOwnerClass, formatCoordinate } from './helpers';
 
 function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, onCollectStatus }) {
+  // Fix: only honor http(s) tracker URLs so a stored javascript: URL can't run on click (PR #405 review)
+  const liveTrackerUrl = /^https?:\/\//i.test(destination.live_tracker_url || '')
+    ? destination.live_tracker_url
+    : null;
   return (
     <div className="view-container">
       <div className="view-scroll">
@@ -158,10 +162,10 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
         )}
         </div>
 
-        {destination.live_tracker_url && (
+        {liveTrackerUrl && (
           <div className="more-info-section">
             <a
-              href={destination.live_tracker_url}
+              href={liveTrackerUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="more-info-link live-tracker-link"

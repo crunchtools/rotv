@@ -15,11 +15,14 @@ Add a `water_taxi` POI role and four generic POI columns (seasonal, ADA, bike-fr
 
 ### Data Flow
 
-1. Migration `062_add_water_taxis.sql` adds the four columns and seeds the two POIs (idempotent).
-2. A companion `load-water-taxi-geometry.js` loads route `geometry` (LineString/MultiLineString) into the seeded POIs, mirroring `load-river-geometry.js`.
-3. The POI serializer returns the new columns; the map fetches POIs as today.
-4. `Map.jsx` styles `water_taxi`-role geometry as a dashed transit line and adds a "Water Taxis" legend toggle.
-5. The sidebar reads the new columns to render seasonal/accessibility badges and the Live Tracker button.
+1. Migration `062_add_water_taxis.sql` adds the four columns, seeds the two POIs, **and loads their route `geometry` inline** (idempotent).
+2. The `/api/linear-features` serializer returns the new columns and includes the `water_taxi` role; the map fetches it as today.
+3. `Map.jsx` styles `water_taxi`-role geometry as a dashed transit line and adds a "Water Taxis" legend toggle.
+4. The sidebar reads the new columns to render seasonal/accessibility badges and the Live Tracker button.
+
+### Geometry loading decision
+
+The river feature uses a separate `load-river-geometry.js` script (its OSM geometries are large KB-scale MultiLineStrings) run manually at deploy. We instead embed the two small water taxi LineStrings directly in the SQL migration because: (a) the geometry is tiny (7 and 12 points), and (b) the dev (`entrypoint.sh`, unix-socket) and prod (`rotv-init.sh`, systemd) startup paths run only the numbered `*.sql` migrations and connect differently — a JS loader would need wiring into both and would not run on a plain `run.sh start`. Embedding in SQL gives one source of truth that loads automatically everywhere, with no manual deploy step. Coordinates are sampled from the Cuyahoga River centerline already in the DB so the lines sit on the water.
 
 ---
 
@@ -36,14 +39,13 @@ Add a `water_taxi` POI role and four generic POI columns (seasonal, ADA, bike-fr
 ## Implementation Steps
 
 ### Phase 1: Backend / data
-- [ ] `backend/migrations/062_add_water_taxis.sql` — add 4 columns; seed eLCee2 + Harbor Hopper POIs with `water_taxi` role, descriptions, root notes, seasonal/accessibility flags, live_tracker_url.
-- [ ] `backend/migrations/load-water-taxi-geometry.js` — load dashed route GeoJSON into the seeded POIs (mirror `load-river-geometry.js`); GeoJSON files in `backend/data/water-taxis/`.
-- [ ] Add the 4 new columns to the POI serializer / queries so they reach the frontend.
+- [x] `backend/migrations/062_add_water_taxis.sql` — add 4 columns; seed eLCee2 + Harbor Hopper POIs with `water_taxi` role, descriptions, root notes, seasonal/accessibility flags, live_tracker_url; load route geometry inline (see Geometry loading decision).
+- [x] Add the 4 new columns to `/api/linear-features` and include `water_taxi` in its role filter.
 
 ### Phase 2: Frontend rendering
-- [ ] Add `water_taxi` styling branch in `Map.jsx` `getStyleForFeature` (dashed line, transit color).
-- [ ] Add a "Water Taxis" layer toggle to the legend (`showWaterTaxis` state + handler), and include `water_taxi` in the visibility predicate.
-- [ ] Icon/layer entry in `iconUtils.js` if a layer icon is shown.
+- [x] Add `water_taxi` styling branch in `Map.jsx` `getLinearFeatureStyle` (dashed line, transit color `#0E9E9E`).
+- [x] Add a "Water Taxis" layer toggle to the legend (`showWaterTaxis` state + handler), and include `water_taxi` in the visibility predicate.
+- [x] Add the `water-taxis` layer icon asset (`frontend/public/icons/layers/water-taxis.svg`). Layer icons render from `/icons/layers/<id>.svg`, so no `iconUtils.js` change is needed.
 
 ### Phase 3: Sidebar
 - [ ] Seasonal indicator + ADA / bike-friendly badges in the read-only sidebar view.
@@ -57,19 +59,18 @@ Add a `water_taxi` POI role and four generic POI columns (seasonal, ADA, bike-fr
 
 | File | Purpose |
 |------|---------|
-| `backend/migrations/062_add_water_taxis.sql` | Columns + POI seed |
-| `backend/migrations/load-water-taxi-geometry.js` | Load route geometry |
-| `backend/data/water-taxis/elcee2.geojson` | eLCee2 route line |
-| `backend/data/water-taxis/harbor-hopper.geojson` | Harbor Hopper route line(s) |
+| `backend/migrations/062_add_water_taxis.sql` | Columns + POI seed + inline route geometry |
+| `frontend/public/icons/layers/water-taxis.svg` | "Water Taxis" legend layer icon |
 
 ### Modified Files
 
 | File | Changes |
 |------|---------|
-| `backend/server.js` / POI route serializer | Return new columns |
-| `frontend/src/components/Map.jsx` | `water_taxi` style branch + "Water Taxis" legend toggle |
-| `frontend/src/utils/iconUtils.js` | Layer icon entry (if used) |
-| `frontend/src/components/sidebar/ReadOnlyView.jsx` | Seasonal/ADA/bike badges + Live Tracker button |
+| `backend/server.js` | `/api/linear-features` includes `water_taxi` role + new columns (also added to `/api/pois`) |
+| `frontend/src/components/Map.jsx` | `water_taxi` style branch + "Water Taxis" legend toggle + visibility wiring |
+| `frontend/src/App.jsx` | `showWaterTaxis` state/props; deep-link layer enable |
+| `frontend/src/App.css` | `water-taxi` badge + `service-badge` (seasonal/ADA/bike) styles |
+| `frontend/src/components/sidebar/ReadOnlyView.jsx` | Water Taxi/Seasonal/ADA/bike badges + scheme-validated Live Tracker button |
 
 ---
 
