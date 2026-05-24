@@ -17,17 +17,6 @@ function createGaugeIcon(label, active) {
   });
 }
 
-// Pans/zooms the map to the gauge currently shown in the River Levels carousel (#92)
-function GaugeFocuser({ activeGauge }) {
-  const map = useMap();
-  React.useEffect(() => {
-    if (!activeGauge || activeGauge.latitude == null || activeGauge.longitude == null) return;
-    const targetZoom = Math.max(map.getZoom(), 13);
-    map.flyTo([activeGauge.latitude, activeGauge.longitude], targetZoom, { animate: true, duration: 0.6 });
-  }, [activeGauge, map]);
-  return null;
-}
-
 function createTripStopIcon(n) {
   return L.divIcon({
     className: 'trip-stop-icon',
@@ -1571,7 +1560,9 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         })}
 
         <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />
-        <GaugeFocuser activeGauge={activeGauge} />
+        {/* GaugeFocuser removed — flyTo on gauge change cascades through
+            moveend → updateVisiblePois → poiNavigationList recompute →
+            currentPoiIndex update → ThumbnailCarousel remount */}
         <MapVisibilityHandler activeTab={activeTab} />
         <BoundsFitter boundsToFit={boundsToFit} fitNonce={fitNonce} />
         <MapBoundsTracker

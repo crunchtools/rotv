@@ -125,8 +125,9 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     const target = e.target;
     const isCarousel = target.closest('.thumbnail-carousel-wrapper, .thumbnail-carousel');
     const isNavButton = target.closest('.image-nav-btn');
+    const isGaugeCarousel = target.closest('.river-levels-tab');
 
-    if (isCarousel || isNavButton) {
+    if (isCarousel || isNavButton || isGaugeCarousel) {
       touchStartX.current = null;
       touchStartY.current = null;
       return;

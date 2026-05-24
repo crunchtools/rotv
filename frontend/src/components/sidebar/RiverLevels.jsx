@@ -27,23 +27,18 @@ function fmt(value, unit) {
   return `${Number(value).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`;
 }
 
-function GaugeCard({ gauge }) {
-  const [readings, setReadings] = useState(null);
+function GaugeCard({ gauge, cachedReadings }) {
+  const [readings, setReadings] = useState(cachedReadings ?? null);
   const [error, setError] = useState(false);
   const [metric, setMetric] = useState(
     gauge.latest?.discharge_cfs != null ? 'discharge_cfs' : 'gage_height_ft'
   );
 
   useEffect(() => {
-    let cancelled = false;
+    if (cachedReadings) { setReadings(cachedReadings); return; }
     setReadings(null);
     setError(false);
-    fetch(`/api/river-gauges/${gauge.id}/readings?days=7`)
-      .then(res => (res.ok ? res.json() : Promise.reject(new Error('fetch failed'))))
-      .then(data => { if (!cancelled) setReadings(data.readings || []); })
-      .catch(() => { if (!cancelled) setError(true); });
-    return () => { cancelled = true; };
-  }, [gauge.id]);
+  }, [gauge.id, cachedReadings]);
 
   const dischargeAvailable = readings
     ? readings.some(r => r.discharge_cfs != null)
@@ -52,7 +47,6 @@ function GaugeCard({ gauge }) {
     ? readings.some(r => r.gage_height_ft != null)
     : gauge.latest?.gage_height_ft != null;
 
-  // If the chosen metric has no data for this gauge, switch to the one that does.
   useEffect(() => {
     if (readings === null) return;
     if (metric === 'discharge_cfs' && !dischargeAvailable && heightAvailable) setMetric('gage_height_ft');
@@ -86,7 +80,7 @@ function GaugeCard({ gauge }) {
       </div>
 
       {error ? (
-        <p className="river-levels-empty">Couldn’t load readings.</p>
+        <p className="river-levels-empty">Couldn't load readings.</p>
       ) : readings === null ? (
         <p className="river-levels-empty">Loading…</p>
       ) : (
@@ -104,21 +98,34 @@ function RiverLevels({ poiId, onActiveGaugeChange }) {
   const [gauges, setGauges] = useState(null);
   const [index, setIndex] = useState(0);
   const touchStartX = useRef(null);
+  const readingsCache = useRef(new globalThis.Map());
+  const [cacheVersion, setCacheVersion] = useState(0);
 
   useEffect(() => {
     if (!poiId) return undefined;
     let cancelled = false;
+    readingsCache.current.clear();
+    setCacheVersion(0);
     fetch(`/api/pois/${poiId}/river-gauges`)
       .then(res => (res.ok ? res.json() : []))
       .then(data => {
         if (cancelled) return;
         setGauges(data);
-        // Focus a specific gauge if a map marker linked here with ?gauge=<id>
         const focusId = new URLSearchParams(window.location.search).get('gauge');
         if (focusId) {
           const i = data.findIndex(g => String(g.id) === String(focusId));
           if (i >= 0) setIndex(i);
         }
+        data.forEach(g => {
+          fetch(`/api/river-gauges/${g.id}/readings?days=7`)
+            .then(res => (res.ok ? res.json() : { readings: [] }))
+            .then(d => {
+              if (cancelled) return;
+              readingsCache.current.set(g.id, d.readings || []);
+              setCacheVersion(v => v + 1);
+            })
+            .catch(() => {});
+        });
       })
       .catch(() => { if (!cancelled) setGauges([]); });
     return () => { cancelled = true; };
@@ -160,8 +167,13 @@ function RiverLevels({ poiId, onActiveGaugeChange }) {
     return <div className="river-levels-tab"><p className="river-levels-empty">No gauge data yet for this river.</p></div>;
   }
 
-  const onTouchStart = (e) => { touchStartX.current = e.touches[0]?.clientX ?? null; };
+  const onTouchStart = (e) => {
+    e.stopPropagation();
+    touchStartX.current = e.touches[0]?.clientX ?? null;
+  };
+  const onTouchMove = (e) => { e.stopPropagation(); };
   const onTouchEnd = (e) => {
+    e.stopPropagation();
     if (touchStartX.current == null) return;
     const dx = (e.changedTouches[0]?.clientX ?? 0) - touchStartX.current;
     if (Math.abs(dx) > 40) go(dx < 0 ? 1 : -1);
@@ -169,30 +181,45 @@ function RiverLevels({ poiId, onActiveGaugeChange }) {
   };
 
   return (
-    <div className="river-levels-tab" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-      <p className="tab-subtitle">Official USGS gauge readings for kayakers</p>
+    <div className="river-levels-tab" onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
+      <div className="river-gauge-carousel-wrapper">
+        {count > 1 && (
+          <button
+            className="river-gauge-nav-arrow river-gauge-nav-prev"
+            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); go(-1); }}
+            onClick={(e) => { e.stopPropagation(); go(-1); }}
+            aria-label="Previous gauge"
+          >‹</button>
+        )}
+
+        <GaugeCard gauge={current} cachedReadings={readingsCache.current.get(current.id) ?? null} />
+
+        {count > 1 && (
+          <button
+            className="river-gauge-nav-arrow river-gauge-nav-next"
+            onTouchEnd={(e) => { e.preventDefault(); e.stopPropagation(); go(1); }}
+            onClick={(e) => { e.stopPropagation(); go(1); }}
+            aria-label="Next gauge"
+          >›</button>
+        )}
+      </div>
+
+      <p className="river-gauge-subtitle">Official USGS gauge readings for kayakers</p>
 
       {count > 1 && (
-        <div className="river-gauge-nav">
-          <button className="river-gauge-arrow" onClick={() => go(-1)} aria-label="Previous gauge">‹</button>
+        <div className="river-gauge-footer">
           <span className="river-gauge-pager">{safeIndex + 1} of {count} gauges</span>
-          <button className="river-gauge-arrow" onClick={() => go(1)} aria-label="Next gauge">›</button>
-        </div>
-      )}
-
-      <GaugeCard key={current.id} gauge={current} />
-
-      {count > 1 && (
-        <div className="river-gauge-dots" role="tablist" aria-label="Select gauge">
-          {gauges.map((g, i) => (
-            <button
-              key={g.id}
-              className={`river-gauge-dot-btn ${i === safeIndex ? 'active' : ''}`}
-              onClick={() => setIndex(i)}
-              aria-label={g.name || g.usgs_site_id}
-              aria-selected={i === safeIndex}
-            />
-          ))}
+          <div className="river-gauge-dots" role="tablist" aria-label="Select gauge">
+            {gauges.map((g, i) => (
+              <button
+                key={g.id}
+                className={`river-gauge-dot-btn ${i === safeIndex ? 'active' : ''}`}
+                onClick={() => setIndex(i)}
+                aria-label={g.name || g.usgs_site_id}
+                aria-selected={i === safeIndex}
+              />
+            ))}
+          </div>
         </div>
       )}
     </div>

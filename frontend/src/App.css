@@ -15153,29 +15153,35 @@ button.feedback-link-inline {
   animation: pulse-ring 1.5s ease-out infinite;
 }
 
-.river-levels-tab { padding: 0.5rem 0; }
+.river-levels-tab { padding: 0.25rem 0; }
+
+/* Carousel wrapper — positions the nav arrows over the gauge card */
+.river-gauge-carousel-wrapper {
+  position: relative;
+}
 .river-gauge-card {
   border: 1px solid var(--border-color, #ddd);
   border-radius: 8px;
-  padding: 0.75rem;
-  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  margin: 0;
 }
-.river-gauge-name { margin: 0 0 0.35rem; font-size: 1rem; }
+.river-gauge-name { margin: 0 0 0.25rem; font-size: 0.95rem; }
 .river-gauge-current {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 0.4rem;
-  margin-bottom: 0.5rem;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.9rem;
 }
 .river-gauge-value { font-weight: 700; color: #1e6fb8; }
 .river-gauge-sep { color: #999; }
-.river-gauge-time { color: #666; font-size: 0.85rem; }
-.river-gauge-metric-toggle { display: flex; gap: 0; margin-bottom: 0.5rem; }
+.river-gauge-time { color: #666; font-size: 0.8rem; }
+.river-gauge-metric-toggle { display: flex; gap: 0; margin-bottom: 0.35rem; }
 .river-gauge-metric-toggle button {
   flex: 1;
-  padding: 0.3rem 0.5rem;
-  font-size: 0.8rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.78rem;
   border: 1px solid var(--border-color, #ccc);
   background: #f6f6f6;
   cursor: pointer;
@@ -15184,36 +15190,54 @@ button.feedback-link-inline {
 .river-gauge-metric-toggle button:last-child { border-radius: 0 6px 6px 0; border-left: none; }
 .river-gauge-metric-toggle button.active { background: #1e6fb8; color: #fff; border-color: #1e6fb8; }
 .river-gauge-metric-toggle button:disabled { opacity: 0.4; cursor: not-allowed; }
-.river-gauge-link { display: inline-block; margin-top: 0.4rem; font-size: 0.85rem; }
+.river-gauge-link { display: inline-block; margin-top: 0.25rem; font-size: 0.8rem; }
 .river-levels-empty { color: #777; font-style: italic; padding: 0.5rem 0; }
 
-/* River Levels carousel nav */
-.river-gauge-nav {
+/* Nav arrows — flanking the gauge card like the photo nav arrows */
+.river-gauge-nav-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(128, 128, 128, 0.3);
+  border: none;
+  padding: 0;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-.river-gauge-arrow {
-  flex: 0 0 auto;
-  width: 2rem;
-  height: 2rem;
-  font-size: 1.4rem;
-  line-height: 1;
-  border: 1px solid var(--border-color, #ccc);
-  border-radius: 50%;
-  background: #fff;
-  color: #1e6fb8;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 300;
+  color: rgba(255, 255, 255, 0.9);
   cursor: pointer;
+  transition: background 0.2s;
+  z-index: 5;
+  line-height: 1;
 }
-.river-gauge-arrow:hover { background: #1e6fb8; color: #fff; border-color: #1e6fb8; }
-.river-gauge-pager { font-size: 0.85rem; color: #666; }
+.river-gauge-nav-arrow:hover { background: rgba(128, 128, 128, 0.5); }
+.river-gauge-nav-prev { left: 0; border-radius: 0 4px 4px 0; }
+.river-gauge-nav-next { right: 0; border-radius: 4px 0 0 4px; }
+
+/* Subtitle + pager below the card */
+.river-gauge-subtitle {
+  text-align: center;
+  font-size: 0.78rem;
+  color: #777;
+  font-style: italic;
+  margin: 0.4rem 0 0.15rem;
+}
+.river-gauge-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.1rem;
+}
+.river-gauge-pager { font-size: 0.8rem; color: #666; }
 .river-gauge-dots {
   display: flex;
   justify-content: center;
   gap: 0.4rem;
-  margin-top: 0.6rem;
 }
 .river-gauge-dot-btn {
   width: 9px;
