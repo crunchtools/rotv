@@ -1162,10 +1162,37 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     }
   };
 
+  // Fit the map to all water taxi routes (their geometry sits in the Flats).
+  const fitToWaterTaxis = useCallback(() => {
+    if (!onFitBounds || !linearFeatures) return;
+    let minLat = Infinity, minLng = Infinity, maxLat = -Infinity, maxLng = -Infinity;
+    for (const f of linearFeatures) {
+      if (!f.poi_roles?.includes('water_taxi') || !f.geometry) continue;
+      const b = getGeometryBounds(f.geometry);
+      if (!b) continue;
+      if (b.south < minLat) minLat = b.south;
+      if (b.west < minLng) minLng = b.west;
+      if (b.north > maxLat) maxLat = b.north;
+      if (b.east > maxLng) maxLng = b.east;
+    }
+    if (minLat === Infinity) {
+      if (defaultBounds) onFitBounds(defaultBounds);
+      return;
+    }
+    onFitBounds([[minLat, minLng], [maxLat, maxLng]]);
+  }, [linearFeatures, onFitBounds, defaultBounds]);
+
+  // Toggling the Water Taxis layer on zooms to its routes, matching POI-type behavior.
+  const handleToggleWaterTaxis = (next) => {
+    onToggleWaterTaxis(next);
+    if (next) fitToWaterTaxis();
+  };
+
   const handleShowAll = () => {
     if (onVisibleTypesChange) onVisibleTypesChange(new Set(allIconTypes));
     onToggleTrails(true);
     onToggleRivers(true);
+    onToggleWaterTaxis(true);
     fitToTypes(allIconTypes); // fit to every POI now shown
   };
 
@@ -1173,6 +1200,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     if (onVisibleTypesChange) onVisibleTypesChange(new Set());
     onToggleTrails(false);
     onToggleRivers(false);
+    onToggleWaterTaxis(false);
     if (onFitBounds && defaultBounds) onFitBounds(defaultBounds);
   };
 
@@ -1756,7 +1784,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         showRivers={showRivers}
         onToggleRivers={onToggleRivers}
         showWaterTaxis={showWaterTaxis}
-        onToggleWaterTaxis={onToggleWaterTaxis}
+        onToggleWaterTaxis={handleToggleWaterTaxis}
         visibleBoundaries={visibleBoundaries}
         onToggleBoundary={onToggleBoundary}
         onShowBoundaries={onShowBoundaries}
