@@ -116,15 +116,15 @@ function RiverLevels({ poiId, onActiveGaugeChange }) {
           const i = data.findIndex(g => String(g.id) === String(focusId));
           if (i >= 0) setIndex(i);
         }
-        data.forEach(g => {
+        Promise.all(data.map(g =>
           fetch(`/api/river-gauges/${g.id}/readings?days=7`)
             .then(res => (res.ok ? res.json() : { readings: [] }))
-            .then(d => {
-              if (cancelled) return;
-              readingsCache.current.set(g.id, d.readings || []);
-              setCacheVersion(v => v + 1);
-            })
-            .catch(() => {});
+            .then(d => ({ id: g.id, readings: d.readings || [] }))
+            .catch(() => ({ id: g.id, readings: [] }))
+        )).then(results => {
+          if (cancelled) return;
+          results.forEach(r => readingsCache.current.set(r.id, r.readings));
+          setCacheVersion(v => v + 1);
         });
       })
       .catch(() => { if (!cancelled) setGauges([]); });
