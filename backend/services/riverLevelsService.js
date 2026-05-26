@@ -163,7 +163,7 @@ export async function runRiverLevelsCollection(pool, options = {}) {
  */
 export async function getAllGaugesWithLatest(pool) {
   const { rows } = await pool.query(`
-    SELECT g.id, g.usgs_site_id, g.name, g.river_poi_id, g.latitude, g.longitude,
+    SELECT g.id, g.usgs_site_id, COALESCE(g.display_name, g.name) AS name, g.river_poi_id, g.latitude, g.longitude,
            p.name AS river_name,
            r.reading_time, r.gage_height_ft, r.discharge_cfs
     FROM river_gauges g
@@ -187,7 +187,7 @@ export async function getAllGaugesWithLatest(pool) {
  */
 export async function getGaugesForPoi(pool, poiId) {
   const { rows } = await pool.query(`
-    SELECT g.id, g.usgs_site_id, g.name, g.river_poi_id, g.latitude, g.longitude,
+    SELECT g.id, g.usgs_site_id, COALESCE(g.display_name, g.name) AS name, g.river_poi_id, g.latitude, g.longitude,
            r.reading_time, r.gage_height_ft, r.discharge_cfs
     FROM river_gauges g
     LEFT JOIN LATERAL (
