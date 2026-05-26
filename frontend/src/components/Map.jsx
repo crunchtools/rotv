@@ -7,6 +7,18 @@ import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
 
+// Escape user-supplied POI fields before interpolating them into tooltip HTML
+// strings passed to Leaflet's bindTooltip (which sets innerHTML). Prevents XSS
+// from admin-entered names/descriptions. (PR #415 review)
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // River gauge marker (#92): a labeled pin showing the latest discharge (cfs)
 function createGaugeIcon(label, active) {
   return L.divIcon({
@@ -842,7 +854,7 @@ function createViewSelectedIcon(iconUrl) {
   });
 }
 
-function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDragEnd, _mapMoveCount, hasSelection }) {
+function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDragEnd, _mapMoveCount }) {
   const markerRef = useRef(null);
   const map = useMap();
   const hoverTimerRef = useRef(null);
@@ -924,7 +936,9 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
     }
   };
 
-  const showTooltip = isSelected || !hasSelection;
+  // The selected POI has no on-map tooltip (its info is in the sidebar); every
+  // other POI still shows its hover tooltip, even while one is selected. (#409)
+  const showTooltip = !isSelected;
 
   useEffect(() => {
     if (markerRef.current) {
@@ -1436,7 +1450,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                   data={geojsonData}
                   style={() => ({
                     color: 'transparent',
-                    weight: 20,
+                    weight: 24,
                     fill: false,
                     opacity: 1
                   })}
@@ -1449,11 +1463,15 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                     });
 
                     if (!isSelected) {
+                      // Fix: glow the visible edge on hover via a CSS class instead of
+                      // shrinking the hit stroke. Shrinking it moved the cursor out of
+                      // the stroke (mouseout→mouseover loop) — the #409 flicker. The hit
+                      // width now stays constant (and is a touch wider for easier hover).
                       layer.on('mouseover', () => {
-                        layer.setStyle({ color: 'rgba(0, 102, 204, 0.35)', weight: 8 });
+                        document.querySelector(`.lf-vis-${feature.id}`)?.classList.add('map-hover');
                       });
                       layer.on('mouseout', () => {
-                        layer.setStyle({ color: 'transparent', weight: 20 });
+                        document.querySelector(`.lf-vis-${feature.id}`)?.classList.remove('map-hover');
                       });
                     }
 
@@ -1462,8 +1480,10 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                       handleLinearFeatureClick(feature);
                     });
 
-                    const hasAnySelection = (selectedDestination && (selectedDestination.geometry || selectedDestination.latitude)) || selectedLinearFeature;
-                    if (isSelected || !hasAnySelection) {
+                    // The SELECTED feature has no on-map tooltip (its info is in the
+                    // sidebar); every other feature still shows its hover tooltip, even
+                    // while one is selected, so the user can explore others. (#409)
+                    if (!isSelected) {
                       const hasImage = feature.has_primary_image;
                       const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
@@ -1471,37 +1491,35 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                       if (hasImage) {
                         tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                       }
-                      tooltipHtml += `<strong>${feature.name}</strong>`;
+                      tooltipHtml += `<strong>${escapeHtml(feature.name)}</strong>`;
                       if (feature.brief_description) {
-                        tooltipHtml += `<p>${feature.brief_description}</p>`;
+                        tooltipHtml += `<p>${escapeHtml(feature.brief_description)}</p>`;
                       }
                       tooltipHtml += '</div>';
 
                       layer.bindTooltip(tooltipHtml, {
-                        permanent: isSelected,
+                        permanent: false,
                         direction: 'auto',
                         offset: [0, 0],
-                        sticky: !isSelected,
-                        className: `destination-tooltip ${isSelected ? 'selected-tooltip' : ''}`
+                        sticky: true,
+                        className: 'destination-tooltip'
                       });
 
-                      if (!isSelected) {
-                        let hoverTimer = null;
-                        layer.on('tooltipopen', (e) => {
-                          const el = e.tooltip.getElement();
-                          if (el) el.style.opacity = '0';
-                          if (hoverTimer) clearTimeout(hoverTimer);
-                          hoverTimer = setTimeout(() => {
-                            e.tooltip.update();
-                            const el2 = e.tooltip.getElement();
-                            if (el2) el2.style.opacity = '0.95';
-                            hoverTimer = null;
-                          }, TOOLTIP_HOVER_DELAY);
-                        });
-                        layer.on('tooltipclose', () => {
-                          if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
-                        });
-                      }
+                      let hoverTimer = null;
+                      layer.on('tooltipopen', (e) => {
+                        const el = e.tooltip.getElement();
+                        if (el) el.style.opacity = '0';
+                        if (hoverTimer) clearTimeout(hoverTimer);
+                        hoverTimer = setTimeout(() => {
+                          e.tooltip.update();
+                          const el2 = e.tooltip.getElement();
+                          if (el2) el2.style.opacity = '0.95';
+                          hoverTimer = null;
+                        }, TOOLTIP_HOVER_DELAY);
+                      });
+                      layer.on('tooltipclose', () => {
+                        if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+                      });
                     }
                   }}
                 />
@@ -1514,6 +1532,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                       const el = layer.getElement();
                       if (el) {
                         el.style.pointerEvents = 'none';
+                        el.classList.add(`lf-vis-${feature.id}`); // hover-glow hook (#409)
                       }
                     });
                   }}
@@ -1529,7 +1548,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                 data={geojsonData}
                 style={() => ({
                   color: 'transparent',
-                  weight: 20,
+                  weight: 24,
                   opacity: 1
                 })}
                 onEachFeature={(geoFeature, layer) => {
@@ -1539,16 +1558,22 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                   });
 
                   if (!isSelected) {
+                    // Fix: glow the visible line on hover via a CSS class instead of
+                    // shrinking the hit stroke. Shrinking it moved the cursor out of
+                    // the stroke (mouseout→mouseover loop) — the #409 flicker. The hit
+                    // width now stays constant (and is a touch wider for easier hover).
                     layer.on('mouseover', () => {
-                      layer.setStyle({ color: 'rgba(0, 102, 204, 0.35)', weight: 8 });
+                      document.querySelector(`.lf-vis-${feature.id}`)?.classList.add('map-hover');
                     });
                     layer.on('mouseout', () => {
-                      layer.setStyle({ color: 'transparent', weight: 20 });
+                      document.querySelector(`.lf-vis-${feature.id}`)?.classList.remove('map-hover');
                     });
                   }
 
-                  const hasAnySelection = selectedDestination || selectedLinearFeature;
-                  if (isSelected || !hasAnySelection) {
+                  // The SELECTED feature has no on-map tooltip (its info is in the
+                  // sidebar); every other feature still shows its hover tooltip, even
+                  // while one is selected, so the user can explore others. (#409)
+                  if (!isSelected) {
                     const hasImage = feature.has_primary_image;
                     const imageUrl = hasImage ? `/api/pois/${feature.id}/thumbnail?size=medium` : null;
 
@@ -1556,39 +1581,37 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                     if (hasImage) {
                       tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                     }
-                    tooltipHtml += `<strong>${feature.name}</strong>`;
+                    tooltipHtml += `<strong>${escapeHtml(feature.name)}</strong>`;
                     if (feature.brief_description) {
-                      tooltipHtml += `<p>${feature.brief_description}</p>`;
+                      tooltipHtml += `<p>${escapeHtml(feature.brief_description)}</p>`;
                     }
                     if (feature.length_miles) {
-                      tooltipHtml += `<p class="trail-info">${feature.length_miles} miles${feature.difficulty ? ' • ' + feature.difficulty : ''}</p>`;
+                      tooltipHtml += `<p class="trail-info">${escapeHtml(feature.length_miles)} miles${feature.difficulty ? ' • ' + escapeHtml(feature.difficulty) : ''}</p>`;
                     }
                     tooltipHtml += '</div>';
 
                     layer.bindTooltip(tooltipHtml, {
-                      permanent: isSelected,
+                      permanent: false,
                       direction: 'auto',
                       offset: [0, 0],
-                      sticky: !isSelected,
-                      className: `destination-tooltip ${isSelected ? 'selected-tooltip' : ''}`
+                      sticky: true,
+                      className: 'destination-tooltip'
                     });
 
-                    if (!isSelected) {
-                      let hoverTimer = null;
-                      layer.on('tooltipopen', (e) => {
-                        const el = e.tooltip.getElement();
-                        if (el) el.style.opacity = '0';
-                        if (hoverTimer) clearTimeout(hoverTimer);
-                        hoverTimer = setTimeout(() => {
-                          const el2 = e.tooltip.getElement();
-                          if (el2) el2.style.opacity = '0.95';
-                          hoverTimer = null;
-                        }, TOOLTIP_HOVER_DELAY);
-                      });
-                      layer.on('tooltipclose', () => {
-                        if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
-                      });
-                    }
+                    let hoverTimer = null;
+                    layer.on('tooltipopen', (e) => {
+                      const el = e.tooltip.getElement();
+                      if (el) el.style.opacity = '0';
+                      if (hoverTimer) clearTimeout(hoverTimer);
+                      hoverTimer = setTimeout(() => {
+                        const el2 = e.tooltip.getElement();
+                        if (el2) el2.style.opacity = '0.95';
+                        hoverTimer = null;
+                      }, TOOLTIP_HOVER_DELAY);
+                    });
+                    layer.on('tooltipclose', () => {
+                      if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; }
+                    });
                   }
                 }}
               />
@@ -1601,6 +1624,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                     const el = layer.getElement();
                     if (el) {
                       el.style.pointerEvents = 'none';
+                      el.classList.add(`lf-vis-${feature.id}`); // hover-glow hook (#409)
                     }
                   });
                 }}
@@ -1677,7 +1701,6 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             onSelect={() => {}}
             mapMoveCount={mapMoveCount}
             onDragEnd={(d, lat, lng) => onPreviewCoordsChange({ lat, lng })}
-            hasSelection={true}
           />
         )}
 
@@ -1712,7 +1735,6 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
               onSelect={onSelectDestination}
               onDragEnd={isDraggable ? handleDrag : handleMarkerDragEnd}
               mapMoveCount={mapMoveCount}
-              hasSelection={!!((selectedDestination && (selectedDestination.geometry || selectedDestination.latitude)) || selectedLinearFeature)}
             />
           );
         })}
