@@ -11,8 +11,8 @@ export default function useBoatPosition() {
     const fetchPosition = () => {
       fetch('/api/water-taxi/position')
         .then(res => res.json())
-        .then(data => {
-          if (mounted) setBoatPosition(data.harbor_hopper || null);
+        .then(positions => {
+          if (mounted) setBoatPosition(positions.harbor_hopper || null);
         })
         .catch(() => {
           if (mounted) setBoatPosition(null);

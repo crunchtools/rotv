@@ -104,9 +104,9 @@ function connect() {
     console.log('[WaterTaxiTracker] Connected to TrackMyShuttle');
   });
 
-  socket.on(SERIAL_NUMBER, (data) => {
-    if (data.code !== 200 || !data.response) return;
-    updatePosition(data.response);
+  socket.on(SERIAL_NUMBER, (message) => {
+    if (message.code !== 200 || !message.response) return;
+    updatePosition(message.response);
   });
 
   socket.on('disconnect', (reason) => {
@@ -121,10 +121,10 @@ function connect() {
 async function checkSettingAndConnect() {
   if (!pool) return;
   try {
-    const result = await pool.query(
+    const setting = await pool.query(
       `SELECT value FROM admin_settings WHERE key = 'live_boat_tracker_enabled'`
     );
-    if (result.rows[0]?.value === 'false') {
+    if (setting.rows[0]?.value === 'false') {
       console.log('[WaterTaxiTracker] Disabled via admin setting — not connecting');
       return;
     }

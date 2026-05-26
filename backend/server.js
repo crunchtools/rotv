@@ -2920,8 +2920,14 @@ async function start() {
     console.error('Failed to initialize job scheduler:', error.message);
   }
 
-  startTracker(pool).catch(err =>
-    console.error('[WaterTaxiTracker] Failed to start:', err.message));
+  // CI/tests must never reach the live TrackMyShuttle service. The test env files
+  // set DISABLE_LIVE_BOAT_TRACKER=true so the tracker (and its boat marker, which
+  // otherwise renders as the first .leaflet-marker-icon and breaks POI-selection
+  // tests) stays off. Unset in prod, so the tracker runs there. (PR #417 review)
+  if (process.env.DISABLE_LIVE_BOAT_TRACKER !== 'true') {
+    startTracker(pool).catch(err =>
+      console.error('[WaterTaxiTracker] Failed to start:', err.message));
+  }
 
   activeSmtpServer = startSmtpServer(pool);
 
