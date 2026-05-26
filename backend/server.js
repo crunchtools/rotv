@@ -2920,8 +2920,13 @@ async function start() {
     console.error('Failed to initialize job scheduler:', error.message);
   }
 
-  startTracker(pool).catch(err =>
-    console.error('[WaterTaxiTracker] Failed to start:', err.message));
+  // Don't open the external TrackMyShuttle connection under test — its live,
+  // network-dependent boat marker renders as the first .leaflet-marker-icon and
+  // intermittently breaks POI-selection tests that click .first(). (PR #417 review)
+  if (process.env.NODE_ENV !== 'test') {
+    startTracker(pool).catch(err =>
+      console.error('[WaterTaxiTracker] Failed to start:', err.message));
+  }
 
   activeSmtpServer = startSmtpServer(pool);
 
