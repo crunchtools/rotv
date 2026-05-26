@@ -2820,6 +2820,7 @@ body {
   transition: all 0.15s ease;
   /* Allow the name to truncate within its grid column */
   min-width: 0;
+  max-width: 100%;
 }
 
 .boundary-chip.active {
@@ -2856,6 +2857,20 @@ body {
   /* Fill the grid column and truncate to fit instead of a fixed cap (#396 follow-up) */
   flex: 1;
   min-width: 0;
+}
+
+.touch-tooltip {
+  position: fixed;
+  transform: translateX(-50%);
+  background: #333;
+  color: #fff;
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10000;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .legend-toggle {
@@ -3666,6 +3681,14 @@ body {
   font-family: inherit;
   color: inherit;
   text-align: left;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.legend-icon-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .legend-icon-item:hover {
