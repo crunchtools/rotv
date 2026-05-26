@@ -7,6 +7,18 @@ import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
 
+// Escape user-supplied POI fields before interpolating them into tooltip HTML
+// strings passed to Leaflet's bindTooltip (which sets innerHTML). Prevents XSS
+// from admin-entered names/descriptions. (PR #415 review)
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // River gauge marker (#92): a labeled pin showing the latest discharge (cfs)
 function createGaugeIcon(label, active) {
   return L.divIcon({
@@ -1479,9 +1491,9 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                       if (hasImage) {
                         tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                       }
-                      tooltipHtml += `<strong>${feature.name}</strong>`;
+                      tooltipHtml += `<strong>${escapeHtml(feature.name)}</strong>`;
                       if (feature.brief_description) {
-                        tooltipHtml += `<p>${feature.brief_description}</p>`;
+                        tooltipHtml += `<p>${escapeHtml(feature.brief_description)}</p>`;
                       }
                       tooltipHtml += '</div>';
 
@@ -1569,12 +1581,12 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
                     if (hasImage) {
                       tooltipHtml += `<div class="tooltip-thumbnail"><img src="${imageUrl}" alt="" onerror="this.style.display='none';this.parentElement.style.display='none'" /></div>`;
                     }
-                    tooltipHtml += `<strong>${feature.name}</strong>`;
+                    tooltipHtml += `<strong>${escapeHtml(feature.name)}</strong>`;
                     if (feature.brief_description) {
-                      tooltipHtml += `<p>${feature.brief_description}</p>`;
+                      tooltipHtml += `<p>${escapeHtml(feature.brief_description)}</p>`;
                     }
                     if (feature.length_miles) {
-                      tooltipHtml += `<p class="trail-info">${feature.length_miles} miles${feature.difficulty ? ' • ' + feature.difficulty : ''}</p>`;
+                      tooltipHtml += `<p class="trail-info">${escapeHtml(feature.length_miles)} miles${feature.difficulty ? ' • ' + escapeHtml(feature.difficulty) : ''}</p>`;
                     }
                     tooltipHtml += '</div>';
 
