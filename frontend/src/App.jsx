@@ -7,6 +7,7 @@ import { useTrip } from './hooks/useTrip';
 import TripBuilder from './components/TripBuilder';
 import MyTripsModal from './components/MyTripsModal';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
+import useBoatPosition from './hooks/useBoatPosition';
 import Map from './components/Map';
 import Sidebar from './components/Sidebar';
 import NotificationBell from './components/NotificationBell';
@@ -107,6 +108,7 @@ function AppContent() {
   const [showTrails, setShowTrails] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [showWaterTaxis, setShowWaterTaxis] = useState(true);
+  const boatPosition = useBoatPosition();
   const [visibleBoundaries, setVisibleBoundaries] = useState(new Set()); // Set of boundary IDs
 
   const [mapState, setMapState] = useState({
@@ -2314,6 +2316,7 @@ function AppContent() {
           onToggleRivers={setShowRivers}
           showWaterTaxis={showWaterTaxis}
           onToggleWaterTaxis={setShowWaterTaxis}
+          boatPosition={boatPosition}
           visibleBoundaries={visibleBoundaries}
           onToggleBoundary={(id) => {
             const willEnable = !visibleBoundaries.has(id);
@@ -2458,6 +2461,7 @@ function AppContent() {
           initialSidebarTab={initialSidebarTab}
           onSidebarTabChange={(tab) => setInitialSidebarTab(null)}
           onActiveGaugeChange={setActiveGauge}
+          boatPosition={boatPosition}
         />
       </main>
       {showFeedbackForm && (

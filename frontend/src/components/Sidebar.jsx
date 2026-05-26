@@ -27,7 +27,7 @@ const SIDEBAR_TAB_LABELS = {
   river_levels: 'Water Levels',
 };
 
-function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange, onActiveGaugeChange }) {
+function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange, onActiveGaugeChange, boatPosition }) {
   const navigate = useNavigate();
 
   // Unified POI prop (spec 019). The sidebar takes a single `poi` plus
@@ -803,6 +803,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 moreInfoLink={linearFeature.more_info_link}
                 trailStatus={trailStatus}
                 onCollectStatus={handleCollectStatusInline}
+                boatPosition={boatPosition}
               />
             )
           )}
@@ -1091,6 +1092,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
               moreInfoLink={destination.more_info_link}
               trailStatus={trailStatus}
               onCollectStatus={handleCollectStatusInline}
+              boatPosition={boatPosition}
             />
           )
         )}

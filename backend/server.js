@@ -74,6 +74,7 @@ import { startSmtpServer, processNewsletterById } from './services/newsletterSer
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
 import { startMcpServer } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
+import { startTracker, stopTracker, getBoatPositions } from './services/waterTaxiTrackerService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -2058,6 +2059,10 @@ app.get('/api/river-gauges/:id/readings', async (req, res) => {
   }
 });
 
+app.get('/api/water-taxi/position', (_req, res) => {
+  res.json(getBoatPositions());
+});
+
 app.get('/api/trails/mtb', async (req, res) => {
   try {
     const includeStatus = req.query.includeStatus === 'true';
@@ -2915,6 +2920,9 @@ async function start() {
     console.error('Failed to initialize job scheduler:', error.message);
   }
 
+  startTracker(pool).catch(err =>
+    console.error('[WaterTaxiTracker] Failed to start:', err.message));
+
   activeSmtpServer = startSmtpServer(pool);
 
   if (process.env.MCP_ADMIN_TOKEN) {
@@ -2928,6 +2936,7 @@ async function start() {
 
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
+  stopTracker();
   if (activeSmtpServer) activeSmtpServer.close();
   await stopJobLogger();
   await stopJobScheduler();
@@ -2936,6 +2945,7 @@ process.on('SIGTERM', async () => {
 
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...');
+  stopTracker();
   if (activeSmtpServer) activeSmtpServer.close();
   await stopJobLogger();
   await stopJobScheduler();
