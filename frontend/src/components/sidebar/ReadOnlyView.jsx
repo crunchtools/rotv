@@ -5,7 +5,7 @@ import FavoriteToggle from '../FavoriteToggle';
 import CellSignal from './CellSignal';
 import { getNavigationStops, getOwnerClass, formatCoordinate } from './helpers';
 
-function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, onCollectStatus }) {
+function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, onCollectStatus, boatPosition }) {
   // Fix: only honor http(s) tracker URLs so a stored javascript: URL can't run on click (PR #405 review)
   const liveTrackerUrl = /^https?:\/\//i.test(destination.live_tracker_url || '')
     ? destination.live_tracker_url
@@ -175,6 +175,9 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
                 <path fill="currentColor" d="M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z" />
               </svg>
             </a>
+            <span className={`boat-status-badge ${boatPosition?.status === 'active' ? 'live' : boatPosition?.status === 'docked' ? 'docked' : 'offline'}`}>
+              {boatPosition?.status === 'active' ? 'Live' : boatPosition?.status === 'docked' ? 'Docked' : 'Offline'}
+            </span>
           </div>
         )}
 

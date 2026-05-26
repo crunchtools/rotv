@@ -29,6 +29,22 @@ function createGaugeIcon(label, active) {
   });
 }
 
+function createBoatIcon(heading, status) {
+  const color = status === 'docked' ? '#999' : '#0E9E9E';
+  return L.divIcon({
+    className: 'boat-marker-icon',
+    html: `<div class="boat-marker-inner" style="transform: rotate(${heading || 0}deg)">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 32" width="20" height="32">
+        <path fill="${color}" stroke="#fff" stroke-width="1" stroke-linejoin="round"
+          d="M10 1 L4 10 L3 24 L5 30 L10 32 L15 30 L17 24 L16 10 Z"/>
+        <line x1="10" y1="6" x2="10" y2="18" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
+      </svg>
+    </div>`,
+    iconSize: [20, 32],
+    iconAnchor: [10, 16],
+  });
+}
+
 function createTripStopIcon(n) {
   return L.divIcon({
     className: 'trip-stop-icon',
@@ -1024,7 +1040,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, showWaterTaxis, onToggleWaterTaxis, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, showWaterTaxis, onToggleWaterTaxis, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded, boatPosition }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
   // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
   // dual-role organization+boundary may be selected as a destination yet still
@@ -1650,6 +1666,18 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             </CircleMarker>
           ));
         })}
+
+        {showWaterTaxis && boatPosition && (
+          <Marker
+            position={[boatPosition.latitude, boatPosition.longitude]}
+            icon={createBoatIcon(boatPosition.heading, boatPosition.status)}
+            zIndexOffset={500}
+          >
+            <Tooltip direction="top" offset={[0, -14]}>
+              {boatPosition.status === 'docked' ? 'Harbor Hopper (Docked)' : 'Harbor Hopper (Live)'}
+            </Tooltip>
+          </Marker>
+        )}
 
         <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />
         {/* GaugeFocuser removed — flyTo on gauge change cascades through
