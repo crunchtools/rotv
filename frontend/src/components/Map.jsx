@@ -1690,6 +1690,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             position={[boatPosition.latitude, boatPosition.longitude]}
             icon={createBoatIcon(boatPosition.heading, boatPosition.status)}
             zIndexOffset={500}
+            keyboard={false}
           >
             <Tooltip direction="top" offset={[0, -14]}>
               {boatPosition.status === 'docked' ? 'Harbor Hopper (Docked)' : 'Harbor Hopper (Live)'}
