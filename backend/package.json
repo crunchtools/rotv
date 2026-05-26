@@ -39,6 +39,7 @@
     "playwright": "1.58.1",
     "sharp": "^0.33.5",
     "smtp-server": "^3.13.6",
+    "socket.io-client": "^2.5.0",
     "turndown": "^7.2.2",
     "zod": "^4.3.6"
   },
