@@ -18,9 +18,10 @@ import io from 'socket.io-client';
 
 const SOCKET_URL = 'https://socket.trackmyshuttle.com/';
 const TRACKER_PAGE = 'https://trackmyshuttle.com/a/5799';
-const ORG_KEY = 'f923d2d999391c15d4325a241635cc3b';
-const SERIAL_NUMBER = '78W113620299';
+const ORG_KEY = process.env.TMS_ORG_KEY || 'f923d2d999391c15d4325a241635cc3b';
+const SERIAL_NUMBER = process.env.TMS_SERIAL || '78W113620299';
 const ACTIVE_STALE_MS = 5 * 60 * 1000;
+const DOCKED_STALE_MS = 24 * 60 * 60 * 1000;
 
 const ACTIVE_EVENTS = new Set([
   'ON_PERIODIC', 'HEADING', 'IGN_ON', 'POLL', 'POWER_UP',
@@ -153,11 +154,10 @@ export function getBoatPositions() {
     return { harbor_hopper: null };
   }
 
-  if (position.status === 'active') {
-    const age = Date.now() - new Date(position.updated_at).getTime();
-    if (age > ACTIVE_STALE_MS) {
-      return { harbor_hopper: null };
-    }
+  const age = Date.now() - new Date(position.updated_at).getTime();
+  const threshold = position.status === 'active' ? ACTIVE_STALE_MS : DOCKED_STALE_MS;
+  if (age > threshold) {
+    return { harbor_hopper: null };
   }
 
   return {
@@ -166,7 +166,7 @@ export function getBoatPositions() {
       longitude: position.longitude,
       heading: position.heading,
       status: position.status,
-      updated_at: position.updated_at,
+      updatedAt: position.updated_at,
     },
   };
 }

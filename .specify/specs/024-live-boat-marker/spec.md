@@ -75,14 +75,13 @@ None.
     "latitude": 41.4958,
     "longitude": -81.7037,
     "heading": 180,
-    "speed": 5.2,
-    "updated_at": "2026-05-25T14:30:00Z",
-    "stale": false
+    "status": "active",
+    "updatedAt": "2026-05-25T14:30:00Z"
   }
 }
 ```
 
-When no position is available or the data is stale (> 5 min old):
+When no position is available or the data is stale (active >5 min, docked >24 hr):
 ```json
 {
   "harbor_hopper": null
