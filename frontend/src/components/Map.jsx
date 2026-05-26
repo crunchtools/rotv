@@ -373,6 +373,24 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef }) 
   return null;
 }
 
+// Pan/zoom the map to the active river gauge as the user steps through the
+// River Levels carousel (#92). The flyTo is wrapped in _isProgrammaticMove so
+// its moveend does NOT recompute visible POIs (see MapBoundsTracker, ~line 603)
+// — that cascade is what made the POI carousel reappear on every gauge switch
+// when GaugeFocuser was a bare flyTo.
+function GaugeFocuser({ activeGauge }) {
+  const map = useMap();
+  React.useEffect(() => {
+    if (!activeGauge || activeGauge.latitude == null || activeGauge.longitude == null) return;
+    const targetZoom = Math.max(map.getZoom(), 13);
+    map._isProgrammaticMove = true;
+    map.flyTo([activeGauge.latitude, activeGauge.longitude], targetZoom, { animate: true, duration: 0.6 });
+    const timer = setTimeout(() => { map._isProgrammaticMove = false; }, 700); // 600ms fly + buffer
+    return () => clearTimeout(timer);
+  }, [activeGauge, map]);
+  return null;
+}
+
 function MapVisibilityHandler({ activeTab }) {
   const map = useMap();
   const prevTab = useRef(activeTab);
@@ -1652,9 +1670,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         })}
 
         <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />
-        {/* GaugeFocuser removed — flyTo on gauge change cascades through
-            moveend → updateVisiblePois → poiNavigationList recompute →
-            currentPoiIndex update → ThumbnailCarousel remount */}
+        <GaugeFocuser activeGauge={activeGauge} />
         <MapVisibilityHandler activeTab={activeTab} />
         <BoundsFitter boundsToFit={boundsToFit} fitNonce={fitNonce} />
         <MapBoundsTracker
