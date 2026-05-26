@@ -202,12 +202,30 @@ function Legend({
   const [openSection, setOpenSection] = useState('poi');
   const toggleSection = (key) => setOpenSection(prev => (prev === key ? null : key));
 
+  const [touchTooltip, setTouchTooltip] = useState(null);
+  const touchTimerRef = useRef(null);
+
+  const handleTouchStart = useCallback((e, text) => {
+    touchTimerRef.current = setTimeout(() => {
+      const touch = e.touches[0];
+      setTouchTooltip({ text, x: touch.clientX, y: touch.clientY });
+    }, 500);
+  }, []);
+
+  const handleTouchEnd = useCallback(() => {
+    if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
+    setTouchTooltip(null);
+  }, []);
+
   const renderBoundaryChip = (boundary) => (
     <button
       key={boundary.id}
       className={`boundary-chip ${visibleBoundaries.has(boundary.id) ? 'active' : 'inactive'}`}
       onClick={() => onToggleBoundary(boundary.id)}
       title={boundary.name}
+      onTouchStart={(e) => handleTouchStart(e, boundary.name)}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
     >
       <span
         className="boundary-chip-color"
@@ -252,6 +270,10 @@ function Legend({
                     className={`legend-icon-item ${type.isActive ? 'active' : 'inactive'}`}
                     onClick={type.onToggle}
                     aria-pressed={type.isActive}
+                    title={type.label}
+                    onTouchStart={(e) => handleTouchStart(e, type.label)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchEnd}
                     type="button"
                   >
                     <img src={`/icons/layers/${type.id}.svg`} alt="" aria-hidden="true" />
@@ -266,6 +288,10 @@ function Legend({
                     className={`legend-icon-item ${isActive ? 'active' : 'inactive'}`}
                     onClick={() => onToggleType(type.id)}
                     aria-pressed={isActive}
+                    title={type.label}
+                    onTouchStart={(e) => handleTouchStart(e, type.label)}
+                    onTouchEnd={handleTouchEnd}
+                    onTouchMove={handleTouchEnd}
                     type="button"
                   >
                     {type.svg_content ? (
@@ -312,6 +338,11 @@ function Legend({
         </LegendSection>
 
       </div>
+      {touchTooltip && (
+        <div className="touch-tooltip" style={{ top: touchTooltip.y - 40, left: touchTooltip.x }}>
+          {touchTooltip.text}
+        </div>
+      )}
     </div>
   );
 }
