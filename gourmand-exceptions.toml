@@ -296,6 +296,13 @@ check = "single_use_helpers"
 path = "backend/services/riverLevelsService.js"
 justification = "parseUsgsResponse is a pure, side-effect-free parser unit-tested directly in tests/riverLevels.unit.test.js (USGS JSON → readings, no-data sentinel handling, timestamp merging). Gourmand only counts internal call sites, so the test caller is invisible — a false positive. Keeping the parse step separate from the network/DB I/O in runRiverLevelsCollection is what makes the parsing logic testable without mocking fetch or Postgres"
 
+# Single-use helpers - Water taxi tracker service (Socket.IO lifecycle phases)
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/waterTaxiTrackerService.js"
+justification = "Flagged seedFromPage, updatePosition, connect, and checkSettingAndConnect are discrete phases of the live-boat tracker lifecycle (#408): seedFromPage isolates the one-shot HTML scrape that primes the docked marker, connect isolates Socket.IO setup + reconnection wiring, updatePosition isolates the active/docked classification of an incoming GPS event, and checkSettingAndConnect isolates the admin-toggle gate. Inlining them into startTracker would collapse network seeding, socket lifecycle, event parsing, and feature-flag logic into one opaque function — the same discrete-phase rationale accepted for trailStatusService and newsService"
+
 # Single-use helpers - News service (batch collection orchestration)
 
 [[exceptions]]
