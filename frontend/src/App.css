@@ -2803,6 +2803,7 @@ body {
   /* Two-column grid to match the Points of Interest layout (#396 follow-up) */
   display: grid;
   grid-template-columns: 1fr 1fr;
+  justify-items: start;
   gap: 0.35rem;
 }
 
@@ -3646,6 +3647,7 @@ body {
 .legend-icons {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  justify-items: start;
   gap: 0.25rem;
   margin-bottom: 0.5rem;
 }
