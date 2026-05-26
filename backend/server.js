@@ -2920,10 +2920,13 @@ async function start() {
     console.error('Failed to initialize job scheduler:', error.message);
   }
 
-  // Don't open the external TrackMyShuttle connection under test — its live,
+  // Don't open the external TrackMyShuttle connection under test/dev — its live,
   // network-dependent boat marker renders as the first .leaflet-marker-icon and
-  // intermittently breaks POI-selection tests that click .first(). (PR #417 review)
-  if (process.env.NODE_ENV !== 'test') {
+  // intermittently breaks POI-selection tests that click .first(). The test
+  // container runs NODE_ENV=development (Containerfile default); prod sets
+  // 'production', so this fails open and the tracker still runs in prod.
+  // (PR #417 review)
+  if (process.env.NODE_ENV !== 'test' && process.env.NODE_ENV !== 'development') {
     startTracker(pool).catch(err =>
       console.error('[WaterTaxiTracker] Failed to start:', err.message));
   }
