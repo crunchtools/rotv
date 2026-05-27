@@ -1782,6 +1782,22 @@ body {
   margin: 0.25rem 0;
 }
 
+.poi-event-meta {
+  margin-top: 0.25rem;
+}
+
+/* Source-POI label on rolled-up boundary/org news & events (#406) */
+.poi-item-source {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: #4a7c23;
+  background: #eef4e6;
+  border-radius: 0.75rem;
+  padding: 0.05rem 0.5rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .sidebar-content {
   padding: 1.5rem;
 }

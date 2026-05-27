@@ -119,8 +119,10 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
         ) : events.map(item => (
         <div key={item.id} className={`poi-event-item ${item.event_type || 'program'}`}
              onClick={() => {
-               if (!poiName) return;
-               const poiSlug = generateSlug(poiName);
+               // Rolled-up items belong to a contained/owned POI — link to that POI's permalink (#406)
+               const sourceName = item.poi_name || poiName;
+               if (!sourceName) return;
+               const poiSlug = generateSlug(sourceName);
                const titleSlug = generateSlug(item.title);
                navigate(`/${poiSlug}/events/${titleSlug}`);
                if (onSelectEvent) onSelectEvent({ type: 'event', poiSlug, titleSlug });
@@ -148,6 +150,11 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
           {item.location_details && (
             <div className="poi-event-location">
               <strong>Location:</strong> {item.location_details}
+            </div>
+          )}
+          {item.poi_name && Number(item.poi_id) !== Number(poiId) && (
+            <div className="poi-event-meta">
+              <span className="poi-item-source">📍 {item.poi_name}</span>
             </div>
           )}
         </div>

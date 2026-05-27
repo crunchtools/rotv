@@ -75,6 +75,7 @@ import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from '
 import { startMcpServer } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 import { startTracker, stopTracker, getBoatPositions } from './services/waterTaxiTrackerService.js';
+import { getRollupPoiIds } from './services/geoService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1895,16 +1896,18 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
     const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
       ? rawTz
       : 'America/New_York';
+    // Roll up boundary/org POIs to include contained/owned POIs (#406)
+    const poiIds = await getRollupPoiIds(pool, id);
     const tabCountsQuery = await pool.query(`
       SELECT
         (SELECT COUNT(*) FROM poi_news n
-         WHERE n.poi_id = $1
+         WHERE n.poi_id = ANY($1)
            AND n.moderation_status IN ('published', 'auto_approved')) AS news_count,
         (SELECT COUNT(*) FROM poi_events e
-         WHERE e.poi_id = $1
+         WHERE e.poi_id = ANY($1)
            AND e.moderation_status IN ('published', 'auto_approved')
            AND (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date) AS events_count
-    `, [id, tz]);
+    `, [poiIds, tz]);
     // Guard against future refactor adding a FROM clause that could return 0 rows (PR #368 review)
     const row = tabCountsQuery.rows[0] || { news_count: 0, events_count: 0 };
     res.json({
@@ -1921,20 +1924,24 @@ app.get('/api/pois/:id/news', async (req, res) => {
   try {
     const { id } = req.params;
     const limit = parseInt(req.query.limit) || 50;
+    // Roll up boundary/org POIs to include contained/owned POIs (#406)
+    const poiIds = await getRollupPoiIds(pool, id);
     const newsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.publication_date, n.date_consensus_score, n.collection_date,
+             n.poi_id, src.name AS poi_name,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
-      WHERE n.poi_id = $1
+      LEFT JOIN pois src ON src.id = n.poi_id
+      WHERE n.poi_id = ANY($1)
         AND n.moderation_status IN ('published', 'auto_approved')
-      GROUP BY n.id
+      GROUP BY n.id, src.name
       ORDER BY
         COALESCE(n.publication_date, n.collection_date) DESC,
         n.collection_date DESC
       LIMIT $2
-    `, [id, limit]);
+    `, [poiIds, limit]);
     res.json(newsQuery.rows);
   } catch (error) {
     console.error('Error fetching POI news:', error);
@@ -1948,20 +1955,24 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const upcomingOnly = req.query.upcoming !== 'false';
     const limit = parseInt(req.query.limit) || 50;
     const tz = req.query.tz || 'America/New_York';
+    // Roll up boundary/org POIs to include contained/owned POIs (#406)
+    const poiIds = await getRollupPoiIds(pool, id);
     let query = `
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type, e.location_details, e.source_url, e.collection_date,
+             e.poi_id, src.name AS poi_name,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
-      WHERE e.poi_id = $1
+      LEFT JOIN pois src ON src.id = e.poi_id
+      WHERE e.poi_id = ANY($1)
         AND e.moderation_status IN ('published', 'auto_approved')
     `;
     if (upcomingOnly) {
       query += ` AND (e.start_date AT TIME ZONE $3)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $3)::date`;
     }
-    query += ` GROUP BY e.id ORDER BY e.start_date ASC LIMIT $2`;
+    query += ` GROUP BY e.id, src.name ORDER BY e.start_date ASC LIMIT $2`;
 
-    const eventsQuery = await pool.query(query, upcomingOnly ? [id, limit, tz] : [id, limit]);
+    const eventsQuery = await pool.query(query, upcomingOnly ? [poiIds, limit, tz] : [poiIds, limit]);
     res.json(eventsQuery.rows);
   } catch (error) {
     console.error('Error fetching POI events:', error);
