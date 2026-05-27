@@ -15068,13 +15068,25 @@ button.feedback-link-inline {
   padding: 0;
 }
 .notification-item {
-  display: flex;
-  gap: 0.6rem;
-  padding: 0.7rem 1rem;
   border-bottom: 1px solid #f0f0f0;
 }
 .notification-item.unread {
   background: #f3f8ee;
+}
+.notification-item-btn {
+  display: flex;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.7rem 1rem;
+  background: none;
+  border: none;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.notification-item-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
 }
 .notification-icon {
   flex-shrink: 0;
@@ -15082,13 +15094,7 @@ button.feedback-link-inline {
 .notification-title {
   font-size: 0.9rem;
   font-weight: 600;
-}
-.notification-title a {
   color: #2d5016;
-  text-decoration: none;
-}
-.notification-title a:hover {
-  text-decoration: underline;
 }
 .notification-meta {
   font-size: 0.78rem;

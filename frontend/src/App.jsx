@@ -944,15 +944,27 @@ function AppContent() {
       const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
         : selectedLinearFeature ? generateSlug(selectedLinearFeature.name) : null;
       if (currentSlug !== poiSlug) {
+        isLoadingFromUrlRef.current = true;
+        // Fix: open the permalink sidebar for organization (virtual) and linear
+        // POIs too, not just destinations — notification/shared links to org
+        // news & events were navigating but rendering nothing (#412)
         const destination = destinations.find(d => generateSlug(d.name) === poiSlug);
-        if (destination) {
-          isLoadingFromUrlRef.current = true;
-          setSelectedDestination(destination);
+        const virtualPoi = !destination && virtualPois.find(v => generateSlug(v.name) === poiSlug);
+        const linearFeature = !destination && !virtualPoi
+          && linearFeatures.find(f => generateSlug(f.name) === poiSlug);
+        const pointPoi = destination || virtualPoi;
+        if (pointPoi) {
+          setSelectedDestination(pointPoi);
           setSelectedLinearFeature(null);
           setActiveTab('view');
-          document.title = `${destination.name} | Roots of The Valley`;
-          setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+          document.title = `${pointPoi.name} | Roots of The Valley`;
+        } else if (linearFeature) {
+          setSelectedLinearFeature(linearFeature);
+          setSelectedDestination(null);
+          setActiveTab('view');
+          document.title = `${linearFeature.name} | Roots of The Valley`;
         }
+        setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
       }
       return;
     }

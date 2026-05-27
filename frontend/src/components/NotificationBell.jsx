@@ -1,28 +1,40 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { safeHttpUrl } from '../utils/url';
+import { generateSlug } from './sidebar/helpers';
 
 const POLL_MS = 60000;
-const LAST_SEEN_KEY = 'rotv-notifications-last-seen';
+const READ_KEY = 'rotv-notifications-read';
 
-function readLastSeen() {
+function readReadSet() {
   try {
-    return localStorage.getItem(LAST_SEEN_KEY) || new Date().toISOString();
+    const arr = JSON.parse(localStorage.getItem(READ_KEY) || '[]');
+    return new Set(Array.isArray(arr) ? arr : []);
   } catch {
-    return new Date().toISOString();
+    return new Set();
   }
 }
 
-function writeLastSeen(iso) {
+function writeReadSet(set) {
   try {
-    localStorage.setItem(LAST_SEEN_KEY, iso);
+    localStorage.setItem(READ_KEY, JSON.stringify([...set]));
   } catch {
     /* ignore */
   }
 }
 
 function timeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '';
+  const diff = Date.now() - ms;
+  // Future-dated items (upcoming events) read forward: "in 3d".
+  if (diff < 0) {
+    const mins = Math.floor(-diff / 60000);
+    if (mins < 60) return 'soon';
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `in ${hrs}h`;
+    return `in ${Math.floor(hrs / 24)}d`;
+  }
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return 'just now';
   if (mins < 60) return `${mins}m ago`;
@@ -32,41 +44,50 @@ function timeAgo(iso) {
 }
 
 function normalize(feed) {
+  // activityTime drives both ordering and the "time ago" label. Prefer the
+  // content's own date (publication for news, start for events) over the
+  // collection date, so the feed reads newest-published-first rather than in
+  // scrape order.
   const news = (feed.news || []).map(n => ({
     key: `news-${n.id}`,
     type: 'news',
     title: n.title,
     poiName: n.poi_name,
-    url: n.source_url,
-    activityTime: n.collection_date || n.publication_date
+    activityTime: n.publication_date || n.collection_date
   }));
   const events = (feed.events || []).map(e => ({
     key: `event-${e.id}`,
     type: 'event',
     title: e.title,
     poiName: e.poi_name,
-    url: e.source_url,
-    activityTime: e.collection_date || e.start_date
+    activityTime: e.start_date || e.collection_date
   }));
-  return [...news, ...events].sort(
-    (a, b) => new Date(b.activityTime) - new Date(a.activityTime)
+  // Sort newest-first. Coerce missing/invalid dates to 0 so they sort to the
+  // bottom rather than producing NaN comparisons (unstable order).
+  return [...news, ...events].sort((a, b) =>
+    (new Date(b.activityTime).getTime() || 0) - (new Date(a.activityTime).getTime() || 0)
   );
 }
 
 export default function NotificationBell() {
   const { isAuthenticated, favorites } = useAuth();
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
-  const [unread, setUnread] = useState(0);
+  const [readSet, setReadSet] = useState(readReadSet);
   const [open, setOpen] = useState(false);
-  const [lastSeen, setLastSeen] = useState(readLastSeen);
   const [anchorBottom, setAnchorBottom] = useState(null);
   const [anchorRight, setAnchorRight] = useState(null);
   const containerRef = useRef(null);
 
+  // Facebook-style: an item stays unread (tinted, counted) until the user clicks
+  // it. Opening the dropdown does not mark anything read.
+  const isUnread = useCallback((item) => !readSet.has(item.key), [readSet]);
+
+  const unread = items.filter(isUnread).length;
+
   const loadFeed = useCallback(async () => {
     if (!isAuthenticated && favorites.length === 0) {
       setItems([]);
-      setUnread(0);
       return;
     }
     try {
@@ -75,10 +96,7 @@ export default function NotificationBell() {
         : `/api/notifications/feed?pois=${favorites.join(',')}`;
       const res = await fetch(url, { credentials: 'include' });
       if (!res.ok) return;
-      const normalized = normalize(await res.json());
-      setItems(normalized);
-      const seen = readLastSeen();
-      setUnread(normalized.filter(i => new Date(i.activityTime) > new Date(seen)).length);
+      setItems(normalize(await res.json()));
     } catch (err) {
       /* keep last known state on transient failure */
     }
@@ -89,6 +107,19 @@ export default function NotificationBell() {
     const id = setInterval(loadFeed, POLL_MS);
     return () => clearInterval(id);
   }, [loadFeed]);
+
+  // Keep the read set bounded: drop keys no longer present in the feed.
+  useEffect(() => {
+    if (items.length === 0) return;
+    const liveKeys = new Set(items.map(i => i.key));
+    setReadSet(prev => {
+      const pruned = [...prev].filter(k => liveKeys.has(k));
+      if (pruned.length === prev.size) return prev;
+      const next = new Set(pruned);
+      writeReadSet(next);
+      return next;
+    });
+  }, [items]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -112,11 +143,23 @@ export default function NotificationBell() {
         setAnchorBottom(barRect.bottom);
         setAnchorRight(container.getBoundingClientRect().right - barRect.right);
       }
-      const now = new Date().toISOString();
-      writeLastSeen(now);
-      setLastSeen(now);
-      setUnread(0);
     }
+  };
+
+  const handleItemClick = (item) => {
+    setReadSet(prev => {
+      if (prev.has(item.key)) return prev;
+      const next = new Set(prev);
+      next.add(item.key);
+      writeReadSet(next);
+      return next;
+    });
+    const poiSlug = generateSlug(item.poiName);
+    const titleSlug = generateSlug(item.title);
+    if (poiSlug && titleSlug) {
+      navigate(`/${poiSlug}/${item.type === 'event' ? 'events' : 'news'}/${titleSlug}`);
+    }
+    setOpen(false);
   };
 
   return (
@@ -153,19 +196,21 @@ export default function NotificationBell() {
               {items.map(item => (
                 <li
                   key={item.key}
-                  className={`notification-item ${new Date(item.activityTime) > new Date(lastSeen) ? 'unread' : ''}`}
+                  className={`notification-item ${isUnread(item) ? 'unread' : ''}`}
                 >
-                  <span className="notification-icon">{item.type === 'event' ? '📅' : '📰'}</span>
-                  <div className="notification-body">
-                    <div className="notification-title">
-                      {safeHttpUrl(item.url) ? (
-                        <a href={safeHttpUrl(item.url)} target="_blank" rel="noopener noreferrer">{item.title}</a>
-                      ) : item.title}
+                  <button
+                    type="button"
+                    className="notification-item-btn"
+                    onClick={() => handleItemClick(item)}
+                  >
+                    <span className="notification-icon">{item.type === 'event' ? '📅' : '📰'}</span>
+                    <div className="notification-body">
+                      <div className="notification-title">{item.title}</div>
+                      <div className="notification-meta">
+                        {item.poiName} · {timeAgo(item.activityTime)}
+                      </div>
                     </div>
-                    <div className="notification-meta">
-                      {item.poiName} · {timeAgo(item.activityTime)}
-                    </div>
-                  </div>
+                  </button>
                 </li>
               ))}
             </ul>
