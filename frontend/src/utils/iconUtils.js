@@ -43,6 +43,24 @@ export function getDestinationIconTypeFromConfig(destination, iconConfig) {
   return 'default';
 }
 
+export function poiMatchesActivityForTypes(poi, visibleTypes, iconConfig) {
+  if (!iconConfig || iconConfig.length === 0) return false;
+  const poiActivities = (poi.primary_activities || '').toLowerCase();
+  if (!poiActivities) return false;
+
+  for (const icon of iconConfig) {
+    if (icon.enabled === false) continue;
+    if (!visibleTypes.has(icon.name)) continue;
+    if (!icon.activity_fallbacks) continue;
+
+    const fallbacks = icon.activity_fallbacks.split(',').map(a => a.trim().toLowerCase());
+    for (const fb of fallbacks) {
+      if (fb && matchesWholeWord(poiActivities, fb)) return true;
+    }
+  }
+  return false;
+}
+
 export function getIconUrlForPOI(poi, iconConfig, poiType) {
   if (poiType === 'trail') return '/icons/layers/trails.svg';
   if (poiType === 'river') return '/icons/layers/rivers.svg';

@@ -186,7 +186,8 @@ const ResultsTab = memo(function ResultsTab({
       const search = searchText.toLowerCase();
       filtered = filtered.filter(poi =>
         (poi.name || '').toLowerCase().includes(search) ||
-        (poi.brief_description || '').toLowerCase().includes(search)
+        (poi.brief_description || '').toLowerCase().includes(search) ||
+        (poi.primary_activities || '').toLowerCase().includes(search)
       );
     }
 
@@ -392,7 +393,7 @@ const ResultsTab = memo(function ResultsTab({
           <input
             type="text"
             className="results-search-input"
-            placeholder="Search by name or description..."
+            placeholder="Search by name, description, or activity..."
             value={searchText}
             onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
           />
@@ -495,7 +496,7 @@ const ResultsTab = memo(function ResultsTab({
         <input
           type="text"
           className="results-search-input"
-          placeholder="Search by name or description..."
+          placeholder="Search by name, description, or activity..."
           value={searchText}
           onChange={(e) => setSearchText(e.target.value)}
         />
