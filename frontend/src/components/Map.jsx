@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
-import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes } from '../utils/iconUtils';
+import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, matchesWholeWord } from '../utils/iconUtils';
 import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
@@ -1183,7 +1183,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         for (const icon of iconConfig) {
           if (icon.enabled === false || !icon.activity_fallbacks || icon.name === t) continue;
           const fbs = icon.activity_fallbacks.split(',').map(a => a.trim().toLowerCase());
-          if (fbs.some(fb => fb && poiActs.includes(fb))) {
+          if (fbs.some(fb => fb && matchesWholeWord(poiActs, fb))) {
             addToBounds(icon.name, lat, lng);
           }
         }

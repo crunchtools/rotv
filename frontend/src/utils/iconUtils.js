@@ -1,4 +1,4 @@
-function matchesWholeWord(text, keyword) {
+export function matchesWholeWord(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`\\b${escaped}\\b`, 'i');
   return regex.test(text);
