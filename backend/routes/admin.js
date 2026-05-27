@@ -1157,7 +1157,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.get('/icons', async (req, res) => {
     try {
       const iconRows = await pool.query(
-        'SELECT id, name, label, svg_filename, svg_content, title_keywords, activity_fallbacks, sort_order, enabled, drive_file_id FROM icons ORDER BY sort_order, name'
+        'SELECT id, name, label, svg_filename, svg_content, title_keywords, activity_fallbacks, sort_order, enabled, default_hidden, drive_file_id FROM icons ORDER BY sort_order, name'
       );
       res.json(iconRows.rows);
     } catch (error) {

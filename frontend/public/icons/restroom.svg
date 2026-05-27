@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <circle cx="16" cy="16" r="15" fill="#0277bd" stroke="white" stroke-width="2"/>
+  <line x1="16" y1="8" x2="16" y2="24" stroke="white" stroke-width="1.5"/>
+  <!-- figure left -->
+  <circle cx="11" cy="10.5" r="2" fill="white"/>
+  <path d="M11 13 L11 19 M8.5 15 L13.5 15 M9 24 L11 19 L13 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- figure right (dress) -->
+  <circle cx="21" cy="10.5" r="2" fill="white"/>
+  <path d="M21 13 L18.5 20 L23.5 20 Z M21 20 L19.5 24 M21 20 L22.5 24" fill="white" stroke="white" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -1098,9 +1098,10 @@ function AppContent() {
   const hasInitializedVisibleTypes = useRef(false);
   useEffect(() => {
     if (iconConfig && iconConfig.length > 0 && !hasInitializedVisibleTypes.current) {
+      // default_hidden types (e.g. amenities) stay in the legend but start toggled off
       const enabledTypes = new Set(
         iconConfig
-          .filter(icon => icon.enabled !== false)
+          .filter(icon => icon.enabled !== false && icon.default_hidden !== true)
           .map(icon => icon.name)
       );
       if (!enabledTypes.has('default')) {

@@ -120,6 +120,7 @@ export class BrowserOverloadError extends Error {
 import { searchNewsUrls } from './serperService.js';
 import { getDomainReputation } from './moderationService.js';
 import { loadListSetting } from './filterLists.js';
+import { classifyPoiType } from '../utils/poiClassify.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -1749,12 +1750,54 @@ function checkDomainOwnership(sourceUrl, currentPoiId, domainMap) {
   return null;
 }
 
+/**
+ * Drop POIs whose type is in news_collection_excluded_types (e.g. playground,
+ * restroom) — amenities that never have news/events (#418). Returns the surviving
+ * ids in input order.
+ *
+ * A POI is excluded if its name/activity classification is an excluded type, OR
+ * if its primary_activities directly include one of those types' activities. The
+ * second check is authoritative: name-keyword classification can misfire when a
+ * POI's name contains another type's keyword (e.g. "Ledge Lake Bath House" ->
+ * 'house' -> historic), but an explicit Restroom/Playground activity is certain.
+ */
+async function filterExcludedTypePois(pool, rows) {
+  const excludedTypes = (await loadListSetting(pool, 'news_collection_excluded_types'))
+    .filter(t => typeof t === 'string');
+  if (excludedTypes.length === 0) return rows.map(r => r.id);
+
+  const excluded = new Set(excludedTypes);
+  const iconConfig = (await pool.query(
+    'SELECT name, label, title_keywords, activity_fallbacks, enabled FROM icons ORDER BY sort_order, name'
+  )).rows;
+
+  // The label of each excluded type is its dedicated-amenity activity
+  // ('Playground', 'Restroom'). A POI is a dedicated amenity only when that is
+  // its SOLE activity — a full park that merely offers a playground (a
+  // multi-activity list) still collects news.
+  const dedicatedActivities = new Set(
+    iconConfig
+      .filter(icon => excluded.has(icon.name) && icon.label)
+      .map(icon => icon.label.trim().toLowerCase())
+  );
+
+  const isDedicatedAmenity = (primaryActivities) =>
+    dedicatedActivities.has((primaryActivities || '').trim().toLowerCase());
+
+  return rows
+    .filter(r =>
+      !excluded.has(classifyPoiType(r.name, r.primary_activities, iconConfig)) &&
+      !isDedicatedAmenity(r.primary_activities)
+    )
+    .map(r => r.id);
+}
+
 export async function getAllPoisForCollection(pool) {
   const excludedIds = (await loadListSetting(pool, 'news_collection_excluded_pois'))
     .filter(id => Number.isInteger(id));
 
   const collectionPoiRows = await pool.query(
-    `SELECT id FROM pois
+    `SELECT id, name, primary_activities FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
        AND poi_roles && ARRAY['point','organization','river']::text[]
        ${excludedIds.length > 0 ? 'AND id != ALL($1)' : ''}
@@ -1767,7 +1810,7 @@ export async function getAllPoisForCollection(pool) {
        name`,
     excludedIds.length > 0 ? [excludedIds] : []
   );
-  return collectionPoiRows.rows.map(r => r.id);
+  return filterExcludedTypePois(pool, collectionPoiRows.rows);
 }
 
 export async function getPoisForTierCollection(pool, tier) {
@@ -1788,7 +1831,7 @@ export async function getPoisForTierCollection(pool, tier) {
   }
 
   const tierPoiRows = await pool.query(
-    `SELECT id FROM pois
+    `SELECT id, name, primary_activities FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
        AND poi_roles && ARRAY['point','organization','river']::text[]
        AND collection_tier = $1
@@ -1802,7 +1845,7 @@ export async function getPoisForTierCollection(pool, tier) {
        name`,
     params
   );
-  return tierPoiRows.rows.map(r => r.id);
+  return filterExcludedTypePois(pool, tierPoiRows.rows);
 }
 
 export async function runTierNewsCollection(pool, tier, sheets = null) {
