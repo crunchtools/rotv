@@ -94,7 +94,7 @@ for (const feature of snapshot) {
          geom = EXCLUDED.geom,
          primary_activities = EXCLUDED.primary_activities,
          updated_at = CURRENT_TIMESTAMP
-       RETURNING (xmax = 0) AS is_insert`,
+       RETURNING (xmax = 0) AS is_insert`,  // xmax = 0 means a fresh INSERT; non-zero = ON CONFLICT UPDATE
       [name, feature.lat, feature.lon, meta.activity, description, feature.osm_id, moreInfoLink]
     );
     if (upsert.rows[0].is_insert) inserted++;

@@ -18,8 +18,10 @@ function matchesWholeWord(text, keyword) {
 
 /**
  * @param {string} name - POI name
- * @param {string} primaryActivities - comma-separated activities
+ * @param {string} primaryActivities - comma-separated activities (pois.primary_activities is TEXT)
  * @param {Array<{name:string,title_keywords?:string,activity_fallbacks?:string,enabled?:boolean}>} iconConfig
+ *   MUST be ordered by sort_order ascending (classification priority): the first
+ *   matching icon wins, so callers query `ORDER BY sort_order, name`.
  * @returns {string} icon/type name, or 'default'
  */
 export function classifyPoiType(name, primaryActivities, iconConfig) {
