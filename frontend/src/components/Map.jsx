@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
-import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
+import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, matchesWholeWord } from '../utils/iconUtils';
 import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
@@ -238,7 +238,7 @@ function Legend({
           <input
             type="text"
             className="search-input"
-            placeholder="Search destinations..."
+            placeholder="Search by name or activity..."
             value={searchQuery || ''}
             onChange={(e) => onSearchChange(e.target.value)}
           />
@@ -589,7 +589,7 @@ function ZoomTooltipHider() {
   return null;
 }
 
-function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery }) {
+function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery, iconConfig }) {
   const map = useMap();
   const search = (searchQuery || '').toLowerCase();
 
@@ -607,7 +607,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
           // While searching, destinations are already title-filtered upstream — count
           // them regardless of category; otherwise honor the category toggles.
           const iconType = getDestinationIconType(dest);
-          if (!search && !visibleTypes.has(iconType)) {
+          if (!search && !visibleTypes.has(iconType) && !poiMatchesActivityForTypes(dest, visibleTypes, iconConfig)) {
             return;
           }
 
@@ -672,7 +672,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
       }
     } catch {
     }
-  }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search]);
+  }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search, iconConfig]);
 
   useMapEvents({
     moveend: updateVisiblePois,
@@ -1160,26 +1160,37 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   // doesn't re-scan every POI on each click. Stored as [minLat,minLng,maxLat,maxLng].
   // (PR #401 review)
   const typeBoundsById = useMemo(() => {
-    // globalThis.Map: the bare name `Map` is this file's <Map> component, so
-    // `new Map()` would construct the component. (PR #401 review)
     const byType = new globalThis.Map();
-    for (const dest of destinations) {
-      if (!dest.latitude || !dest.longitude) continue;
-      const t = getDestinationIconType(dest);
-      const lat = parseFloat(dest.latitude);
-      const lng = parseFloat(dest.longitude);
-      const cur = byType.get(t);
+    const addToBounds = (type, lat, lng) => {
+      const cur = byType.get(type);
       if (!cur) {
-        byType.set(t, [lat, lng, lat, lng]);
+        byType.set(type, [lat, lng, lat, lng]);
       } else {
         if (lat < cur[0]) cur[0] = lat;
         if (lng < cur[1]) cur[1] = lng;
         if (lat > cur[2]) cur[2] = lat;
         if (lng > cur[3]) cur[3] = lng;
       }
+    };
+    for (const dest of destinations) {
+      if (!dest.latitude || !dest.longitude) continue;
+      const t = getDestinationIconType(dest);
+      const lat = parseFloat(dest.latitude);
+      const lng = parseFloat(dest.longitude);
+      addToBounds(t, lat, lng);
+      const poiActs = (dest.primary_activities || '').toLowerCase();
+      if (poiActs && iconConfig) {
+        for (const icon of iconConfig) {
+          if (icon.enabled === false || !icon.activity_fallbacks || icon.name === t) continue;
+          const fbs = icon.activity_fallbacks.split(',').map(a => a.trim().toLowerCase());
+          if (fbs.some(fb => fb && matchesWholeWord(poiActs, fb))) {
+            addToBounds(icon.name, lat, lng);
+          }
+        }
+      }
     }
     return byType;
-  }, [destinations, getDestinationIconType]);
+  }, [destinations, getDestinationIconType, iconConfig]);
 
   // Fit the map to all POIs of the given icon type(s), from cached per-type bounds.
   const fitToTypes = useCallback((typeIds) => {
@@ -1733,6 +1744,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           showWaterTaxis={showWaterTaxis}
           visibleBoundaries={visibleBoundaries}
           searchQuery={searchQuery}
+          iconConfig={iconConfig}
         />
         <MapMoveTracker onMapMove={() => setMapMoveCount(c => c + 1)} />
         <ZoomTooltipHider />
@@ -1774,7 +1786,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           // When a title search is active, App has already narrowed destinations to
           // name matches — show them regardless of the category toggles.
           const iconType = getDestinationIconType(dest);
-          if (!searchQuery && !visibleTypes.has(iconType)) return null;
+          if (!searchQuery && !visibleTypes.has(iconType) && !poiMatchesActivityForTypes(dest, visibleTypes, iconConfig)) return null;
 
           const isSelected = selectedDestination?.id === dest.id;
           const icon = getDestinationIcon(dest);

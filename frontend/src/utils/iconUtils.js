@@ -1,4 +1,4 @@
-function matchesWholeWord(text, keyword) {
+export function matchesWholeWord(text, keyword) {
   const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const regex = new RegExp(`\\b${escaped}\\b`, 'i');
   return regex.test(text);
@@ -41,6 +41,24 @@ export function getDestinationIconTypeFromConfig(destination, iconConfig) {
   }
 
   return 'default';
+}
+
+export function poiMatchesActivityForTypes(poi, visibleTypes, iconConfig) {
+  if (!iconConfig || iconConfig.length === 0) return false;
+  const poiActivities = (poi.primary_activities || '').toLowerCase();
+  if (!poiActivities) return false;
+
+  for (const icon of iconConfig) {
+    if (icon.enabled === false) continue;
+    if (!visibleTypes.has(icon.name)) continue;
+    if (!icon.activity_fallbacks) continue;
+
+    const fallbacks = icon.activity_fallbacks.split(',').map(a => a.trim().toLowerCase());
+    for (const fb of fallbacks) {
+      if (fb && matchesWholeWord(poiActivities, fb)) return true;
+    }
+  }
+  return false;
 }
 
 export function getIconUrlForPOI(poi, iconConfig, poiType) {

@@ -1246,9 +1246,11 @@ function AppContent() {
     }
 
     if (activeFilters.search) {
-      // Title-only match: typing a name shows only items whose title contains it.
       const searchLower = activeFilters.search.toLowerCase();
-      filtered = filtered.filter(d => d.name?.toLowerCase().includes(searchLower));
+      filtered = filtered.filter(d =>
+        d.name?.toLowerCase().includes(searchLower) ||
+        (d.primary_activities || '').toLowerCase().includes(searchLower)
+      );
     }
 
     setFilteredDestinations(filtered);
