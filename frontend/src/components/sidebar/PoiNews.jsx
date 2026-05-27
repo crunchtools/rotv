@@ -103,8 +103,10 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
         ) : news.map(item => (
         <div key={item.id} className={`poi-news-item ${item.news_type || 'general'}`}
              onClick={() => {
-               if (!poiName) return;
-               const poiSlug = generateSlug(poiName);
+               // Rolled-up items belong to a contained/owned POI — link to that POI's permalink (#406)
+               const sourceName = item.poi_name || poiName;
+               if (!sourceName) return;
+               const poiSlug = generateSlug(sourceName);
                const titleSlug = generateSlug(item.title);
                navigate(`/${poiSlug}/news/${titleSlug}`);
                if (onSelectNews) onSelectNews({ type: 'news', poiSlug, titleSlug });
@@ -132,6 +134,9 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
           )}
           {item.summary && <p className="poi-news-summary">{item.summary}</p>}
           <div className="poi-news-meta">
+            {item.poi_name && Number(item.poi_id) !== Number(poiId) && (
+              <span className="poi-item-source">📍 {item.poi_name}</span>
+            )}
             {item.source_name && <span className="news-source">{item.source_name}</span>}
           </div>
         </div>
