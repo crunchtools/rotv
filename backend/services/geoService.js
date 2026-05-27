@@ -77,7 +77,8 @@ export async function getRollupPoiIds(pool, poiId) {
        FROM pois WHERE id = $1`,
       [id]
     );
-    if (targetQuery.rows.length === 0) return [id];
+    // Fix: non-existent POI rolls up to nothing, consistent with the invalid-input path (PR #424 review)
+    if (targetQuery.rows.length === 0) return [];
     target = targetQuery.rows[0];
   } catch (err) {
     console.warn(`[Geo] Rollup target lookup failed for POI ${id}: ${err.message}`);
@@ -114,27 +115,30 @@ export async function getRollupPoiIds(pool, poiId) {
 
   if (boundarySourceIds.length > 0) {
     try {
+      // Two index-friendly paths instead of one all-POIs CTE (PR #424 review):
+      // point POIs join directly on the indexed `geom` column (uses idx_pois_geom);
+      // linear features parse GeoJSON only for the small trail/boundary/river subset.
       const containedQuery = await pool.query(
         `WITH boundaries AS (
            SELECT boundary_geom FROM pois
            WHERE id = ANY($1)
              AND 'boundary' = ANY(poi_roles)
              AND boundary_geom IS NOT NULL
-         ),
-         candidate AS (
-           SELECT p.id,
-             CASE
-               WHEN 'point' = ANY(p.poi_roles) AND p.geom IS NOT NULL THEN p.geom
-               WHEN p.poi_roles && ARRAY['trail','boundary','river']::text[] AND p.geometry IS NOT NULL THEN
-                 ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(p.geometry::text), 1))
-               ELSE NULL
-             END AS pt
-           FROM pois p
-           WHERE (p.deleted IS NULL OR p.deleted = FALSE)
          )
-         SELECT DISTINCT c.id
-         FROM candidate c
-         JOIN boundaries b ON c.pt IS NOT NULL AND ST_Contains(b.boundary_geom, c.pt)`,
+         SELECT p.id
+         FROM pois p
+         JOIN boundaries b ON ST_Contains(b.boundary_geom, p.geom)
+         WHERE 'point' = ANY(p.poi_roles)
+           AND p.geom IS NOT NULL
+           AND (p.deleted IS NULL OR p.deleted = FALSE)
+         UNION
+         SELECT p.id
+         FROM pois p
+         JOIN boundaries b
+           ON ST_Contains(b.boundary_geom, ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(p.geometry::text), 1)))
+         WHERE p.poi_roles && ARRAY['trail','boundary','river']::text[]
+           AND p.geometry IS NOT NULL
+           AND (p.deleted IS NULL OR p.deleted = FALSE)`,
         [boundarySourceIds]
       );
       containedQuery.rows.forEach(row => { if (Number.isInteger(row.id)) ids.add(row.id); });
