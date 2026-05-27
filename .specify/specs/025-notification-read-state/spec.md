@@ -30,12 +30,13 @@ Fixes #412.
 
 Acceptance Criteria:
 - [ ] Opening the bell does NOT mark all items read and does NOT clear the badge.
-- [ ] Each unread item is visually tinted; clicking an item removes its tint.
+- [ ] Every notification is tinted until the user clicks it; clicking removes its
+      tint (Facebook-style — viewing the list is not "reading").
 - [ ] The unread badge count equals the number of not-yet-clicked items and
       decrements by one as each item is read.
 - [ ] Read state persists across reloads (localStorage).
-- [ ] Existing users are not flooded: items already present at first use of the
-      new behavior are treated as read (baseline), only genuinely new items count.
+- [ ] The read set is pruned to items still present in the feed so storage stays
+      bounded.
 
 **US-025-2: Newest publication date first**
 > As a follower of places, I want notifications ordered by when the content was
@@ -71,8 +72,7 @@ No schema changes. Read state lives entirely in browser `localStorage`.
 
 | Key | Description |
 |-----|-------------|
-| `rotv-notifications-last-seen` | Existing key, repurposed as the **baseline** timestamp set once on first load; items older than this are implicitly read. |
-| `rotv-notifications-read` | New key: JSON array of read item keys (e.g. `["news-12","event-5"]`). |
+| `rotv-notifications-read` | JSON array of read item keys (e.g. `["news-12","event-5"]`). An item is unread iff its key is not in this set. The legacy `rotv-notifications-last-seen` key is no longer used. |
 
 ---
 

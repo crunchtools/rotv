@@ -17,14 +17,14 @@ mark-all-read model with a per-item read set in localStorage, and change the
 
 ### Data Flow
 
-1. On mount, ensure a baseline `last-seen` timestamp exists in localStorage
-   (write `now` once if absent). Items older than the baseline are implicitly read.
-2. Load the read set (`rotv-notifications-read`) — a JSON array of item keys.
-3. `loadFeed()` fetches `/api/notifications/feed`, normalizes, sorts by
-   publication/start date, prunes the read set to current keys, and computes
-   `unread` = items newer than baseline AND not in the read set.
-4. Clicking an item adds its key to the read set, persists it, and recomputes
-   unread/tint. Opening the dropdown no longer mutates read state.
+1. Load the read set (`rotv-notifications-read`) — a JSON array of item keys.
+2. `loadFeed()` fetches `/api/notifications/feed`, normalizes, and sorts by
+   publication/start date. A separate effect prunes the read set to keys still
+   present in the feed.
+3. `unread` = items whose key is not in the read set. Opening the dropdown does
+   not mutate read state.
+4. Clicking an item adds its key to the read set, persists it, navigates to the
+   in-app permalink, and closes the dropdown.
 
 ---
 
@@ -46,12 +46,12 @@ mark-all-read model with a per-item read set in localStorage, and change the
 
 ### Phase 2: Per-item read state
 
-- [ ] Add read-set helpers (read/write/prune) for `rotv-notifications-read`.
-- [ ] Ensure baseline `last-seen` is written once on mount.
-- [ ] Compute `unread` from baseline + read set; recompute in `loadFeed()`.
+- [ ] Add read-set helpers (read/write) for `rotv-notifications-read`.
+- [ ] Compute `unread` purely from the read set (item unread iff not in set).
+- [ ] Prune the read set to live feed keys in an effect.
 - [ ] Add per-item click handler that marks read and navigates.
 - [ ] Remove the mark-all-read / `setUnread(0)` logic from `handleToggle`.
-- [ ] Drive `.unread` tint from the read set instead of `lastSeen` alone.
+- [ ] Drive `.unread` tint from the read set.
 
 ### Phase 3: In-app permalink navigation
 
@@ -100,7 +100,7 @@ mark-all-read model with a per-item read set in localStorage, and change the
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Existing users see a large unread count on upgrade | Low | Baseline timestamp treats pre-existing items as read. |
+| Existing users see all current items tinted on upgrade | Low | Intended Facebook-style behavior; badge caps at "9+"; feed is bounded to recent items. |
 | `localStorage` unavailable (private mode) | Low | All access wrapped in try/catch; falls back to in-memory. |
 | Read set growth | Low | Pruned to current feed keys each load. |
 
