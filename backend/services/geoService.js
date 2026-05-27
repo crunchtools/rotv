@@ -135,7 +135,7 @@ export async function getRollupPoiIds(pool, poiId) {
          SELECT p.id
          FROM pois p
          JOIN boundaries b
-           ON ST_Contains(b.boundary_geom, ST_PointOnSurface(ST_GeomFromGeoJSON(p.geometry::text)))
+           ON ST_Contains(b.boundary_geom, ST_PointOnSurface(ST_GeomFromGeoJSON(p.geometry)))
          WHERE p.poi_roles && ARRAY['trail','boundary','river']::text[]
            AND p.geometry IS NOT NULL
            AND (p.deleted IS NULL OR p.deleted = FALSE)`,
