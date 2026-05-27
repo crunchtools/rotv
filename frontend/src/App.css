@@ -2812,6 +2812,7 @@ body {
   align-items: center;
   gap: 0.35rem;
   padding: 0.25rem 0.5rem;
+  user-select: none;
   border-radius: 12px;
   font-size: 0.75rem;
   cursor: pointer;
@@ -3672,6 +3673,7 @@ body {
   align-items: center;
   gap: 0.35rem;
   font-size: 0.75rem;
+  user-select: none;
   padding: 0.2rem 0.3rem;
   border-radius: 4px;
   cursor: pointer;

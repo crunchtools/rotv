@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
@@ -205,27 +206,19 @@ function Legend({
   const [touchTooltip, setTouchTooltip] = useState(null);
   const touchTimerRef = useRef(null);
 
-  const handleTouchStart = useCallback((e, text) => {
-    touchTimerRef.current = setTimeout(() => {
-      const touch = e.touches[0];
-      setTouchTooltip({ text, x: touch.clientX, y: touch.clientY });
-    }, 500);
-  }, []);
-
-  const handleTouchEnd = useCallback(() => {
-    if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
-    setTouchTooltip(null);
+  const showTapTooltip = useCallback((e, text) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    setTouchTooltip({ text, x: rect.left + rect.width / 2, y: rect.top });
+    touchTimerRef.current = setTimeout(() => setTouchTooltip(null), 2500);
   }, []);
 
   const renderBoundaryChip = (boundary) => (
     <button
       key={boundary.id}
       className={`boundary-chip ${visibleBoundaries.has(boundary.id) ? 'active' : 'inactive'}`}
-      onClick={() => onToggleBoundary(boundary.id)}
+      onClick={(e) => { onToggleBoundary(boundary.id); showTapTooltip(e, boundary.name); }}
       title={boundary.name}
-      onTouchStart={(e) => handleTouchStart(e, boundary.name)}
-      onTouchEnd={handleTouchEnd}
-      onTouchMove={handleTouchEnd}
     >
       <span
         className="boundary-chip-color"
@@ -268,12 +261,9 @@ function Legend({
                   <button
                     key={type.id}
                     className={`legend-icon-item ${type.isActive ? 'active' : 'inactive'}`}
-                    onClick={type.onToggle}
+                    onClick={(e) => { type.onToggle(); showTapTooltip(e, type.label); }}
                     aria-pressed={type.isActive}
                     title={type.label}
-                    onTouchStart={(e) => handleTouchStart(e, type.label)}
-                    onTouchEnd={handleTouchEnd}
-                    onTouchMove={handleTouchEnd}
                     type="button"
                   >
                     <img src={`/icons/layers/${type.id}.svg`} alt="" aria-hidden="true" />
@@ -286,12 +276,9 @@ function Legend({
                   <button
                     key={type.id}
                     className={`legend-icon-item ${isActive ? 'active' : 'inactive'}`}
-                    onClick={() => onToggleType(type.id)}
+                    onClick={(e) => { onToggleType(type.id); showTapTooltip(e, type.label); }}
                     aria-pressed={isActive}
                     title={type.label}
-                    onTouchStart={(e) => handleTouchStart(e, type.label)}
-                    onTouchEnd={handleTouchEnd}
-                    onTouchMove={handleTouchEnd}
                     type="button"
                   >
                     {type.svg_content ? (
@@ -338,10 +325,11 @@ function Legend({
         </LegendSection>
 
       </div>
-      {touchTooltip && (
+      {touchTooltip && createPortal(
         <div className="touch-tooltip" style={{ top: touchTooltip.y - 40, left: touchTooltip.x }}>
           {touchTooltip.text}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
