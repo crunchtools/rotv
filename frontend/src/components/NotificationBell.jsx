@@ -24,7 +24,9 @@ function writeReadSet(set) {
 }
 
 function timeAgo(iso) {
-  const diff = Date.now() - new Date(iso).getTime();
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return '';
+  const diff = Date.now() - ms;
   // Future-dated items (upcoming events) read forward: "in 3d".
   if (diff < 0) {
     const mins = Math.floor(-diff / 60000);
