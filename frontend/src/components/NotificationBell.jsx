@@ -60,8 +60,10 @@ function normalize(feed) {
     poiName: e.poi_name,
     activityTime: e.start_date || e.collection_date
   }));
-  return [...news, ...events].sort(
-    (a, b) => new Date(b.activityTime) - new Date(a.activityTime)
+  // Sort newest-first. Coerce missing/invalid dates to 0 so they sort to the
+  // bottom rather than producing NaN comparisons (unstable order).
+  return [...news, ...events].sort((a, b) =>
+    (new Date(b.activityTime).getTime() || 0) - (new Date(a.activityTime).getTime() || 0)
   );
 }
 
