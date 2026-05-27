@@ -1,0 +1,21 @@
+{
+  "name": "Roots of The Valley",
+  "short_name": "ROTV",
+  "description": "Explore the rich history and natural beauty of Cuyahoga Valley National Park.",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#2d5016",
+  "background_color": "#f5f5f5",
+  "icons": [
+    {
+      "src": "/brand/rotv-favicon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/brand/rotv-favicon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
