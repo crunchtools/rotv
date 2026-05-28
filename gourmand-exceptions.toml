@@ -310,6 +310,13 @@ check = "single_use_helpers"
 path = "backend/services/newsService.js"
 justification = "Flagged helpers include several false positives — resetJobUsage, createNewsCollectionJob, processNewsCollectionJob, getAllPoisForCollection, getPoisForTierCollection are all exported and called from routes/admin.js, server.js, or mcpServer.js (gourmand only sees internal call sites). isNoiseLink is re-exported and used by tests/deterministicLinks.experiment.js. Remaining internals (classifyPage, itemCount, buildEventPrompt, buildNewsPrompt, normalizeNewsTitle) are discrete LLM-prompt-construction phases whose names document which Gemini call they prepare"
 
+# Single-use helpers - OSM POI match generator (discrete matching pipeline stages)
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/migrations/generate-osm-matches.js"
+justification = "Flagged jaccard, isContained, distanceMeters, maxDistance, fetchCandidates are discrete, individually-reasoned stages of the curated-POI->OSM matcher (#7). jaccard (token-set similarity) and isContained (subset name match) are the two name-similarity primitives; distanceMeters is a standard haversine; maxDistance encodes the name-confidence->allowed-radius policy that prevents proximity-only false matches (a shoe store inheriting a neighbouring cafe's hours); fetchCandidates isolates the Overpass HTTP/QL I/O from the pure matching loop. Inlining them would fuse network I/O, geodesy, string similarity, and match policy into one opaque loop — the same discrete-stage rationale accepted for trailStatusService and newsService"
+
 # Single-use helpers - Test utilities (legitimate test setup/teardown)
 
 [[exceptions]]

@@ -3,7 +3,7 @@ import NavigateButton from '../NavigateButton';
 import AddToTripButton from '../AddToTripButton';
 import FavoriteToggle from '../FavoriteToggle';
 import CellSignal from './CellSignal';
-import { getNavigationStops, getOwnerClass, formatCoordinate } from './helpers';
+import { getNavigationStops, getOwnerClass, formatCoordinate, WHEELCHAIR_LABELS, FEE_LABELS, humanizeOpeningHours } from './helpers';
 
 function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, onCollectStatus, boatPosition }) {
   // Fix: only honor http(s) tracker URLs so a stored javascript: URL can't run on click (PR #405 review)
@@ -149,6 +149,24 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
               <div className="detail-item">
                 <label>Cell Signal</label>
                 <CellSignal level={destination.cell_signal} />
+              </div>
+            )}
+            {destination.opening_hours && (
+              <div className="detail-item">
+                <label>Hours</label>
+                <span>{humanizeOpeningHours(destination.opening_hours)}</span>
+              </div>
+            )}
+            {destination.wheelchair && (
+              <div className="detail-item">
+                <label>Accessibility</label>
+                <span>{WHEELCHAIR_LABELS[destination.wheelchair] || destination.wheelchair}</span>
+              </div>
+            )}
+            {destination.fee && (
+              <div className="detail-item">
+                <label>Fee</label>
+                <span>{FEE_LABELS[destination.fee] || destination.fee}</span>
               </div>
             )}
           </div>

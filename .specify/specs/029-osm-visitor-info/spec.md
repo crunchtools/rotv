@@ -1,6 +1,6 @@
 # Specification: OSM-Sourced Visitor Info (Hours, Accessibility, Fee)
 
-> **Spec ID:** 028-osm-visitor-info
+> **Spec ID:** 029-osm-visitor-info
 > **Status:** Draft
 > **Version:** 0.1.0
 > **Author:** Scott McCarty
@@ -59,7 +59,7 @@ Acceptance Criteria:
 
 ### OSM Enrichment
 
-**US-028-5: Auto-populate from OSM**
+**US-028-5: Auto-populate amenities from OSM**
 > As a maintainer, I want the OSM amenity import to capture these tags so that
 > the seeded amenities ship with hours/accessibility/fee where OSM has them.
 
@@ -67,6 +67,22 @@ Acceptance Criteria:
 - [ ] `amenities.json` snapshot includes `opening_hours`, `wheelchair`, `fee` when present in OSM.
 - [ ] `import-osm-amenities.js` writes them on insert and refreshes them on re-import, without clobbering a non-null OSM value with null.
 - [ ] Idempotent: re-running does not duplicate or wipe data.
+
+**US-028-6: Match curated POIs to OSM**
+> As a maintainer, I want ROTV's hand-curated POIs (parks, trails, visitor
+> centers, businesses) matched to their OpenStreetMap features so that they
+> record an `osm_id` and gain hours/accessibility/fee where OSM has them.
+
+Acceptance Criteria:
+- [ ] Matching is name-gated (token similarity) with proximity scaled to name
+      confidence — proximity alone never matches (no shoe-store-inherits-cafe-hours).
+- [ ] Matches are written to a committed, reviewable `poi-osm-matches.json`.
+- [ ] Apply is idempotent and non-destructive: `osm_id` set once per name on an
+      unlinked row only if the id is free; visitor-info fields use COALESCE;
+      `more_info_link` is never touched (curated official links survive).
+- [ ] Of ~465 curated POIs, ~248 match at high precision; the ~18 OSM tags are
+      surfaced. (Most CVNP-area features simply aren't tagged with these fields
+      in OSM — the ceiling is OSM coverage, not matching.)
 
 ---
 

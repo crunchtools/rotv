@@ -452,6 +452,44 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
               />
             </div>
           </div>
+
+          <div className="edit-section">
+            <label title="Operating hours, in OpenStreetMap opening_hours syntax (e.g. Mo-Su 06:00-22:00)">Hours</label>
+            <input
+              type="text"
+              value={editedData.opening_hours || ''}
+              onChange={(e) => handleChange('opening_hours', e.target.value || null)}
+              placeholder="e.g. Mo-Su 06:00-22:00"
+            />
+          </div>
+
+          <div className="edit-row">
+            <div className="edit-section half">
+              <label title="Wheelchair accessibility (OpenStreetMap wheelchair tag)">Accessibility</label>
+              <select
+                value={editedData.wheelchair || ''}
+                onChange={(e) => handleChange('wheelchair', e.target.value || null)}
+              >
+                <option value="">Unknown</option>
+                <option value="yes">Accessible</option>
+                <option value="designated">Designated accessible</option>
+                <option value="limited">Limited</option>
+                <option value="no">Not accessible</option>
+              </select>
+            </div>
+            <div className="edit-section half">
+              <label title="Whether a fee is charged (OpenStreetMap fee tag)">Fee</label>
+              <select
+                value={editedData.fee || ''}
+                onChange={(e) => handleChange('fee', e.target.value || null)}
+              >
+                <option value="">Unknown</option>
+                <option value="yes">Yes</option>
+                <option value="no">No</option>
+                <option value="conditional">Varies</option>
+              </select>
+            </div>
+          </div>
         </>
       )}
 

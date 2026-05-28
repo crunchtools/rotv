@@ -1,6 +1,6 @@
 # Implementation Plan: OSM-Sourced Visitor Info (Hours, Accessibility, Fee)
 
-> **Spec ID:** 028-osm-visitor-info
+> **Spec ID:** 029-osm-visitor-info
 > **Status:** Planning
 > **Last Updated:** 2026-05-27
 > **Estimated Effort:** M
@@ -63,7 +63,7 @@ and extend the existing OSM amenity snapshot + importer to auto-populate them.
 | File | Purpose |
 |------|---------|
 | `backend/migrations/067_osm_visitor_info.sql` | Add 3 columns + constraints |
-| `.specify/specs/028-osm-visitor-info/{spec,plan}.md` | Spec & plan |
+| `.specify/specs/029-osm-visitor-info/{spec,plan}.md` | Spec & plan |
 
 ### Modified Files
 | File | Changes |
