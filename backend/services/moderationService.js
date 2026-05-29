@@ -399,7 +399,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
-    const autoModeratedBy = resolvedStatus === 'published' ? AUTO_PUBLISHER_USER_ID : null;
+    const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
     // Only write publication_date when rescore produced a new value — writing the existing
     // value back through this path can silently corrupt a previously-good timestamp
     if (rescoredDate) {
