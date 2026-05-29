@@ -7,6 +7,7 @@ export function parseDate(raw, timezone = 'America/New_York') {
 
   if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
     const [y, m, d] = trimmed.split('-').map(Number);
+    if (y < 2000 || y > 2100) return null;
     const probe = new Date(y, m - 1, d);
     if (probe.getFullYear() === y && probe.getMonth() === m - 1 && probe.getDate() === d) {
       return trimmed;
@@ -24,6 +25,7 @@ export function parseDate(raw, timezone = 'America/New_York') {
   const month = d.get('month');
   const day = d.get('day');
   if (!year || !month || !day) return null;
+  if (year < 2000 || year > 2100) return null;
 
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
