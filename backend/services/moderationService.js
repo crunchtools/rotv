@@ -530,33 +530,21 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
     const newPoiId = poiGate.newPoiId; // Tier-2 reassignment target, or null to keep current poi_id
     const gatesJson = JSON.stringify(gates);
-    // Only write publication_date when rescore produced a new value — writing the existing
-    // value back through this path can silently corrupt a previously-good timestamp
-    if (rescoredDate) {
-      await pool.query(
-        `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
-                publication_date = $2, date_consensus_score = $3,
-                ai_reasoning = $4, relevance_signals = $5, moderation_gates = $8::jsonb,
-                poi_id = COALESCE($9, poi_id), moderation_date = CURRENT_TIMESTAMP,
-                moderated_by = COALESCE($7, moderated_by), moderated_at = CASE WHEN $7 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
-         WHERE id = $6`,
-        [resolvedStatus, newDate, newScore, reasoning,
-         relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
-         contentId, autoModeratedBy, gatesJson, newPoiId]
-      );
-    } else {
-      await pool.query(
-        `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
-                date_consensus_score = $2,
-                ai_reasoning = $3, relevance_signals = $4, moderation_gates = $7::jsonb,
-                poi_id = COALESCE($8, poi_id), moderation_date = CURRENT_TIMESTAMP,
-                moderated_by = COALESCE($6, moderated_by), moderated_at = CASE WHEN $6 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
-         WHERE id = $5`,
-        [resolvedStatus, newScore, reasoning,
-         relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
-         contentId, autoModeratedBy, gatesJson, newPoiId]
-      );
-    }
+    // publication_date is only overwritten when a rescore produced a new value; otherwise
+    // COALESCE keeps the existing value (writing the old value back can corrupt a good timestamp).
+    const pubDateUpdate = rescoredDate ? newDate : null;
+    await pool.query(
+      `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
+              publication_date = COALESCE($2, publication_date), date_consensus_score = $3,
+              ai_reasoning = $4, relevance_signals = $5, moderation_gates = $6::jsonb,
+              poi_id = COALESCE($7, poi_id), moderation_date = CURRENT_TIMESTAMP,
+              moderated_by = COALESCE($8, moderated_by),
+              moderated_at = CASE WHEN $8 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
+       WHERE id = $9`,
+      [resolvedStatus, pubDateUpdate, newScore, reasoning,
+       relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
+       gatesJson, newPoiId, autoModeratedBy, contentId]
+    );
 
   } else if (contentType === 'photo') {
     const photoQuery = await pool.query(

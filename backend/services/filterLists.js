@@ -79,7 +79,7 @@ export const DENY_LISTS = [
     sweepFragment: (prefixes) => {
       const valid = prefixes.filter(p => typeof p === 'string' && p.trim());
       if (!valid.length) return null;
-      const conds = valid.map((_, i) => `regexp_replace(lower(source_url), '^https?://(www\\.)?', '') LIKE $${i + 1}`).join(' OR ');
+      const conds = valid.map((_, i) => `regexp_replace(lower(source_url), '^https?://(www\\.)?|/+$', '', 'g') LIKE $${i + 1}`).join(' OR ');
       return { sql: `source_url IS NOT NULL AND (${conds})`, params: valid.map(p => normalizeBlocklistPrefix(p) + '%') };
     }
   }
