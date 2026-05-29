@@ -21,6 +21,14 @@ export async function loadListSetting(pool, key) {
   }
 }
 
+// Normalize a blocklist prefix (drop scheme + leading www + trailing slash) so a bare
+// domain or a domain+path entry matches a stored URL via startsWith, the same way
+// getDomainReputation treats the blocklist. Kept local to avoid a circular import with
+// moderationService.
+function normalizeBlocklistPrefix(prefix) {
+  return String(prefix).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+}
+
 // Registry of hard-reject deny lists, applied during moderation.
 // - matches(row, values): per-item test.
 // - sweepFragment(values, textCols): SQL WHERE fragment for the retroactive
@@ -48,6 +56,30 @@ export const DENY_LISTS = [
       if (!valid.length) return null;
       const conds = valid.flatMap((_, i) => textCols.map(c => `${c} ILIKE $${i + 1}`)).join(' OR ');
       return { sql: `(${conds})`, params: valid.map(p => `%${p.trim()}%`) };
+    }
+  },
+  {
+    // Domain/URL blocklist. Previously enforced only at collection time (URLs skipped
+    // before fetching); now also a retroactive hard reject so blocking a domain cleans
+    // up items already collected from it.
+    key: 'blocklist_urls',
+    reason: 'Rejected: source domain is on the URL blocklist',
+    contentTypes: ['news', 'event'],
+    matches: (row, prefixes) => {
+      let norm;
+      try {
+        const u = new URL(row.source_url);
+        norm = (u.hostname.toLowerCase().replace(/^www\./, '') + u.pathname).toLowerCase().replace(/\/+$/, '');
+      } catch {
+        return false;
+      }
+      return prefixes.some(p => typeof p === 'string' && p.trim() && norm.startsWith(normalizeBlocklistPrefix(p)));
+    },
+    sweepFragment: (prefixes) => {
+      const valid = prefixes.filter(p => typeof p === 'string' && p.trim());
+      if (!valid.length) return null;
+      const conds = valid.map((_, i) => `regexp_replace(lower(source_url), '^https?://(www\\.)?|/+$', '', 'g') LIKE $${i + 1}`).join(' OR ');
+      return { sql: `source_url IS NOT NULL AND (${conds})`, params: valid.map(p => normalizeBlocklistPrefix(p) + '%') };
     }
   }
 ];

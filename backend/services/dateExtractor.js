@@ -184,7 +184,10 @@ export function scoreDeterministicSources(sources = {}) {
   for (const d of (sources.meta || [])) add(d, 1, 'meta');
   for (const d of (sources.timeTags || [])) add(d, 1, 'time-tag');
   add(sources.url, 1, 'url');
-  add(sources.searchDate, 3, 'search-date');
+  // Search-engine dates have proven reliable in moderation (often dead-on, even for
+  // Facebook/blog sources with no on-page date), so weight them on par with JSON-LD —
+  // an SE date alone then clears the date gate. (spec 030)
+  add(sources.searchDate, 4, 'search-date');
 
   return { scores, sourceMap };
 }

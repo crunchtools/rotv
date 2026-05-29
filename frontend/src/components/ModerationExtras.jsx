@@ -33,6 +33,37 @@ const getConfidenceColor = (score) => {
   return '#4caf50';
 };
 
+const GATE_VERDICT_COLOR = { pass: '#4caf50', review: '#ff9800', fail: '#f44336' };
+
+// Compact pass/review/fail pills for the three auto-moderation gates (spec 030).
+// Hover shows each gate's reason; a Tier-2 POI reassignment is called out inline.
+function GateBadges({ gates }) {
+  if (!gates) return null;
+  const items = [
+    ['Date', gates.date],
+    ['Relevance', gates.relevance],
+    ['POI', gates.poi]
+  ].filter(([, g]) => g && g.verdict);
+  if (items.length === 0) return null;
+  const reassigned = gates.poi && gates.poi.reassigned_to;
+  return (
+    <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center', flexWrap: 'wrap' }}>
+      {items.map(([label, g]) => (
+        <span key={label} title={g.reason || ''}
+          style={{ ...badgeStyle(GATE_VERDICT_COLOR[g.verdict] || '#757575'), textTransform: 'none' }}>
+          {label} {g.verdict === 'pass' ? '✓' : g.verdict === 'fail' ? '✗' : '?'}
+        </span>
+      ))}
+      {reassigned && (
+        <span style={{ fontSize: '0.72rem', color: '#1565c0', fontWeight: 600 }}
+          title={gates.poi.reason || ''}>
+          reassigned
+        </span>
+      )}
+    </span>
+  );
+}
+
 const getTypeBadgeColor = (type) => {
   switch (type) {
     case 'news': return '#2196f3';
@@ -154,6 +185,8 @@ export default function ModerationExtras({
             {(item.confidence_score * 100).toFixed(0)}%
           </span>
         )}
+
+        {item.content_type !== 'photo' && <GateBadges gates={item.moderation_gates} />}
 
         <span style={{ fontSize: '0.72rem', color: '#aaa' }}>
           {formatPublicationDate(item.collection_date || item.created_at)}
