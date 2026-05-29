@@ -188,25 +188,28 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(4);
   });
 
-  it('scores searchDate (Serper publisher date) alone at 3 pts', () => {
+  it('scores searchDate (Serper publisher date) alone at 4 pts', () => {
+    // Search-engine dates have proven reliable in moderation, so they are weighted on
+    // par with JSON-LD (4 pts) — an SE date alone clears the date gate (spec 030).
     const result = scoreDateConsensus({ searchDate: '2026-03-09' }, []);
     expect(result.date).toBe('2026-03-09');
-    expect(result.score).toBe(3);
+    expect(result.score).toBe(4);
     expect(result.sourceMap['2026-03-09']).toContain('search-date');
   });
 
   it('searchDate outweighs a disagreeing weak signal (the #1557 fix)', () => {
-    // Before: the Serper date sat in `meta` (1 pt) and lost to noise. Now it is a
-    // first-class deterministic source (3 pts) and wins over a single weak signal.
+    // The Serper date is a first-class deterministic source (4 pts) and wins over a
+    // single weak signal.
     const result = scoreDateConsensus({ searchDate: '2026-03-09', meta: ['2026-05-22'] }, []);
     expect(result.date).toBe('2026-03-09');
-    expect(result.score).toBe(3);
+    expect(result.score).toBe(4);
   });
 
-  it('on-page JSON-LD still outranks searchDate on conflict', () => {
+  it('searchDate ties on-page JSON-LD on conflict (both 4 pts) -> no consensus', () => {
+    // SE dates are now on par with JSON-LD, so a disagreement is a 4-vs-4 tie and
+    // yields score 0 (routed to review rather than auto-trusted).
     const result = scoreDateConsensus({ jsonLd: ['2026-03-09'], searchDate: '2026-05-22' }, []);
-    expect(result.date).toBe('2026-03-09');
-    expect(result.score).toBe(4);
+    expect(result.score).toBe(0);
   });
 });
 
