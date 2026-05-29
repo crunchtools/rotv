@@ -34,7 +34,7 @@ function createBoatIcon(heading) {
   return L.divIcon({
     className: 'boat-marker-icon',
     html: `<div class="boat-marker-inner" style="transform: rotate(${heading || 0}deg)">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="29" height="29">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="38" height="38">
         <path fill="#F5C518" stroke="#B8860B" stroke-width="30" stroke-linejoin="round"
           d="m595.16 289.09c1.19.14 2.37.2 3.55.2 7.15 0 14.09-2.47 19.85-7.14 7.28-5.89 11.99-14.83 12.93-24.55 1.88-19.32-11.27-36.73-29.31-38.79-8.38-.96-16.68 1.5-23.4 6.93-7.28 5.89-11.99 14.84-12.93 24.55-1.87 19.33 11.28 36.73 29.31 38.79z"/>
         <path fill="#F5C518" stroke="#B8860B" stroke-width="30" stroke-linejoin="round"
@@ -43,8 +43,8 @@ function createBoatIcon(heading) {
           d="M600 400 L600 700"/>
       </svg>
     </div>`,
-    iconSize: [29, 29],
-    iconAnchor: [14, 14],
+    iconSize: [38, 38],
+    iconAnchor: [19, 19],
   });
 }
 
