@@ -97,7 +97,10 @@ describe('Open Graph share images', () => {
     expect(ogImages[0].endsWith(FALLBACK_IMAGE_PATH)).toBe(true);
   }, 15000);
 
-  it('uses the associated POI photo for a news permalink', async () => {
+  it('emits a real share image for a news permalink (source image or POI photo, never brand)', async () => {
+    // Priority is source article image -> POI primary photo -> brand fallback
+    // (server.js). For a POI that has a photo, the permalink must resolve to one
+    // of the first two, never the brand card.
     let target = null;
     for (const poi of (poiWithPhoto ? [poiWithPhoto, ...pois] : pois).slice(0, 80)) {
       const news = await request(BASE_URL).get(`/api/pois/${poi.id}/news`);
@@ -117,7 +120,12 @@ describe('Open Graph share images', () => {
     const res = await request(BASE_URL).get(url).expect(200);
 
     const ogImages = metaContent(res.text, 'property', 'og:image');
+    const [twitterImage] = metaContent(res.text, 'name', 'twitter:image');
     expect(ogImages.length).toBe(1);
-    expect(ogImages[0]).toMatch(new RegExp(`/api/pois/${target.poi.id}/thumbnail\\?size=large$`));
+    expect(ogImages[0].endsWith(FALLBACK_IMAGE_PATH)).toBe(false);
+    const isPoiPhoto = new RegExp(`/api/pois/${target.poi.id}/thumbnail\\?size=large$`).test(ogImages[0]);
+    const isSourceImage = /^https?:\/\//i.test(ogImages[0]);
+    expect(isPoiPhoto || isSourceImage).toBe(true);
+    expect(twitterImage).toBe(ogImages[0]);
   }, 60000);
 });
