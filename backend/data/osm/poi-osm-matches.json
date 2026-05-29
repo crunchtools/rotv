@@ -1,0 +1,2978 @@
+[
+  {
+    "poi_name": "Acacia Reservation",
+    "osm_id": "way297396089",
+    "opening_hours": "06:00-23:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Acacia Reservation",
+      "similarity": 1,
+      "distance_m": 90
+    }
+  },
+  {
+    "poi_name": "Akron Zoo",
+    "osm_id": "way243713543",
+    "opening_hours": "Mo-Su 11:00-16:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Akron Zoo",
+      "similarity": 1,
+      "distance_m": 79
+    }
+  },
+  {
+    "poi_name": "Boston Mill Visitor Center",
+    "osm_id": "way1056693999",
+    "opening_hours": "Mo-Su 09:30-17:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Mill Visitor Center - Cuyahoga Valley NP",
+      "similarity": 0.85,
+      "distance_m": 15
+    }
+  },
+  {
+    "poi_name": "Boston Store",
+    "osm_id": "way491806320",
+    "opening_hours": "Mo-Su 09:30-18:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Store Visitor Center",
+      "similarity": 0.85,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "CanalWay Center",
+    "osm_id": "way98114746",
+    "opening_hours": "Mo-Su 09:30-17:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "CanalWay Center",
+      "similarity": 1,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Cleveland Metroparks Zoo",
+    "osm_id": "relation3961010",
+    "opening_hours": "Apr-Sep 10:00-17:00; Oct-Mar 10:00-16:00; Nov Th[4],Dec 25,Jan 01 off",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cleveland Metroparks Zoo",
+      "similarity": 1,
+      "distance_m": 89
+    }
+  },
+  {
+    "poi_name": "Creekside Bar & Restaurant",
+    "osm_id": "node5561316002",
+    "opening_hours": "Mo-Th 11:00-22:00; Fr-Sa 11:00-23:00; Su 08:00-21:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Creekside Restaurant & Bar",
+      "similarity": 1,
+      "distance_m": 22
+    }
+  },
+  {
+    "poi_name": "Hale Farm & Village",
+    "osm_id": "way578672338",
+    "opening_hours": "Mo-Su 10:00-16:00",
+    "wheelchair": null,
+    "fee": "yes",
+    "match": {
+      "osm_name": "Hale Farm & Village",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Hampton Hills Metro Park",
+    "osm_id": "way515714240",
+    "opening_hours": "Mo-Su 06:00-23:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Hampton Hills Metropark",
+      "similarity": 1,
+      "distance_m": 47
+    }
+  },
+  {
+    "poi_name": "Hampton Hills Mountain Bike Area",
+    "osm_id": "way458952457",
+    "opening_hours": "Mo-Su 06:00-23:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Hampton Hills Mountain Bike Area",
+      "similarity": 1,
+      "distance_m": 65
+    }
+  },
+  {
+    "poi_name": "Hampton Hills Mountain Bike Trailhead",
+    "osm_id": "way437398880",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": "no",
+    "match": {
+      "osm_name": "Hampton Hills Mountain Bike Area Parking",
+      "similarity": 1,
+      "distance_m": 26
+    }
+  },
+  {
+    "poi_name": "Ira Road Trailhead",
+    "osm_id": "way1084532348",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": "no",
+    "match": {
+      "osm_name": "Ira Trailhead",
+      "similarity": 0.85,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Purplebrown Farm Store",
+    "osm_id": "way662435089",
+    "opening_hours": "Tu-Su 09:00-19:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Purplebrown Farm Store",
+      "similarity": 1,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Big Bend Area",
+    "osm_id": "way466833017",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": "no",
+    "match": {
+      "osm_name": "Big Bend Trailhead Parking",
+      "similarity": 0.85,
+      "distance_m": 9
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Revere Road Lot",
+    "osm_id": "way636715645",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": "no",
+    "match": {
+      "osm_name": "Sand Run Metro Park Revere Road Lot",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Treaty Line Area",
+    "osm_id": "node5972884372",
+    "opening_hours": "Mo-Su 06:00-21:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Treaty Line Area",
+      "similarity": 0.85,
+      "distance_m": 63
+    }
+  },
+  {
+    "poi_name": "West Creek Reservation",
+    "osm_id": "relation11228395",
+    "opening_hours": "06:00-23:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "West Creek Reservation",
+      "similarity": 1,
+      "distance_m": 1569
+    }
+  },
+  {
+    "poi_name": "West Creek Reservation",
+    "osm_id": "relation11228395",
+    "opening_hours": "06:00-23:00",
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "West Creek Reservation",
+      "similarity": 1,
+      "distance_m": 274
+    }
+  },
+  {
+    "poi_name": "303 & 8 Trailhead",
+    "osm_id": "way168918107",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "303 and 8 Trailhead",
+      "similarity": 1,
+      "distance_m": 8
+    }
+  },
+  {
+    "poi_name": "Akron Hebrew Cemetery",
+    "osm_id": "way470097973",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Akron Hebrew Cemetery",
+      "similarity": 1,
+      "distance_m": 20
+    }
+  },
+  {
+    "poi_name": "Alder Trail",
+    "osm_id": "way469653061",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Alder Pond",
+      "similarity": 0.85,
+      "distance_m": 161
+    }
+  },
+  {
+    "poi_name": "Averill Pond Connector Trail",
+    "osm_id": "way180853643",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Averill Pond",
+      "similarity": 0.85,
+      "distance_m": 60
+    }
+  },
+  {
+    "poi_name": "Bath Road Heronry",
+    "osm_id": "way1285790680",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Bath Road Heronry",
+      "similarity": 1,
+      "distance_m": 80
+    }
+  },
+  {
+    "poi_name": "Beaver Marsh",
+    "osm_id": "relation15433480",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Beaver Marsh",
+      "similarity": 1,
+      "distance_m": 94
+    }
+  },
+  {
+    "poi_name": "Bedford",
+    "osm_id": "relation182107",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Bedford",
+      "similarity": 1,
+      "distance_m": 110
+    }
+  },
+  {
+    "poi_name": "Bedford Reservation",
+    "osm_id": "relation15722681",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Bedford Reservation",
+      "similarity": 1,
+      "distance_m": 1710
+    }
+  },
+  {
+    "poi_name": "Bedford Reserve Mountain Bike Trailhead",
+    "osm_id": "relation182107",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Bedford",
+      "similarity": 0.85,
+      "distance_m": 677
+    }
+  },
+  {
+    "poi_name": "Blimp City Bike and Hike",
+    "osm_id": "way566171130",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Blimp City Bike & Hike",
+      "similarity": 1,
+      "distance_m": 10
+    }
+  },
+  {
+    "poi_name": "Blossom Music Center",
+    "osm_id": "way86578574",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Blossom Music Center",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Blue Hen Falls",
+    "osm_id": "node3639490710",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Blue Hen Falls Trailhead",
+      "similarity": 1,
+      "distance_m": 224
+    }
+  },
+  {
+    "poi_name": "Blue Hen Falls Spur",
+    "osm_id": "node3639490710",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Blue Hen Falls Trailhead",
+      "similarity": 0.85,
+      "distance_m": 515
+    }
+  },
+  {
+    "poi_name": "Boston Cemetery",
+    "osm_id": "way180853636",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Cemetery",
+      "similarity": 1,
+      "distance_m": 10
+    }
+  },
+  {
+    "poi_name": "Boston Mill Pedestrian Bridge",
+    "osm_id": "way609638968",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Trailhead",
+      "similarity": 0.85,
+      "distance_m": 76
+    }
+  },
+  {
+    "poi_name": "Boston Mill Ski Resort",
+    "osm_id": "way609638968",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Trailhead",
+      "similarity": 0.85,
+      "distance_m": 508
+    }
+  },
+  {
+    "poi_name": "Boston Run Trail",
+    "osm_id": "node2916044185",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Run Trailhead",
+      "similarity": 1,
+      "distance_m": 407
+    }
+  },
+  {
+    "poi_name": "Boston Ski Lodge",
+    "osm_id": "way609638968",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Trailhead",
+      "similarity": 0.85,
+      "distance_m": 521
+    }
+  },
+  {
+    "poi_name": "Brandywine Falls",
+    "osm_id": "node1913071012",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brandywine Falls",
+      "similarity": 1,
+      "distance_m": 35
+    }
+  },
+  {
+    "poi_name": "Brandywine Falls Trailhead",
+    "osm_id": "way609638965",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brandywine Falls Metro Park",
+      "similarity": 1,
+      "distance_m": 35
+    }
+  },
+  {
+    "poi_name": "Brandywine Inn",
+    "osm_id": "node660062313",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Inn at Brandywine Falls",
+      "similarity": 0.85,
+      "distance_m": 10
+    }
+  },
+  {
+    "poi_name": "Brandywine Ski Resort",
+    "osm_id": "way391698033",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brandywine Ski Resort",
+      "similarity": 1,
+      "distance_m": 266
+    }
+  },
+  {
+    "poi_name": "Brecksville",
+    "osm_id": "relation182134",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brecksville",
+      "similarity": 1,
+      "distance_m": 324
+    }
+  },
+  {
+    "poi_name": "Brecksville Reservation",
+    "osm_id": "relation182134",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brecksville",
+      "similarity": 1,
+      "distance_m": 929
+    }
+  },
+  {
+    "poi_name": "Bridal Veil Falls",
+    "osm_id": "node2519251489",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Bridal Veil Falls Overlook",
+      "similarity": 0.85,
+      "distance_m": 51
+    }
+  },
+  {
+    "poi_name": "Bridal Veil Falls Scenic Overlook",
+    "osm_id": "node2519251489",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Bridal Veil Falls Overlook",
+      "similarity": 0.85,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Brookside Reservation",
+    "osm_id": "relation3956352",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brookside Reservation",
+      "similarity": 1,
+      "distance_m": 85
+    }
+  },
+  {
+    "poi_name": "Brushwood Lake",
+    "osm_id": "way86971609",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brushwood Lake",
+      "similarity": 1,
+      "distance_m": 8
+    }
+  },
+  {
+    "poi_name": "Buckeye trail",
+    "osm_id": "node13130126777",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Buckeye Trail Snowville Trailhead",
+      "similarity": 0.85,
+      "distance_m": 237
+    }
+  },
+  {
+    "poi_name": "Buckeye Trail",
+    "osm_id": "node13130126777",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Buckeye Trail Snowville Trailhead",
+      "similarity": 0.85,
+      "distance_m": 237
+    }
+  },
+  {
+    "poi_name": "Camp Butler",
+    "osm_id": "way1230727949",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Camp Butler",
+      "similarity": 1,
+      "distance_m": 353
+    }
+  },
+  {
+    "poi_name": "Camp Ledgewood",
+    "osm_id": "node3642999941",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Camp Ledgewood",
+      "similarity": 1,
+      "distance_m": 290
+    }
+  },
+  {
+    "poi_name": "Canal Basin Park",
+    "osm_id": "way1266663439",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Canal Basin Park",
+      "similarity": 1,
+      "distance_m": 12
+    }
+  },
+  {
+    "poi_name": "Canal Basin Park",
+    "osm_id": "way1266663439",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Canal Basin Park",
+      "similarity": 1,
+      "distance_m": 15
+    }
+  },
+  {
+    "poi_name": "Canal Exploration Center",
+    "osm_id": "way609638976",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Canal Exploration Center",
+      "similarity": 1,
+      "distance_m": 75
+    }
+  },
+  {
+    "poi_name": "Cascade Park",
+    "osm_id": "way464364020",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cascade Park",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Cascade Park",
+    "osm_id": "way464364020",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cascade Park",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Cascade Valley - Kayak Access Point",
+    "osm_id": "relation14962727",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cascade Valley Metro Park",
+      "similarity": 0.85,
+      "distance_m": 676
+    }
+  },
+  {
+    "poi_name": "Cascade Valley Metro Park",
+    "osm_id": "relation14962727",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cascade Valley Metro Park",
+      "similarity": 1,
+      "distance_m": 202
+    }
+  },
+  {
+    "poi_name": "Cascade Valley Metro Park",
+    "osm_id": "node357450378",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cascade Valley Metro Park",
+      "similarity": 1,
+      "distance_m": 227
+    }
+  },
+  {
+    "poi_name": "Cedar Grove Cemetery Peninsula",
+    "osm_id": "way479776135",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cedar Grove Cemetery",
+      "similarity": 0.85,
+      "distance_m": 19
+    }
+  },
+  {
+    "poi_name": "Century Cycles",
+    "osm_id": "way180851215",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Century Cycles",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Cherry Lane / Fernwood / Nuthatch Trail",
+    "osm_id": "relation17745791",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Nuthatch Trail",
+      "similarity": 0.85,
+      "distance_m": 159
+    }
+  },
+  {
+    "poi_name": "Chippewa Creek",
+    "osm_id": "way1383438145",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Chippewa Creek Condominiums",
+      "similarity": 0.85,
+      "distance_m": 421
+    }
+  },
+  {
+    "poi_name": "Chippewa Creek Gorge Scenic Overlook",
+    "osm_id": "node2765824033",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Chippewa Creek Gorge Overlook",
+      "similarity": 0.85,
+      "distance_m": 4
+    }
+  },
+  {
+    "poi_name": "City of Akron",
+    "osm_id": "relation182644",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Akron",
+      "similarity": 0.85,
+      "distance_m": 375
+    }
+  },
+  {
+    "poi_name": "Clayton-Stanford Trail",
+    "osm_id": "node10688617635",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Stanford Trailhead",
+      "similarity": 0.85,
+      "distance_m": 287
+    }
+  },
+  {
+    "poi_name": "Cleveland Grain Silos",
+    "osm_id": "relation182130",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cleveland",
+      "similarity": 0.85,
+      "distance_m": 584
+    }
+  },
+  {
+    "poi_name": "Cleveland Harbor West Pierhead Lighthouse",
+    "osm_id": "way414659281",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "West Pierhead",
+      "similarity": 0.85,
+      "distance_m": 1
+    }
+  },
+  {
+    "poi_name": "Cleveland Rowing Foundation",
+    "osm_id": "relation182130",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cleveland",
+      "similarity": 0.85,
+      "distance_m": 770
+    }
+  },
+  {
+    "poi_name": "Cleveland-Cliffs Bike Park",
+    "osm_id": "way1292838498",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cleveland-Cliffs Bike Park",
+      "similarity": 1,
+      "distance_m": 7
+    }
+  },
+  {
+    "poi_name": "Confluence Metro Park",
+    "osm_id": "way1183430028",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Confluence Metro Park",
+      "similarity": 1,
+      "distance_m": 22
+    }
+  },
+  {
+    "poi_name": "Connector Trail - Stanford to Towpath",
+    "osm_id": "node10688617635",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Stanford Trailhead",
+      "similarity": 0.85,
+      "distance_m": 206
+    }
+  },
+  {
+    "poi_name": "Conrad Botzum Farmstead",
+    "osm_id": "way1298135284",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "The Conrad Botzum Farmstead",
+      "similarity": 1,
+      "distance_m": 122
+    }
+  },
+  {
+    "poi_name": "County Line Saloon",
+    "osm_id": "way1018560522",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "County Line Saloon",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Crooked River Skatepark",
+    "osm_id": "way593865571",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Crooked River Skatepark",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Cuyahoga Falls",
+    "osm_id": "way321927904",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cuyahoga Falls Community Gardens at Keyser Park",
+      "similarity": 0.85,
+      "distance_m": 738
+    }
+  },
+  {
+    "poi_name": "Cuyahoga Heights",
+    "osm_id": "relation182126",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cuyahoga Heights",
+      "similarity": 1,
+      "distance_m": 779
+    }
+  },
+  {
+    "poi_name": "Cuyahoga Valley Scenic Railroad - Akron Northside Station",
+    "osm_id": "relation182644",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Akron",
+      "similarity": 0.85,
+      "distance_m": 592
+    }
+  },
+  {
+    "poi_name": "Cuyahoga Valley Scenic Railroad - Boston Mill Station",
+    "osm_id": "way609638968",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Boston Trailhead",
+      "similarity": 0.85,
+      "distance_m": 160
+    }
+  },
+  {
+    "poi_name": "Cuyahoga Valley Scenic Railroad - Brecksville Station",
+    "osm_id": "way609638972",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brecksville Station Trailhead",
+      "similarity": 0.85,
+      "distance_m": 147
+    }
+  },
+  {
+    "poi_name": "Cuyahoga Valley Scenic Railroad - Canal Exploration Center Station",
+    "osm_id": "way609638976",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Canal Exploration Center",
+      "similarity": 0.85,
+      "distance_m": 206
+    }
+  },
+  {
+    "poi_name": "Cuyahoga Valley Scenic Railroad - Peninsula Depot",
+    "osm_id": "relation181945",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Peninsula",
+      "similarity": 0.85,
+      "distance_m": 744
+    }
+  },
+  {
+    "poi_name": "Deep Lock Quarry",
+    "osm_id": "node11322675878",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Deep Lock Quarry Trailhead",
+      "similarity": 1,
+      "distance_m": 27
+    }
+  },
+  {
+    "poi_name": "Deep Lock Quarry Metro Park",
+    "osm_id": "way1118934213",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Deep Lock Quarry Metro Park",
+      "similarity": 1,
+      "distance_m": 25
+    }
+  },
+  {
+    "poi_name": "Deer Lick Cave",
+    "osm_id": "node1511399783",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Deer Lick Cave",
+      "similarity": 1,
+      "distance_m": 1
+    }
+  },
+  {
+    "poi_name": "Dogwood Trail",
+    "osm_id": "node9921222793",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Dogwood Trailhead",
+      "similarity": 1,
+      "distance_m": 485
+    }
+  },
+  {
+    "poi_name": "Egbert Picnic Area",
+    "osm_id": "way962742744",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Egbert Picnic Area and Trailhead",
+      "similarity": 1,
+      "distance_m": 89
+    }
+  },
+  {
+    "poi_name": "Everett Covered Bridge",
+    "osm_id": "way860501491",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Everett Covered Bridge",
+      "similarity": 1,
+      "distance_m": 1
+    }
+  },
+  {
+    "poi_name": "Everett Trailhead",
+    "osm_id": "node10774357846",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Everett Trailhead",
+      "similarity": 1,
+      "distance_m": 27
+    }
+  },
+  {
+    "poi_name": "F.A. Seiberling Nature Realm",
+    "osm_id": "way321864947",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "F.A. Seiberling Nature Realm",
+      "similarity": 1,
+      "distance_m": 32
+    }
+  },
+  {
+    "poi_name": "F.A. Seiberling Nature Realm",
+    "osm_id": "way321864947",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "F.A. Seiberling Nature Realm",
+      "similarity": 1,
+      "distance_m": 196
+    }
+  },
+  {
+    "poi_name": "F.A. Seiberling Nature Realm - Suspension Bridge",
+    "osm_id": "way321864947",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "F.A. Seiberling Nature Realm",
+      "similarity": 0.85,
+      "distance_m": 239
+    }
+  },
+  {
+    "poi_name": "F.A. Seiberling Nature Realm - Visitors Center",
+    "osm_id": "way614291127",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Visitors Center",
+      "similarity": 0.85,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Fernwood / Nuthatch Trail",
+    "osm_id": "relation17745791",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Nuthatch Trail",
+      "similarity": 0.85,
+      "distance_m": 117
+    }
+  },
+  {
+    "poi_name": "Firestone Metro Park",
+    "osm_id": "way279928717",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Firestone Metro Park",
+      "similarity": 1,
+      "distance_m": 535
+    }
+  },
+  {
+    "poi_name": "Firestone Metro Park",
+    "osm_id": "way279928717",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Firestone Metro Park",
+      "similarity": 1,
+      "distance_m": 31
+    }
+  },
+  {
+    "poi_name": "Frazee House",
+    "osm_id": "way205548623",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Frazee House",
+      "similarity": 1,
+      "distance_m": 4
+    }
+  },
+  {
+    "poi_name": "Furnace Run Metro Park",
+    "osm_id": "relation1290126",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Furnace Run Metro Park",
+      "similarity": 1,
+      "distance_m": 193
+    }
+  },
+  {
+    "poi_name": "Gardiner Trail",
+    "osm_id": "relation13168285",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Gardiner Trail",
+      "similarity": 1,
+      "distance_m": 99
+    }
+  },
+  {
+    "poi_name": "Garfield Park Reservation",
+    "osm_id": "relation19838009",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Garfield Park Reservation All Purpose Trail Loop",
+      "similarity": 0.85,
+      "distance_m": 88
+    }
+  },
+  {
+    "poi_name": "Garfield Park Reservation",
+    "osm_id": "relation3956380",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Garfield Park Reservation",
+      "similarity": 1,
+      "distance_m": 831
+    }
+  },
+  {
+    "poi_name": "Gear Up Velo",
+    "osm_id": "node9164112996",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Gear Up Velo",
+      "similarity": 1,
+      "distance_m": 6
+    }
+  },
+  {
+    "poi_name": "Glendale Cemetery",
+    "osm_id": "way279063127",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Glendale Cemetery",
+      "similarity": 1,
+      "distance_m": 37
+    }
+  },
+  {
+    "poi_name": "Glens Trail",
+    "osm_id": "way1230898998",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "The Glens",
+      "similarity": 1,
+      "distance_m": 802
+    }
+  },
+  {
+    "poi_name": "Goodyear Heights Metro Park",
+    "osm_id": "way422736187",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Goodyear Heights Metro Park",
+      "similarity": 1,
+      "distance_m": 27
+    }
+  },
+  {
+    "poi_name": "Gorge Metro Park",
+    "osm_id": "node10766608816",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Gorge Trailhead",
+      "similarity": 1,
+      "distance_m": 11
+    }
+  },
+  {
+    "poi_name": "Gorge Metro Park",
+    "osm_id": "way324814067",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Gorge Metro Park",
+      "similarity": 1,
+      "distance_m": 78
+    }
+  },
+  {
+    "poi_name": "Gorge Metro Park Dam",
+    "osm_id": "way324814067",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Gorge Metro Park",
+      "similarity": 0.85,
+      "distance_m": 156
+    }
+  },
+  {
+    "poi_name": "Gorge Trail",
+    "osm_id": "way324814067",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Gorge Metro Park",
+      "similarity": 1,
+      "distance_m": 490
+    }
+  },
+  {
+    "poi_name": "Greater Cleveland Acquarium",
+    "osm_id": "relation182130",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cleveland",
+      "similarity": 0.85,
+      "distance_m": 195
+    }
+  },
+  {
+    "poi_name": "Greenfield Trail",
+    "osm_id": "relation13168287",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Greenfield Trail",
+      "similarity": 1,
+      "distance_m": 50
+    }
+  },
+  {
+    "poi_name": "Hampton Hills - Archery Range",
+    "osm_id": "way1390859113",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Hampton Hills Archery Range",
+      "similarity": 1,
+      "distance_m": 55
+    }
+  },
+  {
+    "poi_name": "Harbor Hopper",
+    "osm_id": "way1417965572",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Harbor Hopper",
+      "similarity": 1,
+      "distance_m": 197
+    }
+  },
+  {
+    "poi_name": "Haskell Run Trail",
+    "osm_id": "node10767319986",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Haskell Run Trailhead",
+      "similarity": 1,
+      "distance_m": 67
+    }
+  },
+  {
+    "poi_name": "Hemlock Trail",
+    "osm_id": "relation19472719",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Hemlock Trail",
+      "similarity": 1,
+      "distance_m": 183
+    }
+  },
+  {
+    "poi_name": "Heritage Farms",
+    "osm_id": "node6351185586",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Heritage Farms",
+      "similarity": 1,
+      "distance_m": 0
+    }
+  },
+  {
+    "poi_name": "Hinckley Reservation",
+    "osm_id": "relation15741865",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Hinckley Hills Carriage Trail",
+      "similarity": 0.85,
+      "distance_m": 273
+    }
+  },
+  {
+    "poi_name": "Historic Coast Guard Station",
+    "osm_id": "way605955898",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Cleveland Coast Guard Station",
+      "similarity": 0.6,
+      "distance_m": 11
+    }
+  },
+  {
+    "poi_name": "Historic Viaduct",
+    "osm_id": "node2519265077",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Viaduct Park",
+      "similarity": 0.85,
+      "distance_m": 32
+    }
+  },
+  {
+    "poi_name": "Horseshoe Pond",
+    "osm_id": "way51472307",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Horseshoe Pond",
+      "similarity": 1,
+      "distance_m": 42
+    }
+  },
+  {
+    "poi_name": "Ice Box Cave",
+    "osm_id": "node9927508286",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Ice Box Cave",
+      "similarity": 1,
+      "distance_m": 4
+    }
+  },
+  {
+    "poi_name": "Indigo Lake",
+    "osm_id": "way86576736",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Indigo Lake",
+      "similarity": 1,
+      "distance_m": 8
+    }
+  },
+  {
+    "poi_name": "Ira Cemetery",
+    "osm_id": "way479772329",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Ira Cemetery",
+      "similarity": 1,
+      "distance_m": 7
+    }
+  },
+  {
+    "poi_name": "Jaite Mill Historic District",
+    "osm_id": "node6080047867",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Jaite Mill Historic District",
+      "similarity": 1,
+      "distance_m": 21
+    }
+  },
+  {
+    "poi_name": "John Brown House",
+    "osm_id": "way608649476",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "John Brown House;John Brown Home",
+      "similarity": 0.85,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "John Brown Monument",
+    "osm_id": "node9298296247",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "John Brown Monument",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Kendall Lake CVNP",
+    "osm_id": "way86578820",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Kendall Lake",
+      "similarity": 0.85,
+      "distance_m": 65
+    }
+  },
+  {
+    "poi_name": "Kendall Lake Trailhead",
+    "osm_id": "node10707734911",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Kendall Lake Trailhead",
+      "similarity": 1,
+      "distance_m": 50
+    }
+  },
+  {
+    "poi_name": "Kennedy Park",
+    "osm_id": "way321515915",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Kennedy Park",
+      "similarity": 1,
+      "distance_m": 168
+    }
+  },
+  {
+    "poi_name": "Lake Plata Trail",
+    "osm_id": "way155050947",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Lake Plata",
+      "similarity": 1,
+      "distance_m": 39
+    }
+  },
+  {
+    "poi_name": "Lake Trail",
+    "osm_id": "node10707734911",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Kendall Lake Trailhead",
+      "similarity": 0.85,
+      "distance_m": 133
+    }
+  },
+  {
+    "poi_name": "Ledges Overlook",
+    "osm_id": "node7795340162",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Ledges Overlook",
+      "similarity": 1,
+      "distance_m": 4
+    }
+  },
+  {
+    "poi_name": "Ledges Trail",
+    "osm_id": "node2851910913",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Ledges Shelter",
+      "similarity": 0.85,
+      "distance_m": 240
+    }
+  },
+  {
+    "poi_name": "Liberty Park",
+    "osm_id": "way553214856",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Liberty Park Recreation",
+      "similarity": 0.85,
+      "distance_m": 137
+    }
+  },
+  {
+    "poi_name": "Liberty Park Nature Center",
+    "osm_id": "way553210214",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Liberty Park Nature Area",
+      "similarity": 1,
+      "distance_m": 350
+    }
+  },
+  {
+    "poi_name": "Liberty Park Trailhead",
+    "osm_id": "way553210214",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Liberty Park Nature Area",
+      "similarity": 0.85,
+      "distance_m": 239
+    }
+  },
+  {
+    "poi_name": "Lock 29 Peninsula",
+    "osm_id": "node11480703208",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Lock 29 Trailhead",
+      "similarity": 0.85,
+      "distance_m": 14
+    }
+  },
+  {
+    "poi_name": "Lock 39 Trailhead",
+    "osm_id": "way609638979",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Lock 39 Trailhead",
+      "similarity": 1,
+      "distance_m": 29
+    }
+  },
+  {
+    "poi_name": "Mater Dolorosa Cemetery",
+    "osm_id": "way1292193618",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Mater Dolorosa Cemetery",
+      "similarity": 1,
+      "distance_m": 8
+    }
+  },
+  {
+    "poi_name": "Meadowedge Trail",
+    "osm_id": "way86576729",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Meadowedge Pond",
+      "similarity": 0.85,
+      "distance_m": 169
+    }
+  },
+  {
+    "poi_name": "Meadows Trailhead Brecksville",
+    "osm_id": "relation182134",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Brecksville",
+      "similarity": 0.85,
+      "distance_m": 112
+    }
+  },
+  {
+    "poi_name": "Mill Stream Run Reservation",
+    "osm_id": "relation3951437",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Mill Stream Run Reservation",
+      "similarity": 1,
+      "distance_m": 987
+    }
+  },
+  {
+    "poi_name": "Missing Link Trail",
+    "osm_id": "node9910493624",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Missing Link Vista",
+      "similarity": 0.85,
+      "distance_m": 371
+    }
+  },
+  {
+    "poi_name": "Monarch Trail",
+    "osm_id": "way691839410",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Monarch Bluff Picnic Area",
+      "similarity": 0.85,
+      "distance_m": 107
+    }
+  },
+  {
+    "poi_name": "Morgana Run Trail",
+    "osm_id": "relation15521543",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Morgana Run Trail",
+      "similarity": 1,
+      "distance_m": 1596
+    }
+  },
+  {
+    "poi_name": "Mother of Sorrows Church",
+    "osm_id": "way1232206063",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Mother of Sorrows Church",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Mount Peace Cemetery",
+    "osm_id": "way256658690",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Mount Peace Cemetery",
+      "similarity": 1,
+      "distance_m": 50
+    }
+  },
+  {
+    "poi_name": "Mud Brook Greenway Trail",
+    "osm_id": "way1190178505",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Mud Brook Greenway Trail Parking",
+      "similarity": 1,
+      "distance_m": 415
+    }
+  },
+  {
+    "poi_name": "Munroe Falls Metro Park",
+    "osm_id": "way324817710",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Munroe Falls Metro Park",
+      "similarity": 1,
+      "distance_m": 683
+    }
+  },
+  {
+    "poi_name": "Munroe Falls Metro Park",
+    "osm_id": "way324817710",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Munroe Falls Metro Park",
+      "similarity": 1,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Mustill Store",
+    "osm_id": "way952525242",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Mustill Store Museum",
+      "similarity": 0.85,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "My Mountain Trail",
+    "osm_id": "node4057487060",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "My Mountain Overlook",
+      "similarity": 0.85,
+      "distance_m": 232
+    }
+  },
+  {
+    "poi_name": "Newburgh Heights",
+    "osm_id": "relation182109",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Newburgh Heights",
+      "similarity": 1,
+      "distance_m": 39
+    }
+  },
+  {
+    "poi_name": "Noisy Oyster",
+    "osm_id": "node8951968628",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Noisy Oyster",
+      "similarity": 1,
+      "distance_m": 9
+    }
+  },
+  {
+    "poi_name": "North Chagrin Reservation",
+    "osm_id": "relation15699685",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "North Chagrin Reservation",
+      "similarity": 1,
+      "distance_m": 301
+    }
+  },
+  {
+    "poi_name": "Northampton Point",
+    "osm_id": "node13037793076",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Northampton Point River Access",
+      "similarity": 0.85,
+      "distance_m": 13
+    }
+  },
+  {
+    "poi_name": "Nuthatch / Seneca Trail",
+    "osm_id": "relation17745800",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Seneca Trail",
+      "similarity": 0.85,
+      "distance_m": 149
+    }
+  },
+  {
+    "poi_name": "Nuthatch Trail",
+    "osm_id": "relation17745791",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Nuthatch Trail",
+      "similarity": 1,
+      "distance_m": 98
+    }
+  },
+  {
+    "poi_name": "Nuthatch Trail Connector",
+    "osm_id": "relation17745791",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Nuthatch Trail",
+      "similarity": 0.85,
+      "distance_m": 464
+    }
+  },
+  {
+    "poi_name": "O'Neil Woods Metro Park",
+    "osm_id": "way323043456",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "O'Neil Woods Metropark",
+      "similarity": 1,
+      "distance_m": 182
+    }
+  },
+  {
+    "poi_name": "O’Neil Woods Metro Park",
+    "osm_id": "node10278271626",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "O'Neil Woods Trailhead",
+      "similarity": 1,
+      "distance_m": 39
+    }
+  },
+  {
+    "poi_name": "Oak Hill Trail",
+    "osm_id": "node2878973583",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Oak Hill Trailhead",
+      "similarity": 1,
+      "distance_m": 337
+    }
+  },
+  {
+    "poi_name": "Oak Hill Trailhead CVNP",
+    "osm_id": "way466935819",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Oak Hill Trailhead",
+      "similarity": 0.85,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Octagon Shelter CVNP",
+    "osm_id": "way441858075",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Octagon Shelter",
+      "similarity": 0.85,
+      "distance_m": 10
+    }
+  },
+  {
+    "poi_name": "Ohio & Erie Canal Mountain Bike Trailhead",
+    "osm_id": "way1292840660",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Canal Trail",
+      "similarity": 0.85,
+      "distance_m": 174
+    }
+  },
+  {
+    "poi_name": "Ohio & Erie Canal Reservation",
+    "osm_id": "way1292840660",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Canal Trail",
+      "similarity": 0.85,
+      "distance_m": 572
+    }
+  },
+  {
+    "poi_name": "Ohio City Bike Co-op",
+    "osm_id": "node3625076530",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Ohio City Bicycle Co-op",
+      "similarity": 0.67,
+      "distance_m": 10
+    }
+  },
+  {
+    "poi_name": "Old Carriage Trail",
+    "osm_id": "relation19383010",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Old Carriage Trail",
+      "similarity": 1,
+      "distance_m": 133
+    }
+  },
+  {
+    "poi_name": "Overlook Trail",
+    "osm_id": "node2335435034",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Overlook Deck",
+      "similarity": 0.85,
+      "distance_m": 193
+    }
+  },
+  {
+    "poi_name": "Oxbow Trail",
+    "osm_id": "node9927720490",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Oxbow Trailhead",
+      "similarity": 1,
+      "distance_m": 69
+    }
+  },
+  {
+    "poi_name": "Parma Heights Resevoir",
+    "osm_id": "way1423628359",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Resevoir Park",
+      "similarity": 0.85,
+      "distance_m": 161
+    }
+  },
+  {
+    "poi_name": "Pedego Electric Bikes",
+    "osm_id": "node10082314402",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Pedego Electric Bikes",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Peninsula Art Academy",
+    "osm_id": "relation181945",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Peninsula",
+      "similarity": 0.85,
+      "distance_m": 749
+    }
+  },
+  {
+    "poi_name": "Peninsula Coffee House & Market",
+    "osm_id": "way662436847",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Peninsula Coffee House & Market",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Peninsula Police Department",
+    "osm_id": "relation181945",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Peninsula",
+      "similarity": 0.85,
+      "distance_m": 651
+    }
+  },
+  {
+    "poi_name": "Peninsula United Methodist Church",
+    "osm_id": "way479776847",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Peninsula United Methodist Church",
+      "similarity": 1,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Pine Hollow Trailhead",
+    "osm_id": "way406599913",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Pine Hollow",
+      "similarity": 1,
+      "distance_m": 19
+    }
+  },
+  {
+    "poi_name": "Portal West Coffee",
+    "osm_id": "node12716428801",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Portal West Coffee",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Porthouse Theater",
+    "osm_id": "way325043658",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Porthouse Theater",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Prairie Trail",
+    "osm_id": "node2931873368",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Tallgrass Prairie",
+      "similarity": 0.85,
+      "distance_m": 20
+    }
+  },
+  {
+    "poi_name": "Prather Trail",
+    "osm_id": "node12115369026",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Prather Vista",
+      "similarity": 0.85,
+      "distance_m": 177
+    }
+  },
+  {
+    "poi_name": "Quarry Trail",
+    "osm_id": "node5825988904",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Deep Lock Quarry",
+      "similarity": 0.85,
+      "distance_m": 92
+    }
+  },
+  {
+    "poi_name": "Reagan-Huffman Mountain Bike Trailhead",
+    "osm_id": "way465205150",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Reagan Park",
+      "similarity": 0.85,
+      "distance_m": 459
+    }
+  },
+  {
+    "poi_name": "Red Lock Trailhead",
+    "osm_id": "way609638969",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Red Lock Trailhead",
+      "similarity": 1,
+      "distance_m": 33
+    }
+  },
+  {
+    "poi_name": "River Light Gallery",
+    "osm_id": "way662436846",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "River Light Gallery",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Rivergate Park",
+    "osm_id": "way1011021052",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Rivergate Park",
+      "similarity": 1,
+      "distance_m": 51
+    }
+  },
+  {
+    "poi_name": "Rivergate Park",
+    "osm_id": "way1011021052",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Rivergate Park",
+      "similarity": 1,
+      "distance_m": 58
+    }
+  },
+  {
+    "poi_name": "Rocky River Reservation",
+    "osm_id": "way1001929248",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Rocky River",
+      "similarity": 1,
+      "distance_m": 406
+    }
+  },
+  {
+    "poi_name": "Salt Run Trail",
+    "osm_id": "relation12471680",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Salt Run Trail",
+      "similarity": 1,
+      "distance_m": 83
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park",
+    "osm_id": "way323083638",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Sand Run Metro Park",
+      "similarity": 1,
+      "distance_m": 282
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Lone Spruce Area",
+    "osm_id": "node11644577965",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Lone Spruce Area",
+      "similarity": 0.85,
+      "distance_m": 41
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - North Hawkins Area",
+    "osm_id": "node11644577968",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "North Hawkins Area",
+      "similarity": 0.85,
+      "distance_m": 82
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Old Portage Area",
+    "osm_id": "node11644577964",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Old Portage Area",
+      "similarity": 0.85,
+      "distance_m": 12
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Shadowfield Area",
+    "osm_id": "node11644577967",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Shadowfield Area",
+      "similarity": 0.85,
+      "distance_m": 28
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Vehicle Ford",
+    "osm_id": "way323083638",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Sand Run Metro Park",
+      "similarity": 0.85,
+      "distance_m": 536
+    }
+  },
+  {
+    "poi_name": "Sand Run Metro Park - Wadsworth Area",
+    "osm_id": "node11644577966",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Wadsworth Area",
+      "similarity": 0.85,
+      "distance_m": 27
+    }
+  },
+  {
+    "poi_name": "Sarah’s Vineyard",
+    "osm_id": "way1227238488",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Sarah's Vineyard",
+      "similarity": 1,
+      "distance_m": 34
+    }
+  },
+  {
+    "poi_name": "Schneider Park",
+    "osm_id": "way633129749",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Schneider Park",
+      "similarity": 1,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Schneider Park",
+    "osm_id": "way633129749",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Schneider Park",
+      "similarity": 1,
+      "distance_m": 1
+    }
+  },
+  {
+    "poi_name": "Schumacher / Valley Link Trail",
+    "osm_id": "node12421845396",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Schumacher Trailhead",
+      "similarity": 0.85,
+      "distance_m": 357
+    }
+  },
+  {
+    "poi_name": "Schumacher Trail",
+    "osm_id": "node12421845396",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Schumacher Trailhead",
+      "similarity": 1,
+      "distance_m": 593
+    }
+  },
+  {
+    "poi_name": "Second Sole Akron",
+    "osm_id": "node8951968622",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Second Sole",
+      "similarity": 0.85,
+      "distance_m": 7
+    }
+  },
+  {
+    "poi_name": "Seneca Trail",
+    "osm_id": "relation17745800",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Seneca Trail",
+      "similarity": 1,
+      "distance_m": 68
+    }
+  },
+  {
+    "poi_name": "Silver Creek Metro Park",
+    "osm_id": "way279929012",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Silver Creek Metro Park",
+      "similarity": 1,
+      "distance_m": 200
+    }
+  },
+  {
+    "poi_name": "Silver Creek Metro Park",
+    "osm_id": "way279929012",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Silver Creek Metro Park",
+      "similarity": 1,
+      "distance_m": 419
+    }
+  },
+  {
+    "poi_name": "Skyline Trail",
+    "osm_id": "node11215871518",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Skyline Overlook",
+      "similarity": 0.85,
+      "distance_m": 119
+    }
+  },
+  {
+    "poi_name": "Springfield Bog Metro Park",
+    "osm_id": "way279927827",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Springfield Bog Metro Park",
+      "similarity": 1,
+      "distance_m": 134
+    }
+  },
+  {
+    "poi_name": "Squire’s Castle",
+    "osm_id": "way1079665168",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Squire's Castle Shelter",
+      "similarity": 0.85,
+      "distance_m": 291
+    }
+  },
+  {
+    "poi_name": "Stan Hywet",
+    "osm_id": "way470099376",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Stan Hywet Hall & Gardens",
+      "similarity": 0.85,
+      "distance_m": 121
+    }
+  },
+  {
+    "poi_name": "Stanford House",
+    "osm_id": "way481072417",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Stanford House",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Stanford Trail",
+    "osm_id": "node10688617635",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Stanford Trailhead",
+      "similarity": 1,
+      "distance_m": 552
+    }
+  },
+  {
+    "poi_name": "Station Bridle Path",
+    "osm_id": "relation19472679",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Station Bridle Path",
+      "similarity": 1,
+      "distance_m": 453
+    }
+  },
+  {
+    "poi_name": "Stumpy Basin",
+    "osm_id": "way180851250",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Stumpy Basin",
+      "similarity": 1,
+      "distance_m": 18
+    }
+  },
+  {
+    "poi_name": "Summit County",
+    "osm_id": "relation911310",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Summit County",
+      "similarity": 1,
+      "distance_m": 464
+    }
+  },
+  {
+    "poi_name": "Summit Lake NorthShore Park",
+    "osm_id": "node357450445",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Summit Lake Park",
+      "similarity": 0.85,
+      "distance_m": 105
+    }
+  },
+  {
+    "poi_name": "Summit Lake Park",
+    "osm_id": "way472101121",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Summit Lake Park",
+      "similarity": 1,
+      "distance_m": 9
+    }
+  },
+  {
+    "poi_name": "Szalay’s Farm",
+    "osm_id": "way305206960",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Szalay's",
+      "similarity": 0.85,
+      "distance_m": 1
+    }
+  },
+  {
+    "poi_name": "Tamarack Trail",
+    "osm_id": "way782261998",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Tamarack Bog",
+      "similarity": 0.85,
+      "distance_m": 90
+    }
+  },
+  {
+    "poi_name": "Terminal & Valley Depot",
+    "osm_id": "node11817333996",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Terminal",
+      "similarity": 0.85,
+      "distance_m": 223
+    }
+  },
+  {
+    "poi_name": "Terra Vista Natural Study Area",
+    "osm_id": "node7633727920",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Terra Vista Natural Study Area",
+      "similarity": 1,
+      "distance_m": 17
+    }
+  },
+  {
+    "poi_name": "The Merchant Tavern",
+    "osm_id": "way630824653",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "The Merchant",
+      "similarity": 0.85,
+      "distance_m": 4
+    }
+  },
+  {
+    "poi_name": "The Rabbit Hole Akron",
+    "osm_id": "node7223210190",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "The Rabbit Hole",
+      "similarity": 0.85,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Tinker's Creek Gorge Scenic Overlook",
+    "osm_id": "node2141917791",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Tinker's Creek Gorge Scenic Overlook",
+      "similarity": 1,
+      "distance_m": 4
+    }
+  },
+  {
+    "poi_name": "Top O' the World Connector",
+    "osm_id": "way1227237226",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Top o' the World",
+      "similarity": 0.85,
+      "distance_m": 83
+    }
+  },
+  {
+    "poi_name": "Towpath Tennis Center",
+    "osm_id": "way1456804958",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Towpath Tennis Center",
+      "similarity": 1,
+      "distance_m": 2
+    }
+  },
+  {
+    "poi_name": "Trail Mix Peninsula",
+    "osm_id": "way662435088",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Trail Mix Peninsula",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Turner Trail",
+    "osm_id": "relation13168286",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Turner Trail",
+      "similarity": 1,
+      "distance_m": 158
+    }
+  },
+  {
+    "poi_name": "Valley Overlook at Camp Mueller",
+    "osm_id": "way1232699874",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Valley Overlook at Camp Mueller",
+      "similarity": 1,
+      "distance_m": 236
+    }
+  },
+  {
+    "poi_name": "Valley View Woods",
+    "osm_id": "relation18057126",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Valley View Woods",
+      "similarity": 1,
+      "distance_m": 86
+    }
+  },
+  {
+    "poi_name": "Valley View Woods Park",
+    "osm_id": "relation18057126",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Valley View Woods",
+      "similarity": 1,
+      "distance_m": 153
+    }
+  },
+  {
+    "poi_name": "Vertical Runner - Brecksville",
+    "osm_id": "way609351918",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Vertical Runner",
+      "similarity": 0.85,
+      "distance_m": 12
+    }
+  },
+  {
+    "poi_name": "Viaduct Park",
+    "osm_id": "node2519265077",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Viaduct Park",
+      "similarity": 1,
+      "distance_m": 3
+    }
+  },
+  {
+    "poi_name": "Viaduct Park Loop Trail",
+    "osm_id": "node2519265077",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Viaduct Park",
+      "similarity": 0.85,
+      "distance_m": 139
+    }
+  },
+  {
+    "poi_name": "Village of Peninsula",
+    "osm_id": "relation181945",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Peninsula",
+      "similarity": 0.85,
+      "distance_m": 152
+    }
+  },
+  {
+    "poi_name": "Village of Valley View",
+    "osm_id": "relation182083",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Valley View",
+      "similarity": 0.85,
+      "distance_m": 647
+    }
+  },
+  {
+    "poi_name": "Virginia Kendall Park",
+    "osm_id": "node357468346",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Virginia Kendall Park",
+      "similarity": 1,
+      "distance_m": 174
+    }
+  },
+  {
+    "poi_name": "Walton Hills",
+    "osm_id": "relation182082",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Walton Hills",
+      "similarity": 1,
+      "distance_m": 335
+    }
+  },
+  {
+    "poi_name": "Washington Reservation",
+    "osm_id": "relation3956422",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Washington Reservation",
+      "similarity": 1,
+      "distance_m": 697
+    }
+  },
+  {
+    "poi_name": "Water Works Family Aquatic Center",
+    "osm_id": "way321563943",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Water Works Park",
+      "similarity": 0.85,
+      "distance_m": 76
+    }
+  },
+  {
+    "poi_name": "water works walking path",
+    "osm_id": "way321563943",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Water Works Park",
+      "similarity": 0.85,
+      "distance_m": 475
+    }
+  },
+  {
+    "poi_name": "Wendy Park Cleveland Metroparks",
+    "osm_id": "way95024460",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Wendy Park",
+      "similarity": 0.85,
+      "distance_m": 47
+    }
+  },
+  {
+    "poi_name": "Wetmore Trail",
+    "osm_id": "node10025833140",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Wetmore Trailhead",
+      "similarity": 1,
+      "distance_m": 910
+    }
+  },
+  {
+    "poi_name": "Wetmore Trailhead",
+    "osm_id": "way437233918",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Wetmore Trailhead",
+      "similarity": 1,
+      "distance_m": 19
+    }
+  },
+  {
+    "poi_name": "Whipp's Ledges Loop Trail",
+    "osm_id": "relation19449933",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Whipp's Ledges Parking",
+      "similarity": 0.85,
+      "distance_m": 269
+    }
+  },
+  {
+    "poi_name": "White Oak Trail",
+    "osm_id": "relation19474655",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "White Oak Trail",
+      "similarity": 1,
+      "distance_m": 21
+    }
+  },
+  {
+    "poi_name": "Wildflower Loop Trail",
+    "osm_id": "relation19472720",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Wildflower Loop Trail",
+      "similarity": 1,
+      "distance_m": 58
+    }
+  },
+  {
+    "poi_name": "Wildlife Woods Trail",
+    "osm_id": "way1232467402",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Wildlife Woods Park",
+      "similarity": 1,
+      "distance_m": 200
+    }
+  },
+  {
+    "poi_name": "Wilson’s Feed Mill",
+    "osm_id": "way609638974",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Wilson Feed Mill",
+      "similarity": 0.85,
+      "distance_m": 5
+    }
+  },
+  {
+    "poi_name": "Winking Lizard Tavern",
+    "osm_id": "way662435087",
+    "opening_hours": null,
+    "wheelchair": null,
+    "fee": null,
+    "match": {
+      "osm_name": "Winking Lizard",
+      "similarity": 0.85,
+      "distance_m": 3
+    }
+  }
+]

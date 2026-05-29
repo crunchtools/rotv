@@ -13,8 +13,13 @@
  *   node backend/migrations/import-osm-amenities.js      # local
  *   node /app/migrations/import-osm-amenities.js          # in container
  *
- * Refresh the snapshot by re-querying Overpass for the two tags in the region
- * bbox and re-filtering to boundary_type='park' polygons.
+ * Each feature also carries the OSM visitor-info tags opening_hours, wheelchair,
+ * and fee (null when untagged), written to the matching pois columns (#7). On
+ * re-import these refresh via COALESCE so a present value is never nulled out.
+ *
+ * Refresh the snapshot by re-querying Overpass for the two amenity tags in the
+ * region bbox (with `out tags;` to capture opening_hours/wheelchair/fee) and
+ * re-filtering to boundary_type='park' polygons.
  */
 
 import { readFileSync } from 'fs';
@@ -81,21 +86,27 @@ for (const feature of snapshot) {
       `INSERT INTO pois (
          name, poi_roles, latitude, longitude,
          geom, primary_activities, brief_description, collection_tier,
-         osm_id, more_info_link, has_primary_image, created_at, updated_at
+         osm_id, more_info_link, opening_hours, wheelchair, fee,
+         has_primary_image, created_at, updated_at
        )
        VALUES (
          $1, ARRAY['point']::text[], $2::double precision, $3::double precision,
          ST_SetSRID(ST_MakePoint($3::double precision, $2::double precision), 4326), $4, $5, 'monthly',
-         $6, $7, FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+         $6, $7, $8, $9, $10,
+         FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
        )
        ON CONFLICT (osm_id) WHERE osm_id IS NOT NULL DO UPDATE SET
          latitude = EXCLUDED.latitude,
          longitude = EXCLUDED.longitude,
          geom = EXCLUDED.geom,
          primary_activities = EXCLUDED.primary_activities,
+         opening_hours = COALESCE(EXCLUDED.opening_hours, pois.opening_hours),
+         wheelchair = COALESCE(EXCLUDED.wheelchair, pois.wheelchair),
+         fee = COALESCE(EXCLUDED.fee, pois.fee),
          updated_at = CURRENT_TIMESTAMP
        RETURNING (xmax = 0) AS is_insert`,  // xmax = 0 means a fresh INSERT; non-zero = ON CONFLICT UPDATE
-      [name, feature.lat, feature.lon, meta.activity, description, feature.osm_id, moreInfoLink]
+      [name, feature.lat, feature.lon, meta.activity, description, feature.osm_id, moreInfoLink,
+       feature.opening_hours || null, feature.wheelchair || null, feature.fee || null]
     );
     if (upsert.rows[0].is_insert) inserted++;
     else updated++;

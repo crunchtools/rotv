@@ -5,7 +5,10 @@
         "lat": 41.372601,
         "lon": -81.6130157,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node10676833085",
@@ -13,7 +16,10 @@
         "lat": 41.2622703,
         "lon": -81.5599946,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "no",
+        "fee": null
     },
     {
         "osm_id": "node10707691068",
@@ -21,7 +27,10 @@
         "lat": 41.2170147,
         "lon": -81.5257278,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node10762282822",
@@ -29,7 +38,10 @@
         "lat": 41.1390045,
         "lon": -81.5747406,
         "osm_name": null,
-        "park": "F.A. Seiberling Nature Realm"
+        "park": "F.A. Seiberling Nature Realm",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node10859526305",
@@ -37,7 +49,10 @@
         "lat": 41.499276,
         "lon": -81.7115625,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node10859526306",
@@ -45,7 +60,10 @@
         "lat": 41.4987731,
         "lon": -81.7155029,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node11020856749",
@@ -53,7 +71,10 @@
         "lat": 41.5020874,
         "lon": -81.4893153,
         "osm_name": null,
-        "park": "Acacia Reservation"
+        "park": "Acacia Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node1137180456",
@@ -61,7 +82,10 @@
         "lat": 41.1592267,
         "lon": -81.5744783,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "node11916192151",
@@ -69,7 +93,10 @@
         "lat": 41.3924917,
         "lon": -81.6308308,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node11978458897",
@@ -77,7 +104,10 @@
         "lat": 41.224304,
         "lon": -81.5105508,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": "no"
     },
     {
         "osm_id": "node12115369022",
@@ -85,7 +115,10 @@
         "lat": 41.1240971,
         "lon": -81.5312301,
         "osm_name": null,
-        "park": "Cascade Valley Metro Park"
+        "park": "Cascade Valley Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node12956673576",
@@ -93,7 +126,10 @@
         "lat": 41.5409742,
         "lon": -81.6338902,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node1297928834",
@@ -101,7 +137,10 @@
         "lat": 41.4465345,
         "lon": -81.7251191,
         "osm_name": null,
-        "park": "Brookside Reservation"
+        "park": "Brookside Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13037793077",
@@ -109,7 +148,10 @@
         "lat": 41.1721688,
         "lon": -81.5718225,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13101163329",
@@ -117,7 +159,10 @@
         "lat": 41.2178774,
         "lon": -81.5790801,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13115472762",
@@ -125,7 +170,10 @@
         "lat": 41.1325073,
         "lon": -81.4220798,
         "osm_name": null,
-        "park": "Munroe Falls Metro Park"
+        "park": "Munroe Falls Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13119545302",
@@ -133,7 +181,10 @@
         "lat": 41.1303703,
         "lon": -81.4230127,
         "osm_name": null,
-        "park": "Munroe Falls Metro Park"
+        "park": "Munroe Falls Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13119546749",
@@ -141,7 +192,10 @@
         "lat": 41.1329089,
         "lon": -81.4237524,
         "osm_name": null,
-        "park": "Munroe Falls Metro Park"
+        "park": "Munroe Falls Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13120496070",
@@ -149,7 +203,10 @@
         "lat": 41.2776985,
         "lon": -81.5372488,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13120522503",
@@ -157,7 +214,10 @@
         "lat": 41.2318264,
         "lon": -81.5540243,
         "osm_name": null,
-        "park": "Deep Lock Quarry Metro Park"
+        "park": "Deep Lock Quarry Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13529495791",
@@ -165,7 +225,10 @@
         "lat": 41.3904225,
         "lon": -81.5767491,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13568292708",
@@ -173,7 +236,10 @@
         "lat": 41.3897753,
         "lon": -81.6951007,
         "osm_name": null,
-        "park": "West Creek Reservation"
+        "park": "West Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13568292732",
@@ -181,7 +247,10 @@
         "lat": 41.3897834,
         "lon": -81.6951233,
         "osm_name": null,
-        "park": "West Creek Reservation"
+        "park": "West Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13568292734",
@@ -189,7 +258,10 @@
         "lat": 41.3908488,
         "lon": -81.6917027,
         "osm_name": null,
-        "park": "West Creek Reservation"
+        "park": "West Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node1375183996",
@@ -197,7 +269,10 @@
         "lat": 41.2309378,
         "lon": -81.4934969,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "node13836877296",
@@ -205,7 +280,10 @@
         "lat": 41.3189718,
         "lon": -81.5880832,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node13836877297",
@@ -213,7 +291,10 @@
         "lat": 41.3189741,
         "lon": -81.5881326,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2141868525",
@@ -221,7 +302,10 @@
         "lat": 41.3790138,
         "lon": -81.551066,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2141917787",
@@ -229,7 +313,10 @@
         "lat": 41.3758499,
         "lon": -81.573669,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2148542124",
@@ -237,7 +324,10 @@
         "lat": 41.3739723,
         "lon": -81.5721534,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2153810573",
@@ -245,7 +335,10 @@
         "lat": 41.5796073,
         "lon": -81.4287785,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2155072348",
@@ -253,7 +346,10 @@
         "lat": 41.3524398,
         "lon": -81.5920963,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2158266182",
@@ -261,7 +357,10 @@
         "lat": 41.5612571,
         "lon": -81.430438,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2202420723",
@@ -269,7 +368,10 @@
         "lat": 41.5746917,
         "lon": -81.4226424,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2202420738",
@@ -277,7 +379,10 @@
         "lat": 41.5745894,
         "lon": -81.4214193,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2235614557",
@@ -285,7 +390,10 @@
         "lat": 41.5501387,
         "lon": -81.4177555,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2243047166",
@@ -293,7 +401,10 @@
         "lat": 41.5690731,
         "lon": -81.4191489,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2251256936",
@@ -301,7 +412,10 @@
         "lat": 41.5615033,
         "lon": -81.4346334,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node2283472002",
@@ -309,7 +423,10 @@
         "lat": 41.4072496,
         "lon": -81.8863243,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2414613006",
@@ -317,7 +434,10 @@
         "lat": 41.4569989,
         "lon": -81.4066279,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": "no"
     },
     {
         "osm_id": "node2504525020",
@@ -325,7 +445,10 @@
         "lat": 41.5391942,
         "lon": -81.5219986,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2505390692",
@@ -333,7 +456,10 @@
         "lat": 41.5601654,
         "lon": -81.532329,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2505390702",
@@ -341,7 +467,10 @@
         "lat": 41.5620921,
         "lon": -81.5319856,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node2506476021",
@@ -349,7 +478,10 @@
         "lat": 41.5394272,
         "lon": -81.5219353,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2509774902",
@@ -357,7 +489,10 @@
         "lat": 41.5479255,
         "lon": -81.5285592,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2516687875",
@@ -365,7 +500,10 @@
         "lat": 41.276319,
         "lon": -81.5402439,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2519251318",
@@ -373,7 +511,10 @@
         "lat": 41.3770279,
         "lon": -81.5589703,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2519265063",
@@ -381,7 +522,10 @@
         "lat": 41.3805781,
         "lon": -81.5346332,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2520419082",
@@ -389,7 +533,10 @@
         "lat": 41.5406539,
         "lon": -81.6286528,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2525740698",
@@ -397,7 +544,10 @@
         "lat": 41.5020872,
         "lon": -81.489358,
         "osm_name": null,
-        "park": "Acacia Reservation"
+        "park": "Acacia Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node2525828377",
@@ -405,7 +555,10 @@
         "lat": 41.3908153,
         "lon": -81.6917462,
         "osm_name": null,
-        "park": "West Creek Reservation"
+        "park": "West Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2679582997",
@@ -413,7 +566,10 @@
         "lat": 41.3154487,
         "lon": -81.6165565,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2679583003",
@@ -421,7 +577,10 @@
         "lat": 41.3154527,
         "lon": -81.6186942,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2679583027",
@@ -429,7 +588,10 @@
         "lat": 41.3196251,
         "lon": -81.6155058,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2679583028",
@@ -437,7 +599,10 @@
         "lat": 41.3181743,
         "lon": -81.6156821,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2679583062",
@@ -445,7 +610,10 @@
         "lat": 41.307817,
         "lon": -81.6020229,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2757357899",
@@ -453,7 +621,10 @@
         "lat": 41.3015754,
         "lon": -81.8033928,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2786496941",
@@ -461,7 +632,10 @@
         "lat": 41.3156644,
         "lon": -81.6010038,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2851907817",
@@ -469,7 +643,10 @@
         "lat": 41.2262941,
         "lon": -81.5152929,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "no",
+        "fee": null
     },
     {
         "osm_id": "node2851910941",
@@ -477,7 +654,10 @@
         "lat": 41.2243049,
         "lon": -81.5104772,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": "no"
     },
     {
         "osm_id": "node2851910954",
@@ -485,7 +665,10 @@
         "lat": 41.2320797,
         "lon": -81.5072738,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2867556015",
@@ -493,7 +676,10 @@
         "lat": 41.3863932,
         "lon": -81.5371677,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2867556025",
@@ -501,7 +687,10 @@
         "lat": 41.3846877,
         "lon": -81.5243936,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2867556036",
@@ -509,7 +698,10 @@
         "lat": 41.3732017,
         "lon": -81.5046475,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2937937111",
@@ -517,7 +709,10 @@
         "lat": 41.4237721,
         "lon": -81.4213917,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2937937160",
@@ -525,7 +720,10 @@
         "lat": 41.4185272,
         "lon": -81.4192953,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node2941979574",
@@ -533,7 +731,10 @@
         "lat": 41.4337199,
         "lon": -81.4177753,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2953596613",
@@ -541,7 +742,10 @@
         "lat": 41.4006065,
         "lon": -81.8864987,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2953596933",
@@ -549,7 +753,10 @@
         "lat": 41.4047691,
         "lon": -81.8840418,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2961881365",
@@ -557,7 +764,10 @@
         "lat": 41.4332255,
         "lon": -81.8448262,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2961881408",
@@ -565,7 +775,10 @@
         "lat": 41.4327047,
         "lon": -81.8485223,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986102859",
@@ -573,7 +786,10 @@
         "lat": 41.4901381,
         "lon": -81.9339643,
         "osm_name": null,
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node2986102861",
@@ -581,7 +797,10 @@
         "lat": 41.4900261,
         "lon": -81.9310068,
         "osm_name": null,
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986102864",
@@ -589,7 +808,10 @@
         "lat": 41.486667,
         "lon": -81.9338194,
         "osm_name": null,
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986138404",
@@ -597,7 +819,10 @@
         "lat": 41.4425483,
         "lon": -81.7552954,
         "osm_name": null,
-        "park": "Big Creek Reservation"
+        "park": "Big Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986138410",
@@ -605,7 +830,10 @@
         "lat": 41.4020351,
         "lon": -81.7580542,
         "osm_name": null,
-        "park": "Big Creek Reservation"
+        "park": "Big Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986138417",
@@ -613,7 +841,10 @@
         "lat": 41.3804378,
         "lon": -81.8409555,
         "osm_name": "Mastadon Play Pit Play Area",
-        "park": "Big Creek Reservation"
+        "park": "Big Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986174403",
@@ -621,7 +852,10 @@
         "lat": 41.3635574,
         "lon": -81.8581176,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node2986174415",
@@ -629,7 +863,10 @@
         "lat": 41.3547407,
         "lon": -81.8546829,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986174419",
@@ -637,7 +874,10 @@
         "lat": 41.3552443,
         "lon": -81.8495652,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986236008",
@@ -645,7 +885,10 @@
         "lat": 41.3338914,
         "lon": -81.8335773,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986236013",
@@ -653,7 +896,10 @@
         "lat": 41.3341387,
         "lon": -81.8274293,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986519822",
@@ -661,7 +907,10 @@
         "lat": 41.4343864,
         "lon": -81.8443419,
         "osm_name": "Swingset",
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986519823",
@@ -669,7 +918,10 @@
         "lat": 41.4335579,
         "lon": -81.8443848,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986520656",
@@ -677,7 +929,10 @@
         "lat": 41.4791695,
         "lon": -81.832508,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986520658",
@@ -685,7 +940,10 @@
         "lat": 41.4780683,
         "lon": -81.8317462,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986687776",
@@ -693,7 +951,10 @@
         "lat": 41.2208544,
         "lon": -81.7203914,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986687811",
@@ -701,7 +962,10 @@
         "lat": 41.2204569,
         "lon": -81.6979976,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node2986687814",
@@ -709,7 +973,10 @@
         "lat": 41.2185362,
         "lon": -81.7030598,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986687817",
@@ -717,7 +984,10 @@
         "lat": 41.2114941,
         "lon": -81.70892,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986687822",
@@ -725,7 +995,10 @@
         "lat": 41.204207,
         "lon": -81.7262368,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node2986687832",
@@ -733,7 +1006,10 @@
         "lat": 41.2040133,
         "lon": -81.7269878,
         "osm_name": "Ledge Lake Bath House",
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node3195055708",
@@ -741,7 +1017,10 @@
         "lat": 41.3865764,
         "lon": -81.5953812,
         "osm_name": null,
-        "park": "Valley View Woods"
+        "park": "Valley View Woods",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node3195055710",
@@ -749,7 +1028,10 @@
         "lat": 41.3867434,
         "lon": -81.5956736,
         "osm_name": null,
-        "park": "Valley View Woods"
+        "park": "Valley View Woods",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node3195055711",
@@ -757,7 +1039,10 @@
         "lat": 41.3870272,
         "lon": -81.5929082,
         "osm_name": null,
-        "park": "Valley View Woods"
+        "park": "Valley View Woods",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node3445659035",
@@ -765,7 +1050,10 @@
         "lat": 41.4111826,
         "lon": -81.4140311,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node3618330016",
@@ -773,7 +1061,10 @@
         "lat": 41.2895578,
         "lon": -81.5640521,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4022750202",
@@ -781,7 +1072,10 @@
         "lat": 41.5598247,
         "lon": -81.5313771,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4035709934",
@@ -789,7 +1083,10 @@
         "lat": 41.4295271,
         "lon": -81.6060899,
         "osm_name": null,
-        "park": "Garfield Park Reservation"
+        "park": "Garfield Park Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4035709947",
@@ -797,7 +1094,10 @@
         "lat": 41.4294947,
         "lon": -81.6019106,
         "osm_name": null,
-        "park": "Garfield Park Reservation"
+        "park": "Garfield Park Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4035712675",
@@ -805,7 +1105,10 @@
         "lat": 41.4329632,
         "lon": -81.6051565,
         "osm_name": null,
-        "park": "Garfield Park Reservation"
+        "park": "Garfield Park Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4036690720",
@@ -813,7 +1116,10 @@
         "lat": 41.4286193,
         "lon": -81.60683,
         "osm_name": null,
-        "park": "Garfield Park Reservation"
+        "park": "Garfield Park Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4044801548",
@@ -821,7 +1127,10 @@
         "lat": 41.5699001,
         "lon": -81.4377953,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4064237415",
@@ -829,7 +1138,10 @@
         "lat": 41.4229027,
         "lon": -81.4168596,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4066048430",
@@ -837,7 +1149,10 @@
         "lat": 41.4322004,
         "lon": -81.604702,
         "osm_name": null,
-        "park": "Garfield Park Reservation"
+        "park": "Garfield Park Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4069224516",
@@ -845,7 +1160,10 @@
         "lat": 41.4134042,
         "lon": -81.4594332,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4127019880",
@@ -853,7 +1171,10 @@
         "lat": 41.2709841,
         "lon": -81.5558063,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4218284432",
@@ -861,7 +1182,10 @@
         "lat": 41.372215,
         "lon": -81.6137067,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4270946681",
@@ -869,7 +1193,10 @@
         "lat": 41.306772,
         "lon": -81.398587,
         "osm_name": null,
-        "park": "Liberty Park"
+        "park": "Liberty Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4351736404",
@@ -877,7 +1204,10 @@
         "lat": 41.1842838,
         "lon": -81.5826273,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "node4464194737",
@@ -885,7 +1215,10 @@
         "lat": 41.4901601,
         "lon": -81.9332669,
         "osm_name": null,
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4464194784",
@@ -893,7 +1226,10 @@
         "lat": 41.4895333,
         "lon": -81.9345944,
         "osm_name": null,
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4465446059",
@@ -901,7 +1237,10 @@
         "lat": 41.4336882,
         "lon": -81.6587505,
         "osm_name": null,
-        "park": "Ohio & Erie Canal Reservation"
+        "park": "Ohio & Erie Canal Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4465446844",
@@ -909,7 +1248,10 @@
         "lat": 41.4545856,
         "lon": -81.6592269,
         "osm_name": null,
-        "park": "Washington Reservation"
+        "park": "Washington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4529249945",
@@ -917,7 +1259,10 @@
         "lat": 41.561726,
         "lon": -81.4357488,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4531011957",
@@ -925,7 +1270,10 @@
         "lat": 41.3568005,
         "lon": -81.8241964,
         "osm_name": null,
-        "park": "Big Creek Reservation"
+        "park": "Big Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4531012608",
@@ -933,7 +1281,10 @@
         "lat": 41.380378,
         "lon": -81.8425807,
         "osm_name": null,
-        "park": "Big Creek Reservation"
+        "park": "Big Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4545860956",
@@ -941,7 +1292,10 @@
         "lat": 41.2216249,
         "lon": -81.7309028,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4545861521",
@@ -949,7 +1303,10 @@
         "lat": 41.203166,
         "lon": -81.7006004,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4636077527",
@@ -957,7 +1314,10 @@
         "lat": 41.3761302,
         "lon": -81.5742223,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4714314685",
@@ -965,7 +1325,10 @@
         "lat": 41.0125077,
         "lon": -81.3940918,
         "osm_name": null,
-        "park": "Springfield Bog Metro Park"
+        "park": "Springfield Bog Metro Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node4719518875",
@@ -973,7 +1336,10 @@
         "lat": 41.3629687,
         "lon": -81.8588522,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4731424491",
@@ -981,7 +1347,10 @@
         "lat": 41.3043636,
         "lon": -81.7537599,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4732830529",
@@ -989,7 +1358,10 @@
         "lat": 41.3023289,
         "lon": -81.7378319,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4884571736",
@@ -997,7 +1369,10 @@
         "lat": 41.2165105,
         "lon": -81.7145979,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4884571737",
@@ -1005,7 +1380,10 @@
         "lat": 41.2171251,
         "lon": -81.7144119,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4904842313",
@@ -1013,7 +1391,10 @@
         "lat": 41.3630752,
         "lon": -81.8546659,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4972122536",
@@ -1021,7 +1402,10 @@
         "lat": 41.1277701,
         "lon": -81.5397336,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "node4974367973",
@@ -1029,7 +1413,10 @@
         "lat": 41.4133342,
         "lon": -81.4233188,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node4980291106",
@@ -1037,7 +1424,10 @@
         "lat": 41.2680072,
         "lon": -81.6392055,
         "osm_name": null,
-        "park": "Furnace Run Metro Park"
+        "park": "Furnace Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node5036948730",
@@ -1045,7 +1435,10 @@
         "lat": 41.4504556,
         "lon": -81.6580381,
         "osm_name": null,
-        "park": "Washington Reservation"
+        "park": "Washington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node5102173322",
@@ -1053,7 +1446,10 @@
         "lat": 41.0917526,
         "lon": -81.5186707,
         "osm_name": null,
-        "park": "Cascade Park"
+        "park": "Cascade Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "node5275328754",
@@ -1061,7 +1457,10 @@
         "lat": 41.2141827,
         "lon": -81.5309797,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node5747753898",
@@ -1069,7 +1468,10 @@
         "lat": 41.4996367,
         "lon": -81.7108324,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node5825507126",
@@ -1077,7 +1479,10 @@
         "lat": 41.0592966,
         "lon": -81.5425897,
         "osm_name": null,
-        "park": "Summit Lake Park"
+        "park": "Summit Lake Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node5982333359",
@@ -1085,7 +1490,10 @@
         "lat": 41.1378062,
         "lon": -81.5649645,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6003953365",
@@ -1093,7 +1501,10 @@
         "lat": 41.1334234,
         "lon": -81.596668,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node6011450296",
@@ -1101,7 +1512,10 @@
         "lat": 41.2611433,
         "lon": -81.683192,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6214892937",
@@ -1109,7 +1523,10 @@
         "lat": 41.331648,
         "lon": -81.4091136,
         "osm_name": "Nature Play",
-        "park": "Liberty Park"
+        "park": "Liberty Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6283260364",
@@ -1117,7 +1534,10 @@
         "lat": 41.1340915,
         "lon": -81.5600071,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "node6311827098",
@@ -1125,7 +1545,10 @@
         "lat": 41.3903862,
         "lon": -81.5772039,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6311827109",
@@ -1133,7 +1556,10 @@
         "lat": 41.389769,
         "lon": -81.5923124,
         "osm_name": null,
-        "park": "Valley View Woods"
+        "park": "Valley View Woods",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6486880885",
@@ -1141,7 +1567,10 @@
         "lat": 41.0784253,
         "lon": -81.4557772,
         "osm_name": null,
-        "park": "Goodyear Heights Metro Park"
+        "park": "Goodyear Heights Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6510003585",
@@ -1149,7 +1578,10 @@
         "lat": 41.1703681,
         "lon": -81.5902836,
         "osm_name": null,
-        "park": "O'Neil Woods Metro Park"
+        "park": "O'Neil Woods Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6712076870",
@@ -1157,7 +1589,10 @@
         "lat": 41.448979,
         "lon": -81.7239299,
         "osm_name": null,
-        "park": "Brookside Reservation"
+        "park": "Brookside Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node6795730985",
@@ -1165,7 +1600,10 @@
         "lat": 41.1670844,
         "lon": -81.5670037,
         "osm_name": null,
-        "park": "Hampton Hills Metro Park"
+        "park": "Hampton Hills Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node8040270852",
@@ -1173,7 +1611,10 @@
         "lat": 41.2207808,
         "lon": -81.5116417,
         "osm_name": "Men's Toilets",
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "no",
+        "fee": null
     },
     {
         "osm_id": "node8040276264",
@@ -1181,7 +1622,10 @@
         "lat": 41.2207497,
         "lon": -81.5112938,
         "osm_name": "Women's Bathroom",
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "no",
+        "fee": null
     },
     {
         "osm_id": "node8279554267",
@@ -1189,7 +1633,10 @@
         "lat": 41.5606933,
         "lon": -81.5329362,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node8762263552",
@@ -1197,7 +1644,10 @@
         "lat": 41.4887874,
         "lon": -81.7382427,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": "no"
     },
     {
         "osm_id": "node8762286830",
@@ -1205,7 +1655,10 @@
         "lat": 41.4865533,
         "lon": -81.743656,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": "no"
     },
     {
         "osm_id": "node8762604693",
@@ -1213,7 +1666,10 @@
         "lat": 41.5834593,
         "lon": -81.568323,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node8762652383",
@@ -1221,7 +1677,10 @@
         "lat": 41.5829163,
         "lon": -81.5693881,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": "no"
     },
     {
         "osm_id": "node8763018942",
@@ -1229,7 +1688,10 @@
         "lat": 41.0110472,
         "lon": -81.5176427,
         "osm_name": null,
-        "park": "Firestone Metro Park"
+        "park": "Firestone Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node8763018943",
@@ -1237,7 +1699,10 @@
         "lat": 41.012577,
         "lon": -81.5136469,
         "osm_name": null,
-        "park": "Firestone Metro Park"
+        "park": "Firestone Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node8815953337",
@@ -1245,7 +1710,10 @@
         "lat": 41.0168175,
         "lon": -81.5149407,
         "osm_name": null,
-        "park": "Firestone Metro Park"
+        "park": "Firestone Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node9230679589",
@@ -1253,7 +1721,10 @@
         "lat": 41.4092779,
         "lon": -81.8820007,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node9588942854",
@@ -1261,7 +1732,10 @@
         "lat": 41.4921596,
         "lon": -81.7359486,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node9741336929",
@@ -1269,7 +1743,10 @@
         "lat": 41.1293802,
         "lon": -81.5526594,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "node9818859742",
@@ -1277,7 +1754,10 @@
         "lat": 41.4888053,
         "lon": -81.7382911,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node9854608444",
@@ -1285,7 +1765,10 @@
         "lat": 41.139266,
         "lon": -81.5649835,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node9854608453",
@@ -1293,7 +1776,10 @@
         "lat": 41.1303178,
         "lon": -81.5680391,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "node9910733104",
@@ -1301,7 +1787,10 @@
         "lat": 41.1227772,
         "lon": -81.5249043,
         "osm_name": null,
-        "park": "Cascade Valley Metro Park"
+        "park": "Cascade Valley Metro Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "node9935556868",
@@ -1309,7 +1798,10 @@
         "lat": 41.3608849,
         "lon": -81.8588261,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way1005349290",
@@ -1317,7 +1809,10 @@
         "lat": 41.4332349,
         "lon": -81.8448275,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1005349294",
@@ -1325,7 +1820,10 @@
         "lat": 41.4349193,
         "lon": -81.8442683,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1005349296",
@@ -1333,7 +1831,10 @@
         "lat": 41.4332898,
         "lon": -81.8441266,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1033100035",
@@ -1341,7 +1842,10 @@
         "lat": 41.4895403,
         "lon": -81.9345986,
         "osm_name": null,
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1038682275",
@@ -1349,7 +1853,10 @@
         "lat": 41.486458,
         "lon": -81.7460066,
         "osm_name": "The Lindsey Family Play Space",
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1044285011",
@@ -1357,7 +1864,10 @@
         "lat": 41.42995,
         "lon": -81.6657215,
         "osm_name": null,
-        "park": "Ohio & Erie Canal Reservation"
+        "park": "Ohio & Erie Canal Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1079665169",
@@ -1365,7 +1875,10 @@
         "lat": 41.582074,
         "lon": -81.4177858,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1082530189",
@@ -1373,7 +1886,10 @@
         "lat": 41.1201718,
         "lon": -81.5169127,
         "osm_name": null,
-        "park": "Cascade Valley Metro Park"
+        "park": "Cascade Valley Metro Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way1083291220",
@@ -1381,7 +1897,10 @@
         "lat": 41.1220865,
         "lon": -81.5227153,
         "osm_name": null,
-        "park": "Cascade Valley Metro Park"
+        "park": "Cascade Valley Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1083291222",
@@ -1389,7 +1908,10 @@
         "lat": 41.1195374,
         "lon": -81.5237149,
         "osm_name": null,
-        "park": "Cascade Valley Metro Park"
+        "park": "Cascade Valley Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1149973620",
@@ -1397,7 +1919,10 @@
         "lat": 41.2394779,
         "lon": -81.5378296,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1155071912",
@@ -1405,7 +1930,10 @@
         "lat": 41.219643,
         "lon": -81.575901,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1156484519",
@@ -1413,7 +1941,10 @@
         "lat": 41.1273396,
         "lon": -81.5458675,
         "osm_name": null,
-        "park": "Sand Run Metro Park"
+        "park": "Sand Run Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1157720751",
@@ -1421,7 +1952,10 @@
         "lat": 41.1208065,
         "lon": -81.4934425,
         "osm_name": null,
-        "park": "Gorge Metro Park"
+        "park": "Gorge Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1163505913",
@@ -1429,7 +1963,10 @@
         "lat": 41.3112209,
         "lon": -81.7846409,
         "osm_name": null,
-        "park": "Mill Stream Run Reservation"
+        "park": "Mill Stream Run Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1174428106",
@@ -1437,7 +1974,10 @@
         "lat": 41.2333892,
         "lon": -81.5693289,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1221204668",
@@ -1445,7 +1985,10 @@
         "lat": 41.229704,
         "lon": -81.5539495,
         "osm_name": null,
-        "park": "Deep Lock Quarry Metro Park"
+        "park": "Deep Lock Quarry Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1249928792",
@@ -1453,7 +1996,10 @@
         "lat": 41.4453405,
         "lon": -81.8293357,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1267521419",
@@ -1461,7 +2007,10 @@
         "lat": 41.3804303,
         "lon": -81.8409429,
         "osm_name": "Mastadon Play Pit Play Area",
-        "park": "Big Creek Reservation"
+        "park": "Big Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1267995343",
@@ -1469,7 +2018,10 @@
         "lat": 41.453983,
         "lon": -81.6621353,
         "osm_name": null,
-        "park": "Washington Reservation"
+        "park": "Washington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1286938353",
@@ -1477,7 +2029,10 @@
         "lat": 41.1509808,
         "lon": -81.550829,
         "osm_name": null,
-        "park": "Hampton Hills Mountain Bike Area"
+        "park": "Hampton Hills Mountain Bike Area",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1294767426",
@@ -1485,7 +2040,10 @@
         "lat": 41.1659651,
         "lon": -81.5365896,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1308288116",
@@ -1493,7 +2051,10 @@
         "lat": 41.1238763,
         "lon": -81.5310094,
         "osm_name": null,
-        "park": "Cascade Valley Metro Park"
+        "park": "Cascade Valley Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1330031009",
@@ -1501,7 +2062,10 @@
         "lat": 41.4902682,
         "lon": -81.9333607,
         "osm_name": "Karen's Way Play Space",
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1335708746",
@@ -1509,7 +2073,10 @@
         "lat": 41.1282915,
         "lon": -81.521784,
         "osm_name": null,
-        "park": "Cascade Valley Metro Park"
+        "park": "Cascade Valley Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1359965592",
@@ -1517,7 +2084,10 @@
         "lat": 41.4416124,
         "lon": -81.8349511,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1388871213",
@@ -1525,7 +2095,10 @@
         "lat": 41.2307395,
         "lon": -81.5232341,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1421600772",
@@ -1533,7 +2106,10 @@
         "lat": 41.2232298,
         "lon": -81.7116889,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1421600776",
@@ -1541,7 +2117,10 @@
         "lat": 41.2246356,
         "lon": -81.7081998,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1421600777",
@@ -1549,7 +2128,10 @@
         "lat": 41.2221404,
         "lon": -81.7129131,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1421600787",
@@ -1557,7 +2139,10 @@
         "lat": 41.217792,
         "lon": -81.7159193,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1421600795",
@@ -1565,7 +2150,10 @@
         "lat": 41.2266774,
         "lon": -81.7195273,
         "osm_name": null,
-        "park": "Hinckley Reservation"
+        "park": "Hinckley Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1422943492",
@@ -1573,7 +2161,10 @@
         "lat": 41.3014254,
         "lon": -81.5998556,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way1424147645",
@@ -1581,7 +2172,10 @@
         "lat": 41.3846824,
         "lon": -81.5394062,
         "osm_name": null,
-        "park": "Bedford Reservation"
+        "park": "Bedford Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "way1424841214",
@@ -1589,7 +2183,10 @@
         "lat": 41.2044367,
         "lon": -81.5816274,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1425465590",
@@ -1597,7 +2194,10 @@
         "lat": 41.3819678,
         "lon": -81.481892,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1425468558",
@@ -1605,7 +2205,10 @@
         "lat": 41.4203404,
         "lon": -81.4236848,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1427112920",
@@ -1613,7 +2216,10 @@
         "lat": 41.1306391,
         "lon": -81.4346757,
         "osm_name": null,
-        "park": "Munroe Falls Metro Park"
+        "park": "Munroe Falls Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1427123267",
@@ -1621,7 +2227,10 @@
         "lat": 41.1302572,
         "lon": -81.424582,
         "osm_name": null,
-        "park": "Munroe Falls Metro Park"
+        "park": "Munroe Falls Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1427125657",
@@ -1629,7 +2238,10 @@
         "lat": 41.1326473,
         "lon": -81.4252635,
         "osm_name": null,
-        "park": "Munroe Falls Metro Park"
+        "park": "Munroe Falls Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way1427238338",
@@ -1637,7 +2249,10 @@
         "lat": 41.3000021,
         "lon": -81.6072731,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way297209389",
@@ -1645,7 +2260,10 @@
         "lat": 41.1907638,
         "lon": -81.5597446,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way297209391",
@@ -1653,7 +2271,10 @@
         "lat": 41.190749,
         "lon": -81.5599941,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way297212149",
@@ -1661,7 +2282,10 @@
         "lat": 41.1918888,
         "lon": -81.5624295,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way297212150",
@@ -1669,7 +2293,10 @@
         "lat": 41.1920268,
         "lon": -81.5624016,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way310182539",
@@ -1677,7 +2304,10 @@
         "lat": 41.0829699,
         "lon": -81.4480869,
         "osm_name": null,
-        "park": "Goodyear Heights Metro Park"
+        "park": "Goodyear Heights Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way321927910",
@@ -1685,7 +2315,10 @@
         "lat": 41.1676295,
         "lon": -81.5362099,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way375405469",
@@ -1693,7 +2326,10 @@
         "lat": 41.4929316,
         "lon": -81.7341905,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way375610560",
@@ -1701,7 +2337,10 @@
         "lat": 41.4860415,
         "lon": -81.7468382,
         "osm_name": null,
-        "park": "Cleveland Lakefront Reservation"
+        "park": "Cleveland Lakefront Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way377646390",
@@ -1709,7 +2348,10 @@
         "lat": 41.4391244,
         "lon": -81.8462193,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way377646393",
@@ -1717,7 +2359,10 @@
         "lat": 41.4689982,
         "lon": -81.8329459,
         "osm_name": null,
-        "park": "Rocky River Reservation"
+        "park": "Rocky River Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "way422748570",
@@ -1725,7 +2370,10 @@
         "lat": 41.0755037,
         "lon": -81.4510398,
         "osm_name": null,
-        "park": "Goodyear Heights Metro Park"
+        "park": "Goodyear Heights Metro Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way425109411",
@@ -1733,7 +2381,10 @@
         "lat": 41.5480948,
         "lon": -81.528423,
         "osm_name": "Euclid Creek Playground",
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way437233917",
@@ -1741,7 +2392,10 @@
         "lat": 41.2122548,
         "lon": -81.5456137,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way462785361",
@@ -1749,7 +2403,10 @@
         "lat": 41.5859851,
         "lon": -81.5657686,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way462785367",
@@ -1757,7 +2414,10 @@
         "lat": 41.5875234,
         "lon": -81.5618468,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way462785368",
@@ -1765,7 +2425,10 @@
         "lat": 41.5875469,
         "lon": -81.56163,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way462785370",
@@ -1773,7 +2436,10 @@
         "lat": 41.58707,
         "lon": -81.5633549,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way462785375",
@@ -1781,7 +2447,10 @@
         "lat": 41.5829031,
         "lon": -81.5693631,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way478297268",
@@ -1789,7 +2458,10 @@
         "lat": 41.1860348,
         "lon": -81.5884168,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way491806317",
@@ -1797,7 +2469,10 @@
         "lat": 41.2629429,
         "lon": -81.5587285,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "no",
+        "fee": null
     },
     {
         "osm_id": "way575122002",
@@ -1805,7 +2480,10 @@
         "lat": 41.4169457,
         "lon": -81.4153677,
         "osm_name": null,
-        "park": "South Chagrin Reservation"
+        "park": "South Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way610031851",
@@ -1813,7 +2491,10 @@
         "lat": 41.3014966,
         "lon": -81.5990664,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way622499187",
@@ -1821,7 +2502,10 @@
         "lat": 41.3166724,
         "lon": -81.4174869,
         "osm_name": null,
-        "park": "Liberty Park"
+        "park": "Liberty Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way622499200",
@@ -1829,7 +2513,10 @@
         "lat": 41.3173608,
         "lon": -81.4175533,
         "osm_name": null,
-        "park": "Liberty Park"
+        "park": "Liberty Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way713940619",
@@ -1837,7 +2524,10 @@
         "lat": 41.4500697,
         "lon": -81.7217981,
         "osm_name": null,
-        "park": "Brookside Reservation"
+        "park": "Brookside Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way714941822",
@@ -1845,7 +2535,10 @@
         "lat": 41.5745638,
         "lon": -81.4176246,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way714941824",
@@ -1853,7 +2546,10 @@
         "lat": 41.5751638,
         "lon": -81.4176432,
         "osm_name": null,
-        "park": "North Chagrin Reservation"
+        "park": "North Chagrin Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way746531257",
@@ -1861,7 +2557,10 @@
         "lat": 41.2006932,
         "lon": -81.5715733,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way749959910",
@@ -1869,7 +2568,10 @@
         "lat": 41.3043783,
         "lon": -81.753855,
         "osm_name": null,
-        "park": "Brecksville Reservation"
+        "park": "Brecksville Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way751089153",
@@ -1877,7 +2579,10 @@
         "lat": 41.1924006,
         "lon": -81.5611354,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way751089154",
@@ -1885,7 +2590,10 @@
         "lat": 41.1922441,
         "lon": -81.5611693,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": null
     },
     {
         "osm_id": "way817947652",
@@ -1893,7 +2601,10 @@
         "lat": 41.2431781,
         "lon": -81.5491636,
         "osm_name": null,
-        "park": "Cuyahoga Valley National Park"
+        "park": "Cuyahoga Valley National Park",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": "no"
     },
     {
         "osm_id": "way854646225",
@@ -1901,7 +2612,10 @@
         "lat": 41.5832467,
         "lon": -81.5683928,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     },
     {
         "osm_id": "way891132942",
@@ -1909,7 +2623,10 @@
         "lat": 41.5604721,
         "lon": -81.5331986,
         "osm_name": null,
-        "park": "Euclid Creek Reservation"
+        "park": "Euclid Creek Reservation",
+        "opening_hours": null,
+        "wheelchair": "yes",
+        "fee": "no"
     },
     {
         "osm_id": "way999320970",
@@ -1917,6 +2634,9 @@
         "lat": 41.4901637,
         "lon": -81.9341409,
         "osm_name": null,
-        "park": "Huntington Reservation"
+        "park": "Huntington Reservation",
+        "opening_hours": null,
+        "wheelchair": null,
+        "fee": null
     }
 ]
