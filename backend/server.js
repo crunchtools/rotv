@@ -72,7 +72,7 @@ import imageServerClient from './services/imageServerClient.js';
 import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
-import { startMcpServer, mcpMiddleware } from './services/mcpServer.js';
+import { mcpMiddleware } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 import { startTracker, stopTracker, getBoatPositions } from './services/waterTaxiTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
@@ -2963,8 +2963,8 @@ async function start() {
 
   activeSmtpServer = startSmtpServer(pool);
 
-  startMcpServer(pool, app.get('boss'), parseInt(process.env.MCP_PORT || '3001'));
   app.all('/mcp/:token', mcpMiddleware(pool, app.get('boss')));
+  console.log('MCP server mounted at /mcp/:token');
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Roots of The Valley API running on port ${PORT}`);

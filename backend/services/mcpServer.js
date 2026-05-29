@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import http from 'http';
 import crypto from 'crypto';
+import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
 
 import {
   getQueue,
@@ -815,7 +815,7 @@ async function handleMcpRequest(req, res, pool, boss) {
       const adminResult = await pool.query(
         'SELECT id FROM users WHERE is_admin = TRUE ORDER BY id LIMIT 1'
       );
-      mcpUserId = adminResult.rows.length > 0 ? adminResult.rows[0].id : null;
+      mcpUserId = adminResult.rows.length > 0 ? adminResult.rows[0].id : MCP_ADMIN_USER_ID;
     }
   }
 
@@ -836,31 +836,11 @@ async function handleMcpRequest(req, res, pool, boss) {
   await transport.handleRequest(req, res);
 }
 
-export function startMcpServer(pool, boss, port = 3001) {
-  const httpServer = http.createServer(async (req, res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
-    res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
-    await handleMcpRequest(req, res, pool, boss);
-  });
-
-  httpServer.listen(port, () => {
-    console.log(`ROTV Admin MCP server running on port ${port}`);
-  });
-
-  return httpServer;
-}
-
 export function mcpMiddleware(pool, boss) {
   return async (req, res) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
+    res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
     await handleMcpRequest(req, res, pool, boss);
   };
 }

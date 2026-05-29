@@ -170,21 +170,17 @@ NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}
 ENVFILE
         fi
 
-        # MCP server always runs on port 3001 inside the container
-        MCP_PORT_MAP=""
-
         # Use host network for default instance, bridge network for alternate ports
         if [ "$HOST_PORT" = "8080" ]; then
             NETWORK_ARGS="--network=host"
         else
-            NETWORK_ARGS="-p ${HOST_PORT}:8080 -p $((HOST_PORT + 1000)):25 -p $((HOST_PORT + 920)):3001"
+            NETWORK_ARGS="-p ${HOST_PORT}:8080 -p $((HOST_PORT + 1000)):25"
         fi
 
         podman run -d \
             --name "$CONTAINER_NAME" \
             --privileged \
             $NETWORK_ARGS \
-            $MCP_PORT_MAP \
             --tmpfs /run \
             -v ~/.rotv/environment-dev:/etc/rotv/environment:ro \
             $STORAGE_MOUNT \
