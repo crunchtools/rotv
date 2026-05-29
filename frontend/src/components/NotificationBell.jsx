@@ -6,7 +6,7 @@ import { generateSlug } from './sidebar/helpers';
 const POLL_MS = 60000;
 const READ_KEY = 'rotv-notifications-read';
 
-function readReadSet() {
+function readLocalSet() {
   try {
     const arr = JSON.parse(localStorage.getItem(READ_KEY) || '[]');
     return new Set(Array.isArray(arr) ? arr : []);
@@ -15,7 +15,7 @@ function readReadSet() {
   }
 }
 
-function writeReadSet(set) {
+function writeLocalSet(set) {
   try {
     localStorage.setItem(READ_KEY, JSON.stringify([...set]));
   } catch {
@@ -27,7 +27,6 @@ function timeAgo(iso) {
   const ms = new Date(iso).getTime();
   if (Number.isNaN(ms)) return '';
   const diff = Date.now() - ms;
-  // Future-dated items (upcoming events) read forward: "in 3d".
   if (diff < 0) {
     const mins = Math.floor(-diff / 60000);
     if (mins < 60) return 'soon';
@@ -44,10 +43,6 @@ function timeAgo(iso) {
 }
 
 function normalize(feed) {
-  // activityTime drives both ordering and the "time ago" label. Prefer the
-  // content's own date (publication for news, start for events) over the
-  // collection date, so the feed reads newest-published-first rather than in
-  // scrape order.
   const news = (feed.news || []).map(n => ({
     key: `news-${n.id}`,
     type: 'news',
@@ -62,8 +57,6 @@ function normalize(feed) {
     poiName: e.poi_name,
     activityTime: e.start_date || e.collection_date
   }));
-  // Sort newest-first. Coerce missing/invalid dates to 0 so they sort to the
-  // bottom rather than producing NaN comparisons (unstable order).
   return [...news, ...events].sort((a, b) =>
     (new Date(b.activityTime).getTime() || 0) - (new Date(a.activityTime).getTime() || 0)
   );
@@ -73,17 +66,41 @@ export default function NotificationBell() {
   const { isAuthenticated, favorites } = useAuth();
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
-  const [readSet, setReadSet] = useState(readReadSet);
+  const [readSet, setReadSet] = useState(readLocalSet);
   const [open, setOpen] = useState(false);
   const [anchorBottom, setAnchorBottom] = useState(null);
   const [anchorRight, setAnchorRight] = useState(null);
   const containerRef = useRef(null);
+  const serverSynced = useRef(false);
 
-  // Facebook-style: an item stays unread (tinted, counted) until the user clicks
-  // it. Opening the dropdown does not mark anything read.
   const isUnread = useCallback((item) => !readSet.has(item.key), [readSet]);
-
   const unread = items.filter(isUnread).length;
+
+  // On mount (or auth change), merge server-side read keys into local state
+  useEffect(() => {
+    if (!isAuthenticated) { serverSynced.current = false; return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/notifications/reads', { credentials: 'include' });
+        if (!res.ok || cancelled) return;
+        const { keys } = await res.json();
+        if (cancelled || !keys?.length) return;
+        setReadSet(prev => {
+          const merged = new Set(prev);
+          let changed = false;
+          for (const k of keys) {
+            if (!merged.has(k)) { merged.add(k); changed = true; }
+          }
+          if (!changed) return prev;
+          writeLocalSet(merged);
+          return merged;
+        });
+        serverSynced.current = true;
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isAuthenticated]);
 
   const loadFeed = useCallback(async () => {
     if (!isAuthenticated && favorites.length === 0) {
@@ -116,7 +133,7 @@ export default function NotificationBell() {
       const pruned = [...prev].filter(k => liveKeys.has(k));
       if (pruned.length === prev.size) return prev;
       const next = new Set(pruned);
-      writeReadSet(next);
+      writeLocalSet(next);
       return next;
     });
   }, [items]);
@@ -146,14 +163,27 @@ export default function NotificationBell() {
     }
   };
 
-  const handleItemClick = (item) => {
+  const markRead = useCallback((key) => {
     setReadSet(prev => {
-      if (prev.has(item.key)) return prev;
+      if (prev.has(key)) return prev;
       const next = new Set(prev);
-      next.add(item.key);
-      writeReadSet(next);
+      next.add(key);
+      writeLocalSet(next);
+      // Sync to server for authenticated users (fire-and-forget)
+      if (isAuthenticated) {
+        fetch('/api/notifications/reads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ keys: [key] })
+        }).catch(() => {});
+      }
       return next;
     });
+  }, [isAuthenticated]);
+
+  const handleItemClick = (item) => {
+    markRead(item.key);
     const poiSlug = generateSlug(item.poiName);
     const titleSlug = generateSlug(item.title);
     if (poiSlug && titleSlug) {
