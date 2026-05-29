@@ -48,6 +48,72 @@ export async function getContainingBoundaries(pool, poiId) {
 }
 
 /**
+ * Find the candidate POIs an item could be reassigned to when it is relevant but
+ * not about its assigned POI (POI gate, Tier 2).
+ *
+ * - owner: the organization that owns the assigned POI (pois.owner_id), if any.
+ * - boundary: the smallest boundary POI that geographically contains the assigned
+ *   POI (e.g. Liberty Park Nature Center -> Liberty Park). Excludes the POI itself.
+ *
+ * Spatial lookup is wrapped so a PostGIS failure degrades to a null boundary rather
+ * than erroring — mirroring getContainingBoundaries.
+ *
+ * @param {Pool} pool - Database connection pool
+ * @param {number} poiId - assigned POI id
+ * @returns {Promise<{owner: {id:number,name:string}|null, boundary: {id:number,name:string}|null}>}
+ */
+export async function getReassignmentCandidates(pool, poiId) {
+  const id = parseInt(poiId, 10);
+  const candidates = { owner: null, boundary: null };
+  if (!Number.isInteger(id) || id <= 0) return candidates;
+
+  try {
+    const ownerQuery = await pool.query(
+      `SELECT o.id, o.name
+         FROM pois x
+         JOIN pois o ON o.id = x.owner_id
+        WHERE x.id = $1 AND (o.deleted IS NULL OR o.deleted = FALSE)`,
+      [id]
+    );
+    if (ownerQuery.rows.length) candidates.owner = ownerQuery.rows[0];
+  } catch (err) {
+    console.warn(`[Geo] Owner lookup failed for POI ${id}: ${err.message}`);
+  }
+
+  try {
+    const boundaryQuery = await pool.query(`
+      WITH poi_point AS (
+        SELECT
+          CASE
+            WHEN 'point' = ANY(poi_roles) AND geom IS NOT NULL THEN geom
+            WHEN poi_roles && ARRAY['trail','boundary','river']::text[] AND geometry IS NOT NULL THEN
+              ST_StartPoint(ST_GeometryN(ST_GeomFromGeoJSON(geometry::text), 1))
+            ELSE NULL
+          END as point_geom
+        FROM pois
+        WHERE id = $1
+      )
+      SELECT boundary.id, boundary.name
+      FROM poi_point
+      JOIN pois AS boundary
+        ON 'boundary' = ANY(boundary.poi_roles)
+        AND boundary.boundary_geom IS NOT NULL
+        AND boundary.id != $1
+        AND (boundary.deleted IS NULL OR boundary.deleted = FALSE)
+        AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
+      WHERE poi_point.point_geom IS NOT NULL
+      ORDER BY ST_Area(boundary.boundary_geom) ASC
+      LIMIT 1
+    `, [id]);
+    if (boundaryQuery.rows.length) candidates.boundary = boundaryQuery.rows[0];
+  } catch (err) {
+    console.warn(`[Geo] Boundary candidate lookup unavailable for POI ${id}: ${err.message}`);
+  }
+
+  return candidates;
+}
+
+/**
  * Expand a POI id into the set of POI ids whose news/events should roll up to it.
  *
  * - A normal point POI returns just [id] (no spatial cost, no behavior change).

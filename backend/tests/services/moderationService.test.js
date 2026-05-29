@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { applyQualityFilters, getDomainReputation } from '../../services/moderationService.js';
+import { applyQualityFilters, getDomainReputation, evaluateDateGate } from '../../services/moderationService.js';
 
 // Test domain lists (mirrors production config from migration 019)
 const TRUSTED_DOMAINS = [
@@ -122,5 +122,42 @@ describe('Domain reputation detection', () => {
     expect(getDomainReputation('not-a-url', TRUSTED_SET, COMPETITOR_SET)).toBe('unknown');
     expect(getDomainReputation('', TRUSTED_SET, COMPETITOR_SET)).toBe('unknown');
     expect(getDomainReputation(null, TRUSTED_SET, COMPETITOR_SET)).toBe('unknown');
+  });
+});
+
+describe('Date gate (spec 030)', () => {
+  const cfg = { threshold: 4, floorYear: 2010, trustedSet: TRUSTED_SET };
+
+  test('missing date -> review', () => {
+    expect(evaluateDateGate(null, 0, 'https://nps.gov/a', cfg).verdict).toBe('review');
+  });
+
+  test('high consensus passes from any source', () => {
+    const g = evaluateDateGate('2023-06-01', 6, 'https://example.com/a', cfg);
+    expect(g.verdict).toBe('pass');
+  });
+
+  test('trusted source passes a recent date with low consensus', () => {
+    const g = evaluateDateGate('2024-09-10', 1, 'https://cleveland.com/story', cfg);
+    expect(g.verdict).toBe('pass');
+    expect(g.trusted_source).toBe(true);
+  });
+
+  test('untrusted source with low consensus -> review', () => {
+    expect(evaluateDateGate('2024-09-10', 1, 'https://example.com/a', cfg).verdict).toBe('review');
+  });
+
+  test('old date from trusted source still passes (age never penalized)', () => {
+    expect(evaluateDateGate('2015-04-01', 1, 'https://beaconjournal.com/x', cfg).verdict).toBe('pass');
+  });
+
+  test('hallucinated pre-floor year -> review', () => {
+    expect(evaluateDateGate('1899-01-01', 8, 'https://cleveland.com/x', cfg).verdict).toBe('review');
+  });
+
+  test('future news date -> review, but events allow future', () => {
+    const future = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
+    expect(evaluateDateGate(future, 6, 'https://cleveland.com/x', cfg).verdict).toBe('review');
+    expect(evaluateDateGate(future, 6, 'https://cleveland.com/x', { ...cfg, allowFuture: true }).verdict).toBe('pass');
   });
 });

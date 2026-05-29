@@ -515,6 +515,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'moderation_enabled',
       'moderation_auto_approve_threshold',
       'moderation_auto_approve_enabled',
+      'moderation_date_floor_year',
+      'moderation_sweep_batch_size',
       'photo_submissions_enabled',
       'apify_api_token',
       'news_collection_prompt',

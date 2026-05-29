@@ -5,7 +5,8 @@ import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
-import { denyReason, sweepDenyLists } from './filterLists.js';
+import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
+import { getReassignmentCandidates } from './geoService.js';
 
 function sameOrigin(urlA, urlB) {
   try { return new URL(urlA).origin === new URL(urlB).origin; }
@@ -146,7 +147,6 @@ async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
 }
 
 async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
-  const typeLabel = contentType === 'event' ? 'event' : 'news article or announcement';
   const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park and the surrounding region including Cleveland Metroparks, Summit Metro Parks, and other nearby parks, trails, and outdoor recreation areas.
 
 Title: "${title}"
@@ -154,37 +154,40 @@ Summary: "${description || '(none)'}"
 Location: ${poiName || '(unknown)'}
 Type: ${contentType}
 
-Is this a real ${typeLabel}, NOT a static reference page?
+Is this content a good fit for this guide?
 
-APPROVE if the content:
-- Reports on something that happened or will happen (article, announcement, press release)
-- Describes a specific event with dates
-- Scheduled recreational excursions, tours, or rides with specific dates (e.g., scenic train rides, guided hikes, boat tours) — even if they run regularly
-- The TOPIC is directly related to: nature, trails, hiking, biking, paddling, outdoor recreation,
-  conservation, ecology, wildlife, park operations, land management, environmental education,
-  local history of the Cuyahoga Valley, or outdoor arts/music events hosted by a park or nature organization
-- Old news IS valid — a 2021 trail opening article is still news
+APPROVE if the SUBJECT relates to the Cuyahoga Valley / Northeast Ohio outdoors —
+nature, trails, hiking, biking, paddling, outdoor recreation, conservation, ecology,
+wildlife, park operations, land management, environmental education, local/regional
+history, scenic destinations and waterfalls, or outdoor arts/music events at a park or
+nature organization. This INCLUDES, equally:
+- News, announcements, and press releases
+- Events and scheduled excursions/tours/rides (even recurring ones)
+- Evergreen and descriptive content — trail write-ups, destination and "things to do"
+  guides, historical features and local legends, scenic-spot descriptions, hike recaps
+- Old content — a 2021 trail-opening article or a decades-old history piece is valid
 
-REJECT if the content is:
-- A permanent informational page (trail description, facility info, visitor guide)
-- An education resource or reference tool (StoryMap, interactive map, FAQ)
-- A general "about us" or organization overview page
-- A product/service page or commercial listing
-- A page that describes what something IS rather than what happened or will happen
-- A religious service, worship gathering, spiritual discussion, or faith-based event
-- A political rally, campaign event, or partisan meeting
-- A private party, wedding, corporate retreat, or commercial rental event
-- A general community event unrelated to nature, parks, or outdoor recreation
-  (e.g., book clubs, support groups, fitness classes, fundraising galas)
+Good, on-topic regional outdoor/park/history content is valuable to this guide whether
+or not it reports a specific "happening." Do NOT reject it merely for being a
+description, a reference page, a list, or evergreen rather than breaking news.
 
-IMPORTANT: Location alone does NOT make content relevant. An event held at a park
-venue is NOT automatically on-topic — the event's SUBJECT must relate to nature,
-trails, parks, conservation, history, or outdoor recreation.
+REJECT only if the content is genuinely a poor fit:
+- Off-topic for an outdoor/park/history guide — a religious service or worship gathering,
+  a political rally or partisan event, a private party/wedding/corporate rental, a purely
+  commercial product/service listing, or a general community event unrelated to nature,
+  parks, or regional history (e.g. book clubs, support groups, fitness classes, galas)
+- About a place OUTSIDE Northeast Ohio (e.g. a trail or park in another state)
+- Spam, navigation chrome, an error page, or content with no discernible subject
 
-The key test: does this page report on a HAPPENING (past, present, or future)
-whose TOPIC relates to nature, parks, or outdoor recreation in the Cuyahoga Valley?
+IMPORTANT: judge by SUBJECT, not venue. An off-topic event (a wedding, a political
+rally) held at a park is still a reject. But on-topic content about the parks, trails,
+nature, or history of the region is relevant even when it is purely descriptive.
 
-Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
+Also judge "about_poi": is this content specifically about "${poiName || '(unknown)'}"
+— either named directly or located there? Set about_poi false when the content is
+relevant to the region but is really about a different, broader, or neighboring place.
+
+Return ONLY valid JSON: {"relevant": true, "about_poi": true, "reasoning": "one sentence why"}`;
 
   const results = await Promise.all(
     Array.from({ length: numVotes }, () =>
@@ -193,7 +196,7 @@ Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
           const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
           try {
             const parsed = JSON.parse(raw);
-            return { relevant: !!parsed.relevant, reasoning: parsed.reasoning || '' };
+            return { relevant: !!parsed.relevant, about_poi: !!parsed.about_poi, reasoning: parsed.reasoning || '' };
           } catch {
             return null;
           }
@@ -204,18 +207,127 @@ Return ONLY valid JSON: {"relevant": true, "reasoning": "one sentence why"}`;
   return results.filter(Boolean);
 }
 
+// Tier-2 POI gate: when content is relevant but not about its assigned POI, ask which
+// candidate it actually belongs to — the assigned POI, its owner org, or its containing
+// boundary — or none. Single call, fired only on a Tier-1 miss.
+async function assignBestPoi(pool, { title, description, poiName }, candidates) {
+  const options = ['assigned'];
+  let optionText = `- "assigned": the content is about "${poiName || '(unknown)'}"`;
+  if (candidates.owner) {
+    options.push('owner');
+    optionText += `\n- "owner": the content is about "${candidates.owner.name}" (the organization that owns it)`;
+  }
+  if (candidates.boundary) {
+    options.push('boundary');
+    optionText += `\n- "boundary": the content is about "${candidates.boundary.name}" (the park/area it sits within)`;
+  }
+  optionText += `\n- "none": none of the above`;
+
+  const prompt = `You are routing a news/event item to the correct place for "Roots of The Valley."
+
+Title: "${title}"
+Summary: "${description || '(none)'}"
+
+Which one is this content most about? Choose exactly one:
+${optionText}
+
+Return ONLY valid JSON: {"choice": "assigned|owner|boundary|none"}`;
+
+  try {
+    const r = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 64, thinkingBudget: 0 });
+    const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    const choice = JSON.parse(raw).choice;
+    return options.includes(choice) ? choice : 'none';
+  } catch {
+    return 'none';
+  }
+}
+
+// Date gate: a date passes when it is present, not in the future, plausible (year at or
+// above the floor — catches hallucinated 1800s values), AND trustworthy (consensus score
+// at/above threshold OR from a trusted-domain source). Age is never penalized.
+export function evaluateDateGate(effectiveDate, dateScore, sourceUrl, { threshold, floorYear, trustedSet, allowFuture = false }) {
+  if (!effectiveDate) {
+    return { verdict: 'review', reason: 'No publication date', trusted_source: false };
+  }
+  const parsed = new Date(effectiveDate);
+  if (Number.isNaN(parsed.getTime())) {
+    return { verdict: 'review', reason: 'Unparseable publication date', trusted_source: false };
+  }
+  if (!allowFuture && parsed > new Date()) {
+    return { verdict: 'review', reason: `Future publication date ${effectiveDate}`, trusted_source: false };
+  }
+  const year = parsed.getUTCFullYear();
+  if (year < floorYear) {
+    return { verdict: 'review', reason: `Implausible year ${year} (below ${floorYear})`, trusted_source: false };
+  }
+  const trusted = getDomainReputation(sourceUrl, trustedSet) === 'trusted';
+  if (dateScore >= threshold) {
+    return { verdict: 'pass', reason: `Date consensus ${dateScore}/${threshold}`, trusted_source: trusted };
+  }
+  if (trusted) {
+    return { verdict: 'pass', reason: `Trusted source date (consensus ${dateScore}/${threshold})`, trusted_source: true };
+  }
+  return { verdict: 'review', reason: `Low date confidence ${dateScore}/${threshold} from untrusted source`, trusted_source: false };
+}
+
+// POI gate (three tiers). Returns the verdict plus newPoiId when a Tier-2 reassignment
+// should be applied by the caller's write. Never rejects.
+//
+// deniedPoiIds (the POI deny list) is filtered out of the candidates so a reassignment
+// can never route an item onto a deny-listed POI — that would silently defeat the
+// hard-reject deny check, which runs once against the original poi_id earlier in the
+// pipeline. A would-be denied target drops the item to Tier 3 (manual review) instead.
+export async function evaluatePoiGate(pool, row, votes, deniedPoiIds = new Set()) {
+  const total = votes.length;
+  const aboutCount = votes.filter(v => v.about_poi).length;
+  if (total > 0 && aboutCount * 2 >= total) {
+    return { verdict: 'pass', tier: 1, reason: `About assigned POI (${aboutCount}/${total} votes)`, reassigned_from: null, reassigned_to: null, newPoiId: null };
+  }
+
+  const candidates = await getReassignmentCandidates(pool, row.poi_id);
+  if (candidates.owner && deniedPoiIds.has(candidates.owner.id)) candidates.owner = null;
+  if (candidates.boundary && deniedPoiIds.has(candidates.boundary.id)) candidates.boundary = null;
+  if (!candidates.owner && !candidates.boundary) {
+    return { verdict: 'review', tier: 3, reason: 'Not about assigned POI; no eligible owner/boundary candidate', reassigned_from: null, reassigned_to: null, newPoiId: null };
+  }
+
+  const choice = await assignBestPoi(pool, { title: row.title, description: row.description, poiName: row.poi_name }, candidates);
+  if (choice === 'assigned') {
+    return { verdict: 'pass', tier: 1, reason: 'Confirmed about assigned POI', reassigned_from: null, reassigned_to: null, newPoiId: null };
+  }
+  const target = choice === 'owner' ? candidates.owner : choice === 'boundary' ? candidates.boundary : null;
+  if (target) {
+    return {
+      verdict: 'pass', tier: 2,
+      reason: `Reassigned to ${target.name} (${choice})`,
+      reassigned_from: row.poi_id, reassigned_to: target.id, newPoiId: target.id
+    };
+  }
+  return { verdict: 'review', tier: 3, reason: 'Not confidently about assigned POI, owner, or boundary', reassigned_from: null, reassigned_to: null, newPoiId: null };
+}
+
 export async function processItem(pool, contentType, contentId, { forceStatus = null, runId = null } = {}) {
   const itemRunId = runId || Math.floor(Date.now() / 1000);
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_threshold', 'moderation_news_date_threshold')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_threshold', 'moderation_news_date_threshold', 'moderation_date_floor_year', 'moderation_trusted_domains')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const parsedNewsThreshold = parseInt(settings.moderation_news_date_threshold);
   const newsDateThreshold = Number.isNaN(parsedNewsThreshold) ? 4 : parsedNewsThreshold;
+  const parsedFloorYear = parseInt(settings.moderation_date_floor_year);
+  const dateFloorYear = Number.isNaN(parsedFloorYear) ? 2010 : parsedFloorYear;
+  let trustedSet = new Set();
+  try {
+    const domains = JSON.parse(settings.moderation_trusted_domains || '[]');
+    if (Array.isArray(domains)) trustedSet = new Set(domains.map(d => String(d).toLowerCase().replace(/^www\./, '')));
+  } catch { /* leave empty on bad JSON */ }
   const parsedPhotoThreshold = parseFloat(settings.moderation_auto_approve_threshold);
   const photoThreshold = Number.isNaN(parsedPhotoThreshold) ? 0.9 : parsedPhotoThreshold;
+  // Deny-listed POIs must never be a reassignment target (POI gate Tier 2).
+  const deniedPoiIds = new Set((await loadListSetting(pool, 'news_collection_excluded_pois')).map(Number).filter(Number.isInteger));
 
   let scoring;
 
@@ -302,7 +414,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         if (row.date_signals) {
           const signals = row.date_signals;
           consensus = scoreDateConsensus(
-            { jsonLd: signals.jsonLd || [], meta: signals.meta || [], timeTags: signals.timeTags || [], url: signals.url || null },
+            { jsonLd: signals.jsonLd || [], meta: signals.meta || [], timeTags: signals.timeTags || [], url: signals.url || null, searchDate: signals.searchDate || null },
             signals.llmVotes || []
           );
         } else {
@@ -377,52 +489,72 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
 
     const effectiveDate = newDate || row.publication_date;
-    const isFutureDate = contentType === 'news' && effectiveDate && new Date(effectiveDate) > new Date();
+
+    // Three independent gates — auto-publish only when all three pass (spec 030).
+    // Events legitimately carry future dates, so the future-date check is news-only.
+    const dateGate = evaluateDateGate(effectiveDate, newScore, row.source_url,
+      { threshold: effectiveThreshold, floorYear: dateFloorYear, trustedSet, allowFuture: contentType === 'event' });
+
+    const relevanceGate = unanimousYes
+      ? { verdict: 'pass', reason: `Relevance ${yesCount}/${relevanceVotes.length} yes` }
+      : unanimousNo
+        ? { verdict: 'fail', reason: `Unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})` }
+        : { verdict: 'review', reason: `Relevance split ${yesCount}/${relevanceVotes.length} yes` };
+
+    // Skip the POI gate's extra lookup/LLM call when relevance already failed (we reject regardless).
+    const poiGate = relevanceGate.verdict === 'fail'
+      ? { verdict: 'review', tier: 0, reason: 'Not evaluated (relevance failed)', reassigned_from: null, reassigned_to: null, newPoiId: null }
+      : await evaluatePoiGate(pool, row, relevanceVotes, deniedPoiIds);
 
     let resolvedStatus;
-    let reasoning;
     if (forceStatus) {
       resolvedStatus = forceStatus;
-      reasoning = `Forced to ${forceStatus}`;
-    } else if (isFutureDate) {
-      resolvedStatus = 'pending';
-      reasoning = `Pending: future publication date ${effectiveDate} — needs review`;
-    } else if (unanimousNo) {
+    } else if (relevanceGate.verdict === 'fail') {
       resolvedStatus = 'rejected';
-      reasoning = `Rejected: relevance vote unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})`;
-    } else if (unanimousYes && newScore >= effectiveThreshold && effectiveDate) {
+    } else if (dateGate.verdict === 'pass' && relevanceGate.verdict === 'pass' && poiGate.verdict === 'pass') {
       resolvedStatus = 'published';
-      reasoning = `Published: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${effectiveThreshold}`;
     } else {
       resolvedStatus = 'pending';
-      reasoning = `Pending: relevance ${yesCount}/${relevanceVotes.length} yes, date score ${newScore}/${effectiveThreshold}`;
     }
+
+    const gates = {
+      date: { verdict: dateGate.verdict, reason: dateGate.reason, trusted_source: dateGate.trusted_source },
+      relevance: { verdict: relevanceGate.verdict, reason: relevanceGate.reason, yes: yesCount, total: relevanceVotes.length },
+      poi: { verdict: poiGate.verdict, tier: poiGate.tier, reason: poiGate.reason, reassigned_from: poiGate.reassigned_from, reassigned_to: poiGate.reassigned_to }
+    };
+    const reasoning = forceStatus
+      ? `Forced to ${forceStatus}`
+      : `${resolvedStatus} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
     const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
+    const newPoiId = poiGate.newPoiId; // Tier-2 reassignment target, or null to keep current poi_id
+    const gatesJson = JSON.stringify(gates);
     // Only write publication_date when rescore produced a new value — writing the existing
     // value back through this path can silently corrupt a previously-good timestamp
     if (rescoredDate) {
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
                 publication_date = $2, date_consensus_score = $3,
-                ai_reasoning = $4, relevance_signals = $5, moderation_date = CURRENT_TIMESTAMP,
+                ai_reasoning = $4, relevance_signals = $5, moderation_gates = $8::jsonb,
+                poi_id = COALESCE($9, poi_id), moderation_date = CURRENT_TIMESTAMP,
                 moderated_by = COALESCE($7, moderated_by), moderated_at = CASE WHEN $7 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
          WHERE id = $6`,
         [resolvedStatus, newDate, newScore, reasoning,
          relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
-         contentId, autoModeratedBy]
+         contentId, autoModeratedBy, gatesJson, newPoiId]
       );
     } else {
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
                 date_consensus_score = $2,
-                ai_reasoning = $3, relevance_signals = $4, moderation_date = CURRENT_TIMESTAMP,
+                ai_reasoning = $3, relevance_signals = $4, moderation_gates = $7::jsonb,
+                poi_id = COALESCE($8, poi_id), moderation_date = CURRENT_TIMESTAMP,
                 moderated_by = COALESCE($6, moderated_by), moderated_at = CASE WHEN $6 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
          WHERE id = $5`,
         [resolvedStatus, newScore, reasoning,
          relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
-         contentId, autoModeratedBy]
+         contentId, autoModeratedBy, gatesJson, newPoiId]
       );
     }
 
@@ -482,14 +614,25 @@ export async function processPendingItems(pool) {
     console.error('[Moderation] Deny-list sweep failed:', e.message);
   }
 
+  // Per-cycle batch size is configurable so a monthly collection dump clears in a few
+  // sweep cycles instead of grinding through 20 at a time (spec 030).
+  const batchRow = await pool.query(
+    "SELECT value FROM admin_settings WHERE key = 'moderation_sweep_batch_size'"
+  );
+  const parsedBatch = parseInt(batchRow.rows[0]?.value);
+  const batchSize = Number.isNaN(parsedBatch) || parsedBatch <= 0 ? 50 : parsedBatch;
+
   const pendingNews = await pool.query(
-    `SELECT id FROM poi_news WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT 20`
+    `SELECT id FROM poi_news WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT $1`,
+    [batchSize]
   );
   const pendingEvents = await pool.query(
-    `SELECT id FROM poi_events WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT 20`
+    `SELECT id FROM poi_events WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT $1`,
+    [batchSize]
   );
   const pendingPhotos = await pool.query(
-    `SELECT id FROM photo_submissions WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT 20`
+    `SELECT id FROM photo_submissions WHERE moderation_status = 'pending' AND moderation_processed = false LIMIT $1`,
+    [batchSize]
   );
   const totalPending = pendingNews.rows.length + pendingEvents.rows.length + pendingPhotos.rows.length;
 
@@ -747,7 +890,8 @@ export async function fixDate(pool, contentType, contentId) {
       jsonLd: signals.jsonLd || [],
       meta: signals.meta || [],
       timeTags: signals.timeTags || [],
-      url: signals.url || null
+      url: signals.url || null,
+      searchDate: signals.searchDate || null
     };
     consensus = scoreDateConsensus(deterministicSources, signals.llmVotes || []);
   } else {
@@ -808,7 +952,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
 
   const baseQuery = `
     SELECT n.id, 'news' AS content_type, n.poi_id, n.title, n.summary AS description,
-           n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues,
+           n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues, n.moderation_gates,
            n.submitted_by, n.moderated_by, n.moderated_at, n.collection_date AS created_at, n.source_url,
            n.content_source, n.publication_date, n.date_consensus_score,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
@@ -823,7 +967,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
     GROUP BY n.id, p.name
     UNION ALL
     SELECT e.id, 'event' AS content_type, e.poi_id, e.title, e.description,
-           e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
+           e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues, e.moderation_gates,
            e.submitted_by, e.moderated_by, e.moderated_at, e.collection_date AS created_at, e.source_url,
            e.content_source, e.publication_date, e.date_consensus_score,
            e.start_date, e.end_date,
@@ -843,7 +987,7 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
              ELSE CONCAT(media_type, ' #', id)
            END AS title,
            caption AS description,
-           moderation_status, confidence_score, ai_reasoning, NULL AS ai_issues,
+           moderation_status, confidence_score, ai_reasoning, NULL AS ai_issues, NULL::jsonb AS moderation_gates,
            submitted_by, moderated_by, moderated_at, created_at, youtube_url AS source_url,
            NULL AS content_source, NULL::DATE AS publication_date, 0 AS date_consensus_score,
            NULL::TIMESTAMPTZ AS start_date, NULL::TIMESTAMPTZ AS end_date,
