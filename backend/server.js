@@ -156,6 +156,7 @@ app.use(cors({
 // MCP routes must be mounted before the JSON body parser so the MCP SDK
 // can read the raw request stream for its own JSON-RPC parsing.
 app.all('/mcp/:token', (req, res, next) => { req._mcpRoute = true; next(); });
+app.all('/mcp', (req, res, next) => { req._mcpRoute = true; next(); });
 
 // Large GeoJSON geometry in linear features can exceed the default 100kb limit
 app.use((req, res, next) => {
@@ -2963,8 +2964,10 @@ async function start() {
 
   activeSmtpServer = startSmtpServer(pool);
 
-  app.all('/mcp/:token', mcpMiddleware(pool, app.get('boss')));
-  console.log('MCP server mounted at /mcp/:token');
+  const mcpHandler = mcpMiddleware(pool, app.get('boss'));
+  app.all('/mcp/:token', mcpHandler);
+  app.all('/mcp', mcpHandler);
+  console.log('MCP server mounted at /mcp/:token and /mcp?token=');
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Roots of The Valley API running on port ${PORT}`);

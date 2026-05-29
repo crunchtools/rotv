@@ -789,11 +789,13 @@ function registerTools(server, pool, boss, mcpUserId) {
 }
 
 async function handleMcpRequest(req, res, pool, boss) {
-  const urlMatch = req.url.match(/^\/mcp\/([A-Za-z0-9_-]+)$/);
+  const urlMatch = req.url.match(/^\/mcp\/([A-Za-z0-9_-]+)/);
   const urlToken = urlMatch ? urlMatch[1] : null;
+  const queryMatch = req.url.match(/[?&]token=([A-Za-z0-9_-]+)/);
+  const queryToken = queryMatch ? queryMatch[1] : null;
   const authHeader = req.headers.authorization;
   const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const token = urlToken || bearerToken;
+  const token = urlToken || queryToken || bearerToken;
 
   if (!token) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
