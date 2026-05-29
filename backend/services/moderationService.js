@@ -3,6 +3,7 @@ import { renderPage } from './renderPage.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
+import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists } from './filterLists.js';
 
@@ -398,27 +399,30 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
+    const autoModeratedBy = resolvedStatus === 'published' ? AUTO_PUBLISHER_USER_ID : null;
     // Only write publication_date when rescore produced a new value — writing the existing
     // value back through this path can silently corrupt a previously-good timestamp
     if (rescoredDate) {
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
                 publication_date = $2, date_consensus_score = $3,
-                ai_reasoning = $4, relevance_signals = $5, moderation_date = CURRENT_TIMESTAMP
+                ai_reasoning = $4, relevance_signals = $5, moderation_date = CURRENT_TIMESTAMP,
+                moderated_by = COALESCE($7, moderated_by), moderated_at = CASE WHEN $7 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
          WHERE id = $6`,
         [resolvedStatus, newDate, newScore, reasoning,
          relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
-         contentId]
+         contentId, autoModeratedBy]
       );
     } else {
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, moderation_status = $1,
                 date_consensus_score = $2,
-                ai_reasoning = $3, relevance_signals = $4, moderation_date = CURRENT_TIMESTAMP
+                ai_reasoning = $3, relevance_signals = $4, moderation_date = CURRENT_TIMESTAMP,
+                moderated_by = COALESCE($6, moderated_by), moderated_at = CASE WHEN $6 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
          WHERE id = $5`,
         [resolvedStatus, newScore, reasoning,
          relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
-         contentId]
+         contentId, autoModeratedBy]
       );
     }
 
