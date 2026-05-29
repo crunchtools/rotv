@@ -19,18 +19,10 @@ export async function loadListSetting(pool, key) {
   }
 }
 
-// Normalize a stored URL and a blocklist prefix the same way getDomainReputation does
-// (drop scheme + leading www + trailing slash), so a blocklist entry that is a bare
-// domain or a domain+path matches via startsWith. Kept local to avoid a circular import
-// with moderationService.
-function normalizeUrlForPrefix(url) {
-  try {
-    const u = new URL(url);
-    return (u.hostname.toLowerCase().replace(/^www\./, '') + u.pathname).toLowerCase().replace(/\/+$/, '');
-  } catch {
-    return null;
-  }
-}
+// Normalize a blocklist prefix (drop scheme + leading www + trailing slash) so a bare
+// domain or a domain+path entry matches a stored URL via startsWith, the same way
+// getDomainReputation treats the blocklist. Kept local to avoid a circular import with
+// moderationService.
 function normalizeBlocklistPrefix(prefix) {
   return String(prefix).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
 }
@@ -72,8 +64,13 @@ export const DENY_LISTS = [
     reason: 'Rejected: source domain is on the URL blocklist',
     contentTypes: ['news', 'event'],
     matches: (row, prefixes) => {
-      const norm = normalizeUrlForPrefix(row.source_url);
-      if (!norm) return false;
+      let norm;
+      try {
+        const u = new URL(row.source_url);
+        norm = (u.hostname.toLowerCase().replace(/^www\./, '') + u.pathname).toLowerCase().replace(/\/+$/, '');
+      } catch {
+        return false;
+      }
       return prefixes.some(p => typeof p === 'string' && p.trim() && norm.startsWith(normalizeBlocklistPrefix(p)));
     },
     sweepFragment: (prefixes) => {
