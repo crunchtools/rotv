@@ -24,7 +24,7 @@ dollar amount — OSM rarely tags `charge` and pricing goes stale (see issue not
 
 ### Visitor Planning
 
-**US-028-1: See operating hours**
+**US-029-1: See operating hours**
 > As a visitor planning a trip, I want to see a POI's operating hours so that I
 > can avoid arriving when it is closed.
 
@@ -32,7 +32,7 @@ Acceptance Criteria:
 - [ ] When a POI has `opening_hours`, the Visitor Information section shows an "Hours" row.
 - [ ] The row is hidden when the value is null/empty (no empty rows).
 
-**US-028-2: See accessibility**
+**US-029-2: See accessibility**
 > As a visitor with mobility needs, I want to see wheelchair accessibility so
 > that I can decide whether a destination works for me.
 
@@ -40,7 +40,7 @@ Acceptance Criteria:
 - [ ] `wheelchair` value renders as a human label (Accessible / Limited / Not accessible / Designated).
 - [ ] Row hidden when unset.
 
-**US-028-3: See whether there is a fee**
+**US-029-3: See whether there is a fee**
 > As a visitor, I want to know whether a POI charges a fee so that I can budget.
 
 Acceptance Criteria:
@@ -49,7 +49,7 @@ Acceptance Criteria:
 
 ### Content Curation
 
-**US-028-4: Edit the fields**
+**US-029-4: Edit the fields**
 > As an admin, I want to edit hours, accessibility, and fee on any POI so that I
 > can correct or supplement OSM data.
 
@@ -59,7 +59,7 @@ Acceptance Criteria:
 
 ### OSM Enrichment
 
-**US-028-5: Auto-populate amenities from OSM**
+**US-029-5: Auto-populate amenities from OSM**
 > As a maintainer, I want the OSM amenity import to capture these tags so that
 > the seeded amenities ship with hours/accessibility/fee where OSM has them.
 
@@ -68,7 +68,7 @@ Acceptance Criteria:
 - [ ] `import-osm-amenities.js` writes them on insert and refreshes them on re-import, without clobbering a non-null OSM value with null.
 - [ ] Idempotent: re-running does not duplicate or wipe data.
 
-**US-028-6: Match curated POIs to OSM**
+**US-029-6: Match curated POIs to OSM**
 > As a maintainer, I want ROTV's hand-curated POIs (parks, trails, visitor
 > centers, businesses) matched to their OpenStreetMap features so that they
 > record an `osm_id` and gain hours/accessibility/fee where OSM has them.
