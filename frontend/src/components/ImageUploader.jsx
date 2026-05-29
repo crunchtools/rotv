@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import MediaUploadModal from './MediaUploadModal';
 
 function ImageUploader({
@@ -16,10 +16,13 @@ function ImageUploader({
   const [error, setError] = useState(null);
   const [dragActive, setDragActive] = useState(false);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
+  const [imageLoadFailed, setImageLoadFailed] = useState(false);
   const fileInputRef = useRef(null);
 
   const cacheParam = updatedAt || Date.now();
   const serverImageUrl = hasImage ? `/api/pois/${destinationId}/thumbnail?size=medium&v=${cacheParam}` : null;
+
+  useEffect(() => { setImageLoadFailed(false); }, [serverImageUrl]);
 
   let imagePreviewUrl = null;
   let showUploadZone = false;
@@ -28,7 +31,7 @@ function ImageUploader({
     imagePreviewUrl = `data:${pendingImage.mimeType};base64,${pendingImage.data}`;
   } else if (pendingImage?.deleted) {
     showUploadZone = true;
-  } else if (hasImage) {
+  } else if (hasImage && !imageLoadFailed) {
     imagePreviewUrl = serverImageUrl;
   } else {
     showUploadZone = true;
@@ -148,14 +151,8 @@ function ImageUploader({
             src={imagePreviewUrl}
             alt="Destination"
             className={`image-preview ${isVirtualPoi ? 'logo-image' : ''}`}
-            onError={(e) => {
-              e.target.style.display = 'none';
-              e.target.nextSibling.style.display = 'flex';
-            }}
+            onError={() => setImageLoadFailed(true)}
           />
-          <div className="image-load-error" style={{ display: 'none' }}>
-            Failed to load image
-          </div>
           <div className="image-preview-actions">
             <button
               type="button"

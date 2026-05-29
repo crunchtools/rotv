@@ -67,5 +67,40 @@ export function createNotificationsRouter(pool) {
     }
   });
 
+  router.get('/reads', optionalAuth, async (req, res) => {
+    if (!req.user?.id) return res.json({ keys: [] });
+    try {
+      const result = await pool.query(
+        `SELECT notification_key FROM user_notification_reads WHERE user_id = $1`,
+        [req.user.id]
+      );
+      res.json({ keys: result.rows.map(r => r.notification_key) });
+    } catch (err) {
+      console.error('GET /api/notifications/reads failed:', err);
+      res.status(500).json({ error: 'Failed to load read state' });
+    }
+  });
+
+  router.post('/reads', optionalAuth, async (req, res) => {
+    if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
+    const { keys } = req.body;
+    if (!Array.isArray(keys) || keys.length === 0) return res.json({ ok: true });
+    const validKeys = keys.filter(k => typeof k === 'string' && k.length <= 128).slice(0, 200);
+    if (validKeys.length === 0) return res.json({ ok: true });
+    try {
+      const values = validKeys.map((k, i) => `($1, $${i + 2}, CURRENT_TIMESTAMP)`).join(',');
+      await pool.query(
+        `INSERT INTO user_notification_reads (user_id, notification_key, read_at)
+         VALUES ${values}
+         ON CONFLICT (user_id, notification_key) DO NOTHING`,
+        [req.user.id, ...validKeys]
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      console.error('POST /api/notifications/reads failed:', err);
+      res.status(500).json({ error: 'Failed to save read state' });
+    }
+  });
+
   return router;
 }

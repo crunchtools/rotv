@@ -2199,7 +2199,6 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
 
 app.get('/api/news/recent', async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 500;
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
     const adminColumns = isAdmin
       ? `, n.moderation_status, n.confidence_score, n.ai_reasoning, n.ai_issues,
@@ -2217,8 +2216,7 @@ app.get('/api/news/recent', async (req, res) => {
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY n.id, p.id, p.name, p.poi_roles
       ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.collection_date DESC
-      LIMIT $1
-    `, [limit]);
+    `);
     res.json(recentNewsQuery.rows);
   } catch (error) {
     console.error('Error fetching recent news:', error);
