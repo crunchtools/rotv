@@ -490,6 +490,29 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
               </select>
             </div>
           </div>
+
+          <div className="edit-row">
+            <div className="edit-section half">
+              <label className="activity-checkbox" title="Parking available at this location">
+                <input
+                  type="checkbox"
+                  checked={!!editedData.has_parking}
+                  onChange={(e) => handleChange('has_parking', e.target.checked)}
+                />
+                Parking
+              </label>
+            </div>
+            <div className="edit-section half">
+              <label className="activity-checkbox" title="Restrooms available at this location">
+                <input
+                  type="checkbox"
+                  checked={!!editedData.has_restrooms}
+                  onChange={(e) => handleChange('has_restrooms', e.target.checked)}
+                />
+                Restrooms
+              </label>
+            </div>
+          </div>
         </>
       )}
 

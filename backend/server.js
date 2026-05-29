@@ -918,7 +918,7 @@ app.get('/api/pois', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee,
+             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
@@ -955,7 +955,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee,
+             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
@@ -1732,7 +1732,7 @@ app.get('/api/destinations', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee,
+             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
@@ -1758,7 +1758,7 @@ app.get('/api/destinations/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee,
+             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
@@ -1786,7 +1786,7 @@ app.get('/api/linear-features', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee,
+             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
@@ -1814,7 +1814,7 @@ app.get('/api/linear-features/:id', async (req, res) => {
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee,
+             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
