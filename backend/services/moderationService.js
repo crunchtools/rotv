@@ -661,16 +661,16 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
 export async function createItem(pool, contentType, fields, adminUserId) {
   if (contentType === 'news') {
     const inserted = await pool.query(
-      `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, moderation_status, submitted_by, content_source)
-       VALUES ($1, $2, $3, $4, $5, $6, 'published', $7, 'human') RETURNING id`,
+      `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, moderation_status, submitted_by, moderated_by, moderated_at, content_source)
+       VALUES ($1, $2, $3, $4, $5, $6, 'published', $7, $7, CURRENT_TIMESTAMP, 'human') RETURNING id`,
       [fields.poi_id, fields.title, fields.summary || null, fields.source_url || null,
        fields.source_name || null, fields.news_type || 'general', adminUserId]
     );
     return inserted.rows[0].id;
   } else if (contentType === 'event') {
     const inserted = await pool.query(
-      `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, moderation_status, submitted_by, content_source)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', $9, 'human') RETURNING id`,
+      `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, moderation_status, submitted_by, moderated_by, moderated_at, content_source)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'published', $9, $9, CURRENT_TIMESTAMP, 'human') RETURNING id`,
       [fields.poi_id, fields.title, fields.description || null, fields.start_date,
        fields.end_date || null, fields.event_type || null, fields.location_details || null,
        fields.source_url || null, adminUserId]
@@ -678,8 +678,8 @@ export async function createItem(pool, contentType, fields, adminUserId) {
     return inserted.rows[0].id;
   } else if (contentType === 'photo') {
     const inserted = await pool.query(
-      `INSERT INTO photo_submissions (poi_id, caption, moderation_status, submitted_by)
-       VALUES ($1, $2, 'published', $3) RETURNING id`,
+      `INSERT INTO photo_submissions (poi_id, caption, moderation_status, submitted_by, moderated_by, moderated_at)
+       VALUES ($1, $2, 'published', $3, $3, CURRENT_TIMESTAMP) RETURNING id`,
       [fields.poi_id, fields.caption || null, adminUserId]
     );
     return inserted.rows[0].id;

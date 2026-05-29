@@ -170,10 +170,6 @@ NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}
 ENVFILE
         fi
 
-        # Build MCP port mapping if token is configured
-        MCP_PORT_MAP=""
-        [ -n "$MCP_ADMIN_TOKEN" ] && MCP_PORT_MAP="-p 3001:3001"
-
         # Use host network for default instance, bridge network for alternate ports
         if [ "$HOST_PORT" = "8080" ]; then
             NETWORK_ARGS="--network=host"
@@ -185,7 +181,6 @@ ENVFILE
             --name "$CONTAINER_NAME" \
             --privileged \
             $NETWORK_ARGS \
-            $MCP_PORT_MAP \
             --tmpfs /run \
             -v ~/.rotv/environment-dev:/etc/rotv/environment:ro \
             $STORAGE_MOUNT \

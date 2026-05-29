@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import GeneralSettings from './GeneralSettings';
+import McpSettings from './McpSettings';
 import { useAuth } from '../hooks/useAuth';
 import { readEmail, writeEmail, writeSubscribed } from '../utils/anonSettings';
 import { safeHttpUrl } from '../utils/url';
@@ -113,6 +114,14 @@ function UserSettings({ user, initialTab }) {
         >
           Newsletter
         </button>
+        {user && (
+          <button
+            className={`settings-tab-btn ${activeTab === 'mcp' ? 'active' : ''}`}
+            onClick={() => setActiveTab('mcp')}
+          >
+            MCP
+          </button>
+        )}
       </nav>
 
       <div className="settings-tab-content">
@@ -304,6 +313,9 @@ function UserSettings({ user, initialTab }) {
               </ul>
             </div>
           </div>
+        )}
+        {activeTab === 'mcp' && (
+          <McpSettings />
         )}
       </div>
     </>
