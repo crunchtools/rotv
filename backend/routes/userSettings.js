@@ -115,10 +115,10 @@ export function createUserSettingsRouter(pool) {
 
   router.get('/mcp-token', isAuthenticated, async (req, res) => {
     try {
-      const result = await pool.query(
+      const tokenRow = await pool.query(
         'SELECT mcp_token FROM users WHERE id = $1', [req.user.id]
       );
-      let token = result.rows[0]?.mcp_token;
+      let token = tokenRow.rows[0]?.mcp_token;
       if (!token) {
         token = crypto.randomBytes(32).toString('base64url');
         await pool.query(
