@@ -169,6 +169,18 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
                 <span>{FEE_LABELS[destination.fee] || destination.fee}</span>
               </div>
             )}
+            {destination.has_parking && (
+              <div className="detail-item">
+                <label>Parking</label>
+                <span>Yes</span>
+              </div>
+            )}
+            {destination.has_restrooms && (
+              <div className="detail-item">
+                <label>Restrooms</label>
+                <span>Yes</span>
+              </div>
+            )}
           </div>
         </div>
 
