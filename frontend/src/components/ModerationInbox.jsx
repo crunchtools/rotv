@@ -7,6 +7,7 @@ import ModerationExtras, { btnStyle, inputStyle, renderFieldInput, badgeStyle, a
 function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectPoi }) {
   const [queue, setQueue] = useState([]);
   const [total, setTotal] = useState(0);
+  const [typeCounts, setTypeCounts] = useState({ news: 0, event: 0, photo: 0 });
   const [filter, setFilter] = useState(null);
   const [statusFilter, setStatusFilter] = useState(() => focusItemId ? 'all' : 'pending');
   const [loading, setLoading] = useState(true);
@@ -42,6 +43,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         const data = await response.json();
         setQueue(data.items);
         setTotal(data.total);
+        if (data.typeCounts) setTypeCounts(data.typeCounts);
       }
     } catch (err) {
       console.error('Error fetching moderation queue:', err);
@@ -255,7 +257,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
               if (f.value === 'event') setSortOrder('date_asc');
               else if (f.value !== filter) setSortOrder('collected_desc');
               setPage(1);
-            }} style={filterBtn(filter === f.value)}>{f.label}</button>
+            }} style={filterBtn(filter === f.value)}>{f.value && filter === f.value ? `${f.label} (${typeCounts[f.value] || 0})` : f.label}</button>
           ))}
         </div>
         <div style={{ display: 'flex', gap: '3px' }}>

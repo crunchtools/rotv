@@ -1027,11 +1027,18 @@ export async function getQueue(pool, { page = 1, limit = 20, contentType = null,
   params.push(limit, offset);
   const countParams = params.slice(0, -2);
 
-  const [queueItems, countRow] = await Promise.all([
+  const typeCountQuery = `SELECT content_type, COUNT(*) AS cnt FROM (${baseQuery}) AS q ${whereClause} GROUP BY content_type`;
+
+  const [queueItems, countRow, typeCountRows] = await Promise.all([
     pool.query(wrappedQuery, params),
-    pool.query(countQuery, countParams)
+    pool.query(countQuery, countParams),
+    pool.query(typeCountQuery, countParams)
   ]);
-  return { items: queueItems.rows, total: parseInt(countRow.rows[0].count), page, limit };
+
+  const typeCounts = { news: 0, event: 0, photo: 0 };
+  for (const r of typeCountRows.rows) typeCounts[r.content_type] = parseInt(r.cnt);
+
+  return { items: queueItems.rows, total: parseInt(countRow.rows[0].count), page, limit, typeCounts };
 }
 
 export async function getPendingCount(pool) {

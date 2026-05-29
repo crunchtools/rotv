@@ -499,7 +499,7 @@ function AppContent() {
         setActiveTab('settings');
         setSettingsTab('newsletter');
         isProgrammaticNavigationRef.current = true;
-        navigate('/settings');
+        navigate('/settings/newsletter');
         break;
       }
       case 'tripTourAddDemoStop': {
@@ -567,12 +567,30 @@ function AppContent() {
         document.title = 'Roots of The Valley';
       }
       isProgrammaticNavigationRef.current = true;
-      navigate(`/${newTab}`);
+      if (newTab === 'settings') {
+        navigate(`/settings/${settingsTab}`);
+      } else if (newTab === 'about') {
+        navigate(`/about/${aboutTab}`);
+      } else {
+        navigate(`/${newTab}`);
+      }
     } else if (!selectedDestination && !selectedLinearFeature) {
       isProgrammaticNavigationRef.current = true;
       navigate('/');
     }
-  }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature]);
+  }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature, settingsTab, aboutTab]);
+
+  const handleSettingsTabChange = useCallback((tab) => {
+    setSettingsTab(tab);
+    isProgrammaticNavigationRef.current = true;
+    navigate(`/settings/${tab}`);
+  }, [navigate]);
+
+  const handleAboutTabChange = useCallback((tab) => {
+    setAboutTab(tab);
+    isProgrammaticNavigationRef.current = true;
+    navigate(`/about/${tab}`);
+  }, [navigate]);
 
   useEffect(() => {
     if (location.pathname === '/admin/jobs') {
@@ -797,6 +815,18 @@ function AppContent() {
     const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
       setActiveTab(pathParts[0]);
+      if (selectedDestination || selectedLinearFeature) {
+        setSelectedDestination(null);
+        setSelectedLinearFeature(null);
+        document.title = 'Roots of The Valley';
+      }
+      return;
+    }
+
+    const settingsSubTabs = ['general', 'newsletter', 'rss', 'mcp', 'users', 'themes', 'activities', 'eras', 'surfaces', 'icons', 'moderation', 'jobs', 'dataCollection', 'google'];
+    if (pathParts.length === 2 && pathParts[0] === 'settings' && settingsSubTabs.includes(pathParts[1])) {
+      setActiveTab('settings');
+      setSettingsTab(pathParts[1]);
       if (selectedDestination || selectedLinearFeature) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
@@ -2086,7 +2116,7 @@ function AppContent() {
             setModerationFocusId(newsId);
             setModerationFocusTitle(newsTitle || null);
             setActiveTab('settings');
-            setSettingsTab('moderation');
+            handleSettingsTabChange('moderation');
           }}
         />
         </main>
@@ -2117,7 +2147,7 @@ function AppContent() {
             setModerationFocusId(eventId);
             setModerationFocusTitle(eventTitle || null);
             setActiveTab('settings');
-            setSettingsTab('moderation');
+            handleSettingsTabChange('moderation');
           }}
         />
         </main>
@@ -2125,7 +2155,7 @@ function AppContent() {
 
       {activeTab === 'about' && (
         <main id="main-content" className="main-content-full" tabIndex="-1">
-          <AboutPage onStartTour={startTour} onStartTripTour={startTripTour} aboutTab={aboutTab} onTabChange={setAboutTab} isAdmin={isAdmin} editMode={editMode} />
+          <AboutPage onStartTour={startTour} onStartTripTour={startTripTour} aboutTab={aboutTab} onTabChange={handleAboutTabChange} isAdmin={isAdmin} editMode={editMode} />
         </main>
       )}
 
@@ -2138,28 +2168,28 @@ function AppContent() {
             <nav className="settings-tabs">
               <button
                 className={`settings-tab-btn ${settingsTab === 'general' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('general')}
+                onClick={() => handleSettingsTabChange('general')}
                 tabIndex={settingsTab === 'general' ? 0 : -1}
               >
                 General
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'newsletter' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('newsletter')}
+                onClick={() => handleSettingsTabChange('newsletter')}
                 tabIndex={settingsTab === 'newsletter' ? 0 : -1}
               >
                 Newsletter
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'rss' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('rss')}
+                onClick={() => handleSettingsTabChange('rss')}
                 tabIndex={settingsTab === 'rss' ? 0 : -1}
               >
                 RSS Feed
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'mcp' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('mcp')}
+                onClick={() => handleSettingsTabChange('mcp')}
                 tabIndex={settingsTab === 'mcp' ? 0 : -1}
               >
                 MCP
@@ -2168,42 +2198,42 @@ function AppContent() {
             <nav className="settings-tabs settings-tabs-row2">
               <button
                 className={`settings-tab-btn ${settingsTab === 'users' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('users')}
+                onClick={() => handleSettingsTabChange('users')}
                 tabIndex={settingsTab === 'users' ? 0 : -1}
               >
                 Users
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'themes' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('themes')}
+                onClick={() => handleSettingsTabChange('themes')}
                 tabIndex={settingsTab === 'themes' ? 0 : -1}
               >
                 Themes
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'activities' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('activities')}
+                onClick={() => handleSettingsTabChange('activities')}
                 tabIndex={settingsTab === 'activities' ? 0 : -1}
               >
                 Activities
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'eras' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('eras')}
+                onClick={() => handleSettingsTabChange('eras')}
                 tabIndex={settingsTab === 'eras' ? 0 : -1}
               >
                 Eras
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'surfaces' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('surfaces')}
+                onClick={() => handleSettingsTabChange('surfaces')}
                 tabIndex={settingsTab === 'surfaces' ? 0 : -1}
               >
                 Surfaces
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'icons' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('icons')}
+                onClick={() => handleSettingsTabChange('icons')}
                 tabIndex={settingsTab === 'icons' ? 0 : -1}
               >
                 Icons
@@ -2212,7 +2242,7 @@ function AppContent() {
             <nav className="settings-tabs settings-tabs-row3">
               <button
                 className={`settings-tab-btn ${settingsTab === 'moderation' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('moderation')}
+                onClick={() => handleSettingsTabChange('moderation')}
                 tabIndex={settingsTab === 'moderation' ? 0 : -1}
                 style={{ position: 'relative' }}
               >
@@ -2231,21 +2261,21 @@ function AppContent() {
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'jobs' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('jobs')}
+                onClick={() => handleSettingsTabChange('jobs')}
                 tabIndex={settingsTab === 'jobs' ? 0 : -1}
               >
                 Jobs
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'dataCollection' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('dataCollection')}
+                onClick={() => handleSettingsTabChange('dataCollection')}
                 tabIndex={settingsTab === 'dataCollection' ? 0 : -1}
               >
                 Data Collection
               </button>
               <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
-                onClick={() => setSettingsTab('google')}
+                onClick={() => handleSettingsTabChange('google')}
                 tabIndex={settingsTab === 'google' ? 0 : -1}
               >
                 Google
@@ -2271,7 +2301,7 @@ function AppContent() {
               {settingsTab === 'jobs' && <JobsDashboard expandTarget={jobsExpandTarget} onExpandTargetConsumed={() => setJobsExpandTarget(null)} />}
               {settingsTab === 'google' && (
                 <div className="google-integration-tab">
-                  <SyncSettings onDataRefresh={refreshAllData} onNavigateToJobs={(jobId) => { setJobsExpandTarget(jobId); setSettingsTab('jobs'); }} />
+                  <SyncSettings onDataRefresh={refreshAllData} onNavigateToJobs={(jobId) => { setJobsExpandTarget(jobId); handleSettingsTabChange('jobs'); }} />
                   <div className="settings-divider"></div>
                   <AISettings />
                 </div>
