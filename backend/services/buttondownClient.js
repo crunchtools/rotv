@@ -2,6 +2,10 @@ import axios from 'axios';
 
 const BUTTONDOWN_API_BASE = 'https://api.buttondown.email';
 
+function isSendEnabled() {
+  return process.env.NEWSLETTER_SEND_ENABLED !== 'false';
+}
+
 let apiKeyCache = null;
 
 async function getApiKey(pool) {
@@ -82,6 +86,11 @@ async function retryRequest(requestFn, maxRetries = 3) {
 }
 
 export async function addSubscriber(email, pool = null) {
+  if (!isSendEnabled()) {
+    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED=false), skipping addSubscriber');
+    return { email, status: 'send_disabled', skipped: true };
+  }
+
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);
 
@@ -141,6 +150,11 @@ export async function getSubscriberCount(pool = null) {
 }
 
 export async function sendEmail(subject, htmlBody, pool = null, { existingEmailId, onDraftCreated } = {}) {
+  if (!isSendEnabled()) {
+    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED=false), skipping sendEmail');
+    return { skipped: true, reason: 'send_disabled' };
+  }
+
   const apiKey = await getApiKey(pool);
 
   let emailId;
@@ -205,6 +219,11 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
 }
 
 export async function sendDraftToRecipients(subject, htmlBody, recipients, pool = null) {
+  if (!isSendEnabled()) {
+    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED=false), skipping sendDraftToRecipients');
+    return { emailId: null, skipped: true, reason: 'send_disabled' };
+  }
+
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);
 
