@@ -35,14 +35,14 @@ function createBoatIcon(heading, status) {
   return L.divIcon({
     className: 'boat-marker-icon',
     html: `<div class="boat-marker-inner" style="transform: rotate(${heading || 0}deg)">
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 32" width="20" height="32">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 32" width="26" height="42">
         <path fill="${color}" stroke="#fff" stroke-width="1" stroke-linejoin="round"
           d="M10 1 L4 10 L3 24 L5 30 L10 32 L15 30 L17 24 L16 10 Z"/>
         <line x1="10" y1="6" x2="10" y2="18" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>
       </svg>
     </div>`,
-    iconSize: [20, 32],
-    iconAnchor: [10, 16],
+    iconSize: [26, 42],
+    iconAnchor: [13, 21],
   });
 }
 
