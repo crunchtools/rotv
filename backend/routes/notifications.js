@@ -70,11 +70,11 @@ export function createNotificationsRouter(pool) {
   router.get('/reads', optionalAuth, async (req, res) => {
     if (!req.user?.id) return res.json({ keys: [] });
     try {
-      const result = await pool.query(
+      const readsRows = await pool.query(
         `SELECT notification_key FROM user_notification_reads WHERE user_id = $1`,
         [req.user.id]
       );
-      res.json({ keys: result.rows.map(r => r.notification_key) });
+      res.json({ keys: readsRows.rows.map(r => r.notification_key) });
     } catch (err) {
       console.error('GET /api/notifications/reads failed:', err);
       res.status(500).json({ error: 'Failed to load read state' });
