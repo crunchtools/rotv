@@ -1251,9 +1251,10 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       }
 
       const dateScore = item.date_consensus_score || 0;
-      await pool.query(`
+      const inserted = await pool.query(`
         INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url, content_source)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT DO NOTHING
       `, [
         effectivePoiId,
         item.title,
@@ -1269,6 +1270,11 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         item.image_url || null,
         contentSource
       ]);
+      if (inserted.rowCount === 0) {
+        duplicateCount++;
+        if (log) log(`[Save] Skip duplicate (concurrent insert race): "${item.title}" → ${resolvedUrl}`);
+        continue;
+      }
       savedCount++;
       if (log) log(`[Save] Saved (pending): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
