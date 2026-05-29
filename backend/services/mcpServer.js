@@ -35,7 +35,7 @@ import {
   queueNewsletterJob
 } from './jobScheduler.js';
 
-const MCP_ADMIN_USER_ID = -2;
+import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
 
 function registerTools(server, pool, boss) {
 

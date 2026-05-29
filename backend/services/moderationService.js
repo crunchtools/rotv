@@ -3,6 +3,7 @@ import { renderPage } from './renderPage.js';
 import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
+import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists } from './filterLists.js';
 
@@ -398,7 +399,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
-    const autoModeratedBy = resolvedStatus === 'published' ? -1 : null;
+    const autoModeratedBy = resolvedStatus === 'published' ? AUTO_PUBLISHER_USER_ID : null;
     // Only write publication_date when rescore produced a new value — writing the existing
     // value back through this path can silently corrupt a previously-good timestamp
     if (rescoredDate) {
