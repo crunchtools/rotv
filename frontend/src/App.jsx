@@ -35,6 +35,7 @@ import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
 import GuidedTour, { TRIP_TOUR_STEPS } from './components/GuidedTour';
 import TourPrompt from './components/TourPrompt';
+import McpSettings from './components/McpSettings';
 import { handleRovingKeyDown } from './utils/a11yUtils';
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
@@ -2156,6 +2157,13 @@ function AppContent() {
               >
                 RSS Feed
               </button>
+              <button
+                className={`settings-tab-btn ${settingsTab === 'mcp' ? 'active' : ''}`}
+                onClick={() => setSettingsTab('mcp')}
+                tabIndex={settingsTab === 'mcp' ? 0 : -1}
+              >
+                MCP
+              </button>
             </nav>
             <nav className="settings-tabs settings-tabs-row2">
               <button
@@ -2283,6 +2291,9 @@ function AppContent() {
                     https://buttondown.com/rotv/rss
                   </a>
                 </div>
+              )}
+              {settingsTab === 'mcp' && (
+                <McpSettings />
               )}
             </div>
             </>

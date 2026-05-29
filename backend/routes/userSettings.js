@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { isAuthenticated } from '../middleware/auth.js';
 import { validateStops, insertStops, insertTripWithSlugRetry } from './trips.js';
 import { addSubscriber } from '../services/buttondownClient.js';
@@ -109,6 +110,38 @@ export function createUserSettingsRouter(pool) {
     } catch (err) {
       console.error('POST /api/user/settings/sync failed:', err);
       res.status(500).json({ error: 'Failed to sync settings' });
+    }
+  });
+
+  router.get('/mcp-token', isAuthenticated, async (req, res) => {
+    try {
+      const result = await pool.query(
+        'SELECT mcp_token FROM users WHERE id = $1', [req.user.id]
+      );
+      let token = result.rows[0]?.mcp_token;
+      if (!token) {
+        token = crypto.randomBytes(32).toString('base64url');
+        await pool.query(
+          'UPDATE users SET mcp_token = $1 WHERE id = $2', [token, req.user.id]
+        );
+      }
+      res.json({ token });
+    } catch (err) {
+      console.error('GET /api/user/settings/mcp-token failed:', err);
+      res.status(500).json({ error: 'Failed to get MCP token' });
+    }
+  });
+
+  router.post('/mcp-token/regenerate', isAuthenticated, async (req, res) => {
+    try {
+      const token = crypto.randomBytes(32).toString('base64url');
+      await pool.query(
+        'UPDATE users SET mcp_token = $1 WHERE id = $2', [token, req.user.id]
+      );
+      res.json({ token });
+    } catch (err) {
+      console.error('POST /api/user/settings/mcp-token/regenerate failed:', err);
+      res.status(500).json({ error: 'Failed to regenerate MCP token' });
     }
   });
 

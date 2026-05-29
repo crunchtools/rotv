@@ -170,15 +170,14 @@ NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}
 ENVFILE
         fi
 
-        # Build MCP port mapping if token is configured
+        # MCP server always runs on port 3001 inside the container
         MCP_PORT_MAP=""
-        [ -n "$MCP_ADMIN_TOKEN" ] && MCP_PORT_MAP="-p 3001:3001"
 
         # Use host network for default instance, bridge network for alternate ports
         if [ "$HOST_PORT" = "8080" ]; then
             NETWORK_ARGS="--network=host"
         else
-            NETWORK_ARGS="-p ${HOST_PORT}:8080 -p $((HOST_PORT + 1000)):25"
+            NETWORK_ARGS="-p ${HOST_PORT}:8080 -p $((HOST_PORT + 1000)):25 -p $((HOST_PORT + 920)):3001"
         fi
 
         podman run -d \

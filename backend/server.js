@@ -72,7 +72,7 @@ import imageServerClient from './services/imageServerClient.js';
 import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
-import { startMcpServer } from './services/mcpServer.js';
+import { startMcpServer, mcpMiddleware } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 import { startTracker, stopTracker, getBoatPositions } from './services/waterTaxiTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
@@ -153,9 +153,19 @@ app.use(cors({
   credentials: true
 }));
 
+// MCP routes must be mounted before the JSON body parser so the MCP SDK
+// can read the raw request stream for its own JSON-RPC parsing.
+app.all('/mcp/:token', (req, res, next) => { req._mcpRoute = true; next(); });
+
 // Large GeoJSON geometry in linear features can exceed the default 100kb limit
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use((req, res, next) => {
+  if (req._mcpRoute) return next();
+  express.json({ limit: '50mb' })(req, res, next);
+});
+app.use((req, res, next) => {
+  if (req._mcpRoute) return next();
+  express.urlencoded({ limit: '50mb', extended: true })(req, res, next);
+});
 
 const PgSession = connectPgSimple(session);
 app.use(session({
@@ -2953,9 +2963,8 @@ async function start() {
 
   activeSmtpServer = startSmtpServer(pool);
 
-  if (process.env.MCP_ADMIN_TOKEN) {
-    startMcpServer(pool, app.get('boss'), parseInt(process.env.MCP_PORT || '3001'));
-  }
+  startMcpServer(pool, app.get('boss'), parseInt(process.env.MCP_PORT || '3001'));
+  app.all('/mcp/:token', mcpMiddleware(pool, app.get('boss')));
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Roots of The Valley API running on port ${PORT}`);
