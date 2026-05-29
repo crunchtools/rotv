@@ -1,3 +1,5 @@
+import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
+
 // Unified handling for the admin-managed filter lists (mirrors the frontend's
 // single News & Events Filters section). One place to load a list setting, and
 // a data-driven registry of the hard-reject "deny lists" that drive both the
@@ -108,10 +110,12 @@ export async function sweepDenyLists(pool, { runId, logInfo } = {}) {
       const frag = list.sweepFragment(values, table.textCols);
       if (!frag) continue;
       const reasonIdx = frag.params.length + 1;
+      const moderatorIdx = frag.params.length + 2;
       const res = await pool.query(
-        `UPDATE ${table.name} SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $${reasonIdx}
+        `UPDATE ${table.name} SET moderation_status = 'rejected', moderation_processed = true, ai_reasoning = $${reasonIdx},
+                moderated_by = $${moderatorIdx}, moderated_at = CURRENT_TIMESTAMP
          WHERE moderation_status <> 'rejected' AND ${frag.sql}`,
-        [...frag.params, list.reason]
+        [...frag.params, list.reason, AUTO_PUBLISHER_USER_ID]
       );
       if (table.name === 'poi_events') events += res.rowCount;
       else news += res.rowCount;

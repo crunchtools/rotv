@@ -435,10 +435,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
     try {
       const newsItem = await pool.query(
-        `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, content_source, moderation_status, collection_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'human', 'published', CURRENT_TIMESTAMP)
+        `INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, content_source, moderation_status, moderated_by, moderated_at, collection_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'human', 'published', $8, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [poi_id, title.trim(), summary || null, source_url || null, source_name || null, news_type || 'general', publication_date || null]
+        [poi_id, title.trim(), summary || null, source_url || null, source_name || null, news_type || 'general', publication_date || null, req.user.id]
       );
 
       console.log(`Admin ${req.user.email} created manual news item: ${title}`);
@@ -458,10 +458,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
     try {
       const eventItem = await pool.query(
-        `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, content_source, moderation_status, collection_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'human', 'published', CURRENT_TIMESTAMP)
+        `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, content_source, moderation_status, moderated_by, moderated_at, collection_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'human', 'published', $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [poi_id, title.trim(), description || null, start_date, end_date || null, event_type || null, location_details || null, source_url || null, publication_date || null]
+        [poi_id, title.trim(), description || null, start_date, end_date || null, event_type || null, location_details || null, source_url || null, publication_date || null, req.user.id]
       );
 
       console.log(`Admin ${req.user.email} created manual event: ${title}`);
@@ -1734,9 +1734,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         );
 
         await pool.query(`
-          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_at)
-          VALUES ($1, 'image', $2, 'primary', 'auto_approved', CURRENT_TIMESTAMP)
-        `, [id, imageServerAssetId]);
+          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_by, moderated_at)
+          VALUES ($1, 'image', $2, 'primary', 'auto_approved', $3, CURRENT_TIMESTAMP)
+        `, [id, imageServerAssetId, req.user.id]);
         await pool.query('COMMIT');
       }
 
@@ -1825,9 +1825,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         );
 
         await pool.query(`
-          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_at)
-          VALUES ($1, 'image', $2, 'primary', 'auto_approved', CURRENT_TIMESTAMP)
-        `, [id, imageServerAssetId]);
+          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_by, moderated_at)
+          VALUES ($1, 'image', $2, 'primary', 'auto_approved', $3, CURRENT_TIMESTAMP)
+        `, [id, imageServerAssetId, req.user.id]);
         await pool.query('COMMIT');
       }
 
@@ -4696,10 +4696,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       } else {
         const softDelete = await pool.query(
           `UPDATE poi_media
-           SET moderation_status = 'rejected'
+           SET moderation_status = 'rejected', moderated_by = $2, moderated_at = NOW()
            WHERE id = $1
            RETURNING id, poi_id`,
-          [id]
+          [id, req.user.id]
         );
 
         if (softDelete.rows.length === 0) {

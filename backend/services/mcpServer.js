@@ -1,8 +1,8 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { z } from 'zod';
-import http from 'http';
 import crypto from 'crypto';
+import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
 
 import {
   getQueue,
@@ -35,9 +35,7 @@ import {
   queueNewsletterJob
 } from './jobScheduler.js';
 
-import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
-
-function registerTools(server, pool, boss) {
+function registerTools(server, pool, boss, mcpUserId) {
 
   server.tool(
     'poi_list',
@@ -267,7 +265,7 @@ function registerTools(server, pool, boss) {
       id: z.number().describe('Content item ID')
     },
     async ({ content_type, id }) => {
-      await approveItem(pool, content_type, id, MCP_ADMIN_USER_ID);
+      await approveItem(pool, content_type, id, mcpUserId);
       return { content: [{ type: 'text', text: `Approved ${content_type} #${id}` }] };
     }
   );
@@ -281,7 +279,7 @@ function registerTools(server, pool, boss) {
       reason: z.string().optional().default('Rejected via MCP admin').describe('Rejection reason')
     },
     async ({ content_type, id, reason }) => {
-      await rejectItem(pool, content_type, id, MCP_ADMIN_USER_ID, reason);
+      await rejectItem(pool, content_type, id, mcpUserId, reason);
       return { content: [{ type: 'text', text: `Rejected ${content_type} #${id}: ${reason}` }] };
     }
   );
@@ -350,7 +348,7 @@ function registerTools(server, pool, boss) {
         event_type: args.event_type,
         location_details: args.location_details
       };
-      const newId = await createItem(pool, args.content_type, fields, MCP_ADMIN_USER_ID);
+      const newId = await createItem(pool, args.content_type, fields, mcpUserId);
       return { content: [{ type: 'text', text: `Created ${args.content_type} #${newId}` }] };
     }
   );
@@ -364,7 +362,7 @@ function registerTools(server, pool, boss) {
       edits: z.record(z.string(), z.any()).describe('Fields to edit (e.g. {title: "new title", summary: "new summary"})')
     },
     async ({ content_type, id, edits }) => {
-      await editAndPublish(pool, content_type, id, edits, MCP_ADMIN_USER_ID);
+      await editAndPublish(pool, content_type, id, edits, mcpUserId);
       return { content: [{ type: 'text', text: `Edited and published ${content_type} #${id}` }] };
     }
   );
@@ -379,7 +377,7 @@ function registerTools(server, pool, boss) {
       })).describe('Array of {type, id} objects to approve')
     },
     async ({ items }) => {
-      const bulkOutcome = await bulkApprove(pool, items, MCP_ADMIN_USER_ID);
+      const bulkOutcome = await bulkApprove(pool, items, mcpUserId);
       return { content: [{ type: 'text', text: `Approved ${bulkOutcome.approved} items` }] };
     }
   );
@@ -790,58 +788,61 @@ function registerTools(server, pool, boss) {
 
 }
 
-export function startMcpServer(pool, boss, port = 3001) {
-  const httpServer = http.createServer(async (req, res) => {
+async function handleMcpRequest(req, res, pool, boss) {
+  const urlMatch = req.url.match(/^\/mcp\/([A-Za-z0-9_-]+)/);
+  const urlToken = urlMatch ? urlMatch[1] : null;
+  const queryMatch = req.url.match(/[?&]token=([A-Za-z0-9_-]+)/);
+  const queryToken = queryMatch ? queryMatch[1] : null;
+  const authHeader = req.headers.authorization;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const token = urlToken || queryToken || bearerToken;
+
+  if (!token) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Unauthorized' }));
+    return;
+  }
+
+  let mcpUserId = null;
+
+  const userResult = await pool.query(
+    'SELECT id, is_admin FROM users WHERE mcp_token = $1', [token]
+  );
+  if (userResult.rows.length > 0) {
+    mcpUserId = userResult.rows[0].id;
+  } else {
+    const envToken = process.env.MCP_ADMIN_TOKEN;
+    if (envToken && token.length === envToken.length &&
+        crypto.timingSafeEqual(Buffer.from(token), Buffer.from(envToken))) {
+      const adminResult = await pool.query(
+        'SELECT id FROM users WHERE is_admin = TRUE ORDER BY id LIMIT 1'
+      );
+      mcpUserId = adminResult.rows.length > 0 ? adminResult.rows[0].id : MCP_ADMIN_USER_ID;
+    }
+  }
+
+  if (!mcpUserId) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Unauthorized' }));
+    return;
+  }
+
+  const server = new McpServer({ name: 'rotv-admin', version: '1.0.0' });
+  registerTools(server, pool, boss, mcpUserId);
+
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined
+  });
+
+  await server.connect(transport);
+  await transport.handleRequest(req, res);
+}
+
+export function mcpMiddleware(pool, boss) {
+  return async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'POST, GET, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Mcp-Session-Id');
     res.setHeader('Access-Control-Expose-Headers', 'Mcp-Session-Id');
-
-    if (req.method === 'OPTIONS') {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-
-    const authHeader = req.headers.authorization;
-    const expectedToken = process.env.MCP_ADMIN_TOKEN;
-    if (!expectedToken) {
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Unauthorized' }));
-      return;
-    }
-
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-    const expected = Buffer.from(expectedToken);
-    const provided = Buffer.from(token || '');
-    if (expected.length !== provided.length || !crypto.timingSafeEqual(expected, provided)) {
-      res.writeHead(401, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Unauthorized' }));
-      return;
-    }
-
-    if (req.url !== '/mcp') {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'Not found' }));
-      return;
-    }
-
-    // MCP SDK's Server.connect() takes exclusive ownership of a transport,
-    // so each stateless HTTP request needs its own server+transport pair
-    const server = new McpServer({ name: 'rotv-admin', version: '1.0.0' });
-    registerTools(server, pool, boss);
-
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined
-    });
-
-    await server.connect(transport);
-    await transport.handleRequest(req, res);
-  });
-
-  httpServer.listen(port, () => {
-    console.log(`ROTV Admin MCP server running on port ${port}`);
-  });
-
-  return httpServer;
+    await handleMcpRequest(req, res, pool, boss);
+  };
 }
