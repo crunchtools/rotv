@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
-import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, matchesWholeWord } from '../utils/iconUtils';
+import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, trailPassesActivityFilter, matchesWholeWord } from '../utils/iconUtils';
 import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
@@ -636,7 +636,8 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
             // Title search matches across all linear types, ignoring layer toggles
             isLayerVisible = feature.name?.toLowerCase().includes(search);
           } else if (feature.poi_roles?.includes('trail')) {
-            isLayerVisible = showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig);
+            isLayerVisible = (showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig))
+              && trailPassesActivityFilter(feature, visibleTypes, iconConfig);
           } else if (feature.poi_roles?.includes('river')) {
             isLayerVisible = showRivers;
           } else if (feature.poi_roles?.includes('water_taxi')) {
@@ -1496,7 +1497,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           // regardless of its layer toggle, and hide non-matches.
           const isVisible = searchQuery
             ? feature.name?.toLowerCase().includes(searchQuery.toLowerCase())
-            : ((feature.poi_roles?.includes('trail') && (showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig))) ||
+            : ((feature.poi_roles?.includes('trail') && (showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig)) && trailPassesActivityFilter(feature, visibleTypes, iconConfig)) ||
                (feature.poi_roles?.includes('river') && showRivers) ||
                (feature.poi_roles?.includes('water_taxi') && showWaterTaxis) ||
                (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id)));
