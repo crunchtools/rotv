@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTrip } from '../hooks/useTrip';
 import { useAuth } from '../hooks/useAuth';
 import { readTrips as readLocalTrips, removeTrip as removeLocalTrip } from '../utils/anonSettings';
-import './MyTripsModal.css';
+import './TripsManager.css';
 
 function formatDate(iso) {
   if (!iso) return '';

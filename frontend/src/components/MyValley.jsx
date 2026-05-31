@@ -18,6 +18,7 @@ export default function MyValley({ open, onClose, destinations = [] }) {
   const [visitedList, setVisitedList] = useState([]);
   const [followingList, setFollowingList] = useState([]);
   const [tripCount, setTripCount] = useState(0);
+  const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // id -> name lookup over the markable locations the map already loaded, used
@@ -28,19 +29,23 @@ export default function MyValley({ open, onClose, destinations = [] }) {
     return map;
   }, [destinations]);
 
-  const total = destinations.length;
-  const exploredCount = isAuthenticated ? visitedList.length : visited.length;
+  // Signed-in: trust the server's point-based counters (/api/visited/stats) so N
+  // and M match the spec's "markable point locations". Signed-out: derive from
+  // localStorage against the loaded destinations (point POIs) as the denominator.
+  const total = isAuthenticated && stats ? stats.total : destinations.length;
+  const exploredCount = isAuthenticated
+    ? (stats ? stats.visited : visitedList.length)
+    : visited.length;
   const percent = total > 0 ? Math.min(100, Math.round((exploredCount / total) * 100)) : 0;
 
   const toRows = useCallback(
-    (ids) => ids
-      .map(id => ({ id, name: nameById.get(id) }))
-      .filter(row => row.name),
+    (ids) => ids.map(id => ({ id, name: nameById.get(id) || 'Saved place' })),
     [nameById]
   );
 
   const load = useCallback(async () => {
     if (!isAuthenticated) {
+      setStats(null);
       setVisitedList(toRows(visited));
       setFollowingList(toRows(favorites));
       setTripCount(readLocalTrips().length);
@@ -48,14 +53,16 @@ export default function MyValley({ open, onClose, destinations = [] }) {
     }
     setLoading(true);
     try {
-      const [visRes, favRes, tripsRes] = await Promise.all([
+      const [visRes, favRes, tripsRes, statsRes] = await Promise.all([
         fetch('/api/visited', { credentials: 'include' }),
         fetch('/api/favorites', { credentials: 'include' }),
-        fetch('/api/trips/mine', { credentials: 'include' })
+        fetch('/api/trips/mine', { credentials: 'include' }),
+        fetch('/api/visited/stats', { credentials: 'include' })
       ]);
       if (visRes.ok) setVisitedList(await visRes.json());
       if (favRes.ok) setFollowingList(await favRes.json());
       if (tripsRes.ok) setTripCount((await tripsRes.json()).length);
+      if (statsRes.ok) setStats(await statsRes.json());
     } catch {
       setVisitedList([]);
     } finally {

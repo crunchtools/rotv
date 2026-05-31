@@ -1,6 +1,6 @@
 import React from 'react';
 import TripsManager from './TripsManager';
-import './MyTripsModal.css';
+import './TripsManager.css';
 
 export default function MyTripsModal({ open, onClose }) {
   if (!open) return null;
