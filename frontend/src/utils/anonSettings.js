@@ -10,6 +10,7 @@ const KEY_NEWSLETTER_EMAIL = 'rotv-newsletter-email';
 const KEY_NEWSLETTER_SUBSCRIBED = 'rotv-newsletter-subscribed';
 const KEY_SAVED_TRIPS = 'rotv-saved-trips';
 const KEY_FAVORITES = 'rotv-favorites';
+const KEY_VISITED = 'rotv-visited';
 
 function safeRead(key) {
   try {
@@ -72,31 +73,44 @@ export function removeTrip(slug) {
   writeTrips(readTrips().filter(t => t.slug !== slug));
 }
 
-export function readFavorites() {
-  const raw = safeRead(KEY_FAVORITES);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter(n => Number.isInteger(n)) : [];
-  } catch {
-    return [];
-  }
+/**
+ * Factory for an anonymous "array of POI ids" localStorage collection — the
+ * canonical local-first user-data primitive. Returns read/write/add/remove
+ * bound to one storage key. Favorites and Visited (and any future POI-id list)
+ * share this so the next user feature is a one-liner, not a copy-paste.
+ * See docs/USER_DATA_FRAMEWORK.md.
+ */
+export function createPoiIdListStore(key) {
+  const read = () => {
+    const raw = safeRead(key);
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.filter(n => Number.isInteger(n)) : [];
+    } catch {
+      return [];
+    }
+  };
+  const write = (poiIds) => safeWrite(key, JSON.stringify(poiIds));
+  const add = (poiId) => {
+    const ids = read();
+    if (!ids.includes(poiId)) write([...ids, poiId]);
+  };
+  const remove = (poiId) => write(read().filter(id => id !== poiId));
+  return { read, write, add, remove };
 }
 
-export function writeFavorites(poiIds) {
-  safeWrite(KEY_FAVORITES, JSON.stringify(poiIds));
-}
+const favoritesStore = createPoiIdListStore(KEY_FAVORITES);
+export const readFavorites = favoritesStore.read;
+export const writeFavorites = favoritesStore.write;
+export const addFavorite = favoritesStore.add;
+export const removeFavorite = favoritesStore.remove;
 
-export function addFavorite(poiId) {
-  const favorites = readFavorites();
-  if (!favorites.includes(poiId)) {
-    writeFavorites([...favorites, poiId]);
-  }
-}
-
-export function removeFavorite(poiId) {
-  writeFavorites(readFavorites().filter(id => id !== poiId));
-}
+const visitedStore = createPoiIdListStore(KEY_VISITED);
+export const readVisited = visitedStore.read;
+export const writeVisited = visitedStore.write;
+export const addVisited = visitedStore.add;
+export const removeVisited = visitedStore.remove;
 
 /**
  * Flush accumulated anonymous state to the backend on first successful
@@ -115,8 +129,10 @@ export async function syncAnonSettings() {
   const subscribed = safeRead(KEY_NEWSLETTER_SUBSCRIBED) === 'true';
   const trips = readTrips();
   const favorites = readFavorites();
+  const visited = readVisited();
 
-  const hasState = timezone || (email && subscribed) || trips.length > 0 || favorites.length > 0;
+  const hasState = timezone || (email && subscribed) || trips.length > 0
+    || favorites.length > 0 || visited.length > 0;
   if (!hasState) return { synced: false };
 
   const payload = {};
@@ -124,6 +140,7 @@ export async function syncAnonSettings() {
   if (email && subscribed) payload.newsletter = { email, subscribed };
   if (trips.length > 0) payload.trips = trips;
   if (favorites.length > 0) payload.favorites = favorites;
+  if (visited.length > 0) payload.visited = visited;
 
   try {
     const res = await fetch('/api/user/settings/sync', {
@@ -143,6 +160,9 @@ export async function syncAnonSettings() {
     }
     if (favorites.length > 0) {
       safeRemove(KEY_FAVORITES);
+    }
+    if (visited.length > 0) {
+      safeRemove(KEY_VISITED);
     }
 
     return { synced: true };

@@ -15019,6 +15019,12 @@ button.feedback-link-inline {
 .favorite-toggle-btn.favorited:hover {
   background: #b07f12;
 }
+.visited-toggle-btn.visited {
+  background: #2e7d32;
+}
+.visited-toggle-btn.visited:hover {
+  background: #256628;
+}
 
 .notification-bell {
   position: relative;

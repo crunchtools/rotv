@@ -88,6 +88,7 @@ export function createAuthRouter(pool) {
         isAdmin: true,
         role: 'admin',
         favorites: [],
+        visited: [],
         preferences: {}
       });
     }
@@ -104,6 +105,16 @@ export function createAuthRouter(pool) {
       } catch (err) {
         console.error('Failed to load favorites for /auth/user:', err);
       }
+      let visited = [];
+      try {
+        const visitedResult = await pool.query(
+          `SELECT poi_id FROM user_visits WHERE user_id = $1 ORDER BY visited_at DESC`,
+          [id]
+        );
+        visited = visitedResult.rows.map(r => r.poi_id);
+      } catch (err) {
+        console.error('Failed to load visited for /auth/user:', err);
+      }
       res.json({
         id,
         email,
@@ -112,6 +123,7 @@ export function createAuthRouter(pool) {
         isAdmin: is_admin,
         role: role || 'viewer',
         favorites,
+        visited,
         preferences: preferences || {}
       });
     } else {

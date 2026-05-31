@@ -1,6 +1,6 @@
 # rotv Constitution
 
-> **Version:** 2.0.0
+> **Version:** 2.1.0
 > **Ratified:** 2026-03-10
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.3.0
@@ -17,6 +17,28 @@ AGPL-3.0-or-later
 ## Versioning
 
 Follow Semantic Versioning 2.0.0. MAJOR/MINOR/PATCH.
+
+## User Data: Local-First with Login Sync
+
+Every user-specific experience (saved places, visited lists, trips, preferences,
+and anything personal added in the future) MUST work for **anonymous visitors**
+without requiring sign-in. State is persisted in `localStorage` first, and MUST
+**sync to the user's account on first sign-in** so it follows them across devices.
+
+- **Anonymous path:** persist to `localStorage` via the helpers in
+  `frontend/src/utils/anonSettings.js`. For "list of POI ids" collections, use the
+  shared `createPoiIdListStore(key)` factory rather than re-implementing read/write.
+- **Sync path:** the freshly-signed-in client flushes accumulated state to
+  `POST /api/user/settings/sync`, which MUST be **server-wins, idempotent, and
+  re-runnable** (`ON CONFLICT DO NOTHING`, fill-gaps only — never clobber account
+  data). POI-id collections use the shared `syncPoiIdList()` helper against a
+  whitelisted `user_*` table.
+- **Hydration:** the signed-in client loads its server state from `/auth/user`
+  and tracks it in `AuthContext`.
+
+New user features extend this framework instead of inventing a parallel storage
+or sync mechanism. The end-to-end recipe is documented in
+`docs/USER_DATA_FRAMEWORK.md`.
 
 ## Base Image
 
