@@ -626,7 +626,8 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
                                     visibleTypes.has('trail') ||
                                     visibleTypes.has('river') ||
                                     visibleTypes.has('water_taxi') ||
-                                    visibleTypes.has('boundary');
+                                    visibleTypes.has('boundary') ||
+                                    visibleTypes.size > 0;
 
       if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
         linearFeatures.forEach(feature => {
@@ -635,7 +636,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
             // Title search matches across all linear types, ignoring layer toggles
             isLayerVisible = feature.name?.toLowerCase().includes(search);
           } else if (feature.poi_roles?.includes('trail')) {
-            isLayerVisible = showTrails;
+            isLayerVisible = showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig);
           } else if (feature.poi_roles?.includes('river')) {
             isLayerVisible = showRivers;
           } else if (feature.poi_roles?.includes('water_taxi')) {
@@ -1495,7 +1496,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           // regardless of its layer toggle, and hide non-matches.
           const isVisible = searchQuery
             ? feature.name?.toLowerCase().includes(searchQuery.toLowerCase())
-            : ((feature.poi_roles?.includes('trail') && showTrails) ||
+            : ((feature.poi_roles?.includes('trail') && (showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig))) ||
                (feature.poi_roles?.includes('river') && showRivers) ||
                (feature.poi_roles?.includes('water_taxi') && showWaterTaxis) ||
                (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id)));
