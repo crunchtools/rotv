@@ -627,7 +627,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
                                     visibleTypes.has('river') ||
                                     visibleTypes.has('water_taxi') ||
                                     visibleTypes.has('boundary') ||
-                                    visibleTypes.size > 0;
+                                    isFilteredMode;
 
       if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
         linearFeatures.forEach(feature => {

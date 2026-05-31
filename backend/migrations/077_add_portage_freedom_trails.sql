@@ -1,4 +1,4 @@
--- Migration: 075_add_portage_freedom_trails.sql
+-- Migration: 077_add_portage_freedom_trails.sql
 -- Description: Add Portage Hike & Bike Trail. Add Biking activity to Mud Brook
 --   Greenway Trail. Freedom Trail already exists in production with geometry.
 

@@ -1,4 +1,4 @@
--- Migration: 074_add_centennial_bikehike_trails.sql
+-- Migration: 076_add_centennial_bikehike_trails.sql
 -- Description: Add Cleveland Foundation Centennial Trail and Bike & Hike Trail as
 --   trail POIs with OSM geometry. Also add Biking activity to the Ohio & Erie Canal
 --   Towpath Trail (already exists as POI 1062).
