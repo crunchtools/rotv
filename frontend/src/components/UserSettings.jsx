@@ -1,12 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import GeneralSettings from './GeneralSettings';
 import McpSettings from './McpSettings';
-import { useAuth } from '../hooks/useAuth';
 import { readEmail, writeEmail, writeSubscribed } from '../utils/anonSettings';
-import { safeHttpUrl } from '../utils/url';
 
 function UserSettings({ user, initialTab }) {
-  const { toggleFavorite } = useAuth();
   const [activeTab, setActiveTab] = useState(initialTab || 'general');
 
   useEffect(() => {
@@ -15,36 +12,6 @@ function UserSettings({ user, initialTab }) {
   const [email, setEmail] = useState(() => user?.email || readEmail());
   const [status, setStatus] = useState('idle');
   const [message, setMessage] = useState('');
-
-  const [favorites, setFavorites] = useState([]);
-  const [feed, setFeed] = useState({ news: [], events: [] });
-  const [favLoading, setFavLoading] = useState(false);
-
-  const loadFavorites = useCallback(async () => {
-    if (!user) return;
-    setFavLoading(true);
-    try {
-      const [favRes, feedRes] = await Promise.all([
-        fetch('/api/favorites', { credentials: 'include' }),
-        fetch('/api/notifications/feed', { credentials: 'include' })
-      ]);
-      if (favRes.ok) setFavorites(await favRes.json());
-      if (feedRes.ok) setFeed(await feedRes.json());
-    } catch (err) {
-      setFavorites([]);
-    } finally {
-      setFavLoading(false);
-    }
-  }, [user]);
-
-  useEffect(() => {
-    if (activeTab === 'favorites') loadFavorites();
-  }, [activeTab, loadFavorites]);
-
-  const handleUnfavorite = async (poiId) => {
-    setFavorites(prev => prev.filter(p => p.id !== poiId));
-    await toggleFavorite(poiId);
-  };
 
   useEffect(() => {
     if (user?.email) {
@@ -100,14 +67,6 @@ function UserSettings({ user, initialTab }) {
         >
           General
         </button>
-        {user && (
-          <button
-            className={`settings-tab-btn ${activeTab === 'favorites' ? 'active' : ''}`}
-            onClick={() => setActiveTab('favorites')}
-          >
-            Favorites
-          </button>
-        )}
         <button
           className={`settings-tab-btn ${activeTab === 'newsletter' ? 'active' : ''}`}
           onClick={() => setActiveTab('newsletter')}
@@ -156,82 +115,6 @@ function UserSettings({ user, initialTab }) {
             )}
             <GeneralSettings />
           </>
-        )}
-
-        {activeTab === 'favorites' && (
-          <div className="settings-section">
-            <h3>⭐ Favorites</h3>
-            <p className="settings-description">
-              Places you follow. Get a notification and a personalized weekly
-              email when there's new news or an event at one of them.
-            </p>
-
-            {favLoading && favorites.length === 0 ? (
-              <p className="field-hint">Loading…</p>
-            ) : favorites.length === 0 ? (
-              <div className="settings-info-box">
-                <div className="info-box-header">
-                  <span className="info-icon">⭐</span>
-                  <strong>No favorites yet</strong>
-                </div>
-                <p className="settings-description">
-                  Open a place on the map and tap “Follow” to start tracking its
-                  news and events here.
-                </p>
-              </div>
-            ) : (
-              <ul className="favorites-list">
-                {favorites.map(poi => (
-                  <li key={poi.id} className="favorites-list-item">
-                    <span className="favorites-poi-name">{poi.name}</span>
-                    <button
-                      className="favorites-remove-btn"
-                      onClick={() => handleUnfavorite(poi.id)}
-                      title={`Unfollow ${poi.name}`}
-                    >
-                      Unfollow
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {(feed.events.length > 0 || feed.news.length > 0) && (
-              <>
-                <div className="settings-divider"></div>
-                {feed.events.length > 0 && (
-                  <>
-                    <h4>📅 Upcoming events</h4>
-                    <ul className="favorites-feed">
-                      {feed.events.map(e => (
-                        <li key={`e-${e.id}`}>
-                          {safeHttpUrl(e.source_url) ? (
-                            <a href={safeHttpUrl(e.source_url)} target="_blank" rel="noopener noreferrer">{e.title}</a>
-                          ) : e.title}
-                          <span className="favorites-feed-poi"> · {e.poi_name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-                {feed.news.length > 0 && (
-                  <>
-                    <h4>📰 Recent news</h4>
-                    <ul className="favorites-feed">
-                      {feed.news.map(n => (
-                        <li key={`n-${n.id}`}>
-                          {safeHttpUrl(n.source_url) ? (
-                            <a href={safeHttpUrl(n.source_url)} target="_blank" rel="noopener noreferrer">{n.title}</a>
-                          ) : n.title}
-                          <span className="favorites-feed-poi"> · {n.poi_name}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-              </>
-            )}
-          </div>
         )}
 
         {activeTab === 'newsletter' && (

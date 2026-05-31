@@ -3,7 +3,10 @@ import {
   syncAnonSettings,
   readFavorites,
   addFavorite as addAnonFavorite,
-  removeFavorite as removeAnonFavorite
+  removeFavorite as removeAnonFavorite,
+  readVisited,
+  addVisited as addAnonVisited,
+  removeVisited as removeAnonVisited
 } from '../utils/anonSettings';
 
 export const AuthContext = createContext(null);
@@ -13,6 +16,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [favorites, setFavorites] = useState(() => readFavorites());
+  const [visited, setVisited] = useState(() => readVisited());
 
   const fetchUser = useCallback(async () => {
     try {
@@ -24,19 +28,23 @@ export function AuthProvider({ children }) {
         if (userData) {
           setUser(userData);
           setFavorites(userData.favorites || []);
+          setVisited(userData.visited || []);
         } else {
           setUser(null);
           setFavorites(readFavorites());
+          setVisited(readVisited());
         }
       } else {
         setUser(null);
         setFavorites(readFavorites());
+        setVisited(readVisited());
       }
     } catch (err) {
       console.error('Failed to fetch user:', err);
       setError(err.message);
       setUser(null);
       setFavorites(readFavorites());
+      setVisited(readVisited());
     } finally {
       setLoading(false);
     }
@@ -67,6 +75,7 @@ export function AuthProvider({ children }) {
       if (response.ok) {
         setUser(null);
         setFavorites(readFavorites());
+        setVisited(readVisited());
       }
     } catch (err) {
       console.error('Logout failed:', err);
@@ -112,6 +121,36 @@ export function AuthProvider({ children }) {
     return !wasFavorited;
   }, [favorites, user]);
 
+  const isVisited = useCallback(
+    (poiId) => visited.includes(poiId),
+    [visited]
+  );
+
+  const toggleVisited = useCallback(async (poiId) => {
+    const wasVisited = visited.includes(poiId);
+    const next = wasVisited
+      ? visited.filter(id => id !== poiId)
+      : [...visited, poiId];
+    setVisited(next);
+
+    if (user) {
+      try {
+        const res = await fetch(`/api/visited/${poiId}`, {
+          method: wasVisited ? 'DELETE' : 'POST',
+          credentials: 'include'
+        });
+        if (!res.ok) throw new Error('Request failed');
+      } catch (err) {
+        setVisited(visited);
+      }
+    } else if (wasVisited) {
+      removeAnonVisited(poiId);
+    } else {
+      addAnonVisited(poiId);
+    }
+    return !wasVisited;
+  }, [visited, user]);
+
   const value = {
     user,
     loading,
@@ -122,6 +161,9 @@ export function AuthProvider({ children }) {
     favorites,
     isFavorited,
     toggleFavorite,
+    visited,
+    isVisited,
+    toggleVisited,
     logout,
     loginWithGoogle,
     loginWithFacebook,

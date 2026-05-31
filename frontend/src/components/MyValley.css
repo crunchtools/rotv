@@ -1,0 +1,160 @@
+.my-valley-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  /* Above the fixed top nav (z-index 10000) so the modal is a true top-level
+     dialog — its header isn't painted over/clipped, and the backdrop dims the
+     nav while open. */
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.my-valley-modal {
+  background: white;
+  border-radius: 8px;
+  max-width: 640px;
+  width: 100%;
+  /* Fixed height (not max-height) so switching subtabs never resizes the modal
+     and re-centers it — the body scrolls within a stable frame. */
+  height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.24);
+}
+
+.my-valley-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+
+.my-valley-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.my-valley-close-btn {
+  border: none;
+  background: transparent;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 0.25rem;
+}
+
+.my-valley-progress {
+  padding: 0.75rem 1rem 0.25rem;
+  flex-shrink: 0;
+}
+
+.my-valley-progress-label {
+  font-size: 0.9rem;
+  margin-bottom: 0.4rem;
+}
+
+.my-valley-progress-label strong {
+  font-size: 1.1rem;
+  color: #2e7d32;
+}
+
+.my-valley-progress-track {
+  height: 10px;
+  border-radius: 6px;
+  background: #e8ede9;
+  overflow: hidden;
+}
+
+.my-valley-progress-fill {
+  height: 100%;
+  background: #2e7d32;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.my-valley-nudge {
+  margin: 0.5rem 1rem 0;
+  padding: 0.5rem 0.75rem;
+  background: #f1f8e9;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: #33691e;
+  flex-shrink: 0;
+}
+
+.my-valley-modal .settings-tabs {
+  padding: 0.5rem 1rem 0;
+  flex-shrink: 0;
+}
+
+/* In the modal's tight flex column, keep the subtabs fully visible: don't let
+   the mobile horizontal-scroll rule clip the labels/underline — wrap instead. */
+@media (max-width: 768px) {
+  .my-valley-modal .settings-tabs {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+}
+
+.my-valley-body {
+  padding: 0.75rem 1rem 1rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.my-valley-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.my-valley-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: #f7f7f7;
+  border-radius: 4px;
+}
+
+.my-valley-row-name {
+  font-weight: 600;
+}
+
+.my-valley-remove-btn {
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: white;
+  border-radius: 4px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.my-valley-empty {
+  padding: 0.75rem 0;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.my-valley-empty strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.my-valley-empty p {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+}
+
+.my-valley-hint {
+  color: rgba(0, 0, 0, 0.55);
+  font-style: italic;
+}

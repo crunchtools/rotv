@@ -7,6 +7,42 @@ import { addSubscriber } from '../services/buttondownClient.js';
 const MAX_SYNC_TRIPS = 50;
 
 /**
+ * Whitelist of user POI-id-list tables that anonymous localStorage collections
+ * sync into. Keys are the sync payload field names; values are the table names.
+ * The table name is interpolated into SQL, so only these fixed values are ever
+ * used — never request input. Part of the local-first user-data framework
+ * (see docs/USER_DATA_FRAMEWORK.md).
+ */
+const POI_ID_LIST_TABLES = {
+  favorites: 'user_poi_favorites',
+  visited: 'user_visits'
+};
+
+/**
+ * Sync an anonymous "array of POI ids" collection into its user_* join table.
+ * Server-wins and idempotent: only inserts ids for POIs that still exist and
+ * are not deleted, and ON CONFLICT DO NOTHING means re-syncs never duplicate.
+ * Returns the number of rows inserted. Reused by every POI-id-list user feature.
+ */
+async function syncPoiIdList(pool, userId, ids, field) {
+  const table = POI_ID_LIST_TABLES[field];
+  if (!table || !Array.isArray(ids) || ids.length === 0) return 0;
+  const poiIds = ids
+    .map(Number)
+    .filter(n => Number.isInteger(n) && n > 0)
+    .slice(0, 500);
+  if (poiIds.length === 0) return 0;
+  const inserted = await pool.query(
+    `INSERT INTO ${table} (user_id, poi_id)
+     SELECT $1, p FROM UNNEST($2::int[]) AS p
+     WHERE EXISTS (SELECT 1 FROM pois WHERE id = p AND deleted IS NOT TRUE)
+     ON CONFLICT DO NOTHING`,
+    [userId, poiIds]
+  );
+  return inserted.rowCount;
+}
+
+/**
  * Router for /api/user/settings/sync.
  *
  * Flushes a freshly-signed-in user's anonymous localStorage state to the
@@ -21,8 +57,8 @@ export function createUserSettingsRouter(pool) {
   const router = express.Router();
 
   router.post('/sync', isAuthenticated, async (req, res) => {
-    const { timezone, newsletter, trips, favorites } = req.body || {};
-    const synced = { timezone: false, newsletter: false, trips: 0, favorites: 0 };
+    const { timezone, newsletter, trips, favorites, visited } = req.body || {};
+    const synced = { timezone: false, newsletter: false, trips: 0, favorites: 0, visited: 0 };
 
     try {
       if (typeof timezone === 'string' && timezone.trim()) {
@@ -50,22 +86,8 @@ export function createUserSettingsRouter(pool) {
         }
       }
 
-      if (Array.isArray(favorites) && favorites.length > 0) {
-        const poiIds = favorites
-          .map(Number)
-          .filter(n => Number.isInteger(n) && n > 0)
-          .slice(0, 500);
-        if (poiIds.length > 0) {
-          const favInsert = await pool.query(
-            `INSERT INTO user_poi_favorites (user_id, poi_id)
-             SELECT $1, p FROM UNNEST($2::int[]) AS p
-             WHERE EXISTS (SELECT 1 FROM pois WHERE id = p AND deleted IS NOT TRUE)
-             ON CONFLICT DO NOTHING`,
-            [req.user.id, poiIds]
-          );
-          synced.favorites = favInsert.rowCount;
-        }
-      }
+      synced.favorites = await syncPoiIdList(pool, req.user.id, favorites, 'favorites');
+      synced.visited = await syncPoiIdList(pool, req.user.id, visited, 'visited');
 
       if (Array.isArray(trips) && trips.length > 0) {
         const client = await pool.connect();

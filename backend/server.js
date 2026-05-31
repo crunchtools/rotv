@@ -19,6 +19,7 @@ import { createFeedbackRouter } from './routes/feedback.js';
 import { createTripsRouter } from './routes/trips.js';
 import { createUserSettingsRouter } from './routes/userSettings.js';
 import { createFavoritesRouter } from './routes/favorites.js';
+import { createVisitedRouter } from './routes/visited.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { isAuthenticated } from './middleware/auth.js';
 import {
@@ -197,6 +198,7 @@ app.use('/api/feedback', createFeedbackRouter(pool));
 app.use('/api/trips', createTripsRouter(pool));
 app.use('/api/user/settings', createUserSettingsRouter(pool));
 app.use('/api/favorites', createFavoritesRouter(pool));
+app.use('/api/visited', createVisitedRouter(pool));
 app.use('/api/notifications', createNotificationsRouter(pool));
 
 async function importGeoJSONFeatures(client) {

@@ -6,6 +6,7 @@ import { useAuth } from './hooks/useAuth';
 import { useTrip } from './hooks/useTrip';
 import TripBuilder from './components/TripBuilder';
 import MyTripsModal from './components/MyTripsModal';
+import MyValley from './components/MyValley';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
 import useBoatPosition from './hooks/useBoatPosition';
 import Map from './components/Map';
@@ -253,6 +254,7 @@ function AppContent() {
   const [showLoginDropdown, setShowLoginDropdown] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [showMyTrips, setShowMyTrips] = useState(false);
+  const [showMyValley, setShowMyValley] = useState(false);
   const [tourVariant, setTourVariant] = useState('default');
   const {
     loadFromSlug: loadTripFromSlug,
@@ -1954,10 +1956,10 @@ function AppContent() {
                       {isAdmin && <span className="admin-badge-inline">Admin</span>}
                     </div>
                     <button
-                      className="dropdown-item-inline my-trips-menu-item"
-                      onClick={() => { setShowUserDropdown(false); setShowMyTrips(true); }}
+                      className="dropdown-item-inline my-valley-menu-item"
+                      onClick={() => { setShowUserDropdown(false); setShowMyValley(true); }}
                     >
-                      My Trips
+                      My Valley
                     </button>
                     <button
                       className="dropdown-item-inline settings-item-inline"
@@ -2021,10 +2023,10 @@ function AppContent() {
                     }
                   }}>
                     <button
-                      className="dropdown-item-inline my-trips-menu-item"
-                      onClick={() => { setShowLoginDropdown(false); setShowMyTrips(true); }}
+                      className="dropdown-item-inline my-valley-menu-item"
+                      onClick={() => { setShowLoginDropdown(false); setShowMyValley(true); }}
                     >
-                      My Trips
+                      My Valley
                     </button>
                     <button
                       className="dropdown-item-inline settings-item-inline"
@@ -2526,6 +2528,11 @@ function AppContent() {
 
       <TripBuilder onOpenMyTrips={() => setShowMyTrips(true)} />
       <MyTripsModal open={showMyTrips} onClose={() => setShowMyTrips(false)} />
+      <MyValley
+        open={showMyValley}
+        onClose={() => setShowMyValley(false)}
+        destinations={destinations}
+      />
 
       {showTourPrompt && (
         <TourPrompt
