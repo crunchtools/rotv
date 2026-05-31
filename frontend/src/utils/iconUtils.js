@@ -61,6 +61,34 @@ export function poiMatchesActivityForTypes(poi, visibleTypes, iconConfig) {
   return false;
 }
 
+/**
+ * True when the legend is narrowed to a subset of activity-bearing types
+ * (e.g. just "Biking") rather than showing everything. The Trails layer is only
+ * refined by activity while this is true; with all (or no) activity types
+ * selected it stays all-or-nothing, preserving plain "show me the trails" browsing.
+ */
+export function isActivityFilterActive(visibleTypes, iconConfig) {
+  if (!iconConfig || iconConfig.length === 0) return false;
+  let activityTypes = 0, selected = 0;
+  for (const icon of iconConfig) {
+    if (icon.enabled === false || !icon.activity_fallbacks) continue;
+    activityTypes++;
+    if (visibleTypes.has(icon.name)) selected++;
+  }
+  return selected > 0 && selected < activityTypes;
+}
+
+/**
+ * Whether a trail (linear feature) should render given the current activity
+ * narrowing. Untagged trails always show, so a missing tag never silently hides a
+ * trail. (Selecting "Biking" hides hiking-only trails.)
+ */
+export function trailPassesActivityFilter(feature, visibleTypes, iconConfig) {
+  if (!isActivityFilterActive(visibleTypes, iconConfig)) return true;
+  if (!(feature.primary_activities || '').trim()) return true;
+  return poiMatchesActivityForTypes(feature, visibleTypes, iconConfig);
+}
+
 export function getIconUrlForPOI(poi, iconConfig, poiType) {
   if (poiType === 'trail') return '/icons/layers/trails.svg';
   if (poiType === 'river') return '/icons/layers/rivers.svg';
