@@ -40,7 +40,7 @@ Frontend-only, no backend or DB changes.
 
 1. User clicks the ruler button → `ZoomLocateControl` calls `onToggleMeasure()` → `Map` flips `measureMode`.
 2. `measureMode` true → `<MeasureTape active />` mounts; on mount it computes two default
-   endpoints in the bottom-right quadrant of the current viewport via
+   endpoints straddling the center of the current viewport via
    `map.containerPointToLatLng()` and adds markers + polyline + tooltip to the map.
 3. Dragging an endpoint fires `drag` → update the polyline latlngs and recompute the
    label with `map.distance(a, b)`.
@@ -71,7 +71,7 @@ Frontend-only, no backend or DB changes.
 ### Phase 2: MeasureTape component
 
 - [ ] New `MeasureTape({ active })` `useMap()` child.
-- [ ] On activate: compute default A/B in bottom-right quadrant (e.g. container points at 78%×80% and 90%×80%), add two draggable divIcon markers, a polyline, and a permanent midpoint tooltip.
+- [ ] On activate: compute default A/B straddling viewport center (e.g. container points at 40%×50% and 60%×50%), add two draggable divIcon markers, a polyline, and a permanent midpoint tooltip.
 - [ ] `drag` handlers update polyline + tooltip position + label live.
 - [ ] `formatDistance(meters)` → imperial primary (ft `< 0.1 mi`, else mi 2dp) + metric secondary (m `< 1 km`, else km 2dp).
 - [ ] Cleanup on deactivate/unmount removes all layers; re-activate resets to default position.
@@ -143,7 +143,7 @@ None.
 |------|--------|------------|
 | Endpoint drag pans the map | Med | `disableClickPropagation` + marker `draggable` handles its own events |
 | Tooltip/markers leak on toggle | Low | Explicit cleanup in `useEffect` return; keyed on `active` |
-| Distance label overlaps controls | Low | Default endpoints placed bottom-right, away from top-left controls |
+| Distance label overlaps controls | Low | Default endpoints centered, clear of the top-left controls |
 
 ---
 

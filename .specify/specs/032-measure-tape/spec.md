@@ -33,7 +33,7 @@ Acceptance Criteria:
 - [ ] A measure toggle button is available in the map control cluster (top-left, with zoom/locate/satellite).
 - [ ] Activating it shows two draggable endpoint handles (A and B) connected by a line.
 - [ ] A label shows the geodesic distance between A and B, in imperial primary (ft / mi) with metric secondary (m / km).
-- [ ] Endpoints first appear in the bottom-right of the current viewport so they don't cover the map controls.
+- [ ] Endpoints first appear near the center of the current viewport so they're immediately visible and easy to grab.
 
 **US-002: Drag endpoints to measure anything**
 > As a visitor, I want to drag each endpoint independently so that I can line them up
@@ -59,7 +59,7 @@ Acceptance Criteria:
 Acceptance Criteria:
 - [ ] Toggling the button off removes both endpoints, the line, and the label.
 - [ ] The toggle button shows an active state while the tape is on.
-- [ ] Turning the tape off and on again resets endpoints to the default bottom-right position.
+- [ ] Turning the tape off and on again resets endpoints to the default centered position.
 
 ---
 
@@ -92,14 +92,14 @@ None. No backend changes.
 ### Wireframe
 
 ```
- map controls (top-left)        measuring tape (starts bottom-right)
+ map controls (top-left)        measuring tape (starts centered)
  ┌───┐
- │ + │                                   A ●╌╌╌╌╌╌╌╌╌● B
- │ − │                                      ┌─────────────┐
- │ ◎ │  ← locate                            │ 1.24 mi     │
- │ ▦ │  ← satellite                         │ (2.0 km)    │
- │ 📏│  ← measure (NEW, toggles tape)       └─────────────┘
- └───┘
+ │ + │
+ │ − │                       A ●╌╌╌╌╌╌╌╌╌● B
+ │ ◎ │  ← locate                ┌─────────────┐
+ │ ▦ │  ← satellite             │ 1.24 mi     │
+ │ 📏│  ← measure (NEW)         │ (2.0 km)    │
+ └───┘   appended to cluster    └─────────────┘
 ```
 
 ### Units
