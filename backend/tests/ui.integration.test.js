@@ -233,14 +233,15 @@ describe('UI Integration Tests', () => {
 
       // Get all buttons in order
       const buttons = await page.locator('.zoom-locate-control .zoom-locate-btn').all();
-      expect(buttons.length).toBe(4);
+      expect(buttons.length).toBe(5);
 
-      // Verify order: zoom in, zoom out, locate, satellite
+      // Verify order: zoom in, zoom out, locate, satellite, measure
       const classNames = await Promise.all(buttons.map(btn => btn.getAttribute('class')));
       expect(classNames[0]).toContain('zoom-in-btn');
       expect(classNames[1]).toContain('zoom-out-btn');
       expect(classNames[2]).toContain('locate-button');
       expect(classNames[3]).toContain('satellite-toggle-button');
+      expect(classNames[4]).toContain('measure-button');
     }, 30000);
 
     it('should position map controls below header (not off-screen)', async () => {
