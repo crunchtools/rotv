@@ -936,8 +936,8 @@ function MeasureTape({ active }) {
     const startA = map.containerPointToLatLng(L.point(size.x * 0.4, size.y * 0.5));
     const startB = map.containerPointToLatLng(L.point(size.x * 0.6, size.y * 0.5));
 
-    const markerA = L.marker(startA, { draggable: true, icon: makeHandle('A'), zIndexOffset: 1200, keyboard: false }).addTo(map);
-    const markerB = L.marker(startB, { draggable: true, icon: makeHandle('B'), zIndexOffset: 1200, keyboard: false }).addTo(map);
+    const markerA = L.marker(startA, { draggable: true, icon: makeHandle('A'), zIndexOffset: 1200 }).addTo(map);
+    const markerB = L.marker(startB, { draggable: true, icon: makeHandle('B'), zIndexOffset: 1200 }).addTo(map);
     const line = L.polyline([startA, startB], { color: '#2d5016', weight: 3, dashArray: '6 6', interactive: false }).addTo(map);
     const label = L.tooltip({ permanent: true, direction: 'center', className: 'measure-tooltip', interactive: false });
 
