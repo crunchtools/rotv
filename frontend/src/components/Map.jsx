@@ -698,7 +698,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
   return null;
 }
 
-function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onSatelliteToggle }) {
+function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onSatelliteToggle, measureMode, onMeasureToggle }) {
   const map = useMap();
   const [locating, setLocating] = useState(false);
   const userMarkerRef = useRef(null);
@@ -808,17 +808,26 @@ function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onS
 
         const satelliteToggle = L.DomUtil.create('a', 'zoom-locate-btn satellite-toggle-button', container);
         satelliteToggle.href = '#';
-        satelliteToggle.title = useSatellite ? 'Switch to map view' : 'Switch to satellite view';
+        satelliteToggle.title = 'Switch to satellite view';
         satelliteToggle.setAttribute('role', 'button');
-        satelliteToggle.setAttribute('aria-label', useSatellite ? 'Switch to map view' : 'Switch to satellite view');
+        satelliteToggle.setAttribute('aria-label', 'Switch to satellite view');
         satelliteToggle.innerHTML = `
           <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
           </svg>
         `;
-        if (useSatellite) {
-          satelliteToggle.classList.add('active');
-        }
+
+        const measure = L.DomUtil.create('a', 'zoom-locate-btn measure-button', container);
+        measure.href = '#';
+        measure.title = 'Measure distance';
+        measure.setAttribute('role', 'button');
+        measure.setAttribute('aria-label', 'Measure distance');
+        measure.setAttribute('aria-pressed', 'false');
+        measure.innerHTML = `
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M21.71 8.04l-5.75-5.75a1 1 0 0 0-1.41 0L2.29 14.55a1 1 0 0 0 0 1.41l5.75 5.75a1 1 0 0 0 1.41 0L21.71 9.45a1 1 0 0 0 0-1.41zM8.75 19.59l-4.34-4.34L14.96 4.7l1.0 1.0-2.12 2.12 1.06 1.06 2.12-2.12 1.06 1.06-1.06 1.06 1.06 1.06 1.06-1.06 1.05 1.06L8.75 19.59z"/>
+          </svg>
+        `;
 
         L.DomEvent.disableClickPropagation(container);
 
@@ -844,6 +853,13 @@ function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onS
           }
         });
 
+        L.DomEvent.on(measure, 'click', function(e) {
+          L.DomEvent.preventDefault(e);
+          if (onMeasureToggle) {
+            onMeasureToggle();
+          }
+        });
+
         return container;
       }
     });
@@ -860,7 +876,9 @@ function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onS
         userCircleRef.current.remove();
       }
     };
-  }, [map, handleLocate, useSatellite, onSatelliteToggle]);
+    // Fix: onAdd reads no toggle state, so the control is built once and the
+    // sync effects below own each button's active state — no churn (PR #458 review)
+  }, [map, handleLocate, onSatelliteToggle, onMeasureToggle]);
 
   useEffect(() => {
     const button = document.querySelector('.locate-button');
@@ -887,6 +905,72 @@ function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onS
       }
     }
   }, [useSatellite]);
+
+  useEffect(() => {
+    const button = document.querySelector('.measure-button');
+    if (button) {
+      button.classList.toggle('active', measureMode);
+      button.setAttribute('aria-pressed', measureMode ? 'true' : 'false');
+    }
+  }, [measureMode]);
+
+  return null;
+}
+
+function MeasureTape({ active }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!active) return undefined;
+
+    const makeHandle = (letter) => L.divIcon({
+      className: 'measure-handle',
+      html: `<span class="measure-handle-dot"></span><span class="measure-handle-letter">${letter}</span>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14]
+    });
+
+    // Default the two endpoints straddling the viewport center so they are
+    // immediately visible and easy to grab.
+    const size = map.getSize();
+    const startA = map.containerPointToLatLng(L.point(size.x * 0.4, size.y * 0.5));
+    const startB = map.containerPointToLatLng(L.point(size.x * 0.6, size.y * 0.5));
+
+    const markerA = L.marker(startA, { draggable: true, icon: makeHandle('A'), zIndexOffset: 1200 }).addTo(map);
+    const markerB = L.marker(startB, { draggable: true, icon: makeHandle('B'), zIndexOffset: 1200 }).addTo(map);
+    const line = L.polyline([startA, startB], { color: '#2d5016', weight: 3, dashArray: '6 6', interactive: false }).addTo(map);
+    const label = L.tooltip({ permanent: true, direction: 'center', className: 'measure-tooltip', interactive: false });
+
+    const update = () => {
+      const a = markerA.getLatLng();
+      const b = markerB.getLatLng();
+      line.setLatLngs([a, b]);
+      const meters = map.distance(a, b);
+      const miles = meters / 1609.344;
+      const imperial = miles >= 0.1
+        ? `${miles.toFixed(2)} mi`
+        : `${Math.round(meters * 3.28084).toLocaleString()} ft`;
+      const metric = meters >= 1000
+        ? `${(meters / 1000).toFixed(2)} km`
+        : `${Math.round(meters).toLocaleString()} m`;
+      label.setLatLng(L.latLng((a.lat + b.lat) / 2, (a.lng + b.lng) / 2));
+      label.setContent(`${imperial} <span class="measure-tooltip-secondary">(${metric})</span>`);
+    };
+
+    label.setLatLng(L.latLng((startA.lat + startB.lat) / 2, (startA.lng + startB.lng) / 2)).addTo(map);
+    update();
+    markerA.on('drag', update);
+    markerB.on('drag', update);
+
+    return () => {
+      markerA.off();
+      markerB.off();
+      markerA.remove();
+      markerB.remove();
+      line.remove();
+      label.remove();
+    };
+  }, [active, map]);
 
   return null;
 }
@@ -1107,6 +1191,11 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   }, [isLegendExpanded, setIsLegendExpanded]);
 
   const [useSatellite, setUseSatellite] = useState(false);
+  const [measureMode, setMeasureMode] = useState(false);
+  // Fix: stable callbacks so ZoomLocateControl's effect doesn't tear down and
+  // rebuild the whole control on every render (PR #458 review)
+  const handleSatelliteToggle = useCallback(() => setUseSatellite(prev => !prev), []);
+  const handleMeasureToggle = useCallback(() => setMeasureMode(prev => !prev), []);
   const [selectedFileName, setSelectedFileName] = useState(null); // Just for UI display
   const [importType, setImportType] = useState('trail');
   const [importingFile, setImportingFile] = useState(false);
@@ -1764,8 +1853,12 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
 
         <ZoomLocateControl
           useSatellite={useSatellite}
-          onSatelliteToggle={() => setUseSatellite(prev => !prev)}
+          onSatelliteToggle={handleSatelliteToggle}
+          measureMode={measureMode}
+          onMeasureToggle={handleMeasureToggle}
         />
+
+        <MeasureTape active={measureMode} />
 
         {newPOI && previewCoords && (
           <DestinationMarker
