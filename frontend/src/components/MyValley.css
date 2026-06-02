@@ -128,6 +128,8 @@
 
 .my-valley-row-name {
   font-weight: 600;
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -140,6 +142,7 @@
   padding: 0.2rem 0.5rem;
   font-size: 0.8rem;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .my-valley-empty {
@@ -211,6 +214,8 @@
 
 /* Clickable favorite name — a green link, like normal links */
 .my-valley-row-open {
+  display: flex;
+  align-items: center;
   flex: 1;
   min-width: 0;
   border: none;
