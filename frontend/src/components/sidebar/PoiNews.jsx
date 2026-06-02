@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { formatPublicationDate, NewsTypeIcon } from '../NewsEventsShared';
 import { generateSlug } from './helpers';
 
-function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNews }) {
+function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNews, navigateOnSelect = true }) {
   const navigate = useNavigate();
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -108,7 +108,7 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
                if (!sourceName) return;
                const poiSlug = generateSlug(sourceName);
                const titleSlug = generateSlug(item.title);
-               navigate(`/${poiSlug}/news/${titleSlug}`);
+               if (navigateOnSelect) navigate(`/${poiSlug}/news/${titleSlug}`);
                if (onSelectNews) onSelectNews({ type: 'news', poiSlug, titleSlug });
              }}
              style={{ cursor: 'pointer' }}>

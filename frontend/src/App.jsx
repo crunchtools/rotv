@@ -870,6 +870,17 @@ function AppContent() {
           setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
           return;
         }
+        // Resolve organization (virtual) POIs for sub-tab paths too, so a favorite (or
+        // permalink) to an org opens its sidebar — not just destinations & linear features (#437)
+        const virtualPoi = virtualPois.find(v => generateSlug(v.name) === poiSlug);
+        if (virtualPoi) {
+          setSelectedDestination(virtualPoi);
+          setSelectedLinearFeature(null);
+          setActiveTab('view');
+          document.title = `${virtualPoi.name} | Roots of The Valley`;
+          setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+          return;
+        }
         const lf = linearFeatures.find(f => generateSlug(f.name) === poiSlug);
         if (lf) {
           setSelectedLinearFeature(lf);

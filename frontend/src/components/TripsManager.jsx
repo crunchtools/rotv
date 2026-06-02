@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useTrip } from '../hooks/useTrip';
 import { useAuth } from '../hooks/useAuth';
 import { readTrips as readLocalTrips, removeTrip as removeLocalTrip } from '../utils/anonSettings';
+import BackButton from './BackButton';
 import './TripsManager.css';
 
 function formatDate(iso) {
@@ -299,7 +300,7 @@ export default function TripsManager({ active = true, onClosed }) {
             </ul>
           )}
           <div style={{ marginTop: '0.75rem' }}>
-            <button onClick={() => setView('mine')}>&larr; Back to My Trips</button>
+            <BackButton onClick={() => setView('mine')} />
           </div>
         </>
       )}
@@ -330,7 +331,7 @@ export default function TripsManager({ active = true, onClosed }) {
             </ul>
           )}
           <div style={{ marginTop: '0.75rem' }}>
-            <button onClick={() => setView('mine')}>&larr; Back to My Trips</button>
+            <BackButton onClick={() => setView('mine')} />
           </div>
         </>
       )}
