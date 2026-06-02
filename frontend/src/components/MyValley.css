@@ -99,6 +99,16 @@
     flex-wrap: wrap;
     overflow: visible;
   }
+
+  /* Smaller titles on mobile so more of the name shows before truncating */
+  .my-valley-row-name,
+  .my-valley-detail-name {
+    font-size: 0.9rem;
+  }
+
+  .my-valley-row {
+    padding: 0.5rem 0.6rem;
+  }
 }
 
 .my-valley-body {
