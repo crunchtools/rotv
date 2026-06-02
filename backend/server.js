@@ -949,6 +949,56 @@ app.get('/api/pois', async (req, res) => {
   }
 });
 
+// Public batch enrichment for an arbitrary list of POI ids: latest trail status +
+// published news count + upcoming-events count. Lets anonymous (localStorage) favorites
+// show the same status/counts as the signed-in list (#437, local-first parity).
+// Registered before /api/pois/:id so the literal "summary" path is not parsed as an id.
+app.get('/api/pois/summary', async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '')
+      .split(',')
+      .map(s => parseInt(s, 10))
+      .filter(n => Number.isInteger(n) && n > 0)
+      .slice(0, 200);
+    if (ids.length === 0) {
+      return res.json([]);
+    }
+    // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE takes arbitrary input (PR #368 review)
+    const rawTz = req.query.tz;
+    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
+      ? rawTz
+      : 'America/New_York';
+    const summary = await pool.query(`
+      SELECT p.id,
+             ts.status AS trail_status,
+             COALESCE(nc.cnt, 0)::int AS news_count,
+             COALESCE(ec.cnt, 0)::int AS events_count
+        FROM pois p
+        LEFT JOIN LATERAL (
+          SELECT status FROM trail_status
+           WHERE poi_id = p.id ORDER BY created_at DESC LIMIT 1
+        ) ts ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) AS cnt FROM poi_news n
+           WHERE n.poi_id = p.id
+             AND n.moderation_status IN ('published', 'auto_approved')
+        ) nc ON true
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) AS cnt FROM poi_events e
+           WHERE e.poi_id = p.id
+             AND e.moderation_status IN ('published', 'auto_approved')
+             AND (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
+        ) ec ON true
+       WHERE p.id = ANY($1) AND p.deleted IS NOT TRUE`,
+      [ids, tz]
+    );
+    res.json(summary.rows);
+  } catch (error) {
+    console.error('Error fetching POI summary:', error);
+    res.status(500).json({ error: 'Failed to fetch POI summary' });
+  }
+});
+
 app.get('/api/pois/:id', async (req, res) => {
   try {
     const poiQuery = await pool.query(`

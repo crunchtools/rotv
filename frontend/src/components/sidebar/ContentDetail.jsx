@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { formatPublicationDate, NewsTypeIcon, EventTypeIcon } from '../NewsEventsShared';
 import ShareButton from '../ShareButton';
+import BackButton from '../BackButton';
 
-function ContentDetail({ permalinkInfo, onBack, onItemLoaded }) {
+function ContentDetail({ permalinkInfo, onBack, onItemLoaded, showBack = true }) {
   const [item, setItem] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -23,7 +24,7 @@ function ContentDetail({ permalinkInfo, onBack, onItemLoaded }) {
   if (loading) return <div className="sidebar-tab-loading">Loading...</div>;
   if (error || !item) return (
     <div className="content-detail">
-      <button className="content-detail-back" onClick={onBack}>&larr; Back</button>
+      {showBack && <BackButton onClick={onBack} />}
       <p className="sidebar-tab-empty">{error || 'Not found'}</p>
     </div>
   );
@@ -36,7 +37,7 @@ function ContentDetail({ permalinkInfo, onBack, onItemLoaded }) {
 
   return (
     <div className="content-detail">
-      <button className="content-detail-back" onClick={onBack}>&larr; Back to {item.poi_name || 'POI'}</button>
+      {showBack && <BackButton onClick={onBack} />}
       <div className="content-detail-header">
         {isEvent ? <EventTypeIcon type={item.event_type} /> : <NewsTypeIcon type={item.news_type} />}
         <h3 className="content-detail-title">{item.title}</h3>

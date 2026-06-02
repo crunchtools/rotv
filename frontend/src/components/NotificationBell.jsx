@@ -219,7 +219,7 @@ export default function NotificationBell() {
           <div className="notification-dropdown-header">Notifications</div>
           {items.length === 0 ? (
             <div className="notification-empty">
-              No updates yet. Follow places (★) to get news and events about them here.
+              No updates yet. Favorite places (★) to get news and events about them here.
             </div>
           ) : (
             <ul className="notification-list">

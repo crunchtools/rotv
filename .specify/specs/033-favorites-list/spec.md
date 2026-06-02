@@ -38,7 +38,10 @@ Acceptance Criteria:
 > As a user, I want to click a favorite so that I'm taken to it on the map.
 
 Acceptance Criteria:
-- [ ] Clicking a row navigates to the POI (`/<slug>`) and closes the My Valley modal.
+- [ ] Clicking a favorite's name navigates to the POI (`/<slug>/info`) and closes the My Valley modal (i.e. "show it on the map").
+- [ ] The news / events count chips open that POI's news/events **inside My Valley** as a back-able detail panel (master→detail), so focus stays in the modal and the behavior is identical on mobile and desktop. The panel reuses the existing sidebar `PoiNews`/`PoiEvents` components for the same look/feel, with a News|Events toggle.
+- [ ] Clicking an individual article opens the full article **inside** My Valley (reusing the sidebar `ContentDetail`), with Back returning to the news/events list — focus never leaves the modal. Three levels: favorites list → POI news/events → article.
+- [ ] Clickable name + counts render green, like normal links.
 - [ ] The Remove (un-favorite) control still works and does not trigger navigation.
 
 **US-003: Sort and filter**
@@ -57,7 +60,7 @@ Acceptance Criteria:
 > star icon, the toggle, the list tab, and the notifications copy all agree.
 
 Acceptance Criteria:
-- [ ] The My Valley tab reads "★ Favorites (N)" (was "⭐ Following").
+- [ ] The My Valley tab reads "★ Favorites (N)" (was "⭐ Following"), and is the **first** tab (order: Favorites, Visited, Trips), shown by default when the modal opens.
 - [ ] The POI toggle reads "Favorite" / "Favorited" with "Add to favorites" / "Remove from favorites" titles (was "Follow" / "Following").
 - [ ] Empty-state and NotificationBell copy say "Favorite places" (was "Follow places").
 - [ ] Internal identifiers in `MyValley.jsx` use favorite naming (`view === 'favorites'`, `favoriteList`, `handleRemoveFavorite`). Backend already uses `favorites` / `user_poi_favorites`; no DB rename.
@@ -79,9 +82,15 @@ No schema changes. Reads existing tables: `user_poi_favorites`, `pois`, `poi_new
 |--------|------|--------|------|
 | GET | `/api/favorites` | **Additive**: each row also returns `trail_status` (latest, or null), `news_count`, `events_count`. Accepts `?tz=` (whitelisted IANA, like `/api/pois/:id/tab-counts`). Existing fields unchanged. | Yes |
 
+### New
+
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/api/pois/summary?ids=1,2,3&tz=` | Public batch enrichment: returns `[{ id, trail_status, news_count, events_count }]` for the requested ids (non-deleted, capped at 200). Mirrors the notification feed's `?pois=` precedent so **anonymous** (localStorage) favorites get the same status/counts as the signed-in list — closes the local-first gap. Registered before `/api/pois/:id` so `summary` isn't parsed as an id. | No |
+
 Counts are computed against the POI's own id (no boundary/org rollup) in a single query
-via `LEFT JOIN LATERAL` — favorites are overwhelmingly point POIs, and this keeps the
-endpoint to two queries with no N+1.
+via `LEFT JOIN LATERAL` — favorites are overwhelmingly point POIs, and this keeps each
+endpoint to one query with no N+1.
 
 ---
 
@@ -90,15 +99,28 @@ endpoint to two queries with no N+1.
 ### Modified Components
 
 - `MyValley.jsx` — rename Following→Favorites; enrich rows (StatusBadge, count chips,
-  clickable navigate); add sort + type-filter controls over the favorites list.
+  clickable navigate); add sort + type-filter controls; in-modal news/events/article detail.
 - `FavoriteToggle.jsx` — relabel to Favorite/Favorited.
 - `NotificationBell.jsx` — "Favorite places (★) …" copy.
 
+### App-wide back button (US-005)
+
+New shared `BackButton.jsx` standardizes every navigational back control to a single
+look (`.back-button`) and a destination-agnostic label — just **"← Back"**. A back button
+describes the action, not the destination, because a view (e.g. `ContentDetail`) can be
+reached from multiple places; a baked-in name ("Back to <POI>") is misleading in one of
+them. Swapped at all text call sites: `ContentDetail`, `MyValley`, `NewsPermalink`,
+`EventPermalink`, `TripsManager`, `PrivacyPolicy`. (Icon-only/​pagination controls are
+out of scope: the sidebar MTB header `←` and ModerationInbox pagination "Back".)
+
 ### Anonymous users
 
-Anonymous favorites (localStorage ids) render name + navigate + Remove, but **without**
-status/counts (those require the authenticated server query). The sort/filter controls
-still work on what's shown. This preserves the local-first rule.
+Anonymous favorites (localStorage ids) render with the **same** status/counts as the
+signed-in list, fetched from the public `GET /api/pois/summary` batch endpoint and merged
+client-side. Name + navigate + Remove + sort/filter all work without sign-in. If the
+enrichment fetch fails, rows gracefully fall back to names only. This fully honors the
+local-first rule (the user-specific favorites state is localStorage-backed and syncs on
+sign-in; the public POI status/counts are available to everyone).
 
 ### Wireframe
 
@@ -116,7 +138,7 @@ still work on what's shown. This preserves the local-first rule.
 
 ## Non-Functional Requirements
 
-**NFR-001: Local-first preserved** — anonymous path keeps working from localStorage; no sign-in required to see/remove favorites.
+**NFR-001: Local-first parity** — anonymous path works from localStorage and gets the same public status/counts as signed-in (via `/api/pois/summary`); no sign-in required to see/enrich/remove favorites.
 
 **NFR-002: No N+1** — enrichment is a single SQL query; sort/filter is client-side.
 

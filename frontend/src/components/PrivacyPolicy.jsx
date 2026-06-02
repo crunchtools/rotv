@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from './MarkdownRenderer';
+import BackButton from './BackButton';
 
 function PrivacyEditor({ content, onSave }) {
   const [draft, setDraft] = useState(content || '');
@@ -105,9 +106,7 @@ function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
     <div className={`privacy-policy-page ${inline ? 'privacy-inline' : ''}`}>
       <div className="privacy-policy-content">
         {!inline && (
-          <button className="privacy-back-btn" onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')}>
-            &larr; Back
-          </button>
+          <BackButton onClick={() => window.history.length > 1 ? navigate(-1) : navigate('/')} />
         )}
 
         {isAdmin && editMode && !editing && (

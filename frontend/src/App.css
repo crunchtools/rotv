@@ -1724,17 +1724,18 @@ body {
   padding: 0.75rem;
 }
 
-.content-detail-back {
+/* Standard app-wide back control (see BackButton.jsx) */
+.back-button {
   background: none;
   border: none;
   color: #2e7d32;
   cursor: pointer;
   padding: 0;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   margin-bottom: 1rem;
 }
 
-.content-detail-back:hover {
+.back-button:hover {
   text-decoration: underline;
 }
 
@@ -14311,20 +14312,6 @@ svg.leaflet-zoom-animated {
   margin-bottom: 24px;
 }
 
-.permalink-back-btn {
-  background: none;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  padding: 6px 14px;
-  cursor: pointer;
-  color: #555;
-  font-size: 14px;
-}
-
-.permalink-back-btn:hover {
-  background: #f0f0f0;
-}
-
 .permalink-header {
   display: flex;
   align-items: flex-start;
@@ -14446,20 +14433,6 @@ svg.leaflet-zoom-animated {
   border-radius: 8px;
   padding: 2.5rem 3rem;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.privacy-back-btn {
-  background: none;
-  border: none;
-  color: #2d6a4f;
-  font-size: 0.95rem;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 1.5rem;
-}
-
-.privacy-back-btn:hover {
-  text-decoration: underline;
 }
 
 .privacy-policy-content h1 {

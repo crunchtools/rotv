@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatPublicationDate, NewsTypeIcon, DetailImage } from './NewsEventsShared';
 import ShareButton from './ShareButton';
+import BackButton from './BackButton';
 
 function generateSlug(name) {
   if (!name) return '';
@@ -43,9 +44,7 @@ export default function NewsPermalink({ poiSlug, titleSlug }) {
         <div className="permalink-error">
           <h2>{error || 'Article not found'}</h2>
           <p>This article may have been removed or the link may be incorrect.</p>
-          <button onClick={() => navigate('/')} className="permalink-back-btn">
-            Back to Map
-          </button>
+          <BackButton onClick={() => navigate('/')} />
         </div>
       </div>
     );
@@ -57,9 +56,7 @@ export default function NewsPermalink({ poiSlug, titleSlug }) {
     <div className="permalink-page">
       <div className="permalink-card">
         <div className="permalink-nav">
-          <button onClick={() => navigate('/')} className="permalink-back-btn">
-            &larr; Back to Map
-          </button>
+          <BackButton onClick={() => navigate('/')} />
         </div>
 
         <DetailImage imageUrl={item.image_url} poiId={item.poi_id} alt={item.title} />
