@@ -2,14 +2,14 @@
 # Contains: PostgreSQL 17, Node.js, Playwright/Chromium
 # This image rarely changes and is cached on quay.io/fatherlinux/rotv-base
 
-FROM registry.access.redhat.com/ubi10/ubi:latest
+FROM quay.io/crunchtools/ubi10-core:latest
 
 LABEL maintainer="fatherlinux"
 LABEL description="ROTV Base - PostgreSQL 17, Node.js, Playwright infrastructure"
 LABEL version="1.0.0"
 
 # Install systemd, Node.js, and Chromium dependencies for Playwright
-RUN dnf install -y systemd nodejs npm procps-ng \
+RUN dnf install -y nodejs npm procps-ng \
     # Playwright/Chromium system dependencies
     nspr nss alsa-lib atk cups-libs gtk3 \
     libXcomposite libXdamage libXrandr libxkbcommon \
