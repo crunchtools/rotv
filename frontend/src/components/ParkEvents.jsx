@@ -25,9 +25,12 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
-  const [activeSubTab, setActiveSubTab] = useState('future');
+  const [activeSubTab, setActiveSubTab] = useState('today');
   const [pastEvents, setPastEvents] = useState([]);
   const [pastLoading, setPastLoading] = useState(false);
+  // Today / This Weekend windows (#436): { count, events } keyed by range.
+  const [windowData, setWindowData] = useState({ today: null, weekend: null });
+  const [windowLoading, setWindowLoading] = useState(true);
   const [typeFilters, setTypeFilters] = useState({
     'hike': true,
     'race': true,
@@ -40,13 +43,51 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     'alert': true
   });
   const [showNewForm, setShowNewForm] = useState(false);
+  const [seriesEditData, setSeriesEditData] = useState(null);
 
   const mod = useModeration({
     onItemsChanged: () => { fetchEvents(); fetchPastEvents(); }
   });
 
+  const SUBTABS = [
+    { key: 'today', label: 'Today' },
+    { key: 'weekend', label: 'This Weekend' },
+    { key: 'future', label: 'Future' },
+    { key: 'past', label: 'Past' }
+  ];
+
+  const appTz = () => localStorage.getItem('app-timezone')
+    || Intl.DateTimeFormat().resolvedOptions().timeZone
+    || 'America/New_York';
+
   useEffect(() => {
     fetchEvents();
+  }, [refreshTrigger]);
+
+  // Load the Today and This Weekend windows, then land on the most useful default:
+  // Today when it has events, otherwise This Weekend (#436).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setWindowLoading(true);
+      try {
+        const tz = encodeURIComponent(appTz());
+        const [today, weekend] = await Promise.all([
+          fetch(`/api/events/window?range=today&tz=${tz}`).then(r => r.ok ? r.json() : null),
+          fetch(`/api/events/window?range=weekend&tz=${tz}`).then(r => r.ok ? r.json() : null)
+        ]);
+        if (cancelled) return;
+        setWindowData({ today, weekend });
+        if (today && today.count === 0 && weekend && weekend.count > 0) {
+          setActiveSubTab(prev => (prev === 'today' ? 'weekend' : prev));
+        }
+      } catch (err) {
+        console.error('Error fetching event windows:', err);
+      } finally {
+        if (!cancelled) setWindowLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [refreshTrigger]);
 
   const fetchEvents = async () => {
@@ -92,6 +133,45 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     }
   };
 
+  // Refetch every events surface after a create/edit/delete (one-off or series).
+  const reloadAll = async () => {
+    fetchEvents();
+    fetchPastEvents();
+    try {
+      const tz = encodeURIComponent(appTz());
+      const [today, weekend] = await Promise.all([
+        fetch(`/api/events/window?range=today&tz=${tz}`).then(r => r.ok ? r.json() : null),
+        fetch(`/api/events/window?range=weekend&tz=${tz}`).then(r => r.ok ? r.json() : null)
+      ]);
+      setWindowData({ today, weekend });
+    } catch (err) {
+      console.error('Error reloading event windows:', err);
+    }
+  };
+
+  // Recurring (series-linked) events are managed as a series, not per occurrence.
+  const openSeriesEdit = async (seriesId) => {
+    try {
+      const res = await fetch('/api/admin/event-series', { credentials: 'include' });
+      if (!res.ok) return;
+      const all = await res.json();
+      const series = all.find(s => s.id === seriesId);
+      if (series) setSeriesEditData(series);
+    } catch (err) {
+      console.error('Error loading series for edit:', err);
+    }
+  };
+
+  const deleteSeries = async (seriesId) => {
+    if (!window.confirm('Delete this recurring event? Future occurrences are removed; past ones are kept as history.')) return;
+    try {
+      const res = await fetch(`/api/admin/event-series/${seriesId}`, { method: 'DELETE', credentials: 'include' });
+      if (res.ok) reloadAll();
+    } catch (err) {
+      console.error('Error deleting series:', err);
+    }
+  };
+
   let currentBounds;
   if (bypassViewportFilter) {
     currentBounds = DEFAULT_PARK_BOUNDS;
@@ -112,7 +192,10 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
 
   const thumbnailBounds = stableBoundsRef.current;
 
-  const sourceEvents = activeSubTab === 'future' ? events : pastEvents;
+  const sourceEvents =
+    activeSubTab === 'past' ? pastEvents :
+    activeSubTab === 'future' ? events :
+    (windowData[activeSubTab]?.events || []);
   const filteredEvents = React.useMemo(() => {
     const hasDestinations = Array.isArray(filteredDestinations);
     const hasLinearFeatures = Array.isArray(filteredLinearFeatures);
@@ -196,29 +279,32 @@ END:VCALENDAR`;
     URL.revokeObjectURL(url);
   };
 
-  const isLoading = activeSubTab === 'future' ? loading : pastLoading;
+  const isLoading =
+    activeSubTab === 'future' ? loading :
+    activeSubTab === 'past' ? pastLoading :
+    windowLoading;
   const tabLabel = 'Events';
+
+  const renderSubTabs = () => (
+    <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
+      {SUBTABS.map(t => (
+        <button
+          key={t.key}
+          className={`results-subtab ${activeSubTab === t.key ? 'active' : ''}`}
+          onClick={() => { setActiveSubTab(t.key); setCurrentPage(1); }}
+          tabIndex={activeSubTab === t.key ? 0 : -1}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
 
   if (isLoading) {
     return (
       <div className="park-events-tab">
         <h2>{tabLabel}</h2>
-        <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
-          <button
-            className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
-            onClick={() => setActiveSubTab('future')}
-            tabIndex={activeSubTab === 'future' ? 0 : -1}
-          >
-            Future
-          </button>
-          <button
-            className={`results-subtab ${activeSubTab === 'past' ? 'active' : ''}`}
-            onClick={() => setActiveSubTab('past')}
-            tabIndex={activeSubTab === 'past' ? 0 : -1}
-          >
-            Past
-          </button>
-        </div>
+        {renderSubTabs()}
         <div className="loading-indicator">Loading events...</div>
       </div>
     );
@@ -250,27 +336,22 @@ END:VCALENDAR`;
           mode="create"
           contentType="event"
           pois={mod.pois}
-          onCreate={() => fetchEvents()}
+          onCreate={() => reloadAll()}
           onClose={() => setShowNewForm(false)}
         />
       )}
 
-      <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
-        <button
-          className={`results-subtab ${activeSubTab === 'future' ? 'active' : ''}`}
-          onClick={() => { setActiveSubTab('future'); setCurrentPage(1); }}
-          tabIndex={activeSubTab === 'future' ? 0 : -1}
-        >
-          Future
-        </button>
-        <button
-          className={`results-subtab ${activeSubTab === 'past' ? 'active' : ''}`}
-          onClick={() => { setActiveSubTab('past'); setCurrentPage(1); }}
-          tabIndex={activeSubTab === 'past' ? 0 : -1}
-        >
-          Past
-        </button>
-      </div>
+      {seriesEditData && (
+        <ContentFormModal
+          contentType="event"
+          seriesEdit={seriesEditData}
+          pois={mod.pois}
+          onCreate={() => reloadAll()}
+          onClose={() => setSeriesEditData(null)}
+        />
+      )}
+
+      {renderSubTabs()}
 
       <div className="results-filters">
         <input
@@ -313,6 +394,8 @@ END:VCALENDAR`;
             <p className="no-content">
               {sourceEvents.length > 0
                 ? 'No events match the current filters. Try adjusting the type filters above or the map view.'
+                : activeSubTab === 'today' ? 'Nothing happening today.'
+                : activeSubTab === 'weekend' ? 'Nothing happening this weekend.'
                 : activeSubTab === 'future' ? 'No upcoming events found.' : 'No past events found.'}
             </p>
           ) : (
@@ -352,7 +435,7 @@ END:VCALENDAR`;
               </div>
             }
           >
-            {editMode && isAdmin && (
+            {editMode && isAdmin && !item.is_recurring && (
               <ModerationExtras
                 item={{ ...item, content_type: 'event' }}
                 isPending={false}
@@ -384,6 +467,16 @@ END:VCALENDAR`;
                 onAddUrl={mod.handleAddUrl}
                 onRemoveUrl={mod.handleRemoveUrl}
               />
+            )}
+            {editMode && isAdmin && item.is_recurring && item.series_id && (
+              <div className="recur-admin-controls">
+                <button type="button" className="recur-edit-btn" onClick={() => openSeriesEdit(item.series_id)}>
+                  Edit recurring event
+                </button>
+                <button type="button" className="recur-delete-btn" onClick={() => deleteSeries(item.series_id)}>
+                  Delete
+                </button>
+              </div>
             )}
           </EventCardBody>
             ))}

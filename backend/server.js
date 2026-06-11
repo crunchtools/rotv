@@ -77,6 +77,12 @@ import { mcpMiddleware } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 import { startTracker, stopTracker, getBoatPositions } from './services/waterTaxiTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
+import {
+  getAllActiveSeries,
+  nextOccurrence,
+  cadenceLabel,
+  materializeAllSeries
+} from './services/eventSeriesService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1978,7 +1984,7 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
          WHERE n.poi_id = ANY($1)
            AND n.moderation_status IN ('published', 'auto_approved')) AS news_count,
         (SELECT COUNT(*) FROM poi_events e
-         WHERE e.poi_id = ANY($1)
+         WHERE (e.poi_id = ANY($1) OR e.venue_poi_id = ANY($1))
            AND e.moderation_status IN ('published', 'auto_approved')
            AND (e.start_date AT TIME ZONE $2)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $2)::date) AS events_count
     `, [poiIds, tz]);
@@ -2033,18 +2039,20 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const poiIds = await getRollupPoiIds(pool, id);
     let query = `
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type, e.location_details, e.source_url, e.collection_date,
-             e.poi_id, src.name AS poi_name,
+             e.poi_id, src.name AS poi_name, e.venue_poi_id, vp.name AS venue_name,
+             e.series_id, e.recurrence_label AS cadence_label, (e.series_id IS NOT NULL) AS is_recurring,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
       LEFT JOIN pois src ON src.id = e.poi_id
-      WHERE e.poi_id = ANY($1)
+      LEFT JOIN pois vp ON vp.id = e.venue_poi_id
+      WHERE (e.poi_id = ANY($1) OR e.venue_poi_id = ANY($1))
         AND e.moderation_status IN ('published', 'auto_approved')
     `;
     if (upcomingOnly) {
       query += ` AND (e.start_date AT TIME ZONE $3)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $3)::date`;
     }
-    query += ` GROUP BY e.id, src.name ORDER BY e.start_date ASC LIMIT $2`;
+    query += ` GROUP BY e.id, src.name, vp.name ORDER BY e.start_date ASC LIMIT $2`;
 
     const eventsQuery = await pool.query(query, upcomingOnly ? [poiIds, limit, tz] : [poiIds, limit]);
     res.json(eventsQuery.rows);
@@ -2286,15 +2294,18 @@ app.get('/api/events/upcoming', async (req, res) => {
       : '';
     const upcomingEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles${adminColumns},
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles,
+             e.venue_poi_id, vp.name AS venue_name,
+             e.series_id, e.recurrence_label AS cadence_label, (e.series_id IS NOT NULL) AS is_recurring${adminColumns},
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
+      LEFT JOIN pois vp ON vp.id = e.venue_poi_id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
         AND (e.start_date AT TIME ZONE $1)::date >= (CURRENT_TIMESTAMP AT TIME ZONE $1)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
-      GROUP BY e.id, p.id, p.name, p.poi_roles
+      GROUP BY e.id, p.id, p.name, p.poi_roles, vp.name
       ORDER BY e.start_date ASC
     `, [tz]);
     res.json(upcomingEventsQuery.rows);
@@ -2315,15 +2326,18 @@ app.get('/api/events/past', async (req, res) => {
       : '';
     const pastEventsQuery = await pool.query(`
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles${adminColumns},
+             e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles,
+             e.venue_poi_id, vp.name AS venue_name,
+             e.series_id, e.recurrence_label AS cadence_label, (e.series_id IS NOT NULL) AS is_recurring${adminColumns},
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
+      LEFT JOIN pois vp ON vp.id = e.venue_poi_id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
       WHERE e.moderation_status IN ('published', 'auto_approved')
         AND (e.start_date AT TIME ZONE $2)::date < (CURRENT_TIMESTAMP AT TIME ZONE $2)::date
         AND (p.deleted IS NULL OR p.deleted = FALSE)
-      GROUP BY e.id, p.id, p.name, p.poi_roles
+      GROUP BY e.id, p.id, p.name, p.poi_roles, vp.name
       ORDER BY e.start_date DESC
       LIMIT $1
     `, [limit, tz]);
@@ -2331,6 +2345,99 @@ app.get('/api/events/past', async (req, res) => {
   } catch (error) {
     console.error('Error fetching past events:', error);
     res.status(500).json({ error: 'Failed to fetch past events' });
+  }
+});
+
+// "Happening Today" / "This Weekend" (#436): one-off events + projected recurring
+// occurrences within a near-term window, with a count for the Events nav badge.
+// range=today → the current day; range=weekend → this/upcoming Fri–Sun.
+app.get('/api/events/window', async (req, res) => {
+  try {
+    const range = req.query.range === 'today' ? 'today' : 'weekend';
+    const rawTz = req.query.tz;
+    // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE accepts arbitrary input (PR #368 review)
+    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
+      ? rawTz
+      : 'America/New_York';
+    const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
+
+    // "Today" as a calendar date in the venue timezone.
+    const todayRow = await pool.query('SELECT (CURRENT_TIMESTAMP AT TIME ZONE $1)::date::text AS today', [tz]);
+    const today = todayRow.rows[0].today;
+
+    let from = today;
+    let to = today;
+    if (range === 'weekend') {
+      const base = new Date(`${today}T00:00:00Z`);
+      const dow = base.getUTCDay(); // 0=Sun..6=Sat
+      // Days back to the weekend's Friday: Sun -2, Sat -1, Fri 0; Mon–Thu jump forward to the next Friday.
+      const toFriday = dow === 0 ? -2 : 5 - dow;
+      const friday = new Date(base.getTime() + toFriday * 86400000);
+      const sunday = new Date(friday.getTime() + 2 * 86400000);
+      from = friday.toISOString().slice(0, 10);
+      to = sunday.toISOString().slice(0, 10);
+    }
+
+    const adminColumns = isAdmin
+      ? `, e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
+           e.content_source, e.moderated_at`
+      : '';
+    const windowEvents = await pool.query(`
+      SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
+             e.location_details, e.source_url, e.image_url,
+             p.id as poi_id, p.name as poi_name, p.poi_roles,
+             e.venue_poi_id, vp.name AS venue_name,
+             e.series_id, e.recurrence_label AS cadence_label, (e.series_id IS NOT NULL) AS is_recurring${adminColumns},
+             COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
+      FROM poi_events e
+      JOIN pois p ON e.poi_id = p.id
+      LEFT JOIN pois vp ON vp.id = e.venue_poi_id
+      LEFT JOIN poi_event_urls u ON u.event_id = e.id
+      WHERE e.moderation_status IN ('published', 'auto_approved')
+        AND (e.start_date AT TIME ZONE $3)::date >= $1::date
+        AND (e.start_date AT TIME ZONE $3)::date <= $2::date
+        AND (p.deleted IS NULL OR p.deleted = FALSE)
+      GROUP BY e.id, p.id, p.name, p.poi_roles, vp.name
+      ORDER BY e.start_date ASC
+    `, [from, to, tz]);
+    res.json({ range, from, to, count: windowEvents.rows.length, events: windowEvents.rows });
+  } catch (error) {
+    console.error('Error fetching event window:', error);
+    res.status(500).json({ error: 'Failed to fetch events' });
+  }
+});
+
+// Active recurring series with their next occurrence — backs the recurring filter/badge.
+app.get('/api/events/recurring', async (req, res) => {
+  try {
+    const tz = (typeof req.query.tz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(req.query.tz))
+      ? req.query.tz
+      : 'America/New_York';
+    const todayRow = await pool.query('SELECT (CURRENT_TIMESTAMP AT TIME ZONE $1)::date::text AS today', [tz]);
+    const today = todayRow.rows[0].today;
+    const series = await getAllActiveSeries(pool);
+    const recurring = series.map(s => ({
+      id: s.id,
+      poi_id: s.poi_id,
+      poi_name: s.poi_name,
+      poi_roles: s.poi_roles,
+      venue_poi_id: s.venue_poi_id,
+      venue_name: s.venue_name,
+      title: s.title,
+      description: s.description,
+      event_type: s.event_type,
+      location_details: s.location_details,
+      source_url: s.source_url,
+      image_url: s.image_url,
+      season_start: s.season_start,
+      season_end: s.season_end,
+      cadence_label: cadenceLabel(s),
+      next_occurrence: nextOccurrence(s, today)
+    }));
+    res.json(recurring);
+  } catch (error) {
+    console.error('Error fetching recurring series:', error);
+    res.status(500).json({ error: 'Failed to fetch recurring series' });
   }
 });
 
@@ -3013,6 +3120,10 @@ async function start() {
   }
 
   activeSmtpServer = startSmtpServer(pool);
+
+  // Materialize recurring-event series into poi_events so they appear everywhere regular
+  // events do (#436). Idempotent: regenerates future occurrences, keeps past as history.
+  await materializeAllSeries(pool);
 
   const mcpHandler = mcpMiddleware(pool, app.get('boss'));
   app.all('/mcp/:token', mcpHandler);

@@ -2296,9 +2296,17 @@ body {
   margin-bottom: 0.5rem;
 }
 
+/* Recurring cadence line on event cards (#436), a bottom section e.g. "Weekly: Saturdays".
+   Bold label + regular value mirrors the "Location:" line. */
+.park-event-recurring {
+  font-size: 0.85rem;
+  color: #1a1a1a;
+  margin-bottom: 0.5rem;
+}
+
 .park-event-location {
   font-size: 0.85rem;
-  color: #525252;
+  color: #1a1a1a;
   margin: 0.5rem 0;
 }
 
@@ -4824,6 +4832,50 @@ body {
 .new-content-form .form-section {
   margin-bottom: 1rem;
 }
+
+/* Recurring-event authoring controls (#436) */
+.recur-weekdays {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+.recur-day {
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  background: #fff;
+  color: #333;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.recur-day.active {
+  background: #2d5016;
+  border-color: #2d5016;
+  color: #fff;
+}
+.new-content-form .form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+/* Manage a recurring event (series) from its occurrence card in edit mode */
+.recur-admin-controls {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.recur-edit-btn,
+.recur-delete-btn {
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.recur-edit-btn { color: #2d5016; border-color: #2d5016; }
+.recur-delete-btn { color: #c62828; border-color: #c62828; }
 
 .new-content-form .form-section label {
   display: block;
