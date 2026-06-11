@@ -169,8 +169,11 @@ jobs:
 
       - name: Install Gourmand
         run: |
-          if ! command -v gourmand &> /dev/null; then
-            cargo install --git https://codeberg.org/mattdm/gourmand.git
+          # Pinned to the revision this repo's exceptions are calibrated against.
+          # Upgrading to v0.16.5+ is a tracked project: the new checks report
+          # 1,214 pre-existing violations that need fixing or excepting first.
+          if ! command -v gourmand &> /dev/null || ! gourmand --full --help &> /dev/null; then
+            cargo install --git https://codeberg.org/mattdm/gourmand.git --rev c890a55f93273f92d37a76ee592735e61d5220b0 --force
           fi
 
       - name: Run Gourmand

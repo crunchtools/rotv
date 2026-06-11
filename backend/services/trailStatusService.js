@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { generateTextWithCustomPrompt } from './geminiService.js';
 import { renderPage } from './renderPage.js';
 import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
+import { fetchBlueskyPosts, isBlueskyUrl } from './blueskyService.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
 
@@ -138,6 +139,14 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
         steps: ['Initialized', 'Fetching Facebook posts']
       });
       rendered = await fetchFacebookPosts(pool, statusUrl);
+    } else if (isBlueskyUrl(statusUrl)) {
+      console.log(`[Trail Status] Fetching Bluesky posts via public API for: ${statusUrl}`);
+      updateProgress(poi.id, {
+        phase: 'rendering',
+        message: 'Fetching Bluesky posts via public API...',
+        steps: ['Initialized', 'Fetching Bluesky posts']
+      });
+      rendered = await fetchBlueskyPosts(statusUrl);
     } else {
       let cookies = null;
       if (isTwitterUrl(statusUrl)) {
