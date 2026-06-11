@@ -72,6 +72,23 @@ describe('Bluesky Service', () => {
       expect(result.markdown).toBe('[2026-05-26T08:00:00.000Z] Trails are open!');
     });
 
+    it('skips posts without a createdAt timestamp', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          feed: [
+            feedItem('Undated status post', undefined),
+            feedItem('Trails are open!', '2026-05-26T08:00:00.000Z')
+          ]
+        })
+      }));
+
+      const result = await fetchBlueskyPosts('https://bsky.app/profile/smpmountainbike.bsky.social');
+
+      expect(result.reachable).toBe(true);
+      expect(result.markdown).toBe('[2026-05-26T08:00:00.000Z] Trails are open!');
+    });
+
     it('returns unreachable for a URL without a profile handle', async () => {
       const result = await fetchBlueskyPosts('https://example.com/not-bluesky');
 

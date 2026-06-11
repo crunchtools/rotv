@@ -34,14 +34,19 @@ export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
       return { markdown: null, reachable: true, reason: 'no posts found' };
     }
 
+    // Fix: skip posts without createdAt — an undated post would reintroduce the
+    // date mis-attribution this driver exists to prevent (PR #470 review)
     const posts = feed
       .filter(item => !item.reason) // reposts carry a reason (e.g. reasonRepost); originals don't
       .filter(item => (item.post?.record?.text || '').trim().length > 0)
-      .map(item => {
-        const text = item.post.record.text;
-        const date = item.post.record.createdAt || '';
-        return date ? `[${date}] ${text}` : text;
-      });
+      .filter(item => {
+        if (!item.post.record.createdAt) {
+          console.warn(`[Bluesky] Skipping post without createdAt for @${handle}`);
+          return false;
+        }
+        return true;
+      })
+      .map(item => `[${item.post.record.createdAt}] ${item.post.record.text}`);
 
     if (posts.length === 0) {
       console.log(`[Bluesky] Posts returned but no text content for @${handle}`);
