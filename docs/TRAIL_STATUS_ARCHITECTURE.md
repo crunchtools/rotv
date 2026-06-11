@@ -61,19 +61,20 @@ Different trail status sources require different extraction methods:
 |-------------|--------|---------|---------|
 | Twitter/X | Playwright + cookies | contentExtractor.js | @CVNPmtb (East Rim) |
 | Facebook | Apify cloud scraper | apifyService.js | medinaTRAILS (Reagan-Huffman) |
-| Bluesky | Playwright | contentExtractor.js | Summit Metro Parks |
+| Bluesky | Public Bluesky API | blueskyService.js | Summit Metro Parks (Hampton Hills) |
 | Park websites | Playwright | contentExtractor.js | Cleveland Metroparks |
 
 **URL Routing in trailStatusService.js:**
 
 ```
 if Facebook URL → apifyService.fetchFacebookPosts → text
+else if Bluesky URL → blueskyService.fetchBlueskyPosts → text
 else → contentExtractor.extractPageContent (with cookies for Twitter) → markdown
 ```
 
-Both paths produce text that feeds into the same Gemini prompt. The rest of the pipeline (prompt building, Gemini call, JSON parsing, saveTrailStatus) is identical regardless of source.
+All paths produce text that feeds into the same Gemini prompt. The rest of the pipeline (prompt building, Gemini call, JSON parsing, saveTrailStatus) is identical regardless of source.
 
-**Playwright + Readability (Twitter/X, Bluesky, Park Websites)**
+**Playwright + Readability (Twitter/X, Park Websites)**
 
 Most status URLs are rendered via `contentExtractor.js` (Playwright + Readability + Turndown), which produces clean markdown for Gemini to analyze. Playwright and Chromium browsers are installed in the **base container image** (`Containerfile.base`) to optimize build times:
 - Base image installs Playwright globally and downloads Chromium browsers (~400MB)
@@ -96,6 +97,14 @@ Facebook pages cannot be scraped with Playwright because the SPA doesn't yield e
 - Returns post text concatenated with timestamps, same format as contentExtractor output
 - Configurable via Settings > Data Collection in the admin UI
 - Estimated usage: ~1,440 requests/month (1 trail × 48/day × 30 days), within Apify's free tier
+
+**Public Bluesky API (Bluesky)**
+
+Bluesky profile pages were originally Playwright-rendered, but the web UI shows post timestamps as compact relative times that get dropped during text extraction — Gemini only saw dates the park typed into post text, and once mis-attributed a stale closure to the newest post's date. Bluesky's AT Protocol API is free, requires no auth, and returns reliable `createdAt` timestamps per post, so `blueskyService.js` fetches `app.bsky.feed.getAuthorFeed` directly:
+- Detects `bsky.app/profile/<handle>` URLs and extracts the handle
+- Fetches up to 15 posts with `filter=posts_no_replies`, skipping reposts
+- Returns post text concatenated with ISO timestamps, same format as the other drivers
+- No browser, no API key, no rate-limit concerns at trail-status volumes
 
 **Why Not Apify for Twitter?**
 
