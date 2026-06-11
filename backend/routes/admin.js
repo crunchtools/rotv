@@ -45,6 +45,7 @@ import {
   getDisplaySlots as getNewsDisplaySlots
 } from '../services/newsService.js';
 import { submitBatchNewsJob, getJobScheduler, JOB_NAMES, updateSchedule } from '../services/jobScheduler.js';
+import { materializeSeries } from '../services/eventSeriesService.js';
 import {
   getQueue as getModerationQueue,
   getPendingCount as getModerationPendingCount,
@@ -452,7 +453,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   });
 
   router.post('/events', isAdmin, async (req, res) => {
-    const { poi_id, title, start_date, end_date, description, event_type, location_details, source_url, publication_date } = req.body;
+    const { poi_id, venue_poi_id, title, start_date, end_date, description, event_type, location_details, source_url, publication_date } = req.body;
 
     if (!poi_id || !title || !title.trim() || !start_date) {
       return res.status(400).json({ error: 'poi_id, title, and start_date are required' });
@@ -460,10 +461,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
     try {
       const eventItem = await pool.query(
-        `INSERT INTO poi_events (poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, content_source, moderation_status, moderated_by, moderated_at, collection_date)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'human', 'published', $10, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `INSERT INTO poi_events (poi_id, venue_poi_id, title, description, start_date, end_date, event_type, location_details, source_url, publication_date, content_source, moderation_status, moderated_by, moderated_at, collection_date)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'human', 'published', $11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
          RETURNING *`,
-        [poi_id, title.trim(), description || null, start_date, end_date || null, event_type || null, location_details || null, source_url || null, publication_date || null, req.user.id]
+        [poi_id, venue_poi_id || null, title.trim(), description || null, start_date, end_date || null, event_type || null, location_details || null, source_url || null, publication_date || null, req.user.id]
       );
 
       console.log(`Admin ${req.user.email} created manual event: ${title}`);
@@ -471,6 +472,121 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('Error creating event:', error);
       res.status(500).json({ error: 'Failed to create event' });
+    }
+  });
+
+  // Recurring event series CRUD (spec 034, #436). Series store a rule + explicit
+  // season range and are expanded at read time by eventSeriesService.js.
+  router.get('/event-series', isAdmin, async (req, res) => {
+    try {
+      const seriesRows = await pool.query(
+        `SELECT s.*, p.name AS poi_name
+           FROM poi_event_series s
+           JOIN pois p ON p.id = s.poi_id
+          ORDER BY p.name, s.title`
+      );
+      res.json(seriesRows.rows);
+    } catch (error) {
+      console.error('Error listing event series:', error);
+      res.status(500).json({ error: 'Failed to list event series' });
+    }
+  });
+
+  router.post('/event-series', isAdmin, async (req, res) => {
+    const {
+      poi_id, venue_poi_id, title, description, event_type, location_details, source_url, image_url,
+      freq, interval, byday, season_start, season_end, exdates, time_start, time_end, active
+    } = req.body;
+
+    if (!poi_id || !title || !title.trim() || !season_start || !season_end) {
+      return res.status(400).json({ error: 'poi_id, title, season_start, and season_end are required' });
+    }
+    if (!Array.isArray(byday) || byday.length === 0) {
+      return res.status(400).json({ error: 'byday must be a non-empty array of weekday codes (e.g. ["SU"])' });
+    }
+
+    try {
+      const created = await pool.query(
+        `INSERT INTO poi_event_series
+           (poi_id, venue_poi_id, title, description, event_type, location_details, source_url, image_url,
+            freq, interval, byday, season_start, season_end, exdates, time_start, time_end,
+            content_source, moderation_status, active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
+                 'human', 'published', $17)
+         RETURNING *`,
+        [poi_id, venue_poi_id || null, title.trim(), description || null, event_type || null, location_details || null,
+         source_url || null, image_url || null, freq || 'WEEKLY', parseInt(interval, 10) || 1, byday,
+         season_start, season_end, Array.isArray(exdates) ? exdates : [], time_start || null, time_end || null, active !== false]
+      );
+      await materializeSeries(pool, created.rows[0]);
+      console.log(`Admin ${req.user.email} created event series: ${title}`);
+      res.status(201).json(created.rows[0]);
+    } catch (error) {
+      console.error('Error creating event series:', error);
+      res.status(500).json({ error: 'Failed to create event series' });
+    }
+  });
+
+  router.put('/event-series/:id', isAdmin, async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid series id' });
+    }
+    const {
+      poi_id, venue_poi_id, title, description, event_type, location_details, source_url, image_url,
+      freq, interval, byday, season_start, season_end, exdates, time_start, time_end, active
+    } = req.body;
+    if (!poi_id || !title || !title.trim() || !season_start || !season_end) {
+      return res.status(400).json({ error: 'poi_id, title, season_start, and season_end are required' });
+    }
+    if (!Array.isArray(byday) || byday.length === 0) {
+      return res.status(400).json({ error: 'byday must be a non-empty array of weekday codes (e.g. ["SU"])' });
+    }
+
+    try {
+      const updated = await pool.query(
+        `UPDATE poi_event_series SET
+           poi_id = $1, venue_poi_id = $2, title = $3, description = $4, event_type = $5, location_details = $6,
+           source_url = $7, image_url = $8, freq = $9, interval = $10, byday = $11,
+           season_start = $12, season_end = $13, exdates = $14, time_start = $15, time_end = $16,
+           active = $17, updated_at = NOW()
+         WHERE id = $18
+         RETURNING *`,
+        [poi_id, venue_poi_id || null, title.trim(), description || null, event_type || null, location_details || null,
+         source_url || null, image_url || null, freq || 'WEEKLY', parseInt(interval, 10) || 1, byday,
+         season_start, season_end, Array.isArray(exdates) ? exdates : [], time_start || null, time_end || null, active !== false, id]
+      );
+      if (updated.rows.length === 0) {
+        return res.status(404).json({ error: 'Series not found' });
+      }
+      await materializeSeries(pool, updated.rows[0]);
+      res.json(updated.rows[0]);
+    } catch (error) {
+      console.error('Error updating event series:', error);
+      res.status(500).json({ error: 'Failed to update event series' });
+    }
+  });
+
+  router.delete('/event-series/:id', isAdmin, async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: 'Invalid series id' });
+    }
+    const client = await pool.connect();
+    try {
+      // Atomically remove future materialized occurrences and the series; past ones are kept
+      // as history (their series_id is set NULL by the FK ON DELETE SET NULL on series drop).
+      await client.query('BEGIN');
+      await client.query('DELETE FROM poi_events WHERE series_id = $1 AND start_date >= NOW()', [id]);
+      await client.query('DELETE FROM poi_event_series WHERE id = $1', [id]);
+      await client.query('COMMIT');
+      res.json({ success: true });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      console.error('Error deleting event series:', error);
+      res.status(500).json({ error: 'Failed to delete event series' });
+    } finally {
+      client.release();
     }
   });
 

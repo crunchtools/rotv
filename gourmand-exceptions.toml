@@ -506,6 +506,13 @@ path = "backend/services/mcpServer.js"
 justification = "Load-bearing comment only: MCP SDK constraint at lines 801-802 — `Server.connect()` takes exclusive ownership of a transport, forcing per-request server+transport creation in stateless mode."
 classification = "by_design"
 
+# Event series service (#436) — exported recurring-event helpers used cross-module
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/eventSeriesService.js"
+justification = "Flagged: cadenceLabel (41) and getActiveSeriesForPois (144). Both are exported. cadenceLabel is called from server.js:/api/events/recurring in addition to the internal expandSeries call — false positive (gourmand only sees the one internal call site). getActiveSeriesForPois is called from server.js (/api/pois/:id/events projection and /api/pois/:id/tab-counts) plus internally by getSeriesOccurrencesForPois — also a cross-module false positive on the call-site count."
+
 [[exceptions]]
 check = "verbose_comments"
 path = "backend/services/moderationService.js"

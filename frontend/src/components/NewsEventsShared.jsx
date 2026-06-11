@@ -358,9 +358,37 @@ export function EventCardBody({ item, onSelectPoi, calendarButtons, children, cl
 
       {item.description && <p className="park-event-description">{item.description}</p>}
 
-      {item.location_details && (
+      {(item.venue_name || item.location_details) && (
         <div className="park-event-location">
-          <strong>Location:</strong> {item.location_details}
+          <strong>Location:</strong>{' '}
+          {item.venue_name ? (
+            onSelectPoi && item.venue_poi_id ? (
+              <button
+                className="park-event-poi-link"
+                onClick={() => onSelectPoi(item.venue_poi_id)}
+                title={`View ${item.venue_name}`}
+              >
+                {item.venue_name}
+              </button>
+            ) : (
+              <span>{item.venue_name}</span>
+            )
+          ) : (
+            item.location_details
+          )}
+        </div>
+      )}
+
+      {item.is_recurring && item.cadence_label && (
+        <div className="park-event-recurring" title="Recurring event">
+          {item.cadence_label.includes(':') ? (
+            <>
+              <strong>{item.cadence_label.slice(0, item.cadence_label.indexOf(':') + 1)}</strong>
+              {' ' + item.cadence_label.slice(item.cadence_label.indexOf(':') + 1).trim()}
+            </>
+          ) : (
+            <strong>{item.cadence_label}</strong>
+          )}
         </div>
       )}
 
