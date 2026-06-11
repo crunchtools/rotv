@@ -1,13 +1,14 @@
 /**
- * Event Series Service - recurring event expansion (spec 034, issue #436).
+ * Event Series Service - recurring events (spec 034, issue #436).
  *
- * Recurring events are stored as a RULE (poi_event_series) and expanded into
- * concrete occurrences at read time here — never materialized as rows. Powers the
- * Today / This Weekend subtabs and the recurring badge on the Events tab.
+ * Recurring events are stored as a RULE (poi_event_series). `expandSeries` turns a rule
+ * into concrete occurrences, and `materializeSeries` writes those occurrences as real
+ * poi_events rows (linked by series_id) so recurring events appear everywhere regular
+ * events do — Today/This Weekend, Future, Past, newsletter, notifications, search.
  *
  * v1 honors weekly cadence (interval 1 = weekly, 2 = biweekly, ...) over an explicit,
- * admin-entered [season_start, season_end] range. Biweekly anchors on the first
- * matching weekday on/after season_start.
+ * admin-entered [season_start, season_end] range with exception dates. Biweekly anchors
+ * on the first matching weekday on/after season_start.
  */
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -162,30 +163,42 @@ export async function materializeSeries(pool, series, tz = 'America/New_York') {
   if (!series || !series.id) return 0;
   const occurrences = expandSeries(series, series.season_start, series.season_end);
   const label = cadenceLabel(series);
-  await pool.query('DELETE FROM poi_events WHERE series_id = $1 AND start_date >= NOW()', [series.id]);
-  let inserted = 0;
-  for (const o of occurrences) {
-    const hasTime = o.start_date.length > 10;
-    const startLocal = hasTime ? o.start_date : `${o.start_date} 00:00:00`;
-    const startTz = hasTime ? tz : 'UTC';
-    const insertResult = await pool.query(
-      `INSERT INTO poi_events
-         (poi_id, venue_poi_id, series_id, title, description, start_date, end_date,
-          event_type, location_details, source_url, image_url, recurrence_label,
-          content_source, moderation_status, collection_date)
-       VALUES ($1, $2, $3, $4, $5,
-               ($6::text)::timestamp AT TIME ZONE $8,
-               CASE WHEN $7::text IS NULL THEN NULL ELSE ($7::text)::timestamp AT TIME ZONE $9 END,
-               $10, $11, $12, $13, $14, 'recurring', 'published', NOW())
-       ON CONFLICT (series_id, start_date) DO NOTHING`,
-      [series.poi_id, series.venue_poi_id || null, series.id, series.title, series.description || null,
-       startLocal, o.end_date || null, startTz, tz,
-       series.event_type || null, series.location_details || null, series.source_url || null,
-       series.image_url || null, label]
-    );
-    inserted += insertResult.rowCount;
+  // One transaction so an edit never leaves a window with future occurrences deleted
+  // but not yet re-inserted (a concurrent reader would briefly see no upcoming events).
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('DELETE FROM poi_events WHERE series_id = $1 AND start_date >= NOW()', [series.id]);
+    let inserted = 0;
+    for (const o of occurrences) {
+      const hasTime = o.start_date.length > 10;
+      const startLocal = hasTime ? o.start_date : `${o.start_date} 00:00:00`;
+      const startTz = hasTime ? tz : 'UTC';
+      const insertResult = await client.query(
+        `INSERT INTO poi_events
+           (poi_id, venue_poi_id, series_id, title, description, start_date, end_date,
+            event_type, location_details, source_url, image_url, recurrence_label,
+            content_source, moderation_status, collection_date)
+         VALUES ($1, $2, $3, $4, $5,
+                 ($6::text)::timestamp AT TIME ZONE $8,
+                 CASE WHEN $7::text IS NULL THEN NULL ELSE ($7::text)::timestamp AT TIME ZONE $9 END,
+                 $10, $11, $12, $13, $14, 'recurring', 'published', NOW())
+         ON CONFLICT (series_id, start_date) DO NOTHING`,
+        [series.poi_id, series.venue_poi_id || null, series.id, series.title, series.description || null,
+         startLocal, o.end_date || null, startTz, tz,
+         series.event_type || null, series.location_details || null, series.source_url || null,
+         series.image_url || null, label]
+      );
+      inserted += insertResult.rowCount;
+    }
+    await client.query('COMMIT');
+    return inserted;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-  return inserted;
 }
 
 /** Materialize every active series — run on backend boot so deploy/seed self-populates. */

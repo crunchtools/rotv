@@ -572,15 +572,21 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid series id' });
     }
+    const client = await pool.connect();
     try {
-      // Remove future materialized occurrences; past ones are kept as history (their
-      // series_id is set NULL by the FK ON DELETE SET NULL when the series row is dropped).
-      await pool.query('DELETE FROM poi_events WHERE series_id = $1 AND start_date >= NOW()', [id]);
-      await pool.query('DELETE FROM poi_event_series WHERE id = $1', [id]);
+      // Atomically remove future materialized occurrences and the series; past ones are kept
+      // as history (their series_id is set NULL by the FK ON DELETE SET NULL on series drop).
+      await client.query('BEGIN');
+      await client.query('DELETE FROM poi_events WHERE series_id = $1 AND start_date >= NOW()', [id]);
+      await client.query('DELETE FROM poi_event_series WHERE id = $1', [id]);
+      await client.query('COMMIT');
       res.json({ success: true });
     } catch (error) {
+      await client.query('ROLLBACK');
       console.error('Error deleting event series:', error);
       res.status(500).json({ error: 'Failed to delete event series' });
+    } finally {
+      client.release();
     }
   });
 
