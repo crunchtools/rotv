@@ -1,16 +1,12 @@
 const BLUESKY_API_BASE = 'https://public.api.bsky.app/xrpc';
 
-function extractBlueskyHandle(url) {
-  const match = url.match(/bsky\.app\/profile\/([^/?#]+)/);
-  return match ? match[1] : null;
-}
-
 export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
-  const handle = extractBlueskyHandle(statusUrl);
-  if (!handle) {
+  const handleMatch = statusUrl.match(/bsky\.app\/profile\/([^/?#]+)/);
+  if (!handleMatch) {
     console.log(`[Bluesky] Could not extract handle from: ${statusUrl}`);
     return { markdown: null, reachable: false, reason: 'invalid Bluesky URL' };
   }
+  const handle = handleMatch[1];
 
   console.log(`[Bluesky] Fetching posts for @${handle} (max ${maxItems})...`);
 
@@ -26,8 +22,8 @@ export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
       throw new Error(`Bluesky API error ${response.status}: ${errorText}`);
     }
 
-    const data = await response.json();
-    const feed = data.feed || [];
+    const authorFeed = await response.json();
+    const feed = authorFeed.feed || [];
 
     if (feed.length === 0) {
       console.log(`[Bluesky] No posts found for @${handle}`);
