@@ -30,6 +30,31 @@ deferred_work = false  # Matches "todo" inside "Mastodon" and HTML placeholder="
 lint_suppression = false  # Flags intentional `eslint-disable-next-line react-hooks/exhaustive-deps`
 verbose_comments = false  # Counts single-line eslint-disable directives as comment blocks (max 0 on new files)
 
+[[check_overrides]]
+check = "linter_configuration"
+justification = "Expects clippy.toml (Rust) or pyproject.toml (Python) — this is a JavaScript/Node.js project linted by eslint with eslint.config.js, a configuration shape the check does not recognize"
+classification = "gourmand_bug"
+
+[[check_overrides]]
+check = "implicit_state_machine"
+justification = "Rust-centric check that false-positives on Python type annotations (str, int, bool) and standard React boolean-state idioms like isLoading/isOpen, which are not implicit state machines"
+classification = "gourmand_bug"
+
+[[check_overrides]]
+check = "deferred_work"
+justification = "Matches 'todo' inside the substring 'Mastodon' and HTML placeholder=\"...\" attributes on form inputs — standard JS/React/HTML idioms, not deferred-work markers (confirmed during the #184 sidebar extraction, which relocated pre-existing gourmand-clean code)"
+classification = "gourmand_bug"
+
+[[check_overrides]]
+check = "lint_suppression"
+justification = "Project policy permits eslint-disable-next-line react-hooks/exhaustive-deps suppressions when each carries an adjacent WHY-comment naming the excluded reference — the documented suppressions are deliberate dependency-array decisions, not hidden lint debt"
+classification = "by_design"
+
+[[check_overrides]]
+check = "verbose_comments"
+justification = "Counts single-line eslint-disable directives as comment blocks against a max-0 budget on new files, flagging files whose only comments are required lint markers"
+classification = "gourmand_bug"
+
 [severity]
 # Override severity levels for specific checks
 # check_name = "warning"  # Options: error, warning, info
