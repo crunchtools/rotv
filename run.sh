@@ -170,6 +170,14 @@ NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}
 ENVFILE
         fi
 
+        # The env file is long-lived, so files created before the
+        # NEWSLETTER_SEND_ENABLED kill switch existed (#440) never got it and
+        # kept sending real newsletter email from dev containers.
+        if ! grep -q '^NEWSLETTER_SEND_ENABLED=' ~/.rotv/environment-dev; then
+            echo "Adding NEWSLETTER_SEND_ENABLED=false to existing ~/.rotv/environment-dev"
+            echo "NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}" >> ~/.rotv/environment-dev
+        fi
+
         # Use host network for default instance, bridge network for alternate ports
         if [ "$HOST_PORT" = "8080" ]; then
             NETWORK_ARGS="--network=host"
@@ -247,6 +255,7 @@ FACEBOOK_APP_ID=$FACEBOOK_APP_ID
 FACEBOOK_APP_SECRET=$FACEBOOK_APP_SECRET
 ADMIN_EMAIL=$ADMIN_EMAIL
 DISABLE_LIVE_BOAT_TRACKER=true
+NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}
 ENVFILE
 
         # Start container with ephemeral storage and seed data (use :test tag)

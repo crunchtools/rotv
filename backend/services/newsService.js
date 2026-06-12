@@ -1338,11 +1338,16 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
 
       const normalizedEventUrl = normalizeUrl(resolvedUrl);
       const normalizedEventTitle = normalizeTitle(item.title);
+      // Title match compares calendar day (Eastern), not exact timestamp: the
+      // same event collected once with a bare date (noon fallback) and once
+      // with a real start time would otherwise dodge dedup and dup the digest.
       const existing = await pool.query(
         `SELECT id, title, source_url, poi_id FROM poi_events
          WHERE (
            ($1::text IS NOT NULL AND LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = $1::text)
-           OR (poi_id = $2 AND ${SQL_NORMALIZE_TITLE} = $3 AND start_date = $4)
+           OR (poi_id = $2 AND ${SQL_NORMALIZE_TITLE} = $3
+               AND (start_date AT TIME ZONE 'America/New_York')::date =
+                   ($4::timestamptz AT TIME ZONE 'America/New_York')::date)
          )`,
         [normalizedEventUrl, effectivePoiId, normalizedEventTitle, item.start_date]
       );
