@@ -1,5 +1,80 @@
 import { sendEmail, sendDraftToRecipients } from './buttondownClient.js';
 
+const DIGEST_EVENT_LIMIT = 15;
+const DIGEST_NEWS_LIMIT = 5;
+
+// Mirrors normalizeTitle in newsService.js (kept local so this module stays
+// importable without pulling in the whole collection pipeline).
+function normalizeEventTitle(title) {
+  if (!title) return '';
+  return title.toLowerCase().replace(/^the\s+/i, '').trim();
+}
+
+function dayInTimezone(date, tz) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date(date));
+}
+
+// Collapse rows that are the same event on the same calendar day at the same
+// POI. Save-time dedup now catches these going forward, but rows collected
+// before that fix (and any that slip through) must not reach subscribers.
+// Input is sorted by start_date ASC, so the variant with a real start time
+// wins over a bare-date noon fallback.
+export function dedupeDigestEvents(events, tz = 'America/New_York') {
+  const seen = new Set();
+  return events.filter(event => {
+    const key = `${event.poi_id}|${normalizeEventTitle(event.title)}|${dayInTimezone(event.start_date, tz)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+const NEWS_STOPWORDS = new Set([
+  'the', 'and', 'for', 'are', 'will', 'with', 'its', 'has', 'have', 'had',
+  'this', 'that', 'these', 'those', 'from', 'they', 'their', 'been', 'was',
+  'were', 'which', 'also', 'more', 'than', 'into', 'about', 'after', 'before',
+  'host', 'hosts', 'hosting', 'held', 'hold', 'holds', 'new', 'news',
+  'announce', 'announces', 'announced', 'including', 'include', 'includes'
+]);
+
+function newsTokens(item) {
+  const poiTokens = new Set(
+    (item.poi_name || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
+  );
+  const stem = (word) => word.replace(/ies$/, 'y').replace(/(ing|ed|es|s)$/, '');
+  return new Set(
+    `${item.title || ''} ${item.summary || ''}`
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w) && !poiTokens.has(w))
+      .map(stem)
+  );
+}
+
+// Two stories about the same POI count as one story when their significant
+// vocabulary (title + summary, minus stopwords and the POI's own name) mostly
+// overlaps. Catches the same announcement collected from two outlets, which
+// URL- and title-based dedup at save time cannot (different source, different
+// headline). Input is sorted most-recent-first, so the freshest copy wins.
+export function dedupeDigestNews(news) {
+  const kept = [];
+  for (const item of news) {
+    const tokens = newsTokens(item);
+    const isDup = kept.some(other => {
+      if (other.poi_id !== item.poi_id) return false;
+      const otherTokens = newsTokens(other);
+      let shared = 0;
+      for (const t of tokens) if (otherTokens.has(t)) shared++;
+      const smaller = Math.min(tokens.size, otherTokens.size);
+      return smaller > 0 && shared >= 4 && shared / smaller >= 0.4;
+    });
+    if (!isDup) kept.push(item);
+  }
+  return kept;
+}
+
 export function upcomingFridayISO(tz = 'America/New_York') {
   const now = new Date();
   const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now);
@@ -24,7 +99,7 @@ async function fetchDigestContent(pool, tz, asOfDate) {
       AND (e.start_date AT TIME ZONE $1)::date <= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date + 2
       AND e.moderation_status IN ('published', 'auto_approved')
     ORDER BY e.start_date ASC, e.id ASC
-    LIMIT 15
+    LIMIT ${DIGEST_EVENT_LIMIT * 2}
   `;
 
   const newsQuery = `
@@ -35,7 +110,7 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     WHERE n.moderation_status IN ('published', 'auto_approved')
       AND COALESCE(n.publication_date, n.collection_date) > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
     ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.id DESC
-    LIMIT 5
+    LIMIT ${DIGEST_NEWS_LIMIT * 2}
   `;
 
   const [eventsResult, newsResult] = await Promise.all([
@@ -43,7 +118,10 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     pool.query(newsQuery, [asOfDate])
   ]);
 
-  return { events: eventsResult.rows, news: newsResult.rows };
+  return {
+    events: dedupeDigestEvents(eventsResult.rows, tz).slice(0, DIGEST_EVENT_LIMIT),
+    news: dedupeDigestNews(newsResult.rows).slice(0, DIGEST_NEWS_LIMIT)
+  };
 }
 
 function renderDigestHtml(events, news, tz = 'America/New_York') {
@@ -534,14 +612,18 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
     const friday = dayInTz(asOf);
     const sunday = dayInTz(new Date(new Date(asOf).getTime() + 2 * 86400000));
 
-    const userNews = newsResult.rows.filter(n => poiSet.has(n.poi_id)).slice(0, 5);
-    const userEvents = eventsResult.rows
-      .filter(e => poiSet.has(e.poi_id))
-      .filter(e => {
-        const day = dayInTz(e.start_date);
-        return day >= friday && day <= sunday;
-      })
-      .slice(0, 10);
+    const userNews = dedupeDigestNews(
+      newsResult.rows.filter(n => poiSet.has(n.poi_id))
+    ).slice(0, 5);
+    const userEvents = dedupeDigestEvents(
+      eventsResult.rows
+        .filter(e => poiSet.has(e.poi_id))
+        .filter(e => {
+          const day = dayInTz(e.start_date);
+          return day >= friday && day <= sunday;
+        }),
+      tz
+    ).slice(0, 10);
 
     const html = renderDigestHtml(userEvents, userNews, tz);
     if (!html) {

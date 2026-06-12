@@ -8,6 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- **Duplicate events in weekly newsletter**: "Steam in the Valley!" ran twice in issue #15
+  - Save-time dedup required an exact `start_date` match, so a bare-date variant (noon fallback) and a timed variant of the same event both saved
+  - Title match now compares the calendar day in Eastern time; digest rendering also dedupes by POI + title + day as a safety net for rows collected before the fix
+- **Duplicate news stories in weekly newsletter**: the Summit Metro Parks fishing-derby story ran twice (parks site + Spectrum News)
+  - Same story from two outlets has a different URL and headline, dodging save-time dedup
+  - Digest rendering now collapses same-POI stories whose significant title+summary vocabulary mostly overlaps; both digest paths overfetch so dedup does not shrink the issue below its slot count
+- **Preview/digest emails sent from dev and test containers** (regression of #440)
+  - `~/.rotv/environment-dev` is long-lived and only generated when missing, so files created before #440 never received `NEWSLETTER_SEND_ENABLED=false`; the test ENVFILE block never included it at all
+  - run.sh now appends the kill switch to existing dev env files and includes it in the test env file; three [PREVIEW] copies on May 28 and June 11 came from prod + dev + test containers all sharing the prod Buttondown key
 - **News date year corruption**: Fixed systematic 2025→2026 year shift in publication dates (#228)
   - Root cause: pg library returns `date` columns as JavaScript Date objects; `String(dateObj).slice(0,10)` produces `"Sat May 31"` (no year), which chrono-node re-parses as the next future occurrence
   - Fix: global pg type parsers (`types.setTypeParser`) for OID 1082/1114/1184 now return raw ISO strings
