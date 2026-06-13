@@ -2,8 +2,13 @@ import axios from 'axios';
 
 const BUTTONDOWN_API_BASE = 'https://api.buttondown.email';
 
-function isSendEnabled() {
-  return process.env.NEWSLETTER_SEND_ENABLED !== 'false';
+// Fail-closed: sending requires an explicit NEWSLETTER_SEND_ENABLED=true.
+// A missing or unset variable means NO send, so a forgotten env file (the
+// regression behind the triple [PREVIEW] emails, #440/#476) can never email
+// real subscribers by default. Production sets the flag explicitly in its
+// env file; dev/test set it to 'false' (or leave it unset).
+export function isSendEnabled() {
+  return process.env.NEWSLETTER_SEND_ENABLED === 'true';
 }
 
 let apiKeyCache = null;
@@ -87,7 +92,7 @@ async function retryRequest(requestFn, maxRetries = 3) {
 
 export async function addSubscriber(email, pool = null) {
   if (!isSendEnabled()) {
-    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED=false), skipping addSubscriber');
+    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping addSubscriber');
     return { email, status: 'send_disabled', skipped: true };
   }
 
@@ -151,7 +156,7 @@ export async function getSubscriberCount(pool = null) {
 
 export async function sendEmail(subject, htmlBody, pool = null, { existingEmailId, onDraftCreated } = {}) {
   if (!isSendEnabled()) {
-    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED=false), skipping sendEmail');
+    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping sendEmail');
     return { skipped: true, reason: 'send_disabled' };
   }
 
@@ -220,7 +225,7 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
 
 export async function sendDraftToRecipients(subject, htmlBody, recipients, pool = null) {
   if (!isSendEnabled()) {
-    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED=false), skipping sendDraftToRecipients');
+    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping sendDraftToRecipients');
     return { emailId: null, skipped: true, reason: 'send_disabled' };
   }
 
