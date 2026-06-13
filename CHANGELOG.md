@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Newsletter send gate is now fail-closed**: `isSendEnabled()` requires an explicit `NEWSLETTER_SEND_ENABLED=true`
+  - Previously fail-open (`!== 'false'`), so a missing variable meant sends were ENABLED — the root condition behind the duplicate [PREVIEW] emails (#440/#476)
+  - A forgotten or mislocated env file now means NO send by default; only production sets the flag to `true` (added explicitly to lotor's env before this shipped). Also closes the latent risk of CI containers (which carry the prod Buttondown key via seed data) being nominally send-enabled
+
 ### Fixed
 - **Duplicate events in weekly newsletter**: "Steam in the Valley!" ran twice in issue #15
   - Save-time dedup required an exact `start_date` match, so a bare-date variant (noon fallback) and a timed variant of the same event both saved
