@@ -6,8 +6,8 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-// buttondownClient imports axios (used only inside a function); stub it so the
-// module loads on the host without a full backend node_modules.
+// buttondownClient imports axios (used only inside a function); mock it so the
+// module imports cleanly on the host without a full backend node_modules.
 vi.mock('axios', () => ({ default: { create: vi.fn(() => ({})) } }));
 
 const { isSendEnabled } = await import('../services/buttondownClient.js');
