@@ -81,6 +81,8 @@ SET geometry = '{"type":"LineString","coordinates":[[-81.706867,41.497019],[-81.
     updated_at = NOW()
 WHERE name = 'Harbor Hopper' AND 'water_taxi' = ANY(poi_roles)
   AND geometry IS NOT NULL
+  AND jsonb_typeof(geometry->'coordinates') = 'array'
+  AND jsonb_array_length(geometry->'coordinates') > 0
   AND (geometry->'coordinates'->0->>0)::numeric = -81.707759;
 
 -- 5. GIN index for the served-by lookup (GET /api/pois/:id/serving-taxis), which

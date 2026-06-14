@@ -83,7 +83,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     fetch(`/api/pois/${pointId}/serving-taxis`)
       .then(r => (r.ok ? r.json() : []))
       .then(data => { if (!cancelled) setServingTaxis(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) setServingTaxis([]); });
+      .catch((err) => { if (!cancelled) { console.error('Error fetching serving taxis:', err); setServingTaxis([]); } });
     return () => { cancelled = true; };
   }, [destination?.id, destination?.poi_roles]);
 
