@@ -3189,6 +3189,35 @@ body {
     width: 100%;
   }
 
+  /* Expanded sidebar covers full viewport including the top nav bar */
+  .sidebar.expanded {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 20000;
+  }
+
+  .sidebar-expand-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.85;
+    line-height: 1;
+  }
+
+  .sidebar-expand-btn:hover {
+    opacity: 1;
+  }
+
   /* Sidebar tabs on mobile - make them more compact */
   .sidebar-tabs {
     padding: 0;

@@ -75,6 +75,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [tabCounts, setTabCounts] = useState({ news_count: null, events_count: null });
   const [hasGauges, setHasGauges] = useState(null);
   const [servingTaxis, setServingTaxis] = useState([]);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
 
   useEffect(() => {
     const pointId = destination?.id;
@@ -279,6 +280,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       setEditedData({ ...displayItem });
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
+      setIsSidebarExpanded(false);
       // Respect a deep-linked subtab (e.g. /poi/river_levels) instead of forcing Info.
       if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
@@ -621,7 +623,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
     return (
       <div
-        className={`sidebar open ${isEditing ? 'editing' : ''}`}
+        className={`sidebar open ${isEditing ? 'editing' : ''} ${isMobile && isSidebarExpanded ? 'expanded' : ''}`}
         onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
         onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
         onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
@@ -696,6 +698,24 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 title="Back to MTB Trails"
               >
                 ←
+              </button>
+            )}
+            {isMobile && !isEditing && (
+              <button
+                className="sidebar-expand-btn"
+                onClick={() => setIsSidebarExpanded(prev => !prev)}
+                title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+                aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+              >
+                {isSidebarExpanded ? (
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                  </svg>
+                )}
               </button>
             )}
             <button className="close-btn" onClick={onClose}>&times;</button>
@@ -932,7 +952,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
   return (
     <div
-      className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''}`}
+      className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''} ${isMobile && isSidebarExpanded ? 'expanded' : ''}`}
       onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
       onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
       onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
@@ -996,6 +1016,24 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 ›
               </button>
             </>
+          )}
+          {isMobile && !isEditing && (
+            <button
+              className="sidebar-expand-btn"
+              onClick={() => setIsSidebarExpanded(prev => !prev)}
+              title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+              aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+            >
+              {isSidebarExpanded ? (
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+              )}
+            </button>
           )}
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
