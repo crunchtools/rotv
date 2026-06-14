@@ -1478,6 +1478,18 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     }
   };
 
+  // The live boat and its route are the same POI: find the Harbor Hopper linear
+  // feature (the only water_taxi with a tracker) so the boat marker shares its
+  // tooltip and opens the same Info panel (spec 035).
+  const boatFeature = useMemo(
+    () => linearFeatures?.find(f => f.poi_roles?.includes('water_taxi') && /^https?:\/\//i.test(f.live_tracker_url || '')),
+    [linearFeatures]
+  );
+  const boatStatusLabel = boatPosition?.status === 'active' ? 'Live'
+    : boatPosition?.status === 'docked' ? 'Docked' : 'Offline';
+  const boatStatusClass = boatPosition?.status === 'active' ? 'live'
+    : boatPosition?.status === 'docked' ? 'docked' : 'offline';
+
   const getLinearFeatureStyle = useCallback((feature, isSelected) => {
     const editSelectedColor = '#FF8C00';
     const viewSelectedColor = '#0066CC';
@@ -1796,28 +1808,45 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             ? feature.name?.toLowerCase().includes(searchQuery.toLowerCase())
             : showWaterTaxis;
           if (!stopsVisible) return null;
-          return feature.stops.map((stop, i) => (
-            <CircleMarker
-              key={`wt-stop-${feature.id}-${i}`}
-              center={[stop.lat, stop.lng]}
-              radius={5}
-              pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#0E9E9E', fillOpacity: 1 }}
-            >
-              <Tooltip direction="top" offset={[0, -4]}>{stop.name}</Tooltip>
-            </CircleMarker>
-          ));
+          return feature.stops.map((stop, i) => {
+            if (stop.poi_id) return null;
+            return (
+              <CircleMarker
+                key={`wt-stop-${feature.id}-${i}`}
+                center={[stop.lat, stop.lng]}
+                radius={5}
+                pathOptions={{ color: '#ffffff', weight: 2, fillColor: '#0E9E9E', fillOpacity: 1 }}
+              >
+                <Tooltip direction="top" offset={[0, -4]}>{stop.name}</Tooltip>
+              </CircleMarker>
+            );
+          });
         })}
 
-        {showWaterTaxis && boatPosition && (
+        {showWaterTaxis && boatPosition && boatFeature && (
           <Marker
             position={[boatPosition.latitude, boatPosition.longitude]}
             icon={createBoatIcon(boatPosition.heading, boatPosition.status)}
             zIndexOffset={500}
             keyboard={false}
+            eventHandlers={{ click: () => handleLinearFeatureClick(boatFeature) }}
           >
-            <Tooltip direction="top" offset={[0, -14]}>
-              {boatPosition.status === 'docked' ? 'Harbor Hopper (Docked)' : 'Harbor Hopper (Live)'}
-            </Tooltip>
+            {selectedLinearFeature?.id !== boatFeature.id && (
+              <Tooltip direction="top" offset={[0, -14]} className="destination-tooltip">
+                <div className="tooltip-content">
+                  {boatFeature.has_primary_image && (
+                    <div className="tooltip-thumbnail">
+                      <img src={`/api/pois/${boatFeature.id}/thumbnail?size=medium`} alt="" />
+                    </div>
+                  )}
+                  <div className="tooltip-title-row">
+                    <strong>{boatFeature.name}</strong>
+                    <span className={`boat-status-badge ${boatStatusClass}`}>{boatStatusLabel}</span>
+                  </div>
+                  {boatFeature.brief_description && <p>{boatFeature.brief_description}</p>}
+                </div>
+              </Tooltip>
+            )}
           </Marker>
         )}
 

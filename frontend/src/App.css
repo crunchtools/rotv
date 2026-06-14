@@ -15470,3 +15470,47 @@ button.feedback-link-inline {
   cursor: pointer;
 }
 .river-gauge-dot-btn.active { background: #1e6fb8; }
+
+/* Water taxi route stops list + stop "served by" link (spec 035) */
+.water-taxi-stops {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+.water-taxi-stops li {
+  margin: 0.2rem 0;
+}
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #4a7c23;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-button:hover {
+  color: #2d5016;
+}
+.served-by {
+  margin: 0;
+}
+
+/* Boat live-status badge: in the hover tooltip it sits next to the title; in the
+   Info panel it joins the other service badges at service-badge size (spec 035) */
+.tooltip-title-row {
+  display: flex;
+  align-items: center;
+}
+.service-badge.live {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.service-badge.docked {
+  background: #fff3e0;
+  color: #e65100;
+}
+.service-badge.offline {
+  background: #f5f5f5;
+  color: #999;
+}
