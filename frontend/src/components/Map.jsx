@@ -4,6 +4,7 @@ import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents
 import L from 'leaflet';
 import VirtualPoiCreator from './VirtualPoiCreator';
 import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, trailPassesActivityFilter, matchesWholeWord } from '../utils/iconUtils';
+import { getBoatStatus } from '../utils/boatStatus';
 import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
@@ -1485,10 +1486,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     () => linearFeatures?.find(f => f.poi_roles?.includes('water_taxi') && /^https?:\/\//i.test(f.live_tracker_url || '')),
     [linearFeatures]
   );
-  const boatStatusLabel = boatPosition?.status === 'active' ? 'Live'
-    : boatPosition?.status === 'docked' ? 'Docked' : 'Offline';
-  const boatStatusClass = boatPosition?.status === 'active' ? 'live'
-    : boatPosition?.status === 'docked' ? 'docked' : 'offline';
+  const { label: boatStatusLabel, className: boatStatusClass } = getBoatStatus(boatPosition);
 
   const getLinearFeatureStyle = useCallback((feature, isSelected) => {
     const editSelectedColor = '#FF8C00';

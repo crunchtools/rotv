@@ -5,16 +5,14 @@ import FavoriteToggle from '../FavoriteToggle';
 import VisitedToggle from '../VisitedToggle';
 import CellSignal from './CellSignal';
 import { getNavigationStops, getOwnerClass, formatCoordinate, WHEELCHAIR_LABELS, FEE_LABELS, humanizeOpeningHours } from './helpers';
+import { getBoatStatus } from '../../utils/boatStatus';
 
 function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare, moreInfoLink, trailStatus = null, onCollectStatus, boatPosition, stops = null, onSelectStop = null, servingTaxis = null, onSelectServingTaxi = null }) {
   // Fix: only honor http(s) tracker URLs so a stored javascript: URL can't run on click (PR #405 review)
   const liveTrackerUrl = /^https?:\/\//i.test(destination.live_tracker_url || '')
     ? destination.live_tracker_url
     : null;
-  const boatStatusLabel = boatPosition?.status === 'active' ? 'Live'
-    : boatPosition?.status === 'docked' ? 'Docked' : 'Offline';
-  const boatStatusClass = boatPosition?.status === 'active' ? 'live'
-    : boatPosition?.status === 'docked' ? 'docked' : 'offline';
+  const { label: boatStatusLabel, className: boatStatusClass } = getBoatStatus(boatPosition);
   return (
     <div className="view-container">
       <div className="view-scroll">

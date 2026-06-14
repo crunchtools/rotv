@@ -83,4 +83,9 @@ WHERE name = 'Harbor Hopper' AND 'water_taxi' = ANY(poi_roles)
   AND geometry IS NOT NULL
   AND (geometry->'coordinates'->0->>0)::numeric = -81.707759;
 
+-- 5. GIN index for the served-by lookup (GET /api/pois/:id/serving-taxis), which
+--    filters pois.stops with the @> containment operator. Without this the query
+--    full-scans pois on every stop sidebar open (Gatehouse PR #480 review).
+CREATE INDEX IF NOT EXISTS idx_pois_stops_gin ON pois USING GIN (stops);
+
 COMMIT;

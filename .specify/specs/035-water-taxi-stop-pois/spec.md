@@ -75,8 +75,9 @@ Acceptance Criteria:
 
 ### New Tables
 
-None. Stops reuse the existing `pois` table (point POIs) and the existing
-`poi_associations` table for the route↔stop relationship.
+None. Stops reuse the existing `pois` table (point POIs). The route↔stop
+relationship is modeled via `pois.stops[].poi_id` plus a served-by lookup —
+**not** `poi_associations` (see Open Questions).
 
 ### Schema Changes
 
@@ -93,11 +94,11 @@ ON CONFLICT (name) DO NOTHING;
 -- 2. Promote each Harbor Hopper stop to a full point POI (idempotent on name+point role).
 --    Coordinates come from the existing Harbor Hopper pois.stops JSONB.
 
--- 3. Associate each new stop POI with the Harbor Hopper route POI
---    (poi_associations, association_type = 'water_taxi_stop').
-
--- 4. Link the route's ordered stops to their POIs: extend each stops entry with poi_id
+-- 3. Link the route's ordered stops to their POIs: extend each stops entry with poi_id
 --    so the route can list stops in order and the map can suppress the duplicate circle.
+--    (No poi_associations — the served-by direction is a stops @> poi_id lookup.)
+
+-- 4. GIN index on pois.stops for the served-by lookup (stops @> {poi_id}).
 ```
 
 - Stop POIs use `poi_roles = '{point}'`. The two breweries classify as `food_drink`
