@@ -1721,6 +1721,32 @@ app.get('/api/pois/:id/associations', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/pois/:id/serving-taxis
+ * Water-taxi POIs whose stops include this POI id — powers the stop POI sidebar's
+ * "Served by <taxi>" link (spec 035). Read-only, public.
+ */
+app.get('/api/pois/:id/serving-taxis', async (req, res) => {
+  try {
+    const poiId = parseInt(req.params.id, 10);
+    if (Number.isNaN(poiId)) {
+      return res.status(400).json({ error: 'Invalid POI id' });
+    }
+    const servingTaxisQuery = await pool.query(`
+      SELECT id, name
+      FROM pois
+      WHERE poi_roles @> ARRAY['water_taxi']::text[]
+        AND stops @> jsonb_build_array(jsonb_build_object('poi_id', $1::int))
+        AND (deleted IS NULL OR deleted = FALSE)
+      ORDER BY name
+    `, [poiId]);
+    res.json(servingTaxisQuery.rows);
+  } catch (error) {
+    console.error('Error fetching serving taxis:', error);
+    res.status(500).json({ error: 'Failed to fetch serving taxis' });
+  }
+});
+
 app.get('/api/associations', async (req, res) => {
   try {
     const associationsQuery = await pool.query(`

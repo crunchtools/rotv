@@ -74,6 +74,18 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [trailStatus, setTrailStatus] = useState(null);
   const [tabCounts, setTabCounts] = useState({ news_count: null, events_count: null });
   const [hasGauges, setHasGauges] = useState(null);
+  const [servingTaxis, setServingTaxis] = useState([]);
+
+  useEffect(() => {
+    const pointId = destination?.id;
+    if (!pointId || !destination?.poi_roles?.includes('point')) { setServingTaxis([]); return undefined; }
+    let cancelled = false;
+    fetch(`/api/pois/${pointId}/serving-taxis`)
+      .then(r => (r.ok ? r.json() : []))
+      .then(data => { if (!cancelled) setServingTaxis(Array.isArray(data) ? data : []); })
+      .catch((err) => { if (!cancelled) { console.error('Error fetching serving taxis:', err); setServingTaxis([]); } });
+    return () => { cancelled = true; };
+  }, [destination?.id, destination?.poi_roles]);
 
   const [selectedPoiIds, setSelectedPoiIds] = useState(new Set());
 
@@ -804,6 +816,11 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 trailStatus={trailStatus}
                 onCollectStatus={handleCollectStatusInline}
                 boatPosition={boatPosition}
+                stops={linearFeature.stops}
+                onSelectStop={(poiId) => {
+                  const d = allDestinations?.find(dest => dest.id === poiId);
+                  if (d) onSelectPoi(d);
+                }}
               />
             )
           )}
@@ -871,6 +888,18 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           )}
         </div>
         </div> {/* End sidebar-content-wrapper */}
+
+        {/* Fix: render the upload modal on the linear-feature branch so "+ Add Photo/Video" works for water taxis, rivers, and trails (PR #035 review) */}
+        {uploadModalOpen && linearFeature?.id && (
+          <MediaUploadModal
+            poiId={linearFeature.id}
+            onClose={() => setUploadModalOpen(false)}
+            onSuccess={() => {
+              setUploadModalOpen(false);
+              handleMediaUpdate();
+            }}
+          />
+        )}
 
         <ShareModal
           isOpen={showShareModal}
@@ -1093,6 +1122,11 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
               trailStatus={trailStatus}
               onCollectStatus={handleCollectStatusInline}
               boatPosition={boatPosition}
+              servingTaxis={servingTaxis}
+              onSelectServingTaxi={(taxiId) => {
+                const f = allLinearFeatures?.find(feat => feat.id === taxiId);
+                if (f) onSelectPoi(f);
+              }}
             />
           )
         )}
