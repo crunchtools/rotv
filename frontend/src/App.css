@@ -3189,6 +3189,11 @@ body {
     width: 100%;
   }
 
+  /* Raise parent stacking context so expanded sidebar can cover the nav bar */
+  .main-content:has(.sidebar.expanded) {
+    z-index: 10001 !important;
+  }
+
   /* Expanded sidebar covers full viewport including the top nav bar */
   .sidebar.expanded {
     position: fixed;
