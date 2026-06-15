@@ -76,6 +76,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [hasGauges, setHasGauges] = useState(null);
   const [servingTaxis, setServingTaxis] = useState([]);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+  const [mobilePhotosVisible, setMobilePhotosVisible] = useState(false);
 
   useEffect(() => {
     const pointId = destination?.id;
@@ -280,13 +281,14 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       setEditedData({ ...displayItem });
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
-      setIsSidebarExpanded(false);
+      setIsSidebarExpanded(isMobile);
+      setMobilePhotosVisible(false);
       // Respect a deep-linked subtab (e.g. /poi/river_levels) instead of forcing Info.
       if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
       setIsEditing(false);
     }
-  }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList, initialSidebarTab, permalinkInfo]);
+  }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList, initialSidebarTab, permalinkInfo, isMobile]);
 
   useEffect(() => {
     if (permalinkInfo) return;
@@ -703,7 +705,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
             {isMobile && !isEditing && (
               <button
                 className="sidebar-expand-btn"
-                onClick={() => setIsSidebarExpanded(prev => !prev)}
+                onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
                 title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
                 aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
               >
@@ -723,7 +725,14 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         </div>
 
         <div style={{ position: 'relative' }}>
-          {isEditing && linearFeature?.id ? (
+          {isMobile && isSidebarExpanded && !mobilePhotosVisible && !isEditing && media.length > 0 ? (
+            <button
+              className="sidebar-show-photos-btn"
+              onClick={() => setMobilePhotosVisible(true)}
+            >
+              Show Photos
+            </button>
+          ) : isEditing && linearFeature?.id ? (
             <ImageUploader
               destinationId={linearFeature.id}
               hasImage={!!linearFeature.has_primary_image}
@@ -1020,7 +1029,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           {isMobile && !isEditing && (
             <button
               className="sidebar-expand-btn"
-              onClick={() => setIsSidebarExpanded(prev => !prev)}
+              onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
               title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
               aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
             >
@@ -1040,7 +1049,14 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       </div>
 
       <div style={{ position: 'relative' }}>
-        {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
+        {isMobile && isSidebarExpanded && !mobilePhotosVisible && !isEditing && media.length > 0 ? (
+          <button
+            className="sidebar-show-photos-btn"
+            onClick={() => setMobilePhotosVisible(true)}
+          >
+            Show Photos
+          </button>
+        ) : permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
           permalinkItem ? (
             <DetailImage key={permalinkItem.id} imageUrl={permalinkItem.image_url} poiId={permalinkItem.poi_id} alt={permalinkItem.title} />
           ) : (

@@ -3223,6 +3223,19 @@ body {
     opacity: 1;
   }
 
+  .sidebar-show-photos-btn {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: #4a9eff;
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-align: center;
+  }
+
   /* Sidebar tabs on mobile - make them more compact */
   .sidebar-tabs {
     padding: 0;
