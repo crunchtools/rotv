@@ -630,7 +630,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
         onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
       >
-        {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
+        {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && mobilePhotosVisible && (
           <ThumbnailCarousel
             pois={poiNavigationList}
             currentIndex={currentIndex}
@@ -972,7 +972,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
       onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
     >
-      {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
+      {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && mobilePhotosVisible && (
         <ThumbnailCarousel
           pois={poiNavigationList}
           currentIndex={currentIndex}
