@@ -29,7 +29,7 @@
 
 @media (max-width: 768px) {
   :root {
-    --header-height: 104px; /* Mobile header height - increased to prevent button cutoff */
+    --header-height: 88px; /* Mobile header height */
   }
 }
 
@@ -3058,7 +3058,7 @@ body {
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.5rem 0.75rem;
-    height: 88px; /* Fixed height for mobile - shorter than desktop */
+    height: 88px; /* Fixed height for mobile */
   }
 
   .header-left h1 {
@@ -3221,19 +3221,6 @@ body {
 
   .sidebar-expand-btn:hover {
     opacity: 1;
-  }
-
-  .sidebar-show-photos-btn {
-    display: block;
-    width: 100%;
-    padding: 8px;
-    background: none;
-    border: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    color: #4a9eff;
-    font-size: 0.85rem;
-    cursor: pointer;
-    text-align: center;
   }
 
   /* Sidebar tabs on mobile - make them more compact */
