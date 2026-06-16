@@ -77,6 +77,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [servingTaxis, setServingTaxis] = useState([]);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => window.innerWidth < 768);
   const [mobilePhotosVisible, setMobilePhotosVisible] = useState(false);
+  const [hasNavigatedPoi, setHasNavigatedPoi] = useState(false);
 
   useEffect(() => {
     const pointId = destination?.id;
@@ -187,10 +188,12 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       if (deltaX > 0) {
         if (currentIndex > 0) {
           onNavigate('prev');
+          setHasNavigatedPoi(true);
         }
       } else {
         if (poiNavigationList && currentIndex < poiNavigationList.length - 1) {
           onNavigate('next');
+          setHasNavigatedPoi(true);
         }
       }
     }
@@ -630,7 +633,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
         onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
       >
-        {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && mobilePhotosVisible && (
+        {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && hasNavigatedPoi && (
           <ThumbnailCarousel
             pois={poiNavigationList}
             currentIndex={currentIndex}
@@ -972,7 +975,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
       onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
     >
-      {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && mobilePhotosVisible && (
+      {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && hasNavigatedPoi && (
         <ThumbnailCarousel
           pois={poiNavigationList}
           currentIndex={currentIndex}
