@@ -3189,6 +3189,53 @@ body {
     width: 100%;
   }
 
+  /* Raise parent stacking context so expanded sidebar can cover the nav bar */
+  .main-content:has(.sidebar.expanded) {
+    z-index: 10001 !important;
+  }
+
+  /* Expanded sidebar covers full viewport including the top nav bar */
+  .sidebar.expanded {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 20000;
+  }
+
+  .sidebar-expand-btn {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.85;
+    line-height: 1;
+  }
+
+  .sidebar-expand-btn:hover {
+    opacity: 1;
+  }
+
+  .sidebar-show-photos-btn {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    background: none;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    color: #4a9eff;
+    font-size: 0.85rem;
+    cursor: pointer;
+    text-align: center;
+  }
+
   /* Sidebar tabs on mobile - make them more compact */
   .sidebar-tabs {
     padding: 0;
@@ -15513,4 +15560,21 @@ button.feedback-link-inline {
 .service-badge.offline {
   background: #f5f5f5;
   color: #999;
+}
+
+/* Mobile: larger close and expand buttons for touch targets */
+@media (max-width: 768px) {
+  .close-btn {
+    font-size: 2rem;
+    padding: 4px;
+    min-width: 44px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .sidebar-expand-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
 }

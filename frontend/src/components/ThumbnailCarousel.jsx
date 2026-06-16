@@ -63,7 +63,7 @@ function ThumbnailCarousel({ pois, currentIndex, onNavigate }) {
 
     hideTimerRef.current = setTimeout(() => {
       setIsVisible(false);
-    }, 5000);
+    }, 3000);
 
     return () => {
       if (hideTimerRef.current) {

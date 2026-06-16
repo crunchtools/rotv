@@ -75,6 +75,9 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [tabCounts, setTabCounts] = useState({ news_count: null, events_count: null });
   const [hasGauges, setHasGauges] = useState(null);
   const [servingTaxis, setServingTaxis] = useState([]);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => window.innerWidth < 768);
+  const [mobilePhotosVisible, setMobilePhotosVisible] = useState(false);
+  const [hasNavigatedPoi, setHasNavigatedPoi] = useState(false);
 
   useEffect(() => {
     const pointId = destination?.id;
@@ -185,10 +188,12 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       if (deltaX > 0) {
         if (currentIndex > 0) {
           onNavigate('prev');
+          setHasNavigatedPoi(true);
         }
       } else {
         if (poiNavigationList && currentIndex < poiNavigationList.length - 1) {
           onNavigate('next');
+          setHasNavigatedPoi(true);
         }
       }
     }
@@ -279,12 +284,14 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       setEditedData({ ...displayItem });
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
+      setIsSidebarExpanded(isMobile);
+      setMobilePhotosVisible(false);
       // Respect a deep-linked subtab (e.g. /poi/river_levels) instead of forcing Info.
       if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
       setIsEditing(false);
     }
-  }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList, initialSidebarTab, permalinkInfo]);
+  }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList, initialSidebarTab, permalinkInfo, isMobile]);
 
   useEffect(() => {
     if (permalinkInfo) return;
@@ -621,12 +628,12 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
     return (
       <div
-        className={`sidebar open ${isEditing ? 'editing' : ''}`}
+        className={`sidebar open ${isEditing ? 'editing' : ''} ${isMobile && isSidebarExpanded ? 'expanded' : ''}`}
         onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
         onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
         onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
       >
-        {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
+        {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && hasNavigatedPoi && (
           <ThumbnailCarousel
             pois={poiNavigationList}
             currentIndex={currentIndex}
@@ -698,72 +705,103 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 ←
               </button>
             )}
+            {isMobile && !isEditing && (
+              <button
+                className="sidebar-expand-btn"
+                onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
+                title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+                aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+              >
+                {isSidebarExpanded ? (
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                  </svg>
+                )}
+              </button>
+            )}
             <button className="close-btn" onClick={onClose}>&times;</button>
           </div>
         </div>
 
         <div style={{ position: 'relative' }}>
-          {isEditing && linearFeature?.id ? (
-            <ImageUploader
-              destinationId={linearFeature.id}
-              hasImage={!!linearFeature.has_primary_image}
-              pendingImage={pendingImage}
-              onPendingImageChange={setPendingImage}
-              updatedAt={linearFeature.updated_at}
-              disabled={saving}
-              isVirtualPoi={false}
-              user={user}
-              poiId={linearFeature.id}
-              onMediaUpdate={handleMediaUpdate}
-            />
-          ) : media.length > 0 ? (
-            <Mosaic media={media} allMedia={allMedia} poiId={linearFeature?.id} user={user} onMediaUpdate={handleMediaUpdate} />
-          ) : user && linearFeature?.id && !mediaLoading ? (
-            <div className="sidebar-no-media">
+          {isMobile && !mobilePhotosVisible && !isEditing ? (
+            media.length > 0 ? (
               <button
-                className="btn-add-first-media"
-                onClick={() => setUploadModalOpen(true)}
+                className="sidebar-show-photos-btn"
+                onClick={() => setMobilePhotosVisible(true)}
               >
-                + Add Photo/Video
+                Show Photos
               </button>
-            </div>
-          ) : null}
-
-          {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
+            ) : null
+          ) : (
             <>
-              {currentIndex > 0 && (
-                <button
-                  className="image-nav-btn image-nav-prev"
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    debouncedNavigate('prev');
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  aria-label="Previous POI"
-                >
-                  <span className="image-nav-chevron">‹</span>
-                </button>
-              )}
-              {currentIndex < poiNavigationList.length - 1 && (
-                <button
-                  className="image-nav-btn image-nav-next"
-                  onTouchEnd={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    debouncedNavigate('next');
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  aria-label="Next POI"
-                >
-                  <span className="image-nav-chevron">›</span>
-                </button>
+              {isEditing && linearFeature?.id ? (
+                <ImageUploader
+                  destinationId={linearFeature.id}
+                  hasImage={!!linearFeature.has_primary_image}
+                  pendingImage={pendingImage}
+                  onPendingImageChange={setPendingImage}
+                  updatedAt={linearFeature.updated_at}
+                  disabled={saving}
+                  isVirtualPoi={false}
+                  user={user}
+                  poiId={linearFeature.id}
+                  onMediaUpdate={handleMediaUpdate}
+                />
+              ) : media.length > 0 ? (
+                <Mosaic media={media} allMedia={allMedia} poiId={linearFeature?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+              ) : user && linearFeature?.id && !mediaLoading ? (
+                <div className="sidebar-no-media">
+                  <button
+                    className="btn-add-first-media"
+                    onClick={() => setUploadModalOpen(true)}
+                  >
+                    + Add Photo/Video
+                  </button>
+                </div>
+              ) : null}
+
+              {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
+                <>
+                  {currentIndex > 0 && (
+                    <button
+                      className="image-nav-btn image-nav-prev"
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        debouncedNavigate('prev');
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      aria-label="Previous POI"
+                    >
+                      <span className="image-nav-chevron">‹</span>
+                    </button>
+                  )}
+                  {currentIndex < poiNavigationList.length - 1 && (
+                    <button
+                      className="image-nav-btn image-nav-next"
+                      onTouchEnd={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        debouncedNavigate('next');
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }}
+                      aria-label="Next POI"
+                    >
+                      <span className="image-nav-chevron">›</span>
+                    </button>
+                  )}
+                </>
               )}
             </>
           )}
@@ -932,12 +970,12 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
   return (
     <div
-      className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''}`}
+      className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''} ${isMobile && isSidebarExpanded ? 'expanded' : ''}`}
       onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
       onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
       onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
     >
-      {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && (
+      {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && hasNavigatedPoi && (
         <ThumbnailCarousel
           pois={poiNavigationList}
           currentIndex={currentIndex}
@@ -997,78 +1035,109 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
               </button>
             </>
           )}
+          {isMobile && !isEditing && (
+            <button
+              className="sidebar-expand-btn"
+              onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
+              title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+              aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
+            >
+              {isSidebarExpanded ? (
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                  <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
+                </svg>
+              )}
+            </button>
+          )}
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
       </div>
 
       <div style={{ position: 'relative' }}>
-        {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
-          permalinkItem ? (
-            <DetailImage key={permalinkItem.id} imageUrl={permalinkItem.image_url} poiId={permalinkItem.poi_id} alt={permalinkItem.title} />
-          ) : (
-            <div style={{ height: '180px', marginBottom: '12px' }} />
-          )
-        ) : isEditing && destination?.id ? (
-          <ImageUploader
-            destinationId={destination.id}
-            hasImage={!!destination.has_primary_image}
-            pendingImage={pendingImage}
-            onPendingImageChange={setPendingImage}
-            updatedAt={destination.updated_at}
-            disabled={saving}
-            isVirtualPoi={destination?.poi_roles?.includes('organization') && !destination?.geometry && !destination?.latitude}
-            user={user}
-            poiId={destination.id}
-            onMediaUpdate={handleMediaUpdate}
-          />
-        ) : media.length > 0 ? (
-          <Mosaic media={media} allMedia={allMedia} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
-        ) : user && destination?.id && !mediaLoading ? (
-          <div className="sidebar-no-media">
+        {isMobile && !mobilePhotosVisible && !isEditing ? (
+          media.length > 0 ? (
             <button
-              className="btn-add-first-media"
-              onClick={() => setUploadModalOpen(true)}
+              className="sidebar-show-photos-btn"
+              onClick={() => setMobilePhotosVisible(true)}
             >
-              + Add Photo/Video
+              Show Photos
             </button>
-          </div>
-        ) : null}
-
-        {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
+          ) : null
+        ) : (
           <>
-            {currentIndex > 0 && (
-              <button
-                className="image-nav-btn image-nav-prev"
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  debouncedNavigate('prev');
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                aria-label="Previous POI"
-              >
-                <span className="image-nav-chevron">‹</span>
-              </button>
-            )}
-            {currentIndex < poiNavigationList.length - 1 && (
-              <button
-                className="image-nav-btn image-nav-next"
-                onTouchEnd={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  debouncedNavigate('next');
-                }}
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
-                aria-label="Next POI"
-              >
-                <span className="image-nav-chevron">›</span>
-              </button>
+            {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
+              permalinkItem ? (
+                <DetailImage key={permalinkItem.id} imageUrl={permalinkItem.image_url} poiId={permalinkItem.poi_id} alt={permalinkItem.title} />
+              ) : (
+                <div style={{ height: '180px', marginBottom: '12px' }} />
+              )
+            ) : isEditing && destination?.id ? (
+              <ImageUploader
+                destinationId={destination.id}
+                hasImage={!!destination.has_primary_image}
+                pendingImage={pendingImage}
+                onPendingImageChange={setPendingImage}
+                updatedAt={destination.updated_at}
+                disabled={saving}
+                isVirtualPoi={destination?.poi_roles?.includes('organization') && !destination?.geometry && !destination?.latitude}
+                user={user}
+                poiId={destination.id}
+                onMediaUpdate={handleMediaUpdate}
+              />
+            ) : media.length > 0 ? (
+              <Mosaic media={media} allMedia={allMedia} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+            ) : user && destination?.id && !mediaLoading ? (
+              <div className="sidebar-no-media">
+                <button
+                  className="btn-add-first-media"
+                  onClick={() => setUploadModalOpen(true)}
+                >
+                  + Add Photo/Video
+                </button>
+              </div>
+            ) : null}
+
+            {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
+              <>
+                {currentIndex > 0 && (
+                  <button
+                    className="image-nav-btn image-nav-prev"
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      debouncedNavigate('prev');
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    aria-label="Previous POI"
+                  >
+                    <span className="image-nav-chevron">‹</span>
+                  </button>
+                )}
+                {currentIndex < poiNavigationList.length - 1 && (
+                  <button
+                    className="image-nav-btn image-nav-next"
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      debouncedNavigate('next');
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    aria-label="Next POI"
+                  >
+                    <span className="image-nav-chevron">›</span>
+                  </button>
+                )}
+              </>
             )}
           </>
         )}
