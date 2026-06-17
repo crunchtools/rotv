@@ -474,14 +474,15 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // while regional content passes. The POI gate still handles reassignment when
     // about_poi is false. (PR #483 follow-up)
     const isAffirmativeVote = v => v.relevant || v.about_poi;
+    let yesCount = 0, noCount = 0;
     try {
       relevanceVotes = await runContentRelevanceVotes(pool, {
         title: row.title, description: row.description,
         poiName: row.poi_name, contentType
       });
 
-      const yesCount = relevanceVotes.filter(isAffirmativeVote).length;
-      const noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
+      yesCount = relevanceVotes.filter(isAffirmativeVote).length;
+      noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
       console.log(`[Moderation] ${contentType} #${contentId}: relevance votes ${yesCount}/${relevanceVotes.length} yes`);
       logInfo(itemRunId, 'moderation', null, row.title,
         `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes`);
@@ -490,8 +491,6 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       logError(itemRunId, 'moderation', null, row.title, `Relevance voting failed: ${err.message}`);
     }
 
-    const yesCount = relevanceVotes.filter(isAffirmativeVote).length;
-    const noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
     const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
 
