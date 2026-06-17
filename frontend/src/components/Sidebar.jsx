@@ -76,7 +76,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [hasGauges, setHasGauges] = useState(null);
   const [servingTaxis, setServingTaxis] = useState([]);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => window.innerWidth < 768);
-  const [mobilePhotosVisible, setMobilePhotosVisible] = useState(false);
   const [hasNavigatedPoi, setHasNavigatedPoi] = useState(false);
 
   useEffect(() => {
@@ -285,7 +284,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
       setIsSidebarExpanded(isMobile);
-      setMobilePhotosVisible(false);
       // Respect a deep-linked subtab (e.g. /poi/river_levels) instead of forcing Info.
       if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
@@ -708,7 +706,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
             {isMobile && !isEditing && (
               <button
                 className="sidebar-expand-btn"
-                onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
+                onClick={() => { setIsSidebarExpanded(prev => !prev); }}
                 title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
                 aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
               >
@@ -728,18 +726,8 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         </div>
 
         <div style={{ position: 'relative' }}>
-          {isMobile && !mobilePhotosVisible && !isEditing ? (
-            media.length > 0 ? (
-              <button
-                className="sidebar-show-photos-btn"
-                onClick={() => setMobilePhotosVisible(true)}
-              >
-                Show Photos
-              </button>
-            ) : null
-          ) : (
-            <>
-              {isEditing && linearFeature?.id ? (
+          <>
+            {isEditing && linearFeature?.id ? (
                 <ImageUploader
                   destinationId={linearFeature.id}
                   hasImage={!!linearFeature.has_primary_image}
@@ -804,8 +792,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 </>
               )}
             </>
-          )}
-        </div>
+          </div>
 
         <div className="sidebar-tabs">
           {visibleTabs.map(tab => (
@@ -1038,7 +1025,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           {isMobile && !isEditing && (
             <button
               className="sidebar-expand-btn"
-              onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
+              onClick={() => { setIsSidebarExpanded(prev => !prev); }}
               title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
               aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
             >
@@ -1058,17 +1045,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       </div>
 
       <div style={{ position: 'relative' }}>
-        {isMobile && !mobilePhotosVisible && !isEditing ? (
-          media.length > 0 ? (
-            <button
-              className="sidebar-show-photos-btn"
-              onClick={() => setMobilePhotosVisible(true)}
-            >
-              Show Photos
-            </button>
-          ) : null
-        ) : (
-          <>
+        <>
             {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
               permalinkItem ? (
                 <DetailImage key={permalinkItem.id} imageUrl={permalinkItem.image_url} poiId={permalinkItem.poi_id} alt={permalinkItem.title} />
@@ -1140,7 +1117,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
               </>
             )}
           </>
-        )}
       </div>
 
       <div className="sidebar-tabs">
