@@ -131,10 +131,11 @@ ssh -p 22422 root@lotor.dc3.crunchtools.com \
    podman exec rootsofthevalley.org psql -U rotv rotv -f /tmp/insert_hudson.sql"
 ```
 
-> **Companion fix:** Green Valley Brewing Co. was on `collection_tier='daily'`
-> (migration 043 auto-assigns daily to any POI with a `news_url`/`events_url`;
-> the brewery has a Facebook events URL). Reclassify it to weekly:
-> `UPDATE pois SET collection_tier='weekly' WHERE id=6372;`
+> **Companion fix (included in `insert_hudson.sql`):** Green Valley Brewing Co.
+> was on `collection_tier='daily'` (migration 043 auto-assigns daily to any POI
+> with a `news_url`/`events_url`; the brewery has a Facebook events URL). The
+> import reclassifies it to weekly — keyed by name, since POI ids are not stable
+> across environments.
 
 
 ---

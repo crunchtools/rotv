@@ -35,6 +35,14 @@ WHERE name = 'Hudson'
   AND boundary_type = 'municipal'
   AND geometry IS NOT NULL;
 
+-- Companion fix: Green Valley Brewing Co. (POI 6372 in prod) was auto-set to
+-- collection_tier='daily' by migration 043 (any POI with a news_url/events_url
+-- gets daily; the brewery has a Facebook events URL), so it over-collected.
+-- Reclassify to weekly. Keyed by name — POI ids are NOT stable across
+-- environments (the local dev seed maps id 6372 to a different POI).
+UPDATE pois SET collection_tier = 'weekly'
+WHERE name = 'Green Valley Brewing Co.' AND 'point' = ANY(poi_roles);
+
 COMMIT;
 
 -- Verification: Hudson boundary present with a valid polygon, and the brewery
