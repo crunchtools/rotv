@@ -467,14 +467,21 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     let relevanceVotes = [];
+    // Fix: a vote counts as affirmative if the content is relevant to the guide's
+    // mission OR specifically about this POI. Content genuinely about a mapped POI
+    // belongs even when the topic isn't a classic outdoor/nature/history match —
+    // otherwise a commercial POI's own news (e.g. a brewery) is wrongly rejected
+    // while regional content passes. The POI gate still handles reassignment when
+    // about_poi is false. (PR #483 follow-up)
+    const isAffirmativeVote = v => v.relevant || v.about_poi;
     try {
       relevanceVotes = await runContentRelevanceVotes(pool, {
         title: row.title, description: row.description,
         poiName: row.poi_name, contentType
       });
 
-      const yesCount = relevanceVotes.filter(v => v.relevant).length;
-      const noCount = relevanceVotes.filter(v => !v.relevant).length;
+      const yesCount = relevanceVotes.filter(isAffirmativeVote).length;
+      const noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
       console.log(`[Moderation] ${contentType} #${contentId}: relevance votes ${yesCount}/${relevanceVotes.length} yes`);
       logInfo(itemRunId, 'moderation', null, row.title,
         `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes`);
@@ -483,8 +490,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       logError(itemRunId, 'moderation', null, row.title, `Relevance voting failed: ${err.message}`);
     }
 
-    const yesCount = relevanceVotes.filter(v => v.relevant).length;
-    const noCount = relevanceVotes.filter(v => !v.relevant).length;
+    const yesCount = relevanceVotes.filter(isAffirmativeVote).length;
+    const noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
     const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
 
