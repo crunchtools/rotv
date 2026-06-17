@@ -66,6 +66,7 @@ Each municipality has a unique color for visual distinction on the map:
 | **Cuyahoga Falls** | `#20B2AA` | Light Sea Green |
 | Cuyahoga Heights | `#8B4513` | Saddle Brown |
 | Cuyahoga Valley National Park | `#228B22` | Forest Green |
+| **Hudson** | `#B22222` | Firebrick |
 | Independence | `#DC143C` | Crimson |
 | Newburgh Heights | `#2F4F4F` | Dark Slate Gray |
 | Valley View | `#4682B4` | Steel Blue |
@@ -86,6 +87,54 @@ ssh -p 22422 root@lotor.dc3.crunchtools.com \
   "podman cp update_colors.sql rootsofthevalley.org:/tmp/ && \
    podman exec rootsofthevalley.org psql -U rotv rotv -f /tmp/update_colors.sql"
 ```
+
+
+---
+
+# Hudson Municipal Boundary
+
+City boundary for **Hudson, Ohio** (Summit County). Added to fix a news-collection
+problem: **Green Valley Brewing Co.** (POI 6372) sits in Hudson, but no Hudson
+boundary existed, so `geoService.getContainingBoundaries()` fell back to the
+`Summit County` boundary. `serperService` then built a county-wide news query
+(`"...for Green Valley Brewing Co. in Summit County, Ohio"`) that vacuumed up
+regional noise (parks, bridges, elections) instead of news about the brewery.
+With the city boundary in place, the POI grounds to Hudson first (smallest
+containing boundary), tightening the search.
+
+## Files
+
+- `hudson.geojson` — single-Polygon EPSG:4326 FeatureCollection (301 points)
+- `insert_hudson.sql` — idempotent import (sets `boundary_geom` for grounding)
+
+## Data Source
+
+- **Source:** OpenStreetMap via Nominatim API — **License:** ODbL 1.0
+- **Retrieved:** 2026-06-13 — **OSM Relation ID:** 181817
+
+## Schema
+
+Same current model as the metro/municipal park imports (NOT legacy `poi_type`):
+`poi_roles=ARRAY['boundary']`, `boundary_type='municipal'` (Municipal panel),
+`geometry` JSONB, and PostGIS `boundary_geom` — the column grounding reads.
+
+## Local / Production Import
+
+```bash
+# Local
+podman cp data/boundaries/insert_hudson.sql rotv:/tmp/
+podman exec rotv psql -U postgres -d rotv -f /tmp/insert_hudson.sql
+# Production (lotor)
+scp -P 22422 data/boundaries/insert_hudson.sql root@lotor.dc3.crunchtools.com:/tmp/
+ssh -p 22422 root@lotor.dc3.crunchtools.com \
+  "podman cp /tmp/insert_hudson.sql rootsofthevalley.org:/tmp/ && \
+   podman exec rootsofthevalley.org psql -U rotv rotv -f /tmp/insert_hudson.sql"
+```
+
+> **Companion fix:** Green Valley Brewing Co. was on `collection_tier='daily'`
+> (migration 043 auto-assigns daily to any POI with a `news_url`/`events_url`;
+> the brewery has a Facebook events URL). Reclassify it to weekly:
+> `UPDATE pois SET collection_tier='weekly' WHERE id=6372;`
 
 
 ---
