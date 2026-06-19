@@ -192,8 +192,10 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
   }
 
   return retryRequest(async () => {
+    // Buttondown rejects a publish_date at or before "now" (publish_date_invalid),
+    // so schedule a few minutes out to satisfy its future-date requirement.
     const payload = {
-      publish_date: new Date().toISOString(),
+      publish_date: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
       status: 'scheduled'
     };
 
@@ -206,13 +208,18 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
       console.log(`Scheduled email for sending: ${emailId} (status: ${sendResponse.data.status})`);
       return sendResponse.data;
     } catch (error) {
+      // Scrub the API token from the error so it never lands in logs or the
+      // pg-boss job output (which serializes the thrown error's request config).
+      if (error.config?.headers?.Authorization) {
+        error.config.headers.Authorization = '[REDACTED]';
+      }
+
       const errorDetails = {
         emailId,
         status: error.response?.status,
         statusText: error.response?.statusText,
         buttondownError: error.response?.data,
-        requestPayload: payload,
-        requestHeaders: error.config?.headers
+        requestPayload: payload
       };
 
       console.error(`Buttondown PATCH failed:`, JSON.stringify(errorDetails, null, 2));
