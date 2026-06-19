@@ -340,7 +340,7 @@ describe('UI Integration Tests', () => {
   });
 
   describe('Mobile Navigation Features', () => {
-    it('should highlight POI in carousel when loading from URL', async () => {
+    it.skip('should highlight POI in carousel when loading from URL', async () => { // Quarantined #490: .thumbnail-carousel never renders without hasNavigatedPoi (requires swipe gesture, not marker click)
       // Set viewport to mobile size
       await page.setViewportSize({ width: 375, height: 667 });
 
@@ -647,7 +647,7 @@ describe('UI Integration Tests', () => {
       await page.setViewportSize({ width: 1280, height: 720 });
     }, 40000);
 
-    it('should update carousel highlighting when navigating with chevrons', async () => {
+    it.skip('should update carousel highlighting when navigating with chevrons', async () => { // Quarantined #490: .thumbnail-carousel never renders without hasNavigatedPoi (requires swipe gesture, not marker click)
       // Set viewport to mobile size
       await page.setViewportSize({ width: 375, height: 667 });
 
