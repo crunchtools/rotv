@@ -15,22 +15,32 @@ export default function usePoiMedia(poi, onPoiUpdate) {
   });
 
   useEffect(() => {
+    // Clear the previous POI's media immediately so we never flash a stale
+    // image while the newly selected POI's media is still loading.
+    setMedia([]);
+    setAllMedia([]);
+
     if (!poiId) return;
 
+    let cancelled = false;
     setMediaLoading(true);
     fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
       .then(res => res.ok ? res.json() : { mosaic: [], all_media: [] })
       .then(mediaResponse => {
+        if (cancelled) return; // Ignore a response that lands after the POI changed
         setMedia(mediaResponse.mosaic || []);
         setAllMedia(mediaResponse.all_media || []);
         setMediaLoading(false);
       })
       .catch(err => {
+        if (cancelled) return;
         console.error('Failed to load media:', err);
         setMedia([]);
         setAllMedia([]);
         setMediaLoading(false);
       });
+
+    return () => { cancelled = true; };
   }, [poiId]);
 
   useEffect(() => {

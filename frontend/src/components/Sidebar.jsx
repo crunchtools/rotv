@@ -76,7 +76,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [hasGauges, setHasGauges] = useState(null);
   const [servingTaxis, setServingTaxis] = useState([]);
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => window.innerWidth < 768);
-  const [mobilePhotosVisible, setMobilePhotosVisible] = useState(false);
   const [hasNavigatedPoi, setHasNavigatedPoi] = useState(false);
 
   useEffect(() => {
@@ -118,18 +117,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwipingHorizontally, setIsSwipingHorizontally] = useState(false);
 
-  const lastNavigationTime = React.useRef(0);
-  const NAVIGATION_DEBOUNCE_MS = 300;
-
-  const debouncedNavigate = (direction) => {
-    const now = Date.now();
-    if (now - lastNavigationTime.current < NAVIGATION_DEBOUNCE_MS) {
-      return; // Ignore rapid taps
-    }
-    lastNavigationTime.current = now;
-    onNavigate(direction);
-  };
-
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener('resize', handleResize);
@@ -139,10 +126,9 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const handleTouchStart = (e) => {
     const target = e.target;
     const isCarousel = target.closest('.thumbnail-carousel-wrapper, .thumbnail-carousel');
-    const isNavButton = target.closest('.image-nav-btn');
     const isGaugeCarousel = target.closest('.river-levels-tab');
 
-    if (isCarousel || isNavButton || isGaugeCarousel) {
+    if (isCarousel || isGaugeCarousel) {
       touchStartX.current = null;
       touchStartY.current = null;
       return;
@@ -285,7 +271,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
       setIsSidebarExpanded(isMobile);
-      setMobilePhotosVisible(false);
       // Respect a deep-linked subtab (e.g. /poi/river_levels) instead of forcing Info.
       if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
@@ -705,39 +690,12 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 ←
               </button>
             )}
-            {isMobile && !isEditing && (
-              <button
-                className="sidebar-expand-btn"
-                onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
-                title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
-                aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
-              >
-                {isSidebarExpanded ? (
-                  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                    <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
-                  </svg>
-                ) : (
-                  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                    <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                  </svg>
-                )}
-              </button>
-            )}
             <button className="close-btn" onClick={onClose}>&times;</button>
           </div>
         </div>
 
         <div style={{ position: 'relative' }}>
-          {isMobile && !mobilePhotosVisible && !isEditing ? (
-            media.length > 0 ? (
-              <button
-                className="sidebar-show-photos-btn"
-                onClick={() => setMobilePhotosVisible(true)}
-              >
-                Show Photos
-              </button>
-            ) : null
-          ) : (
+          {(
             <>
               {isEditing && linearFeature?.id ? (
                 <ImageUploader
@@ -764,45 +722,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                   </button>
                 </div>
               ) : null}
-
-              {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
-                <>
-                  {currentIndex > 0 && (
-                    <button
-                      className="image-nav-btn image-nav-prev"
-                      onTouchEnd={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        debouncedNavigate('prev');
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      aria-label="Previous POI"
-                    >
-                      <span className="image-nav-chevron">‹</span>
-                    </button>
-                  )}
-                  {currentIndex < poiNavigationList.length - 1 && (
-                    <button
-                      className="image-nav-btn image-nav-next"
-                      onTouchEnd={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        debouncedNavigate('next');
-                      }}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                      }}
-                      aria-label="Next POI"
-                    >
-                      <span className="image-nav-chevron">›</span>
-                    </button>
-                  )}
-                </>
-              )}
             </>
           )}
         </div>
@@ -1035,39 +954,12 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
               </button>
             </>
           )}
-          {isMobile && !isEditing && (
-            <button
-              className="sidebar-expand-btn"
-              onClick={() => { setIsSidebarExpanded(prev => { if (prev) setMobilePhotosVisible(false); return !prev; }); }}
-              title={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
-              aria-label={isSidebarExpanded ? 'Collapse panel' : 'Expand panel'}
-            >
-              {isSidebarExpanded ? (
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                  <path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z"/>
-                </svg>
-              ) : (
-                <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-                  <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
-                </svg>
-              )}
-            </button>
-          )}
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>
       </div>
 
       <div style={{ position: 'relative' }}>
-        {isMobile && !mobilePhotosVisible && !isEditing ? (
-          media.length > 0 ? (
-            <button
-              className="sidebar-show-photos-btn"
-              onClick={() => setMobilePhotosVisible(true)}
-            >
-              Show Photos
-            </button>
-          ) : null
-        ) : (
+        {(
           <>
             {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
               permalinkItem ? (
@@ -1100,45 +992,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 </button>
               </div>
             ) : null}
-
-            {isMobile && !isEditing && !permalinkInfo && onNavigate && poiNavigationList && poiNavigationList.length > 1 && media.length > 0 && (
-              <>
-                {currentIndex > 0 && (
-                  <button
-                    className="image-nav-btn image-nav-prev"
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      debouncedNavigate('prev');
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    aria-label="Previous POI"
-                  >
-                    <span className="image-nav-chevron">‹</span>
-                  </button>
-                )}
-                {currentIndex < poiNavigationList.length - 1 && (
-                  <button
-                    className="image-nav-btn image-nav-next"
-                    onTouchEnd={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      debouncedNavigate('next');
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    aria-label="Next POI"
-                  >
-                    <span className="image-nav-chevron">›</span>
-                  </button>
-                )}
-              </>
-            )}
           </>
         )}
       </div>
