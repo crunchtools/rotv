@@ -31,29 +31,14 @@
   align-items: center;
 }
 
-/* Close Button */
-.lightbox-close {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  background: rgba(255, 255, 255, 0.2);
-  border: none;
-  color: white;
-  font-size: 32px;
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  cursor: pointer;
+/* Header bar — reuses .sidebar-header + .close-btn (App.css) for identical size/font/X.
+   Only the background colour differs, to signal a different navigational context. */
+.sidebar-header.lightbox-header {
+  background: #4a4a4a;
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
   z-index: 10002;
-  transition: background-color 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.lightbox-close:hover {
-  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Navigation Arrows */
@@ -96,16 +81,6 @@
   align-items: center;
   padding: 10px 0;
   flex-shrink: 0;
-}
-
-/* Counter */
-.lightbox-counter {
-  background: rgba(0, 0, 0, 0.6);
-  color: white;
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 13px;
-  margin-bottom: 8px;
 }
 
 /* Thumbnail Strip */

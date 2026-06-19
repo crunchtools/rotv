@@ -832,7 +832,7 @@ body {
   padding: 1rem 1.5rem;
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
 }
 
 .sidebar-header h2 {
@@ -1437,44 +1437,6 @@ body {
 }
 
 /* Image navigation chevrons - faded grey */
-.image-nav-btn {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  background: rgba(128, 128, 128, 0.3);
-  border: none;
-  padding: 0;
-  width: 44px;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s;
-  z-index: 5;
-}
-
-.image-nav-btn:hover {
-  background: rgba(128, 128, 128, 0.5);
-}
-
-.image-nav-prev {
-  left: 8px;
-  border-radius: 0 4px 4px 0;
-}
-
-.image-nav-next {
-  right: 8px;
-  border-radius: 4px 0 0 4px;
-}
-
-.image-nav-chevron {
-  font-size: 32px;
-  font-weight: 300;
-  color: rgba(255, 255, 255, 0.8);
-  line-height: 1;
-}
-
 /* Swipe direction indicators - blue like Chrome's */
 .swipe-indicator {
   position: fixed;

@@ -218,41 +218,21 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
       onTouchEnd={handleTouchEnd}
     >
       <div className="lightbox-container" onClick={(e) => e.stopPropagation()}>
-        {/* Close Button */}
-        <button
-          className="lightbox-close"
-          onClick={onClose}
-          aria-label="Close lightbox"
-        >
-          ✕
-        </button>
+        {/* Header bar — reuses .sidebar-header + .close-btn for identical size/font; only colour + text differ to signal a different navigational context */}
+        <div className="sidebar-header lightbox-header">
+          <h2>{currentIndex + 1} / {media.length}</h2>
+          <button
+            className="close-btn"
+            onClick={onClose}
+            aria-label="Close lightbox"
+          >
+            &times;
+          </button>
+        </div>
 
-        {/* Navigation Arrows */}
+        {/* Thumbnail strip */}
         {media.length > 1 && (
-          <>
-            <button
-              className="lightbox-arrow lightbox-arrow-left"
-              onClick={handlePrevious}
-              aria-label="Previous"
-            >
-              ‹
-            </button>
-            <button
-              className="lightbox-arrow lightbox-arrow-right"
-              onClick={handleNext}
-              aria-label="Next"
-            >
-              ›
-            </button>
-          </>
-        )}
-
-        {/* Top bar: counter + thumbnail strip */}
-        <div className="lightbox-top-bar">
-          <div className="lightbox-counter">
-            {currentIndex + 1} / {media.length}
-          </div>
-          {media.length > 1 && (
+          <div className="lightbox-top-bar">
             <div className="lightbox-thumbnails" ref={thumbnailsRef}>
               {media.map((item, index) => (
                 <div
@@ -287,11 +267,31 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Main Media with badges overlaid */}
         <div className="lightbox-main">
+          {/* Navigation Arrows — centered on the media area */}
+          {media.length > 1 && (
+            <>
+              <button
+                className="lightbox-arrow lightbox-arrow-left"
+                onClick={handlePrevious}
+                aria-label="Previous"
+              >
+                ‹
+              </button>
+              <button
+                className="lightbox-arrow lightbox-arrow-right"
+                onClick={handleNext}
+                aria-label="Next"
+              >
+                ›
+              </button>
+            </>
+          )}
+
           {renderMedia()}
 
           {/* Badges positioned over the image */}
