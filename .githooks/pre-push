@@ -5,7 +5,7 @@
 
 set -e
 
-GATEHOUSE_IMAGE="quay.io/fatherlinux/gatehouse:latest"
+GATEHOUSE_IMAGE="quay.io/crunchtools/gatehouse:latest"
 ENV_FILE="$HOME/.config/mcp-env/gatehouse.env"
 
 # Load API key from env file
