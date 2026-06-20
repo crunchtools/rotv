@@ -360,6 +360,27 @@ describe('UI Integration Tests', () => {
         state: 'visible'
       });
 
+      // The carousel only renders after the first swipe (hasNavigatedPoi gate in Sidebar.jsx).
+      // Simulate a left swipe on the sidebar to trigger navigation and reveal the carousel.
+      await page.evaluate(() => {
+        const sidebar = document.querySelector('.sidebar');
+        if (!sidebar) return;
+        const r = sidebar.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const mk = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: cy, pageX: x, pageY: cy, screenX: x, screenY: cy });
+        const fire = (type, x) => sidebar.dispatchEvent(new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [mk(x)],
+          changedTouches: [mk(x)],
+          targetTouches: type === 'touchend' ? [] : [mk(x)],
+          bubbles: true, cancelable: true
+        }));
+        fire('touchstart', cx + 70);
+        fire('touchmove', cx);
+        fire('touchend', cx - 70);
+      });
+      await page.waitForTimeout(500);
+
       // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
@@ -659,15 +680,38 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+
+      // The carousel only renders after the first swipe (hasNavigatedPoi gate in Sidebar.jsx).
+      // Simulate a left swipe on the sidebar to trigger navigation and reveal the carousel.
+      await page.evaluate(() => {
+        const sidebar = document.querySelector('.sidebar');
+        if (!sidebar) return;
+        const r = sidebar.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const mk = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: cy, pageX: x, pageY: cy, screenX: x, screenY: cy });
+        const fire = (type, x) => sidebar.dispatchEvent(new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [mk(x)],
+          changedTouches: [mk(x)],
+          targetTouches: type === 'touchend' ? [] : [mk(x)],
+          bubbles: true, cancelable: true
+        }));
+        fire('touchstart', cx + 70);
+        fire('touchmove', cx);
+        fire('touchend', cx - 70);
+      });
+      await page.waitForTimeout(500);
+
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails
       const thumbnailCount = await page.locator('.thumbnail-item').count();
       expect(thumbnailCount).toBeGreaterThan(0);
 
-      // Check which navigation buttons exist
+      // image-nav-btn chevrons were removed in PR #473 (on-photo arrows removed,
+      // swipe + thumbnail strip remain for navigation). Check presence gracefully.
       const nextButtonExists = await page.locator('.image-nav-btn.image-nav-next').count() > 0;
       const prevButtonExists = await page.locator('.image-nav-btn.image-nav-prev').count() > 0;
 

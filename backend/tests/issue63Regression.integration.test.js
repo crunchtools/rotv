@@ -102,9 +102,9 @@ describe('Issue #63 Regression Tests', () => {
       await page.setViewportSize({ width: 375, height: 667 });
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Wait for markers and click one
+      // Wait for markers and click one — 1000ms lets Leaflet fully bind click handlers
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar and transition to complete (0.3s CSS transition)
@@ -138,8 +138,30 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+
+      // The carousel only renders after the first swipe (hasNavigatedPoi gate in Sidebar.jsx).
+      // Simulate a left swipe on the sidebar to trigger navigation and reveal the carousel.
+      await page.evaluate(() => {
+        const sidebar = document.querySelector('.sidebar');
+        if (!sidebar) return;
+        const r = sidebar.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const mk = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: cy, pageX: x, pageY: cy, screenX: x, screenY: cy });
+        const fire = (type, x) => sidebar.dispatchEvent(new TouchEvent(type, {
+          touches: type === 'touchend' ? [] : [mk(x)],
+          changedTouches: [mk(x)],
+          targetTouches: type === 'touchend' ? [] : [mk(x)],
+          bubbles: true, cancelable: true
+        }));
+        fire('touchstart', cx + 70);
+        fire('touchmove', cx);
+        fire('touchend', cx - 70);
+      });
+      await page.waitForTimeout(500);
+
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
