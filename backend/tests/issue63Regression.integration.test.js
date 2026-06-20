@@ -111,20 +111,20 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
       await page.waitForTimeout(500);
 
-      // Check sidebar positioning
+      // Check sidebar visual position — expanded mobile sidebar is position:fixed top:0
       const sidebarPosition = await page.evaluate(() => {
         const sidebar = document.querySelector('.sidebar');
         if (!sidebar) return null;
 
-        const style = getComputedStyle(sidebar);
+        const rect = sidebar.getBoundingClientRect();
         return {
-          top: style.top,
-          topPx: parseInt(style.top, 10)
+          top: rect.top,
+          topPx: Math.round(rect.top)
         };
       });
 
       expect(sidebarPosition).not.toBeNull();
-      // Should be flush with top (0px) - carousel fills the green header area
+      // Expanded mobile sidebar covers full viewport from top (position:fixed top:0)
       expect(sidebarPosition.topPx).toBe(0);
 
       await page.setViewportSize({ width: 1280, height: 720 });
@@ -138,8 +138,17 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar to open, then swipe to trigger hasNavigatedPoi (carousel requires navigation)
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await page.evaluate(() => {
+        const sidebar = document.querySelector('.sidebar.open');
+        if (!sidebar) return;
+        const ts = new Touch({ identifier: 0, target: sidebar, clientX: 300, clientY: 400 });
+        const te = new Touch({ identifier: 0, target: sidebar, clientX: 200, clientY: 400 });
+        sidebar.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [ts], targetTouches: [ts], changedTouches: [ts] }));
+        sidebar.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [te], targetTouches: [te], changedTouches: [te] }));
+        sidebar.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [te] }));
+      });
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content

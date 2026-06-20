@@ -360,6 +360,17 @@ describe('UI Integration Tests', () => {
         state: 'visible'
       });
 
+      // Swipe to trigger hasNavigatedPoi = true (carousel only renders after navigation)
+      await page.evaluate(() => {
+        const sidebar = document.querySelector('.sidebar.open');
+        if (!sidebar) return;
+        const ts = new Touch({ identifier: 0, target: sidebar, clientX: 300, clientY: 400 });
+        const te = new Touch({ identifier: 0, target: sidebar, clientX: 200, clientY: 400 });
+        sidebar.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [ts], targetTouches: [ts], changedTouches: [ts] }));
+        sidebar.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [te], targetTouches: [te], changedTouches: [te] }));
+        sidebar.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [te] }));
+      });
+
       // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
@@ -659,8 +670,17 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar, then swipe to trigger hasNavigatedPoi (carousel only renders after navigation)
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await page.evaluate(() => {
+        const sidebar = document.querySelector('.sidebar.open');
+        if (!sidebar) return;
+        const ts = new Touch({ identifier: 0, target: sidebar, clientX: 300, clientY: 400 });
+        const te = new Touch({ identifier: 0, target: sidebar, clientX: 200, clientY: 400 });
+        sidebar.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [ts], targetTouches: [ts], changedTouches: [ts] }));
+        sidebar.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [te], targetTouches: [te], changedTouches: [te] }));
+        sidebar.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], targetTouches: [], changedTouches: [te] }));
+      });
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails
