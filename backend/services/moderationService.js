@@ -414,7 +414,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         if (row.date_signals) {
           const signals = row.date_signals;
           consensus = scoreDateConsensus(
-            { jsonLd: signals.jsonLd || [], meta: signals.meta || [], timeTags: signals.timeTags || [], url: signals.url || null, searchDate: signals.searchDate || null },
+            { jsonLd: signals.jsonLd || [], meta: signals.meta || [], timeTags: signals.timeTags || [], url: signals.url || null, searchDate: signals.searchDate || null, social: signals.social || [] },
             signals.llmVotes || []
           );
         } else {
@@ -436,11 +436,13 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
           consensus = await scoreDate(pool, {
             title: row.title, description: row.description,
             pageContent,
+            threshold: effectiveThreshold,
             sources: {
               jsonLd: ogDates.jsonLdDates || [],
               meta: [ogDates.publishedTime, ogDates.parselyPubDate, ogDates.dcDate].filter(Boolean),
               timeTags: ogDates.timeDates || [],
-              url: extractUrlDate(row.source_url)
+              url: extractUrlDate(row.source_url),
+              social: ogDates.socialDates || []
             }
           });
         }
@@ -885,7 +887,8 @@ export async function fixDate(pool, contentType, contentId) {
       meta: signals.meta || [],
       timeTags: signals.timeTags || [],
       url: signals.url || null,
-      searchDate: signals.searchDate || null
+      searchDate: signals.searchDate || null,
+      social: signals.social || []
     };
     consensus = scoreDateConsensus(deterministicSources, signals.llmVotes || []);
   } else {
@@ -912,7 +915,8 @@ export async function fixDate(pool, contentType, contentId) {
         jsonLd: ogDates.jsonLdDates || [],
         meta: [ogDates.publishedTime, ogDates.parselyPubDate, ogDates.dcDate].filter(Boolean),
         timeTags: ogDates.timeDates || [],
-        url: extractUrlDate(item.source_url)
+        url: extractUrlDate(item.source_url),
+        social: ogDates.socialDates || []
       }
     });
   }
