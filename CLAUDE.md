@@ -97,6 +97,69 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 
 ---
 
+## Architecture Map
+
+### Frontend (React 18 + Vite 5)
+- `frontend/src/App.jsx` — main app component, routing, state management (~2500 lines)
+- `frontend/src/App.css` — all styles including media queries (mobile breakpoint: 768px)
+- `frontend/src/components/Map.jsx` — Leaflet map with marker clusters
+- `frontend/src/components/Sidebar.jsx` — POI detail panel with tabs (info, news, events, media)
+- `frontend/src/components/BackButton.jsx` — shared back navigation
+- `frontend/src/utils/anonSettings.js` — localStorage helpers for anonymous user state
+
+### Backend (Node.js 20 + Express)
+- `backend/server.js` — Express app setup, route mounting, MCP server startup
+- `backend/routes/` — API route handlers (admin, auth, pois, news, events, media, etc.)
+- `backend/services/` — business logic (collection, moderation, newsletter, geocoding, MCP)
+- `backend/services/mcpServer.js` — MCP admin server on port 3001 (30 tools)
+- `backend/services/moderationService.js` — AI moderation with Gemini scoring
+- `backend/services/newsService.js` — News/events web crawling pipeline
+
+### Database (PostgreSQL 17 + PostGIS)
+- Schema created by `backend/server.js` initDatabase() on first run
+- Migrations in `backend/migrations/*.sql` — run by rotv-init.service, NOT on every restart
+- Seed data: `backend/tests/fixtures/test-seed-data.sql` (INSERT-only, no schema, no poi_media rows)
+
+### Tests
+- `backend/tests/*.integration.test.js` — Playwright integration tests against live app
+- `backend/tests/*.unit.test.js` — Vitest unit tests
+- ALWAYS use `./run.sh test`, never `npx vitest run` directly
+- Test seed has NO poi_media rows — tests needing media must handle absence gracefully
+
+### Key Relationships
+- Carousel rendering requires `hasNavigatedPoi=true` (marker click alone won't show it)
+- Mobile layout triggers at `max-width: 768px` in App.css media queries
+- `./run.sh reload-app` copies code only — does NOT reload env vars (use stop/start for env changes)
+- Image serving: `IMAGE_SERVER_URL` → images.rootsofthevalley.org (container-to-container)
+
+---
+
+## Agent Guidance
+
+### For test-fix issues
+1. Read the failing test file(s) named in the issue
+2. Read the component/service under test to understand current behavior
+3. Fix the tests to match current behavior
+4. Do NOT explore unrelated files (CSS, git history, other components) unless the test failure points there
+
+### For frontend issues
+- Start with App.jsx for state/routing, then the specific component
+- Check App.css for styling — all styles are in this one file
+- Mobile issues: look at the 768px media query block in App.css
+
+### For backend/API issues
+- Start with the route handler in backend/routes/
+- Business logic is in backend/services/ (same name as the route usually)
+- Database schema is created in server.js initDatabase()
+
+### Gotchas
+- `CREATE OR REPLACE VIEW` fails if columns changed — must DROP first
+- Migrations only run on fresh DB init, not on restart — apply manually on deploy
+- Test seed data is INSERT-only with no schema (server creates schema)
+- Multiple Claude Code sessions clobber each other's containers (same name/port)
+
+---
+
 ## Architecture Documentation
 
 | Document | Contents |
