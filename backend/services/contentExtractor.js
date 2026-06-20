@@ -159,6 +159,23 @@ export async function extractPageContent(url, options = {}) {
           if (dt) timeDates.push(dt);
         });
 
+        // Facebook/Instagram post timestamps live in embedded JSON (publish_time /
+        // creation_time / taken_at[_timestamp]) as unix epoch seconds — never in the
+        // article:published_time meta tag that logged-out social pages omit. Harvest them
+        // so the real post date reaches the date gate instead of an LLM guess. (PR #496)
+        const socialDates = [];
+        if (/facebook\.com|instagram\.com/.test(location.hostname)) {
+          const epochRe = /"(?:publish_time|creation_time|taken_at|taken_at_timestamp)"\s*:\s*(\d{9,10})\b/g;
+          document.querySelectorAll('script').forEach(s => {
+            const txt = s.textContent || '';
+            let m;
+            while ((m = epochRe.exec(txt)) !== null) {
+              const secs = parseInt(m[1], 10);
+              if (secs > 0) socialDates.push(new Date(secs * 1000).toISOString().substring(0, 10));
+            }
+          });
+        }
+
         return {
           publishedTime: getMeta('article:published_time'),
           modifiedTime: getMeta('article:modified_time'),
@@ -166,6 +183,7 @@ export async function extractPageContent(url, options = {}) {
           dcDate: getMetaName('dc.date'),
           jsonLdDates,
           timeDates,
+          socialDates,
           eventStartDate,
           eventEndDate
         };

@@ -109,6 +109,13 @@ describe('scoreDateConsensus', () => {
     expect(result.score).toBe(4);
   });
 
+  it('scores a Facebook/Instagram social timestamp at 4 pts (clears the gate alone)', () => {
+    // PR #496: a real post timestamp is authoritative, so it carries the date by itself.
+    const result = scoreDateConsensus({ social: ['2025-07-11'] }, []);
+    expect(result.date).toBe('2025-07-11');
+    expect(result.score).toBe(4);
+  });
+
   it('scores JSON-LD + matching URL at 5 pts', () => {
     const result = scoreDateConsensus({
       jsonLd: ['2024-03-15'],
@@ -125,6 +132,16 @@ describe('scoreDateConsensus', () => {
     );
     expect(result.date).toBe('2024-06-01');
     expect(result.score).toBe(3);
+  });
+
+  it('4 unanimous LLM votes score 4 pts (meets the default threshold on their own)', () => {
+    // PR #496: the date gate auto-publishes an untrusted, tag-less date only on full unanimity.
+    const result = scoreDateConsensus(
+      {},
+      ['2024-06-01', '2024-06-01', '2024-06-01', '2024-06-01']
+    );
+    expect(result.date).toBe('2024-06-01');
+    expect(result.score).toBe(4);
   });
 
   it('LLM votes + agreeing JSON-LD scores 7 pts', () => {

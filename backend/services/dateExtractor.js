@@ -164,7 +164,8 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
     meta:      normList(rawSources.meta),
     timeTags:  normList(rawSources.timeTags),
     url:       norm(rawSources.url),
-    searchDate: norm(rawSources.searchDate)
+    searchDate: norm(rawSources.searchDate),
+    social:    normList(rawSources.social)
   };
 }
 
@@ -188,6 +189,11 @@ export function scoreDeterministicSources(sources = {}) {
   // Facebook/blog sources with no on-page date), so weight them on par with JSON-LD —
   // an SE date alone then clears the date gate. (spec 030)
   add(sources.searchDate, 4, 'search-date');
+  // Facebook/Instagram post timestamps (publish_time/taken_at/uploadDate) are the post's
+  // authoritative structural date — weight them on par with JSON-LD so a real social
+  // timestamp clears the gate on its own, instead of leaving social content (~half the
+  // moderation queue) to LLM date guesses that the date gate then distrusts. (PR #496)
+  for (const d of (sources.social || [])) add(d, 4, 'social-timestamp');
 
   return { scores, sourceMap };
 }

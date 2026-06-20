@@ -160,4 +160,16 @@ describe('Date gate (spec 030)', () => {
     expect(evaluateDateGate(future, 6, 'https://cleveland.com/x', cfg).verdict).toBe('review');
     expect(evaluateDateGate(future, 6, 'https://cleveland.com/x', { ...cfg, allowFuture: true }).verdict).toBe('pass');
   });
+
+  // PR #496: 4 unanimous LLM voters score exactly 4, meeting the threshold, so a clean date
+  // with no machine-readable tag auto-publishes from an untrusted source only on unanimity.
+  test('untrusted source passes when unanimous voters reach threshold (score 4)', () => {
+    const g = evaluateDateGate('2021-12-03', 4, 'https://clevelandmagazine.com/a', cfg);
+    expect(g.verdict).toBe('pass');
+    expect(g.trusted_source).toBe(false);
+  });
+
+  test('untrusted source with only 3 of 4 votes (score 3) -> review', () => {
+    expect(evaluateDateGate('2021-12-03', 3, 'https://clevelandmagazine.com/a', cfg).verdict).toBe('review');
+  });
 });
