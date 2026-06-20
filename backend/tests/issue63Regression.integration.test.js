@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
+import { simulateSwipeLeft } from './testHelpers.js';
 
 /**
  * Issue #63 Regression Tests
@@ -140,6 +141,7 @@ describe('Issue #63 Regression Tests', () => {
 
       // Wait for sidebar and carousel
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await simulateSwipeLeft(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
