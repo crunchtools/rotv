@@ -111,6 +111,12 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
       await page.waitForTimeout(500);
 
+      // Simulate swipe gesture to trigger carousel rendering
+      await page.dispatchEvent('.sidebar', 'touchstart', { touches: [{ clientX: 300, clientY: 300 }] });
+      await page.dispatchEvent('.sidebar', 'touchmove', { touches: [{ clientX: 100, clientY: 300 }] });
+      await page.dispatchEvent('.sidebar', 'touchend', { changedTouches: [{ clientX: 100, clientY: 300 }] });
+      await page.waitForTimeout(500);
+
       // Check sidebar positioning
       const sidebarPosition = await page.evaluate(() => {
         const sidebar = document.querySelector('.sidebar');
@@ -140,6 +146,13 @@ describe('Issue #63 Regression Tests', () => {
 
       // Wait for sidebar and carousel
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+
+      // Simulate swipe gesture to trigger carousel rendering
+      await page.dispatchEvent('.sidebar', 'touchstart', { touches: [{ clientX: 300, clientY: 300 }] });
+      await page.dispatchEvent('.sidebar', 'touchmove', { touches: [{ clientX: 100, clientY: 300 }] });
+      await page.dispatchEvent('.sidebar', 'touchend', { changedTouches: [{ clientX: 100, clientY: 300 }] });
+      await page.waitForTimeout(500);
+
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
