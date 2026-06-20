@@ -138,8 +138,22 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar to open, then swipe left to set hasNavigatedPoi=true and render carousel
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await page.evaluate(() => {
+        const sidebar = document.querySelector('.sidebar.open');
+        if (!sidebar) return;
+        const rect = sidebar.getBoundingClientRect();
+        const startX = rect.left + rect.width * 0.75;
+        const startY = rect.top + rect.height * 0.5;
+        const endX = startX - 100;
+        const endY = startY;
+        const t0 = new Touch({ identifier: 1, target: sidebar, clientX: startX, clientY: startY });
+        const t1 = new Touch({ identifier: 1, target: sidebar, clientX: endX, clientY: endY });
+        sidebar.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [t0], changedTouches: [t0] }));
+        sidebar.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [t1], changedTouches: [t1] }));
+        sidebar.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [t1] }));
+      });
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
