@@ -1,4 +1,15 @@
 import { extractPageContent } from './contentExtractor.js';
+import { fetchSocialPosts, isSocialUrl } from './apifyService.js';
+
+// Social (Facebook/Instagram) collection via Apify is on by default; absence of the setting
+// means enabled. Read only for social URLs so non-social renders pay no extra query. (spec 036)
+async function isApifySocialEnabled(pool) {
+  try {
+    const r = await pool.query(`SELECT value FROM admin_settings WHERE key = 'social_apify_collection_enabled'`);
+    if (r.rows.length > 0 && r.rows[0].value != null) return String(r.rows[0].value).toLowerCase() !== 'false';
+  } catch { /* default enabled on read failure */ }
+  return true;
+}
 
 const TTL_MS = {
   detail: Infinity,
@@ -40,7 +51,18 @@ export async function renderPage(pool, url, options = {}) {
     }
   } catch (err) { console.error('[Cache] Read failure:', err.message); }
 
-  const rendered = await extractPageContent(url, extractOptions);
+  // Facebook/Instagram pages don't render usefully logged-out, so route them through Apify to
+  // capture the real post timestamp (ogDates.socialDates). If disabled or no token, fall back to
+  // the headless renderer + embedded-timestamp harvest in contentExtractor. (spec 036)
+  const useApify = isSocialUrl(url) && await isApifySocialEnabled(pool);
+  let rendered = useApify
+    ? await fetchSocialPosts(pool, url, 10)
+    : await extractPageContent(url, extractOptions);
+
+  // Apify attempted but unavailable (no token / unreachable) — fall back to the headless renderer.
+  if (useApify && (!rendered || rendered.reachable === false)) {
+    rendered = await extractPageContent(url, extractOptions);
+  }
 
   if (rendered.reachable && rendered.markdown) {
     try {
