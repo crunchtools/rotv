@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
+import { simulateSwipeLeft } from './testHelpers.js';
 
 /**
  * Issue #63 Regression Tests
@@ -140,6 +141,38 @@ describe('Issue #63 Regression Tests', () => {
 
       // Wait for sidebar and carousel
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+
+      // Simulate swipe gesture to trigger hasNavigatedPoi and render carousel
+      const box = await page.locator('.sidebar.open').boundingBox();
+      if (box) {
+        const startX = box.x + box.width * 0.75;
+        const startY = box.y + box.height * 0.5;
+        const endX = startX - 150;
+        await page.evaluate(({ startX, startY, endX }) => {
+          const sidebar = document.querySelector('.sidebar.open');
+          if (!sidebar) return;
+          const mkTouch = (x, y) => new Touch({
+            identifier: 1, target: sidebar,
+            clientX: x, clientY: y, screenX: x, screenY: y, pageX: x, pageY: y,
+            radiusX: 1, radiusY: 1, rotationAngle: 0, force: 1,
+          });
+          const t0 = mkTouch(startX, startY);
+          sidebar.dispatchEvent(new TouchEvent('touchstart', {
+            bubbles: true, cancelable: true,
+            touches: [t0], targetTouches: [t0], changedTouches: [t0],
+          }));
+          const t1 = mkTouch(endX, startY);
+          sidebar.dispatchEvent(new TouchEvent('touchmove', {
+            bubbles: true, cancelable: true,
+            touches: [t1], targetTouches: [t1], changedTouches: [t1],
+          }));
+          sidebar.dispatchEvent(new TouchEvent('touchend', {
+            bubbles: true, cancelable: true,
+            touches: [], targetTouches: [], changedTouches: [t1],
+          }));
+        }, { startX, startY, endX });
+      }
+
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
@@ -192,6 +225,23 @@ describe('Issue #63 Regression Tests', () => {
       // Should have 1rem (16px) margins on sides
       expect(legendPosition.leftPx).toBe(16);
       expect(legendPosition.rightPx).toBe(16);
+
+      await page.setViewportSize({ width: 1280, height: 720 });
+    }, 30000);
+
+    it('should handle left swipe gesture on sidebar without errors', async () => {
+      await page.setViewportSize({ width: 375, height: 667 });
+      await page.goto(baseUrl, { waitUntil: 'networkidle' });
+
+      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
+      await page.locator('.leaflet-marker-icon').first().click();
+      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+
+      await simulateSwipeLeft(page);
+
+      await page.waitForSelector('.sidebar', { timeout: 5000 });
+      const sidebarVisible = await page.locator('.sidebar').isVisible();
+      expect(sidebarVisible).toBe(true);
 
       await page.setViewportSize({ width: 1280, height: 720 });
     }, 30000);

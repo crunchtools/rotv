@@ -171,15 +171,14 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
     const minSwipeDistance = 50;
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > minSwipeDistance) {
+      setHasNavigatedPoi(true);
       if (deltaX > 0) {
         if (currentIndex > 0) {
           onNavigate('prev');
-          setHasNavigatedPoi(true);
         }
       } else {
         if (poiNavigationList && currentIndex < poiNavigationList.length - 1) {
           onNavigate('next');
-          setHasNavigatedPoi(true);
         }
       }
     }
