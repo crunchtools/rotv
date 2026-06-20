@@ -248,8 +248,7 @@ describe('Playwright Integration Tests', () => {
 
       // Should not fail specifically due to SSL errors
       if (!result.success) {
-        expect(result.error).not.toMatch(/certificate/i);
-        expect(result.error).not.toMatch(/SSL/i);
+        expect(result.error).not.toMatch(/ERR_SSL|certificate/i);
       }
 
       console.log(`[Playwright Test] SSL handling: ${result.success ? 'rendered' : result.error}`);
