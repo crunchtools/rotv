@@ -25,6 +25,40 @@ async function openPoiWithMoreInfo(page, baseUrl) {
   return null;
 }
 
+// The ThumbnailCarousel only mounts after the user navigates between POIs
+// (Sidebar.jsx gates it on `hasNavigatedPoi`, set true on the first swipe/chevron
+// navigation) — opening a POI no longer shows it on first paint. Simulate a
+// horizontal swipe on the open sidebar to trigger navigation so the carousel
+// renders. Tries "next" first, then "prev" in case the open POI is at the start
+// of the navigation list. Returns true once the carousel is present.
+async function showCarouselViaSwipe(page) {
+  const swipe = (direction) => page.evaluate((dir) => {
+    const el = document.querySelector('.sidebar');
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const y = Math.round(rect.top + Math.min(rect.height / 2, 200));
+    const startX = dir === 'next' ? 260 : 110;
+    const endX = dir === 'next' ? 110 : 260;
+    const midX = Math.round((startX + endX) / 2);
+    const mk = (x) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y });
+    const send = (type, x, list) => el.dispatchEvent(new TouchEvent(type, {
+      bubbles: true, cancelable: true,
+      touches: list, targetTouches: list, changedTouches: [mk(x)],
+    }));
+    send('touchstart', startX, [mk(startX)]);
+    send('touchmove', midX, [mk(midX)]);
+    send('touchend', endX, []);
+  }, direction);
+
+  await swipe('next');
+  await page.waitForTimeout(400);
+  if (await page.locator('.thumbnail-carousel').count() === 0) {
+    await swipe('prev');
+    await page.waitForTimeout(400);
+  }
+  return (await page.locator('.thumbnail-carousel').count()) > 0;
+}
+
 describe('UI Integration Tests', () => {
   let browser;
   let page;
@@ -360,6 +394,9 @@ describe('UI Integration Tests', () => {
         state: 'visible'
       });
 
+      // Carousel renders only after the first POI navigation — trigger a swipe.
+      await showCarouselViaSwipe(page);
+
       // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
@@ -659,8 +696,9 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar, then trigger navigation so the carousel renders
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await showCarouselViaSwipe(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails
