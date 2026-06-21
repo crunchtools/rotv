@@ -1,6 +1,35 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
 
+// Simulate a horizontal swipe on the open sidebar to trigger hasNavigatedPoi=true
+// in Sidebar.jsx, which is required for the ThumbnailCarousel to render.
+async function triggerCarouselViaSwipe(page) {
+  await page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar.open');
+    if (!sidebar) return;
+    const rect = sidebar.getBoundingClientRect();
+    const midY = rect.top + rect.height * 0.4;
+    const startX = rect.left + rect.width * 0.75;
+    const endX = rect.left + rect.width * 0.2;
+    const mkTouch = (x, y) => new Touch({
+      identifier: 1, target: sidebar,
+      clientX: x, clientY: y, pageX: x, pageY: y, screenX: x, screenY: y,
+      radiusX: 1, radiusY: 1, rotationAngle: 0, force: 1
+    });
+    sidebar.dispatchEvent(new TouchEvent('touchstart', {
+      bubbles: true, cancelable: true, view: window,
+      touches: [mkTouch(startX, midY)], targetTouches: [mkTouch(startX, midY)],
+      changedTouches: [mkTouch(startX, midY)]
+    }));
+    sidebar.dispatchEvent(new TouchEvent('touchend', {
+      bubbles: true, cancelable: true, view: window,
+      touches: [], targetTouches: [],
+      changedTouches: [mkTouch(endX, midY)]
+    }));
+  });
+  await page.waitForTimeout(500);
+}
+
 /**
  * Issue #63 Regression Tests
  *
@@ -138,8 +167,9 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar, then swipe to trigger hasNavigatedPoi=true so carousel renders
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await triggerCarouselViaSwipe(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
