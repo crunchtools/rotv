@@ -1,6 +1,44 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
 
+// Navigate to the first resolvable POI via URL slug. More reliable than clicking
+// a marker on mobile where the first .leaflet-marker-icon may be a cluster.
+async function openFirstPoi(page, baseUrl) {
+  const res = await fetch(`${baseUrl}/api/destinations`);
+  const body = await res.json();
+  const list = Array.isArray(body) ? body : (body.destinations || body.pois || []);
+  for (const poi of list.slice(0, 15)) {
+    const slug = (poi.name || '').toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    if (!slug) continue;
+    await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
+    try {
+      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+      return poi;
+    } catch { continue; }
+  }
+  return null;
+}
+
+// Simulate a horizontal swipe on the sidebar to trigger hasNavigatedPoi=true,
+// which is required for the ThumbnailCarousel to render (since commit 1bd4f00).
+async function simulateSwipe(page) {
+  await page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+    const rect = sidebar.getBoundingClientRect();
+    const startX = rect.left + rect.width * 0.8;
+    const endX = rect.left + rect.width * 0.1;
+    const y = rect.top + rect.height * 0.5;
+    const mkTouch = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: y, pageX: x, pageY: y });
+    const ts = mkTouch(startX);
+    sidebar.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [ts], changedTouches: [ts] }));
+    const te = mkTouch(endX);
+    sidebar.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [te] }));
+  });
+  await page.waitForTimeout(400);
+}
+
 /**
  * Issue #63 Regression Tests
  *
@@ -100,15 +138,13 @@ describe('Issue #63 Regression Tests', () => {
 
     it('should position sidebar flush with top on mobile', async () => {
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Wait for markers and click one
-      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(500);
-      await page.locator('.leaflet-marker-icon').first().click();
+      // Navigate to a POI via URL slug — more reliable than clicking a marker,
+      // which may hit a cluster icon that expands instead of opening the sidebar.
+      const poi = await openFirstPoi(page, baseUrl);
+      expect(poi).not.toBeNull();
 
-      // Wait for sidebar and transition to complete (0.3s CSS transition)
-      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      // Wait for transition to complete (0.3s CSS transition)
       await page.waitForTimeout(500);
 
       // Check sidebar positioning
@@ -132,14 +168,14 @@ describe('Issue #63 Regression Tests', () => {
 
     it('should have 16px bottom padding on thumbnail carousel for spacing', async () => {
       await page.setViewportSize({ width: 375, height: 667 });
-      await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Wait for markers and click one
-      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.locator('.leaflet-marker-icon').first().click();
+      // Navigate via URL slug for reliable sidebar open, then swipe to trigger
+      // hasNavigatedPoi=true so ThumbnailCarousel renders (required since 1bd4f00).
+      const poi = await openFirstPoi(page, baseUrl);
+      expect(poi).not.toBeNull();
+      await simulateSwipe(page);
 
-      // Wait for sidebar and carousel
-      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      // Wait for carousel
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
