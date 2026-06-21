@@ -1,6 +1,36 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
 
+// The ThumbnailCarousel only renders after hasNavigatedPoi=true, which Sidebar.jsx
+// sets on the first touch swipe navigation. Tests that merely click a marker never
+// trigger it. This helper simulates the swipe so the carousel appears.
+async function triggerCarouselDisplay(page) {
+  // Left swipe (next POI) — works unless we're at the last index
+  await page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar.open');
+    if (!sidebar) return;
+    const y = 300;
+    const mk = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: y });
+    sidebar.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [mk(250)], changedTouches: [mk(250)] }));
+    sidebar.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [mk(100)], changedTouches: [mk(100)] }));
+    sidebar.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [mk(100)] }));
+  });
+  await page.waitForTimeout(800);
+  // Fallback: right swipe (prev POI) in case the current POI is last in the list
+  if (await page.locator('.thumbnail-carousel').count() === 0) {
+    await page.evaluate(() => {
+      const sidebar = document.querySelector('.sidebar.open');
+      if (!sidebar) return;
+      const y = 300;
+      const mk = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: y });
+      sidebar.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true, touches: [mk(100)], changedTouches: [mk(100)] }));
+      sidebar.dispatchEvent(new TouchEvent('touchmove', { bubbles: true, cancelable: true, touches: [mk(250)], changedTouches: [mk(250)] }));
+      sidebar.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true, touches: [], changedTouches: [mk(250)] }));
+    });
+    await page.waitForTimeout(800);
+  }
+}
+
 /**
  * Issue #63 Regression Tests
  *
@@ -138,8 +168,9 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar and trigger carousel via swipe (hasNavigatedPoi must be true)
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await triggerCarouselDisplay(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
