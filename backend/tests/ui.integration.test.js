@@ -1,6 +1,43 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
 
+// Simulate a swipe on the open sidebar to set hasNavigatedPoi=true (carousel only renders after navigation).
+// Tries next direction first (left-to-right swipe, deltaX < 0) then falls back to prev.
+async function triggerCarouselNavigation(page) {
+  await page.evaluate(() => {
+    const sidebar = document.querySelector('.sidebar.open');
+    if (!sidebar) return;
+    const y = 300;
+    const mkTouch = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: y });
+    sidebar.dispatchEvent(new TouchEvent('touchstart', {
+      bubbles: true, cancelable: true,
+      touches: [mkTouch(50)], targetTouches: [mkTouch(50)], changedTouches: [mkTouch(50)]
+    }));
+    sidebar.dispatchEvent(new TouchEvent('touchend', {
+      bubbles: true, cancelable: true,
+      touches: [], targetTouches: [], changedTouches: [mkTouch(250)]
+    }));
+  });
+  await page.waitForTimeout(300);
+  if (await page.locator('.thumbnail-carousel').count() === 0) {
+    await page.evaluate(() => {
+      const sidebar = document.querySelector('.sidebar.open');
+      if (!sidebar) return;
+      const y = 300;
+      const mkTouch = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: y });
+      sidebar.dispatchEvent(new TouchEvent('touchstart', {
+        bubbles: true, cancelable: true,
+        touches: [mkTouch(250)], targetTouches: [mkTouch(250)], changedTouches: [mkTouch(250)]
+      }));
+      sidebar.dispatchEvent(new TouchEvent('touchend', {
+        bubbles: true, cancelable: true,
+        touches: [], targetTouches: [], changedTouches: [mkTouch(50)]
+      }));
+    });
+    await page.waitForTimeout(300);
+  }
+}
+
 // Open a POI that has a More Info link via its bare-path permalink (/<slug>),
 // which reliably opens the sidebar on both mobile and desktop. .more-info-link
 // only renders when more_info_link is set, so clicking an arbitrary marker is
@@ -354,11 +391,13 @@ describe('UI Integration Tests', () => {
       const firstMarker = await page.locator('.leaflet-marker-icon').first();
       await firstMarker.click();
 
-      // Wait for sidebar to open
+      // Wait for sidebar to open, then trigger navigation to set hasNavigatedPoi=true
+      // (carousel only renders after a swipe navigation, not after a plain marker click)
       await page.waitForSelector('.sidebar.open', {
         timeout: 10000,
         state: 'visible'
       });
+      await triggerCarouselNavigation(page);
 
       // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
@@ -659,8 +698,10 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar, then trigger navigation to set hasNavigatedPoi=true
+      // (carousel only renders after a swipe navigation, not after a plain marker click)
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await triggerCarouselNavigation(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails
