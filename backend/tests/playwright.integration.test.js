@@ -247,9 +247,11 @@ describe('Playwright Integration Tests', () => {
       expect(result).toHaveProperty('success');
 
       // Should not fail specifically due to SSL errors
+      // Sanitize domain name first — "badssl.com" contains "ssl" which would cause false positives
       if (!result.success) {
-        expect(result.error).not.toMatch(/certificate/i);
-        expect(result.error).not.toMatch(/SSL/i);
+        const sanitizedError = result.error.replace(/badssl\.com/g, '');
+        expect(sanitizedError).not.toMatch(/certificate/i);
+        expect(sanitizedError).not.toMatch(/SSL/i);
       }
 
       console.log(`[Playwright Test] SSL handling: ${result.success ? 'rendered' : result.error}`);

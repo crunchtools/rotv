@@ -360,6 +360,30 @@ describe('UI Integration Tests', () => {
         state: 'visible'
       });
 
+      // Simulate a left swipe to set hasNavigatedPoi=true so the carousel renders
+      const box = await page.locator('.sidebar.open').boundingBox();
+      if (box) {
+        const startX = box.x + box.width * 0.75;
+        const startY = box.y + box.height * 0.5;
+        const endX = startX - 150;
+        await page.evaluate(({ startX, startY, endX }) => {
+          const sidebar = document.querySelector('.sidebar.open');
+          if (!sidebar) return;
+          const dispatchTouchEvent = (type, x, y, changedX, changedY) => {
+            const event = new Event(type, { bubbles: true, cancelable: true });
+            const touch = { identifier: 1, target: sidebar, clientX: x, clientY: y, screenX: x, screenY: y, pageX: x, pageY: y };
+            const changedTouch = { identifier: 1, target: sidebar, clientX: changedX, clientY: changedY, screenX: changedX, screenY: changedY, pageX: changedX, pageY: changedY };
+            Object.defineProperty(event, 'touches', { value: type === 'touchend' ? [] : [touch] });
+            Object.defineProperty(event, 'targetTouches', { value: type === 'touchend' ? [] : [touch] });
+            Object.defineProperty(event, 'changedTouches', { value: [changedTouch] });
+            sidebar.dispatchEvent(event);
+          };
+          dispatchTouchEvent('touchstart', startX, startY, startX, startY);
+          dispatchTouchEvent('touchmove', endX, startY, endX, startY);
+          dispatchTouchEvent('touchend', endX, startY, endX, startY);
+        }, { startX, startY, endX });
+      }
+
       // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
@@ -661,6 +685,30 @@ describe('UI Integration Tests', () => {
 
       // Wait for sidebar and carousel
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+
+      // Simulate a left swipe to set hasNavigatedPoi=true so the carousel renders
+      const box = await page.locator('.sidebar.open').boundingBox();
+      if (box) {
+        const startX = box.x + box.width * 0.75;
+        const startY = box.y + box.height * 0.5;
+        const endX = startX - 150;
+        await page.evaluate(({ startX, startY, endX }) => {
+          const sidebar = document.querySelector('.sidebar.open');
+          if (!sidebar) return;
+          const dispatchTouchEvent = (type, x, y, changedX, changedY) => {
+            const event = new Event(type, { bubbles: true, cancelable: true });
+            const touch = { identifier: 1, target: sidebar, clientX: x, clientY: y, screenX: x, screenY: y, pageX: x, pageY: y };
+            const changedTouch = { identifier: 1, target: sidebar, clientX: changedX, clientY: changedY, screenX: changedX, screenY: changedY, pageX: changedX, pageY: changedY };
+            Object.defineProperty(event, 'touches', { value: type === 'touchend' ? [] : [touch] });
+            Object.defineProperty(event, 'targetTouches', { value: type === 'touchend' ? [] : [touch] });
+            Object.defineProperty(event, 'changedTouches', { value: [changedTouch] });
+            sidebar.dispatchEvent(event);
+          };
+          dispatchTouchEvent('touchstart', startX, startY, startX, startY);
+          dispatchTouchEvent('touchmove', endX, startY, endX, startY);
+          dispatchTouchEvent('touchend', endX, startY, endX, startY);
+        }, { startX, startY, endX });
+      }
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails
