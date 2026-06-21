@@ -36,7 +36,7 @@ import {
   collectPoi,
   saveNewsItems,
   saveEventItems,
-  buildDomainOwnershipMap,
+  buildUriOwnershipMap,
   getCollectionProgress,
   clearProgress,
   updateProgress,
@@ -2803,9 +2803,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         logInfo(runId, 'news_single', poi.id, poi.name, `Saving ${news.length} news items to database...`);
         await flushJobLogs();
 
-        const domainOwnershipMap = await buildDomainOwnershipMap(pool);
+        const uriOwnershipMap = await buildUriOwnershipMap(pool);
         const saveLog = (msg) => { logInfo(runId, 'news_single', poi.id, poi.name, msg); };
-        const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog, domainOwnershipMap });
+        const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog, uriOwnershipMap });
         await flushJobLogs();
 
         updateProgress(poi.id, {
@@ -2901,9 +2901,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         logInfo(runId, 'events_single', poi.id, poi.name, `Saving ${events.length} event items to database...`);
         await flushJobLogs();
 
-        const domainOwnershipMap = await buildDomainOwnershipMap(pool);
+        const uriOwnershipMap = await buildUriOwnershipMap(pool);
         const saveLog = (msg) => { logInfo(runId, 'events_single', poi.id, poi.name, msg); };
-        const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog, domainOwnershipMap });
+        const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog, uriOwnershipMap });
         await flushJobLogs();
 
         updateProgress(poi.id, {
