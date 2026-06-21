@@ -1,30 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
 
-// Open a POI that has a More Info link via its bare-path permalink (/<slug>),
-// which reliably opens the sidebar on both mobile and desktop. .more-info-link
-// only renders when more_info_link is set, so clicking an arbitrary marker is
-// non-deterministic now that amenity POIs without links exist. A given slug may
-// not resolve (e.g. POI not in the loaded set), so try candidates until the
-// sidebar opens with the link. Returns the POI, or null if none resolve.
-async function openPoiWithMoreInfo(page, baseUrl) {
-  const res = await fetch(`${baseUrl}/api/destinations`);
-  const body = await res.json();
-  const list = (Array.isArray(body) ? body : (body.destinations || body.pois || []))
-    .filter(d => /^https?:\/\//i.test(d.more_info_link || ''));
-  for (const poi of list.slice(0, 15)) {
-    // Slug must match frontend/src/App.jsx generateSlug so the permalink resolves.
-    const slug = (poi.name || '').toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
-    try {
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
-    } catch { continue; }
-    if (await page.locator('.more-info-link').count() > 0) return poi;
-  }
-  return null;
-}
-
 describe('UI Integration Tests', () => {
   let browser;
   let page;
@@ -84,9 +60,6 @@ describe('UI Integration Tests', () => {
     it('should toggle satellite mode on and off', async () => {
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Give UI time to fully load
-      await page.waitForTimeout(500);
-
       // Wait for the map controls to render
       await page.waitForSelector('.zoom-locate-control', { timeout: 15000 });
       await page.waitForSelector('.satellite-toggle-button', { timeout: 5000 });
@@ -99,7 +72,6 @@ describe('UI Integration Tests', () => {
             const closeBtn = document.querySelector('.legend .legend-toggle, .legend .close-btn');
             if (closeBtn) closeBtn.click();
           });
-          await page.waitForTimeout(300);
         }
       } catch (e) {
         // Legend not present, continue
@@ -118,8 +90,12 @@ describe('UI Integration Tests', () => {
         if (btn) btn.click();
       });
 
-      // Wait a bit for the class to update
-      await page.waitForTimeout(500);
+      // Wait for active class to appear
+      await page.waitForFunction(
+        () => document.querySelector('.satellite-toggle-button')?.classList.contains('active'),
+        null,
+        { timeout: 5000 }
+      );
 
       // Verify button is now active
       hasActiveClass = await page.evaluate(() => {
@@ -141,8 +117,12 @@ describe('UI Integration Tests', () => {
         if (btn) btn.click();
       });
 
-      // Wait a bit for the class to update
-      await page.waitForTimeout(500);
+      // Wait for active class to be removed
+      await page.waitForFunction(
+        () => !document.querySelector('.satellite-toggle-button')?.classList.contains('active'),
+        null,
+        { timeout: 5000 }
+      );
 
       // Verify button is no longer active
       hasActiveClass = await page.evaluate(() => {
@@ -169,7 +149,6 @@ describe('UI Integration Tests', () => {
       const legend = page.locator('.legend');
       if (await legend.isVisible()) {
         await legend.locator('.legend-toggle, .close-btn').first().click().catch(() => {});
-        await page.waitForTimeout(300);
       }
 
       const satelliteButton = page.locator('.satellite-toggle-button');
@@ -181,8 +160,12 @@ describe('UI Integration Tests', () => {
       // Click satellite toggle to enable satellite mode using evaluate to trigger React event
       await satelliteButton.evaluate(el => el.click());
 
-      // Wait for state change
-      await page.waitForTimeout(1000);
+      // Wait for active class
+      await page.waitForFunction(
+        () => document.querySelector('.satellite-toggle-button')?.classList.contains('active'),
+        null,
+        { timeout: 5000 }
+      );
 
       // Verify button is now active
       hasActiveClass = await satelliteButton.evaluate(el => el.classList.contains('active'));
@@ -195,8 +178,12 @@ describe('UI Integration Tests', () => {
       // Click again to switch back to regular map using evaluate
       await satelliteButton.evaluate(el => el.click());
 
-      // Wait for state change
-      await page.waitForTimeout(1000);
+      // Wait for active class to be removed
+      await page.waitForFunction(
+        () => !document.querySelector('.satellite-toggle-button')?.classList.contains('active'),
+        null,
+        { timeout: 5000 }
+      );
 
       // Verify button is no longer active
       hasActiveClass = await satelliteButton.evaluate(el => el.classList.contains('active'));
@@ -378,7 +365,23 @@ describe('UI Integration Tests', () => {
       // Set viewport to mobile size
       await page.setViewportSize({ width: 375, height: 667 });
 
-      const poi = await openPoiWithMoreInfo(page, baseUrl);
+      // Find a POI with a More Info link via its bare-path permalink (/<slug>).
+      // .more-info-link only renders when more_info_link is set, so an arbitrary
+      // marker click is non-deterministic. Try candidates until sidebar opens with the link.
+      const res = await fetch(`${baseUrl}/api/destinations`);
+      const body = await res.json();
+      const candidates = (Array.isArray(body) ? body : (body.destinations || body.pois || []))
+        .filter(d => /^https?:\/\//i.test(d.more_info_link || ''));
+      let poi = null;
+      for (const candidate of candidates.slice(0, 15)) {
+        const slug = (candidate.name || '').toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
+        try {
+          await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+        } catch { continue; }
+        if (await page.locator('.more-info-link').count() > 0) { poi = candidate; break; }
+      }
       if (!poi) {
         console.warn('[ui] No POI with a More Info link in seed — skipping');
         await page.setViewportSize({ width: 1280, height: 720 });
@@ -388,7 +391,7 @@ describe('UI Integration Tests', () => {
       // Scroll to bottom of Info tab content to make the link visible
       const tabContent = await page.locator('.sidebar-tab-content');
       await tabContent.evaluate(el => el.scrollTop = el.scrollHeight);
-      await page.waitForTimeout(300);
+      await page.waitForSelector('.more-info-link', { timeout: 5000 });
 
       // Verify More Info link exists at bottom of scrollable content
       const moreInfoLink = await page.locator('.more-info-link');
@@ -407,7 +410,23 @@ describe('UI Integration Tests', () => {
       // Set viewport to mobile size
       await page.setViewportSize({ width: 375, height: 667 });
 
-      const poi = await openPoiWithMoreInfo(page, baseUrl);
+      // Find a POI with a More Info link via its bare-path permalink (/<slug>).
+      // .more-info-link only renders when more_info_link is set, so an arbitrary
+      // marker click is non-deterministic. Try candidates until sidebar opens with the link.
+      const res = await fetch(`${baseUrl}/api/destinations`);
+      const body = await res.json();
+      const candidates = (Array.isArray(body) ? body : (body.destinations || body.pois || []))
+        .filter(d => /^https?:\/\//i.test(d.more_info_link || ''));
+      let poi = null;
+      for (const candidate of candidates.slice(0, 15)) {
+        const slug = (candidate.name || '').toLowerCase()
+          .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+        await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
+        try {
+          await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+        } catch { continue; }
+        if (await page.locator('.more-info-link').count() > 0) { poi = candidate; break; }
+      }
       if (!poi) {
         console.warn('[ui] No POI with a More Info link in seed — skipping');
         await page.setViewportSize({ width: 1280, height: 720 });
@@ -417,7 +436,7 @@ describe('UI Integration Tests', () => {
       // More Info link is at bottom of scrollable content, so scroll down to see it
       const tabContent = await page.locator('.sidebar-tab-content');
       await tabContent.evaluate(el => el.scrollTop = el.scrollHeight);
-      await page.waitForTimeout(300);
+      await page.waitForSelector('.more-info-link', { timeout: 5000 });
 
       // Verify More Info link appears at bottom of content
       const moreInfoLink = await page.locator('.more-info-link');
@@ -426,7 +445,6 @@ describe('UI Integration Tests', () => {
 
       // Scroll back up - link should move out of view (not fixed)
       await tabContent.evaluate(el => el.scrollTop = 0);
-      await page.waitForTimeout(300);
 
       // Link should still exist but may not be in viewport (it scrolls with content)
       const linkCount = await moreInfoLink.count();
@@ -445,12 +463,11 @@ describe('UI Integration Tests', () => {
 
       // Wait for map markers and click one to open sidebar
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar to open and transition to settle
+      // Wait for sidebar to open and content to settle
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.sidebar-header h2', { timeout: 5000 });
 
       // Navigation buttons only appear when: mobile, multiple POIs, and POI has media.
       // Check without throwing — if conditions aren't met, verify absence and move on.
@@ -477,7 +494,11 @@ describe('UI Integration Tests', () => {
           const btn = document.querySelector('.image-nav-btn.image-nav-next');
           if (btn) btn.click();
         });
-        await page.waitForTimeout(800);
+        await page.waitForFunction(
+          (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+          initialName,
+          { timeout: 3000 }
+        ).catch(() => {});
 
         // Verify POI changed (or stay same if at boundary)
         const newName = await getHeaderText();
@@ -495,7 +516,11 @@ describe('UI Integration Tests', () => {
             const btn = document.querySelector('.image-nav-btn.image-nav-prev');
             if (btn) btn.click();
           });
-          await page.waitForTimeout(800);
+          await page.waitForFunction(
+            (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+            newName,
+            { timeout: 3000 }
+          ).catch(() => {});
 
           // Verify we're back to original POI
           const finalName = await getHeaderText();
@@ -507,7 +532,11 @@ describe('UI Integration Tests', () => {
           const btn = document.querySelector('.image-nav-btn.image-nav-prev');
           if (btn) btn.click();
         });
-        await page.waitForTimeout(800);
+        await page.waitForFunction(
+          (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+          initialName,
+          { timeout: 3000 }
+        ).catch(() => {});
 
         // Verify POI changed
         const newName = await getHeaderText();
@@ -519,7 +548,11 @@ describe('UI Integration Tests', () => {
             const btn = document.querySelector('.image-nav-btn.image-nav-next');
             if (btn) btn.click();
           });
-          await page.waitForTimeout(800);
+          await page.waitForFunction(
+            (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+            newName,
+            { timeout: 3000 }
+          ).catch(() => {});
 
           // Verify we're back
           const finalName = await getHeaderText();
@@ -543,12 +576,11 @@ describe('UI Integration Tests', () => {
 
       // Wait for map markers and click one to open sidebar
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar to open and transition to settle
+      // Wait for sidebar to open and content to settle
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.sidebar-header h2', { timeout: 5000 });
 
       // Navigation buttons only appear when: mobile, multiple POIs, and POI has media
       const navButtonCount = await page.locator('.image-nav-btn').count();
@@ -581,7 +613,11 @@ describe('UI Integration Tests', () => {
         });
 
         // Wait for navigation to complete
-        await page.waitForTimeout(1000);
+        await page.waitForFunction(
+          (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+          initialName,
+          { timeout: 3000 }
+        ).catch(() => {});
 
         // Get POI name after clicks - re-query to avoid detachment
         const nameAfterClicks = await getHeaderText();
@@ -602,7 +638,11 @@ describe('UI Integration Tests', () => {
             const btn = document.querySelector('.image-nav-btn.image-nav-prev');
             if (btn) btn.click();
           });
-          await page.waitForTimeout(800);
+          await page.waitForFunction(
+            (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+            nameAfterClicks,
+            { timeout: 3000 }
+          ).catch(() => {});
 
           // Verify we're back to original (proves we only moved one step forward)
           const finalName = await getHeaderText();
@@ -620,7 +660,11 @@ describe('UI Integration Tests', () => {
         });
 
         // Wait for navigation
-        await page.waitForTimeout(1000);
+        await page.waitForFunction(
+          (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+          initialName,
+          { timeout: 3000 }
+        ).catch(() => {});
 
         // Should have navigated exactly once - re-query to avoid detachment
         const nameAfterClicks = await getHeaderText();
@@ -632,7 +676,11 @@ describe('UI Integration Tests', () => {
             const btn = document.querySelector('.image-nav-btn.image-nav-next');
             if (btn) btn.click();
           });
-          await page.waitForTimeout(800);
+          await page.waitForFunction(
+            (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+            nameAfterClicks,
+            { timeout: 3000 }
+          ).catch(() => {});
 
           // Verify we're back
           const finalName = await getHeaderText();
@@ -656,7 +704,6 @@ describe('UI Integration Tests', () => {
 
       // Wait for map markers and click one to open sidebar
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar and carousel
@@ -673,9 +720,14 @@ describe('UI Integration Tests', () => {
 
       // Test carousel updates when navigating
       if (nextButtonExists) {
+        const initialName = await page.locator('.sidebar-header h2').textContent();
         const nextButton = await page.locator('.image-nav-btn.image-nav-next');
         await nextButton.click();
-        await page.waitForTimeout(800);
+        await page.waitForFunction(
+          (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+          initialName,
+          { timeout: 3000 }
+        ).catch(() => {});
 
         // Verify carousel still has thumbnails after navigation
         const newThumbnailCount = await page.locator('.thumbnail-item').count();
@@ -685,9 +737,14 @@ describe('UI Integration Tests', () => {
         const carouselVisible = await page.locator('.thumbnail-carousel').isVisible();
         expect(carouselVisible).toBe(true);
       } else if (prevButtonExists) {
+        const initialName = await page.locator('.sidebar-header h2').textContent();
         const prevButton = await page.locator('.image-nav-btn.image-nav-prev');
         await prevButton.click();
-        await page.waitForTimeout(800);
+        await page.waitForFunction(
+          (prev) => document.querySelector('.sidebar-header h2')?.textContent?.trim() !== prev,
+          initialName,
+          { timeout: 3000 }
+        ).catch(() => {});
 
         // Verify carousel still works
         const newThumbnailCount = await page.locator('.thumbnail-item').count();
@@ -776,14 +833,10 @@ describe('UI Integration Tests', () => {
       // Wait for header to render
       await page.waitForSelector('.header', { timeout: 15000 });
 
-      // Give UI time to fully render
-      await page.waitForTimeout(1000);
-
       // First ensure we're on the Map tab (map view)
       const viewTab = page.locator('.tab-btn:has-text("Map")');
       if (await viewTab.isVisible()) {
         await viewTab.evaluate(el => el.click());
-        await page.waitForTimeout(500);
       }
 
       // Wait for map container to exist in DOM (may be hidden due to tabs)
@@ -800,14 +853,14 @@ describe('UI Integration Tests', () => {
 
       // Click the Results tab to verify it's not covered using evaluate
       await resultsTab.evaluate(el => el.click());
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.results-tab-wrapper', { timeout: 5000 });
 
       // Header should still be visible after switching tabs
       expect(await header.isVisible()).toBe(true);
 
       // Click back to Map tab using evaluate
       await viewTab.evaluate(el => el.click());
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.leaflet-container', { timeout: 5000 });
 
       // Header should still be visible with map showing
       expect(await header.isVisible()).toBe(true);
@@ -828,7 +881,6 @@ describe('UI Integration Tests', () => {
       // Switch to Results tab
       const resultsTab = page.locator('.tab-btn:has-text("Results")');
       await resultsTab.evaluate(el => el.click());
-      await page.waitForTimeout(1000);
 
       // Wait for Results tab content to render
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
@@ -846,7 +898,7 @@ describe('UI Integration Tests', () => {
         chips.forEach(chip => chip.click());
       });
 
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.results-tab-wrapper .results-type-filters', { timeout: 5000 });
 
       // Verify all badges are still visible even when deselected
       expect(await filterChips.count()).toBe(initialCount);
@@ -855,7 +907,11 @@ describe('UI Integration Tests', () => {
       // Verify badges are clickable to re-enable filters (use first chip)
       const firstChip = page.locator('.results-tab-wrapper .type-filter-chip').first();
       await firstChip.evaluate(el => el.click());
-      await page.waitForTimeout(300);
+      await page.waitForFunction(
+        () => document.querySelector('.results-tab-wrapper .type-filter-chip')?.classList.contains('active'),
+        null,
+        { timeout: 3000 }
+      );
 
       // Verify the badge is now active
       const isActive = await firstChip.evaluate(el => el.classList.contains('active'));
@@ -868,7 +924,6 @@ describe('UI Integration Tests', () => {
       // Switch to Results tab
       const resultsTab = page.locator('.tab-btn:has-text("Results")');
       await resultsTab.evaluate(el => el.click());
-      await page.waitForTimeout(1000);
 
       // Wait for Results tab content to render
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
@@ -883,7 +938,7 @@ describe('UI Integration Tests', () => {
       // Type search text - scope to Results tab only
       const searchInput = page.locator('.results-tab-wrapper .results-search-input');
       await searchInput.fill('trail');
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.results-tab-wrapper .results-count', { timeout: 5000 });
 
       // Verify filter badges are still visible during search
       expect(await filterChips.count()).toBe(initialCount);
@@ -895,7 +950,7 @@ describe('UI Integration Tests', () => {
 
       // Clear search to restore results
       await searchInput.fill('');
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.results-tab-wrapper .results-count', { timeout: 5000 });
 
       // Badges should still be visible
       expect(await filterChips.count()).toBe(initialCount);

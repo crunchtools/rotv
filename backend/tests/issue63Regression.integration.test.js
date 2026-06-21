@@ -87,7 +87,6 @@ describe('Issue #63 Regression Tests', () => {
 
       // Desktop should have different value
       await page.setViewportSize({ width: 1280, height: 720 });
-      await page.waitForTimeout(300);
 
       const desktopCssVar = await page.evaluate(() => {
         const root = document.documentElement;
@@ -104,12 +103,11 @@ describe('Issue #63 Regression Tests', () => {
 
       // Wait for markers and click one
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(500);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and transition to complete (0.3s CSS transition)
+      // Wait for sidebar and its header to confirm transition is complete
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
-      await page.waitForTimeout(500);
+      await page.waitForSelector('.sidebar-header', { timeout: 5000 });
 
       // Check sidebar positioning
       const sidebarPosition = await page.evaluate(() => {
@@ -169,7 +167,6 @@ describe('Issue #63 Regression Tests', () => {
       // Open legend by clicking Results badge
       const resultsBadge = page.locator('.map-poi-count');
       await resultsBadge.click();
-      await page.waitForTimeout(500);
 
       // Wait for legend to expand
       await page.waitForSelector('.legend.legend-expanded', { timeout: 5000 });
