@@ -25,6 +25,50 @@ async function openPoiWithMoreInfo(page, baseUrl) {
   return null;
 }
 
+// The mobile thumbnail carousel only renders after the user navigates between
+// POIs (Sidebar's hasNavigatedPoi state) — a plain marker click won't show it.
+// See CLAUDE.md: "Carousel rendering requires hasNavigatedPoi=true". Simulate a
+// horizontal swipe on the open sidebar to trigger navigation and reveal it.
+async function swipeSidebar(page, direction) {
+  await page.evaluate((dir) => {
+    const sidebar = document.querySelector('.sidebar.open');
+    if (!sidebar) return;
+    const rect = sidebar.getBoundingClientRect();
+    const y = rect.top + rect.height / 2;
+    // Swipe left → 'next', swipe right → 'prev' (matches handleTouchEnd in Sidebar).
+    const startX = dir === 'next' ? rect.left + rect.width * 0.8 : rect.left + rect.width * 0.2;
+    const endX = dir === 'next' ? rect.left + rect.width * 0.2 : rect.left + rect.width * 0.8;
+    const touchAt = (x) => new Touch({ identifier: 1, target: sidebar, clientX: x, clientY: y, pageX: x, pageY: y });
+    const fire = (type, x) => {
+      const t = touchAt(x);
+      sidebar.dispatchEvent(new TouchEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        touches: type === 'touchend' ? [] : [t],
+        targetTouches: type === 'touchend' ? [] : [t],
+        changedTouches: [t],
+      }));
+    };
+    fire('touchstart', startX);
+    fire('touchmove', (startX + endX) / 2);
+    fire('touchend', endX);
+  }, direction);
+}
+
+// Reveal the carousel by swiping; tries both directions in case the selected POI
+// sits at an end of the navigation list (where one direction is a no-op). Returns
+// true once the carousel renders.
+async function revealCarousel(page) {
+  for (const dir of ['next', 'prev']) {
+    await swipeSidebar(page, dir);
+    try {
+      await page.waitForSelector('.thumbnail-carousel', { timeout: 3000 });
+      return true;
+    } catch { /* try the other direction */ }
+  }
+  return false;
+}
+
 describe('UI Integration Tests', () => {
   let browser;
   let page;
@@ -360,8 +404,9 @@ describe('UI Integration Tests', () => {
         state: 'visible'
       });
 
-      // Wait for carousel to be visible
-      await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
+      // Carousel only appears after navigating between POIs — reveal it via swipe.
+      const revealed = await revealCarousel(page);
+      expect(revealed).toBe(true);
 
       // Verify carousel exists and is visible
       const carouselVisible = await page.locator('.thumbnail-carousel').isVisible();
