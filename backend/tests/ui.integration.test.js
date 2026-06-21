@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
+import { showCarouselViaSwipe } from './utils/uiHelpers.js';
 
 // Open a POI that has a More Info link via its bare-path permalink (/<slug>),
 // which reliably opens the sidebar on both mobile and desktop. .more-info-link
@@ -360,6 +361,9 @@ describe('UI Integration Tests', () => {
         state: 'visible'
       });
 
+      // Carousel renders only after the first POI navigation — trigger a swipe.
+      await showCarouselViaSwipe(page);
+
       // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
@@ -659,8 +663,9 @@ describe('UI Integration Tests', () => {
       await page.waitForTimeout(1000);
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar, then trigger navigation so the carousel renders
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await showCarouselViaSwipe(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails

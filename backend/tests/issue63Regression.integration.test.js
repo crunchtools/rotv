@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
+import { showCarouselViaSwipe } from './utils/uiHelpers.js';
 
 /**
  * Issue #63 Regression Tests
@@ -138,8 +139,9 @@ describe('Issue #63 Regression Tests', () => {
       await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
       await page.locator('.leaflet-marker-icon').first().click();
 
-      // Wait for sidebar and carousel
+      // Wait for sidebar, then trigger navigation so the carousel renders
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await showCarouselViaSwipe(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Check carousel bottom padding - this provides the 16px spacing between carousel and content
