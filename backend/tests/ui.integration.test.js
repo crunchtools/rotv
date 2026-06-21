@@ -360,6 +360,19 @@ describe('UI Integration Tests', () => {
         state: 'visible'
       });
 
+      // Simulate left swipe so handleTouchEnd sets hasNavigatedPoi=true, making the carousel render
+      const sidebarBox = await page.locator('.sidebar.open').boundingBox();
+      await page.evaluate((box) => {
+        const el = document.querySelector('.sidebar.open');
+        const startX = box.x + box.width * 0.75;
+        const startY = box.y + box.height * 0.5;
+        const endX = startX - 150;
+        const mkTouch = (x, y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y, radiusX: 2.5, radiusY: 2.5, rotationAngle: 0, force: 1 });
+        el.dispatchEvent(new TouchEvent('touchstart', { cancelable: true, bubbles: true, touches: [mkTouch(startX, startY)], changedTouches: [mkTouch(startX, startY)] }));
+        el.dispatchEvent(new TouchEvent('touchmove', { cancelable: true, bubbles: true, touches: [mkTouch(endX, startY)], changedTouches: [mkTouch(endX, startY)] }));
+        el.dispatchEvent(new TouchEvent('touchend', { cancelable: true, bubbles: true, touches: [], changedTouches: [mkTouch(endX, startY)] }));
+      }, sidebarBox);
+
       // Wait for carousel to be visible
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
@@ -661,6 +674,19 @@ describe('UI Integration Tests', () => {
 
       // Wait for sidebar and carousel
       await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+
+      // Simulate left swipe so handleTouchEnd sets hasNavigatedPoi=true, making the carousel render
+      const sidebarBox = await page.locator('.sidebar.open').boundingBox();
+      await page.evaluate((box) => {
+        const el = document.querySelector('.sidebar.open');
+        const startX = box.x + box.width * 0.75;
+        const startY = box.y + box.height * 0.5;
+        const endX = startX - 150;
+        const mkTouch = (x, y) => new Touch({ identifier: 1, target: el, clientX: x, clientY: y, radiusX: 2.5, radiusY: 2.5, rotationAngle: 0, force: 1 });
+        el.dispatchEvent(new TouchEvent('touchstart', { cancelable: true, bubbles: true, touches: [mkTouch(startX, startY)], changedTouches: [mkTouch(startX, startY)] }));
+        el.dispatchEvent(new TouchEvent('touchmove', { cancelable: true, bubbles: true, touches: [mkTouch(endX, startY)], changedTouches: [mkTouch(endX, startY)] }));
+        el.dispatchEvent(new TouchEvent('touchend', { cancelable: true, bubbles: true, touches: [], changedTouches: [mkTouch(endX, startY)] }));
+      }, sidebarBox);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
       // Verify carousel has thumbnails
