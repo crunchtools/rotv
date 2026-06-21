@@ -1224,7 +1224,7 @@ function normalizeUrl(url) {
 export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
-  const { log = null, domainOwnershipMap = null, contentSource = 'ai' } = options;
+  const { log = null, uriOwnershipMap = null, contentSource = 'ai' } = options;
 
   for (const item of newsItems) {
     try {
@@ -1250,10 +1250,10 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       }
 
       let effectivePoiId = poiId;
-      const domainOwner = checkDomainOwnership(resolvedUrl || item.source_url, poiId, domainOwnershipMap);
-      if (domainOwner) {
-        effectivePoiId = domainOwner.poiId;
-        if (log) log(`[Save] Reassigning "${item.title}" → ${domainOwner.poiName} (domain ownership)`);
+      const uriOwner = checkUriOwnership(resolvedUrl || item.source_url, poiId, uriOwnershipMap);
+      if (uriOwner) {
+        effectivePoiId = uriOwner.poiId;
+        if (log) log(`[Save] Reassigning "${item.title}" → ${uriOwner.poiName} (URI ownership)`);
       }
 
       const normalizedTitle = normalizeNewsTitle(item.title);
@@ -1330,7 +1330,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
-  const { log = null, domainOwnershipMap = null, contentSource = 'ai' } = options;
+  const { log = null, uriOwnershipMap = null, contentSource = 'ai' } = options;
 
   for (const item of eventItems) {
     try {
@@ -1371,10 +1371,10 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
       }
 
       let effectivePoiId = poiId;
-      const domainOwner = checkDomainOwnership(resolvedUrl || item.source_url, poiId, domainOwnershipMap);
-      if (domainOwner) {
-        effectivePoiId = domainOwner.poiId;
-        if (log) log(`[Save] Reassigning event "${item.title}" → ${domainOwner.poiName} (domain ownership)`);
+      const uriOwner = checkUriOwnership(resolvedUrl || item.source_url, poiId, uriOwnershipMap);
+      if (uriOwner) {
+        effectivePoiId = uriOwner.poiId;
+        if (log) log(`[Save] Reassigning event "${item.title}" → ${uriOwner.poiName} (URI ownership)`);
       }
 
       const normalizedEventUrl = normalizeUrl(resolvedUrl);
@@ -1458,7 +1458,7 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
   let processed = 0;
   const results = [];
 
-  const domainOwnershipMap = await buildDomainOwnershipMap(pool);
+  const uriOwnershipMap = await buildUriOwnershipMap(pool);
 
   let inFlight = 0;
   let nextIndex = 0;
@@ -1478,8 +1478,8 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
     try {
       console.log(`[${index + 1}/${pois.length}] Starting: ${poi.name} (${inFlight} in flight)`);
       const { news, events, metadata } = await collectPoi(pool, poi, sheets, timezone);
-      const savedNews = await saveNewsItems(pool, poi.id, news, { domainOwnershipMap });
-      const savedEvents = await saveEventItems(pool, poi.id, events, { domainOwnershipMap });
+      const savedNews = await saveNewsItems(pool, poi.id, news, { uriOwnershipMap });
+      const savedEvents = await saveEventItems(pool, poi.id, events, { uriOwnershipMap });
       console.log(`[${index + 1}/${pois.length}] ✓ ${poi.name}: ${savedNews} news, ${savedEvents} events`);
       results.push({ newsFound: savedNews, eventsFound: savedEvents, success: true, poiName: poi.name });
     } catch (error) {
@@ -1599,7 +1599,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   );
   const pois = poisResult.rows;
 
-  const domainOwnershipMap = await buildDomainOwnershipMap(pool);
+  const uriOwnershipMap = await buildUriOwnershipMap(pool);
 
   let newsFound = job.news_found || 0;
   let eventsFound = job.events_found || 0;
@@ -1653,8 +1653,8 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         const { news, events, metadata } = await collectPoi(pool, poi, sheets, 'America/New_York');
         tracker.updateProgress(poi.id, { phase: 'save', message: `${news.length} news, ${events.length} events` });
         const saveLog = (msg) => { logInfo(jobId, 'news', poi.id, poi.name, msg); };
-        const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog, domainOwnershipMap });
-        const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog, domainOwnershipMap });
+        const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog, uriOwnershipMap });
+        const savedEvents = await saveEventItems(pool, poi.id, events, { log: saveLog, uriOwnershipMap });
         logInfo(jobId, 'news', poi.id, poi.name, `[${index + 1}/${total}] ${savedNews} news, ${savedEvents} events saved`, { news_found: news.length, events_found: events.length, news_saved: savedNews, events_saved: savedEvents });
 
         await pool.query(`
@@ -1766,17 +1766,19 @@ export async function runBatchNewsCollection(pool, poiIds, sheets = null, source
   return { jobId, totalPois };
 }
 
-function extractDomain(url) {
+function extractUriPrefix(url) {
   if (!url) return null;
   try {
     const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./, '').toLowerCase();
+    const hostname = parsed.hostname.replace(/^www\./, '').toLowerCase();
+    const pathname = parsed.pathname.replace(/\/+$/, '').toLowerCase();
+    return hostname + pathname;
   } catch {
     return null;
   }
 }
 
-export async function buildDomainOwnershipMap(pool) {
+export async function buildUriOwnershipMap(pool) {
   const urlOwners = await pool.query(
     `SELECT id, name, news_url, events_url FROM pois
      WHERE (news_url IS NOT NULL OR events_url IS NOT NULL) AND deleted = false`
@@ -1784,22 +1786,28 @@ export async function buildDomainOwnershipMap(pool) {
   const map = new Map();
   for (const row of urlOwners.rows) {
     for (const url of [row.news_url, row.events_url]) {
-      const domain = extractDomain(url);
-      if (domain) {
-        map.set(domain, { poiId: row.id, poiName: row.name });
+      const uri = extractUriPrefix(url);
+      if (uri) {
+        map.set(uri, { poiId: row.id, poiName: row.name });
       }
     }
   }
   return map;
 }
 
-function checkDomainOwnership(sourceUrl, currentPoiId, domainMap) {
-  if (!sourceUrl || !domainMap) return null;
-  const domain = extractDomain(sourceUrl);
-  if (!domain) return null;
-  const owner = domainMap.get(domain);
-  if (owner && owner.poiId !== currentPoiId) return owner;
-  return null;
+function checkUriOwnership(sourceUrl, currentPoiId, uriMap) {
+  if (!sourceUrl || !uriMap) return null;
+  const sourceUri = extractUriPrefix(sourceUrl);
+  if (!sourceUri) return null;
+  let bestMatch = null;
+  let bestLength = 0;
+  for (const [uri, owner] of uriMap) {
+    if (sourceUri.startsWith(uri) && uri.length > bestLength && owner.poiId !== currentPoiId) {
+      bestMatch = owner;
+      bestLength = uri.length;
+    }
+  }
+  return bestMatch;
 }
 
 /**
