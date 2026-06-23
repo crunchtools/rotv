@@ -4965,6 +4965,28 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  router.get('/newsletter/subscribers', isAdmin, async (req, res) => {
+    try {
+      const { listSubscribers } = await import('../services/buttondownClient.js');
+      const subscribers = await listSubscribers(pool);
+      res.json(subscribers);
+    } catch (error) {
+      if (error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
+        try {
+          const localRows = await pool.query(
+            'SELECT DISTINCT email, subscribed_at AS created FROM newsletter_subscriptions ORDER BY subscribed_at DESC'
+          );
+          res.json(localRows.rows);
+        } catch (dbErr) {
+          res.status(500).json({ error: 'Failed to fetch local subscribers' });
+        }
+      } else {
+        console.error('Subscriber list error:', error);
+        res.status(500).json({ error: 'Failed to fetch subscribers' });
+      }
+    }
+  });
+
   router.post('/moderation/sweep', isAdmin, async (req, res) => {
     try {
       console.log(`Admin ${req.user.email} triggered manual moderation sweep`);

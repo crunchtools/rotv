@@ -138,28 +138,172 @@ export function createNewsletterRouter(pool) {
     }
   });
 
-  router.get('/inbound', isAdmin, async (req, res) => {
+  router.get('/sources', isAdmin, async (req, res) => {
     try {
-      const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
       const rows = await pool.query(
-        `SELECT e.id, e.from_address, e.subject, e.received_at, e.processed, e.processed_at,
-                e.error_message, e.news_extracted, e.events_extracted,
-                s.poi_id, p.name AS poi_name
-         FROM newsletter_emails e
-         LEFT JOIN LATERAL (
-           SELECT src.poi_id FROM poi_newsletter_sources src
-           WHERE POSITION(LOWER(src.from_pattern) IN LOWER(e.from_address)) > 0
-           ORDER BY LENGTH(src.from_pattern) DESC LIMIT 1
-         ) s ON TRUE
+        `SELECT s.from_pattern, s.poi_id, s.display_name, s.status, s.created_at,
+                p.name AS poi_name,
+                COUNT(e.id)::int AS email_count,
+                MAX(e.received_at) AS last_received,
+                COALESCE(SUM(e.news_extracted), 0)::int AS total_news,
+                COALESCE(SUM(e.events_extracted), 0)::int AS total_events
+         FROM poi_newsletter_sources s
          LEFT JOIN pois p ON p.id = s.poi_id
-         ORDER BY e.received_at DESC
-         LIMIT $1`,
-        [limit]
+         LEFT JOIN newsletter_emails e
+           ON POSITION(LOWER(s.from_pattern) IN LOWER(e.from_address)) > 0
+         GROUP BY s.from_pattern, s.poi_id, s.display_name, s.status, s.created_at, p.name
+         ORDER BY
+           CASE s.status WHEN 'new' THEN 0 WHEN 'accepted' THEN 1 WHEN 'blocked' THEN 2 END,
+           s.created_at DESC`
       );
       res.json(rows.rows);
     } catch (error) {
-      console.error('Inbound newsletter list error:', error);
-      res.status(500).json({ error: 'Failed to list inbound newsletters' });
+      console.error('Newsletter sources list error:', error);
+      res.status(500).json({ error: 'Failed to list newsletter sources' });
+    }
+  });
+
+  router.put('/sources/:pattern', isAdmin, async (req, res) => {
+    const pattern = decodeURIComponent(req.params.pattern);
+    const { poi_id, status, display_name } = req.body;
+    try {
+      const existing = await pool.query(
+        'SELECT from_pattern, status FROM poi_newsletter_sources WHERE from_pattern = $1', [pattern]
+      );
+      if (existing.rows.length === 0) return res.status(404).json({ error: 'Source not found' });
+
+      const sets = [];
+      const vals = [];
+      let idx = 1;
+
+      if (poi_id !== undefined) { sets.push(`poi_id = $${idx++}`); vals.push(poi_id); }
+      if (status !== undefined) { sets.push(`status = $${idx++}`); vals.push(status); }
+      if (display_name !== undefined) { sets.push(`display_name = $${idx++}`); vals.push(display_name); }
+
+      if (sets.length === 0) return res.status(400).json({ error: 'No fields to update' });
+
+      vals.push(pattern);
+      await pool.query(
+        `UPDATE poi_newsletter_sources SET ${sets.join(', ')} WHERE from_pattern = $${idx}`,
+        vals
+      );
+
+      if (status === 'accepted' && poi_id) {
+        const unprocessed = await pool.query(
+          `SELECT id FROM newsletter_emails
+           WHERE POSITION(LOWER($1) IN LOWER(from_address)) > 0 AND processed = FALSE`,
+          [pattern]
+        );
+        for (const row of unprocessed.rows) {
+          await pool.query('UPDATE newsletter_emails SET error_message = NULL WHERE id = $1', [row.id]);
+          await queueNewsletterJob(row.id);
+        }
+        res.json({ success: true, message: `Source accepted → POI ${poi_id}; ${unprocessed.rows.length} email(s) queued` });
+      } else {
+        res.json({ success: true, message: 'Source updated' });
+      }
+    } catch (error) {
+      console.error('Newsletter source update error:', error);
+      res.status(500).json({ error: 'Failed to update source' });
+    }
+  });
+
+  router.get('/sources/:pattern/emails', isAdmin, async (req, res) => {
+    const pattern = decodeURIComponent(req.params.pattern);
+    try {
+      const rows = await pool.query(
+        `SELECT id, from_address, subject, received_at, processed, processed_at,
+                error_message, news_extracted, events_extracted
+         FROM newsletter_emails
+         WHERE POSITION(LOWER($1) IN LOWER(from_address)) > 0
+         ORDER BY received_at DESC
+         LIMIT 50`,
+        [pattern]
+      );
+      res.json(rows.rows);
+    } catch (error) {
+      console.error('Newsletter source emails error:', error);
+      res.status(500).json({ error: 'Failed to list emails for source' });
+    }
+  });
+
+  router.get('/sources/discover', isAdmin, async (_req, res) => {
+    try {
+      const rows = await pool.query(
+        `SELECT e.from_address,
+                COUNT(e.id)::int AS email_count,
+                MAX(e.received_at) AS last_received,
+                MIN(e.received_at) AS first_received
+         FROM newsletter_emails e
+         WHERE NOT EXISTS (
+           SELECT 1 FROM poi_newsletter_sources s
+           WHERE POSITION(LOWER(s.from_pattern) IN LOWER(e.from_address)) > 0
+         )
+         GROUP BY e.from_address
+         ORDER BY MAX(e.received_at) DESC`
+      );
+      res.json(rows.rows);
+    } catch (error) {
+      console.error('Newsletter source discover error:', error);
+      res.status(500).json({ error: 'Failed to discover sources' });
+    }
+  });
+
+  router.post('/sources', isAdmin, async (req, res) => {
+    const { from_pattern, status } = req.body;
+    if (!from_pattern) return res.status(400).json({ error: 'from_pattern required' });
+    try {
+      await pool.query(
+        `INSERT INTO poi_newsletter_sources (from_pattern, poi_id, status)
+         VALUES ($1, NULL::integer, $2)
+         ON CONFLICT (from_pattern) DO NOTHING`,
+        [from_pattern, status || 'new']
+      );
+      res.json({ success: true, message: `Source "${from_pattern}" added` });
+    } catch (error) {
+      console.error('Newsletter source create error:', error);
+      res.status(500).json({ error: 'Failed to create source' });
+    }
+  });
+
+  router.delete('/sources/:pattern', isAdmin, async (req, res) => {
+    const pattern = decodeURIComponent(req.params.pattern);
+    try {
+      const deleted = await pool.query(
+        'DELETE FROM poi_newsletter_sources WHERE from_pattern = $1 RETURNING from_pattern', [pattern]
+      );
+      if (deleted.rows.length === 0) return res.status(404).json({ error: 'Source not found' });
+
+      const emails = await pool.query(
+        'DELETE FROM newsletter_emails WHERE POSITION(LOWER($1) IN LOWER(from_address)) > 0 RETURNING id',
+        [pattern]
+      );
+
+      res.json({ success: true, message: `Deleted source and ${emails.rows.length} email(s)` });
+    } catch (error) {
+      console.error('Newsletter source delete error:', error);
+      res.status(500).json({ error: 'Failed to delete source' });
+    }
+  });
+
+  router.get('/emails/:id/view', isAdmin, async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    try {
+      const row = await pool.query(
+        'SELECT subject, body_html, body_text FROM newsletter_emails WHERE id = $1', [id]
+      );
+      if (row.rows.length === 0) return res.status(404).send('Not found');
+      const email = row.rows[0];
+      if (email.body_html) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.send(email.body_html);
+      } else {
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.send(email.body_text || '(empty)');
+      }
+    } catch (error) {
+      console.error('Newsletter email view error:', error);
+      res.status(500).send('Failed to load email');
     }
   });
 
@@ -172,29 +316,6 @@ export function createNewsletterRouter(pool) {
     } catch (error) {
       console.error('Inbound newsletter reprocess error:', error);
       res.status(500).json({ error: 'Failed to reprocess' });
-    }
-  });
-
-  router.post('/inbound/:id/assign-poi', isAdmin, async (req, res) => {
-    const id = parseInt(req.params.id, 10);
-    const { poi_id, from_pattern } = req.body;
-    if (!poi_id) return res.status(400).json({ error: 'poi_id required' });
-    try {
-      const emailRow = await pool.query('SELECT from_address FROM newsletter_emails WHERE id = $1', [id]);
-      if (emailRow.rows.length === 0) return res.status(404).json({ error: 'Not found' });
-      const pattern = (from_pattern && from_pattern.trim()) || emailRow.rows[0].from_address;
-      if (!pattern) return res.status(400).json({ error: 'No sender pattern available' });
-      await pool.query(
-        `INSERT INTO poi_newsletter_sources (poi_id, from_pattern)
-         VALUES ($1, $2) ON CONFLICT (poi_id, from_pattern) DO NOTHING`,
-        [poi_id, pattern]
-      );
-      await pool.query('UPDATE newsletter_emails SET processed = FALSE, error_message = NULL WHERE id = $1', [id]);
-      await queueNewsletterJob(id);
-      res.json({ success: true, message: `Mapped "${pattern}" → POI ${poi_id}` });
-    } catch (error) {
-      console.error('Inbound newsletter assign-poi error:', error);
-      res.status(500).json({ error: 'Failed to assign POI' });
     }
   });
 

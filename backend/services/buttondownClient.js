@@ -250,6 +250,30 @@ export async function sendDraftToRecipients(subject, htmlBody, recipients, pool 
   return { emailId };
 }
 
+export async function listSubscribers(pool = null) {
+  const apiKey = await getApiKey(pool);
+  const client = createClient(apiKey);
+
+  const subscribers = [];
+  let url = '/v1/subscribers?status=regular';
+
+  while (url) {
+    const response = await client.get(url);
+    const data = response.data;
+    if (Array.isArray(data.results)) {
+      for (const sub of data.results) {
+        subscribers.push({
+          email: sub.email_address,
+          created: sub.creation_date,
+        });
+      }
+    }
+    url = data.next ? new URL(data.next).pathname + new URL(data.next).search : null;
+  }
+
+  return subscribers;
+}
+
 export async function testApiKey(pool = null) {
   const apiKey = await getApiKey(pool);
   const client = createClient(apiKey);

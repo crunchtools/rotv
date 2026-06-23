@@ -561,6 +561,31 @@ function registerTools(server, pool, boss, mcpUserId) {
   );
 
   server.tool(
+    'newsletter_sources',
+    'List newsletter sources (unique senders) with status, POI assignment, and email counts',
+    {},
+    async () => {
+      const rows = await pool.query(
+        `SELECT s.from_pattern, s.poi_id, s.display_name, s.status, s.created_at,
+                p.name AS poi_name,
+                COUNT(e.id)::int AS email_count,
+                MAX(e.received_at) AS last_received,
+                COALESCE(SUM(e.news_extracted), 0)::int AS total_news,
+                COALESCE(SUM(e.events_extracted), 0)::int AS total_events
+         FROM poi_newsletter_sources s
+         LEFT JOIN pois p ON p.id = s.poi_id
+         LEFT JOIN newsletter_emails e
+           ON POSITION(LOWER(s.from_pattern) IN LOWER(e.from_address)) > 0
+         GROUP BY s.from_pattern, s.poi_id, s.display_name, s.status, s.created_at, p.name
+         ORDER BY
+           CASE s.status WHEN 'new' THEN 0 WHEN 'accepted' THEN 1 WHEN 'blocked' THEN 2 END,
+           s.created_at DESC`
+      );
+      return { content: [{ type: 'text', text: JSON.stringify(rows.rows, null, 2) }] };
+    }
+  );
+
+  server.tool(
     'newsletter_assign_poi',
     'Map a newsletter sender to a POI so its emails are scoped to that POI, then reprocess the email',
     {
@@ -578,13 +603,14 @@ function registerTools(server, pool, boss, mcpUserId) {
         return { content: [{ type: 'text', text: 'No sender pattern available to map' }], isError: true };
       }
       await pool.query(
-        `INSERT INTO poi_newsletter_sources (poi_id, from_pattern)
-         VALUES ($1, $2) ON CONFLICT (poi_id, from_pattern) DO NOTHING`,
+        `INSERT INTO poi_newsletter_sources (poi_id, from_pattern, status)
+         VALUES ($1, $2, 'accepted')
+         ON CONFLICT (from_pattern) DO UPDATE SET poi_id = $1, status = 'accepted'`,
         [poi_id, pattern]
       );
       await pool.query(`UPDATE newsletter_emails SET processed = FALSE, error_message = NULL WHERE id = $1`, [id]);
       await queueNewsletterJob(id);
-      return { content: [{ type: 'text', text: `Mapped "${pattern}" → POI ${poi_id}; queued email #${id} for reprocessing` }] };
+      return { content: [{ type: 'text', text: `Mapped "${pattern}" → POI ${poi_id} (accepted); queued email #${id} for reprocessing` }] };
     }
   );
 

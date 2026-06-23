@@ -122,27 +122,67 @@ export async function processNewsletterById(pool, emailId) {
   const from = email.from_address || '';
   const subject = email.subject || '(no subject)';
 
-  const poiResult = await pool.query(
-    `SELECT p.* FROM poi_newsletter_sources s
-       JOIN pois p ON p.id = s.poi_id
+  const sourceResult = await pool.query(
+    `SELECT s.from_pattern, s.poi_id, s.status, s.display_name, p.*
+       FROM poi_newsletter_sources s
+       LEFT JOIN pois p ON p.id = s.poi_id
       WHERE POSITION(LOWER(s.from_pattern) IN LOWER($1)) > 0
       ORDER BY LENGTH(s.from_pattern) DESC
       LIMIT 1`,
     [from]
   );
 
-  if (poiResult.rows.length === 0) {
+  if (sourceResult.rows.length === 0) {
+    await pool.query(
+      `INSERT INTO poi_newsletter_sources (from_pattern, poi_id, status)
+       VALUES ($1, NULL, 'new')
+       ON CONFLICT (from_pattern) DO NOTHING`,
+      [from]
+    );
     await pool.query(
       `UPDATE newsletter_emails
-         SET processed = FALSE, error_message = $1, processed_at = CURRENT_TIMESTAMP
-       WHERE id = $2`,
-      [`unassigned: no POI mapped for sender ${from}`, emailId]
+         SET processed = FALSE, error_message = 'new source — awaiting admin triage', processed_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [emailId]
     );
-    console.log(`[Newsletter] Quarantined #${emailId} — no POI mapping for "${from}"`);
+    console.log(`[Newsletter] New source discovered: "${from}" — awaiting admin triage`);
     return;
   }
 
-  const poi = poiResult.rows[0];
+  const source = sourceResult.rows[0];
+
+  if (source.status === 'blocked') {
+    await pool.query(
+      `UPDATE newsletter_emails
+         SET processed = TRUE, error_message = 'blocked source', news_extracted = 0, events_extracted = 0, processed_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [emailId]
+    );
+    console.log(`[Newsletter] Skipped #${emailId} — source "${from}" is blocked`);
+    return;
+  }
+
+  if (source.status === 'new') {
+    await pool.query(
+      `UPDATE newsletter_emails
+         SET processed = FALSE, error_message = 'new source — awaiting admin triage', processed_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [emailId]
+    );
+    return;
+  }
+
+  if (!source.poi_id) {
+    await pool.query(
+      `UPDATE newsletter_emails
+         SET processed = FALSE, error_message = 'accepted source has no POI assigned', processed_at = CURRENT_TIMESTAMP
+       WHERE id = $1`,
+      [emailId]
+    );
+    return;
+  }
+
+  const poi = source;
   const { markdown, links, viewInBrowserUrl } = extractEmailParts(email.body_html || '');
 
   let entryUrl = viewInBrowserUrl;
