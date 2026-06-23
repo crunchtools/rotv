@@ -123,10 +123,10 @@ export function extractUrlDate(url) {
   let path;
   try { path = new URL(url).pathname; } catch { path = url; }
 
-  const validateDateParts = (y, m, d) => {
-    const year = parseInt(y, 10), month = parseInt(m, 10), day = parseInt(d, 10);
+  const validateDateParts = (yearStr, m, d) => {
+    const year = parseInt(yearStr, 10), month = parseInt(m, 10), day = parseInt(d, 10);
     if (year < 2000 || year > 2100 || month < 1 || month > 12 || day < 1 || day > 31) return null;
-    return `${y}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return `${yearStr}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
   };
 
   const wpMatch = path.match(/\/(\d{4})\/(\d{2})\/(\d{2})(?:\/|$)/);

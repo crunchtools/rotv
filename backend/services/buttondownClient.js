@@ -259,16 +259,16 @@ export async function listSubscribers(pool = null) {
 
   while (url) {
     const response = await client.get(url);
-    const data = response.data;
-    if (Array.isArray(data.results)) {
-      for (const sub of data.results) {
+    const page = response.data;
+    if (Array.isArray(page.results)) {
+      for (const sub of page.results) {
         subscribers.push({
           email: sub.email_address,
           created: sub.creation_date,
         });
       }
     }
-    url = data.next ? new URL(data.next).pathname + new URL(data.next).search : null;
+    url = page.next ? new URL(page.next).pathname + new URL(page.next).search : null;
   }
 
   return subscribers;

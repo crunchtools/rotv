@@ -8,11 +8,6 @@ import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js'
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
 import { getReassignmentCandidates } from './geoService.js';
 
-function sameOrigin(urlA, urlB) {
-  try { return new URL(urlA).origin === new URL(urlB).origin; }
-  catch { return false; }
-}
-
 const TABLE_MAP = {
   news: 'poi_news',
   event: 'poi_events',
@@ -397,7 +392,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // Per-POI threshold only applies when item came from the POI's configured URL
     const poiConfigUrl = contentType === 'news' ? row.news_url : row.events_url;
     const poiThreshold = contentType === 'news' ? row.news_score_threshold : row.events_score_threshold;
-    const fromConfiguredUrl = row.source_url && poiConfigUrl && sameOrigin(row.source_url, poiConfigUrl);
+    let fromConfiguredUrl = false;
+    try { fromConfiguredUrl = row.source_url && poiConfigUrl && new URL(row.source_url).origin === new URL(poiConfigUrl).origin; }
+    catch { /* malformed URL — treat as not from configured source */ }
     const effectiveThreshold = (fromConfiguredUrl && poiThreshold != null) ? poiThreshold : newsDateThreshold;
 
     let dateScore = row.date_consensus_score || 0;

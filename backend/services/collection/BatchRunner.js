@@ -67,10 +67,10 @@ export async function runBatch({
     try {
       console.log(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Starting (Slot ${slotId}, ${inFlight} in flight)`);
 
-      const result = await collectFn(item, context);
-      results.push({ item, result, success: true });
+      const collected = await collectFn(item, context);
+      results.push({ item, result: collected, success: true });
 
-      await checkpointFn(item, result, null);
+      await checkpointFn(item, collected, null);
     } catch (error) {
       console.error(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Error: ${error.message}`);
       results.push({ item, result: null, success: false, error: error.message });

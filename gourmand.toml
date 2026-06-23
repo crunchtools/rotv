@@ -18,6 +18,8 @@ excluded_paths = [
     "image-server/**",
     "image-server/**/*",
     "Containerfile.images",
+    # Untracked boundary data scripts (one-off GeoJSON generators, not part of the app)
+    "data/**",
 ]
 
 [checks]
