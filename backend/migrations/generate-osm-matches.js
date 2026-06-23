@@ -80,15 +80,11 @@ function distanceMeters(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
-// Allowed match radius grows with name confidence: an exact name match can be a
-// large park whose centroid is far from the curated point; a weak name match
-// must be nearly on top of the POI to count.
-function maxDistance(similarity) {
-  if (similarity >= 0.9) return 2000;
-  if (similarity >= 0.7) return 800;
-  if (similarity >= 0.55) return 300;
-  return 0;
-}
+const MATCH_RADIUS_BY_CONFIDENCE = [
+  { threshold: 0.9, meters: 2000 },
+  { threshold: 0.7, meters: 800 },
+  { threshold: 0.55, meters: 300 },
+];
 
 async function fetchCandidates() {
   const keys = ['leisure', 'tourism', 'historic', 'natural', 'boundary',
@@ -141,7 +137,7 @@ for (const poi of pois) {
   for (const c of candidates) {
     const j = jaccard(poi.name, c.name);
     const similarity = isContained(poi.name, c.name) ? Math.max(j, 0.85) : j;
-    const limit = maxDistance(similarity);
+    const limit = (MATCH_RADIUS_BY_CONFIDENCE.find(r => similarity >= r.threshold) || {}).meters || 0;
     if (limit === 0) continue;
     const d = distanceMeters(poi.lat, poi.lon, c.lat, c.lon);
     if (d > limit) continue;

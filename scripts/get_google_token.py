@@ -13,10 +13,11 @@ SCOPES = [
 ]
 
 CREDENTIALS_FILE = '/home/fatherlinux/.config/google-workspace-mcp/credentials.json'
+OAUTH_CALLBACK_PORT = 8085
 
 def main():
     flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
-    creds = flow.run_local_server(port=8085)
+    creds = flow.run_local_server(port=OAUTH_CALLBACK_PORT)
 
     print("\n" + "="*60)
     print("Add these to your MCP server configuration:")

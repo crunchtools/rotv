@@ -104,7 +104,7 @@ function calculateActiveTheme(config, now) {
   }
 
   const enabledThemes = config.themes
-    .filter(t => t.enabled && isDateInRange(monthDay, t.startDate, t.endDate))
+    .filter(t => t.enabled && (t.startDate > t.endDate ? (monthDay >= t.startDate || monthDay <= t.endDate) : (monthDay >= t.startDate && monthDay <= t.endDate)))
     .sort((a, b) => a.priority - b.priority);
 
   return {
@@ -113,9 +113,4 @@ function calculateActiveTheme(config, now) {
   };
 }
 
-function isDateInRange(current, start, end) {
-  if (start > end) {
-    return current >= start || current <= end;
-  }
-  return current >= start && current <= end;
-}
+

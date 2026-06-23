@@ -11,10 +11,6 @@ const DRY_RUN = process.argv.includes('--dry-run');
 /** Reads standard PG* env vars (PGHOST/PGUSER/PGPASSWORD/...); no hardcoded credentials. */
 const pool = new Pool();
 
-function decodeEntities(s) {
-  return s.replace(/&amp;/gi, '&').replace(/&#0*38;/g, '&').replace(/&#x0*26;/gi, '&');
-}
-
 function extractOgImage(html, pageUrl) {
   const patterns = [
     /<meta[^>]+property=["']og:image(?::url)?["'][^>]+content=["']([^"']+)["']/i,
@@ -26,7 +22,7 @@ function extractOgImage(html, pageUrl) {
     const m = html.match(re);
     if (m && m[1]) {
       try {
-        const url = new URL(decodeEntities(m[1].trim()), pageUrl).href;
+        const url = new URL(m[1].trim().replace(/&amp;/gi, '&').replace(/&#0*38;/g, '&').replace(/&#x0*26;/gi, '&'), pageUrl).href;
         if (EXPIRING_HOST.test(url)) return null;
         return url;
       } catch {
