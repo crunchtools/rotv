@@ -532,6 +532,12 @@ function AppContent() {
         }
         break;
       }
+      case 'tripTourOpenMyValley': {
+        setShowUserDropdown(false);
+        setShowLoginDropdown(false);
+        setShowMyValley(true);
+        break;
+      }
     }
   }, [destinations, isAuthenticated, isAdmin, navigate, tripAddStop, tripSetShowBuilder]);
 

@@ -50,13 +50,23 @@ export const TRIP_TOUR_STEPS = [
     mobile: { mobilePositionAbove: true }
   },
   {
-    selector: '.my-trips-menu-item',
-    title: 'My Trips Anywhere',
-    description: 'Your trip library is reachable any time from the user menu too. Sign in to save trips, share them publicly (after a quick review), or — if you’re an admin — feature them for everyone.',
+    selector: '.my-valley-menu-item',
+    title: 'My Valley',
+    description: 'Your saved places, visited spots, and trips live in My Valley. Open it from the user menu any time.',
     position: 'left',
     action: 'tripTourEndDemo',
-    spotlightSelector: '.my-trips-menu-item',
+    spotlightSelector: '.my-valley-menu-item',
     delay: 400,
+    mobile: { position: 'bottom' }
+  },
+  {
+    selector: '.my-valley-trips-tab',
+    title: 'Your Trips',
+    description: 'Inside My Valley, tap the Trips tab to find saved trips, browse Featured Routes, or share a trip publicly.',
+    position: 'bottom',
+    action: 'tripTourOpenMyValley',
+    spotlightSelector: '.my-valley-trips-tab',
+    delay: 500,
     mobile: { position: 'bottom' }
   }
 ];
