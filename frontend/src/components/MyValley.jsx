@@ -206,7 +206,7 @@ export default function MyValley({ open, onClose, destinations = [] }) {
             🧭 Visited ({isAuthenticated ? visitedList.length : visited.length})
           </button>
           <button
-            className={`settings-tab-btn ${view === 'trips' ? 'active' : ''}`}
+            className={`settings-tab-btn my-valley-trips-tab ${view === 'trips' ? 'active' : ''}`}
             onClick={() => selectView('trips')}
           >
             🗺️ Trips ({tripCount})
