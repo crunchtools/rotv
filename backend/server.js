@@ -76,6 +76,7 @@ import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from '
 import { mcpMiddleware } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 import { startTracker, stopTracker, getBoatPositions } from './services/waterTaxiTrackerService.js';
+import { startTrainTracker, stopTrainTracker, getTrainPositions } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import {
   getAllActiveSeries,
@@ -753,7 +754,7 @@ async function initDatabase() {
       ('trail', 'Trail', 'trail.svg', 'trail,path,towpath', 'Hiking', 3),
       ('historic', 'Historic Site', 'historic.svg', 'historic,history,museum,house,mill,lock', 'Historical Tours', 4),
       ('bridge', 'Bridge', 'bridge.svg', 'bridge,covered bridge', NULL, 5),
-      ('train', 'Train Station', 'train.svg', 'train,station,depot,railroad', 'Train Rides', 6),
+      ('train', 'Train', 'train.svg', 'train,station,depot,railroad,cvsr,scenic', 'Train Rides', 6),
       ('nature', 'Nature Area', 'nature.svg', 'nature,preserve,wetland,marsh,ledges', 'Nature Study,Wildlife Viewing', 7),
       ('skiing', 'Skiing', 'skiing.svg', 'ski,winter', 'Cross-Country Skiing,Snowshoeing', 8),
       ('biking', 'Biking', 'biking.svg', 'bike,cycling', 'Biking', 9),
@@ -1878,7 +1879,7 @@ app.get('/api/linear-features', async (req, res) => {
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
-      WHERE p.poi_roles && ARRAY['trail','river','boundary','water_taxi']::text[]
+      WHERE p.poi_roles && ARRAY['trail','river','boundary','water_taxi','railroad']::text[]
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       ORDER BY p.poi_roles, p.name
     `);
@@ -2180,6 +2181,10 @@ app.get('/api/river-gauges/:id/readings', async (req, res) => {
 
 app.get('/api/water-taxi/position', (_req, res) => {
   res.json(getBoatPositions());
+});
+
+app.get('/api/train/position', (_req, res) => {
+  res.json(getTrainPositions());
 });
 
 app.get('/api/trails/mtb', async (req, res) => {
@@ -3145,6 +3150,11 @@ async function start() {
       console.error('[WaterTaxiTracker] Failed to start:', err.message));
   }
 
+  if (process.env.DISABLE_LIVE_TRAIN_TRACKER !== 'true') {
+    startTrainTracker(pool).catch(err =>
+      console.error('[TrainTracker] Failed to start:', err.message));
+  }
+
   activeSmtpServer = startSmtpServer(pool);
 
   // Materialize recurring-event series into poi_events so they appear everywhere regular
@@ -3164,6 +3174,7 @@ async function start() {
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
   stopTracker();
+  stopTrainTracker();
   if (activeSmtpServer) activeSmtpServer.close();
   await stopJobLogger();
   await stopJobScheduler();
@@ -3173,6 +3184,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   console.log('SIGINT received, shutting down gracefully...');
   stopTracker();
+  stopTrainTracker();
   if (activeSmtpServer) activeSmtpServer.close();
   await stopJobLogger();
   await stopJobScheduler();
