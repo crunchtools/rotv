@@ -9,6 +9,8 @@ import MyTripsModal from './components/MyTripsModal';
 import MyValley from './components/MyValley';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
 import useBoatPosition from './hooks/useBoatPosition';
+import useTrainPosition from './hooks/useTrainPosition';
+import { isFeatureEnabled } from './utils/featureFlags';
 import Map from './components/Map';
 import Sidebar from './components/Sidebar';
 import NotificationBell from './components/NotificationBell';
@@ -110,7 +112,9 @@ function AppContent() {
   const [showTrails, setShowTrails] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [showWaterTaxis, setShowWaterTaxis] = useState(true);
+  const cvsrEnabled = useMemo(() => isFeatureEnabled('CVSR'), []);
   const boatPosition = useBoatPosition();
+  const trainPosition = useTrainPosition();
   const [visibleBoundaries, setVisibleBoundaries] = useState(new Set()); // Set of boundary IDs
 
   const [mapState, setMapState] = useState({
@@ -154,8 +158,9 @@ function AppContent() {
     setSelection((prev) => {
       const next = typeof value === 'function' ? value(prev.poi) : value;
       if (next == null) return { poi: null, kind: null };
-      const kind = next.poi_roles?.includes('organization')
-        ? 'destination'
+      const hasLinearRole = next.poi_roles?.some(r => ['trail', 'river', 'boundary', 'water_taxi', 'railroad'].includes(r));
+      const kind = (next.geometry && hasLinearRole) ? 'linear'
+        : next.poi_roles?.includes('organization') ? 'destination'
         : (next.geometry ? 'linear' : 'destination');
       return { poi: next, kind };
     });
@@ -768,6 +773,18 @@ function AppContent() {
 
       const poi = findPoiBySlug(initialPoiSlug);
       if (poi) {
+        if (poi.poi_roles?.includes('railroad')) {
+          localStorage.setItem('feature_CVSR', 'true');
+          fetch('/api/train/position').then(r => r.json()).then(data => {
+            const pos = data?.cvsr;
+            if (pos) {
+              const pad = 0.005;
+              setBoundsToFit([[pos.latitude - pad, pos.longitude - pad],
+                              [pos.latitude + pad, pos.longitude + pad]]);
+              setFitNonce(n => n + 1);
+            }
+          }).catch(() => {});
+        }
         setSelectedPoi(poi);
         document.title = `${poi.name} | Roots of The Valley`;
         if (isOnMtbPage) {
@@ -2391,7 +2408,9 @@ function AppContent() {
           onToggleRivers={setShowRivers}
           showWaterTaxis={showWaterTaxis}
           onToggleWaterTaxis={setShowWaterTaxis}
+          cvsrEnabled={cvsrEnabled}
           boatPosition={boatPosition}
+          trainPosition={trainPosition}
           visibleBoundaries={visibleBoundaries}
           onToggleBoundary={(id) => {
             const willEnable = !visibleBoundaries.has(id);
@@ -2537,6 +2556,7 @@ function AppContent() {
           onSidebarTabChange={(tab) => setInitialSidebarTab(null)}
           onActiveGaugeChange={setActiveGauge}
           boatPosition={boatPosition}
+          trainPosition={trainPosition}
         />
       </main>
       {showFeedbackForm && (
