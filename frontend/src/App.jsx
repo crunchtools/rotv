@@ -117,6 +117,13 @@ function AppContent() {
   const trainPosition = useTrainPosition();
   const [visibleBoundaries, setVisibleBoundaries] = useState(new Set()); // Set of boundary IDs
 
+  // URL-specified legend filters (#531): parsed on load, consumed by init effects
+  const urlTypesRef = useRef(null);
+  const urlBoundariesRef = useRef(null);
+  const urlLayersRef = useRef(null);
+  const defaultTypesRef = useRef(null);
+  const defaultBoundaryIdsRef = useRef(null);
+
   const [mapState, setMapState] = useState({
     center: [41.26, -81.55],  // Park center default
     zoom: 11,
@@ -739,6 +746,23 @@ function AppContent() {
       window.history.replaceState({}, '', newUrl);
     }
 
+    // Shareable legend filters (#531)
+    const typesParam = params.get('types');
+    if (typesParam) {
+      urlTypesRef.current = new Set(typesParam.split(',').map(t => t.trim()).filter(Boolean));
+    }
+    const boundariesParam = params.get('boundaries');
+    if (boundariesParam) {
+      urlBoundariesRef.current = new Set(
+        boundariesParam.split(',').map(b => parseInt(b.trim(), 10)).filter(id => !isNaN(id))
+      );
+    }
+    const layersParam = params.get('layers');
+    if (typesParam || layersParam) {
+      const layers = layersParam ? new Set(layersParam.split(',').map(l => l.trim()).filter(Boolean)) : new Set();
+      urlLayersRef.current = layers;
+    }
+
     let poiSlug = null;
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
@@ -1179,7 +1203,21 @@ function AppContent() {
       enabledTypes.add('boundary');
       enabledTypes.add('organization');
 
-      setVisibleTypes(enabledTypes);
+      defaultTypesRef.current = new Set(enabledTypes);
+
+      if (urlTypesRef.current) {
+        setVisibleTypes(urlTypesRef.current);
+        urlTypesRef.current = null;
+      } else {
+        setVisibleTypes(enabledTypes);
+      }
+      if (urlLayersRef.current !== null) {
+        const layers = urlLayersRef.current;
+        setShowTrails(layers.has('trails'));
+        setShowRivers(layers.has('rivers'));
+        setShowWaterTaxis(layers.has('water-taxis'));
+        urlLayersRef.current = null;
+      }
       hasInitializedVisibleTypes.current = true;
     }
   }, [iconConfig]);
@@ -1191,11 +1229,75 @@ function AppContent() {
         f => f.poi_roles?.includes('boundary') && f.name === 'Cuyahoga Valley National Park'
       );
       if (cvnpBoundary) {
+        defaultBoundaryIdsRef.current = new Set([cvnpBoundary.id]);
+      }
+
+      if (urlBoundariesRef.current) {
+        setVisibleBoundaries(urlBoundariesRef.current);
+        urlBoundariesRef.current = null;
+      } else if (cvnpBoundary) {
         setVisibleBoundaries(new Set([cvnpBoundary.id]));
       }
       hasInitializedBoundaries.current = true;
     }
   }, [linearFeatures]);
+
+  // Sync legend filter state to URL query params (#531)
+  useEffect(() => {
+    if (!hasInitializedVisibleTypes.current || !hasInitializedBoundaries.current) return;
+
+    const params = new URLSearchParams(window.location.search);
+    let changed = false;
+
+    const defaultTypes = defaultTypesRef.current;
+    const typesDefault = defaultTypes && visibleTypes.size === defaultTypes.size &&
+      [...visibleTypes].every(t => defaultTypes.has(t));
+    const layersDefault = showTrails && showRivers && showWaterTaxis;
+    const allPoiDefault = typesDefault && layersDefault;
+
+    if (allPoiDefault) {
+      if (params.has('types')) { params.delete('types'); changed = true; }
+      if (params.has('layers')) { params.delete('layers'); changed = true; }
+    } else {
+      if (defaultTypes) {
+        if (typesDefault) {
+          if (params.has('types')) { params.delete('types'); changed = true; }
+        } else {
+          const sorted = [...visibleTypes].sort().join(',');
+          if (params.get('types') !== sorted) { params.set('types', sorted); changed = true; }
+        }
+      }
+      const activeLayers = [
+        showTrails && 'trails', showRivers && 'rivers', showWaterTaxis && 'water-taxis'
+      ].filter(Boolean);
+      if (layersDefault) {
+        if (params.has('layers')) { params.delete('layers'); changed = true; }
+      } else if (activeLayers.length === 0) {
+        if (params.get('layers') !== '') { params.set('layers', ''); changed = true; }
+      } else {
+        const val = activeLayers.sort().join(',');
+        if (params.get('layers') !== val) { params.set('layers', val); changed = true; }
+      }
+    }
+
+    const defaultBoundaries = defaultBoundaryIdsRef.current;
+    if (defaultBoundaries) {
+      const sameAsDefault = visibleBoundaries.size === defaultBoundaries.size &&
+        [...visibleBoundaries].every(id => defaultBoundaries.has(id));
+      if (sameAsDefault) {
+        if (params.has('boundaries')) { params.delete('boundaries'); changed = true; }
+      } else {
+        const sorted = [...visibleBoundaries].sort((a, b) => a - b).join(',');
+        if (params.get('boundaries') !== sorted) { params.set('boundaries', sorted); changed = true; }
+      }
+    }
+
+    if (changed) {
+      const search = params.toString();
+      const newUrl = window.location.pathname + (search ? `?${search}` : '');
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, [visibleTypes, visibleBoundaries, showTrails, showRivers, showWaterTaxis]);
 
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
