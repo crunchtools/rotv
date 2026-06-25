@@ -1510,10 +1510,14 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
 
   const snappedTrain = useMemo(() => {
     if (!trainPosition || !trainFeature?.geometry?.coordinates) return null;
-    return snapToLine(
+    const snap = snapToLine(
       [trainPosition.latitude, trainPosition.longitude],
       trainFeature.geometry.coordinates
     );
+    const gpsHeading = trainPosition.heading || 0;
+    const diff = Math.abs(((snap.bearing - gpsHeading + 540) % 360) - 180);
+    if (diff > 90) snap.bearing = (snap.bearing + 180) % 360;
+    return snap;
   }, [trainPosition, trainFeature]);
 
   const getLinearFeatureStyle = useCallback((feature, isSelected) => {
