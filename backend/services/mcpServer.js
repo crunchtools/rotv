@@ -814,39 +814,81 @@ function registerTools(server, pool, boss, mcpUserId) {
 
 }
 
-async function handleMcpRequest(req, res, pool, boss) {
-  const urlMatch = req.url.match(/^\/mcp\/([A-Za-z0-9_-]+)/);
-  const urlToken = urlMatch ? urlMatch[1] : null;
-  const queryMatch = req.url.match(/[?&]token=([A-Za-z0-9_-]+)/);
-  const queryToken = queryMatch ? queryMatch[1] : null;
-  const authHeader = req.headers.authorization;
-  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
-  const token = urlToken || queryToken || bearerToken;
+const sessions = new Map();
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
 
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, session] of sessions) {
+    if (now - session.lastAccess > SESSION_TIMEOUT_MS) {
+      session.transport.close().catch(() => {});
+      sessions.delete(id);
+    }
+  }
+}, 60_000);
+
+function extractToken(req) {
+  const urlMatch = req.url.match(/^\/mcp\/([A-Za-z0-9_-]+)/);
+  if (urlMatch) return urlMatch[1];
+  const queryMatch = req.url.match(/[?&]token=([A-Za-z0-9_-]+)/);
+  if (queryMatch) return queryMatch[1];
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
+  return null;
+}
+
+async function resolveUser(pool, token) {
+  const userResult = await pool.query(
+    'SELECT id, is_admin FROM users WHERE mcp_token = $1', [token]
+  );
+  if (userResult.rows.length > 0) return userResult.rows[0].id;
+
+  const envToken = process.env.MCP_ADMIN_TOKEN;
+  if (envToken && token.length === envToken.length &&
+      crypto.timingSafeEqual(Buffer.from(token), Buffer.from(envToken))) {
+    const adminResult = await pool.query(
+      'SELECT id FROM users WHERE is_admin = TRUE ORDER BY id LIMIT 1'
+    );
+    return adminResult.rows.length > 0 ? adminResult.rows[0].id : MCP_ADMIN_USER_ID;
+  }
+  return null;
+}
+
+async function handleMcpRequest(req, res, pool, boss) {
+  const token = extractToken(req);
   if (!token) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
     return;
   }
 
-  let mcpUserId = null;
+  const sessionId = req.headers['mcp-session-id'];
 
-  const userResult = await pool.query(
-    'SELECT id, is_admin FROM users WHERE mcp_token = $1', [token]
-  );
-  if (userResult.rows.length > 0) {
-    mcpUserId = userResult.rows[0].id;
-  } else {
-    const envToken = process.env.MCP_ADMIN_TOKEN;
-    if (envToken && token.length === envToken.length &&
-        crypto.timingSafeEqual(Buffer.from(token), Buffer.from(envToken))) {
-      const adminResult = await pool.query(
-        'SELECT id FROM users WHERE is_admin = TRUE ORDER BY id LIMIT 1'
-      );
-      mcpUserId = adminResult.rows.length > 0 ? adminResult.rows[0].id : MCP_ADMIN_USER_ID;
+  if (req.method === 'DELETE') {
+    if (sessionId && sessions.has(sessionId)) {
+      const session = sessions.get(sessionId);
+      await session.transport.close();
+      sessions.delete(sessionId);
     }
+    res.writeHead(200);
+    res.end();
+    return;
   }
 
+  if (sessionId && sessions.has(sessionId)) {
+    const session = sessions.get(sessionId);
+    session.lastAccess = Date.now();
+    await session.transport.handleRequest(req, res);
+    return;
+  }
+
+  if (sessionId) {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32000, message: 'Session not found' }, id: null }));
+    return;
+  }
+
+  const mcpUserId = await resolveUser(pool, token);
   if (!mcpUserId) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'Unauthorized' }));
@@ -857,11 +899,26 @@ async function handleMcpRequest(req, res, pool, boss) {
   registerTools(server, pool, boss, mcpUserId);
 
   const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: undefined
+    sessionIdGenerator: () => crypto.randomUUID()
   });
+
+  transport.onclose = () => {
+    const sid = transport.sessionId;
+    if (sid) sessions.delete(sid);
+  };
 
   await server.connect(transport);
   await transport.handleRequest(req, res);
+
+  const newSessionId = transport.sessionId;
+  if (newSessionId) {
+    sessions.set(newSessionId, {
+      server,
+      transport,
+      mcpUserId,
+      lastAccess: Date.now()
+    });
+  }
 }
 
 export function mcpMiddleware(pool, boss) {
