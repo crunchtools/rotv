@@ -2718,6 +2718,10 @@ async function resolvePoiOgImage(poiId, baseUrl) {
   if (!url) {
     url = `${baseUrl}${OG_FALLBACK_IMAGE}`;
   }
+  if (ogImageCache.size >= 1000) {
+    const oldestKey = ogImageCache.keys().next().value;
+    ogImageCache.delete(oldestKey);
+  }
   ogImageCache.set(cacheKey, { url, expires: Date.now() + OG_IMAGE_CACHE_TTL_MS });
   return url;
 }
@@ -2834,7 +2838,18 @@ app.use(async (req, res, next) => {
     const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
     // Image priority: source article image, then POI primary photo, then brand.
     const sourceImage = isUsableSourceImage(item.image_url) ? item.image_url : null;
-    const ogImage = escapeHtml(sourceImage || await resolvePoiOgImage(item.poi_id, baseUrl));
+    let resolvedOgUrl = sourceImage;
+    if (!resolvedOgUrl) {
+      // First try the landing POI's photo fallback
+      const landingOgImage = await resolvePoiOgImage(item._poi.id, baseUrl);
+      if (landingOgImage && !landingOgImage.endsWith(OG_FALLBACK_IMAGE)) {
+        resolvedOgUrl = landingOgImage;
+      } else {
+        // Fall back to the child POI's photo where the item actually belongs
+        resolvedOgUrl = await resolvePoiOgImage(item.poi_id, baseUrl);
+      }
+    }
+    const ogImage = escapeHtml(resolvedOgUrl);
 
     const indexPath = path.join(staticPath, 'index.html');
     let html = await fs.readFile(indexPath, 'utf-8');
