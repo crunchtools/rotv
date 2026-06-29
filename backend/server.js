@@ -2643,12 +2643,27 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
+// Crawlers re-hit the same news/event permalinks repeatedly; cache the slug
+// resolution (a POI scan + PostGIS rollup + content query) so each hit doesn't
+// repeat the work.
+const permalinkCache = new Map();
+const PERMALINK_CACHE_TTL_MS = 5 * 60 * 1000;
 async function findItemBySlugs(type, poiSlug, titleSlug) {
+  const cacheKey = `${type}|${poiSlug}|${titleSlug}`;
+  const cached = permalinkCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.item;
+  }
+
   const poisQuery = await pool.query(
     `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
   );
   const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
   if (!poi) return null;
+
+  // Roll up boundary/org POIs so a landing-page permalink resolves news/events
+  // that live under contained/owned child POIs (#406, #475).
+  const poiIds = await getRollupPoiIds(pool, poi.id);
 
   let rows;
   if (type === 'event') {
@@ -2660,10 +2675,10 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
-      WHERE e.poi_id = $1 AND e.moderation_status IN ('published', 'auto_approved')
+      WHERE e.poi_id = ANY($1) AND e.moderation_status IN ('published', 'auto_approved')
       GROUP BY e.id, p.name, p.id
       ORDER BY e.start_date DESC
-    `, [poi.id]);
+    `, [poiIds]);
     rows = q.rows;
   } else {
     const q = await pool.query(`
@@ -2673,15 +2688,17 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
-      WHERE n.poi_id = $1 AND n.moderation_status IN ('published', 'auto_approved')
+      WHERE n.poi_id = ANY($1) AND n.moderation_status IN ('published', 'auto_approved')
       GROUP BY n.id, p.name, p.id
       ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
-    `, [poi.id]);
+    `, [poiIds]);
     rows = q.rows;
   }
 
-  const item = rows.find(r => generateSlug(r.title) === titleSlug);
-  return item ? { ...item, poi_slug: poiSlug, _poi: poi } : null;
+  const match = rows.find(r => generateSlug(r.title) === titleSlug);
+  const item = match ? { ...match, poi_slug: poiSlug, _poi: poi } : null;
+  permalinkCache.set(cacheKey, { item, expires: Date.now() + PERMALINK_CACHE_TTL_MS });
+  return item;
 }
 
 // og:image for a POI: primary photo at size=large (smaller is rejected by Facebook), else branded fallback.
@@ -2834,7 +2851,9 @@ app.use(async (req, res, next) => {
     const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
     // Image priority: source article image, then POI primary photo, then brand.
     const sourceImage = isUsableSourceImage(item.image_url) ? item.image_url : null;
-    const ogImage = escapeHtml(sourceImage || await resolvePoiOgImage(item.poi_id, baseUrl));
+    // Use the permalink's landing POI for the photo fallback so rolled-up child
+    // items show the landing page's photo, not the child's (#475).
+    const ogImage = escapeHtml(sourceImage || await resolvePoiOgImage(item._poi.id, baseUrl));
 
     const indexPath = path.join(staticPath, 'index.html');
     let html = await fs.readFile(indexPath, 'utf-8');
