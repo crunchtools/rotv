@@ -61,7 +61,7 @@ export async function startTrainTracker(dbPool) {
 
     await authenticate();
 
-    pollTimer = setInterval(async () => {
+    const poll = async () => {
       try {
         const res = await fetch(`${USFT_API_URL}/map/devices`, {
           headers: {
@@ -107,7 +107,10 @@ export async function startTrainTracker(dbPool) {
       } catch (err) {
         console.warn(`[TrainTracker] Poll error: ${err.message}`);
       }
-    }, POLL_INTERVAL_MS);
+    };
+
+    poll();
+    pollTimer = setInterval(poll, POLL_INTERVAL_MS);
 
     jwtTimer = setInterval(async () => {
       try {
