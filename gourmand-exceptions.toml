@@ -249,3 +249,13 @@ check = "single_use_helpers"
 path = "frontend/src/utils/iconUtils.js"
 justification = "getDestinationIconTypeFromConfig (37 lines), poiMatchesActivityForTypes (16 lines), isActivityFilterActive (9 lines) are exported utility functions consumed by map components"
 classification = "by_design"
+
+# ============================================================================
+# generic_names — standard math variable names in geometric formulas
+# ============================================================================
+
+[[exceptions]]
+check = "generic_names"
+path = "frontend/src/utils/snapToLine.js"
+justification = "x and y are the standard variable names in the forward azimuth / atan2 bearing formula from the spherical law of cosines — renaming would make the math harder to verify against reference implementations"
+classification = "by_design"

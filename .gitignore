@@ -21,6 +21,9 @@ media/
 # Local MCP server config
 .mcp.json
 
+# One-off data generation scripts (not part of the app)
+data/boundaries/*.py
+
 # Gourmand reports and cache
 gourmand-report.txt
 .gourmand-cache/
