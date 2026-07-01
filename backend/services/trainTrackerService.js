@@ -12,8 +12,6 @@
 const USFT_API_URL = process.env.USFT_API_URL || 'https://hades.usft.com';
 const SHARING_TOKEN = process.env.USFT_SHARING_TOKEN || '';
 const POLL_INTERVAL_MS = parseInt(process.env.USFT_POLL_INTERVAL_MS, 10) || 5000;
-const ACTIVE_STALE_MS = 5 * 60 * 1000;
-const IDLE_STALE_MS = 24 * 60 * 60 * 1000;
 const JWT_REFRESH_MS = 24 * 60 * 60 * 1000;
 
 let jwt = null;
@@ -70,8 +68,8 @@ export async function startTrainTracker(dbPool) {
           },
         });
 
-        if (res.status === 401) {
-          console.log('[TrainTracker] JWT expired, re-authenticating');
+        if (res.status === 400 || res.status === 401) {
+          console.log(`[TrainTracker] Auth rejected (${res.status}), re-authenticating`);
           await authenticate();
           return;
         }
@@ -133,12 +131,6 @@ export function stopTrainTracker() {
 
 export function getTrainPositions() {
   if (!position) {
-    return { cvsr: null };
-  }
-
-  const age = Date.now() - new Date(position.updatedAt).getTime();
-  const threshold = position.status === 'active' ? ACTIVE_STALE_MS : IDLE_STALE_MS;
-  if (age > threshold) {
     return { cvsr: null };
   }
 
