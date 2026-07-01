@@ -36,75 +36,14 @@ async function authenticate() {
     throw new Error(`USFT auth failed: ${res.status} ${res.statusText}`);
   }
 
-  const data = await res.json();
-  jwt = data.token;
+  const authResponse = await res.json();
+  jwt = authResponse.token;
   console.log('[TrainTracker] Authenticated with USFT');
 }
 
-function deriveStatus(device) {
-  if (!device.ignition) return 'parked';
-  if ((device.location?.velocity || 0) > 0) return 'active';
-  return 'idle';
-}
+export async function startTrainTracker(dbPool) {
+  pool = dbPool;
 
-async function pollDevices() {
-  try {
-    const res = await fetch(`${USFT_API_URL}/map/devices`, {
-      headers: {
-        'Authorization': `Bearer ${jwt}`,
-        'User-Agent': 'RootsOfTheValley/1.0 (+https://rootsofthevalley.org)',
-      },
-    });
-
-    if (res.status === 401) {
-      console.log('[TrainTracker] JWT expired, re-authenticating');
-      await authenticate();
-      return;
-    }
-
-    if (!res.ok) {
-      console.warn(`[TrainTracker] Poll failed: ${res.status}`);
-      return;
-    }
-
-    const devices = await res.json();
-    if (!Array.isArray(devices) || devices.length === 0) return;
-
-    const device = devices[0];
-    const loc = device.location;
-    if (!loc) return;
-
-    const lat = parseFloat(loc.latitude);
-    const lng = parseFloat(loc.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-    position = {
-      latitude: lat,
-      longitude: lng,
-      heading: parseInt(loc.heading, 10) || 0,
-      speed: parseInt(loc.velocity, 10) || 0,
-      status: deriveStatus(device),
-      updatedAt: loc.lastUpdated || new Date().toISOString(),
-    };
-  } catch (err) {
-    console.warn(`[TrainTracker] Poll error: ${err.message}`);
-  }
-}
-
-function startPolling() {
-  pollTimer = setInterval(pollDevices, POLL_INTERVAL_MS);
-  pollDevices();
-
-  jwtTimer = setInterval(async () => {
-    try {
-      await authenticate();
-    } catch (err) {
-      console.warn(`[TrainTracker] JWT refresh failed: ${err.message}`);
-    }
-  }, JWT_REFRESH_MS);
-}
-
-async function checkSettingAndStart() {
   if (!pool) return;
   try {
     const setting = await pool.query(
@@ -121,15 +60,65 @@ async function checkSettingAndStart() {
     }
 
     await authenticate();
-    startPolling();
+
+    pollTimer = setInterval(async () => {
+      try {
+        const res = await fetch(`${USFT_API_URL}/map/devices`, {
+          headers: {
+            'Authorization': `Bearer ${jwt}`,
+            'User-Agent': 'RootsOfTheValley/1.0 (+https://rootsofthevalley.org)',
+          },
+        });
+
+        if (res.status === 401) {
+          console.log('[TrainTracker] JWT expired, re-authenticating');
+          await authenticate();
+          return;
+        }
+
+        if (!res.ok) {
+          console.warn(`[TrainTracker] Poll failed: ${res.status}`);
+          return;
+        }
+
+        const devices = await res.json();
+        if (!Array.isArray(devices) || devices.length === 0) return;
+
+        const device = devices[0];
+        const loc = device.location;
+        if (!loc) return;
+
+        const lat = parseFloat(loc.latitude);
+        const lng = parseFloat(loc.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+        const status = !device.ignition ? 'parked'
+          : (device.location?.velocity || 0) > 0 ? 'active'
+          : 'idle';
+
+        position = {
+          latitude: lat,
+          longitude: lng,
+          heading: parseInt(loc.heading, 10) || 0,
+          speed: parseInt(loc.velocity, 10) || 0,
+          status,
+          updatedAt: loc.lastUpdated || new Date().toISOString(),
+        };
+      } catch (err) {
+        console.warn(`[TrainTracker] Poll error: ${err.message}`);
+      }
+    }, POLL_INTERVAL_MS);
+
+    jwtTimer = setInterval(async () => {
+      try {
+        await authenticate();
+      } catch (err) {
+        console.warn(`[TrainTracker] JWT refresh failed: ${err.message}`);
+      }
+    }, JWT_REFRESH_MS);
   } catch (err) {
     console.error('[TrainTracker] Failed to start:', err.message);
   }
-}
-
-export async function startTrainTracker(dbPool) {
-  pool = dbPool;
-  await checkSettingAndStart();
 }
 
 export function stopTrainTracker() {
