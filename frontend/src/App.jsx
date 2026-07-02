@@ -1132,8 +1132,8 @@ function AppContent() {
   const refreshAllData = React.useCallback(async () => {
     try {
       const [destResponse, linearResponse, iconResponse, virtualPoisResponse, associationsResponse] = await Promise.all([
-        fetch('/api/destinations'),
-        fetch('/api/linear-features'),
+        fetch('/api/pois?role=point'),
+        fetch('/api/pois?role=trail,river,boundary,water_taxi,railroad'),
         fetch('/api/admin/icons'),
         fetch('/api/pois?role=organization'),
         fetch('/api/associations')

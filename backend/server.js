@@ -922,7 +922,8 @@ app.get('/api/pois', async (req, res) => {
     const { type, role } = req.query;
 
     let query = `
-      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+      SELECT p.id, p.name, p.poi_roles, p.poi_roles[1] as feature_type,
+             p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
              p.navigation_latitude, p.navigation_longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
@@ -931,20 +932,23 @@ app.get('/api/pois', async (req, res) => {
              p.length_miles, p.difficulty, p.has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
+             p.research_context,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id
+      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
       WHERE (p.deleted IS NULL OR p.deleted = FALSE)
     `;
 
+    const filterRole = role || type;
     const params = [];
-    if (role) {
-      params.push(role);
-      query += ` AND $${params.length} = ANY(p.poi_roles)`;
-    } else if (type) {
-      params.push(type);
-      query += ` AND $${params.length} = ANY(p.poi_roles)`;
+    if (filterRole) {
+      const roles = filterRole.split(',').map(r => r.trim()).filter(Boolean);
+      const placeholders = roles.map(r => { params.push(r); return `$${params.length}`; });
+      query += ` AND (${placeholders.map(p => `${p} = ANY(p.poi_roles)`).join(' OR ')})`;
+      if (roles.length === 1 && roles[0] === 'point') {
+        query += ` AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL`;
+      }
     }
 
     query += ` ORDER BY p.poi_roles, p.name`;
@@ -1010,17 +1014,20 @@ app.get('/api/pois/summary', async (req, res) => {
 app.get('/api/pois/:id', async (req, res) => {
   try {
     const poiQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
+      SELECT p.id, p.name, p.poi_roles, p.poi_roles[1] as feature_type,
+             p.latitude, p.longitude, p.geometry, p.geometry_drive_file_id,
              p.navigation_latitude, p.navigation_longitude,
              p.owner_id, o.name as owner_name, p.property_owner,
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, p.has_primary_image,
-             p.boundary_type, p.boundary_color, p.news_url, p.events_url,
+             p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
+             p.research_context,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id
+      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
       LEFT JOIN eras e ON p.era_id = e.id
       WHERE p.id = $1`,
       [req.params.id]
@@ -1810,115 +1817,20 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
   }
 });
 
-app.get('/api/destinations', async (req, res) => {
-  try {
-    const destinationsQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude,
-             p.navigation_latitude, p.navigation_longitude,
-             p.owner_id, o.name as owner_name, p.property_owner,
-             p.brief_description, p.era_id, e.name as era_name, p.historical_description,
-             p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
-             p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
-             p.collection_tier, p.deleted, p.created_at, p.updated_at
-      FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
-      LEFT JOIN eras e ON p.era_id = e.id
-      WHERE 'point' = ANY(p.poi_roles)
-        AND p.latitude IS NOT NULL AND p.longitude IS NOT NULL
-        AND (p.deleted IS NULL OR p.deleted = FALSE)
-      ORDER BY p.name
-    `);
-    res.json(destinationsQuery.rows);
-  } catch (error) {
-    console.error('Error fetching destinations:', error);
-    res.status(500).json({ error: 'Failed to fetch destinations' });
-  }
+app.get('/api/destinations', (req, res) => {
+  res.redirect(301, '/api/pois?role=point');
 });
 
-app.get('/api/destinations/:id', async (req, res) => {
-  try {
-    const destinationQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_roles, p.latitude, p.longitude,
-             p.navigation_latitude, p.navigation_longitude,
-             p.owner_id, o.name as owner_name, p.property_owner,
-             p.brief_description, p.era_id, e.name as era_name, p.historical_description,
-             p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
-             p.has_primary_image, p.news_url, p.events_url, p.research_context, p.status_url,
-             p.collection_tier, p.deleted, p.created_at, p.updated_at
-      FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
-      LEFT JOIN eras e ON p.era_id = e.id
-      WHERE p.id = $1`,
-      [req.params.id]
-    );
-    if (destinationQuery.rows.length === 0) {
-      return res.status(404).json({ error: 'Destination not found' });
-    }
-    res.json(destinationQuery.rows[0]);
-  } catch (error) {
-    console.error('Error fetching destination:', error);
-    res.status(500).json({ error: 'Failed to fetch destination' });
-  }
+app.get('/api/destinations/:id', (req, res) => {
+  res.redirect(301, `/api/pois/${req.params.id}`);
 });
 
-app.get('/api/linear-features', async (req, res) => {
-  try {
-    const linearFeaturesQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_roles, p.geometry,
-             p.navigation_latitude, p.navigation_longitude,
-             p.poi_roles[1] as feature_type,
-             p.owner_id, o.name as owner_name, p.property_owner,
-             p.brief_description, p.era_id, e.name as era_name, p.historical_description,
-             p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
-             p.length_miles, p.difficulty, p.has_primary_image,
-             p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
-             p.collection_tier, p.deleted, p.created_at, p.updated_at
-      FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
-      LEFT JOIN eras e ON p.era_id = e.id
-      WHERE p.poi_roles && ARRAY['trail','river','boundary','water_taxi','railroad']::text[]
-        AND (p.deleted IS NULL OR p.deleted = FALSE)
-      ORDER BY p.poi_roles, p.name
-    `);
-    res.json(linearFeaturesQuery.rows);
-  } catch (error) {
-    console.error('Error fetching linear features:', error);
-    res.status(500).json({ error: 'Failed to fetch linear features' });
-  }
+app.get('/api/linear-features', (req, res) => {
+  res.redirect(301, '/api/pois?role=trail,river,boundary,water_taxi,railroad');
 });
 
-app.get('/api/linear-features/:id', async (req, res) => {
-  try {
-    const linearFeatureQuery = await pool.query(`
-      SELECT p.id, p.name, p.poi_roles, p.geometry,
-             p.navigation_latitude, p.navigation_longitude,
-             p.poi_roles[1] as feature_type,
-             p.owner_id, o.name as owner_name, p.property_owner,
-             p.brief_description, p.era_id, e.name as era_name, p.historical_description,
-             p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
-             p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
-             p.length_miles, p.difficulty, p.has_primary_image,
-             p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
-             p.collection_tier, p.deleted, p.created_at, p.updated_at
-      FROM pois p
-      LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
-      LEFT JOIN eras e ON p.era_id = e.id
-      WHERE p.id = $1`,
-      [req.params.id]
-    );
-    if (linearFeatureQuery.rows.length === 0) {
-      return res.status(404).json({ error: 'Linear feature not found' });
-    }
-    res.json(linearFeatureQuery.rows[0]);
-  } catch (error) {
-    console.error('Error fetching linear feature:', error);
-    res.status(500).json({ error: 'Failed to fetch linear feature' });
-  }
+app.get('/api/linear-features/:id', (req, res) => {
+  res.redirect(301, `/api/pois/${req.params.id}`);
 });
 
 app.get('/api/health', (req, res) => {
