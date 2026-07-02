@@ -145,7 +145,7 @@ jobs:
           docker stop rotv 2>/dev/null || true
           docker rm rotv 2>/dev/null || true
 
-  gourmand:
+  gourmand-review:
     name: Code Quality (Gourmand)
     runs-on: ubuntu-latest
 
