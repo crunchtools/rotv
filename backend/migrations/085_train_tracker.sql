@@ -10,7 +10,7 @@ UPDATE icons SET label = 'Train'
 WHERE name = 'train' AND label = 'Train Station';
 
 UPDATE pois
-SET live_tracker_url = 'https://www.lvgps.net/view/gzr9jEzIiHPd5c71ZfUv6uaFCN3rsf-kAts08dBEZPgMzyqR',
+SET live_tracker_url = 'https://www.lvgps.net/view/NbxL6kX7-vNpaZPfFUdcnJ3WSoYkxx07TWMP1CKn17dl15tB',
     poi_roles = CASE
       WHEN NOT ('railroad' = ANY(poi_roles)) THEN array_append(poi_roles, 'railroad')
       ELSE poi_roles

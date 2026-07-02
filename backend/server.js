@@ -929,7 +929,8 @@ app.get('/api/pois', async (req, res) => {
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, p.has_primary_image,
-             p.boundary_type, p.boundary_color, p.news_url, p.events_url,
+             p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
       LEFT JOIN pois o ON p.owner_id = o.id
