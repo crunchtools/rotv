@@ -85,8 +85,23 @@ export function upcomingFridayISO(tz = 'America/New_York') {
 }
 
 export async function generateDigest(pool, tz = 'America/New_York', asOfDate = null) {
-  const { events, news } = await fetchDigestContent(pool, tz, asOfDate);
-  return renderDigestHtml(events, news, tz);
+  const [{ events, news }, greeting] = await Promise.all([
+    fetchDigestContent(pool, tz, asOfDate),
+    fetchDigestGreeting(pool)
+  ]);
+  return renderDigestHtml(events, news, tz, greeting);
+}
+
+async function fetchDigestGreeting(pool) {
+  try {
+    const result = await pool.query(
+      "SELECT value FROM admin_settings WHERE key = 'digest_greeting'"
+    );
+    const val = result.rows[0]?.value?.trim();
+    return val || null;
+  } catch {
+    return null;
+  }
 }
 
 async function fetchDigestContent(pool, tz, asOfDate) {
@@ -124,7 +139,7 @@ async function fetchDigestContent(pool, tz, asOfDate) {
   };
 }
 
-function renderDigestHtml(events, news, tz = 'America/New_York') {
+function renderDigestHtml(events, news, tz = 'America/New_York', greeting = null) {
   if (events.length === 0 && news.length === 0) {
     return '';
   }
@@ -225,6 +240,11 @@ function renderDigestHtml(events, news, tz = 'America/New_York') {
     </a>
     <h1>What's Happening in the Valley This Weekend</h1>
     <p>Your weekly digest from <a href="https://rootsofthevalley.org" style="color: #2d5016 !important; text-decoration: underline;">Roots of The Valley</a></p>
+${greeting ? `
+    <div style="background-color: #f0f7e8; border-left: 4px solid #2d5016; padding: 15px 20px; margin: 20px 0; border-radius: 4px;">
+      <p style="margin: 0; color: #333; font-size: 1em;">${escapeHtml(greeting)}</p>
+    </div>
+` : ''}
 `;
 
   const linkStyle = 'color: #2d5016 !important; text-decoration: underline; font-weight: 500;';
@@ -571,6 +591,7 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
     return { success: true, sent: 0, skipped: 0, candidates: 0 };
   }
 
+  const greeting = await fetchDigestGreeting(pool);
   const allPoiIds = [...new Set(targets.rows.flatMap(t => t.poi_ids))];
 
   const [newsResult, eventsResult] = await Promise.all([
@@ -625,7 +646,7 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
       tz
     ).slice(0, 10);
 
-    const html = renderDigestHtml(userEvents, userNews, tz);
+    const html = renderDigestHtml(userEvents, userNews, tz, greeting);
     if (!html) {
       skipped++;
       continue;
