@@ -604,7 +604,7 @@ function ZoomTooltipHider() {
   return null;
 }
 
-function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, cvsrEnabled, visibleBoundaries, searchQuery, iconConfig }) {
+function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery, iconConfig }) {
   const map = useMap();
   const search = (searchQuery || '').toLowerCase();
 
@@ -656,7 +656,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
           } else if (feature.poi_roles?.includes('water_taxi')) {
             isLayerVisible = showWaterTaxis;
           } else if (feature.poi_roles?.includes('railroad')) {
-            isLayerVisible = cvsrEnabled && visibleTypes.has('train');
+            isLayerVisible = visibleTypes.has('train');
           } else if (feature.poi_roles?.includes('boundary')) {
             isLayerVisible = visibleBoundaries.has(feature.id);
           }
@@ -1180,7 +1180,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, showWaterTaxis, onToggleWaterTaxis, cvsrEnabled, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded, boatPosition, trainPosition }) {
+function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, showWaterTaxis, onToggleWaterTaxis, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded, boatPosition, trainPosition }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
   // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
   // dual-role organization+boundary may be selected as a destination yet still
@@ -1508,15 +1508,24 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   );
   const { label: trainStatusLabel, className: trainStatusClass } = getTrainStatus(trainPosition);
 
+  const prevTrainPosRef = useRef(null);
   const snappedTrain = useMemo(() => {
     if (!trainPosition || !trainFeature?.geometry?.coordinates) return null;
     const snap = snapToLine(
       [trainPosition.latitude, trainPosition.longitude],
       trainFeature.geometry.coordinates
     );
-    const gpsHeading = trainPosition.heading || 0;
-    const diff = Math.abs(((snap.bearing - gpsHeading + 540) % 360) - 180);
-    if (diff > 90) snap.bearing = (snap.bearing + 180) % 360;
+    const prev = prevTrainPosRef.current;
+    if (prev) {
+      const dLat = trainPosition.latitude - prev.latitude;
+      const dLng = trainPosition.longitude - prev.longitude;
+      if (Math.abs(dLat) > 1e-6 || Math.abs(dLng) > 1e-6) {
+        const heading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
+        const diff = Math.abs(((snap.bearing - heading + 540) % 360) - 180);
+        if (diff > 90) snap.bearing = (snap.bearing + 180) % 360;
+      }
+    }
+    prevTrainPosRef.current = { latitude: trainPosition.latitude, longitude: trainPosition.longitude };
     return snap;
   }, [trainPosition, trainFeature]);
 
@@ -1638,7 +1647,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             : ((feature.poi_roles?.includes('trail') && (showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig)) && trailPassesActivityFilter(feature, visibleTypes, iconConfig)) ||
                (feature.poi_roles?.includes('river') && showRivers) ||
                (feature.poi_roles?.includes('water_taxi') && showWaterTaxis) ||
-               (feature.poi_roles?.includes('railroad') && cvsrEnabled && visibleTypes.has('train')) ||
+               (feature.poi_roles?.includes('railroad') && visibleTypes.has('train')) ||
                (feature.poi_roles?.includes('boundary') && visibleBoundaries.has(feature.id)));
           if (!isVisible) return null;
 
@@ -1888,7 +1897,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           </Marker>
         )}
 
-        {cvsrEnabled && visibleTypes.has('train') && snappedTrain && trainFeature && (
+        {visibleTypes.has('train') && snappedTrain && trainFeature && (
           <Marker
             position={snappedTrain.position}
             icon={createTrainIcon(snappedTrain.bearing)}
@@ -1929,7 +1938,6 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           showTrails={showTrails}
           showRivers={showRivers}
           showWaterTaxis={showWaterTaxis}
-          cvsrEnabled={cvsrEnabled}
           visibleBoundaries={visibleBoundaries}
           searchQuery={searchQuery}
           iconConfig={iconConfig}

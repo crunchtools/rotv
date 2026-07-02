@@ -10,7 +10,6 @@ import MyValley from './components/MyValley';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
 import useBoatPosition from './hooks/useBoatPosition';
 import useTrainPosition from './hooks/useTrainPosition';
-import { isFeatureEnabled } from './utils/featureFlags';
 import Map from './components/Map';
 import Sidebar from './components/Sidebar';
 import NotificationBell from './components/NotificationBell';
@@ -112,7 +111,6 @@ function AppContent() {
   const [showTrails, setShowTrails] = useState(true);
   const [showRivers, setShowRivers] = useState(true);
   const [showWaterTaxis, setShowWaterTaxis] = useState(true);
-  const cvsrEnabled = useMemo(() => isFeatureEnabled('CVSR'), []);
   const boatPosition = useBoatPosition();
   const trainPosition = useTrainPosition();
   const [visibleBoundaries, setVisibleBoundaries] = useState(new Set()); // Set of boundary IDs
@@ -798,7 +796,6 @@ function AppContent() {
       const poi = findPoiBySlug(initialPoiSlug);
       if (poi) {
         if (poi.poi_roles?.includes('railroad')) {
-          localStorage.setItem('feature_CVSR', 'true');
           fetch('/api/train/position').then(r => r.json()).then(data => {
             const pos = data?.cvsr;
             if (pos) {
@@ -2510,7 +2507,6 @@ function AppContent() {
           onToggleRivers={setShowRivers}
           showWaterTaxis={showWaterTaxis}
           onToggleWaterTaxis={setShowWaterTaxis}
-          cvsrEnabled={cvsrEnabled}
           boatPosition={boatPosition}
           trainPosition={trainPosition}
           visibleBoundaries={visibleBoundaries}
