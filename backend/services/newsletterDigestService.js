@@ -99,7 +99,8 @@ async function fetchDigestGreeting(pool) {
     );
     const val = result.rows[0]?.value?.trim();
     return val || null;
-  } catch {
+  } catch (err) {
+    console.error('Failed to fetch digest greeting:', err.message);
     return null;
   }
 }
