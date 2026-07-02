@@ -655,7 +655,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'github_api_token',
       'about_story_md',
       'about_tutorial_md',
-      'about_privacy_md'
+      'about_privacy_md',
+      'digest_greeting'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
