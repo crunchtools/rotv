@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { MapContainer, TileLayer, Marker, Tooltip, useMap, GeoJSON, useMapEvents, CircleMarker } from 'react-leaflet';
 import L from 'leaflet';
@@ -1536,12 +1536,15 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     trainIconRef.current = createTrainIcon(animatedTrain.bearing);
   }
 
-  useEffect(() => {
+  // Layout effects, not plain effects: the bearing tracks the zoom level, and a
+  // post-paint rotation lands a frame after the camera — the marker visibly
+  // pivots as a zoom settles (#554). Pre-paint keeps icon and track in lockstep.
+  useLayoutEffect(() => {
     const el = boatMarkerRef.current?.getElement()?.querySelector('.boat-marker-inner');
     if (el && animatedBoat) el.style.transform = `rotate(${animatedBoat.bearing || 0}deg)`;
   }, [animatedBoat?.bearing]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = trainMarkerRef.current?.getElement()?.querySelector('.train-marker-inner');
     if (el && animatedTrain) el.style.transform = `rotate(${animatedTrain.bearing || 0}deg)`;
   }, [animatedTrain?.bearing]);
