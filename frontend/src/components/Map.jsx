@@ -6,7 +6,7 @@ import VirtualPoiCreator from './VirtualPoiCreator';
 import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, trailPassesActivityFilter, matchesWholeWord } from '../utils/iconUtils';
 import { getBoatStatus } from '../utils/boatStatus';
 import { getTrainStatus } from '../utils/trainStatus';
-import { snapToLine } from '../utils/snapToLine';
+import useAnimatedTrackerPosition from '../hooks/useAnimatedTrackerPosition';
 import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
@@ -559,6 +559,18 @@ function MapMoveTracker({ onMapMove }) {
     };
   }, [map, onMapMove]);
 
+  return null;
+}
+
+function ZoomReporter({ onZoomChange }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!map) return;
+    onZoomChange(map.getZoom());
+    const handler = () => onZoomChange(map.getZoom());
+    map.on('zoom', handler);
+    return () => map.off('zoom', handler);
+  }, [map, onZoomChange]);
   return null;
 }
 
@@ -1205,6 +1217,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     return () => document.removeEventListener('pointerdown', handlePointerDown, true);
   }, [isLegendExpanded, setIsLegendExpanded]);
 
+  const [mapZoom, setMapZoom] = useState(13);
   const [useSatellite, setUseSatellite] = useState(false);
   const [measureMode, setMeasureMode] = useState(false);
   // Fix: stable callbacks so ZoomLocateControl's effect doesn't tear down and
@@ -1500,34 +1513,38 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     () => linearFeatures?.find(f => f.poi_roles?.includes('water_taxi') && /^https?:\/\//i.test(f.live_tracker_url || '')),
     [linearFeatures]
   );
+  const boatLineCoords = boatFeature?.geometry?.coordinates;
+  const animatedBoat = useAnimatedTrackerPosition(boatPosition, boatLineCoords, mapZoom, { pollIntervalMs: 10000, iconHalfPx: 19, snapPosition: false });
   const { label: boatStatusLabel, className: boatStatusClass } = getBoatStatus(boatPosition);
 
   const trainFeature = useMemo(
     () => linearFeatures?.find(f => f.poi_roles?.includes('railroad')),
     [linearFeatures]
   );
+  const trainLineCoords = trainFeature?.geometry?.coordinates;
+  const animatedTrain = useAnimatedTrackerPosition(trainPosition, trainLineCoords, mapZoom, { pollIntervalMs: 5000, iconHalfPx: 32 });
   const { label: trainStatusLabel, className: trainStatusClass } = getTrainStatus(trainPosition);
 
-  const prevTrainPosRef = useRef(null);
-  const snappedTrain = useMemo(() => {
-    if (!trainPosition || !trainFeature?.geometry?.coordinates) return null;
-    const snap = snapToLine(
-      [trainPosition.latitude, trainPosition.longitude],
-      trainFeature.geometry.coordinates
-    );
-    const prev = prevTrainPosRef.current;
-    if (prev) {
-      const dLat = trainPosition.latitude - prev.latitude;
-      const dLng = trainPosition.longitude - prev.longitude;
-      if (Math.abs(dLat) > 1e-6 || Math.abs(dLng) > 1e-6) {
-        const heading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
-        const diff = Math.abs(((snap.bearing - heading + 540) % 360) - 180);
-        if (diff > 90) snap.bearing = (snap.bearing + 180) % 360;
-      }
-    }
-    prevTrainPosRef.current = { latitude: trainPosition.latitude, longitude: trainPosition.longitude };
-    return snap;
-  }, [trainPosition, trainFeature]);
+  const boatMarkerRef = useRef(null);
+  const trainMarkerRef = useRef(null);
+  const boatIconRef = useRef(null);
+  const trainIconRef = useRef(null);
+  if (!boatIconRef.current && animatedBoat) {
+    boatIconRef.current = createBoatIcon(animatedBoat.bearing);
+  }
+  if (!trainIconRef.current && animatedTrain) {
+    trainIconRef.current = createTrainIcon(animatedTrain.bearing);
+  }
+
+  useEffect(() => {
+    const el = boatMarkerRef.current?.getElement()?.querySelector('.boat-marker-inner');
+    if (el && animatedBoat) el.style.transform = `rotate(${animatedBoat.bearing || 0}deg)`;
+  }, [animatedBoat?.bearing]);
+
+  useEffect(() => {
+    const el = trainMarkerRef.current?.getElement()?.querySelector('.train-marker-inner');
+    if (el && animatedTrain) el.style.transform = `rotate(${animatedTrain.bearing || 0}deg)`;
+  }, [animatedTrain?.bearing]);
 
   const getLinearFeatureStyle = useCallback((feature, isSelected) => {
     const editSelectedColor = '#FF8C00';
@@ -1870,10 +1887,11 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           });
         })}
 
-        {showWaterTaxis && boatPosition && boatFeature && (
+        {showWaterTaxis && animatedBoat && boatFeature && (
           <Marker
-            position={[boatPosition.latitude, boatPosition.longitude]}
-            icon={createBoatIcon(boatPosition.heading, boatPosition.status)}
+            ref={boatMarkerRef}
+            position={animatedBoat.position}
+            icon={boatIconRef.current}
             zIndexOffset={500}
             keyboard={false}
             eventHandlers={{ click: () => handleLinearFeatureClick(boatFeature) }}
@@ -1897,10 +1915,11 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           </Marker>
         )}
 
-        {visibleTypes.has('train') && snappedTrain && trainFeature && (
+        {visibleTypes.has('train') && animatedTrain && trainFeature && (
           <Marker
-            position={snappedTrain.position}
-            icon={createTrainIcon(snappedTrain.bearing)}
+            ref={trainMarkerRef}
+            position={animatedTrain.position}
+            icon={trainIconRef.current}
             zIndexOffset={500}
             keyboard={false}
             eventHandlers={{ click: () => handleLinearFeatureClick(trainFeature) }}
@@ -1943,6 +1962,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           iconConfig={iconConfig}
         />
         <MapMoveTracker onMapMove={() => setMapMoveCount(c => c + 1)} />
+        <ZoomReporter onZoomChange={setMapZoom} />
         <ZoomTooltipHider />
         <MapClickHandler
           isAdmin={isAdmin}
