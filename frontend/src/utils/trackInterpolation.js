@@ -1,4 +1,10 @@
-function haversineDist(lat1, lng1, lat2, lng2) {
+/**
+ * Great-circle distance between two points.
+ * @param {number} lat1 @param {number} lng1 first point, decimal degrees
+ * @param {number} lat2 @param {number} lng2 second point, decimal degrees
+ * @returns {number} distance in meters
+ */
+export function haversineDist(lat1, lng1, lat2, lng2) {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLng = (lng2 - lng1) * Math.PI / 180;
@@ -8,52 +14,44 @@ function haversineDist(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function extractSubPath(lineCoords, prevSnap, newSnap) {
-  const si = prevSnap.segmentIndex;
-  const ei = newSnap.segmentIndex;
-
-  const startPt = prevSnap.position;
-  const endPt = newSnap.position;
-
-  if (si === ei) {
-    return [startPt, endPt];
-  }
-
-  const forward = si < ei ||
-    (si === ei && prevSnap.segmentT < newSnap.segmentT);
-
-  const path = [startPt];
-  if (forward) {
-    for (let i = si + 1; i <= ei; i++) {
-      path.push([lineCoords[i][1], lineCoords[i][0]]);
-    }
-  } else {
-    for (let i = si; i >= ei + 1; i--) {
-      path.push([lineCoords[i][1], lineCoords[i][0]]);
-    }
-  }
-  path.push(endPt);
-  return path;
-}
-
-export function cumulativeDistances(path) {
+/**
+ * Cumulative meters from the line start to each vertex.
+ * @param {Array<[number, number]>} lineCoords GeoJSON [lng, lat] pairs
+ *   (unlike interpolation paths, which are [lat, lng])
+ * @returns {number[]} one entry per vertex; [0] is 0, last is total length
+ */
+export function lineCumulativeDistances(lineCoords) {
   const dists = [0];
-  for (let i = 1; i < path.length; i++) {
+  for (let i = 1; i < lineCoords.length; i++) {
     dists.push(dists[i - 1] + haversineDist(
-      path[i - 1][0], path[i - 1][1],
-      path[i][0], path[i][1]
+      lineCoords[i - 1][1], lineCoords[i - 1][0],
+      lineCoords[i][1], lineCoords[i][0]
     ));
   }
   return dists;
+}
+
+/**
+ * Arc position (meters along the line) of a snapToLine() result. Travel
+ * direction is the SIGN of the arc delta between two snaps — unlike comparing
+ * a GPS displacement angle to the track bearing, it cannot be flipped by the
+ * perpendicular raw-vs-snapped offset.
+ * @param {number[]} lineDists lineCumulativeDistances(lineCoords)
+ * @param {{segmentIndex: number, segmentT: number}} snap snapToLine() result
+ * @returns {number} meters from the line start
+ */
+export function arcDistanceAt(lineDists, snap) {
+  const i = snap.segmentIndex;
+  return lineDists[i] + snap.segmentT * (lineDists[i + 1] - lineDists[i]);
 }
 
 function segmentBearing(p1, p2) {
   const dLon = (p2[1] - p1[1]) * Math.PI / 180;
   const rlat1 = p1[0] * Math.PI / 180;
   const rlat2 = p2[0] * Math.PI / 180;
-  const y = Math.sin(dLon) * Math.cos(rlat2);
-  const x = Math.cos(rlat1) * Math.sin(rlat2) - Math.sin(rlat1) * Math.cos(rlat2) * Math.cos(dLon);
-  return ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
+  const eastward = Math.sin(dLon) * Math.cos(rlat2);
+  const northward = Math.cos(rlat1) * Math.sin(rlat2) - Math.sin(rlat1) * Math.cos(rlat2) * Math.cos(dLon);
+  return ((Math.atan2(eastward, northward) * 180 / Math.PI) + 360) % 360;
 }
 
 export function walkAlongTrack(lineCoords, snap, distMeters) {
@@ -110,31 +108,39 @@ export function walkAlongTrack(lineCoords, snap, distMeters) {
   }
 }
 
+/**
+ * Point on the line at a given arc distance from its start. O(log n) binary
+ * search over the cumulative-distance table, cheap enough to run every
+ * animation frame — unlike re-snapping a lat/lng against the full geometry.
+ * @param {Array<[number, number]>} lineCoords GeoJSON [lng, lat] vertices
+ * @param {number[]} lineDists lineCumulativeDistances(lineCoords)
+ * @param {number} arcMeters distance along the line; clamped to [0, total]
+ * @returns {{position: [number, number], segmentIndex: number, segmentT: number, bearing: number}}
+ *   same shape as snapToLine() (position is [lat, lng])
+ */
+export function snapAtArc(lineCoords, lineDists, arcMeters) {
+  const total = lineDists[lineDists.length - 1];
+  const arc = Math.max(0, Math.min(total, arcMeters));
+  let lo = 0;
+  let hi = lineDists.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (lineDists[mid] <= arc) lo = mid; else hi = mid;
+  }
+  const segLen = lineDists[lo + 1] - lineDists[lo];
+  const segmentT = segLen === 0 ? 0 : (arc - lineDists[lo]) / segLen;
+  const [lng1, lat1] = lineCoords[lo];
+  const [lng2, lat2] = lineCoords[lo + 1];
+  return {
+    position: [lat1 + segmentT * (lat2 - lat1), lng1 + segmentT * (lng2 - lng1)],
+    segmentIndex: lo,
+    segmentT,
+    bearing: segmentBearing([lat1, lng1], [lat2, lng2]),
+  };
+}
+
 export function dualSnapBearing(lineCoords, snap, halfDistMeters) {
   const front = walkAlongTrack(lineCoords, snap, halfDistMeters);
   const back = walkAlongTrack(lineCoords, snap, -halfDistMeters);
   return segmentBearing(back, front);
-}
-
-export function interpolateAlongPath(path, dists, t) {
-  if (path.length < 2) return { position: path[0] || [0, 0], bearing: 0 };
-
-  const totalDist = dists[dists.length - 1];
-  if (totalDist === 0) return { position: path[0], bearing: segmentBearing(path[0], path[path.length - 1]) };
-
-  const targetDist = Math.max(0, Math.min(1, t)) * totalDist;
-
-  let seg = 0;
-  for (let i = 1; i < dists.length; i++) {
-    if (dists[i] >= targetDist) { seg = i - 1; break; }
-    seg = i - 1;
-  }
-
-  const segLen = dists[seg + 1] - dists[seg];
-  const segT = segLen === 0 ? 0 : (targetDist - dists[seg]) / segLen;
-
-  const lat = path[seg][0] + segT * (path[seg + 1][0] - path[seg][0]);
-  const lng = path[seg][1] + segT * (path[seg + 1][1] - path[seg][1]);
-
-  return { position: [lat, lng], bearing: segmentBearing(path[seg], path[seg + 1]) };
 }

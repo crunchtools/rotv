@@ -422,8 +422,9 @@ sleep 10
 podman exec rotv psql -U postgres -d rotv -c "SELECT COUNT(*) FROM pois;"
 # Expected: 371
 
-# Check API
-curl -s http://localhost:8080/api/destinations | jq -r 'length'
+# Check API (/api/destinations was consolidated into /api/pois in #546;
+# the old path now 301-redirects to /api/pois?role=point)
+curl -s http://localhost:8080/api/pois?role=point | jq -r 'length'
 # Expected: 178
 ```
 

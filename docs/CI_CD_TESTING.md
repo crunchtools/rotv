@@ -243,7 +243,8 @@ era VARCHAR(255),  // Column type doesn't match queries!
 LEFT JOIN eras e ON p.era_id = e.id  // Expects INTEGER era_id!
 ```
 
-This caused 500 errors from `/api/destinations` endpoint.
+This caused 500 errors from the `/api/destinations` endpoint (since
+consolidated into `/api/pois?role=point` in #546; the old path 301-redirects).
 
 ### Solution
 
