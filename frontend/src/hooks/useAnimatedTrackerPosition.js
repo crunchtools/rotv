@@ -2,8 +2,16 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { snapToLine } from '../utils/snapToLine';
 import { extractSubPath, cumulativeDistances, interpolateAlongPath, dualSnapBearing } from '../utils/trackInterpolation';
 
+// At wide zooms the icon's ground footprint spans kilometers of track, and a
+// chord that long cuts across curves — the icon reads visibly crooked against
+// the track line under it (14° off at z11 near the CVSR yard), then rotates
+// into place as the zoom shrinks the span (#554). The eye judges alignment
+// against the LOCAL track direction, so cap the span; below the cap the
+// zoom-scaled footprint behavior is unchanged.
+const MAX_BEARING_SPAN_M = 150;
+
 function pixelsToMeters(halfPx, zoom) {
-  return halfPx * 156543.03 * Math.cos(41.26 * Math.PI / 180) / (2 ** zoom);
+  return Math.min(halfPx * 156543.03 * Math.cos(41.26 * Math.PI / 180) / (2 ** zoom), MAX_BEARING_SPAN_M);
 }
 
 function lerpAngle(a, b, t) {
