@@ -5,6 +5,7 @@ export function snapToLine(point, lineCoords) {
   let bestDist = Infinity;
   let bestPoint = point;
   let bestSegIdx = 0;
+  let bestT = 0;
 
   for (let i = 0; i < lineCoords.length - 1; i++) {
     const [ax, ay] = [lineCoords[i][0], lineCoords[i][1]];
@@ -25,6 +26,7 @@ export function snapToLine(point, lineCoords) {
       bestDist = dist;
       bestPoint = [cy, cx];
       bestSegIdx = i;
+      bestT = t;
     }
   }
 
@@ -37,5 +39,5 @@ export function snapToLine(point, lineCoords) {
   const x = Math.cos(rlat1) * Math.sin(rlat2) - Math.sin(rlat1) * Math.cos(rlat2) * Math.cos(dLon);
   const bearing = ((Math.atan2(y, x) * 180 / Math.PI) + 360) % 360;
 
-  return { position: bestPoint, bearing };
+  return { position: bestPoint, bearing, segmentIndex: bestSegIdx, segmentT: bestT };
 }

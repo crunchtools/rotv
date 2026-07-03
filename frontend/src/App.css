@@ -11565,12 +11565,11 @@ body {
 }
 
 /* Live boat marker (#408) */
-.boat-marker-icon {
+.boat-marker-icon.leaflet-div-icon {
   background: none;
   border: none;
 }
 .boat-marker-inner {
-  transition: transform 0.5s ease;
 }
 .boat-status-badge {
   display: inline-block;
@@ -11597,7 +11596,7 @@ body {
   background: #e3f2fd;
   color: #1565c0;
 }
-.train-marker-icon {
+.train-marker-icon.leaflet-div-icon {
   background: none;
   border: none;
   display: flex;
@@ -11605,7 +11604,6 @@ body {
   justify-content: center;
 }
 .train-marker-inner {
-  transition: transform 0.5s ease;
   display: flex;
   align-items: center;
   justify-content: center;
