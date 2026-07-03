@@ -11,6 +11,12 @@ function lerpAngle(a, b, t) {
   return ((a + diff * t) + 360) % 360;
 }
 
+// Track-following mode keeps { position, snap, direction } in state and derives
+// the bearing DURING RENDER from the current zoom. The bearing depends on zoom
+// (front/back snap points span the icon's ground footprint), and computing it in
+// an effect chain paints a frame or more behind the camera — the train visibly
+// pivots after a zoom settles (#554). Render-time derivation means every painted
+// frame carries the bearing that matches that frame's zoom.
 export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom, { pollIntervalMs = 5000, iconHalfPx = 32, snapPosition = true } = {}) {
   const [animated, setAnimated] = useState(null);
   const prevSnapRef = useRef(null);
@@ -20,14 +26,9 @@ export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom
   const distsRef = useRef(null);
   const startTimeRef = useRef(0);
   const directionRef = useRef(1);
+  const movingRef = useRef(false);
   const rafRef = useRef(null);
-  const latestSnapRef = useRef(null);
-  const zoomRef = useRef(zoom || 13);
   const intervalRef = useRef(pollIntervalMs);
-  const halfPxRef = useRef(iconHalfPx);
-  const prevBearingRef = useRef(0);
-
-  useEffect(() => { zoomRef.current = zoom || 13; }, [zoom]);
 
   useEffect(() => {
     if (!rawPosition || !lineCoords || lineCoords.length < 2) {
@@ -39,38 +40,30 @@ export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom
       [rawPosition.latitude, rawPosition.longitude],
       lineCoords
     );
-    latestSnapRef.current = newSnap;
 
     if (!prevSnapRef.current) {
       prevSnapRef.current = newSnap;
       prevRawRef.current = rawPosition;
       targetRawRef.current = rawPosition;
-      pathRef.current = [newSnap.position, newSnap.position];
-      distsRef.current = [0, 0];
-      startTimeRef.current = performance.now();
-      let bearing;
-      if (snapPosition) {
-        const halfDist = pixelsToMeters(halfPxRef.current, zoomRef.current);
-        bearing = dualSnapBearing(lineCoords, newSnap, halfDist);
-        if (rawPosition.heading != null) {
-          const diff = Math.abs(((bearing - rawPosition.heading + 540) % 360) - 180);
-          if (diff > 90) {
-            bearing = (bearing + 180) % 360;
-            directionRef.current = -1;
-          }
-        }
-      } else {
-        bearing = rawPosition.heading || 0;
+      movingRef.current = false;
+      // Until movement disambiguates travel direction, trust the upstream
+      // GPS heading to decide which way the icon faces along the track.
+      if (rawPosition.heading != null) {
+        const diff = Math.abs(((newSnap.bearing - rawPosition.heading + 540) % 360) - 180);
+        directionRef.current = diff > 90 ? -1 : 1;
       }
-      const pos = snapPosition ? newSnap.position : [rawPosition.latitude, rawPosition.longitude];
-      setAnimated({ position: pos, bearing });
+      setAnimated(snapPosition
+        ? { position: newSnap.position, snap: newSnap, direction: directionRef.current }
+        : { position: [rawPosition.latitude, rawPosition.longitude], heading: rawPosition.heading || 0 });
       return;
     }
 
     const prev = prevSnapRef.current;
     const dLat = rawPosition.latitude - (prev.position[0] || 0);
     const dLng = rawPosition.longitude - (prev.position[1] || 0);
-    if (Math.abs(dLat) > 1e-6 || Math.abs(dLng) > 1e-6) {
+    const hasMoved = Math.abs(dLat) > 1e-6 || Math.abs(dLng) > 1e-6;
+
+    if (hasMoved) {
       const heading = ((Math.atan2(dLng, dLat) * 180 / Math.PI) + 360) % 360;
       const diff = Math.abs(((newSnap.bearing - heading + 540) % 360) - 180);
       directionRef.current = diff > 90 ? -1 : 1;
@@ -79,17 +72,29 @@ export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom
     prevRawRef.current = targetRawRef.current || rawPosition;
     targetRawRef.current = rawPosition;
 
-    const subPath = extractSubPath(lineCoords, prev, newSnap);
-    pathRef.current = subPath;
-    distsRef.current = cumulativeDistances(subPath);
+    if (hasMoved) {
+      pathRef.current = extractSubPath(lineCoords, prev, newSnap);
+      distsRef.current = cumulativeDistances(pathRef.current);
+      movingRef.current = true;
+    } else {
+      // Stationary: hold the last committed position — no path, no tick work,
+      // nothing to drift (#554)
+      pathRef.current = null;
+      distsRef.current = null;
+      movingRef.current = false;
+    }
+
     startTimeRef.current = performance.now();
     prevSnapRef.current = newSnap;
   }, [rawPosition, lineCoords, snapPosition]);
 
   const tick = useCallback(() => {
-    const t = Math.min(1, (performance.now() - startTimeRef.current) / intervalRef.current);
+    if (!movingRef.current) {
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
 
-    let position, bearing;
+    const t = Math.min(1, (performance.now() - startTimeRef.current) / intervalRef.current);
 
     if (snapPosition) {
       const path = pathRef.current;
@@ -98,13 +103,9 @@ export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
-      position = interpolateAlongPath(path, dists, t).position;
+      const position = interpolateAlongPath(path, dists, t).position;
       const reSnap = snapToLine(position, lineCoords);
-      const halfDist = pixelsToMeters(halfPxRef.current, zoomRef.current);
-      bearing = dualSnapBearing(lineCoords, reSnap, halfDist);
-      if (directionRef.current === -1) {
-        bearing = (bearing + 180) % 360;
-      }
+      setAnimated({ position, snap: reSnap, direction: directionRef.current });
     } else {
       const prev = prevRawRef.current;
       const target = targetRawRef.current;
@@ -112,14 +113,15 @@ export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom
         rafRef.current = requestAnimationFrame(tick);
         return;
       }
-      position = [
-        prev.latitude + t * (target.latitude - prev.latitude),
-        prev.longitude + t * (target.longitude - prev.longitude),
-      ];
-      bearing = lerpAngle(prev.heading || 0, target.heading || 0, t);
+      setAnimated({
+        position: [
+          prev.latitude + t * (target.latitude - prev.latitude),
+          prev.longitude + t * (target.longitude - prev.longitude),
+        ],
+        heading: lerpAngle(prev.heading || 0, target.heading || 0, t),
+      });
     }
 
-    setAnimated({ position, bearing });
     rafRef.current = requestAnimationFrame(tick);
   }, [lineCoords, snapPosition]);
 
@@ -128,5 +130,11 @@ export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom
     return () => cancelAnimationFrame(rafRef.current);
   }, [tick]);
 
-  return animated;
+  if (!animated) return null;
+  if (!snapPosition) return { position: animated.position, bearing: animated.heading };
+
+  const halfDist = pixelsToMeters(iconHalfPx, zoom || 13);
+  let bearing = dualSnapBearing(lineCoords, animated.snap, halfDist);
+  if (animated.direction === -1) bearing = (bearing + 180) % 360;
+  return { position: animated.position, bearing };
 }

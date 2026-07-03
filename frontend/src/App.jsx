@@ -42,6 +42,12 @@ import { handleRovingKeyDown } from './utils/a11yUtils';
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
 
+// Linear roles whose geometry is a followable route; a slug matching one of
+// these must select as linear (highlighted path), even when the same POI also
+// carries the organization role. Boundaries are deliberately excluded — org
+// boundaries render as destinations (#412).
+const ROUTE_ROLES = ['trail', 'river', 'water_taxi', 'railroad'];
+
 function generateSlug(name) {
   if (!name) return '';
   return name
@@ -1037,9 +1043,12 @@ function AppContent() {
         // POIs too, not just destinations — notification/shared links to org
         // news & events were navigating but rendering nothing (#412)
         const destination = destinations.find(d => generateSlug(d.name) === poiSlug);
-        const virtualPoi = !destination && virtualPois.find(v => generateSlug(v.name) === poiSlug);
-        const linearFeature = !destination && !virtualPoi
+        const linearFeature = !destination
           && linearFeatures.find(f => generateSlug(f.name) === poiSlug);
+        // Route-role POIs win over their org copy — see the length-1 branch (#554)
+        const isRoutePoi = linearFeature && linearFeature.poi_roles?.some(r => ROUTE_ROLES.includes(r));
+        const virtualPoi = !destination && !isRoutePoi
+          && virtualPois.find(v => generateSlug(v.name) === poiSlug);
         const pointPoi = destination || virtualPoi;
         if (pointPoi) {
           setSelectedDestination(pointPoi);
@@ -1082,7 +1091,14 @@ function AppContent() {
         return;
       }
 
-      const virtualPoi = virtualPois.find(v => generateSlug(v.name) === poiSlug);
+      // Dual-role org POIs (e.g. CVSR = organization + railroad) exist in BOTH
+      // virtualPois and linearFeatures; the route copy must win the slug match
+      // or the permalink selects the org as a destination and the route never
+      // highlights (#554). Boundary orgs stay destinations (#412).
+      const linearFeature = linearFeatures.find(f => generateSlug(f.name) === poiSlug);
+      const isRoutePoi = linearFeature?.poi_roles?.some(r => ROUTE_ROLES.includes(r));
+
+      const virtualPoi = !isRoutePoi && virtualPois.find(v => generateSlug(v.name) === poiSlug);
       if (virtualPoi) {
         setSelectedDestination(virtualPoi);
         setSelectedLinearFeature(null);
@@ -1092,7 +1108,6 @@ function AppContent() {
         return;
       }
 
-      const linearFeature = linearFeatures.find(f => generateSlug(f.name) === poiSlug);
       if (linearFeature) {
         setSelectedLinearFeature(linearFeature);
         setSelectedDestination(null);
@@ -1112,6 +1127,8 @@ function AppContent() {
           setShowRivers(true);
         } else if (linearFeature.poi_roles?.includes('water_taxi')) {
           setShowWaterTaxis(true);
+        } else if (linearFeature.poi_roles?.includes('railroad')) {
+          setVisibleTypes(prev => prev.has('train') ? prev : new Set(prev).add('train'));
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
         return;
