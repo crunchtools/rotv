@@ -72,8 +72,12 @@ RUN if [ "$BUILD_ENV" = "test" ]; then npm install; else npm install --omit=dev;
 # Copy backend code
 COPY backend/ ./
 
-# Move built frontend to public directory
-RUN mv frontend/dist public && rm -rf frontend
+# Move built frontend to public directory. Test builds keep the frontend
+# source at /frontend so backend unit tests can import pure frontend utils
+# (tests/*.unit.test.js -> ../../frontend/src/... matches the host layout).
+RUN mv frontend/dist public && \
+    if [ "$BUILD_ENV" = "test" ]; then mkdir -p /frontend && mv frontend/src /frontend/src; fi && \
+    rm -rf frontend
 
 # Copy systemd units and scripts
 COPY rootfs/ /

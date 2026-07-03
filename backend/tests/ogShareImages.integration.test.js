@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
+import { isUsableSourceImage } from '../utils/sourceImage.js';
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:8080';
 const FALLBACK_IMAGE_PATH = '/brand/rotv-og-share-1200x630.jpg';
@@ -101,14 +102,19 @@ describe('Open Graph share images', () => {
     // Priority is source article image -> POI primary photo -> brand fallback
     // (server.js). For a POI that has a photo, the permalink must resolve to one
     // of the first two, never the brand card.
+    // The server resolves a non-brand image only from (a) a usable source
+    // article image or (b) the POI primary photo (thumbnail endpoint) — a
+    // gallery mosaic alone is NOT sufficient (resolvePoiOgImage requires a
+    // primary/poi_media asset). Select a target the server can actually
+    // resolve, mirroring that priority.
     let target = null;
     for (const poi of (poiWithPhoto ? [poiWithPhoto, ...pois] : pois).slice(0, 80)) {
       const news = await request(BASE_URL).get(`/api/pois/${poi.id}/news`);
-      if (news.status === 200 && Array.isArray(news.body) && news.body.length > 0) {
-        const media = await request(BASE_URL).get(`/api/pois/${poi.id}/media`);
-        const hasPhoto = media.status === 200 && Array.isArray(media.body.mosaic) && media.body.mosaic.length > 0;
-        if (hasPhoto) { target = { poi, news: news.body[0] }; break; }
-      }
+      if (news.status !== 200 || !Array.isArray(news.body) || news.body.length === 0) continue;
+      const withSourceImage = news.body.find(n => isUsableSourceImage(n.image_url));
+      if (withSourceImage) { target = { poi, news: withSourceImage }; break; }
+      const thumb = await request(BASE_URL).get(`/api/pois/${poi.id}/thumbnail?size=large`);
+      if (thumb.status === 200) { target = { poi, news: news.body[0] }; break; }
     }
 
     if (!target) {

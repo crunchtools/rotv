@@ -94,10 +94,10 @@ export async function generateDigest(pool, tz = 'America/New_York', asOfDate = n
 
 async function fetchDigestGreeting(pool) {
   try {
-    const result = await pool.query(
+    const greetingQuery = await pool.query(
       "SELECT value FROM admin_settings WHERE key = 'digest_greeting'"
     );
-    const val = result.rows[0]?.value?.trim();
+    const val = greetingQuery.rows[0]?.value?.trim();
     return val || null;
   } catch (err) {
     console.error('Failed to fetch digest greeting:', err.message);

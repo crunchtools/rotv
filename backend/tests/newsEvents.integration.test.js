@@ -103,7 +103,7 @@ describe('News & Events API Integration Tests', () => {
   describe('GET /api/pois (with news/events counts)', () => {
     it('should return POIs with news and events counts', async () => {
       const response = await request(BASE_URL)
-        .get('/api/destinations')
+        .get('/api/pois?role=point')
         .expect(200);
 
       expect(Array.isArray(response.body)).toBe(true);
@@ -122,7 +122,7 @@ describe('News & Events API Integration Tests', () => {
   describe('Health Check', () => {
     it('should verify container is running', async () => {
       const response = await request(BASE_URL)
-        .get('/api/destinations')
+        .get('/api/pois?role=point')
         .expect(200);
 
       expect(response.status).toBe(200);
