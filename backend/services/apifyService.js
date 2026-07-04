@@ -1,23 +1,17 @@
+// Fix: scope module to Facebook-only trail status scraping (PR #559 review)
 // Apify Facebook scraper — used exclusively by trailStatusService for POIs
 // with a Facebook status_url (e.g. Reagan-Huffman MTB / medinaTRAILS).
 const APIFY_BASE_URL = 'https://api.apify.com/v2';
 const FACEBOOK_ACTOR_ID = 'apify~facebook-posts-scraper';
 const SOCIAL_MAX_POSTS = 10;
 
-let _cachedToken = null;
-let _tokenFetchedAt = 0;
-const TOKEN_TTL_MS = 5 * 60 * 1000;
-
 async function getApifyToken(pool) {
-  if (_cachedToken && (Date.now() - _tokenFetchedAt) < TOKEN_TTL_MS) return _cachedToken;
   try {
     const tokenRow = await pool.query(
       `SELECT value FROM admin_settings WHERE key = 'apify_api_token'`
     );
     if (tokenRow.rows.length > 0 && tokenRow.rows[0].value) {
-      _cachedToken = tokenRow.rows[0].value;
-      _tokenFetchedAt = Date.now();
-      return _cachedToken;
+      return tokenRow.rows[0].value;
     }
   } catch (err) {
     console.error('[Apify] Error loading API token:', err.message);
@@ -69,6 +63,9 @@ export function toIsoDate(raw) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().substring(0, 10);
 }
 
+// Fetch Facebook posts via Apify for trail status collection.
+// Returns { markdown, reachable, reason } matching the contract
+// expected by trailStatusService.
 export async function fetchFacebookPosts(pool, statusUrl, maxItems = SOCIAL_MAX_POSTS) {
   const token = await getApifyToken(pool);
   if (!token) {
