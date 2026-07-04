@@ -60,11 +60,14 @@ function createTripStopIcon(n) {
   });
 }
 
+// The USFT sprite is drawn nose-DOWN (cab/windshield at the bottom), so the
+// img carries a fixed 180° flip; the inner div's rotate() stays "bearing =
+// direction of travel" for both writers (initial html + zoom layout effect).
 function createTrainIcon(heading) {
   return L.divIcon({
     className: 'train-marker-icon',
     html: `<div class="train-marker-inner" style="transform: rotate(${heading || 0}deg)">
-      <img src="https://static.usfleettracking.com/img/icons/trains/train.png" width="64" height="64" style="margin-left: 1px" alt="" />
+      <img src="https://static.usfleettracking.com/img/icons/trains/train.png" width="64" height="64" style="margin-left: 1px; transform: rotate(180deg)" alt="" />
     </div>`,
     iconSize: [64, 64],
     iconAnchor: [32, 32],
