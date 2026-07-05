@@ -111,10 +111,18 @@ describe('Open Graph share images', () => {
     for (const poi of (poiWithPhoto ? [poiWithPhoto, ...pois] : pois).slice(0, 80)) {
       const news = await request(BASE_URL).get(`/api/pois/${poi.id}/news`);
       if (news.status !== 200 || !Array.isArray(news.body) || news.body.length === 0) continue;
-      const withSourceImage = news.body.find(n => isUsableSourceImage(n.image_url));
+      // The list endpoint rolls up contained/child-POI news (#406), but the
+      // permalink resolver (findItemBySlugs) only searches the slug'd POI's OWN
+      // news — the same news/POI pairing the app's share links use. Pair a news
+      // item with a foreign poi_id and the resolver can't find it, so it serves
+      // the brand fallback. Restrict to this POI's own items so the URL we build
+      // is one the resolver can actually resolve.
+      const own = news.body.filter(n => n.poi_id === poi.id);
+      if (own.length === 0) continue;
+      const withSourceImage = own.find(n => isUsableSourceImage(n.image_url));
       if (withSourceImage) { target = { poi, news: withSourceImage }; break; }
       const thumb = await request(BASE_URL).get(`/api/pois/${poi.id}/thumbnail?size=large`);
-      if (thumb.status === 200) { target = { poi, news: news.body[0] }; break; }
+      if (thumb.status === 200) { target = { poi, news: own[0] }; break; }
     }
 
     if (!target) {

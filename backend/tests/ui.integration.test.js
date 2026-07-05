@@ -163,8 +163,12 @@ describe('UI Integration Tests', () => {
     it('should switch between OpenStreetMap and Esri satellite tiles', async () => {
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Wait for the map controls to render
+      // Wait for the map controls to render. The satellite button attaches a
+      // beat after .zoom-locate-control; without waiting for it explicitly, the
+      // locator.evaluate() calls below each stack a 30s auto-wait that can blow
+      // the test budget — the sibling toggle test waits for it and passes.
       await page.waitForSelector('.zoom-locate-control', { timeout: 10000 });
+      await page.waitForSelector('.satellite-toggle-button', { timeout: 10000 });
 
       // Close legend if it's overlaying the map controls
       const legend = page.locator('.legend');
