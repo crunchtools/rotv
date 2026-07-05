@@ -32,6 +32,9 @@ describe('News & Events API Integration Tests', () => {
         expect(newsItem).toHaveProperty('poi_id');
         expect(newsItem).toHaveProperty('title');
         expect(newsItem).toHaveProperty('url');
+        // image_url carries the source-article thumbnail to the frontend (#562);
+        // may be null, but the field must be present.
+        expect(newsItem).toHaveProperty('image_url');
       }
     }, 10000);
 
@@ -70,6 +73,9 @@ describe('News & Events API Integration Tests', () => {
         expect(event).toHaveProperty('poi_id');
         expect(event).toHaveProperty('title');
         expect(event).toHaveProperty('event_date');
+        // image_url carries the source-article thumbnail to the frontend (#562);
+        // may be null, but the field must be present.
+        expect(event).toHaveProperty('image_url');
       }
     }, 10000);
 
