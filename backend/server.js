@@ -1949,7 +1949,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
     const newsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.publication_date, n.date_consensus_score, n.collection_date,
-             n.poi_id, src.name AS poi_name,
+             n.poi_id, n.image_url, src.name AS poi_name,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
@@ -1979,7 +1979,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const poiIds = await getRollupPoiIds(pool, id);
     let query = `
       SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type, e.location_details, e.source_url, e.collection_date,
-             e.poi_id, src.name AS poi_name, e.venue_poi_id, vp.name AS venue_name,
+             e.poi_id, e.image_url, src.name AS poi_name, e.venue_poi_id, vp.name AS venue_name,
              e.series_id, e.recurrence_label AS cadence_label, (e.series_id IS NOT NULL) AS is_recurring,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_events e
