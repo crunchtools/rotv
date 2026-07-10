@@ -29,6 +29,13 @@ function normalizeBlocklistPrefix(prefix) {
   return String(prefix).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
 }
 
+// Escape a user-supplied term so it is a regex literal. Same metacharacter set
+// works for JS RegExp and Postgres POSIX regex (~*), which we use for the
+// word-boundary topic match below.
+function escapeRegex(term) {
+  return String(term).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // Registry of hard-reject deny lists, applied during moderation.
 // - matches(row, values): per-item test.
 // - sweepFragment(values, textCols): SQL WHERE fragment for the retroactive
@@ -56,6 +63,32 @@ export const DENY_LISTS = [
       if (!valid.length) return null;
       const conds = valid.flatMap((_, i) => textCols.map(c => `${c} ILIKE $${i + 1}`)).join(' OR ');
       return { sql: `(${conds})`, params: valid.map(p => `%${p.trim()}%`) };
+    }
+  },
+  {
+    // News topic deny list. Crime/violence stories from trusted news domains
+    // (fox8, news5, beaconjournal) auto-approve and attach to park POIs on loose
+    // city/county name matches, landing in the weekly digest. Reject news whose
+    // title/summary contains one of these terms. NEWS ONLY — a "murder mystery"
+    // or "vintage base ball" event must not be caught, so events are excluded.
+    // Matching is word-boundary (\y / \b) so "shooting" does not fire on
+    // "overshooting" and "arrest" does not fire on "arresting".
+    key: 'news_topic_blocklist',
+    reason: 'Rejected: matches news topic deny list',
+    contentTypes: ['news'],
+    matches: (row, terms) => {
+      const haystack = [row.title, row.summary].filter(Boolean).join(' ');
+      return terms.some(t => {
+        if (typeof t !== 'string' || !t.trim()) return false;
+        return new RegExp(`\\b${escapeRegex(t.trim())}\\b`, 'i').test(haystack);
+      });
+    },
+    sweepFragment: (terms, textCols) => {
+      const valid = terms.filter(t => typeof t === 'string' && t.trim());
+      if (!valid.length) return null;
+      const pattern = `\\y(${valid.map(t => escapeRegex(t.trim())).join('|')})\\y`;
+      const conds = textCols.map(c => `${c} ~* $1`).join(' OR ');
+      return { sql: `(${conds})`, params: [pattern] };
     }
   },
   {
@@ -98,8 +131,8 @@ export async function denyReason(pool, contentType, row) {
 // list, so adding to a list cleans up already-approved items. Returns counts.
 export async function sweepDenyLists(pool, { runId, logInfo } = {}) {
   const tables = [
-    { name: 'poi_events', textCols: ['title', 'description'] },
-    { name: 'poi_news', textCols: ['title', 'summary'] }
+    { name: 'poi_events', textCols: ['title', 'description'], contentType: 'event' },
+    { name: 'poi_news', textCols: ['title', 'summary'], contentType: 'news' }
   ];
   let events = 0;
   let news = 0;
@@ -107,6 +140,9 @@ export async function sweepDenyLists(pool, { runId, logInfo } = {}) {
     const values = await loadListSetting(pool, list.key);
     if (!values.length) continue;
     for (const table of tables) {
+      // Respect the list's contentTypes so the sweep matches the per-item check
+      // (e.g. a news-only list must not retroactively reject events).
+      if (!list.contentTypes.includes(table.contentType)) continue;
       const frag = list.sweepFragment(values, table.textCols);
       if (!frag) continue;
       const reasonIdx = frag.params.length + 1;

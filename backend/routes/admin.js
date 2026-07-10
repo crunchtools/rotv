@@ -650,6 +650,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'news_collection_excluded_pois',
       'blocklist_urls',
       'event_content_blocklist',
+      'news_topic_blocklist',
       'moderation_trusted_domains',
       'trusted_content_paths',
       'github_api_token',
