@@ -75,8 +75,8 @@ import { startSmtpServer, processNewsletterById } from './services/newsletterSer
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
 import { mcpMiddleware } from './services/mcpServer.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
-import { startTracker, stopTracker, getBoatPositions } from './services/waterTaxiTrackerService.js';
-import { startTrainTracker, stopTrainTracker, getTrainPositions } from './services/trainTrackerService.js';
+import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from './services/waterTaxiTrackerService.js';
+import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import {
   getAllActiveSeries,
@@ -2098,6 +2098,17 @@ app.get('/api/water-taxi/position', (_req, res) => {
 
 app.get('/api/train/position', (_req, res) => {
   res.json(getTrainPositions());
+});
+
+// Liveness for the live trackers, for external monitoring (Zabbix). Reports
+// per-tracker running/healthy state so a check can tell "tracker dead" from
+// "vehicle simply parked/off" — a parked train still returns a fresh position.
+app.get('/api/health/trackers', (_req, res) => {
+  // Always 200 so a monitoring probe never reads an off-hours/parked tracker as
+  // "app down"; the per-tracker `healthy`/`running` fields carry the signal and
+  // the Zabbix trigger decides (e.g. running=false is a real bug; stale during
+  // operating hours is worth an alert).
+  res.json({ train: getTrainStatus(), waterTaxi: getWaterTaxiStatus() });
 });
 
 app.get('/api/trails/mtb', async (req, res) => {
