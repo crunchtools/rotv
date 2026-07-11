@@ -58,6 +58,8 @@ function DataCollectionSettings() {
   const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
   const [contentBlocklist, setContentBlocklist] = useState([]);
   const [newContentPhrase, setNewContentPhrase] = useState('');
+  const [newsTopicBlocklist, setNewsTopicBlocklist] = useState([]);
+  const [newNewsTopic, setNewNewsTopic] = useState('');
   const [trustedEventPaths, setTrustedEventPaths] = useState([]);
   const [newTrustedEventPath, setNewTrustedEventPath] = useState('');
 
@@ -401,12 +403,15 @@ function DataCollectionSettings() {
         const blocklist = settings.blocklist_urls?.value || '[]';
         const eventPaths = settings.trusted_content_paths?.value || '[]';
         const contentBlock = settings.event_content_blocklist?.value || '[]';
+        const newsTopics = settings.news_topic_blocklist?.value || '[]';
         try {
           const parsedTrusted = JSON.parse(trusted);
           const parsedBlocklist = JSON.parse(blocklist);
           const parsedEventPaths = JSON.parse(eventPaths);
           const parsedContentBlock = JSON.parse(contentBlock);
+          const parsedNewsTopics = JSON.parse(newsTopics);
           setContentBlocklist(Array.isArray(parsedContentBlock) ? parsedContentBlock.filter(p => typeof p === 'string') : []);
+          setNewsTopicBlocklist(Array.isArray(parsedNewsTopics) ? parsedNewsTopics.filter(p => typeof p === 'string') : []);
           setDomainLists({
             trusted: Array.isArray(parsedTrusted) ? parsedTrusted.filter(d => typeof d === 'string') : [],
             competitor: Array.isArray(parsedBlocklist) ? parsedBlocklist.filter(d => typeof d === 'string') : []
@@ -425,7 +430,7 @@ function DataCollectionSettings() {
   };
 
   // Single save for the unified News & Events Filters section — persists all
-  // five allow/block lists in one click.
+  // allow/block lists in one click.
   const handleSaveAllFilters = async () => {
     setFiltersSaving(true); setResult(null);
     try {
@@ -434,7 +439,8 @@ function DataCollectionSettings() {
         { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) },
         { key: 'trusted_content_paths', value: JSON.stringify(trustedEventPaths) },
         { key: 'news_collection_excluded_pois', value: JSON.stringify(excludedPois.map(p => p.id)) },
-        { key: 'event_content_blocklist', value: JSON.stringify(contentBlocklist) }
+        { key: 'event_content_blocklist', value: JSON.stringify(contentBlocklist) },
+        { key: 'news_topic_blocklist', value: JSON.stringify(newsTopicBlocklist) }
       ];
       for (const setting of settings) {
         const response = await fetch(`/api/admin/settings/${setting.key}`, {
@@ -495,6 +501,19 @@ function DataCollectionSettings() {
 
   const handleRemoveContentPhrase = (phrase) => {
     setContentBlocklist(contentBlocklist.filter(p => p !== phrase));
+  };
+
+  const handleAddNewsTopic = () => {
+    const term = newNewsTopic.trim();
+    if (!term) return;
+    if (!newsTopicBlocklist.some(t => t.toLowerCase() === term.toLowerCase())) {
+      setNewsTopicBlocklist([...newsTopicBlocklist, term]);
+      setNewNewsTopic('');
+    }
+  };
+
+  const handleRemoveNewsTopic = (term) => {
+    setNewsTopicBlocklist(newsTopicBlocklist.filter(t => t !== term));
   };
 
   const handleAddTrustedEventPath = () => {
@@ -1053,6 +1072,19 @@ function DataCollectionSettings() {
               onAdd={handleAddContentPhrase}
               onRemove={handleRemoveContentPhrase}
               placeholder="Cuyahoga Valley Art Center"
+              disabled={filtersSaving}
+            />
+
+            <FilterList
+              title="News Topic Deny List"
+              type="deny"
+              hint="Reject any news item whose title or summary contains one of these words or phrases (whole-word match). Catches crime/violence stories that trusted news domains auto-approve and attach to nearby park POIs. News only — events are never filtered by this list, so 'murder mystery' and 'vintage base ball' events are safe."
+              items={newsTopicBlocklist}
+              value={newNewsTopic}
+              onValueChange={setNewNewsTopic}
+              onAdd={handleAddNewsTopic}
+              onRemove={handleRemoveNewsTopic}
+              placeholder="manhunt"
               disabled={filtersSaving}
             />
 
