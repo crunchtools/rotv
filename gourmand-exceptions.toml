@@ -98,6 +98,14 @@ path = "backend/services/apifyService.js"
 justification = "runActorSync, extractFacebookPageUrl, isFacebookUrl, extractInstagramUrl, toIsoDate, fetchSocialPosts are named steps in the Apify social media collection pipeline"
 classification = "by_design"
 
+# --- trainTrackerService.js ---
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "backend/services/trainTrackerService.js"
+justification = "pollOnce is the poll-cycle operation invoked both immediately at startup and by the interval timer — the natural unit of the self-healing loop. It is exported so the resilience behavior (lazy auth, retry, 401 re-auth, staleness) can be unit-tested directly rather than by spinning real timers; inlining it would hide the exact failure modes behind the 2026-07-10 train outage"
+classification = "by_design"
+
 # --- renderPage.js ---
 
 [[exceptions]]

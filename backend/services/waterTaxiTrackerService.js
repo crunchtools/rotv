@@ -170,3 +170,15 @@ export function getBoatPositions() {
     },
   };
 }
+
+// Liveness for monitoring (GET /api/health/trackers). healthy = we are serving
+// a fresh position; getBoatPositions() already nulls out stale data.
+export function getWaterTaxiStatus() {
+  const healthy = getBoatPositions().harbor_hopper != null;
+  return {
+    connected: socket != null && socket.connected === true,
+    hasPosition: position != null,
+    healthy,
+    updatedAt: position?.updated_at || null,
+  };
+}
