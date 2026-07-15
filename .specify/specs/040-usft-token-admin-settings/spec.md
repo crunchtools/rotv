@@ -40,6 +40,15 @@ Acceptance Criteria:
 - [ ] After a production DB sync, `admin_settings` contains the current token
 - [ ] The tracker authenticates using the DB value with no env var set
 
+**US-040-4: One Save updates both the map marker and the button**
+> As an admin, I want saving the token to update both the live map marker and the green
+> "Live Tracker" button so that rotating the key takes effect everywhere without a restart.
+
+Acceptance Criteria:
+- [ ] The map marker and the CVSR "Live Tracker" button are both driven by the single `usft_sharing_token` (the lvgps view URL embeds the same token the USFT API authenticates with)
+- [ ] Saving the token invalidates the tracker's cached JWT so the next poll re-authenticates with the new token
+- [ ] Saving the token rewrites `live_tracker_url` to `https://www.lvgps.net/view/<token>` for POIs using the lvgps view, and leaves other trackers (e.g. the water-taxi `trackmyshuttle.com` URL) untouched
+
 ### Backward Compatibility
 
 **US-040-3: Env var still works during transition**

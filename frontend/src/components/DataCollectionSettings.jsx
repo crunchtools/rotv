@@ -35,6 +35,12 @@ function DataCollectionSettings() {
   const [serperSaving, setSerperSaving] = useState(false);
   const [serperTesting, setSerperTesting] = useState(false);
 
+  const [usftToken, setUsftToken] = useState('');
+  const [usftTokenSet, setUsftTokenSet] = useState(false);
+  const [usftSaving, setUsftSaving] = useState(false);
+  const [usftTesting, setUsftTesting] = useState(false);
+  const [usftResult, setUsftResult] = useState(null);
+
   const [githubToken, setGithubToken] = useState('');
   const [githubTokenSet, setGithubTokenSet] = useState(false);
   const [githubSaving, setGithubSaving] = useState(false);
@@ -115,6 +121,7 @@ function DataCollectionSettings() {
     fetchGeminiStatus();
     fetchApifyStatus();
     fetchSerperStatus();
+    fetchUsftStatus();
     fetchGithubStatus();
     fetchPlaywrightStatus();
     fetchModerationConfig();
@@ -141,6 +148,12 @@ function DataCollectionSettings() {
     const timer = setTimeout(() => setSerperResult(null), 5000);
     return () => clearTimeout(timer);
   }, [serperResult]);
+
+  useEffect(() => {
+    if (!usftResult) return;
+    const timer = setTimeout(() => setUsftResult(null), 5000);
+    return () => clearTimeout(timer);
+  }, [usftResult]);
 
   useEffect(() => {
     if (!apifyResult) return;
@@ -278,6 +291,47 @@ function DataCollectionSettings() {
       }
     } catch (err) { setSerperResult({ type: 'error', message: `Test failed: ${err.message}` }); }
     finally { setSerperTesting(false); }
+  };
+
+  const fetchUsftStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/settings', { credentials: 'include' });
+      if (response.ok) { const settings = await response.json(); setUsftTokenSet(settings.usft_sharing_token?.isSet || false); }
+    } catch (err) { console.error('Error fetching USFT status:', err); }
+  };
+
+  const handleSaveUsftToken = async () => {
+    if (!usftToken.trim()) { setUsftResult({ type: 'error', message: 'Token cannot be empty' }); return; }
+    setUsftSaving(true); setUsftResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/usft_sharing_token', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+        body: JSON.stringify({ value: usftToken })
+      });
+      if (response.ok) {
+        setUsftResult({ type: 'success', message: 'Saved successfully' });
+        setUsftToken('');
+        setUsftTokenSet(true);
+        await fetchUsftStatus();
+      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
+    } catch (err) { setUsftResult({ type: 'error', message: `Save failed: ${err.message}` }); }
+    finally { setUsftSaving(false); }
+  };
+
+  const handleTestUsftToken = async () => {
+    setUsftTesting(true); setUsftResult(null);
+    try {
+      const response = await fetch('/api/admin/settings/usft-sharing-token/test', {
+        method: 'POST', credentials: 'include'
+      });
+      const data = await response.json();
+      if (data.success) {
+        setUsftResult({ type: 'success', message: 'Test passed ✓' });
+      } else {
+        setUsftResult({ type: 'error', message: data.message || 'Test failed' });
+      }
+    } catch (err) { setUsftResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    finally { setUsftTesting(false); }
   };
 
   const fetchGithubStatus = async () => {
@@ -680,6 +734,102 @@ function DataCollectionSettings() {
 
 
         <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Apify</h5>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+            <span className={`status-indicator ${apifyTokenSet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{apifyTokenSet ? 'Configured' : 'Not configured'}</span>
+            {apifyResult && (
+              <span
+                style={{
+                  marginLeft: '12px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  backgroundColor: apifyResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: apifyResult.type === 'success' ? '#155724' : '#721c24',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setApifyResult(null)}
+                title="Click to dismiss"
+              >
+                {apifyResult.message}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
+            <input
+              type="password"
+              value={apifyToken || (apifyTokenSet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setApifyToken(e.target.value)}
+              placeholder="Enter API token..."
+              disabled={apifySaving}
+              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
+            />
+            <button className="action-btn primary" onClick={handleSaveApifyToken} disabled={apifySaving || !apifyToken.trim()}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {apifySaving ? 'Saving...' : 'Save'}
+            </button>
+            <button className="action-btn secondary" onClick={handleTestApifyToken} disabled={apifyTesting || !apifyTokenSet}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {apifyTesting ? 'Testing...' : 'Test'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+            Twitter/X and Facebook scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
+          </p>
+        </div>
+
+
+        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>GitHub</h5>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+            <span className={`status-indicator ${githubTokenSet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{githubTokenSet ? 'Configured' : 'Not configured'}</span>
+            {githubResult && (
+              <span
+                style={{
+                  marginLeft: '12px',
+                  padding: '4px 10px',
+                  borderRadius: '4px',
+                  fontSize: '0.85rem',
+                  fontWeight: '500',
+                  backgroundColor: githubResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: githubResult.type === 'success' ? '#155724' : '#721c24',
+                  cursor: 'pointer'
+                }}
+                onClick={() => setGithubResult(null)}
+                title="Click to dismiss"
+              >
+                {githubResult.message}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
+            <input
+              type="password"
+              value={githubToken || (githubTokenSet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setGithubToken(e.target.value)}
+              placeholder="Enter GitHub token..."
+              disabled={githubSaving}
+              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
+            />
+            <button className="action-btn primary" onClick={handleSaveGithubToken} disabled={githubSaving || !githubToken.trim()}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {githubSaving ? 'Saving...' : 'Save'}
+            </button>
+            <button className="action-btn secondary" onClick={handleTestGithubToken} disabled={githubTesting || !githubTokenSet}
+              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {githubTesting ? 'Testing...' : 'Test'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+            Feedback form creates GitHub Issues. Use a fine-grained PAT with <code>issues:write</code> scope for <code>crunchtools/rotv</code>.
+          </p>
+        </div>
+
+
+        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
           <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Google Gemini</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
             <span className={`status-indicator ${geminiApiKeySet ? 'configured' : 'not-configured'}`}></span>
@@ -776,11 +926,11 @@ function DataCollectionSettings() {
 
 
         <div style={{ marginTop: '1.5rem' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Apify</h5>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>US Fleet Tracking</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${apifyTokenSet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{apifyTokenSet ? 'Configured' : 'Not configured'}</span>
-            {apifyResult && (
+            <span className={`status-indicator ${usftTokenSet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{usftTokenSet ? 'Configured' : 'Not configured'}</span>
+            {usftResult && (
               <span
                 style={{
                   marginLeft: '12px',
@@ -788,85 +938,37 @@ function DataCollectionSettings() {
                   borderRadius: '4px',
                   fontSize: '0.85rem',
                   fontWeight: '500',
-                  backgroundColor: apifyResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: apifyResult.type === 'success' ? '#155724' : '#721c24',
+                  backgroundColor: usftResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: usftResult.type === 'success' ? '#155724' : '#721c24',
                   cursor: 'pointer'
                 }}
-                onClick={() => setApifyResult(null)}
+                onClick={() => setUsftResult(null)}
                 title="Click to dismiss"
               >
-                {apifyResult.message}
+                {usftResult.message}
               </span>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
             <input
               type="password"
-              value={apifyToken || (apifyTokenSet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setApifyToken(e.target.value)}
-              placeholder="Enter API token..."
-              disabled={apifySaving}
+              value={usftToken || (usftTokenSet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setUsftToken(e.target.value)}
+              placeholder="Enter sharing token..."
+              disabled={usftSaving}
               style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
             />
-            <button className="action-btn primary" onClick={handleSaveApifyToken} disabled={apifySaving || !apifyToken.trim()}
+            <button className="action-btn primary" onClick={handleSaveUsftToken} disabled={usftSaving || !usftToken.trim()}
               style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {apifySaving ? 'Saving...' : 'Save'}
+              {usftSaving ? 'Saving...' : 'Save'}
             </button>
-            <button className="action-btn secondary" onClick={handleTestApifyToken} disabled={apifyTesting || !apifyTokenSet}
+            <button className="action-btn secondary" onClick={handleTestUsftToken} disabled={usftTesting || !usftTokenSet}
               style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {apifyTesting ? 'Testing...' : 'Test'}
+              {usftTesting ? 'Testing...' : 'Test'}
             </button>
           </div>
           <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            Twitter/X and Facebook scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
-          </p>
-        </div>
-
-
-        <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid #e0e0e0' , paddingBottom: '1.5rem' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>GitHub</h5>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${githubTokenSet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{githubTokenSet ? 'Configured' : 'Not configured'}</span>
-            {githubResult && (
-              <span
-                style={{
-                  marginLeft: '12px',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  backgroundColor: githubResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: githubResult.type === 'success' ? '#155724' : '#721c24',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setGithubResult(null)}
-                title="Click to dismiss"
-              >
-                {githubResult.message}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
-            <input
-              type="password"
-              value={githubToken || (githubTokenSet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setGithubToken(e.target.value)}
-              placeholder="Enter GitHub token..."
-              disabled={githubSaving}
-              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
-            />
-            <button className="action-btn primary" onClick={handleSaveGithubToken} disabled={githubSaving || !githubToken.trim()}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {githubSaving ? 'Saving...' : 'Save'}
-            </button>
-            <button className="action-btn secondary" onClick={handleTestGithubToken} disabled={githubTesting || !githubTokenSet}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {githubTesting ? 'Testing...' : 'Test'}
-            </button>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            Feedback form creates GitHub Issues. Use a fine-grained PAT with <code>issues:write</code> scope for <code>crunchtools/rotv</code>.
+            US Fleet Tracking (USFT) sharing token for the CVSR live train tracker. Falls back to the <code>USFT_SHARING_TOKEN</code> env var when unset.
           </p>
         </div>
       </div>

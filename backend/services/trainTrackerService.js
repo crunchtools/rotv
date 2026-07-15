@@ -18,7 +18,10 @@
  */
 
 const USFT_API_URL = process.env.USFT_API_URL || 'https://hades.usft.com';
-const SHARING_TOKEN = process.env.USFT_SHARING_TOKEN || '';
+// Public LiveViewGPS share page fronting the same USFT sharing token. The CVSR POI's
+// green "Live Tracker" button is this base + the current token, so rotating the token
+// in admin settings updates both the map marker (API auth) and the button URL (#550).
+const LVGPS_VIEW_BASE = 'https://www.lvgps.net/view/';
 const POLL_INTERVAL_MS = parseInt(process.env.USFT_POLL_INTERVAL_MS, 10) || 5000;
 const JWT_REFRESH_MS = 24 * 60 * 60 * 1000;
 // Serve null once we haven't had a successful device fetch in this long. Well
@@ -35,14 +38,76 @@ let lastError = null;
 let pool = null;
 let enabled = false;
 
+// Resolve the USFT sharing token: admin_settings first (so `run.sh seed` carries it
+// and it's rotatable from the admin UI without a redeploy), env var as fallback for
+// backward compat while production migrates off USFT_SHARING_TOKEN (#550). A DB hiccup
+// must never throw into the poll loop, so a query failure falls back to the env var.
+async function getSharingToken(dbPool = pool) {
+  const envToken = (process.env.USFT_SHARING_TOKEN || '').trim();
+  if (!dbPool) return envToken;
+  try {
+    const { rows } = await dbPool.query(
+      `SELECT value FROM admin_settings WHERE key = 'usft_sharing_token'`
+    );
+    return (rows[0]?.value || '').trim() || envToken;
+  } catch (err) {
+    console.warn(`[TrainTracker] Could not read usft_sharing_token, using env fallback: ${err.message}`);
+    return envToken;
+  }
+}
+
+// Validate the configured sharing token by attempting a USFT shared-view login.
+// Used by the admin "Test" button. Does not touch the live poller's JWT/state.
+export async function testSharingToken(dbPool) {
+  const token = await getSharingToken(dbPool);
+  if (!token) return { valid: false, message: 'No USFT sharing token configured' };
+  try {
+    const res = await fetch(`${USFT_API_URL}/auth/login/shared-view`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'RootsOfTheValley/1.0 (+https://rootsofthevalley.org)',
+      },
+      body: JSON.stringify({ token }),
+    });
+    if (res.ok) return { valid: true, message: 'USFT sharing token is valid' };
+    return { valid: false, message: `USFT auth rejected the token (${res.status})` };
+  } catch (err) {
+    return { valid: false, message: `Could not reach USFT: ${err.message}` };
+  }
+}
+
+// Called when the admin saves the USFT sharing token. Propagates the new token to
+// BOTH consumers so a single Save updates everything (#550):
+//   1. Map marker — clears the cached JWT so the next poll re-authenticates with the
+//      new token (otherwise the old JWT keeps working until it expires ~30h later).
+//   2. Green "Live Tracker" button — rewrites live_tracker_url to the lvgps view URL
+//      carrying the new token, scoped by the lvgps prefix so other trackers (e.g. the
+//      water taxi's trackmyshuttle URL) are never touched.
+// Never throws — a save must succeed even if this propagation hiccups.
+export async function onSharingTokenChanged(dbPool = pool) {
+  jwt = null;  // force re-auth on the next poll cycle
+  const token = await getSharingToken(dbPool);
+  if (!token || !dbPool) return;
+  try {
+    await dbPool.query(
+      `UPDATE pois SET live_tracker_url = $1 WHERE live_tracker_url LIKE $2`,
+      [LVGPS_VIEW_BASE + token, LVGPS_VIEW_BASE + '%']
+    );
+  } catch (err) {
+    console.warn(`[TrainTracker] Could not sync live_tracker_url after token change: ${err.message}`);
+  }
+}
+
 async function authenticate() {
+  const token = await getSharingToken();
   const res = await fetch(`${USFT_API_URL}/auth/login/shared-view`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'User-Agent': 'RootsOfTheValley/1.0 (+https://rootsofthevalley.org)',
     },
-    body: JSON.stringify({ token: SHARING_TOKEN }),
+    body: JSON.stringify({ token }),
   });
 
   if (!res.ok) {
@@ -141,8 +206,8 @@ export async function startTrainTracker(dbPool) {
     console.warn(`[TrainTracker] Could not read admin setting, proceeding: ${err.message}`);
   }
 
-  if (!SHARING_TOKEN) {
-    console.log('[TrainTracker] No USFT_SHARING_TOKEN configured — not starting');
+  if (!(await getSharingToken())) {
+    console.log('[TrainTracker] No USFT sharing token configured (admin setting or env) — not starting');
     return;
   }
 
