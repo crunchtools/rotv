@@ -776,7 +776,7 @@ function DataCollectionSettings() {
             </button>
           </div>
           <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            Twitter/X and Facebook scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
+            Facebook trail status scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
           </p>
         </div>
 

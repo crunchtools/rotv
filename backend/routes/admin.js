@@ -639,7 +639,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'moderation_sweep_batch_size',
       'photo_submissions_enabled',
       'apify_api_token',
-      'social_apify_collection_enabled',
       'news_collection_prompt',
       'trail_status_prompt',
       'results_subtabs_config',
