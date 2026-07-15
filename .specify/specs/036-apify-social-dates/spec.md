@@ -1,10 +1,18 @@
 # Specification: Apify Social Date Capture (Facebook & Instagram)
 
 > **Spec ID:** 036-apify-social-dates
-> **Status:** In Progress
+> **Status:** Superseded (news-pipeline social scraping removed by #551 / PR #559, 2026-07-15)
 > **Version:** 0.1.0
 > **Author:** Scott McCarty (with Josui)
 > **Date:** 2026-06-19
+
+> **Superseded:** The news-collection social scraping described here (Facebook + Instagram
+> via Apify in `renderPage`, gated by `social_apify_collection_enabled`) was removed in #551 /
+> PR #559 — Serper snippet recovery covers dated social results well enough that the per-run
+> Apify cost wasn't justified. Apify is now scoped to **Facebook trail status only**
+> (`apifyService.fetchFacebookPosts`, used by `trailStatusService`); see
+> `docs/TRAIL_STATUS_ARCHITECTURE.md`. US-036-1/2 no longer apply; US-036-3's carve-out
+> (trail-status Facebook scraping unaffected) is the surviving behavior.
 
 ## Overview
 

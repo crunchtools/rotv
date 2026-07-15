@@ -1,6 +1,15 @@
+/**
+ * Apify Facebook scraper — scoped to trail-status collection only.
+ *
+ * Used exclusively by `trailStatusService` for POIs with a Facebook `status_url`
+ * (e.g. Reagan-Huffman MTB / medinaTRAILS). Public entry point:
+ * `fetchFacebookPosts(pool, statusUrl, maxItems)`. Also exports `isFacebookUrl`,
+ * `toIsoDate`, and `testApifyToken` (used by the admin settings Test button).
+ *
+ * News-pipeline social scraping (Instagram + general social-date capture in
+ * `renderPage`) was removed in #551 / PR #559; see spec 036 (superseded).
+ */
 // Fix: scope module to Facebook-only trail status scraping (PR #559 review)
-// Apify Facebook scraper — used exclusively by trailStatusService for POIs
-// with a Facebook status_url (e.g. Reagan-Huffman MTB / medinaTRAILS).
 const APIFY_BASE_URL = 'https://api.apify.com/v2';
 const FACEBOOK_ACTOR_ID = 'apify~facebook-posts-scraper';
 const SOCIAL_MAX_POSTS = 10;
@@ -54,7 +63,7 @@ export function toIsoDate(raw) {
   if (/^\d+$/.test(str)) {
     let n = Number(str);
     if (!Number.isFinite(n) || n <= 0) return null;
-    if (n < 1e12) n *= 1000;
+    if (n < 1e12) n *= 1000;  // epoch seconds → milliseconds
     const d = new Date(n);
     return Number.isNaN(d.getTime()) ? null : d.toISOString().substring(0, 10);
   }
