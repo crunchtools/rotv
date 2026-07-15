@@ -58,10 +58,14 @@ ENV PGHOST=localhost PGPORT=5432 PGDATABASE=rotv PGUSER=postgres PGPASSWORD=rotv
 WORKDIR /app
 
 # Build frontend
+# Fix: force NODE_ENV=production for the Vite build only — the global
+# ENV NODE_ENV=development (set above, required by the backend at runtime)
+# otherwise makes Vite emit a dev React bundle (jsxDEV + StrictMode
+# double-mount, larger/slower). Scoped to this RUN so runtime env is unchanged. (#556)
 COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm install
 COPY frontend/ ./frontend/
-RUN cd frontend && npm run build
+RUN cd frontend && NODE_ENV=production npm run build
 
 # Install backend dependencies
 # BUILD_ENV=test includes devDependencies (vitest) for CI
