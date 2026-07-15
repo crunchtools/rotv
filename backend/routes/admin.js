@@ -595,8 +595,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const settingsRows = await pool.query('SELECT key, value, updated_at FROM admin_settings');
       const settings = {};
       for (const row of settingsRows.rows) {
-        // Redact API key/token values; expose isSet flag only
-        if (row.key.includes('api_key') || row.key.includes('api_token')) {
+        // Redact API key/token values; expose isSet flag only.
+        // Matches *_api_key and any *_token key (api_token, usft_sharing_token, ...).
+        if (row.key.includes('api_key') || row.key.includes('token')) {
           settings[row.key] = {
             isSet: !!row.value,
             updatedAt: row.updated_at
@@ -622,6 +623,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const allowedKeys = [
       'gemini_api_key',
       'serper_api_key',
+      'usft_sharing_token',
       'gemini_prompt_brief',
       'gemini_prompt_historical',
       'ai_search_primary',
@@ -680,6 +682,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         console.log('Buttondown API key cache cleared');
       }
 
+      if (key === 'usft_sharing_token') {
+        // Re-auth the map marker and refresh the CVSR "Live Tracker" button URL so
+        // saving the token updates both consumers at once (#550).
+        const { onSharingTokenChanged } = await import('../services/trainTrackerService.js');
+        await onSharingTokenChanged(pool);
+        console.log('USFT sharing token updated — tracker re-auth queued, Live Tracker URL synced');
+      }
+
       console.log(`Admin ${req.user.email} updated setting: ${key}`);
       res.json({ success: true });
     } catch (error) {
@@ -701,6 +711,17 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       console.error('Error testing Serper API key:', error);
       res.status(500).json({ success: false, message: 'Failed to test API key', error: error.message });
+    }
+  });
+
+  router.post('/settings/usft-sharing-token/test', isAdmin, async (req, res) => {
+    try {
+      const { testSharingToken } = await import('../services/trainTrackerService.js');
+      const result = await testSharingToken(pool);
+      res.json({ success: result.valid, message: result.message });
+    } catch (error) {
+      console.error('Error testing USFT sharing token:', error);
+      res.status(500).json({ success: false, message: 'Failed to test token', error: error.message });
     }
   });
 
