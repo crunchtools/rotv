@@ -59,7 +59,7 @@ describe('Domain reputation detection', () => {
   });
 });
 
-describe('Date gate (spec 030; trusted-domain bypass removed)', () => {
+describe('Date gate (spec 030)', () => {
   const cfg = { threshold: 4, floorYear: 2010 };
 
   test('missing date -> review', () => {
@@ -70,8 +70,8 @@ describe('Date gate (spec 030; trusted-domain bypass removed)', () => {
     expect(evaluateDateGate('2023-06-01', 6, cfg).verdict).toBe('pass');
   });
 
-  // Trusted-domain date bypass was removed: a weak-consensus date no longer passes just
-  // because the source is an official domain — it goes to manual review like any other.
+  // A weak-consensus date goes to manual review regardless of source reputation — an
+  // official domain earns no date-gate credit of its own.
   test('low consensus -> review regardless of source', () => {
     expect(evaluateDateGate('2024-09-10', 1, cfg).verdict).toBe('review');
   });

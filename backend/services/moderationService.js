@@ -199,9 +199,8 @@ Return ONLY valid JSON: {"choice": "assigned|owner|boundary|none"}`;
 
 // Date gate: a date passes when it is present, not in the future, plausible (year at or
 // above the floor — catches hallucinated 1800s values), AND has consensus at/above the
-// threshold. Age is never penalized. (Trusted-domain date bypass was removed — see the
-// numeric-scoring/trusted-domain teardown; official sources with weak machine-readable
-// dates now go to manual review rather than auto-publishing.)
+// threshold. Age is never penalized. Source reputation carries no weight here: an official
+// domain with a weak machine-readable date goes to manual review like any other source.
 export function evaluateDateGate(effectiveDate, dateScore, { threshold, floorYear, allowFuture = false }) {
   if (!effectiveDate) {
     return { verdict: 'review', reason: 'No publication date' };
@@ -532,10 +531,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
 
   } else if (contentType === 'photo') {
-    // Photos are not auto-scored. Numeric confidence scoring was removed (spec 041
-    // follow-up) — its only live consumer was photo auto-approve, and photo_submissions
-    // has effectively zero volume. Photos go straight to manual review; forceStatus
-    // (an admin explicitly approving/rejecting) is still honored.
+    // Photos go straight to manual review — an AI scoring pass isn't worth its cost given
+    // photo_submissions has effectively zero volume. forceStatus (an admin explicitly
+    // approving or rejecting) is still honored.
     const resolvedStatus = forceStatus || 'pending';
     await pool.query(
       `UPDATE photo_submissions SET moderation_status = $1, moderation_processed = true WHERE id = $2`,
