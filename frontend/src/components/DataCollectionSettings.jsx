@@ -52,15 +52,14 @@ function DataCollectionSettings() {
   const [playwrightTesting, setPlaywrightTesting] = useState(false);
 
   const [moderationConfig, setModerationConfig] = useState({
-    enabled: true, autoApproveEnabled: true, newsDateThreshold: 4, photoConfidenceThreshold: 0.9, photoSubmissionsEnabled: false
+    enabled: true, autoApproveEnabled: true, newsDateThreshold: 4, photoSubmissionsEnabled: false
   });
   const [moderationConfigLoading, setModerationConfigLoading] = useState(true);
   const [moderationConfigSaving, setModerationConfigSaving] = useState(false);
 
-  const [domainLists, setDomainLists] = useState({ trusted: [], competitor: [] });
+  const [domainLists, setDomainLists] = useState({ competitor: [] });
   const [domainListsLoading, setDomainListsLoading] = useState(true);
   const [filtersSaving, setFiltersSaving] = useState(false);
-  const [newTrustedDomain, setNewTrustedDomain] = useState('');
   const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
   const [contentBlocklist, setContentBlocklist] = useState([]);
   const [newContentPhrase, setNewContentPhrase] = useState('');
@@ -418,7 +417,6 @@ function DataCollectionSettings() {
           enabled: settings.moderation_enabled?.value !== 'false',
           autoApproveEnabled: settings.moderation_auto_approve_enabled?.value !== 'false',
           newsDateThreshold: parseInt(settings.moderation_news_date_threshold?.value) || 4,
-          photoConfidenceThreshold: parseFloat(settings.moderation_auto_approve_threshold?.value) || 0.9,
           photoSubmissionsEnabled: settings.photo_submissions_enabled?.value === 'true'
         });
       }
@@ -433,7 +431,6 @@ function DataCollectionSettings() {
         { key: 'moderation_enabled', value: String(moderationConfig.enabled) },
         { key: 'moderation_auto_approve_enabled', value: String(moderationConfig.autoApproveEnabled) },
         { key: 'moderation_news_date_threshold', value: String(moderationConfig.newsDateThreshold) },
-        { key: 'moderation_auto_approve_threshold', value: String(moderationConfig.photoConfidenceThreshold) },
         { key: 'photo_submissions_enabled', value: String(moderationConfig.photoSubmissionsEnabled) }
       ];
       for (const setting of settings) {
@@ -453,13 +450,11 @@ function DataCollectionSettings() {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
       if (response.ok) {
         const settings = await response.json();
-        const trusted = settings.moderation_trusted_domains?.value || '[]';
         const blocklist = settings.blocklist_urls?.value || '[]';
         const eventPaths = settings.trusted_content_paths?.value || '[]';
         const contentBlock = settings.event_content_blocklist?.value || '[]';
         const newsTopics = settings.news_topic_blocklist?.value || '[]';
         try {
-          const parsedTrusted = JSON.parse(trusted);
           const parsedBlocklist = JSON.parse(blocklist);
           const parsedEventPaths = JSON.parse(eventPaths);
           const parsedContentBlock = JSON.parse(contentBlock);
@@ -467,11 +462,10 @@ function DataCollectionSettings() {
           setContentBlocklist(Array.isArray(parsedContentBlock) ? parsedContentBlock.filter(p => typeof p === 'string') : []);
           setNewsTopicBlocklist(Array.isArray(parsedNewsTopics) ? parsedNewsTopics.filter(p => typeof p === 'string') : []);
           setDomainLists({
-            trusted: Array.isArray(parsedTrusted) ? parsedTrusted.filter(d => typeof d === 'string') : [],
             competitor: Array.isArray(parsedBlocklist) ? parsedBlocklist.filter(d => typeof d === 'string') : []
           });
           setTrustedEventPaths(Array.isArray(parsedEventPaths) ? parsedEventPaths.filter(d => typeof d === 'string') : []);
-          if (!Array.isArray(parsedTrusted) || !Array.isArray(parsedBlocklist)) {
+          if (!Array.isArray(parsedBlocklist)) {
             setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
           }
         } catch (e) {
@@ -489,7 +483,6 @@ function DataCollectionSettings() {
     setFiltersSaving(true); setResult(null);
     try {
       const settings = [
-        { key: 'moderation_trusted_domains', value: JSON.stringify(domainLists.trusted) },
         { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) },
         { key: 'trusted_content_paths', value: JSON.stringify(trustedEventPaths) },
         { key: 'news_collection_excluded_pois', value: JSON.stringify(excludedPois.map(p => p.id)) },
@@ -506,24 +499,6 @@ function DataCollectionSettings() {
       setResult({ type: 'success', message: 'Filters saved' });
     } catch (err) { setResult({ type: 'error', message: `Failed to save filters: ${err.message}` }); }
     finally { setFiltersSaving(false); }
-  };
-
-  const handleAddTrustedDomain = () => {
-    const domain = newTrustedDomain.trim().toLowerCase();
-    const urlPrefixRegex = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(\/[a-z0-9._~:@!$&'()*+,;=%-]*)*$/;
-    if (!domain) return;
-    if (!urlPrefixRegex.test(domain)) {
-      setResult({ type: 'error', message: 'Invalid format (e.g., example.com or example.com/path)' });
-      return;
-    }
-    if (!domainLists.trusted.includes(domain)) {
-      setDomainLists({ ...domainLists, trusted: [...domainLists.trusted, domain] });
-      setNewTrustedDomain('');
-    }
-  };
-
-  const handleRemoveTrustedDomain = (domain) => {
-    setDomainLists({ ...domainLists, trusted: domainLists.trusted.filter(d => d !== domain) });
   };
 
   const handleAddCompetitorDomain = () => {
@@ -1078,12 +1053,6 @@ function DataCollectionSettings() {
               <span className="config-hint">Score 0-8 (recommended: 4)</span>
             </div>
             <div className="config-row">
-              <label>Gemini Photo Confidence:</label>
-              <input type="number" value={moderationConfig.photoConfidenceThreshold} onChange={e => setModerationConfig({...moderationConfig, photoConfidenceThreshold: parseFloat(e.target.value) || 0})}
-                min="0" max="1" step="0.05" disabled={moderationConfigSaving || !moderationConfig.enabled || !moderationConfig.autoApproveEnabled} style={{ width: '80px' }} />
-              <span className="config-hint">Score 0.0-1.0 (recommended: 0.9)</span>
-            </div>
-            <div className="config-row">
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <input type="checkbox" checked={moderationConfig.photoSubmissionsEnabled} onChange={e => setModerationConfig({...moderationConfig, photoSubmissionsEnabled: e.target.checked})} disabled={moderationConfigSaving} />
                 Allow Photo Submissions
@@ -1103,18 +1072,6 @@ function DataCollectionSettings() {
         <p className="settings-description">Allow lists (green) and deny lists (red) that govern what gets collected and what passes moderation. Add to each list independently, then Save Filters once to apply everything.</p>
         {(domainListsLoading || excludedPoisLoading) ? <p>Loading filters...</p> : (
           <>
-            <FilterList
-              title="Domain Allow List"
-              type="allow"
-              hint="Trusted source domains. Items from these bypass quality penalties in moderation and phase 2 collection."
-              items={domainLists.trusted}
-              value={newTrustedDomain}
-              onValueChange={setNewTrustedDomain}
-              onAdd={handleAddTrustedDomain}
-              onRemove={handleRemoveTrustedDomain}
-              placeholder="example.com"
-              disabled={filtersSaving}
-            />
             <FilterList
               title="Content Path Allow List"
               type="allow"

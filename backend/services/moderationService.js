@@ -1,8 +1,7 @@
-import { moderateContent, moderatePhoto, generateTextWithCustomPrompt } from './geminiService.js';
+import { generateTextWithCustomPrompt } from './geminiService.js';
 import { renderPage } from './renderPage.js';
-import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
+import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
@@ -13,8 +12,6 @@ const TABLE_MAP = {
   event: 'poi_events',
   photo: 'poi_media'
 };
-
-const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
 
 // blocklistSet entries are URL prefixes (domain or domain+path), matched as startsWith.
 // trustedSet entries are hostnames only.
@@ -56,91 +53,6 @@ function isSafePublicUrl(urlStr) {
   }
 }
 
-function extractDateFields(scoring) {
-  let publicationDate = null;
-
-  if (scoring.publication_date) {
-    const normalized = parseDate(String(scoring.publication_date));
-    if (normalized) {
-      publicationDate = normalized;
-    }
-  }
-
-  return { publicationDate };
-}
-
-export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = new Set(), blocklistSet = new Set()) {
-  const { publicationDate, dateConfidence } = dateInfo;
-
-  const reputation = getDomainReputation(sourceUrl, trustedSet, blocklistSet);
-  if (reputation === 'blocklisted') {
-    scoring.confidence_score *= 0.3;
-    scoring.reasoning += ' Source is on the blocklist.';
-    if (!scoring.issues) scoring.issues = [];
-    scoring.issues.push('blocklisted_domain');
-  } else if (reputation === 'unknown') {
-    scoring.confidence_score *= 0.9;
-  }
-
-  if (isGenericUrl(sourceUrl)) {
-    scoring.confidence_score *= 0.6;
-    scoring.reasoning += ' Source URL is a bare homepage or generic path.';
-    if (!scoring.issues) scoring.issues = [];
-    scoring.issues.push('generic_url');
-  }
-
-  if (!publicationDate || dateConfidence === 'unknown') {
-    scoring.confidence_score = Math.min(scoring.confidence_score, 0.7);
-    scoring.reasoning += ' No publication date found - capping confidence at 0.70.';
-  }
-
-  return scoring;
-}
-
-function serializeIssues(scoring) {
-  const issues = scoring.issues || [];
-  return issues.length > 0 ? JSON.stringify(issues) : null;
-}
-
-async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
-  const table = TABLE_MAP[contentType];
-  const summary = contentType === 'news' ? row.summary : row.description;
-
-  console.log(`[Moderation] ${contentType} #${contentId}: content not on source page, attempting deep crawl...`);
-  try {
-    const crawlResult = await deepCrawlForArticle(
-      pool,
-      row.source_url,
-      { title: row.title, summary },
-      { maxDepth: 2, maxPages: 5, timeoutMs: 60000 }
-    );
-
-    if (crawlResult.foundUrl) {
-      console.log(`[Moderation] ${contentType} #${contentId}: deep crawl found article at ${crawlResult.foundUrl}`);
-      await pool.query(`UPDATE ${table} SET source_url = $1 WHERE id = $2`, [crawlResult.foundUrl, contentId]);
-
-      scoring = await moderateContent(pool, {
-        type: contentType,
-        title: row.title,
-        summary,
-        source_url: crawlResult.foundUrl,
-        source_page_content: crawlResult.foundContent,
-        poi_name: row.poi_name
-      });
-    } else {
-      console.log(`[Moderation] ${contentType} #${contentId}: deep crawl checked ${crawlResult.pagesChecked} pages, no match`);
-      scoring.reasoning += ` Deep crawl checked ${crawlResult.pagesChecked} pages but could not find article.`;
-    }
-  } catch (crawlError) {
-    console.error(`[Moderation] ${contentType} #${contentId}: deep crawl failed: ${crawlError.message}`);
-    scoring.reasoning += ` Deep crawl failed: ${crawlError.message}`;
-  }
-
-  const issuesList = scoring.issues || [];
-  const foundIssue = REJECTION_ISSUES.find(i => issuesList.includes(i));
-  return { scoring, foundIssue };
-}
-
 async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
   const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park and the surrounding region including Cleveland Metroparks, Summit Metro Parks, and other nearby parks, trails, and outdoor recreation areas.
 
@@ -171,8 +83,10 @@ REJECT only if the content is genuinely a poor fit:
   a political rally or partisan event, a private party/wedding/corporate rental, a purely
   commercial product/service listing, or a general community event unrelated to nature,
   parks, or regional history (e.g. book clubs, support groups, fitness classes, galas)
-- About a place OUTSIDE Northeast Ohio (e.g. a trail or park in another state)
 - Spam, navigation chrome, an error page, or content with no discernible subject
+
+Judge ONLY topical fit here — do NOT reject for geography. Whether the subject is
+physically in Northeast Ohio is decided by a separate region check, not this vote.
 
 IMPORTANT: judge by SUBJECT, not venue. An off-topic event (a wedding, a political
 rally) held at a park is still a reject. But on-topic content about the parks, trails,
@@ -192,6 +106,51 @@ Return ONLY valid JSON: {"relevant": true, "about_poi": true, "reasoning": "one 
           try {
             const parsed = JSON.parse(raw);
             return { relevant: !!parsed.relevant, about_poi: !!parsed.about_poi, reasoning: parsed.reasoning || '' };
+          } catch {
+            return null;
+          }
+        })
+        .catch(() => null)
+    )
+  );
+  return results.filter(Boolean);
+}
+
+// Region gate (spec 041): a dedicated geography check, independent of topical
+// relevance. Relevance asks "is the SUBJECT on-topic"; Region asks "is the subject
+// physically IN Northeast Ohio." Split out because a geographically-broad entity POI
+// (e.g. "US Coast Guard") made out-of-region content pass the relevance gate via
+// about_poi — the voters correctly saw it was out of region, but that judgment had
+// nowhere to bind. Now it is its own gate. Mirrors the relevance voter: 3 votes,
+// consensus decided by the caller.
+async function runRegionVotes(pool, { title, description, poiName }, numVotes = 3) {
+  const prompt = `You are checking the GEOGRAPHY of content for "Roots of The Valley," a guide to the Cuyahoga Valley region of Northeast Ohio — Cuyahoga and Summit counties and the immediately adjacent counties (Medina, Lorain, Lake, Geauga, Portage, Stark, Wayne). The core is Cuyahoga Valley National Park, Cleveland Metroparks, Summit Metro Parks, and the cities of Cleveland and Akron.
+
+Title: "${title}"
+Summary: "${description || '(none)'}"
+Location/POI: ${poiName || '(unknown)'}
+
+Is the SUBJECT of this content physically located IN that Northeast Ohio region?
+
+Judge by WHERE the subject or events actually take place, NOT by the name of the
+organization. A national or multi-state organization's activity in another place is
+OUT of region even when that organization also has a local presence — e.g. a Coast
+Guard change-of-command ceremony in Virginia, or a national park in another state,
+is out of region even though the Coast Guard or the Park Service also operates here.
+
+When the location is genuinely unclear and there is no signal placing the subject
+outside the region, lean IN — regional collection already scoped the source.
+
+Return ONLY valid JSON: {"in_region": true, "reasoning": "one sentence why"}`;
+
+  const results = await Promise.all(
+    Array.from({ length: numVotes }, () =>
+      generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 128, thinkingBudget: 0 })
+        .then(r => {
+          const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          try {
+            const parsed = JSON.parse(raw);
+            return { in_region: !!parsed.in_region, reasoning: parsed.reasoning || '' };
           } catch {
             return null;
           }
@@ -239,31 +198,47 @@ Return ONLY valid JSON: {"choice": "assigned|owner|boundary|none"}`;
 }
 
 // Date gate: a date passes when it is present, not in the future, plausible (year at or
-// above the floor — catches hallucinated 1800s values), AND trustworthy (consensus score
-// at/above threshold OR from a trusted-domain source). Age is never penalized.
-export function evaluateDateGate(effectiveDate, dateScore, sourceUrl, { threshold, floorYear, trustedSet, allowFuture = false }) {
+// above the floor — catches hallucinated 1800s values), AND has consensus at/above the
+// threshold. Age is never penalized. Source reputation carries no weight here: an official
+// domain with a weak machine-readable date goes to manual review like any other source.
+export function evaluateDateGate(effectiveDate, dateScore, { threshold, floorYear, allowFuture = false }) {
   if (!effectiveDate) {
-    return { verdict: 'review', reason: 'No publication date', trusted_source: false };
+    return { verdict: 'review', reason: 'No publication date' };
   }
   const parsed = new Date(effectiveDate);
   if (Number.isNaN(parsed.getTime())) {
-    return { verdict: 'review', reason: 'Unparseable publication date', trusted_source: false };
+    return { verdict: 'review', reason: 'Unparseable publication date' };
   }
   if (!allowFuture && parsed > new Date()) {
-    return { verdict: 'review', reason: `Future publication date ${effectiveDate}`, trusted_source: false };
+    return { verdict: 'review', reason: `Future publication date ${effectiveDate}` };
   }
   const year = parsed.getUTCFullYear();
   if (year < floorYear) {
-    return { verdict: 'review', reason: `Implausible year ${year} (below ${floorYear})`, trusted_source: false };
+    return { verdict: 'review', reason: `Implausible year ${year} (below ${floorYear})` };
   }
-  const trusted = getDomainReputation(sourceUrl, trustedSet) === 'trusted';
   if (dateScore >= threshold) {
-    return { verdict: 'pass', reason: `Date consensus ${dateScore}/${threshold}`, trusted_source: trusted };
+    return { verdict: 'pass', reason: `Date consensus ${dateScore}/${threshold}` };
   }
-  if (trusted) {
-    return { verdict: 'pass', reason: `Trusted source date (consensus ${dateScore}/${threshold})`, trusted_source: true };
+  return { verdict: 'review', reason: `Low date confidence ${dateScore}/${threshold}` };
+}
+
+// Region gate consensus (spec 041). Pure so it can be unit-tested. Requires 3 votes:
+// unanimous in-region passes, unanimous out-of-region fails (→ reject), anything else
+// (a split, or too few votes) goes to manual review. This is the gate that binds the
+// geographic judgment the relevance voters were already making but had no place to use.
+export function evaluateRegionGate(regionVotes) {
+  const total = regionVotes.length;
+  const inCount = regionVotes.filter(v => v.in_region).length;
+  if (total < 3) {
+    return { verdict: 'review', reason: `Region inconclusive (${inCount}/${total} in)` };
   }
-  return { verdict: 'review', reason: `Low date confidence ${dateScore}/${threshold} from untrusted source`, trusted_source: false };
+  if (inCount === total) {
+    return { verdict: 'pass', reason: `Region ${inCount}/${total} in` };
+  }
+  if (inCount === 0) {
+    return { verdict: 'fail', reason: `Unanimous out of region (${regionVotes.map(v => v.reasoning).filter(Boolean).join('; ')})` };
+  }
+  return { verdict: 'review', reason: `Region split ${inCount}/${total} in` };
 }
 
 // POI gate (three tiers). Returns the verdict plus newPoiId when a Tier-2 reassignment
@@ -307,24 +282,15 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_threshold', 'moderation_news_date_threshold', 'moderation_date_floor_year', 'moderation_trusted_domains')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_news_date_threshold', 'moderation_date_floor_year')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const parsedNewsThreshold = parseInt(settings.moderation_news_date_threshold);
   const newsDateThreshold = Number.isNaN(parsedNewsThreshold) ? 4 : parsedNewsThreshold;
   const parsedFloorYear = parseInt(settings.moderation_date_floor_year);
   const dateFloorYear = Number.isNaN(parsedFloorYear) ? 2010 : parsedFloorYear;
-  let trustedSet = new Set();
-  try {
-    const domains = JSON.parse(settings.moderation_trusted_domains || '[]');
-    if (Array.isArray(domains)) trustedSet = new Set(domains.map(d => String(d).toLowerCase().replace(/^www\./, '')));
-  } catch { /* leave empty on bad JSON */ }
-  const parsedPhotoThreshold = parseFloat(settings.moderation_auto_approve_threshold);
-  const photoThreshold = Number.isNaN(parsedPhotoThreshold) ? 0.9 : parsedPhotoThreshold;
   // Deny-listed POIs must never be a reassignment target (POI gate Tier 2).
   const deniedPoiIds = new Set((await loadListSetting(pool, 'news_collection_excluded_pois')).map(Number).filter(Number.isInteger));
-
-  let scoring;
 
   if (contentType === 'news' || contentType === 'event') {
     const table = contentType === 'news' ? 'poi_news' : 'poi_events';
@@ -465,7 +431,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       }
     }
 
-    let relevanceVotes = [];
+    let relevanceVotes = [], regionVotes = [];
     // Fix: a vote counts as affirmative if the content is relevant to the guide's
     // mission OR specifically about this POI. Content genuinely about a mapped POI
     // belongs even when the topic isn't a classic outdoor/nature/history match —
@@ -473,21 +439,29 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // while regional content passes. The POI gate still handles reassignment when
     // about_poi is false. (PR #483 follow-up)
     const isAffirmativeVote = v => v.relevant || v.about_poi;
-    let yesCount = 0, noCount = 0;
+    let yesCount = 0, noCount = 0, inRegionCount = 0;
     try {
-      relevanceVotes = await runContentRelevanceVotes(pool, {
-        title: row.title, description: row.description,
-        poiName: row.poi_name, contentType
-      });
+      // Relevance and region are independent LLM votes — run concurrently so the
+      // extra gate adds no wall-clock latency (spec 041).
+      [relevanceVotes, regionVotes] = await Promise.all([
+        runContentRelevanceVotes(pool, {
+          title: row.title, description: row.description,
+          poiName: row.poi_name, contentType
+        }),
+        runRegionVotes(pool, {
+          title: row.title, description: row.description, poiName: row.poi_name
+        })
+      ]);
 
       yesCount = relevanceVotes.filter(isAffirmativeVote).length;
       noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
-      console.log(`[Moderation] ${contentType} #${contentId}: relevance votes ${yesCount}/${relevanceVotes.length} yes`);
+      inRegionCount = regionVotes.filter(v => v.in_region).length;
+      console.log(`[Moderation] ${contentType} #${contentId}: relevance ${yesCount}/${relevanceVotes.length} yes, region ${inRegionCount}/${regionVotes.length} in`);
       logInfo(itemRunId, 'moderation', null, row.title,
-        `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes`);
+        `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes; region ${inRegionCount}/${regionVotes.length} in`);
     } catch (err) {
-      console.error(`[Moderation] ${contentType} #${contentId}: relevance voting failed: ${err.message}`);
-      logError(itemRunId, 'moderation', null, row.title, `Relevance voting failed: ${err.message}`);
+      console.error(`[Moderation] ${contentType} #${contentId}: relevance/region voting failed: ${err.message}`);
+      logError(itemRunId, 'moderation', null, row.title, `Relevance/region voting failed: ${err.message}`);
     }
 
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
@@ -495,10 +469,10 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     const effectiveDate = newDate || row.publication_date;
 
-    // Three independent gates — auto-publish only when all three pass (spec 030).
+    // Four independent gates — auto-publish only when all four pass (spec 030 + 041).
     // Events legitimately carry future dates, so the future-date check is news-only.
-    const dateGate = evaluateDateGate(effectiveDate, newScore, row.source_url,
-      { threshold: effectiveThreshold, floorYear: dateFloorYear, trustedSet, allowFuture: contentType === 'event' });
+    const dateGate = evaluateDateGate(effectiveDate, newScore,
+      { threshold: effectiveThreshold, floorYear: dateFloorYear, allowFuture: contentType === 'event' });
 
     const relevanceGate = unanimousYes
       ? { verdict: 'pass', reason: `Relevance ${yesCount}/${relevanceVotes.length} yes` }
@@ -506,32 +480,37 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         ? { verdict: 'fail', reason: `Unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})` }
         : { verdict: 'review', reason: `Relevance split ${yesCount}/${relevanceVotes.length} yes` };
 
-    // Skip the POI gate's extra lookup/LLM call when relevance already failed (we reject regardless).
-    const poiGate = relevanceGate.verdict === 'fail'
-      ? { verdict: 'review', tier: 0, reason: 'Not evaluated (relevance failed)', reassigned_from: null, reassigned_to: null, newPoiId: null }
+    // Region gate (spec 041): geography, independent of topical relevance. A unanimous
+    // out-of-region verdict rejects — this is what stops a national-org POI (US Coast
+    // Guard) from publishing an out-of-state story that relevance/about_poi let through.
+    const regionGate = evaluateRegionGate(regionVotes);
+
+    // Skip the POI gate's extra lookup/LLM call when relevance or region already failed (we reject regardless).
+    const poiGate = (relevanceGate.verdict === 'fail' || regionGate.verdict === 'fail')
+      ? { verdict: 'review', tier: 0, reason: 'Not evaluated (relevance/region failed)', reassigned_from: null, reassigned_to: null, newPoiId: null }
       : await evaluatePoiGate(pool, row, relevanceVotes, deniedPoiIds);
 
     let resolvedStatus;
     if (forceStatus) {
       resolvedStatus = forceStatus;
-    } else if (relevanceGate.verdict === 'fail') {
+    } else if (relevanceGate.verdict === 'fail' || regionGate.verdict === 'fail') {
       resolvedStatus = 'rejected';
-    } else if (dateGate.verdict === 'pass' && relevanceGate.verdict === 'pass' && poiGate.verdict === 'pass') {
+    } else if (dateGate.verdict === 'pass' && relevanceGate.verdict === 'pass' && regionGate.verdict === 'pass' && poiGate.verdict === 'pass') {
       resolvedStatus = 'published';
     } else {
       resolvedStatus = 'pending';
     }
 
     const gates = {
-      date: { verdict: dateGate.verdict, reason: dateGate.reason, trusted_source: dateGate.trusted_source },
+      date: { verdict: dateGate.verdict, reason: dateGate.reason },
       relevance: { verdict: relevanceGate.verdict, reason: relevanceGate.reason, yes: yesCount, total: relevanceVotes.length },
+      region: { verdict: regionGate.verdict, reason: regionGate.reason, in_region: inRegionCount, total: regionVotes.length },
       poi: { verdict: poiGate.verdict, tier: poiGate.tier, reason: poiGate.reason, reassigned_from: poiGate.reassigned_from, reassigned_to: poiGate.reassigned_to }
     };
     const reasoning = forceStatus
       ? `Forced to ${forceStatus}`
-      : `${resolvedStatus} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
+      : `${resolvedStatus} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); region: ${regionGate.verdict} (${inRegionCount}/${regionVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
 
-    scoring = { confidence_score: newScore / 8.0, reasoning };
     const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
     const newPoiId = poiGate.newPoiId; // Tier-2 reassignment target, or null to keep current poi_id
     const gatesJson = JSON.stringify(gates);
@@ -552,41 +531,16 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
 
   } else if (contentType === 'photo') {
-    const photoQuery = await pool.query(
-      `SELECT ps.id, ps.image_server_asset_id, ps.poi_id, p.name as poi_name
-       FROM photo_submissions ps
-       LEFT JOIN pois p ON ps.poi_id = p.id
-       WHERE ps.id = $1`, [contentId]
-    );
-    if (!photoQuery.rows.length) return;
-    const row = photoQuery.rows[0];
-
-    const imageUrl = row.image_server_asset_id
-      ? `${process.env.IMAGE_SERVER_URL || 'http://10.89.2.100:8000'}/api/assets/${row.image_server_asset_id}/file`
-      : null;
-
-    scoring = await moderatePhoto(pool, {
-      poi_name: row.poi_name,
-      image_url: imageUrl
-    });
-
-    const resolvedStatus = forceStatus ? forceStatus
-      : autoApproveEnabled && scoring.confidence_score >= photoThreshold
-      ? 'auto_approved' : 'pending';
-
+    // Photos go straight to manual review — an AI scoring pass isn't worth its cost given
+    // photo_submissions has effectively zero volume. forceStatus (an admin explicitly
+    // approving or rejecting) is still honored.
+    const resolvedStatus = forceStatus || 'pending';
     await pool.query(
-      `UPDATE photo_submissions SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3, moderation_processed = true WHERE id = $4`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
+      `UPDATE photo_submissions SET moderation_status = $1, moderation_processed = true WHERE id = $2`,
+      [resolvedStatus, contentId]
     );
+    console.log(`[Moderation] photo #${contentId}: → ${resolvedStatus} (manual review)`);
   }
-
-  const decision = contentType === 'photo'
-    ? (scoring?.confidence_score >= photoThreshold ? 'auto_approved' : 'pending')
-    : (scoring?.confidence_score >= (newsDateThreshold / 8.0) ? 'auto_approved' : 'pending');
-  console.log(`[Moderation] ${contentType} #${contentId}: score=${scoring?.confidence_score}`);
-  logInfo(itemRunId || 0, 'moderation', null, null,
-    `Score ${contentType} #${contentId}: ${scoring?.confidence_score?.toFixed(2)} → ${decision}`,
-    { content_type: contentType, content_id: contentId, score: scoring?.confidence_score, decision });
 }
 
 export async function processPendingItems(pool) {

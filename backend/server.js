@@ -889,7 +889,6 @@ async function initDatabase() {
       INSERT INTO admin_settings (key, value, updated_at)
       VALUES
         ('moderation_enabled', 'true', CURRENT_TIMESTAMP),
-        ('moderation_auto_approve_threshold', '0.9', CURRENT_TIMESTAMP),
         ('moderation_auto_approve_enabled', 'true', CURRENT_TIMESTAMP),
         ('photo_submissions_enabled', 'false', CURRENT_TIMESTAMP)
       ON CONFLICT (key) DO NOTHING
