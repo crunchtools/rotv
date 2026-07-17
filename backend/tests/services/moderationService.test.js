@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { applyQualityFilters, getDomainReputation, evaluateDateGate } from '../../services/moderationService.js';
+import { applyQualityFilters, getDomainReputation, evaluateDateGate, evaluateRegionGate } from '../../services/moderationService.js';
 
 // Test domain lists (mirrors production config from migration 019)
 const TRUSTED_DOMAINS = [
@@ -171,5 +171,37 @@ describe('Date gate (spec 030)', () => {
 
   test('untrusted source with only 3 of 4 votes (score 3) -> review', () => {
     expect(evaluateDateGate('2021-12-03', 3, 'https://clevelandmagazine.com/a', cfg).verdict).toBe('review');
+  });
+});
+
+describe('Region gate (spec 041)', () => {
+  const inRegion = { in_region: true, reasoning: 'in NE Ohio' };
+  const outRegion = { in_region: false, reasoning: 'in Virginia' };
+
+  test('unanimous in-region -> pass', () => {
+    expect(evaluateRegionGate([inRegion, inRegion, inRegion]).verdict).toBe('pass');
+  });
+
+  // Regression: news #5416 — a Coast Guard change-of-command ceremony in Portsmouth, VA
+  // that all three voters flagged out-of-region yet published via the relevance about_poi
+  // hole. The Region gate must reject it.
+  test('unanimous out-of-region -> fail (Coast Guard Virginia regression)', () => {
+    const votes = [
+      { in_region: false, reasoning: 'change of command ceremony in Virginia' },
+      { in_region: false, reasoning: 'ceremony in Portsmouth, VA, outside NE Ohio' },
+      { in_region: false, reasoning: 'located in Virginia' }
+    ];
+    const g = evaluateRegionGate(votes);
+    expect(g.verdict).toBe('fail');
+    expect(g.reason).toMatch(/Virginia/);
+  });
+
+  test('split verdict -> review (never auto-publishes, never auto-rejects)', () => {
+    expect(evaluateRegionGate([inRegion, outRegion, inRegion]).verdict).toBe('review');
+  });
+
+  test('fewer than 3 votes (LLM failures) -> review, never fail', () => {
+    expect(evaluateRegionGate([outRegion, outRegion]).verdict).toBe('review');
+    expect(evaluateRegionGate([]).verdict).toBe('review');
   });
 });

@@ -171,8 +171,10 @@ REJECT only if the content is genuinely a poor fit:
   a political rally or partisan event, a private party/wedding/corporate rental, a purely
   commercial product/service listing, or a general community event unrelated to nature,
   parks, or regional history (e.g. book clubs, support groups, fitness classes, galas)
-- About a place OUTSIDE Northeast Ohio (e.g. a trail or park in another state)
 - Spam, navigation chrome, an error page, or content with no discernible subject
+
+Judge ONLY topical fit here — do NOT reject for geography. Whether the subject is
+physically in Northeast Ohio is decided by a separate region check, not this vote.
 
 IMPORTANT: judge by SUBJECT, not venue. An off-topic event (a wedding, a political
 rally) held at a park is still a reject. But on-topic content about the parks, trails,
@@ -192,6 +194,51 @@ Return ONLY valid JSON: {"relevant": true, "about_poi": true, "reasoning": "one 
           try {
             const parsed = JSON.parse(raw);
             return { relevant: !!parsed.relevant, about_poi: !!parsed.about_poi, reasoning: parsed.reasoning || '' };
+          } catch {
+            return null;
+          }
+        })
+        .catch(() => null)
+    )
+  );
+  return results.filter(Boolean);
+}
+
+// Region gate (spec 041): a dedicated geography check, independent of topical
+// relevance. Relevance asks "is the SUBJECT on-topic"; Region asks "is the subject
+// physically IN Northeast Ohio." Split out because a geographically-broad entity POI
+// (e.g. "US Coast Guard") made out-of-region content pass the relevance gate via
+// about_poi — the voters correctly saw it was out of region, but that judgment had
+// nowhere to bind. Now it is its own gate. Mirrors the relevance voter: 3 votes,
+// consensus decided by the caller.
+async function runRegionVotes(pool, { title, description, poiName }, numVotes = 3) {
+  const prompt = `You are checking the GEOGRAPHY of content for "Roots of The Valley," a guide to the Cuyahoga Valley region of Northeast Ohio — Cuyahoga and Summit counties and the immediately adjacent counties (Medina, Lorain, Lake, Geauga, Portage, Stark, Wayne). The core is Cuyahoga Valley National Park, Cleveland Metroparks, Summit Metro Parks, and the cities of Cleveland and Akron.
+
+Title: "${title}"
+Summary: "${description || '(none)'}"
+Location/POI: ${poiName || '(unknown)'}
+
+Is the SUBJECT of this content physically located IN that Northeast Ohio region?
+
+Judge by WHERE the subject or events actually take place, NOT by the name of the
+organization. A national or multi-state organization's activity in another place is
+OUT of region even when that organization also has a local presence — e.g. a Coast
+Guard change-of-command ceremony in Virginia, or a national park in another state,
+is out of region even though the Coast Guard or the Park Service also operates here.
+
+When the location is genuinely unclear and there is no signal placing the subject
+outside the region, lean IN — regional collection already scoped the source.
+
+Return ONLY valid JSON: {"in_region": true, "reasoning": "one sentence why"}`;
+
+  const results = await Promise.all(
+    Array.from({ length: numVotes }, () =>
+      generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 128, thinkingBudget: 0 })
+        .then(r => {
+          const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
+          try {
+            const parsed = JSON.parse(raw);
+            return { in_region: !!parsed.in_region, reasoning: parsed.reasoning || '' };
           } catch {
             return null;
           }
@@ -264,6 +311,25 @@ export function evaluateDateGate(effectiveDate, dateScore, sourceUrl, { threshol
     return { verdict: 'pass', reason: `Trusted source date (consensus ${dateScore}/${threshold})`, trusted_source: true };
   }
   return { verdict: 'review', reason: `Low date confidence ${dateScore}/${threshold} from untrusted source`, trusted_source: false };
+}
+
+// Region gate consensus (spec 041). Pure so it can be unit-tested. Requires 3 votes:
+// unanimous in-region passes, unanimous out-of-region fails (→ reject), anything else
+// (a split, or too few votes) goes to manual review. This is the gate that binds the
+// geographic judgment the relevance voters were already making but had no place to use.
+export function evaluateRegionGate(regionVotes) {
+  const total = regionVotes.length;
+  const inCount = regionVotes.filter(v => v.in_region).length;
+  if (total < 3) {
+    return { verdict: 'review', reason: `Region inconclusive (${inCount}/${total} in)` };
+  }
+  if (inCount === total) {
+    return { verdict: 'pass', reason: `Region ${inCount}/${total} in` };
+  }
+  if (inCount === 0) {
+    return { verdict: 'fail', reason: `Unanimous out of region (${regionVotes.map(v => v.reasoning).filter(Boolean).join('; ')})` };
+  }
+  return { verdict: 'review', reason: `Region split ${inCount}/${total} in` };
 }
 
 // POI gate (three tiers). Returns the verdict plus newPoiId when a Tier-2 reassignment
@@ -465,7 +531,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       }
     }
 
-    let relevanceVotes = [];
+    let relevanceVotes = [], regionVotes = [];
     // Fix: a vote counts as affirmative if the content is relevant to the guide's
     // mission OR specifically about this POI. Content genuinely about a mapped POI
     // belongs even when the topic isn't a classic outdoor/nature/history match —
@@ -473,21 +539,29 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // while regional content passes. The POI gate still handles reassignment when
     // about_poi is false. (PR #483 follow-up)
     const isAffirmativeVote = v => v.relevant || v.about_poi;
-    let yesCount = 0, noCount = 0;
+    let yesCount = 0, noCount = 0, inRegionCount = 0;
     try {
-      relevanceVotes = await runContentRelevanceVotes(pool, {
-        title: row.title, description: row.description,
-        poiName: row.poi_name, contentType
-      });
+      // Relevance and region are independent LLM votes — run concurrently so the
+      // extra gate adds no wall-clock latency (spec 041).
+      [relevanceVotes, regionVotes] = await Promise.all([
+        runContentRelevanceVotes(pool, {
+          title: row.title, description: row.description,
+          poiName: row.poi_name, contentType
+        }),
+        runRegionVotes(pool, {
+          title: row.title, description: row.description, poiName: row.poi_name
+        })
+      ]);
 
       yesCount = relevanceVotes.filter(isAffirmativeVote).length;
       noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
-      console.log(`[Moderation] ${contentType} #${contentId}: relevance votes ${yesCount}/${relevanceVotes.length} yes`);
+      inRegionCount = regionVotes.filter(v => v.in_region).length;
+      console.log(`[Moderation] ${contentType} #${contentId}: relevance ${yesCount}/${relevanceVotes.length} yes, region ${inRegionCount}/${regionVotes.length} in`);
       logInfo(itemRunId, 'moderation', null, row.title,
-        `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes`);
+        `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes; region ${inRegionCount}/${regionVotes.length} in`);
     } catch (err) {
-      console.error(`[Moderation] ${contentType} #${contentId}: relevance voting failed: ${err.message}`);
-      logError(itemRunId, 'moderation', null, row.title, `Relevance voting failed: ${err.message}`);
+      console.error(`[Moderation] ${contentType} #${contentId}: relevance/region voting failed: ${err.message}`);
+      logError(itemRunId, 'moderation', null, row.title, `Relevance/region voting failed: ${err.message}`);
     }
 
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
@@ -495,7 +569,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     const effectiveDate = newDate || row.publication_date;
 
-    // Three independent gates — auto-publish only when all three pass (spec 030).
+    // Four independent gates — auto-publish only when all four pass (spec 030 + 041).
     // Events legitimately carry future dates, so the future-date check is news-only.
     const dateGate = evaluateDateGate(effectiveDate, newScore, row.source_url,
       { threshold: effectiveThreshold, floorYear: dateFloorYear, trustedSet, allowFuture: contentType === 'event' });
@@ -506,17 +580,22 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         ? { verdict: 'fail', reason: `Unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})` }
         : { verdict: 'review', reason: `Relevance split ${yesCount}/${relevanceVotes.length} yes` };
 
-    // Skip the POI gate's extra lookup/LLM call when relevance already failed (we reject regardless).
-    const poiGate = relevanceGate.verdict === 'fail'
-      ? { verdict: 'review', tier: 0, reason: 'Not evaluated (relevance failed)', reassigned_from: null, reassigned_to: null, newPoiId: null }
+    // Region gate (spec 041): geography, independent of topical relevance. A unanimous
+    // out-of-region verdict rejects — this is what stops a national-org POI (US Coast
+    // Guard) from publishing an out-of-state story that relevance/about_poi let through.
+    const regionGate = evaluateRegionGate(regionVotes);
+
+    // Skip the POI gate's extra lookup/LLM call when relevance or region already failed (we reject regardless).
+    const poiGate = (relevanceGate.verdict === 'fail' || regionGate.verdict === 'fail')
+      ? { verdict: 'review', tier: 0, reason: 'Not evaluated (relevance/region failed)', reassigned_from: null, reassigned_to: null, newPoiId: null }
       : await evaluatePoiGate(pool, row, relevanceVotes, deniedPoiIds);
 
     let resolvedStatus;
     if (forceStatus) {
       resolvedStatus = forceStatus;
-    } else if (relevanceGate.verdict === 'fail') {
+    } else if (relevanceGate.verdict === 'fail' || regionGate.verdict === 'fail') {
       resolvedStatus = 'rejected';
-    } else if (dateGate.verdict === 'pass' && relevanceGate.verdict === 'pass' && poiGate.verdict === 'pass') {
+    } else if (dateGate.verdict === 'pass' && relevanceGate.verdict === 'pass' && regionGate.verdict === 'pass' && poiGate.verdict === 'pass') {
       resolvedStatus = 'published';
     } else {
       resolvedStatus = 'pending';
@@ -525,11 +604,12 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const gates = {
       date: { verdict: dateGate.verdict, reason: dateGate.reason, trusted_source: dateGate.trusted_source },
       relevance: { verdict: relevanceGate.verdict, reason: relevanceGate.reason, yes: yesCount, total: relevanceVotes.length },
+      region: { verdict: regionGate.verdict, reason: regionGate.reason, in_region: inRegionCount, total: regionVotes.length },
       poi: { verdict: poiGate.verdict, tier: poiGate.tier, reason: poiGate.reason, reassigned_from: poiGate.reassigned_from, reassigned_to: poiGate.reassigned_to }
     };
     const reasoning = forceStatus
       ? `Forced to ${forceStatus}`
-      : `${resolvedStatus} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
+      : `${resolvedStatus} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); region: ${regionGate.verdict} (${inRegionCount}/${regionVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
 
     scoring = { confidence_score: newScore / 8.0, reasoning };
     const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
