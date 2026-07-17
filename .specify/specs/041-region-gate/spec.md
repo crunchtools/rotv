@@ -89,3 +89,27 @@ Acceptance Criteria:
   (Coast Guard #5416 regression fixture); split → review; <3 votes → review.
 - Manual: re-moderate a known out-of-region item and confirm `rejected` with a
   `region` gate in `moderation_gates`.
+
+---
+
+## Follow-on cleanup (same PR)
+
+Two dead/low-value mechanisms are removed alongside the Region gate, since the
+investigation that surfaced the #5416 bug also established they no longer earn their keep.
+
+**Numeric confidence scoring — removed.** The 0–8 `confidence_score` model predates the
+gate architecture. `applyQualityFilters()` was test-only; the news/event path never wrote
+`confidence_score` (only a misleading log). Its sole live consumer was photo auto-approve,
+and `photo_submissions` has zero rows — no uploads, ever. Removed: `applyQualityFilters`,
+`serializeIssues`, the vestigial score log, `moderatePhoto`, the photo confidence
+threshold setting/UI. Photos now go straight to manual review (`forceStatus` still honored).
+DB `confidence_score` columns are left in place (inert) to avoid a needless migration.
+
+**Trusted domains — removed.** `moderation_trusted_domains`'s only live effect was letting
+a weak-consensus date pass the Date gate. Data: 22 lifetime saves (21 news + 1 event) —
+real but tiny, and the "trusted" name caused this very bug to be misdiagnosed. Removed from
+the Date gate (`evaluateDateGate` no longer takes `sourceUrl`/`trustedSet` or emits
+`trusted_source`), the settings load, admin allow-list, and the settings UI. Trade-off:
+~2–3 official items/week with broken machine-readable dates now land in `pending` instead
+of auto-publishing. (The separate `trusted_content_paths` collection setting is unrelated
+and untouched.)

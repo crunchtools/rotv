@@ -252,7 +252,6 @@ function ContentFormModal({
                 Status: {item.moderation_status === 'auto_approved' ? 'Auto-approved by AI' :
                   item.moderation_status === 'published' ? 'Approved by human' :
                   item.moderation_status}
-                {item.confidence_score != null && ` · Score: ${(item.confidence_score * 100).toFixed(0)}%`}
               </div>
             </div>
           )}

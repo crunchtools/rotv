@@ -26,13 +26,6 @@ const inputStyle = {
   fontSize: '0.85rem', width: '100%', boxSizing: 'border-box'
 };
 
-const getConfidenceColor = (score) => {
-  if (score === null || score === undefined) return '#999';
-  if (score < 0.5) return '#f44336';
-  if (score < 0.9) return '#ff9800';
-  return '#4caf50';
-};
-
 const GATE_VERDICT_COLOR = { pass: '#4caf50', review: '#ff9800', fail: '#f44336' };
 
 // Compact pass/review/fail pills for the three auto-moderation gates (spec 030).
@@ -177,15 +170,6 @@ export default function ModerationExtras({
           );
         })()}
 
-        {item.confidence_score !== null && item.confidence_score !== undefined && (
-          <span style={{
-            color: getConfidenceColor(item.confidence_score),
-            fontWeight: 'bold', fontSize: '0.78rem'
-          }}>
-            {(item.confidence_score * 100).toFixed(0)}%
-          </span>
-        )}
-
         {item.content_type !== 'photo' && <GateBadges gates={item.moderation_gates} />}
 
         <span style={{ fontSize: '0.72rem', color: '#aaa' }}>
@@ -317,4 +301,4 @@ export default function ModerationExtras({
   );
 }
 
-export { FIELD_CONFIGS, badgeStyle, actionBtn, btnStyle, inputStyle, renderFieldInput, getConfidenceColor, getTypeBadgeColor, getSourceBadge };
+export { FIELD_CONFIGS, badgeStyle, actionBtn, btnStyle, inputStyle, renderFieldInput, getTypeBadgeColor, getSourceBadge };

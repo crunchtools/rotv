@@ -1,6 +1,6 @@
-import { moderateContent, moderatePhoto, generateTextWithCustomPrompt } from './geminiService.js';
+import { moderateContent, generateTextWithCustomPrompt } from './geminiService.js';
 import { renderPage } from './renderPage.js';
-import { deepCrawlForArticle, isGenericUrl } from './deepCrawler.js';
+import { deepCrawlForArticle } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
@@ -67,39 +67,6 @@ function extractDateFields(scoring) {
   }
 
   return { publicationDate };
-}
-
-export function applyQualityFilters(scoring, sourceUrl, dateInfo, trustedSet = new Set(), blocklistSet = new Set()) {
-  const { publicationDate, dateConfidence } = dateInfo;
-
-  const reputation = getDomainReputation(sourceUrl, trustedSet, blocklistSet);
-  if (reputation === 'blocklisted') {
-    scoring.confidence_score *= 0.3;
-    scoring.reasoning += ' Source is on the blocklist.';
-    if (!scoring.issues) scoring.issues = [];
-    scoring.issues.push('blocklisted_domain');
-  } else if (reputation === 'unknown') {
-    scoring.confidence_score *= 0.9;
-  }
-
-  if (isGenericUrl(sourceUrl)) {
-    scoring.confidence_score *= 0.6;
-    scoring.reasoning += ' Source URL is a bare homepage or generic path.';
-    if (!scoring.issues) scoring.issues = [];
-    scoring.issues.push('generic_url');
-  }
-
-  if (!publicationDate || dateConfidence === 'unknown') {
-    scoring.confidence_score = Math.min(scoring.confidence_score, 0.7);
-    scoring.reasoning += ' No publication date found - capping confidence at 0.70.';
-  }
-
-  return scoring;
-}
-
-function serializeIssues(scoring) {
-  const issues = scoring.issues || [];
-  return issues.length > 0 ? JSON.stringify(issues) : null;
 }
 
 async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
@@ -286,31 +253,29 @@ Return ONLY valid JSON: {"choice": "assigned|owner|boundary|none"}`;
 }
 
 // Date gate: a date passes when it is present, not in the future, plausible (year at or
-// above the floor — catches hallucinated 1800s values), AND trustworthy (consensus score
-// at/above threshold OR from a trusted-domain source). Age is never penalized.
-export function evaluateDateGate(effectiveDate, dateScore, sourceUrl, { threshold, floorYear, trustedSet, allowFuture = false }) {
+// above the floor — catches hallucinated 1800s values), AND has consensus at/above the
+// threshold. Age is never penalized. (Trusted-domain date bypass was removed — see the
+// numeric-scoring/trusted-domain teardown; official sources with weak machine-readable
+// dates now go to manual review rather than auto-publishing.)
+export function evaluateDateGate(effectiveDate, dateScore, { threshold, floorYear, allowFuture = false }) {
   if (!effectiveDate) {
-    return { verdict: 'review', reason: 'No publication date', trusted_source: false };
+    return { verdict: 'review', reason: 'No publication date' };
   }
   const parsed = new Date(effectiveDate);
   if (Number.isNaN(parsed.getTime())) {
-    return { verdict: 'review', reason: 'Unparseable publication date', trusted_source: false };
+    return { verdict: 'review', reason: 'Unparseable publication date' };
   }
   if (!allowFuture && parsed > new Date()) {
-    return { verdict: 'review', reason: `Future publication date ${effectiveDate}`, trusted_source: false };
+    return { verdict: 'review', reason: `Future publication date ${effectiveDate}` };
   }
   const year = parsed.getUTCFullYear();
   if (year < floorYear) {
-    return { verdict: 'review', reason: `Implausible year ${year} (below ${floorYear})`, trusted_source: false };
+    return { verdict: 'review', reason: `Implausible year ${year} (below ${floorYear})` };
   }
-  const trusted = getDomainReputation(sourceUrl, trustedSet) === 'trusted';
   if (dateScore >= threshold) {
-    return { verdict: 'pass', reason: `Date consensus ${dateScore}/${threshold}`, trusted_source: trusted };
+    return { verdict: 'pass', reason: `Date consensus ${dateScore}/${threshold}` };
   }
-  if (trusted) {
-    return { verdict: 'pass', reason: `Trusted source date (consensus ${dateScore}/${threshold})`, trusted_source: true };
-  }
-  return { verdict: 'review', reason: `Low date confidence ${dateScore}/${threshold} from untrusted source`, trusted_source: false };
+  return { verdict: 'review', reason: `Low date confidence ${dateScore}/${threshold}` };
 }
 
 // Region gate consensus (spec 041). Pure so it can be unit-tested. Requires 3 votes:
@@ -373,24 +338,15 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
-    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_auto_approve_threshold', 'moderation_news_date_threshold', 'moderation_date_floor_year', 'moderation_trusted_domains')`
+    `SELECT key, value FROM admin_settings WHERE key IN ('moderation_news_date_threshold', 'moderation_date_floor_year')`
   );
   const settings = Object.fromEntries(settingsRows.rows.map(r => [r.key, r.value]));
   const parsedNewsThreshold = parseInt(settings.moderation_news_date_threshold);
   const newsDateThreshold = Number.isNaN(parsedNewsThreshold) ? 4 : parsedNewsThreshold;
   const parsedFloorYear = parseInt(settings.moderation_date_floor_year);
   const dateFloorYear = Number.isNaN(parsedFloorYear) ? 2010 : parsedFloorYear;
-  let trustedSet = new Set();
-  try {
-    const domains = JSON.parse(settings.moderation_trusted_domains || '[]');
-    if (Array.isArray(domains)) trustedSet = new Set(domains.map(d => String(d).toLowerCase().replace(/^www\./, '')));
-  } catch { /* leave empty on bad JSON */ }
-  const parsedPhotoThreshold = parseFloat(settings.moderation_auto_approve_threshold);
-  const photoThreshold = Number.isNaN(parsedPhotoThreshold) ? 0.9 : parsedPhotoThreshold;
   // Deny-listed POIs must never be a reassignment target (POI gate Tier 2).
   const deniedPoiIds = new Set((await loadListSetting(pool, 'news_collection_excluded_pois')).map(Number).filter(Number.isInteger));
-
-  let scoring;
 
   if (contentType === 'news' || contentType === 'event') {
     const table = contentType === 'news' ? 'poi_news' : 'poi_events';
@@ -571,8 +527,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     // Four independent gates — auto-publish only when all four pass (spec 030 + 041).
     // Events legitimately carry future dates, so the future-date check is news-only.
-    const dateGate = evaluateDateGate(effectiveDate, newScore, row.source_url,
-      { threshold: effectiveThreshold, floorYear: dateFloorYear, trustedSet, allowFuture: contentType === 'event' });
+    const dateGate = evaluateDateGate(effectiveDate, newScore,
+      { threshold: effectiveThreshold, floorYear: dateFloorYear, allowFuture: contentType === 'event' });
 
     const relevanceGate = unanimousYes
       ? { verdict: 'pass', reason: `Relevance ${yesCount}/${relevanceVotes.length} yes` }
@@ -602,7 +558,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     const gates = {
-      date: { verdict: dateGate.verdict, reason: dateGate.reason, trusted_source: dateGate.trusted_source },
+      date: { verdict: dateGate.verdict, reason: dateGate.reason },
       relevance: { verdict: relevanceGate.verdict, reason: relevanceGate.reason, yes: yesCount, total: relevanceVotes.length },
       region: { verdict: regionGate.verdict, reason: regionGate.reason, in_region: inRegionCount, total: regionVotes.length },
       poi: { verdict: poiGate.verdict, tier: poiGate.tier, reason: poiGate.reason, reassigned_from: poiGate.reassigned_from, reassigned_to: poiGate.reassigned_to }
@@ -611,7 +567,6 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       ? `Forced to ${forceStatus}`
       : `${resolvedStatus} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); region: ${regionGate.verdict} (${inRegionCount}/${regionVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
 
-    scoring = { confidence_score: newScore / 8.0, reasoning };
     const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
     const newPoiId = poiGate.newPoiId; // Tier-2 reassignment target, or null to keep current poi_id
     const gatesJson = JSON.stringify(gates);
@@ -632,41 +587,17 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     );
 
   } else if (contentType === 'photo') {
-    const photoQuery = await pool.query(
-      `SELECT ps.id, ps.image_server_asset_id, ps.poi_id, p.name as poi_name
-       FROM photo_submissions ps
-       LEFT JOIN pois p ON ps.poi_id = p.id
-       WHERE ps.id = $1`, [contentId]
-    );
-    if (!photoQuery.rows.length) return;
-    const row = photoQuery.rows[0];
-
-    const imageUrl = row.image_server_asset_id
-      ? `${process.env.IMAGE_SERVER_URL || 'http://10.89.2.100:8000'}/api/assets/${row.image_server_asset_id}/file`
-      : null;
-
-    scoring = await moderatePhoto(pool, {
-      poi_name: row.poi_name,
-      image_url: imageUrl
-    });
-
-    const resolvedStatus = forceStatus ? forceStatus
-      : autoApproveEnabled && scoring.confidence_score >= photoThreshold
-      ? 'auto_approved' : 'pending';
-
+    // Photos are not auto-scored. Numeric confidence scoring was removed (spec 041
+    // follow-up) — its only live consumer was photo auto-approve, and photo_submissions
+    // has effectively zero volume. Photos go straight to manual review; forceStatus
+    // (an admin explicitly approving/rejecting) is still honored.
+    const resolvedStatus = forceStatus || 'pending';
     await pool.query(
-      `UPDATE photo_submissions SET confidence_score = $1, ai_reasoning = $2, moderation_status = $3, moderation_processed = true WHERE id = $4`,
-      [scoring.confidence_score, scoring.reasoning, resolvedStatus, contentId]
+      `UPDATE photo_submissions SET moderation_status = $1, moderation_processed = true WHERE id = $2`,
+      [resolvedStatus, contentId]
     );
+    console.log(`[Moderation] photo #${contentId}: → ${resolvedStatus} (manual review)`);
   }
-
-  const decision = contentType === 'photo'
-    ? (scoring?.confidence_score >= photoThreshold ? 'auto_approved' : 'pending')
-    : (scoring?.confidence_score >= (newsDateThreshold / 8.0) ? 'auto_approved' : 'pending');
-  console.log(`[Moderation] ${contentType} #${contentId}: score=${scoring?.confidence_score}`);
-  logInfo(itemRunId || 0, 'moderation', null, null,
-    `Score ${contentType} #${contentId}: ${scoring?.confidence_score?.toFixed(2)} → ${decision}`,
-    { content_type: contentType, content_id: contentId, score: scoring?.confidence_score, decision });
 }
 
 export async function processPendingItems(pool) {

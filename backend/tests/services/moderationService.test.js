@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { applyQualityFilters, getDomainReputation, evaluateDateGate, evaluateRegionGate } from '../../services/moderationService.js';
+import { getDomainReputation, evaluateDateGate, evaluateRegionGate } from '../../services/moderationService.js';
 
 // Test domain lists (mirrors production config from migration 019)
 const TRUSTED_DOMAINS = [
@@ -20,75 +20,9 @@ const COMPETITOR_DOMAINS = [
   'cuyahogavalleyguide.com'
 ];
 
-// Create Sets for tests (getDomainReputation and applyQualityFilters now expect Sets)
+// Create Sets for tests (getDomainReputation expects Sets)
 const TRUSTED_SET = new Set(TRUSTED_DOMAINS);
 const COMPETITOR_SET = new Set(COMPETITOR_DOMAINS);
-
-describe('Quality filters', () => {
-  test('rejects blocklisted domains', () => {
-    const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
-    const filtered = applyQualityFilters(scoring, 'https://cuyahogavalley.com/', {}, TRUSTED_SET, COMPETITOR_SET);
-    expect(filtered.confidence_score).toBeLessThan(0.5);
-    expect(filtered.issues).toContain('blocklisted_domain');
-    expect(filtered.reasoning).toContain('blocklist');
-  });
-
-  test('penalizes generic URLs', () => {
-    const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
-    const filtered = applyQualityFilters(scoring, 'https://nps.gov/', {}, TRUSTED_SET, COMPETITOR_SET);
-    expect(filtered.issues).toContain('generic_url');
-    expect(filtered.reasoning).toContain('bare homepage');
-  });
-
-  test('caps confidence when no date', () => {
-    const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
-    const filtered = applyQualityFilters(scoring, 'https://nps.gov/article', { dateConfidence: 'unknown' }, TRUSTED_SET, COMPETITOR_SET);
-    expect(filtered.confidence_score).toBeLessThanOrEqual(0.7);
-    expect(filtered.reasoning).toContain('No publication date');
-  });
-
-  test('allows trusted domains with specific URLs', () => {
-    const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
-    const filtered = applyQualityFilters(scoring, 'https://nps.gov/cuva/new-trail.htm', {
-      publicationDate: '2025-03-15',
-      dateConfidence: 'exact'
-    }, TRUSTED_SET, COMPETITOR_SET);
-    expect(filtered.confidence_score).toBeGreaterThanOrEqual(0.9);
-  });
-
-  test('compounds penalties for multiple quality issues', () => {
-    // Competitor domain + generic URL + no date should result in very low score
-    const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
-    const filtered = applyQualityFilters(scoring, 'https://cuyahogavalley.com/', {
-      dateConfidence: 'unknown'
-    }, TRUSTED_SET, COMPETITOR_SET);
-    // 1.0 * 0.3 (blocklisted) * 0.6 (generic) = 0.18
-    expect(filtered.confidence_score).toBeLessThan(0.2);
-    expect(filtered.issues).toContain('blocklisted_domain');
-    expect(filtered.issues).toContain('generic_url');
-  });
-
-  test('unknown domain with specific URL gets slight penalty', () => {
-    const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
-    const filtered = applyQualityFilters(scoring, 'https://example.com/specific-article', {
-      publicationDate: '2025-03-15',
-      dateConfidence: 'exact'
-    }, TRUSTED_SET, COMPETITOR_SET);
-    // 1.0 * 0.9 (unknown domain) = 0.9
-    expect(filtered.confidence_score).toBeCloseTo(0.9, 1);
-  });
-
-  test('trusted domain with generic URL still gets penalized', () => {
-    const scoring = { confidence_score: 1.0, reasoning: '', issues: [] };
-    const filtered = applyQualityFilters(scoring, 'https://clevelandmetroparks.com/news', {
-      publicationDate: '2025-03-15',
-      dateConfidence: 'exact'
-    }, TRUSTED_SET, COMPETITOR_SET);
-    // 1.0 * 1.0 (trusted) * 0.6 (generic) = 0.6
-    expect(filtered.confidence_score).toBeCloseTo(0.6, 1);
-    expect(filtered.issues).toContain('generic_url');
-  });
-});
 
 describe('Domain reputation detection', () => {
   test('identifies trusted federal sources', () => {
@@ -125,52 +59,45 @@ describe('Domain reputation detection', () => {
   });
 });
 
-describe('Date gate (spec 030)', () => {
-  const cfg = { threshold: 4, floorYear: 2010, trustedSet: TRUSTED_SET };
+describe('Date gate (spec 030; trusted-domain bypass removed)', () => {
+  const cfg = { threshold: 4, floorYear: 2010 };
 
   test('missing date -> review', () => {
-    expect(evaluateDateGate(null, 0, 'https://nps.gov/a', cfg).verdict).toBe('review');
+    expect(evaluateDateGate(null, 0, cfg).verdict).toBe('review');
   });
 
-  test('high consensus passes from any source', () => {
-    const g = evaluateDateGate('2023-06-01', 6, 'https://example.com/a', cfg);
-    expect(g.verdict).toBe('pass');
+  test('consensus at/above threshold passes', () => {
+    expect(evaluateDateGate('2023-06-01', 6, cfg).verdict).toBe('pass');
   });
 
-  test('trusted source passes a recent date with low consensus', () => {
-    const g = evaluateDateGate('2024-09-10', 1, 'https://cleveland.com/story', cfg);
-    expect(g.verdict).toBe('pass');
-    expect(g.trusted_source).toBe(true);
+  // Trusted-domain date bypass was removed: a weak-consensus date no longer passes just
+  // because the source is an official domain — it goes to manual review like any other.
+  test('low consensus -> review regardless of source', () => {
+    expect(evaluateDateGate('2024-09-10', 1, cfg).verdict).toBe('review');
   });
 
-  test('untrusted source with low consensus -> review', () => {
-    expect(evaluateDateGate('2024-09-10', 1, 'https://example.com/a', cfg).verdict).toBe('review');
-  });
-
-  test('old date from trusted source still passes (age never penalized)', () => {
-    expect(evaluateDateGate('2015-04-01', 1, 'https://beaconjournal.com/x', cfg).verdict).toBe('pass');
+  test('old date with good consensus still passes (age never penalized)', () => {
+    expect(evaluateDateGate('2015-04-01', 6, cfg).verdict).toBe('pass');
   });
 
   test('hallucinated pre-floor year -> review', () => {
-    expect(evaluateDateGate('1899-01-01', 8, 'https://cleveland.com/x', cfg).verdict).toBe('review');
+    expect(evaluateDateGate('1899-01-01', 8, cfg).verdict).toBe('review');
   });
 
   test('future news date -> review, but events allow future', () => {
     const future = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
-    expect(evaluateDateGate(future, 6, 'https://cleveland.com/x', cfg).verdict).toBe('review');
-    expect(evaluateDateGate(future, 6, 'https://cleveland.com/x', { ...cfg, allowFuture: true }).verdict).toBe('pass');
+    expect(evaluateDateGate(future, 6, cfg).verdict).toBe('review');
+    expect(evaluateDateGate(future, 6, { ...cfg, allowFuture: true }).verdict).toBe('pass');
   });
 
   // PR #496: 4 unanimous LLM voters score exactly 4, meeting the threshold, so a clean date
-  // with no machine-readable tag auto-publishes from an untrusted source only on unanimity.
-  test('untrusted source passes when unanimous voters reach threshold (score 4)', () => {
-    const g = evaluateDateGate('2021-12-03', 4, 'https://clevelandmagazine.com/a', cfg);
-    expect(g.verdict).toBe('pass');
-    expect(g.trusted_source).toBe(false);
+  // with no machine-readable tag auto-publishes only on unanimity.
+  test('passes when unanimous voters reach threshold (score 4)', () => {
+    expect(evaluateDateGate('2021-12-03', 4, cfg).verdict).toBe('pass');
   });
 
-  test('untrusted source with only 3 of 4 votes (score 3) -> review', () => {
-    expect(evaluateDateGate('2021-12-03', 3, 'https://clevelandmagazine.com/a', cfg).verdict).toBe('review');
+  test('only 3 of 4 votes (score 3) -> review', () => {
+    expect(evaluateDateGate('2021-12-03', 3, cfg).verdict).toBe('review');
   });
 });
 
