@@ -1,8 +1,7 @@
-import { moderateContent, generateTextWithCustomPrompt } from './geminiService.js';
+import { generateTextWithCustomPrompt } from './geminiService.js';
 import { renderPage } from './renderPage.js';
-import { deepCrawlForArticle } from './deepCrawler.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDate, parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
+import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
@@ -13,8 +12,6 @@ const TABLE_MAP = {
   event: 'poi_events',
   photo: 'poi_media'
 };
-
-const REJECTION_ISSUES = ['content_not_on_source_page', 'static_reference_page', 'wrong_poi', 'wrong_geography', 'misclassified_type', 'private_content'];
 
 // blocklistSet entries are URL prefixes (domain or domain+path), matched as startsWith.
 // trustedSet entries are hostnames only.
@@ -54,58 +51,6 @@ function isSafePublicUrl(urlStr) {
   } catch {
     return false;
   }
-}
-
-function extractDateFields(scoring) {
-  let publicationDate = null;
-
-  if (scoring.publication_date) {
-    const normalized = parseDate(String(scoring.publication_date));
-    if (normalized) {
-      publicationDate = normalized;
-    }
-  }
-
-  return { publicationDate };
-}
-
-async function attemptDeepCrawl(pool, contentType, contentId, row, scoring) {
-  const table = TABLE_MAP[contentType];
-  const summary = contentType === 'news' ? row.summary : row.description;
-
-  console.log(`[Moderation] ${contentType} #${contentId}: content not on source page, attempting deep crawl...`);
-  try {
-    const crawlResult = await deepCrawlForArticle(
-      pool,
-      row.source_url,
-      { title: row.title, summary },
-      { maxDepth: 2, maxPages: 5, timeoutMs: 60000 }
-    );
-
-    if (crawlResult.foundUrl) {
-      console.log(`[Moderation] ${contentType} #${contentId}: deep crawl found article at ${crawlResult.foundUrl}`);
-      await pool.query(`UPDATE ${table} SET source_url = $1 WHERE id = $2`, [crawlResult.foundUrl, contentId]);
-
-      scoring = await moderateContent(pool, {
-        type: contentType,
-        title: row.title,
-        summary,
-        source_url: crawlResult.foundUrl,
-        source_page_content: crawlResult.foundContent,
-        poi_name: row.poi_name
-      });
-    } else {
-      console.log(`[Moderation] ${contentType} #${contentId}: deep crawl checked ${crawlResult.pagesChecked} pages, no match`);
-      scoring.reasoning += ` Deep crawl checked ${crawlResult.pagesChecked} pages but could not find article.`;
-    }
-  } catch (crawlError) {
-    console.error(`[Moderation] ${contentType} #${contentId}: deep crawl failed: ${crawlError.message}`);
-    scoring.reasoning += ` Deep crawl failed: ${crawlError.message}`;
-  }
-
-  const issuesList = scoring.issues || [];
-  const foundIssue = REJECTION_ISSUES.find(i => issuesList.includes(i));
-  return { scoring, foundIssue };
 }
 
 async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
