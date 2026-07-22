@@ -68,6 +68,11 @@ function createTripStopIcon(n) {
 // nose-DOWN, off-centre in its own canvas (a lateral error that rode with the
 // bearing, #533), and loaded from a third-party host at render time.
 //
+// Live trackers ride above ordinary POI markers. The consist's trailing units
+// stack just under their lead engine so the head of the train stays on top
+// where the tooltip and click target are (PR #571 review).
+const TRACKER_Z_INDEX = 500;
+
 // Body is a capsule: the front is a true semicircle of radius 132 — half the
 // body width — which is the FPA-4's bulldog nose seen from above.
 const ENGINE_BODY = 'M468 1018 L468 262 A132 132 0 0 1 732 262 L732 1018 '
@@ -1998,7 +2003,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             ref={boatMarkerRef}
             position={animatedBoat.position}
             icon={boatIconRef.current}
-            zIndexOffset={500}
+            zIndexOffset={TRACKER_Z_INDEX}
             keyboard={false}
             eventHandlers={{ click: () => handleLinearFeatureClick(boatFeature) }}
           >
@@ -2030,7 +2035,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             ref={el => { trailingMarkerRefs.current[i] = el; }}
             position={unit.position}
             icon={unit.kind === 'zephyr' ? zephyrIconRef.current : trainIconRef.current}
-            zIndexOffset={499 - i}
+            zIndexOffset={TRACKER_Z_INDEX - 1 - i}
             keyboard={false}
             eventHandlers={{ click: () => handleLinearFeatureClick(trainFeature) }}
           />
@@ -2041,7 +2046,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             ref={trainMarkerRef}
             position={animatedTrain.position}
             icon={trainIconRef.current}
-            zIndexOffset={500}
+            zIndexOffset={TRACKER_Z_INDEX}
             keyboard={false}
             eventHandlers={{ click: () => handleLinearFeatureClick(trainFeature) }}
           >
