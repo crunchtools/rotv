@@ -6,8 +6,8 @@
  * `fetchFacebookPosts(pool, statusUrl, maxItems)`. Also exports `isFacebookUrl`,
  * `toIsoDate`, and `testApifyToken` (used by the admin settings Test button).
  *
- * News-pipeline social scraping (Instagram + general social-date capture in
- * `renderPage`) was removed in #551 / PR #559; see spec 036 (superseded).
+ * Trail status is the module's only consumer — the news pipeline does its own
+ * collection and never calls in here. Spec 036 covers the superseded design.
  */
 // Fix: scope module to Facebook-only trail status scraping (PR #559 review)
 const APIFY_BASE_URL = 'https://api.apify.com/v2';
