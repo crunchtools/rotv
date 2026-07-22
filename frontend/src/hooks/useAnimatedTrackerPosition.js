@@ -2,15 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { snapToLine } from '../utils/snapToLine';
 import {
   dualSnapBearing, lineCumulativeDistances, arcDistanceAt, snapAtArc, haversineDist,
+  bearingHalfSpan,
 } from '../utils/trackInterpolation';
-
-// At wide zooms the icon's ground footprint spans kilometers of track, and a
-// chord that long cuts across curves — the icon reads visibly crooked against
-// the track line under it (14° off at z11 near the CVSR yard), then rotates
-// into place as the zoom shrinks the span (#554). The eye judges alignment
-// against the LOCAL track direction, so cap the span; below the cap the
-// zoom-scaled footprint behavior is unchanged.
-const MAX_BEARING_SPAN_M = 150;
 
 // The GPS device reports on its own cadence (measured ~10-20s for the CVSR
 // unit), while the frontend polls every few seconds and re-delivers the same
@@ -62,7 +55,11 @@ function fixEpochMs(rawPosition) {
  * @param {Array<[number, number]>|null} lineCoords route geometry, GeoJSON [lng, lat]
  * @param {number} zoom current map zoom (bearing footprint scaling)
  * @param {{pollIntervalMs?: number, iconHalfPx?: number, snapPosition?: boolean}} [opts]
- * @returns {{position: [number, number], bearing: number}|null}
+ * @returns {{position: [number, number], bearing: number, arc?: number, direction?: number}|null}
+ *   null until the first fix lands. In track-following mode the result also
+ *   carries `arc` (meters along the line) and `direction` (+1/-1 travel
+ *   direction), which let a caller place further markers at fixed offsets on
+ *   the same track — see buildConsist() (#533). Raw mode omits both.
  */
 export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom, { pollIntervalMs = 5000, iconHalfPx = 32, snapPosition = true } = {}) {
   const [animated, setAnimated] = useState(null);
@@ -220,13 +217,17 @@ export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom
   if (!animated) return null;
   if (!snapPosition) return { position: animated.position, bearing: animated.heading };
 
-  // Icon half-width in ground meters at this zoom (Web Mercator meters/pixel
-  // at the valley's latitude), capped at MAX_BEARING_SPAN_M.
-  const halfDist = Math.min(
-    iconHalfPx * 156543.03 * Math.cos(41.26 * Math.PI / 180) / (2 ** (zoom || 13)),
-    MAX_BEARING_SPAN_M
-  );
+  const halfDist = bearingHalfSpan(zoom, iconHalfPx);
   let bearing = dualSnapBearing(lineCoords, animated.snap, halfDist);
   if (animated.direction === -1) bearing = (bearing + 180) % 360;
-  return { position: animated.position, bearing };
+
+  // arc + direction let a caller place additional markers at fixed offsets
+  // along the same track — the train consist trailing the lead engine (#533).
+  const lineDists = lineDistsRef.current.dists;
+  return {
+    position: animated.position,
+    bearing,
+    arc: lineDists ? arcDistanceAt(lineDists, animated.snap) : 0,
+    direction: animated.direction,
+  };
 }

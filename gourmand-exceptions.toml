@@ -258,6 +258,18 @@ path = "frontend/src/utils/iconUtils.js"
 justification = "getDestinationIconTypeFromConfig (37 lines), poiMatchesActivityForTypes (16 lines), isActivityFilterActive (9 lines) are exported utility functions consumed by map components"
 classification = "by_design"
 
+[[exceptions]]
+check = "single_use_helpers"
+path = "frontend/src/utils/trackInterpolation.js"
+justification = "metersPerPixel has one caller INSIDE this file (bearingHalfSpan) but is exported and also consumed by trainConsist.js unitSpacingMeters — inlining it would duplicate the Web Mercator ground-resolution expression across two files, which is the exact duplication extracting it removed (#533). It is also unit-tested directly for the per-zoom halving, the absolute resolution at z16/z18, and the z13 fallback"
+classification = "by_design"
+
+[[exceptions]]
+check = "single_use_helpers"
+path = "frontend/src/utils/trainConsist.js"
+justification = "unitSpacingMeters is called once by buildConsist but is exported so the consist spacing rule can be unit-tested directly — it encodes the design decision that spacing tracks on-screen pixels at browsing zooms and floors at prototype car length past z18. Inlining it would bury that crossover inside buildConsist and make the zoom behavior testable only through rendered marker positions"
+classification = "by_design"
+
 # ============================================================================
 # generic_names — standard math variable names in geometric formulas
 # ============================================================================

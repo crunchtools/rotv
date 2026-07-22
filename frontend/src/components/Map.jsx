@@ -7,6 +7,8 @@ import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, trailPass
 import { getBoatStatus } from '../utils/boatStatus';
 import { getTrainStatus } from '../utils/trainStatus';
 import useAnimatedTrackerPosition from '../hooks/useAnimatedTrackerPosition';
+import { lineCumulativeDistances } from '../utils/trackInterpolation';
+import { buildConsist, MIN_CONSIST_ZOOM } from '../utils/trainConsist';
 import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
@@ -60,14 +62,83 @@ function createTripStopIcon(n) {
   });
 }
 
-// The USFT sprite is drawn nose-DOWN (cab/windshield at the bottom), so the
-// img carries a fixed 180° flip; the inner div's rotate() stays "bearing =
-// direction of travel" for both writers (initial html + zoom layout effect).
+// CVSR locomotive #6771 (MLW FPA-4) in Cuyahoga Valley livery, drawn top-down
+// to match the Zephyr coach: same body footprint, same heavy outline, nose UP
+// so no compensating flip is needed. Replaces the USFT sprite, which was drawn
+// nose-DOWN, off-centre in its own canvas (a lateral error that rode with the
+// bearing, #533), and loaded from a third-party host at render time.
+//
+// Live trackers ride above ordinary POI markers. The consist's trailing units
+// stack just under their lead engine so the head of the train stays on top
+// where the tooltip and click target are (PR #571 review).
+const TRACKER_Z_INDEX = 500;
+
+// Body is a capsule: the front is a true semicircle of radius 132 — half the
+// body width — which is the FPA-4's bulldog nose seen from above.
+const ENGINE_BODY = 'M468 1018 L468 262 A132 132 0 0 1 732 262 L732 1018 '
+  + 'A52 52 0 0 1 680 1070 L520 1070 A52 52 0 0 1 468 1018 Z';
+// Yellow nose cap, following the same dome and ending at the windshield.
+const ENGINE_NOSE = 'M468 300 L468 262 A132 132 0 0 1 732 262 L732 300 Z';
+
 function createTrainIcon(heading) {
   return L.divIcon({
     className: 'train-marker-icon',
     html: `<div class="train-marker-inner" style="transform: rotate(${heading || 0}deg)">
-      <img src="https://static.usfleettracking.com/img/icons/trains/train.png" width="64" height="64" style="margin-left: 1px; transform: rotate(180deg)" alt="" />
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="64" height="64">
+        <path d="${ENGINE_BODY}" fill="#2E4E31"/>
+        <path d="${ENGINE_NOSE}" fill="#F6C324"/>
+        <rect x="468" y="266" width="264" height="34" fill="#7E2030"/>
+        <rect x="468" y="300" width="264" height="104" fill="#15181A"/>
+        <rect x="496" y="320" width="90" height="64" rx="10" fill="#4A6472"/>
+        <rect x="614" y="320" width="90" height="64" rx="10" fill="#4A6472"/>
+        <rect x="468" y="404" width="264" height="46" fill="#7E2030"/>
+        <rect x="468" y="450" width="264" height="18" fill="#F6C324"/>
+        <rect x="486" y="500" width="15" height="500" fill="#F6C324"/>
+        <rect x="699" y="500" width="15" height="500" fill="#F6C324"/>
+        <rect x="572" y="496" width="56" height="56" rx="14" fill="#12150F"/>
+        <g fill="#1B2A1D">
+          <rect x="556" y="596" width="88" height="70" rx="16"/>
+          <rect x="556" y="714" width="88" height="70" rx="16"/>
+          <rect x="556" y="832" width="88" height="70" rx="16"/>
+        </g>
+        <rect x="496" y="1004" width="208" height="62" rx="22" fill="#23262A"/>
+        <path d="${ENGINE_BODY}" fill="none" stroke="#141812" stroke-width="30"/>
+        <g stroke="#141812" stroke-width="18" stroke-linejoin="round">
+          <rect x="564" y="138" width="72" height="76" rx="24" fill="#7E2030"/>
+          <circle cx="600" cy="142" r="29" fill="#FFF6D8"/>
+        </g>
+        <circle cx="592" cy="135" r="8" fill="#FFFFFF" opacity="0.85"/>
+      </svg>
+    </div>`,
+    iconSize: [64, 64],
+    iconAnchor: [32, 32],
+  });
+}
+
+// Budd-style stainless coach for the consist trailing the engine (#533). Drawn
+// nose-UP, unlike the USFT engine sprite, so it needs no compensating flip; the
+// body is sized to the same 14 × 54 display px the engine occupies inside its
+// 64px box, which is what lets the units couple evenly at a fixed spacing.
+function createZephyrIcon(heading) {
+  return L.divIcon({
+    className: 'zephyr-marker-icon',
+    html: `<div class="zephyr-marker-inner" style="transform: rotate(${heading || 0}deg)">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="64" height="64">
+        <rect x="524" y="92" width="152" height="78" rx="20" fill="#3c4247"/>
+        <rect x="524" y="1030" width="152" height="78" rx="20" fill="#3c4247"/>
+        <rect x="468" y="130" width="264" height="940" rx="50"
+          fill="#dde2e7" stroke="#333a3f" stroke-width="32"/>
+        <rect x="552" y="166" width="96" height="868" rx="32" fill="#fbfcfd"/>
+        <g stroke="#949ca4" stroke-width="16" opacity="0.85" stroke-linecap="round">
+          <path d="M510 226 L510 974"/>
+          <path d="M690 226 L690 974"/>
+        </g>
+        <g fill="#6d757c">
+          <rect x="572" y="322" width="56" height="72" rx="16"/>
+          <rect x="572" y="564" width="56" height="72" rx="16"/>
+          <rect x="572" y="806" width="56" height="72" rx="16"/>
+        </g>
+      </svg>
     </div>`,
     iconSize: [64, 64],
     iconAnchor: [32, 32],
@@ -1528,15 +1599,38 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   const animatedTrain = useAnimatedTrackerPosition(trainPosition, trainLineCoords, mapZoom, { pollIntervalMs: 5000, iconHalfPx: 32 });
   const { label: trainStatusLabel, className: trainStatusClass } = getTrainStatus(trainPosition);
 
+  // The consist trails the lead engine along the same geometry (#533). Zoomed
+  // out past MIN_CONSIST_ZOOM the whole train is narrower than one icon, so
+  // only the lead engine renders and this stays empty.
+  const trainLineDists = useMemo(
+    () => (trainLineCoords?.length >= 2 ? lineCumulativeDistances(trainLineCoords) : null),
+    [trainLineCoords]
+  );
+  const trailingUnits = useMemo(() => {
+    if (!animatedTrain || !trainLineDists || mapZoom < MIN_CONSIST_ZOOM) return [];
+    return buildConsist({
+      lineCoords: trainLineCoords,
+      lineDists: trainLineDists,
+      leadArc: animatedTrain.arc,
+      direction: animatedTrain.direction,
+      zoom: mapZoom,
+    }).slice(1); // index 0 is the lead engine, rendered from its own tracker state
+  }, [animatedTrain, trainLineCoords, trainLineDists, mapZoom]);
+
   const boatMarkerRef = useRef(null);
   const trainMarkerRef = useRef(null);
   const boatIconRef = useRef(null);
   const trainIconRef = useRef(null);
+  const zephyrIconRef = useRef(null);
+  const trailingMarkerRefs = useRef([]);
   if (!boatIconRef.current && animatedBoat) {
     boatIconRef.current = createBoatIcon(animatedBoat.bearing);
   }
   if (!trainIconRef.current && animatedTrain) {
     trainIconRef.current = createTrainIcon(animatedTrain.bearing);
+  }
+  if (!zephyrIconRef.current && animatedTrain) {
+    zephyrIconRef.current = createZephyrIcon(animatedTrain.bearing);
   }
 
   // Layout effects, not plain effects: the bearing tracks the zoom level, and a
@@ -1551,6 +1645,17 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     const el = trainMarkerRef.current?.getElement()?.querySelector('.train-marker-inner');
     if (el && animatedTrain) el.style.transform = `rotate(${animatedTrain.bearing || 0}deg)`;
   }, [animatedTrain?.bearing]);
+
+  // Each consist unit carries its own bearing (in a curve the tail faces a
+  // different way than the head), written pre-paint on the same path as the
+  // lead marker above rather than by rebuilding divIcons every frame.
+  useLayoutEffect(() => {
+    trailingUnits.forEach((unit, i) => {
+      const el = trailingMarkerRefs.current[i]?.getElement()
+        ?.querySelector('.train-marker-inner, .zephyr-marker-inner');
+      if (el) el.style.transform = `rotate(${unit.bearing || 0}deg)`;
+    });
+  }, [trailingUnits]);
 
   const getLinearFeatureStyle = useCallback((feature, isSelected) => {
     const editSelectedColor = '#FF8C00';
@@ -1898,7 +2003,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             ref={boatMarkerRef}
             position={animatedBoat.position}
             icon={boatIconRef.current}
-            zIndexOffset={500}
+            zIndexOffset={TRACKER_Z_INDEX}
             keyboard={false}
             eventHandlers={{ click: () => handleLinearFeatureClick(boatFeature) }}
           >
@@ -1921,12 +2026,27 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           </Marker>
         )}
 
+        {/* Consist cars and tail engine (#533). Clickable like the lead engine so
+            the train reads as one object, but tooltip-free and keyboard-inert so
+            they add neither duplicate hovers nor three extra tab stops. */}
+        {visibleTypes.has('train') && trainFeature && trailingUnits.map((unit, i) => (
+          <Marker
+            key={unit.key}
+            ref={el => { trailingMarkerRefs.current[i] = el; }}
+            position={unit.position}
+            icon={unit.kind === 'zephyr' ? zephyrIconRef.current : trainIconRef.current}
+            zIndexOffset={TRACKER_Z_INDEX - 1 - i}
+            keyboard={false}
+            eventHandlers={{ click: () => handleLinearFeatureClick(trainFeature) }}
+          />
+        ))}
+
         {visibleTypes.has('train') && animatedTrain && trainFeature && (
           <Marker
             ref={trainMarkerRef}
             position={animatedTrain.position}
             icon={trainIconRef.current}
-            zIndexOffset={500}
+            zIndexOffset={TRACKER_Z_INDEX}
             keyboard={false}
             eventHandlers={{ click: () => handleLinearFeatureClick(trainFeature) }}
           >

@@ -11610,6 +11610,22 @@ body {
   transform-origin: center center;
 }
 
+/* Zephyr consist cars (#533) — same box and rotation origin as the engine so
+   the units sit on a common centerline along the track. */
+.zephyr-marker-icon.leaflet-div-icon {
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.zephyr-marker-inner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+}
+
 .poi-type-badge .poi-type-icon {
   width: 18px;
   height: 18px;
