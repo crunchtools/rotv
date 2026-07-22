@@ -120,8 +120,9 @@ and the answer to "what happens at valley-wide zoom".
 ### Phase 3: Render
 
 - [ ] `createZephyrIcon()` in Map.jsx — fluted stainless coach SVG
-- [ ] Render trailing units as `<Marker interactive={false} keyboard={false}>` at a
-      lower `zIndexOffset` than the lead
+- [ ] Render trailing units as `<Marker keyboard={false}>` at a lower `zIndexOffset`
+      than the lead — clickable (US-042-3 wants the train to behave as one object)
+      but tooltip-free and not extra tab stops
 - [ ] Layout effect writes each trailing unit's rotation, mirroring the lead marker's
       existing pre-paint rotation path
 
@@ -203,7 +204,7 @@ commit; the lead marker path is untouched by design (NFR-042-3).
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| 4× marker updates per animation frame degrade map perf | Med | Trailing markers are `interactive={false}`; positions come from O(log n) lookups, and the component already re-renders every frame for the lead marker |
+| 4× marker updates per animation frame degrade map perf | Med | Positions come from O(log n) lookups and the component already re-renders every frame for the lead marker; measured in dev at 4 consist icons / 52 markers total with no paint regression |
 | Exaggerated spacing reads as "wrong" to a railfan | Low | Floors at true prototype length at high zoom; documented in the spec |
 | Direction flips mid-curve cause a visible consist swing | Low | Direction is already debounced by `MIN_DIRECTION_M` in the hook (#554 fix) |
 

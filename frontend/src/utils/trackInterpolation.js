@@ -144,3 +144,36 @@ export function dualSnapBearing(lineCoords, snap, halfDistMeters) {
   const back = walkAlongTrack(lineCoords, snap, -halfDistMeters);
   return segmentBearing(back, front);
 }
+
+// Every tracker on this map runs through the Cuyahoga Valley, so ground
+// resolution is computed at one representative latitude rather than per-fix —
+// the difference across the valley's ~0.5° span is under 1%.
+const VALLEY_LAT = 41.26;
+
+/**
+ * Web Mercator ground resolution at the valley's latitude.
+ * @param {number} zoom Leaflet zoom level
+ * @returns {number} meters per screen pixel
+ */
+export function metersPerPixel(zoom) {
+  return 156543.03 * Math.cos(VALLEY_LAT * Math.PI / 180) / (2 ** (zoom || 13));
+}
+
+// At wide zooms the icon's ground footprint spans kilometers of track, and a
+// chord that long cuts across curves — the icon reads visibly crooked against
+// the track line under it (14° off at z11 near the CVSR yard), then rotates
+// into place as the zoom shrinks the span (#554). The eye judges alignment
+// against the LOCAL track direction, so cap the span; below the cap the
+// zoom-scaled footprint behavior is unchanged.
+const MAX_BEARING_SPAN_M = 150;
+
+/**
+ * Half the ground distance to span when deriving an icon's bearing: the icon's
+ * own footprint at this zoom, capped so the chord stays locally tangent.
+ * @param {number} zoom Leaflet zoom level
+ * @param {number} iconHalfPx half the icon's on-screen length, in pixels
+ * @returns {number} meters
+ */
+export function bearingHalfSpan(zoom, iconHalfPx) {
+  return Math.min(iconHalfPx * metersPerPixel(zoom), MAX_BEARING_SPAN_M);
+}
