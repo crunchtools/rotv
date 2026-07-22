@@ -62,25 +62,48 @@ function createTripStopIcon(n) {
   });
 }
 
-// The USFT sprite is drawn nose-DOWN (cab/windshield at the bottom), so the
-// img carries a fixed 180° flip; the inner div's rotate() stays "bearing =
-// direction of travel" for both writers (initial html + zoom layout effect).
+// CVSR locomotive #6771 (MLW FPA-4) in Cuyahoga Valley livery, drawn top-down
+// to match the Zephyr coach: same body footprint, same heavy outline, nose UP
+// so no compensating flip is needed. Replaces the USFT sprite, which was drawn
+// nose-DOWN, off-centre in its own canvas (a lateral error that rode with the
+// bearing, #533), and loaded from a third-party host at render time.
 //
-// The sprite is also not centered in its own canvas: in the 50px PNG the body
-// spans x 19..30 (centerline 24.5) and y 5..47 (center 26.0) against a canvas
-// center of 25.0 — so the drawn locomotive sits 0.5px left and 1.0px low, or
-// (-0.64, +1.28) once scaled to the 64px box. The 180° flip mirrors that to
-// (+0.64, -1.28), which is a LATERAL error: it rotates with the bearing, so
-// the engine drifts off the rail line instead of riding it (#533). Undo it
-// with a translate applied after the flip, in the parent's frame. The original
-// `margin-left: 1px` (#529) nudged the same direction as the error and is gone.
-const TRAIN_SPRITE_OFFSET = 'translate(-0.64px, 1.28px)';
+// Body is a capsule: the front is a true semicircle of radius 132 — half the
+// body width — which is the FPA-4's bulldog nose seen from above.
+const ENGINE_BODY = 'M468 1018 L468 262 A132 132 0 0 1 732 262 L732 1018 '
+  + 'A52 52 0 0 1 680 1070 L520 1070 A52 52 0 0 1 468 1018 Z';
+// Yellow nose cap, following the same dome and ending at the windshield.
+const ENGINE_NOSE = 'M468 300 L468 262 A132 132 0 0 1 732 262 L732 300 Z';
 
 function createTrainIcon(heading) {
   return L.divIcon({
     className: 'train-marker-icon',
     html: `<div class="train-marker-inner" style="transform: rotate(${heading || 0}deg)">
-      <img src="https://static.usfleettracking.com/img/icons/trains/train.png" width="64" height="64" style="transform: ${TRAIN_SPRITE_OFFSET} rotate(180deg)" alt="" />
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="64" height="64">
+        <path d="${ENGINE_BODY}" fill="#2E4E31"/>
+        <path d="${ENGINE_NOSE}" fill="#F6C324"/>
+        <rect x="468" y="266" width="264" height="34" fill="#7E2030"/>
+        <rect x="468" y="300" width="264" height="104" fill="#15181A"/>
+        <rect x="496" y="320" width="90" height="64" rx="10" fill="#4A6472"/>
+        <rect x="614" y="320" width="90" height="64" rx="10" fill="#4A6472"/>
+        <rect x="468" y="404" width="264" height="46" fill="#7E2030"/>
+        <rect x="468" y="450" width="264" height="18" fill="#F6C324"/>
+        <rect x="486" y="500" width="15" height="500" fill="#F6C324"/>
+        <rect x="699" y="500" width="15" height="500" fill="#F6C324"/>
+        <rect x="572" y="496" width="56" height="56" rx="14" fill="#12150F"/>
+        <g fill="#1B2A1D">
+          <rect x="556" y="596" width="88" height="70" rx="16"/>
+          <rect x="556" y="714" width="88" height="70" rx="16"/>
+          <rect x="556" y="832" width="88" height="70" rx="16"/>
+        </g>
+        <rect x="496" y="1004" width="208" height="62" rx="22" fill="#23262A"/>
+        <path d="${ENGINE_BODY}" fill="none" stroke="#141812" stroke-width="30"/>
+        <g stroke="#141812" stroke-width="18" stroke-linejoin="round">
+          <rect x="564" y="138" width="72" height="76" rx="24" fill="#7E2030"/>
+          <circle cx="600" cy="142" r="29" fill="#FFF6D8"/>
+        </g>
+        <circle cx="592" cy="135" r="8" fill="#FFFFFF" opacity="0.85"/>
+      </svg>
     </div>`,
     iconSize: [64, 64],
     iconAnchor: [32, 32],

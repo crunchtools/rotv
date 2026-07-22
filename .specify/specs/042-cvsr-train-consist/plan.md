@@ -96,7 +96,8 @@ and the answer to "what happens at valley-wide zoom".
 |-----------|------------|-----------|
 | Consist geometry | Existing `snapAtArc()` | O(log n) per unit per frame; already proven by the lead tween |
 | Unit bearings | Existing `dualSnapBearing()` | Identical curve handling to the lead marker; no second bearing implementation |
-| Zephyr car art | Inline SVG in `L.divIcon` | Matches `createBoatIcon()`; no external asset, no CSP/CDN dependency (the engine's USFT PNG is already a remote-host exception) |
+| Zephyr car art | Inline SVG in `L.divIcon` | Matches `createBoatIcon()`; no external asset, no CSP/CDN dependency |
+| Engine art | Inline SVG in `L.divIcon` | Replaces the third-party USFT PNG, which was drawn nose-DOWN and off-centre in its own canvas — a lateral error that rode with the bearing. A self-drawn icon is centred by construction, matches the coach's idiom, and removes the render-time dependency on `usfleettracking.com` |
 | Consist definition | Module-level const array | Declarative; makes a data-driven consist a later drop-in |
 
 ---
