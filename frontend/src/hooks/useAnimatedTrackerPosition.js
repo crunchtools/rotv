@@ -55,7 +55,11 @@ function fixEpochMs(rawPosition) {
  * @param {Array<[number, number]>|null} lineCoords route geometry, GeoJSON [lng, lat]
  * @param {number} zoom current map zoom (bearing footprint scaling)
  * @param {{pollIntervalMs?: number, iconHalfPx?: number, snapPosition?: boolean}} [opts]
- * @returns {{position: [number, number], bearing: number}|null}
+ * @returns {{position: [number, number], bearing: number, arc?: number, direction?: number}|null}
+ *   null until the first fix lands. In track-following mode the result also
+ *   carries `arc` (meters along the line) and `direction` (+1/-1 travel
+ *   direction), which let a caller place further markers at fixed offsets on
+ *   the same track — see buildConsist() (#533). Raw mode omits both.
  */
 export default function useAnimatedTrackerPosition(rawPosition, lineCoords, zoom, { pollIntervalMs = 5000, iconHalfPx = 32, snapPosition = true } = {}) {
   const [animated, setAnimated] = useState(null);

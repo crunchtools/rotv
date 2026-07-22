@@ -1,7 +1,7 @@
 # Implementation Plan: CVSR Train Consist
 
 > **Spec ID:** 042-cvsr-train-consist
-> **Status:** Planning
+> **Status:** Complete
 > **Last Updated:** 2026-07-21
 > **Estimated Effort:** M
 
@@ -10,7 +10,7 @@
 Expose the lead engine's arc distance and travel direction from
 `useAnimatedTrackerPosition`, add a pure `buildConsist()` util that turns those into
 four `{ position, bearing }` units via the existing `snapAtArc()`, and render the
-trailing three as inert Leaflet markers alongside today's lead marker.
+trailing three as Leaflet markers alongside today's lead marker.
 
 ---
 
@@ -38,7 +38,7 @@ trailing three as inert Leaflet markers alongside today's lead marker.
 │                          ▼                               │
 │   ┌────────────────────────────────────────────────┐    │
 │   │  <Marker> lead (tooltip, click)                │    │
-│   │  <Marker> × 3 trailing (inert)                 │    │
+│   │  <Marker> × 3 trailing (click, no tooltip)     │    │
 │   └────────────────────────────────────────────────┘    │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -51,7 +51,8 @@ trailing three as inert Leaflet markers alongside today's lead marker.
    resolves it with `snapAtArc()`, and derives each bearing with `dualSnapBearing()` —
    the same call the lead marker already uses, so curves and direction flips are
    handled identically for every unit.
-4. Map.jsx renders the lead marker as today plus three inert trailing markers, and
+4. Map.jsx renders the lead marker as today plus three trailing markers — clickable
+   so the train reads as one object, but tooltip-free and keyboard-inert — and
    writes each unit's rotation in a layout effect.
 
 ---
@@ -72,7 +73,7 @@ With 64 px icons, true-to-scale spacing renders as a single opaque pile at every
 a user actually browses at. Spacing is therefore computed as:
 
 ```
-spacingM = max(TRUE_CAR_LENGTH_M, MIN_GAP_PX × metersPerPixel(zoom))
+spacingM = max(TRUE_CAR_LENGTH_M, UNIT_GAP_PX × metersPerPixel(zoom))
 ```
 
 - At normal zooms the pixel term dominates: the consist keeps a **constant apparent
@@ -104,31 +105,31 @@ and the answer to "what happens at valley-wide zoom".
 
 ### Phase 1: Expose lead arc and direction
 
-- [ ] `useAnimatedTrackerPosition.js`: return `arc` and `direction` alongside
+- [x] `useAnimatedTrackerPosition.js`: return `arc` and `direction` alongside
       `position`/`bearing` in snap mode (both already exist internally as
       `animated.snap` / `animated.direction`)
-- [ ] Extract `metersPerPixel(zoom)` into `trackInterpolation.js` and use it for the
+- [x] Extract `metersPerPixel(zoom)` into `trackInterpolation.js` and use it for the
       existing `halfDist` computation
 
 ### Phase 2: Consist util
 
-- [ ] New `frontend/src/utils/trainConsist.js` exporting `CONSIST_UNITS`,
+- [x] New `frontend/src/utils/trainConsist.js` exporting `CONSIST_UNITS`,
       `MIN_CONSIST_ZOOM`, and `buildConsist({ lineCoords, lineDists, leadArc, direction, zoom })`
-- [ ] Rear-engine 180° flip applied in the util, not at render time
-- [ ] Clamp units that run off either end of the line (`snapAtArc` already clamps)
+- [x] Rear-engine 180° flip applied in the util, not at render time
+- [x] Clamp units that run off either end of the line (`snapAtArc` already clamps)
 
 ### Phase 3: Render
 
-- [ ] `createZephyrIcon()` in Map.jsx — fluted stainless coach SVG
-- [ ] Render trailing units as `<Marker keyboard={false}>` at a lower `zIndexOffset`
+- [x] `createZephyrIcon()` in Map.jsx — fluted stainless coach SVG
+- [x] Render trailing units as `<Marker keyboard={false}>` at a lower `zIndexOffset`
       than the lead — clickable (US-042-3 wants the train to behave as one object)
       but tooltip-free and not extra tab stops
-- [ ] Layout effect writes each trailing unit's rotation, mirroring the lead marker's
+- [x] Layout effect writes each trailing unit's rotation, mirroring the lead marker's
       existing pre-paint rotation path
 
 ### Phase 4: Tests
 
-- [ ] `backend/tests/trainConsist.unit.test.js`
+- [x] `backend/tests/trainConsist.unit.test.js`
 
 ---
 
@@ -169,7 +170,7 @@ None.
 
 ### Unit Tests
 
-- [ ] `backend/tests/trainConsist.unit.test.js`
+- [x] `backend/tests/trainConsist.unit.test.js`
   - Units trail behind the lead for `direction = +1` and flip for `direction = -1`
   - Arc offsets are monotonic and match the computed spacing
   - Rear engine bearing is 180° from the lead's
