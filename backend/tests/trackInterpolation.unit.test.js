@@ -6,7 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  lineCumulativeDistances, arcDistanceAt, snapAtArc,
+  lineCumulativeDistances, arcDistanceAt, snapAtArc, metersPerPixel, bearingHalfSpan,
 } from '../../frontend/src/utils/trackInterpolation.js';
 import { snapToLine } from '../../frontend/src/utils/snapToLine.js';
 
@@ -95,6 +95,50 @@ describe('snapAtArc', () => {
     const mid = snapAtArc(TRACK, dists, dists[dists.length - 1] / 2);
     expect(mid.position[0]).toBeCloseTo(41.382, 4);
     expect(mid.bearing).toBeCloseTo(0, 0);
+  });
+});
+
+describe('metersPerPixel', () => {
+  it('halves with every zoom level', () => {
+    for (let z = 11; z < 19; z++) {
+      expect(metersPerPixel(z + 1)).toBeCloseTo(metersPerPixel(z) / 2, 6);
+    }
+  });
+
+  it('matches Web Mercator ground resolution at the valley', () => {
+    // ~1.8 m/px at z16 and ~0.45 m/px at z18 near 41.26°N.
+    expect(metersPerPixel(16)).toBeCloseTo(1.796, 2);
+    expect(metersPerPixel(18)).toBeCloseTo(0.449, 3);
+  });
+
+  it('falls back to z13 when zoom is missing', () => {
+    expect(metersPerPixel(undefined)).toBeCloseTo(metersPerPixel(13), 9);
+    expect(metersPerPixel(0)).toBeCloseTo(metersPerPixel(13), 9);
+  });
+});
+
+describe('bearingHalfSpan', () => {
+  it('tracks the icon footprint while it stays locally tangent', () => {
+    // Well inside the cap: the span is just the icon's ground size.
+    expect(bearingHalfSpan(18, 32)).toBeCloseTo(32 * metersPerPixel(18), 6);
+    expect(bearingHalfSpan(16, 32)).toBeCloseTo(32 * metersPerPixel(16), 6);
+  });
+
+  it('caps the span at wide zooms so the chord does not cut across curves', () => {
+    // Uncapped this would be kilometers of track (#554).
+    expect(32 * metersPerPixel(11)).toBeGreaterThan(150);
+    expect(bearingHalfSpan(11, 32)).toBe(150);
+    expect(bearingHalfSpan(8, 32)).toBe(150);
+  });
+
+  it('never exceeds the cap at any zoom', () => {
+    for (let z = 5; z <= 20; z++) {
+      expect(bearingHalfSpan(z, 32)).toBeLessThanOrEqual(150);
+    }
+  });
+
+  it('scales with the icon size below the cap', () => {
+    expect(bearingHalfSpan(18, 64)).toBeCloseTo(2 * bearingHalfSpan(18, 32), 6);
   });
 });
 
