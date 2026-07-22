@@ -65,11 +65,22 @@ function createTripStopIcon(n) {
 // The USFT sprite is drawn nose-DOWN (cab/windshield at the bottom), so the
 // img carries a fixed 180° flip; the inner div's rotate() stays "bearing =
 // direction of travel" for both writers (initial html + zoom layout effect).
+//
+// The sprite is also not centered in its own canvas: in the 50px PNG the body
+// spans x 19..30 (centerline 24.5) and y 5..47 (center 26.0) against a canvas
+// center of 25.0 — so the drawn locomotive sits 0.5px left and 1.0px low, or
+// (-0.64, +1.28) once scaled to the 64px box. The 180° flip mirrors that to
+// (+0.64, -1.28), which is a LATERAL error: it rotates with the bearing, so
+// the engine drifts off the rail line instead of riding it (#533). Undo it
+// with a translate applied after the flip, in the parent's frame. The original
+// `margin-left: 1px` (#529) nudged the same direction as the error and is gone.
+const TRAIN_SPRITE_OFFSET = 'translate(-0.64px, 1.28px)';
+
 function createTrainIcon(heading) {
   return L.divIcon({
     className: 'train-marker-icon',
     html: `<div class="train-marker-inner" style="transform: rotate(${heading || 0}deg)">
-      <img src="https://static.usfleettracking.com/img/icons/trains/train.png" width="64" height="64" style="margin-left: 1px; transform: rotate(180deg)" alt="" />
+      <img src="https://static.usfleettracking.com/img/icons/trains/train.png" width="64" height="64" style="transform: ${TRAIN_SPRITE_OFFSET} rotate(180deg)" alt="" />
     </div>`,
     iconSize: [64, 64],
     iconAnchor: [32, 32],
