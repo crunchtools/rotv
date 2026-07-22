@@ -1,15 +1,27 @@
 import { snapAtArc, dualSnapBearing, metersPerPixel, bearingHalfSpan } from './trackInterpolation';
 
-// The CVSR excursion consist, ordered from the GPS fix backwards: a lead
-// engine, two Zephyr coaches, and a second engine on the tail. The tail engine
-// is dragged backwards rather than turned, which is how the railroad actually
-// works the return leg — hence `flip`.
+// The CVSR excursion consist, ordered front to back: a lead engine, two Zephyr
+// coaches, and a second engine on the tail. The tail engine is dragged
+// backwards rather than turned, which is how the railroad actually works the
+// return leg — hence `flip`.
+//
+// `tracked` marks the unit the GPS device rides in. It is NOT the lead engine:
+// spec 042 assumed it was, which drew the whole train ~50m back along the track
+// and meant the locomotive never reached the platform at a station stop (#573).
+// Declaring it here keeps a physical fact about the real train visible and
+// correctable — moving the device is a one-line change, with no arithmetic to
+// touch.
 export const CONSIST_UNITS = [
   { key: 'lead', kind: 'engine', flip: false },
-  { key: 'car-1', kind: 'zephyr', flip: false },
+  { key: 'car-1', kind: 'zephyr', flip: false, tracked: true },
   { key: 'car-2', kind: 'zephyr', flip: false },
   { key: 'rear', kind: 'engine', flip: true },
 ];
+
+// Derived rather than declared a second time, so it cannot drift out of sync
+// with the array above. Falls back to the lead engine if nothing is marked,
+// which reproduces the spec 042 geometry.
+const TRACKED_INDEX = Math.max(0, CONSIST_UNITS.findIndex(u => u.tracked));
 
 // Below this zoom the entire consist spans fewer pixels than a single icon, so
 // the four markers pile into an unreadable blob — the lead engine renders
@@ -44,30 +56,34 @@ export function unitSpacingMeters(zoom) {
 }
 
 /**
- * Place the train consist along the track behind a lead engine.
+ * Place the train consist along the track around the tracked unit.
+ *
+ * The GPS device rides in one specific unit (see CONSIST_UNITS `tracked`), so
+ * that unit lands exactly on the reported position and the rest of the train is
+ * laid out around it — units ahead of it forward along the direction of travel,
+ * units behind it back. When the tracked unit is index 0 this reduces to the
+ * spec 042 behaviour of trailing everything behind the lead engine.
  *
  * Every unit is resolved independently against the line geometry, so the
  * consist bends through curves instead of holding a rigid straight bar, and
  * each unit's bearing comes from the same dual-snap derivation the lead marker
  * uses — a unit in a curve faces its own local tangent, not the lead's.
  *
- * Index 0 is the lead engine itself. Callers rendering the lead from its own
- * tracker state want `.slice(1)`; it is returned so the trailing units can be
- * reasoned about (and tested) relative to the head of the train.
+ * Index 0 is the lead engine; the array is ordered front to back.
  *
  * @param {object} opts
  * @param {Array<[number, number]>} opts.lineCoords track geometry, GeoJSON [lng, lat]
  * @param {number[]} opts.lineDists lineCumulativeDistances(lineCoords)
- * @param {number} opts.leadArc lead engine's distance along the line, meters
+ * @param {number} opts.anchorArc tracked unit's distance along the line, meters
  * @param {number} opts.direction travel direction along the line, +1 or -1
  * @param {number} opts.zoom current Leaflet zoom
  * @returns {Array<{key: string, kind: string, flip: boolean, position: [number, number], bearing: number}>}
- *   empty when the geometry or lead position is unusable
+ *   empty when the geometry or anchor position is unusable
  */
-export function buildConsist({ lineCoords, lineDists, leadArc, direction, zoom }) {
+export function buildConsist({ lineCoords, lineDists, anchorArc, direction, zoom }) {
   if (!lineCoords || lineCoords.length < 2) return [];
   if (!lineDists || lineDists.length !== lineCoords.length) return [];
-  if (!Number.isFinite(leadArc)) return [];
+  if (!Number.isFinite(anchorArc)) return [];
 
   const spacing = unitSpacingMeters(zoom);
   const halfSpan = bearingHalfSpan(zoom, ICON_HALF_PX);
@@ -76,11 +92,13 @@ export function buildConsist({ lineCoords, lineDists, leadArc, direction, zoom }
   const dir = direction === -1 ? -1 : 1;
 
   return CONSIST_UNITS.map((unit, i) => {
-    // Trailing units sit behind the lead along the direction of travel, so the
-    // offset subtracts when running up the line and adds when running down it.
-    // snapAtArc clamps, so a consist straddling either end of the track stacks
-    // against the endpoint rather than vanishing.
-    const snap = snapAtArc(lineCoords, lineDists, leadArc - dir * i * spacing);
+    // Units ahead of the tracked one (lower index) sit forward along the
+    // direction of travel, units behind it sit back, and the tracked unit
+    // itself lands on anchorArc exactly. snapAtArc clamps, so a consist
+    // straddling either end of the track stacks against the endpoint rather
+    // than vanishing.
+    const arc = anchorArc + dir * (TRACKED_INDEX - i) * spacing;
+    const snap = snapAtArc(lineCoords, lineDists, arc);
     let bearing = dualSnapBearing(lineCoords, snap, halfSpan);
     if (dir === -1) bearing = (bearing + 180) % 360;
     if (unit.flip) bearing = (bearing + 180) % 360;
