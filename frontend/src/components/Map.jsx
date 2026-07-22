@@ -1599,23 +1599,33 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   const animatedTrain = useAnimatedTrackerPosition(trainPosition, trainLineCoords, mapZoom, { pollIntervalMs: 5000, iconHalfPx: 32 });
   const { label: trainStatusLabel, className: trainStatusClass } = getTrainStatus(trainPosition);
 
-  // The consist trails the lead engine along the same geometry (#533). Zoomed
-  // out past MIN_CONSIST_ZOOM the whole train is narrower than one icon, so
-  // only the lead engine renders and this stays empty.
+  // The consist is laid out around the unit the GPS device rides in, not the
+  // lead engine (#573). Built at EVERY zoom, not just above MIN_CONSIST_ZOOM:
+  // the lead engine's position is derived from it, so gating the computation
+  // would jump the engine as the cars appear at the threshold.
   const trainLineDists = useMemo(
     () => (trainLineCoords?.length >= 2 ? lineCumulativeDistances(trainLineCoords) : null),
     [trainLineCoords]
   );
-  const trailingUnits = useMemo(() => {
-    if (!animatedTrain || !trainLineDists || mapZoom < MIN_CONSIST_ZOOM) return [];
+  const consist = useMemo(() => {
+    if (!animatedTrain || !trainLineDists) return [];
     return buildConsist({
       lineCoords: trainLineCoords,
       lineDists: trainLineDists,
-      leadArc: animatedTrain.arc,
+      anchorArc: animatedTrain.arc,
       direction: animatedTrain.direction,
       zoom: mapZoom,
-    }).slice(1); // index 0 is the lead engine, rendered from its own tracker state
+    });
   }, [animatedTrain, trainLineCoords, trainLineDists, mapZoom]);
+
+  // Below the threshold the whole train is narrower than one icon, so only the
+  // lead engine draws. Its position comes from the consist so it stays put as
+  // the cars appear; if the consist cannot be built at all, fall back to the
+  // raw tracker position so a geometry fault never hides the train (NFR-043-2).
+  const leadUnit = consist[0] || null;
+  const trailingUnits = mapZoom < MIN_CONSIST_ZOOM ? [] : consist.slice(1);
+  const leadPosition = leadUnit?.position || animatedTrain?.position || null;
+  const leadBearing = leadUnit?.bearing ?? animatedTrain?.bearing ?? 0;
 
   const boatMarkerRef = useRef(null);
   const trainMarkerRef = useRef(null);
@@ -1643,8 +1653,8 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
 
   useLayoutEffect(() => {
     const el = trainMarkerRef.current?.getElement()?.querySelector('.train-marker-inner');
-    if (el && animatedTrain) el.style.transform = `rotate(${animatedTrain.bearing || 0}deg)`;
-  }, [animatedTrain?.bearing]);
+    if (el && animatedTrain) el.style.transform = `rotate(${leadBearing}deg)`;
+  }, [leadBearing, animatedTrain]);
 
   // Each consist unit carries its own bearing (in a curve the tail faces a
   // different way than the head), written pre-paint on the same path as the
@@ -2041,10 +2051,10 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           />
         ))}
 
-        {visibleTypes.has('train') && animatedTrain && trainFeature && (
+        {visibleTypes.has('train') && animatedTrain && trainFeature && leadPosition && (
           <Marker
             ref={trainMarkerRef}
-            position={animatedTrain.position}
+            position={leadPosition}
             icon={trainIconRef.current}
             zIndexOffset={TRACKER_Z_INDEX}
             keyboard={false}

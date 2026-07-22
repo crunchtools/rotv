@@ -714,8 +714,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.post('/settings/usft-sharing-token/test', isAdmin, async (req, res) => {
     try {
       const { testSharingToken } = await import('../services/trainTrackerService.js');
-      const result = await testSharingToken(pool);
-      res.json({ success: result.valid, message: result.message });
+      const tokenTest = await testSharingToken(pool);
+      res.json({ success: tokenTest.valid, message: tokenTest.message });
     } catch (error) {
       console.error('Error testing USFT sharing token:', error);
       res.status(500).json({ success: false, message: 'Failed to test token', error: error.message });
