@@ -1548,6 +1548,7 @@ export async function createNewsCollectionJob(pool, poiIds, source = 'batch') {
 
 export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobData) {
   const { jobId } = jobData;
+  const jobType = 'news';
 
   const jobResult = await pool.query('SELECT * FROM news_job_status WHERE id = $1', [jobId]);
   if (jobResult.rows.length === 0) {
