@@ -482,6 +482,30 @@ async function initDatabase() {
       END $$;
     `);
 
+    // One account, many logins: lets the same person sign in with Google or
+    // Facebook without colliding on the UNIQUE users.email. Backfilled from the
+    // legacy per-user provider columns, which now only record account origin.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_identities (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        provider VARCHAR(50) NOT NULL,
+        provider_id VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(provider, provider_id)
+      )
+    `);
+
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_user_identities_user_id ON user_identities(user_id)
+    `);
+
+    await client.query(`
+      INSERT INTO user_identities (user_id, provider, provider_id, created_at)
+      SELECT id, oauth_provider, oauth_provider_id, created_at FROM users
+      ON CONFLICT (provider, provider_id) DO NOTHING
+    `);
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS admin_settings (
         key VARCHAR(255) PRIMARY KEY,
