@@ -3094,6 +3094,13 @@ async function start() {
   });
 }
 
+// Background jobs run on timer-dispatched promises with no caller to catch them, so a
+// transient failure (usually a pg pool timeout) would otherwise exit the process and
+// take the site down with it. Stay up and log — a dropped job beats a dropped site.
+process.on('unhandledRejection', reason => {
+  console.error('[unhandledRejection] Backend stayed up; investigate:', reason);
+});
+
 process.on('SIGTERM', async () => {
   console.log('SIGTERM received, shutting down gracefully...');
   stopTracker();

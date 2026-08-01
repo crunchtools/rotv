@@ -64,18 +64,29 @@ export async function runBatch({
       }
     }
 
+    // A checkpoint is bookkeeping — if it fails (e.g. a pg pool timeout) we log and
+    // keep going. Letting it reject would escape processNext, which is dispatched from
+    // a bare setTimeout, and take the whole process down.
+    const safeCheckpoint = async (collected, error) => {
+      try {
+        await checkpointFn(item, collected, error);
+      } catch (checkpointError) {
+        console.error(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Checkpoint failed: ${checkpointError.message}`);
+      }
+    };
+
     try {
       console.log(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Starting (Slot ${slotId}, ${inFlight} in flight)`);
 
       const collected = await collectFn(item, context);
       results.push({ item, result: collected, success: true });
 
-      await checkpointFn(item, collected, null);
+      await safeCheckpoint(collected, null);
     } catch (error) {
       console.error(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Error: ${error.message}`);
       results.push({ item, result: null, success: false, error: error.message });
 
-      await checkpointFn(item, null, error);
+      await safeCheckpoint(null, error);
     }
 
     inFlight--;
