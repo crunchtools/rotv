@@ -1,6 +1,7 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as FacebookStrategy } from 'passport-facebook';
+import { findOrCreateUser as resolveUserAccount } from './userAccount.js';
 
 export function configurePassport(pool) {
   const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
@@ -23,55 +24,8 @@ export function configurePassport(pool) {
     }
   });
 
-  async function findOrCreateUser(provider, profile, credentials) {
-    const email = profile.emails?.[0]?.value;
-    const name = profile.displayName;
-    const pictureUrl = profile.photos?.[0]?.value;
-    const providerId = profile.id;
-    const isAdmin = email && email.toLowerCase() === ADMIN_EMAIL.toLowerCase();
-
-    let userLookup = await pool.query(
-      'SELECT * FROM users WHERE oauth_provider = $1 AND oauth_provider_id = $2',
-      [provider, providerId]
-    );
-
-    if (userLookup.rows.length > 0) {
-      const updateFields = ['last_login_at = CURRENT_TIMESTAMP', 'picture_url = $1', 'name = $2'];
-      const updateValues = [pictureUrl, name];
-
-      if (isAdmin && !userLookup.rows[0].is_admin) {
-        updateFields.push(`is_admin = $${updateValues.length + 1}`);
-        updateValues.push(true);
-        updateFields.push(`role = $${updateValues.length + 1}`);
-        updateValues.push('admin');
-      }
-
-      if (isAdmin && credentials) {
-        updateFields.push(`oauth_credentials = $${updateValues.length + 1}`);
-        updateValues.push(JSON.stringify(credentials));
-      }
-
-      updateValues.push(userLookup.rows[0].id);
-
-      await pool.query(
-        `UPDATE users SET ${updateFields.join(', ')} WHERE id = $${updateValues.length}`,
-        updateValues
-      );
-
-      userLookup = await pool.query('SELECT * FROM users WHERE id = $1', [userLookup.rows[0].id]);
-      return userLookup.rows[0];
-    }
-
-    const role = isAdmin ? 'admin' : 'viewer';
-    const insertResult = await pool.query(
-      `INSERT INTO users (email, name, picture_url, oauth_provider, oauth_provider_id, is_admin, role, oauth_credentials, last_login_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
-       RETURNING *`,
-      [email, name, pictureUrl, provider, providerId, isAdmin, role, isAdmin && credentials ? JSON.stringify(credentials) : null]
-    );
-
-    return insertResult.rows[0];
-  }
+  const findOrCreateUser = (provider, profile, credentials) =>
+    resolveUserAccount(pool, ADMIN_EMAIL, provider, profile, credentials);
 
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     passport.use('google', new GoogleStrategy({
