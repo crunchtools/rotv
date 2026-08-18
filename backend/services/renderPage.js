@@ -54,7 +54,7 @@ export async function renderPage(pool, url, options = {}) {
           og_image = EXCLUDED.og_image,
           title = EXCLUDED.title,
           links = EXCLUDED.links,
-          page_type = COALESCE(EXCLUDED.page_type, rendered_page_cache.page_type),
+          page_type = EXCLUDED.page_type,
           rendered_at = NOW()
       `, [
         url,
