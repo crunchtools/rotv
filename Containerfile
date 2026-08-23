@@ -87,8 +87,13 @@ RUN mv frontend/dist public && \
 COPY rootfs/ /
 
 # Make scripts executable and enable services
+# rsyslog is enabled explicitly rather than inherited. CI builds this image
+# FROM quay.io/crunchtools/rotv-base, not directly from ubi10-core, so the
+# enable symlink ubi10-core creates does not reliably reach the final image --
+# rotv shipped with the forwarding config present but rsyslog.service disabled,
+# and so sent nothing to syslog.crunchtools.com (constitution XIII).
 RUN chmod +x /usr/local/bin/rotv-init.sh && \
-    systemctl enable postgresql rotv-init rotv-backend
+    systemctl enable postgresql rotv-init rotv-backend rsyslog
 
 # Create directory for environment file
 RUN mkdir -p /etc/rotv
