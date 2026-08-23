@@ -84,6 +84,23 @@ jobs:
           docker exec rotv journalctl -u rotv-backend --no-pager -n 30 || true
           echo "=== end debug ==="
 
+          # Constitution XIII: rsyslog must be enabled, or this image ships the
+          # forwarding config while silently sending nothing. That is exactly how
+          # rotv regressed -- the drop-in was present and the service was not
+          # enabled, so it looked correctly configured in every other respect.
+          # Asserted here rather than assumed from ubi10-core, because CI builds
+          # FROM rotv-base and the enable does not reliably survive that hop.
+          echo "=== central logging ==="
+          if ! docker exec rotv test -f /etc/rsyslog.d/00-crunchtools-forward.conf; then
+            echo "FAIL: forwarding drop-in missing (expected from ubi10-core)"
+            exit 1
+          fi
+          if [ "$(docker exec rotv systemctl is-enabled rsyslog 2>&1)" != "enabled" ]; then
+            echo "FAIL: rsyslog is not enabled -- logs will not reach syslog.crunchtools.com"
+            exit 1
+          fi
+          echo "OK: forwarding config present and rsyslog enabled"
+
           # Check if server is ready
           for i in {1..30}; do
             if docker exec rotv curl -s http://localhost:8080/api/destinations > /dev/null 2>&1; then
