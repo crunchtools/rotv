@@ -465,7 +465,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     }
 
     const unanimousYes = relevanceVotes.length >= 3 && yesCount === relevanceVotes.length;
-    const unanimousNo = relevanceVotes.length >= 3 && noCount === relevanceVotes.length;
+    const strongNo = relevanceVotes.length >= 3 && yesCount <= 1;
 
     const effectiveDate = newDate || row.publication_date;
 
@@ -474,10 +474,11 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     const dateGate = evaluateDateGate(effectiveDate, newScore,
       { threshold: effectiveThreshold, floorYear: dateFloorYear, allowFuture: contentType === 'event' });
 
+    // 3/3 → pass, 0-1/3 → fail (auto-reject), 2/3 → review (human)
     const relevanceGate = unanimousYes
       ? { verdict: 'pass', reason: `Relevance ${yesCount}/${relevanceVotes.length} yes` }
-      : unanimousNo
-        ? { verdict: 'fail', reason: `Unanimous NO (${relevanceVotes.map(v => v.reasoning).join('; ')})` }
+      : strongNo
+        ? { verdict: 'fail', reason: `Relevance ${yesCount}/${relevanceVotes.length} yes (${relevanceVotes.filter(v => !isAffirmativeVote(v)).map(v => v.reasoning).join('; ')})` }
         : { verdict: 'review', reason: `Relevance split ${yesCount}/${relevanceVotes.length} yes` };
 
     // Region gate (spec 041): geography, independent of topical relevance. A unanimous
