@@ -41,6 +41,14 @@ const LAUNCH_OPTIONS = {
     '--disable-dev-shm-usage',
     '--disable-accelerated-2d-canvas',
     '--disable-gpu',
+    // --disable-gpu alone does not stop headless Chrome from spawning a GPU
+    // process for SwiftShader software GL. That process segfaults on some
+    // scrape targets (~12 coredumps/hr on lotor; spiked to 81/hr and helped
+    // trigger the 2026-09-03 outage). This keeps it off the SwiftShader path.
+    // Deliberately NOT using --in-process-gpu: a separate GPU process crash is
+    // recoverable (Chrome respawns it), but in-process it would kill the whole
+    // browser and fail the scrape.
+    '--disable-software-rasterizer',
     '--disable-blink-features=AutomationControlled'
   ]
 };
