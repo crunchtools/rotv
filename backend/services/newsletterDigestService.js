@@ -2,6 +2,34 @@ import { sendEmail, sendDraftToRecipients } from './buttondownClient.js';
 
 const DIGEST_EVENT_LIMIT = 15;
 const DIGEST_NEWS_LIMIT = 5;
+// Fetch headroom so host filtering and dedup still leave DIGEST_NEWS_LIMIT rows.
+const DIGEST_NEWS_FETCH_MULTIPLIER = 6;
+
+// Hosts that produce useful POI-page content but not newsletter-worthy news:
+// social posts, restaurant listings, and offshore aggregators that reprint
+// local stories.
+const DIGEST_EXCLUDED_NEWS_HOSTS = [
+  'facebook.com',
+  'instagram.com',
+  'x.com',
+  'twitter.com',
+  'opentable.com',
+  'economictimes.com',
+  'komoot.com',
+  'grokipedia.com'
+];
+
+// Host-boundary match so 'x.com' excludes x.com and m.x.com but not phoenix.com.
+export function isDigestNewsSource(sourceUrl) {
+  if (!sourceUrl) return true;
+  let host;
+  try {
+    host = new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return true; // unparseable URL: let moderation decide, don't silently drop
+  }
+  return !DIGEST_EXCLUDED_NEWS_HOSTS.some(h => host === h || host.endsWith(`.${h}`));
+}
 
 // Mirrors normalizeTitle in newsService.js (kept local so this module stays
 // importable without pulling in the whole collection pipeline).
@@ -118,6 +146,8 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     LIMIT ${DIGEST_EVENT_LIMIT * 2}
   `;
 
+  // The upper bound matters: publication_date is sometimes parsed off an event
+  // page and lands in the future, which sorts above genuine news and takes every slot.
   const newsQuery = `
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
            n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles
@@ -125,8 +155,9 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
       AND COALESCE(n.publication_date, n.collection_date) > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
+      AND COALESCE(n.publication_date, n.collection_date) <= COALESCE($1::timestamptz, NOW())
     ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.id DESC
-    LIMIT ${DIGEST_NEWS_LIMIT * 2}
+    LIMIT ${DIGEST_NEWS_LIMIT * DIGEST_NEWS_FETCH_MULTIPLIER}
   `;
 
   const [eventsResult, newsResult] = await Promise.all([
@@ -136,7 +167,8 @@ async function fetchDigestContent(pool, tz, asOfDate) {
 
   return {
     events: dedupeDigestEvents(eventsResult.rows, tz).slice(0, DIGEST_EVENT_LIMIT),
-    news: dedupeDigestNews(newsResult.rows).slice(0, DIGEST_NEWS_LIMIT)
+    news: dedupeDigestNews(newsResult.rows.filter(n => isDigestNewsSource(n.source_url)))
+      .slice(0, DIGEST_NEWS_LIMIT)
   };
 }
 
@@ -604,6 +636,7 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
         WHERE n.poi_id = ANY($1::int[])
           AND n.moderation_status IN ('published', 'auto_approved')
           AND COALESCE(n.publication_date, n.collection_date) > NOW() - INTERVAL '7 days'
+          AND COALESCE(n.publication_date, n.collection_date) <= NOW()
         ORDER BY COALESCE(n.publication_date, n.collection_date) DESC`,
       [allPoiIds]
     ),
@@ -635,7 +668,9 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
     const sunday = dayInTz(new Date(new Date(asOf).getTime() + 2 * 86400000));
 
     const userNews = dedupeDigestNews(
-      newsResult.rows.filter(n => poiSet.has(n.poi_id))
+      newsResult.rows
+        .filter(n => poiSet.has(n.poi_id))
+        .filter(n => isDigestNewsSource(n.source_url))
     ).slice(0, 5);
     const userEvents = dedupeDigestEvents(
       eventsResult.rows
