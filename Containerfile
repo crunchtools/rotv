@@ -11,7 +11,7 @@ LABEL description="Roots of The Valley - Cuyahoga Valley National Park destinati
 # Install Node.js and Playwright/Chromium system dependencies
 # No RHSM needed — all packages in UBI + pgdg repos
 # When using rotv-base, these are already installed (cache hit / no-op)
-RUN dnf install -y nodejs npm \
+RUN dnf install -y nodejs npm rsyslog \
     nspr nss alsa-lib atk cups-libs gtk3 \
     libXcomposite libXdamage libXrandr libxkbcommon \
     mesa-libgbm pango libdrm \
@@ -87,11 +87,13 @@ RUN mv frontend/dist public && \
 COPY rootfs/ /
 
 # Make scripts executable and enable services
-# rsyslog is enabled explicitly rather than inherited. CI builds this image
-# FROM quay.io/crunchtools/rotv-base, not directly from ubi10-core, so the
-# enable symlink ubi10-core creates does not reliably reach the final image --
-# rotv shipped with the forwarding config present but rsyslog.service disabled,
-# and so sent nothing to syslog.crunchtools.com (constitution XIII).
+# rsyslog is installed and enabled explicitly rather than inherited. CI builds
+# this image FROM quay.io/crunchtools/rotv-base, not directly from ubi10-core,
+# so the enable symlink ubi10-core creates does not reliably reach the final
+# image -- rotv shipped with the forwarding config present but rsyslog.service
+# disabled, and so sent nothing to syslog.crunchtools.com (constitution XIII).
+# The package must be installed above too: local dev builds default to
+# ubi10-core, which does not ship rsyslog, so enabling alone broke ./run.sh build.
 RUN chmod +x /usr/local/bin/rotv-init.sh && \
     systemctl enable postgresql rotv-init rotv-backend rsyslog
 
