@@ -12,7 +12,7 @@ vi.mock('../services/buttondownClient.js', () => ({
   sendDraftToRecipients: vi.fn()
 }));
 
-const { dedupeDigestEvents, dedupeDigestNews } = await import('../services/newsletterDigestService.js');
+const { dedupeDigestEvents, dedupeDigestNews, isDigestNewsSource } = await import('../services/newsletterDigestService.js');
 
 const TZ = 'America/New_York';
 
@@ -107,5 +107,44 @@ describe('dedupeDigestNews', () => {
   it('handles items with no summary', () => {
     const bare = { id: 15, poi_id: 7, poi_name: 'Summit Metro Parks', title: 'Trail closure announced', summary: null };
     expect(dedupeDigestNews([derbyFromParks, bare])).toHaveLength(2);
+  });
+});
+
+/**
+ * Source filtering for the weekly digest. The Sept 4 2026 issue filled all five
+ * news slots with Akron Zoo event pages whose publication_date had been parsed
+ * off the event listing (Oct 30, Oct 10, ...), and the remaining pool was mostly
+ * Facebook posts and an OpenTable listing.
+ */
+describe('isDigestNewsSource', () => {
+  it('drops social posts', () => {
+    expect(isDigestNewsSource('https://www.facebook.com/groups/153025761557295/posts/2783321931860985/')).toBe(false);
+    expect(isDigestNewsSource('https://m.facebook.com/summitmetroparks/photos/abc')).toBe(false);
+    expect(isDigestNewsSource('https://www.instagram.com/p/DcrGy8qFCUE/')).toBe(false);
+    expect(isDigestNewsSource('https://x.com/nps/status/123')).toBe(false);
+  });
+
+  it('drops listing and aggregator hosts', () => {
+    expect(isDigestNewsSource('https://www.opentable.com/r/lockkeepers-valley-view')).toBe(false);
+    expect(isDigestNewsSource('https://m.economictimes.com/news/international/us/story/123.cms')).toBe(false);
+  });
+
+  it('keeps real local news outlets', () => {
+    expect(isDigestNewsSource('https://www.cleveland.com/summit-county/2026/09/story.html')).toBe(true);
+    expect(isDigestNewsSource('https://www.wkyc.com/article/news/local/story')).toBe(true);
+    expect(isDigestNewsSource('https://www.summitmetroparks.org/news/trail-update')).toBe(true);
+    expect(isDigestNewsSource('https://ohiohouse.gov/news/republican/story-147919')).toBe(true);
+  });
+
+  it('matches on host boundaries, not substrings', () => {
+    // 'x.com' must not swallow unrelated hosts that merely contain it
+    expect(isDigestNewsSource('https://www.phoenix.com/parks')).toBe(true);
+    expect(isDigestNewsSource('https://notfacebook.com/story')).toBe(true);
+  });
+
+  it('keeps items with a missing or unparseable URL rather than silently dropping them', () => {
+    expect(isDigestNewsSource(null)).toBe(true);
+    expect(isDigestNewsSource('')).toBe(true);
+    expect(isDigestNewsSource('not a url')).toBe(true);
   });
 });
