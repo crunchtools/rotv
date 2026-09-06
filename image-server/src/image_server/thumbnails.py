@@ -27,45 +27,37 @@ def _normalize_orientation(img: Image.Image) -> Image.Image:
     return ImageOps.exif_transpose(img)
 
 
+def _write_thumbnail(img: Image.Image, dest_path: Path) -> tuple[int, int]:
+    """Resize an open image in place and save it as JPEG. Returns (width, height)."""
+    max_dim = get_config().thumbnail_size
+
+    img = _normalize_orientation(img)
+    if img.mode in RGBA_MODES:
+        img = img.convert("RGB")
+
+    img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    img.save(dest_path, "JPEG", quality=JPEG_QUALITY, optimize=True)
+    logger.info("Generated thumbnail: %s (%dx%d)", dest_path.name, img.width, img.height)
+    return img.width, img.height
+
+
 def generate_thumbnail(source_path: Path, dest_path: Path) -> tuple[int, int]:
     """Generate a JPEG thumbnail from an image file.
 
     Returns (width, height) of the thumbnail.
     """
-    cfg = get_config()
-    max_dim = cfg.thumbnail_size
-
     with Image.open(source_path) as img:
-        img = _normalize_orientation(img)
-        if img.mode in RGBA_MODES:
-            img = img.convert("RGB")
-
-        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        img.save(dest_path, "JPEG", quality=JPEG_QUALITY, optimize=True)
-        logger.info("Generated thumbnail: %s (%dx%d)", dest_path.name, img.width, img.height)
-        return img.width, img.height
+        return _write_thumbnail(img, dest_path)
 
 
-def generate_thumbnail_from_bytes(
-    image_bytes: bytes, dest_path: Path
-) -> tuple[int, int]:
+def generate_thumbnail_from_bytes(image_bytes: bytes, dest_path: Path) -> tuple[int, int]:
     """Generate a JPEG thumbnail from raw image bytes.
 
     Returns (width, height) of the thumbnail.
     """
-    cfg = get_config()
-    max_dim = cfg.thumbnail_size
-
     with Image.open(io.BytesIO(image_bytes)) as img:
-        img = _normalize_orientation(img)
-        if img.mode in RGBA_MODES:
-            img = img.convert("RGB")
-
-        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
-        dest_path.parent.mkdir(parents=True, exist_ok=True)
-        img.save(dest_path, "JPEG", quality=JPEG_QUALITY, optimize=True)
-        return img.width, img.height
+        return _write_thumbnail(img, dest_path)
 
 
 def generate_all_thumbnails_from_bytes(image_bytes: bytes, file_uuid: str) -> None:

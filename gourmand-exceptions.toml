@@ -279,3 +279,13 @@ check = "generic_names"
 path = "frontend/src/utils/snapToLine.js"
 justification = "x and y are the standard variable names in the forward azimuth / atan2 bearing formula from the spherical law of cosines — renaming would make the math harder to verify against reference implementations"
 classification = "by_design"
+
+[[exceptions]]
+check = "over_abstraction"
+path = "image-server/src/image_server/thumbnails.py"
+justification = "_normalize_orientation wraps ImageOps.exif_transpose, and its docstring is why it exists: phones store portrait photos as landscape pixels plus an orientation tag, and dropping that tag on resize rendered thumbnails sideways (issue #393). The name marks the call sites that must not lose it."
+
+[[exceptions]]
+check = "copy_paste_detection"
+path = "image-server/src/image_server/config.py"
+justification = "reset_config and reset_backend each clear one module-level singleton for tests. Three statements, two different globals."
