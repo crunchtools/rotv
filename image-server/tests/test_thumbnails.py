@@ -90,3 +90,18 @@ def test_thumbnail_applies_exif_orientation(tmp_path, monkeypatch):
     assert h > w
     with Image.open(dest) as img:
         assert img.height > img.width
+
+
+def test_thumbnail_from_file_applies_exif_orientation(tmp_path, monkeypatch):
+    """The file entry point shares _write_thumbnail, so #393 must hold there too."""
+    monkeypatch.setenv("THUMBNAIL_SIZE", "100")
+
+    source = tmp_path / "landscape-tagged-portrait.jpg"
+    source.write_bytes(_landscape_jpeg_tagged_portrait())
+    dest = tmp_path / "thumb.jpg"
+
+    w, h = generate_thumbnail(source, dest)
+
+    assert h > w
+    with Image.open(dest) as img:
+        assert img.height > img.width
