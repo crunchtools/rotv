@@ -107,8 +107,8 @@ Workflow includes `repository_dispatch` listener for `parent-image-updated` even
 
 ## Monitoring
 
-Zabbix monitoring:
-- Web scenario (HTTP check) for Node.js backend on port 8080
+Nagios monitoring:
+- HTTP check for Node.js backend on port 8080
 - TCP port check for PostgreSQL on port 5432
 - `pg_isready` health check for database connectivity
 
