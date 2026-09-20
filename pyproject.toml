@@ -9,3 +9,6 @@ select = ["PLR", "C901"]
 [tool.ruff.lint.pylint]
 max-branches = 10
 max-statements = 50
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
