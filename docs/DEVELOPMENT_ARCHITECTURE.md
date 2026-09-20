@@ -102,15 +102,15 @@ Environment variables are loaded from `.env` files that are gitignored:
                            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  Load production settings from backend/.env:                 │
-│  ├─ PRODUCTION_HOST=sven.dc3.crunchtools.com                 │
-│  ├─ PRODUCTION_PORT=22422                                    │
+│  ├─ PRODUCTION_HOST=<your production host>                   │
+│  ├─ PRODUCTION_PORT=<your ssh port>                           │
 │  └─ PRODUCTION_CONTAINER=rootsofthevalley.org                │
 └──────────────────────────────────────────────────────────────┘
                            │
                            ▼
 ┌──────────────────────────────────────────────────────────────┐
 │  SSH to production and run pg_dump:                          │
-│  ssh -p 22422 root@sven.dc3.crunchtools.com \               │
+│  ssh -p "$PRODUCTION_PORT" root@"$PRODUCTION_HOST" \         │
 │    "podman exec rootsofthevalley.org \                       │
 │     pg_dump -U rotv --clean --if-exists \                    │
 │     --no-owner --no-acl rotv" \                              │
@@ -196,7 +196,7 @@ Version bump (1.10.0 → 1.11.0):
   - Syntax: `runuser -u postgres -- command args`
 
 - **SSH**: Secure remote command execution
-  - Custom port: `-p 22422` for production server
+  - Custom port: `-p "$PRODUCTION_PORT"` for production server
   - Remote execution: `ssh host "command"` runs command and returns output
 
 ## Implementation Details
@@ -350,8 +350,8 @@ Bumping version label only rebuilds application layer (~2 minutes), not infrastr
 **Production seed configuration** (lines 1-4):
 ```bash
 # Production seed data source (for ./run.sh seed)
-PRODUCTION_HOST=sven.dc3.crunchtools.com
-PRODUCTION_PORT=22422
+PRODUCTION_HOST=<your production host>
+PRODUCTION_PORT=<your ssh port>
 PRODUCTION_CONTAINER=rootsofthevalley.org
 ```
 

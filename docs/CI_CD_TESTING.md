@@ -703,7 +703,7 @@ podman tag localhost/rotv:latest quay.io/fatherlinux/rotv:latest
 podman push quay.io/fatherlinux/rotv:latest
 
 # Deploy to production
-ssh -p 22422 root@sven.dc3.crunchtools.com
+ssh -p "$PRODUCTION_PORT" root@"$PRODUCTION_HOST"
 podman pull quay.io/fatherlinux/rotv:latest
 podman stop rootsofthevalley.org
 # Restart with production configuration
