@@ -3,6 +3,7 @@ name: Build and Push Image Server
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
     paths:
       - 'image-server/**'
       - 'Containerfile.images'
@@ -41,6 +42,8 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
 
       - name: Build and push
@@ -97,6 +100,8 @@ jobs:
           images: ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
 
       - name: Build and push container image

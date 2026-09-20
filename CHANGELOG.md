@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.4] - 2026-09-20
+
+### Fixed
+- **Registry drift on all three images built from this repo** (rotv, rotv-base,
+  images-rotv): none of the three `build*.yml` workflows had a `tags: ['v*']`
+  push trigger or emitted a semver-tagged image — only `:latest` (and, for
+  rotv/images-rotv, a sha tag) — so every `vX.Y.Z` release tag from v1.31.0
+  through v1.38.3 never produced a matching versioned image in either
+  registry. Added `tags: ['v*']` and `type=semver` metadata tags to all three
+  workflows (rotv-base now also carries a versioned tag alongside `:latest`,
+  which the rotv build still consumes) so cutting this tag actually lands
+  1.38.4 in both quay and ghcr for all three images.
+
 ### Changed
 - **Newsletter send gate is now fail-closed**: `isSendEnabled()` requires an explicit `NEWSLETTER_SEND_ENABLED=true`
   - Previously fail-open (`!== 'false'`), so a missing variable meant sends were ENABLED — the root condition behind the duplicate [PREVIEW] emails (#440/#476)

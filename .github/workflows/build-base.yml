@@ -3,6 +3,7 @@ name: Build and Push Base Image
 on:
   push:
     branches: [main, master]
+    tags: ['v*']
     paths:
       - Containerfile.base
   repository_dispatch:
@@ -33,17 +34,30 @@ jobs:
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
 
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Containerfile.base
           push: true
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          # This workflow tags a bare :latest rather than using
-          # docker/metadata-action, so the OCI labels Section III requires have
-          # to be spelled out. image.source is what auto-links the GHCR package
-          # to the repo and grants github.token write access to it.
+          tags: ${{ steps.meta.outputs.tags }}
+          # This workflow hand-rolls the OCI labels rather than using
+          # docker/metadata-action's, so Section III's required labels stay
+          # exact. image.source is what auto-links the GHCR package to the
+          # repo and grants github.token write access to it. Tags now come
+          # from metadata-action above (bare :latest plus, on a vX.Y.Z tag
+          # push, the matching semver tags) so a release tag actually lands
+          # a versioned rotv-base image alongside :latest.
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Base image for rootsofthevalley.org
@@ -92,13 +106,23 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Containerfile.base
           push: true
-          tags: ${{ env.GHCR_IMAGE }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Base image for rootsofthevalley.org
