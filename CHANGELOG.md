@@ -7,12 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.38.4] - 2026-09-20
+
 ### Changed
 - **Newsletter send gate is now fail-closed**: `isSendEnabled()` requires an explicit `NEWSLETTER_SEND_ENABLED=true`
   - Previously fail-open (`!== 'false'`), so a missing variable meant sends were ENABLED — the root condition behind the duplicate [PREVIEW] emails (#440/#476)
   - A forgotten or mislocated env file now means NO send by default; only production sets the flag to `true` (added explicitly to lotor's env before this shipped). Also closes the latent risk of CI containers (which carry the prod Buttondown key via seed data) being nominally send-enabled
 
 ### Fixed
+- **CI never produced a semver-tagged image**: `build.yml`, `build-base.yml` and
+  `build-images.yml` never triggered on a tag push. Git tags back to at least
+  1.31.0 were pure deploy markers with no corresponding image in either
+  registry -- `rotv`, `rotv-base` and `images-rotv` all only ever shipped
+  `:latest` and per-commit sha tags. Added `tags: ['v*']` to each workflow's
+  push trigger and a `type=semver,pattern={{version}}` tag alongside the
+  existing `latest`/sha/pr tags (additive, does not change branch-push
+  behavior). `build-base.yml` had no `docker/metadata-action` step at all
+  (hand-written `:latest`-only tags); converted it to match its siblings so
+  it can carry a semver tag too. Versions before 1.38.4 remain untagged in
+  the registries by design -- this is a forward fix, not a backfill of
+  historical tags.
 - **Duplicate events in weekly newsletter**: "Steam in the Valley!" ran twice in issue #15
   - Save-time dedup required an exact `start_date` match, so a bare-date variant (noon fallback) and a timed variant of the same event both saved
   - Title match now compares the calendar day in Eastern time; digest rendering also dedupes by POI + title + day as a safety net for rows collected before the fix
