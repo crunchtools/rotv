@@ -1,39 +1,8 @@
-# Gourmand Exceptions — ROTV
-# Each exception is justified; disabled checks (verbose_comments, deferred_work,
-# lint_suppression) do not need exceptions since they never run.
-
-# ============================================================================
-# summary_litter — root-level files required by tooling conventions
-# ============================================================================
-
-[[exceptions]]
-check = "summary_litter"
-path = "CLAUDE.md"
-justification = "Claude Code orientation file required at repo root by the agent harness"
-classification = "by_design"
-
-[[exceptions]]
-check = "summary_litter"
-path = "README.md"
-justification = "Repository README required by GitHub for the repo landing page"
-classification = "by_design"
 
 [[exceptions]]
 check = "summary_litter"
 path = "NEWSLETTER_DEPLOYMENT.md"
 justification = "Ops runbook for newsletter SMTP deployment — referenced by the team during infra changes"
-classification = "by_design"
-
-[[exceptions]]
-check = "summary_litter"
-path = "data/boundaries/README.md"
-justification = "Documents the boundary GeoJSON data pipeline for POI boundary imports"
-classification = "by_design"
-
-[[exceptions]]
-check = "summary_litter"
-path = "image-server/README.md"
-justification = "README for the image-server sub-project (separate Python project with its own tooling)"
 classification = "by_design"
 
 # ============================================================================
@@ -74,74 +43,6 @@ path = "backend/server.js"
 justification = "server.js is 3,000+ lines; getMosaicFromCache, setMosaicCache, initDatabase (560 lines), setupAiSearchDefaults, and start are named sections of a monolithic entry point — inlining any of them would make the file unnavigable"
 classification = "by_design"
 
-# --- newsService.js (1,900+ lines) ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/newsService.js"
-justification = "newsService.js is 1,900+ lines; resetJobUsage, isNoiseLink, classifyPage, itemCount, buildEventPrompt, buildNewsPrompt, normalizeNewsTitle, createNewsCollectionJob, processNewsCollectionJob, getAllPoisForCollection, getPoisForTierCollection are distinct pipeline stages that would collapse into an unreadable monolith if inlined"
-classification = "by_design"
-
-# --- moderationService.js ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/moderationService.js"
-justification = "runContentRelevanceVotes, assignBestPoi, evaluateDateGate, evaluatePoiGate are named moderation pipeline stages — each encapsulates a distinct AI/DB scoring step"
-classification = "by_design"
-
-# --- apifyService.js ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/apifyService.js"
-justification = "runActorSync, extractFacebookPageUrl, isFacebookUrl, extractInstagramUrl, toIsoDate, fetchSocialPosts are named steps in the Apify social media collection pipeline"
-classification = "by_design"
-
-# --- trainTrackerService.js ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/trainTrackerService.js"
-justification = "pollOnce is the poll-cycle operation invoked both immediately at startup and by the interval timer — the natural unit of the self-healing loop. It is exported so the resilience behavior (lazy auth, retry, 401 re-auth, staleness) can be unit-tested directly rather than by spinning real timers; inlining it would hide the exact failure modes behind the 2026-07-10 train outage"
-classification = "by_design"
-
-# --- renderPage.js ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/renderPage.js"
-justification = "isApifySocialEnabled (async DB setting check with fail-open default) and isCacheFresh (TTL logic with page-type dispatch) are named for readability in the render pipeline"
-classification = "by_design"
-
-# --- mcpServer.js (800+ lines) ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/mcpServer.js"
-justification = "registerTools (780+ lines of tool definitions) and handleMcpRequest (HTTP transport handler) are named sections of a large module — inlining would create an unreadable 850+ line function"
-classification = "by_design"
-
-# --- Other service files ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/backupService.js"
-justification = "ensureBackupsFolder creates the backup directory with error handling — named for clarity in the backup pipeline"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/browserPool.js"
-justification = "forceKill resets all browser pool state (refcount, timers, watchdogs) — exported and named for clarity"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/dateExtractor.js"
-justification = "scoreDeterministicSources and localToUTC are named date-processing utilities in a 300+ line extraction module"
-classification = "by_design"
-
 [[exceptions]]
 check = "single_use_helpers"
 path = "backend/services/driveImageService.js"
@@ -156,32 +57,8 @@ classification = "by_design"
 
 [[exceptions]]
 check = "single_use_helpers"
-path = "backend/services/jsRenderer.js"
-justification = "renderJavaScriptPageInternal separates the Playwright rendering logic from the public API's caching/retry wrapper"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
 path = "backend/services/newsletterDigestService.js"
 justification = "normalizeEventTitle, dayInTimezone, fetchDigestContent are named steps in the weekly digest generation pipeline"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/newsletterService.js"
-justification = "extractContentFromEmail (exported, 28 lines of HTML cleanup) and extractEmailParts (link/VIB extraction) are named stages in the email ingestion pipeline"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/riverLevelsService.js"
-justification = "parseUsgsResponse (35-line USGS JSON parser) is named for the distinct concern of parsing an external API response format"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/services/trailStatusService.js"
-justification = "collectTrailStatus and saveTrailStatus (77 lines) are named pipeline stages in the trail condition monitoring service"
 classification = "by_design"
 
 [[exceptions]]
@@ -201,59 +78,6 @@ classification = "by_design"
 
 [[exceptions]]
 check = "single_use_helpers"
-path = "backend/scripts/backfill-news-images.js"
-justification = "extractOgImage, fetchOgImage, main are named stages in a standalone backfill script"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/scripts/cleanup-failed-urls.js"
-justification = "main is the idiomatic JS entry point for a standalone cleanup script"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/scripts/migrate-primary-images.js"
-justification = "fetchPrimaryAsset, hasPrimaryMedia, createPrimaryMediaEntry, migrateImages are named stages in a standalone migration script"
-classification = "by_design"
-
-# --- Test files ---
-# Gourmand's own docs say test files are exempt; these are test entry points.
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/test-playwright.js"
-justification = "Test script entry point"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/test-timeout.js"
-justification = "Test script entry point"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/test-twitter-login.js"
-justification = "Test script entry point"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "backend/tests/trailStatus.integration.test.js"
-justification = "Test setup helper (setupEastRimTrail) — gourmand exempts test files"
-classification = "by_design"
-
-# --- Frontend ---
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "frontend/src/hooks/useSeasonalTheme.js"
-justification = "calculateActiveTheme (24-line theme resolution with conditional branches) is named for readability in the seasonal theme hook"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
 path = "frontend/src/utils/iconUtils.js"
 justification = "getDestinationIconTypeFromConfig (37 lines), poiMatchesActivityForTypes (16 lines), isActivityFilterActive (9 lines) are exported utility functions consumed by map components"
 classification = "by_design"
@@ -262,12 +86,6 @@ classification = "by_design"
 check = "single_use_helpers"
 path = "frontend/src/utils/trackInterpolation.js"
 justification = "metersPerPixel has one caller INSIDE this file (bearingHalfSpan) but is exported and also consumed by trainConsist.js unitSpacingMeters — inlining it would duplicate the Web Mercator ground-resolution expression across two files, which is the exact duplication extracting it removed (#533). It is also unit-tested directly for the per-zoom halving, the absolute resolution at z16/z18, and the z13 fallback"
-classification = "by_design"
-
-[[exceptions]]
-check = "single_use_helpers"
-path = "frontend/src/utils/trainConsist.js"
-justification = "unitSpacingMeters is called once by buildConsist but is exported so the consist spacing rule can be unit-tested directly — it encodes the design decision that spacing tracks on-screen pixels at browsing zooms and floors at prototype car length past z18. Inlining it would bury that crossover inside buildConsist and make the zoom behavior testable only through rendered marker positions"
 classification = "by_design"
 
 # ============================================================================
@@ -284,8 +102,57 @@ classification = "by_design"
 check = "over_abstraction"
 path = "image-server/src/image_server/thumbnails.py"
 justification = "_normalize_orientation wraps ImageOps.exif_transpose, and its docstring is why it exists: phones store portrait photos as landscape pixels plus an orientation tag, and dropping that tag on resize rendered thumbnails sideways (issue #393). The name marks the call sites that must not lose it."
+classification = "by_design"
 
 [[exceptions]]
 check = "copy_paste_detection"
 path = "image-server/src/image_server/config.py"
 justification = "reset_config and reset_backend each clear one module-level singleton for tests. Three statements, two different globals."
+classification = "by_design"
+
+# ============================================================================
+# verbose_comments — false positives after removing the blanket disable
+#
+# Tested on 0.16.5 with the [checks] verbose_comments disable removed. Two
+# distinct false-positive patterns surfaced, both reviewed individually:
+# 1. "Redundant comment pattern" matched a truncated leading substring
+#    ("Validate a", "UPDATE q", "Validate t", "Update d") inside comments
+#    that are otherwise substantive (naming a security finding, a ticket
+#    number, or explaining a non-obvious dispatch rule) -- not restating
+#    the following line.
+# 2. "Long comment block" fired on two multi-paragraph comments that
+#    reference specific issue numbers and explain non-obvious domain facts
+#    (a sprite's drawn orientation, a GPS device's physical position in a
+#    train) -- exactly the "good comment that happens to exceed the line
+#    count" case gourmand's own guidance says to except rather than trim.
+# ============================================================================
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/server.js"
+justification = "Both hits match a truncated 'Validate a'/'UPDATE q' substring inside comments that explain a security fix (SSRF finding) and a query-avoidance optimization respectively -- not restating the following line"
+classification = "gourmand_bug"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "backend/services/trainTrackerService.js"
+justification = "Matches a truncated 'Validate t' substring inside a comment documenting testSharingToken's purpose and scope boundary (does not touch the live poller's state) -- not restating the following line"
+classification = "gourmand_bug"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/App.jsx"
+justification = "Matches a truncated 'Update d' substring inside a comment explaining the dispatch rule for the unified POI update/delete handler (spec 019) -- not restating the following line"
+classification = "gourmand_bug"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/components/Map.jsx"
+justification = "A 9-line comment (max 8) documenting why the CVSR locomotive sprite is drawn nose-up with a specific body footprint, referencing the bug (#533) it replaces -- a good comment that happens to exceed the line count, not filler"
+classification = "gourmand_bug"
+
+[[exceptions]]
+check = "verbose_comments"
+path = "frontend/src/utils/trainConsist.js"
+justification = "An 11-line comment (max 8) documenting the physical consist order and why the GPS-tracked unit is not the lead engine (a real-world fact that broke #573 when assumed otherwise) -- a good comment that happens to exceed the line count, not filler"
+classification = "gourmand_bug"

@@ -1,6 +1,6 @@
 # Gourmand Configuration
 # AI slop detection for maintaining code quality
-# See https://codeberg.org/mattdm/gourmand for documentation
+# See https://gitlab.com/mattdm/gourmand for documentation
 
 [global]
 # Paths to exclude from all checks
@@ -23,39 +23,23 @@ excluded_paths = [
 ]
 
 [checks]
-# Disable checks that don't apply to JavaScript/Node.js projects
-linter_configuration = false  # Expects clippy.toml (Rust) or pyproject.toml (Python)
-implicit_state_machine = false  # Rust-centric check; false-positives on Python type annotations and React idioms like isLoading/isOpen
-# These false-positive on standard JS/React/HTML idioms (confirmed during the
-# #184 sidebar extraction, which relocated pre-existing gourmand-clean code):
-deferred_work = false  # Matches "todo" inside "Mastodon" and HTML placeholder="..." attributes
-lint_suppression = false  # Flags intentional `eslint-disable-next-line react-hooks/exhaustive-deps`
-verbose_comments = false  # Counts single-line eslint-disable directives as comment blocks (max 0 on new files)
-
-[[check_overrides]]
-check = "linter_configuration"
-justification = "Expects clippy.toml (Rust) or pyproject.toml (Python) — this is a JavaScript/Node.js project linted by eslint with eslint.config.js, a configuration shape the check does not recognize"
-classification = "gourmand_bug"
-
-[[check_overrides]]
-check = "implicit_state_machine"
-justification = "Rust-centric check that false-positives on Python type annotations (str, int, bool) and standard React boolean-state idioms like isLoading/isOpen, which are not implicit state machines"
-classification = "gourmand_bug"
-
-[[check_overrides]]
-check = "deferred_work"
-justification = "Matches 'todo' inside the substring 'Mastodon' and HTML placeholder=\"...\" attributes on form inputs — standard JS/React/HTML idioms, not deferred-work markers (confirmed during the #184 sidebar extraction, which relocated pre-existing gourmand-clean code)"
-classification = "gourmand_bug"
+# Disable checks that don't apply to JavaScript/Node.js projects.
+#
+# linter_configuration, implicit_state_machine, and deferred_work were
+# previously disabled here too. Tested on 0.16.5 with the disable removed:
+# implicit_state_machine and deferred_work fired zero times (their upstream
+# false-positive patterns are apparently fixed) and were deleted outright.
+# linter_configuration's one real violation was a genuinely missing
+# [tool.ruff.lint.mccabe] threshold in the placeholder pyproject.toml (kept
+# solely to give gourmand a config file to find on this JS project); fixed
+# directly instead of re-disabling the check.
+lint_suppression = false  # verified below: every suppression covered by this
+                          # override carries an adjacent WHY-comment
 
 [[check_overrides]]
 check = "lint_suppression"
-justification = "Project policy permits eslint-disable-next-line react-hooks/exhaustive-deps suppressions when each carries an adjacent WHY-comment naming the excluded reference — the documented suppressions are deliberate dependency-array decisions, not hidden lint debt"
+justification = "Project policy permits eslint-disable-next-line react-hooks/exhaustive-deps suppressions when each carries an adjacent WHY-comment naming the excluded reference — verified all 8 current sites carry one; the documented suppressions are deliberate dependency-array decisions, not hidden lint debt"
 classification = "by_design"
-
-[[check_overrides]]
-check = "verbose_comments"
-justification = "Counts single-line eslint-disable directives as comment blocks against a max-0 budget on new files, flagging files whose only comments are required lint markers"
-classification = "gourmand_bug"
 
 [severity]
 # Override severity levels for specific checks
@@ -65,36 +49,3 @@ classification = "gourmand_bug"
 # Output format options
 format = "text"  # Options: text, json, github
 color = true
-
-# Gourmand ships these defaults, but only applies them when no gourmand.toml
-# exists. With a config file present and no [thresholds] table, every value
-# silently becomes 0 — so a one-line comment trips a rule documented as firing
-# at nine, and checks with a minimum size stop firing at all. Restated here
-# verbatim from the binary's built-in defaults so the config file does not
-# change what the checks mean.
-[thresholds]
-max_cognitive_complexity_error = 100
-max_cognitive_complexity_warning = 50
-max_comment_block_lines = 8
-max_comment_ratio_percent = 40
-min_function_body_lines = 3
-max_elif_branches = 2
-min_state_branches = 4
-min_boolean_flags = 3
-copy_paste_same_file_threshold = 0.8
-copy_paste_across_files_threshold = 0.9
-copy_paste_min_complexity = 5
-copy_paste_min_statements = 3
-copy_paste_min_length_ratio = 0.5
-copy_paste_levenshtein_weight = 0.5
-copy_paste_jaro_winkler_weight = 0.3
-copy_paste_token_set_weight = 0.2
-copy_paste_fingerprint_boost = 0.1
-copy_paste_fingerprint_penalty = 0.1
-copy_paste_exact_match_threshold = 0.95
-copy_paste_small_function_size = 9
-copy_paste_small_function_min_statements = 3
-copy_paste_large_function_min_statements = 12
-copy_paste_small_function_threshold = 0.99
-copy_paste_exempt_tests = true
-copy_paste_exempt_constructors = true
