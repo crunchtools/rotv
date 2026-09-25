@@ -12,7 +12,7 @@ vi.mock('../services/buttondownClient.js', () => ({
   sendDraftToRecipients: vi.fn()
 }));
 
-const { dedupeDigestEvents, dedupeDigestNews, isDigestNewsSource } = await import('../services/newsletterDigestService.js');
+const { dedupeDigestEvents, dedupeDigestNews, isDigestNewsSource, digestEventLocation } = await import('../services/newsletterDigestService.js');
 
 const TZ = 'America/New_York';
 
@@ -108,6 +108,61 @@ describe('dedupeDigestNews', () => {
     const bare = { id: 15, poi_id: 7, poi_name: 'Summit Metro Parks', title: 'Trail closure announced', summary: null };
     expect(dedupeDigestNews([derbyFromParks, bare])).toHaveLength(2);
   });
+
+  // Sept 25 2026 preview: Beacon Journal ran a photo gallery and the story a
+  // day apart, and they were matched to two sibling POIs.
+  const johnBrownGallery = {
+    id: 7202, poi_id: 5849, poi_name: 'John Brown Monument',
+    title: 'Akron Zoo dedicates the pathway to the John Brown Monument',
+    summary: 'Doug Piekarz, president and CEO of the Akron Zoo, speaks at the dedication of the John Brown Monument Trailhead in Akron, Ohio, on Sept.',
+    source_url: 'https://www.beaconjournal.com/picture-gallery/news/local/2026/09/22/akron-zoo-dedicates-the-pathway-to-the-john-brown-monument/91889708007/',
+    publication_date: '2026-09-23T16:00:00Z'
+  };
+  const johnBrownStory = {
+    id: 7178, poi_id: 5700, poi_name: 'John Brown House',
+    title: 'Akron Zoo opens public trail to John Brown Monument',
+    summary: 'Memorial to Akron abolitionist has been off limits to the public for quite some time. A new trail allows people to hike up the hill to see...',
+    source_url: 'https://www.beaconjournal.com/story/news/2026/09/23/akron-zoo-opens-public-trail-to-john-brown-monument/91811981007/',
+    publication_date: '2026-09-23T16:00:00Z'
+  };
+
+  it('collapses one outlet covering one event twice across sibling POIs', () => {
+    const result = dedupeDigestNews([johnBrownGallery, johnBrownStory]);
+    expect(result.map(n => n.id)).toEqual([7178]); // the fuller summary wins
+  });
+
+  it('keeps the story in place when the gallery sorts second', () => {
+    const result = dedupeDigestNews([corpseFlower, johnBrownStory, johnBrownGallery]);
+    expect(result.map(n => n.id)).toEqual([12, 7178]);
+  });
+
+  it('keeps look-alike headlines from different outlets on different POIs', () => {
+    const otherOutlet = { ...johnBrownGallery, source_url: 'https://www.wkyc.com/article/news/local/akron-zoo-john-brown' };
+    expect(dedupeDigestNews([otherOutlet, johnBrownStory])).toHaveLength(2);
+  });
+
+  it('keeps same-outlet headlines published more than 48 hours apart', () => {
+    const weekLater = { ...johnBrownStory, publication_date: '2026-09-30T16:00:00Z' };
+    expect(dedupeDigestNews([weekLater, johnBrownGallery])).toHaveLength(2);
+  });
+
+  it('keeps different same-outlet stories that only share the organization name', () => {
+    const familyOuting = {
+      id: 20, poi_id: 7, poi_name: 'Summit Metro Parks',
+      title: 'Summit Metro Parks to Host Free Fall Family Outing',
+      summary: 'A free Fall Family Outing at Munroe Falls Metro Park.',
+      source_url: 'https://www.summitmetroparks.org/news/fall-family-outing',
+      publication_date: '2026-09-22T16:00:00Z'
+    };
+    const sturgeon = {
+      id: 21, poi_id: 9, poi_name: 'Cuyahoga River',
+      title: 'Prehistoric species returns at Summit Metro Parks sturgeon release',
+      summary: 'Lake sturgeon were released into the river.',
+      source_url: 'https://www.summitmetroparks.org/news/sturgeon',
+      publication_date: '2026-09-21T16:00:00Z'
+    };
+    expect(dedupeDigestNews([familyOuting, sturgeon])).toHaveLength(2);
+  });
 });
 
 /**
@@ -146,5 +201,22 @@ describe('isDigestNewsSource', () => {
     expect(isDigestNewsSource(null)).toBe(true);
     expect(isDigestNewsSource('')).toBe(true);
     expect(isDigestNewsSource('not a url')).toBe(true);
+  });
+});
+
+describe('digestEventLocation', () => {
+  it('leads with the venue and keeps the organizer', () => {
+    expect(digestEventLocation({ poi_name: 'Summit Metro Parks', location_details: 'Prather Trail' }))
+      .toBe('Prather Trail · Summit Metro Parks');
+  });
+
+  it('falls back to the POI name when no venue was collected', () => {
+    expect(digestEventLocation({ poi_name: 'Summit Metro Parks', location_details: null })).toBe('Summit Metro Parks');
+    expect(digestEventLocation({ poi_name: 'Summit Metro Parks', location_details: '  ' })).toBe('Summit Metro Parks');
+  });
+
+  it('does not repeat the POI name when the venue already contains it', () => {
+    expect(digestEventLocation({ poi_name: 'Cuyahoga Valley Farmers Market', location_details: 'Cuyahoga Valley Farmers Market at Howe Meadow' }))
+      .toBe('Cuyahoga Valley Farmers Market at Howe Meadow');
   });
 });

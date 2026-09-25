@@ -81,26 +81,89 @@ function newsTokens(item) {
   );
 }
 
+function titleTokens(item) {
+  const stem = (word) => word.replace(/ies$/, 'y').replace(/(ing|ed|es|s)$/, '');
+  return new Set(
+    (item.title || '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w))
+      .map(stem)
+  );
+}
+
+function sourceHost(sourceUrl) {
+  try {
+    return new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return null;
+  }
+}
+
+const SAME_OUTLET_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+function newsTimestamp(item) {
+  const date = item.publication_date || item.collection_date;
+  return date ? new Date(date).getTime() : null;
+}
+
+function sharesEnough(a, b, minShared, minRatio) {
+  let shared = 0;
+  for (const t of a) if (b.has(t)) shared++;
+  const smaller = Math.min(a.size, b.size);
+  return smaller > 0 && shared >= minShared && shared / smaller >= minRatio;
+}
+
+// One outlet covering one event twice (a photo gallery and the story, a day
+// apart) often lands on two sibling POIs (John Brown Monument vs John Brown
+// House, Sept 25 2026 preview), and a caption-length summary shares almost no
+// vocabulary with the article. Match on outlet + time window + headline
+// instead, ignoring POI.
+function isSameOutletRepeat(a, b) {
+  const hostA = sourceHost(a.source_url);
+  if (!hostA || hostA !== sourceHost(b.source_url)) return false;
+  const timeA = newsTimestamp(a);
+  const timeB = newsTimestamp(b);
+  if (timeA === null || timeB === null || Math.abs(timeA - timeB) > SAME_OUTLET_WINDOW_MS) return false;
+  return sharesEnough(titleTokens(a), titleTokens(b), 4, 0.5);
+}
+
+const summaryLength = (item) => (item.summary || '').length;
+
 // Two stories about the same POI count as one story when their significant
 // vocabulary (title + summary, minus stopwords and the POI's own name) mostly
 // overlaps. Catches the same announcement collected from two outlets, which
 // URL- and title-based dedup at save time cannot (different source, different
-// headline). Input is sorted most-recent-first, so the freshest copy wins.
+// headline). Input is sorted most-recent-first, so the freshest copy wins,
+// except for same-outlet repeats, where the fuller summary wins (the story,
+// not the gallery caption).
 export function dedupeDigestNews(news) {
   const kept = [];
   for (const item of news) {
     const tokens = newsTokens(item);
-    const isDup = kept.some(other => {
-      if (other.poi_id !== item.poi_id) return false;
-      const otherTokens = newsTokens(other);
-      let shared = 0;
-      for (const t of tokens) if (otherTokens.has(t)) shared++;
-      const smaller = Math.min(tokens.size, otherTokens.size);
-      return smaller > 0 && shared >= 4 && shared / smaller >= 0.4;
-    });
-    if (!isDup) kept.push(item);
+    const samePoiDup = kept.some(other =>
+      other.poi_id === item.poi_id && sharesEnough(tokens, newsTokens(other), 4, 0.4)
+    );
+    if (samePoiDup) continue;
+    const outletDupIndex = kept.findIndex(other => isSameOutletRepeat(other, item));
+    if (outletDupIndex === -1) {
+      kept.push(item);
+    } else if (summaryLength(item) > summaryLength(kept[outletDupIndex])) {
+      kept[outletDupIndex] = item;
+    }
   }
   return kept;
+}
+
+// Events are usually attached to the organizing POI ("Summit Metro Parks"),
+// which says nothing about where to show up. Lead with the collected venue and
+// keep the organizer for context, unless the venue already names it.
+export function digestEventLocation(event) {
+  const venue = (event.location_details || '').trim();
+  const poiName = event.poi_name || '';
+  if (!venue) return poiName;
+  if (!poiName || venue.toLowerCase().includes(poiName.toLowerCase())) return venue;
+  return `${venue} · ${poiName}`;
 }
 
 export function upcomingFridayISO(tz = 'America/New_York') {
@@ -300,7 +363,7 @@ ${greeting ? `
     <div class="event">
       <h3 class="event-title">${escapeHtml(event.title)}</h3>
       <p class="event-date">📅 ${dateStr}</p>
-      <p class="poi-name">📍 ${escapeHtml(event.poi_name)}</p>
+      <p class="poi-name">📍 ${escapeHtml(digestEventLocation(event))}</p>
 `;
       if (event.description) {
         html += `      <p class="description">${escapeHtml(event.description)}</p>\n`;

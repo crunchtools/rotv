@@ -3,6 +3,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import crypto from 'crypto';
 import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
+import { redactSettingRow } from '../utils/settingsRedaction.js';
 
 import {
   getQueue,
@@ -624,7 +625,8 @@ function registerTools(server, pool, boss, mcpUserId) {
         FROM admin_settings
         ORDER BY key
       `);
-      return { content: [{ type: 'text', text: JSON.stringify(settingsRows.rows, null, 2) }] };
+      const redacted = settingsRows.rows.map(redactSettingRow);
+      return { content: [{ type: 'text', text: JSON.stringify(redacted, null, 2) }] };
     }
   );
 

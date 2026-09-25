@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { isAdmin, isAuthenticated } from '../middleware/auth.js';
+import { isSecretSetting } from '../utils/settingsRedaction.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -595,9 +596,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const settingsRows = await pool.query('SELECT key, value, updated_at FROM admin_settings');
       const settings = {};
       for (const row of settingsRows.rows) {
-        // Redact API key/token values; expose isSet flag only.
-        // Matches *_api_key and any *_token key (api_token, usft_sharing_token, ...).
-        if (row.key.includes('api_key') || row.key.includes('token')) {
+        // Redact credentials; expose isSet flag only.
+        if (isSecretSetting(row.key)) {
           settings[row.key] = {
             isSet: !!row.value,
             updatedAt: row.updated_at
