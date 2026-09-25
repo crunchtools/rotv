@@ -52,5 +52,5 @@ UPDATE poi_news SET moderation_processed = false
 WHERE moderation_status = 'pending' AND moderation_processed = true
   AND moderation_gates->'date'->>'reason' LIKE 'Future publication date%'
   -- Fix: compare Eastern calendar days like the new gate, so same-day items whose noon
-  -- timestamp hasn't passed yet are released too (PR #621 review)
+  -- timestamp hasn't passed yet are released too (PR #623 review)
   AND (publication_date AT TIME ZONE 'America/New_York')::date <= (NOW() AT TIME ZONE 'America/New_York')::date;

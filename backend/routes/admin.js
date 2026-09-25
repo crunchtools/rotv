@@ -2960,7 +2960,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   // nothing new. Reset one POI (poiId) or all of them to let the history search resume.
   router.post('/news/historical/reset', isAdmin, async (req, res) => {
     try {
-      // Fix: a malformed poiId is rejected instead of falling through to reset-all (PR #621 review)
+      // Fix: a malformed poiId is rejected instead of falling through to reset-all (PR #623 review)
       const hasPoiId = req.body?.poiId !== undefined && req.body?.poiId !== null;
       const poiId = hasPoiId ? Number(req.body.poiId) : null;
       if (hasPoiId && !(Number.isInteger(poiId) && poiId > 0)) {
