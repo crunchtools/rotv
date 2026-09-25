@@ -152,6 +152,12 @@ describe('rescoreFromSignals (spec 044)', () => {
     expect(consensus.score).toBe(5);
   });
 
+  test('missing or empty signals score nothing instead of throwing', () => {
+    for (const [type, signals] of [['event', null], ['event', {}], ['news', undefined], ['event', { start: null }]]) {
+      expect(rescoreFromSignals(type, signals)).toEqual({ date: null, score: 0, sourceMap: {} });
+    }
+  });
+
   test('news reads top-level signals', () => {
     const consensus = rescoreFromSignals('news', { jsonLd: ['2026-09-20'], llmVotes: ['2026-09-20'] });
     expect(consensus.date).toBe('2026-09-20');

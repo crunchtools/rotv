@@ -163,10 +163,7 @@ import { getDomainReputation } from './moderationService.js';
 import { loadListSetting } from './filterLists.js';
 import { classifyPoiType } from '../utils/poiClassify.js';
 import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
-import {
-  buildNewsPrompt, newsPipelineFor, isDueForCurrentNews,
-  DEFAULT_CURRENT_WINDOW_DAYS, DEFAULT_HISTORY_MAX_URLS, DEFAULT_HISTORY_DRY_RUN_LIMIT
-} from './newsPipelines.js';
+import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, DEFAULT_CURRENT_WINDOW_DAYS, DEFAULT_HISTORY_MAX_URLS, DEFAULT_HISTORY_DRY_RUN_LIMIT } from './newsPipelines.js';
 import fs from 'fs';
 
 function debugLog(message) {

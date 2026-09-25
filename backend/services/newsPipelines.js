@@ -4,8 +4,6 @@
 // window were already more than 90 days old. Everything that differs between the two
 // pipelines lives here; the collection, moderation, and digest code asks this module.
 
-export const PIPELINES = ['current', 'historical'];
-
 export const DEFAULT_CURRENT_WINDOW_DAYS = 30;
 export const DEFAULT_HISTORY_MAX_URLS = 3;
 export const DEFAULT_HISTORY_DRY_RUN_LIMIT = 3;
@@ -38,7 +36,7 @@ export function isDueForCurrentNews(tier, lastCollected, now = new Date()) {
 
 // Historical News rotates its angle each monthly run so repeat runs explore instead
 // of re-asking the same question.
-export const HISTORY_QUERY_TEMPLATES = [
+const HISTORY_QUERY_TEMPLATES = [
   (name, context) => `history of ${name}${context ? ` ${context}` : ''}`,
   (name, context) => `${name} historic${context ? ` ${context}` : ''}`,
   (name, context) => `${name}${context ? ` ${context}` : ''} archives photos`
