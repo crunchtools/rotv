@@ -222,7 +222,7 @@ describe('News/Events Slot Architecture Integration Tests', () => {
           }
 
           if (slot.provider !== null) {
-            expect(slot.provider).toBe('gemini');
+            expect(slot.provider).toBe('openrouter');
           }
 
           if (slot.status !== null) {

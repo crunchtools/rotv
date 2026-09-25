@@ -7381,7 +7381,7 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
-.ai-stats-row.gemini.active {
+.ai-stats-row.llm.active {
   background: rgba(33, 150, 243, 0.15);
 }
 

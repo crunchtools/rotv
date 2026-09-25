@@ -5,7 +5,7 @@ An interactive map application for exploring the Cuyahoga Valley region, featuri
 ## Features
 
 - Interactive Leaflet map with POI markers, trails, and municipal boundaries
-- AI-powered news and events collection (Google Gemini, Perplexity)
+- AI-powered news and events collection (LLMs via OpenRouter)
 - OAuth authentication (Google, Facebook)
 - Admin interface for content management
 - Trail status monitoring

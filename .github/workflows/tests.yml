@@ -43,7 +43,7 @@ jobs:
 
       - name: Run tests
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
         run: |
           # Stop any existing containers
@@ -53,7 +53,7 @@ jobs:
           # Write environment file on host BEFORE container starts
           # Mounted into the container so systemd reads it on first boot
           printf '%s\n' \
-            "GEMINI_API_KEY=${GEMINI_API_KEY}" \
+            "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
             "PERPLEXITY_API_KEY=${PERPLEXITY_API_KEY}" \
             "DISABLE_LIVE_BOAT_TRACKER=true" \
             > ~/.rotv/environment

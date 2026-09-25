@@ -1,16 +1,24 @@
-import fetch, { Headers, Request, Response } from 'node-fetch';
-if (!globalThis.fetch) {
-  globalThis.fetch = fetch;
-  globalThis.Headers = Headers;
-  globalThis.Request = Request;
-  globalThis.Response = Response;
-}
-
-import { GoogleGenerativeAI } from '@google/generative-ai';
+// Every LLM call in ROTV goes through this module: OpenRouter chat completions,
+// zero data retention, with a cross-vendor fallback model. Entry points are
+// complete() and the task helpers built on it (research, moderation, icons).
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { getContainingBoundaries } from './geoService.js';
 
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+export const LLM_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4-flash-0731';
+// Different vendor on purpose, so a DeepSeek or DeepInfra outage doesn't take out both
+const FALLBACK_MODELS = ['openai/gpt-6-luna'];
+// Zero data retention and no training on prompts. `order` is a preference,
+// not a restriction: allow_fallbacks defaults to true, so other ZDR hosts
+// and the fallback model's own providers can still serve the request
+const PROVIDER_POLICY = { zdr: true, data_collection: 'deny', order: ['deepinfra'] };
+const REQUEST_TIMEOUT_MS = 60000;
+const MAX_RETRIES = 5;
+const INITIAL_BACKOFF_MS = 2000;
+const MAX_RETRY_AFTER_MS = 30000;
+// Caps one call's total wait during an outage so a collection job keeps moving
+const RETRY_DEADLINE_MS = 180000;
+const RETRYABLE_STATUSES = new Set([429, 502, 503]);
 
 const DEFAULT_PROMPTS = {
   gemini_prompt_brief: `You are a local historian writing for the Cuyahoga Valley National Park visitor guide.
@@ -138,22 +146,124 @@ IMPORTANT:
 - The brief_description and historical_description should contain real, searchable facts
 - For sources, include MAXIMUM 5 unique URLs. No duplicate URLs.`;
 
-// Env var takes priority over DB so CI/tests can override without DB setup
-export async function createGeminiClient(pool) {
-  if (process.env.GEMINI_API_KEY) {
-    console.log('[Gemini] Using API key from environment variable');
-    return new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// Env var takes priority over DB so CI/tests can override without DB setup.
+// Throws when neither holds a key.
+export async function getApiKey(pool) {
+  if (process.env.OPENROUTER_API_KEY) {
+    return process.env.OPENROUTER_API_KEY;
   }
 
   const apiKeyQuery = await pool.query(
-    "SELECT value FROM admin_settings WHERE key = 'gemini_api_key'"
+    "SELECT value FROM admin_settings WHERE key = 'openrouter_api_key'"
   );
 
   if (!apiKeyQuery.rows.length || !apiKeyQuery.rows[0].value) {
-    throw new Error('Gemini API key not configured. Please add your API key in Settings.');
+    throw new Error('OpenRouter API key not configured. Please add your API key in Settings.');
   }
 
-  return new GoogleGenerativeAI(apiKeyQuery.rows[0].value);
+  return apiKeyQuery.rows[0].value;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function backoffMs(response, attempt) {
+  const header = response.headers.get('retry-after');
+  if (header !== null) {
+    // Retry-After is either delay-seconds or an HTTP-date
+    const seconds = Number(header);
+    const hintedMs = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(header) - Date.now();
+    if (Number.isFinite(hintedMs) && hintedMs >= 0) {
+      return Math.min(hintedMs, MAX_RETRY_AFTER_MS);
+    }
+  }
+  return INITIAL_BACKOFF_MS * 2 ** attempt * (0.5 + Math.random());
+}
+
+/**
+ * Build the OpenRouter request body for a single-turn prompt.
+ * @param {string} prompt
+ * @param {{temperature?: number, maxOutputTokens?: number, thinkingBudget?: number}} [options]
+ *   Gemini-era option names, kept so callers didn't change; thinkingBudget 0 turns reasoning off.
+ * @returns {object} chat-completions body with model fallbacks and the ZDR provider policy
+ */
+export function buildRequestBody(prompt, options = {}) {
+  const body = {
+    model: LLM_MODEL,
+    models: [LLM_MODEL, ...FALLBACK_MODELS.filter(m => m !== LLM_MODEL)],
+    messages: [{ role: 'user', content: prompt }],
+    temperature: options.temperature ?? 0.3,
+    provider: PROVIDER_POLICY
+  };
+  if (options.maxOutputTokens) body.max_tokens = options.maxOutputTokens;
+  if (options.thinkingBudget === 0) body.reasoning = { effort: 'none' };
+  return body;
+}
+
+/**
+ * Send a prompt to OpenRouter and resolve to the reply text ('' if empty).
+ * Retries 429/502/503, and 200s carrying an upstream error, with jittered
+ * backoff so the parallel date-vote calls don't retry in lockstep.
+ * @param {import('pg').Pool} pool used only to read the API key from admin_settings
+ * @param {string} prompt
+ * @param {object} [options] see buildRequestBody
+ * @returns {Promise<string>}
+ * @throws when no key is configured, on a 401 or other non-retryable status,
+ *   on a transport failure or timeout, or with the last error once retries
+ *   or the RETRY_DEADLINE_MS budget run out
+ */
+export async function complete(pool, prompt, options = {}) {
+  const apiKey = await getApiKey(pool);
+  const body = JSON.stringify(buildRequestBody(prompt, options));
+  const deadline = Date.now() + RETRY_DEADLINE_MS;
+  let lastError = null;
+  const pause = async (response, attempt) => {
+    const wait = backoffMs(response, attempt);
+    if (attempt >= MAX_RETRIES - 1 || Date.now() + wait > deadline) return false;
+    await sleep(wait);
+    return true;
+  };
+
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    let response;
+    try {
+      response = await fetch(OPENROUTER_API_URL, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'X-Title': 'rotv'
+        },
+        body,
+        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      });
+    } catch (err) {
+      throw new Error(`OpenRouter request failed: ${err.message}`, { cause: err });
+    }
+
+    if (RETRYABLE_STATUSES.has(response.status)) {
+      // Drain the body so the connection returns to the pool before retrying
+      await response.body?.cancel();
+      lastError = new Error(`OpenRouter returned ${response.status}`);
+      if (!(await pause(response, attempt))) break;
+      continue;
+    }
+    if (!response.ok) {
+      const detail = await response.text();
+      const error = new Error(`OpenRouter returned ${response.status}: ${detail.slice(0, 300)}`);
+      if (response.status === 401) error.message = `Invalid OpenRouter API key: ${detail.slice(0, 200)}`;
+      throw error;
+    }
+
+    const data = await response.json();
+    if (data.error) {
+      lastError = new Error(`OpenRouter upstream error: ${data.error.message || JSON.stringify(data.error)}`);
+      if (!(await pause(response, attempt))) break;
+      continue;
+    }
+    return data.choices?.[0]?.message?.content || '';
+  }
+
+  throw lastError;
 }
 
 export async function getPromptTemplate(pool, promptKey) {
@@ -185,54 +295,20 @@ export async function getInterpolatedPrompt(pool, promptKey, destination) {
 }
 
 export async function generateText(pool, promptKey, destination) {
-  const genAI = await createGeminiClient(pool);
-
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig: { temperature: 0 }
-  });
-
   const template = await getPromptTemplate(pool, promptKey);
   const prompt = interpolatePrompt(template, destination);
 
   console.log(`Generating ${promptKey} for destination: ${destination.name}`);
 
-  const generation = await model.generateContent(prompt);
-  const response = generation.response;
-  const text = response.text();
-
-  return text;
+  return complete(pool, prompt, { temperature: 0 });
 }
 
 export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {
-  const genAI = await createGeminiClient(pool);
-
-  const generationConfig = { temperature: 0.3 };
-  if (options.maxOutputTokens) generationConfig.maxOutputTokens = options.maxOutputTokens;
-  if (options.thinkingBudget !== undefined) generationConfig.thinkingConfig = { thinkingBudget: options.thinkingBudget };
-
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig
-  });
-
   console.log(`Generating with custom prompt (${customPrompt.length} chars)`);
-
-  const generation = await model.generateContent(customPrompt);
-  const response = generation.response;
-  const text = response.text();
-
-  return text;
+  return complete(pool, customPrompt, options);
 }
 
 export async function researchLocation(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
-  const genAI = await createGeminiClient(pool);
-
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig: { temperature: 0 }
-  });
-
   let promptTemplate = RESEARCH_PROMPT_TEMPLATE;
   const activitiesList = availableActivities.length > 0
     ? availableActivities.join(', ')
@@ -255,9 +331,7 @@ export async function researchLocation(pool, destination, availableActivities = 
   console.log(`Researching location: ${destination.name} (${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
   logInfo(runId, 'research', null, destination.name, `Research: ${destination.name}`);
 
-  const generation = await model.generateContent(prompt);
-  const response = generation.response;
-  const text = response.text();
+  const text = await complete(pool, prompt, { temperature: 0 });
 
   try {
     const researchData = parseJsonResponse(text);
@@ -274,13 +348,7 @@ export async function researchLocation(pool, destination, availableActivities = 
 }
 
 export async function testApiKey(pool) {
-  const genAI = await createGeminiClient(pool);
-  const model = genAI.getGenerativeModel({ model: GEMINI_MODEL });
-
-  const verification = await model.generateContent('Respond with exactly: API key verified');
-  const text = verification.response.text();
-
-  return text;
+  return complete(pool, 'Respond with exactly: API key verified', { maxOutputTokens: 16, thinkingBudget: 0 });
 }
 
 const EXAMPLE_SVGS = `
@@ -307,12 +375,6 @@ Example 3 - Historic Building (orange background, house shape):
 `;
 
 export async function generateIconSvg(pool, description, color) {
-  const genAI = await createGeminiClient(pool);
-
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL
-  });
-
   const prompt = `You are an icon designer. Generate a simple, minimal SVG map marker icon.
 
 STRICT REQUIREMENTS:
@@ -336,9 +398,7 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
   console.log(`Generating icon SVG for: ${description} (color: ${color})`);
   logInfo(runId, 'research', null, null, `Icon generation: ${description} (${color})`);
 
-  const iconGeneration = await model.generateContent(prompt);
-  const response = iconGeneration.response;
-  let text = response.text();
+  let text = await complete(pool, prompt);
 
   text = text.trim();
 
@@ -423,13 +483,6 @@ Return a JSON object:
 }`;
 
 export async function researchLocationMultiPass(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
-  const genAI = await createGeminiClient(pool);
-
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig: { temperature: 0 }
-  });
-
   const optionalSections = [];
   if (destination.latitude && destination.longitude) {
     optionalSections.push(`Coordinates: ${destination.latitude}, ${destination.longitude}`);
@@ -473,8 +526,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   console.log(`[Research v2] Pass 1 for: ${destination.name}`);
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1: ${destination.name}`);
 
-  const pass1Generation = await model.generateContent(pass1Prompt);
-  const pass1Text = pass1Generation.response.text();
+  const pass1Text = await complete(pool, pass1Prompt, { temperature: 0 });
   let pass1Data;
 
   try {
@@ -498,8 +550,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   console.log(`[Research v2] Pass 2 for: ${destination.name}`);
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 2: ${destination.name}`);
 
-  const pass2Generation = await model.generateContent(pass2Prompt);
-  const pass2Text = pass2Generation.response.text();
+  const pass2Text = await complete(pool, pass2Prompt, { temperature: 0 });
   let pass2Data;
 
   try {
@@ -546,12 +597,6 @@ export async function researchLocationMultiPass(pool, destination, availableActi
 }
 
 export async function moderateContent(pool, content) {
-  const genAI = await createGeminiClient(pool);
-  const model = genAI.getGenerativeModel({
-    model: GEMINI_MODEL,
-    generationConfig: { temperature: 0 }
-  });
-
   let sourceSection = '';
   if (content.source_page_content) {
     sourceSection = `
@@ -642,14 +687,13 @@ NOTE: Old content is NOT a reason to reject. ROTV is a living history journal.
 Return ONLY valid JSON (no markdown, no code blocks):
 {"confidence_score": 0.0, "reasoning": "...", "issues": []}`;
 
-  const geminiResponse = await model.generateContent(prompt);
-  const text = geminiResponse.response.text().trim();
+  const text = (await complete(pool, prompt, { temperature: 0 })).trim();
 
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
   try {
     return JSON.parse(jsonMatch[1].trim());
   } catch {
-    console.error('[Gemini] Failed to parse moderation response:', text);
+    console.error('[LLM] Failed to parse moderation response:', text);
     return { confidence_score: 0.5, reasoning: 'Failed to parse AI response', issues: ['parse_error'] };
   }
 }

@@ -2999,7 +2999,7 @@ async function start() {
       await processTrailStatusCollectionJob(pool, jobId, poiIds);
     });
 
-    // Aggressive 30-min cadence is fine because Gemini Flash cost is negligible
+    // Aggressive 30-min cadence is fine because the classifier model's cost is negligible
     const trailStatusInterval = '*/30 * * * *';
     await scheduleTrailStatusCollection(trailStatusInterval);
 

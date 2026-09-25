@@ -1,6 +1,6 @@
 
 import crypto from 'crypto';
-import { generateTextWithCustomPrompt } from './geminiService.js';
+import { generateTextWithCustomPrompt } from './llmService.js';
 import { renderPage } from './renderPage.js';
 import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
 import { fetchBlueskyPosts, isBlueskyUrl } from './blueskyService.js';
@@ -109,7 +109,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     message: 'Initializing trail status collection...',
     steps: ['Initialized'],
     poiName: poi.name,
-    provider: 'gemini',
+    provider: 'openrouter',
     slotId,
     jobId
   });
@@ -216,7 +216,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     if (lastRow && lastRow.content_hash === contentHash) {
       const ageHours = (Date.now() - new Date(lastRow.created_at).getTime()) / (1000 * 60 * 60);
       if (ageHours < HASH_SKIP_MAX_AGE_HOURS) {
-        console.log(`[Trail Status] Content unchanged for ${poi.name} (hash ${contentHash.slice(0, 12)}, age ${ageHours.toFixed(1)}h), skipping Gemini extraction`);
+        console.log(`[Trail Status] Content unchanged for ${poi.name} (hash ${contentHash.slice(0, 12)}, age ${ageHours.toFixed(1)}h), skipping LLM extraction`);
         updateProgress(poi.id, {
           phase: 'skipped_unchanged',
           message: 'Content unchanged since last check',
@@ -240,12 +240,12 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     updateProgress(poi.id, {
       phase: 'ai_extraction',
-      message: 'Extracting status with Gemini...',
+      message: 'Extracting status with AI...',
       steps: ['Initialized', 'Rendered', 'Extracting']
     });
 
     const currentDate = new Date().toISOString().split('T')[0];
-    const { getPromptTemplate } = await import('./geminiService.js');
+    const { getPromptTemplate } = await import('./llmService.js');
     const promptTemplate = await getPromptTemplate(pool, 'trail_status_prompt');
     const basePrompt = promptTemplate || TRAIL_STATUS_PROMPT;
     const prompt = basePrompt
@@ -256,7 +256,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       .replace(/\{\{timezone\}\}/g, timezone)
       .replace(/\{\{renderedContent\}\}/g, rendered.markdown);
 
-    console.log(`[Trail Status] Extracting status with Gemini (${prompt.length} char prompt)...`);
+    console.log(`[Trail Status] Extracting status with AI (${prompt.length} char prompt)...`);
     const response = await generateTextWithCustomPrompt(pool, prompt, { thinkingBudget: 0 });
 
     console.log(`[Trail Status] Received response (${response.length} chars)`);
@@ -522,7 +522,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
   console.log(`\n[Trail Status Job ${jobId}] Starting batch processing for ${poiIds.length} trails`);
   logInfo(jobId, 'trail_status', null, null, `Job started: ${poiIds.length} trails`, { total: poiIds.length });
 
-  let geminiCalls = 0;
+  let llmCalls = 0;
 
   try {
     const jobResult = await pool.query(`
@@ -568,12 +568,12 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
         }
 
         const poi = poiResult.rows[0];
-        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, 'gemini');
+        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, 'openrouter');
         tracker.updateProgress(poi.id, {
           phase: 'initializing',
           message: `Starting trail status extraction for ${poi.name}...`,
           poiName: poi.name,
-          provider: 'gemini',
+          provider: 'openrouter',
           slotId,
           jobId: jid,
           completed: false
@@ -593,7 +593,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
 
         const poi = poiResult.rows[0];
         const statusCollection = await collectTrailStatus(pool, poi, sheets, 'America/New_York');
-        geminiCalls++;
+        llmCalls++;
 
         console.log(`[Trail Status Job ${jobId}] [${index + 1}/${total}] ${poi.name}: ${statusCollection.statusFound} status found`);
         if (statusCollection.statusFound > 0) {
@@ -614,7 +614,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
           logError(jobId, 'trail_status', poiId, null, error.message);
         }
 
-        const aiUsage = JSON.stringify({ gemini: geminiCalls });
+        const aiUsage = JSON.stringify({ llm: llmCalls });
         await pool.query(`
           UPDATE trail_status_job_status
           SET trails_processed = $1,
@@ -632,7 +632,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
       }
     });
 
-    const finalAiUsage = JSON.stringify({ gemini: geminiCalls });
+    const finalAiUsage = JSON.stringify({ llm: llmCalls });
     await pool.query(`
       UPDATE trail_status_job_status
       SET status = 'completed',
@@ -647,8 +647,8 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     console.log(`[Trail Status Job ${jobId}] Trails processed: ${processedPois.size}/${poiIds.length}`);
     console.log(`[Trail Status Job ${jobId}] Status found: ${totalStatusFound}`);
     console.log(`[Trail Status Job ${jobId}] Status saved: ${totalStatusSaved}`);
-    console.log(`[Trail Status Job ${jobId}] Gemini calls: ${geminiCalls}`);
-    logInfo(jobId, 'trail_status', null, null, `Job completed: ${processedPois.size} trails, ${totalStatusFound} status found`, { trails_processed: processedPois.size, status_found: totalStatusFound, status_saved: totalStatusSaved, gemini_calls: geminiCalls });
+    console.log(`[Trail Status Job ${jobId}] LLM calls: ${llmCalls}`);
+    logInfo(jobId, 'trail_status', null, null, `Job completed: ${processedPois.size} trails, ${totalStatusFound} status found`, { trails_processed: processedPois.size, status_found: totalStatusFound, status_saved: totalStatusSaved, llm_calls: llmCalls });
     await flushJobLogs();
 
 
@@ -657,7 +657,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
     logError(jobId, 'trail_status', null, null, `Job failed: ${error.message}`);
     await flushJobLogs();
 
-    const failureAiUsage = JSON.stringify({ gemini: geminiCalls });
+    const failureAiUsage = JSON.stringify({ llm: llmCalls });
     await pool.query(`
       UPDATE trail_status_job_status
       SET status = 'failed',
@@ -696,7 +696,7 @@ export async function getJobStatus(pool, jobId) {
     trailsProcessed: job.trails_processed,
     statusFound: job.status_found,
     errorMessage: job.error_message,
-    aiUsage: job.ai_usage ? JSON.parse(job.ai_usage) : { gemini: 0 }
+    aiUsage: job.ai_usage ? JSON.parse(job.ai_usage) : { llm: 0 }
   };
 }
 

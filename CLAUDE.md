@@ -34,7 +34,7 @@ Before making any changes, read these documents in order:
 | Frontend | React 18 + Vite 5 |
 | Maps | Leaflet + React-Leaflet |
 | Testing | Vitest + Playwright + Supertest |
-| AI | Google Gemini, Perplexity |
+| AI | OpenRouter (`backend/services/llmService.js`) |
 
 ---
 
@@ -112,7 +112,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 - `backend/routes/` — API route handlers (admin, auth, pois, news, events, media, etc.)
 - `backend/services/` — business logic (collection, moderation, newsletter, geocoding, MCP)
 - `backend/services/mcpServer.js` — MCP admin server on port 3001 (30 tools)
-- `backend/services/moderationService.js` — AI moderation with Gemini scoring
+- `backend/services/moderationService.js` — AI moderation with LLM scoring
 - `backend/services/newsService.js` — News/events web crawling pipeline
 
 ### Database (PostgreSQL 17 + PostGIS)

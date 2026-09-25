@@ -4,7 +4,7 @@ import FilterList, { FilterChip, FILTER_COLORS } from './FilterList';
 
 function DataCollectionSettings() {
   const [result, setResult] = useState(null);
-  const [geminiResult, setGeminiResult] = useState(null);
+  const [openRouterResult, setOpenRouterResult] = useState(null);
   const [serperResult, setSerperResult] = useState(null);
   const [apifyResult, setApifyResult] = useState(null);
 
@@ -20,10 +20,10 @@ function DataCollectionSettings() {
   const [twitterCookiesJson, setTwitterCookiesJson] = useState('');
   const [showCookieInput, setShowCookieInput] = useState(false);
 
-  const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [geminiApiKeySet, setGeminiApiKeySet] = useState(false);
-  const [geminiSaving, setGeminiSaving] = useState(false);
-  const [geminiTesting, setGeminiTesting] = useState(false);
+  const [openRouterApiKey, setOpenRouterApiKey] = useState('');
+  const [openRouterApiKeySet, setOpenRouterApiKeySet] = useState(false);
+  const [openRouterSaving, setOpenRouterSaving] = useState(false);
+  const [openRouterTesting, setOpenRouterTesting] = useState(false);
 
   const [apifyToken, setApifyToken] = useState('');
   const [apifyTokenSet, setApifyTokenSet] = useState(false);
@@ -117,7 +117,7 @@ function DataCollectionSettings() {
   useEffect(() => {
     fetchTwitterCredentials();
     fetchTwitterAuthStatus();
-    fetchGeminiStatus();
+    fetchOpenRouterStatus();
     fetchApifyStatus();
     fetchSerperStatus();
     fetchUsftStatus();
@@ -137,10 +137,10 @@ function DataCollectionSettings() {
   }, [result]);
 
   useEffect(() => {
-    if (!geminiResult) return;
-    const timer = setTimeout(() => setGeminiResult(null), 5000);
+    if (!openRouterResult) return;
+    const timer = setTimeout(() => setOpenRouterResult(null), 5000);
     return () => clearTimeout(timer);
-  }, [geminiResult]);
+  }, [openRouterResult]);
 
   useEffect(() => {
     if (!serperResult) return;
@@ -171,11 +171,11 @@ function DataCollectionSettings() {
     finally { setTwitterLoading(false); }
   };
 
-  const fetchGeminiStatus = async () => {
+  const fetchOpenRouterStatus = async () => {
     try {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) { const settings = await response.json(); setGeminiApiKeySet(settings.gemini_api_key?.isSet || false); }
-    } catch (err) { console.error('Error fetching Gemini status:', err); }
+      if (response.ok) { const settings = await response.json(); setOpenRouterApiKeySet(settings.openrouter_api_key?.isSet || false); }
+    } catch (err) { console.error('Error fetching OpenRouter status:', err); }
   };
 
   const fetchApifyStatus = async () => {
@@ -185,36 +185,36 @@ function DataCollectionSettings() {
     } catch (err) { console.error('Error fetching Apify status:', err); }
   };
 
-  const handleSaveGeminiApiKey = async () => {
-    if (!geminiApiKey.trim()) { setGeminiResult({ type: 'error', message: 'API key cannot be empty' }); return; }
-    setGeminiSaving(true); setGeminiResult(null);
+  const handleSaveOpenRouterApiKey = async () => {
+    if (!openRouterApiKey.trim()) { setOpenRouterResult({ type: 'error', message: 'API key cannot be empty' }); return; }
+    setOpenRouterSaving(true); setOpenRouterResult(null);
     try {
-      const response = await fetch('/api/admin/settings/gemini_api_key', {
+      const response = await fetch('/api/admin/settings/openrouter_api_key', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: geminiApiKey })
+        body: JSON.stringify({ value: openRouterApiKey })
       });
       if (response.ok) {
-        setGeminiResult({ type: 'success', message: 'Saved successfully' });
-        setGeminiApiKey('');
-        setGeminiApiKeySet(true);
-        await fetchGeminiStatus();
+        setOpenRouterResult({ type: 'success', message: 'Saved successfully' });
+        setOpenRouterApiKey('');
+        setOpenRouterApiKeySet(true);
+        await fetchOpenRouterStatus();
       } else { const error = await response.json(); throw new Error(error.error || 'Failed to save key'); }
-    } catch (err) { setGeminiResult({ type: 'error', message: `Save failed: ${err.message}` }); }
-    finally { setGeminiSaving(false); }
+    } catch (err) { setOpenRouterResult({ type: 'error', message: `Save failed: ${err.message}` }); }
+    finally { setOpenRouterSaving(false); }
   };
 
-  const handleTestGeminiApiKey = async () => {
-    setGeminiTesting(true); setGeminiResult(null);
+  const handleTestOpenRouterApiKey = async () => {
+    setOpenRouterTesting(true); setOpenRouterResult(null);
     try {
       const response = await fetch('/api/admin/ai/test-key', { method: 'POST', credentials: 'include' });
       const data = await response.json();
       if (data.success) {
-        setGeminiResult({ type: 'success', message: 'Test passed ✓' });
+        setOpenRouterResult({ type: 'success', message: 'Test passed ✓' });
       } else {
-        setGeminiResult({ type: 'error', message: data.error || 'Test failed' });
+        setOpenRouterResult({ type: 'error', message: data.error || 'Test failed' });
       }
-    } catch (err) { setGeminiResult({ type: 'error', message: `Test failed: ${err.message}` }); }
-    finally { setGeminiTesting(false); }
+    } catch (err) { setOpenRouterResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    finally { setOpenRouterTesting(false); }
   };
 
   const handleSaveApifyToken = async () => {
@@ -805,11 +805,11 @@ function DataCollectionSettings() {
 
 
         <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Google Gemini</h5>
+          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>OpenRouter</h5>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${geminiApiKeySet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{geminiApiKeySet ? 'Configured' : 'Not configured'}</span>
-            {geminiResult && (
+            <span className={`status-indicator ${openRouterApiKeySet ? 'configured' : 'not-configured'}`}></span>
+            <span style={{ fontSize: '0.9rem' }}>{openRouterApiKeySet ? 'Configured' : 'Not configured'}</span>
+            {openRouterResult && (
               <span
                 style={{
                   marginLeft: '12px',
@@ -817,37 +817,37 @@ function DataCollectionSettings() {
                   borderRadius: '4px',
                   fontSize: '0.85rem',
                   fontWeight: '500',
-                  backgroundColor: geminiResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: geminiResult.type === 'success' ? '#155724' : '#721c24',
+                  backgroundColor: openRouterResult.type === 'success' ? '#d4edda' : '#f8d7da',
+                  color: openRouterResult.type === 'success' ? '#155724' : '#721c24',
                   cursor: 'pointer'
                 }}
-                onClick={() => setGeminiResult(null)}
+                onClick={() => setOpenRouterResult(null)}
                 title="Click to dismiss"
               >
-                {geminiResult.message}
+                {openRouterResult.message}
               </span>
             )}
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
             <input
               type="password"
-              value={geminiApiKey || (geminiApiKeySet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setGeminiApiKey(e.target.value)}
+              value={openRouterApiKey || (openRouterApiKeySet ? '••••••••••••••••••••••••' : '')}
+              onChange={e => setOpenRouterApiKey(e.target.value)}
               placeholder="Enter API key..."
-              disabled={geminiSaving}
+              disabled={openRouterSaving}
               style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
             />
-            <button className="action-btn primary" onClick={handleSaveGeminiApiKey} disabled={geminiSaving || !geminiApiKey.trim()}
+            <button className="action-btn primary" onClick={handleSaveOpenRouterApiKey} disabled={openRouterSaving || !openRouterApiKey.trim()}
               style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {geminiSaving ? 'Saving...' : 'Save'}
+              {openRouterSaving ? 'Saving...' : 'Save'}
             </button>
-            <button className="action-btn secondary" onClick={handleTestGeminiApiKey} disabled={geminiTesting || !geminiApiKeySet}
+            <button className="action-btn secondary" onClick={handleTestOpenRouterApiKey} disabled={openRouterTesting || !openRouterApiKeySet}
               style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {geminiTesting ? 'Testing...' : 'Test'}
+              {openRouterTesting ? 'Testing...' : 'Test'}
             </button>
           </div>
           <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            AI-powered content generation. Get key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">Google AI Studio</a>
+            AI-powered content generation. Get key from <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a>
           </p>
         </div>
 

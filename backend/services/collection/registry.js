@@ -91,7 +91,7 @@ export const COLLECTION_TYPES = [
   {
     id: 'moderation_sweep',
     label: 'Content Moderation',
-    description: 'Scores pending content with Gemini (every 15 min)',
+    description: 'Scores pending content with AI (every 15 min)',
     icon: '\u{1F50D}',
     promptKeys: [],
     scheduleJobName: 'content-moderation-sweep',

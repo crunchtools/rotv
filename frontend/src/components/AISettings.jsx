@@ -44,7 +44,7 @@ function AISettings() {
     setMessage(null);
 
     try {
-      const response = await fetch('/api/admin/settings/gemini_api_key', {
+      const response = await fetch('/api/admin/settings/openrouter_api_key', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -93,7 +93,7 @@ function AISettings() {
   if (loading) {
     return (
       <div className="ai-settings">
-        <h3>AI Integration (Google Gemini)</h3>
+        <h3>AI Integration (OpenRouter)</h3>
         <p>Loading AI settings...</p>
       </div>
     );
@@ -101,7 +101,7 @@ function AISettings() {
 
   return (
     <div className="ai-settings">
-      <h3>AI Integration (Google Gemini)</h3>
+      <h3>AI Integration (OpenRouter)</h3>
       <p className="ai-description">
         Configure AI-powered content generation for destination descriptions.
       </p>
@@ -113,8 +113,8 @@ function AISettings() {
       <div className="ai-section">
         <h4>API Key</h4>
         <div className="api-key-status">
-          <span className={`status-indicator ${settings?.gemini_api_key?.isSet ? 'configured' : 'not-configured'}`}></span>
-          <span>{settings?.gemini_api_key?.isSet ? 'API key configured' : 'API key not configured'}</span>
+          <span className={`status-indicator ${settings?.openrouter_api_key?.isSet ? 'configured' : 'not-configured'}`}></span>
+          <span>{settings?.openrouter_api_key?.isSet ? 'API key configured' : 'API key not configured'}</span>
         </div>
 
         <div className="api-key-form">
@@ -122,7 +122,7 @@ function AISettings() {
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Enter new Gemini API key..."
+            placeholder="Enter new OpenRouter API key..."
             className="api-key-input"
           />
           <button
@@ -132,7 +132,7 @@ function AISettings() {
           >
             {saving ? 'Saving...' : 'Save Key'}
           </button>
-          {settings?.gemini_api_key?.isSet && (
+          {settings?.openrouter_api_key?.isSet && (
             <button
               className="sync-btn process-btn"
               onClick={handleTestApiKey}
@@ -144,8 +144,8 @@ function AISettings() {
         </div>
         <p className="field-hint">
           Get your API key from{' '}
-          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">
-            Google AI Studio
+          <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">
+            OpenRouter
           </a>
         </p>
       </div>
