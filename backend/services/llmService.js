@@ -234,7 +234,8 @@ export async function complete(pool, prompt, options = {}) {
           'X-Title': 'rotv'
         },
         body,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+        // Fix: clamp each attempt to the remaining retry budget (PR #629 review)
+        signal: AbortSignal.timeout(Math.max(1000, Math.min(REQUEST_TIMEOUT_MS, deadline - Date.now())))
       });
     } catch (err) {
       throw new Error(`OpenRouter request failed: ${err.message}`, { cause: err });
