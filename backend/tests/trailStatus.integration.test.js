@@ -5,6 +5,7 @@ const { Pool } = pg;
 // Import the trail status service for direct testing
 import { collectTrailStatus, getLatestTrailStatus } from '../services/trailStatusService.js';
 
+import { TWITTER_COOKIES, hasTwitterCookies } from './helpers/twitterCookies.js';
 /**
  * Trail Status Integration Tests
  *
@@ -34,34 +35,22 @@ describe('Trail Status Integration Tests', () => {
     await setupEastRimTrail(pool);
   });
 
-  // Twitter cookies for authenticated access (valid for ~1 year)
-  // Note: sameSite values normalized to Playwright-compatible values (Strict|Lax|None)
-  const TWITTER_COOKIES = [
-    {"domain":".x.com","expirationDate":1803885827.426768,"hostOnly":false,"httpOnly":true,"name":"auth_token","path":"/","sameSite":"None","secure":true,"session":false,"value":"9e1d4d0bdee8dbebb364c2fffc0aa1fbfac74d7f"},
-    {"domain":".x.com","expirationDate":1803885694.853395,"hostOnly":false,"httpOnly":false,"name":"guest_id","path":"/","sameSite":"None","secure":true,"session":false,"value":"v1%3A176932569481346750"},
-    {"domain":".x.com","expirationDate":1801615263.323888,"hostOnly":false,"httpOnly":false,"name":"twid","path":"/","sameSite":"None","secure":true,"session":false,"value":"u%3D2015324658405408768"},
-    {"domain":".x.com","expirationDate":1803885827.426768,"hostOnly":false,"httpOnly":true,"name":"_twitter_sess","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"BAh7BiIKZmxhc2hJQzonQWN0aW9uQ29udHJvbGxlcjo6Rmxhc2g6OkZsYXNo%250ASGFzaHsABjoKQHVzZWR7AA%253D%253D--1164b91ac812d853b877e93ddb612b7471bebc74"},
-    {"domain":".x.com","expirationDate":1803885827.597045,"hostOnly":false,"httpOnly":false,"name":"ct0","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"35886c82558d14f431693bf87659a9cc4df3259668fae3ff0bff701a1a0a8c18579850cb19c8685aa37e1822c921e4c280b7a5eb1c125ec734c85c546a6437567ec2850428841105bfd2b1fd200d5430"},
-    {"domain":".x.com","expirationDate":1785614577.129721,"hostOnly":false,"httpOnly":false,"name":"d_prefs","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"MToxLGNvbnNlbnRfdmVyc2lvbjoyLHRleHRfdmVyc2lvbjoxMDAw"},
-    {"domain":".x.com","expirationDate":1803885694.708093,"hostOnly":false,"httpOnly":false,"name":"dnt","path":"/","sameSite":"None","secure":true,"session":false,"value":"1"},
-    {"domain":".x.com","expirationDate":1804276977.326857,"hostOnly":false,"httpOnly":false,"name":"guest_id_ads","path":"/","sameSite":"None","secure":true,"session":false,"value":"v1%3A176932569481346750"},
-    {"domain":".x.com","expirationDate":1804276977.327102,"hostOnly":false,"httpOnly":false,"name":"guest_id_marketing","path":"/","sameSite":"None","secure":true,"session":false,"value":"v1%3A176932569481346750"},
-    {"domain":".x.com","expirationDate":1803885827.426455,"hostOnly":false,"httpOnly":true,"name":"kdt","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"Ponn8jflmTzrjRgr8rj1pqQh7LIshja0mUtU9b7s"},
-    {"domain":".x.com","expirationDate":1804276977.327184,"hostOnly":false,"httpOnly":false,"name":"personalization_id","path":"/","sameSite":"None","secure":true,"session":false,"value":"\"v1_fNqeELqjE8f2NiUqY6jDiA==\""}
-  ];
+  // X cookies come from TEST_TWITTER_COOKIES via helpers/twitterCookies.js
 
   /**
    * Setup East Rim Trail with correct status_url and Twitter cookies
    * This ensures the test data is always correctly configured
    */
   async function setupEastRimTrail(pool) {
-    // First, insert Twitter cookies for authenticated access
-    await pool.query(`
-      INSERT INTO admin_settings (key, value, updated_at)
-      VALUES ('twitter_cookies', $1, CURRENT_TIMESTAMP)
-      ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
-    `, [JSON.stringify(TWITTER_COOKIES)]);
-    console.log(`[Test Setup] Inserted Twitter cookies for authenticated access`);
+    // Authenticated X access only when TEST_TWITTER_COOKIES is supplied (helpers/twitterCookies.js)
+    if (hasTwitterCookies) {
+      await pool.query(`
+        INSERT INTO admin_settings (key, value, updated_at)
+        VALUES ('twitter_cookies', $1, CURRENT_TIMESTAMP)
+        ON CONFLICT (key) DO UPDATE SET value = $1, updated_at = CURRENT_TIMESTAMP
+      `, [JSON.stringify(TWITTER_COOKIES)]);
+      console.log(`[Test Setup] Inserted Twitter cookies for authenticated access`);
+    }
 
     // Remove any existing East Rim trails (including variations) to ensure clean state
     await pool.query(`DELETE FROM pois WHERE name LIKE '%East Rim%' AND 'trail' = ANY(poi_roles)`);

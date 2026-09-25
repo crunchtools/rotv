@@ -266,7 +266,7 @@ function ContentFormModal({
           {showRecurring && (
             <>
               <div className="form-section">
-                <label>Venue (where it's held)</label>
+                <label>Venue (where it&apos;s held)</label>
                 <PoiSearchSelect
                   pois={localPois}
                   value={recur.venue_poi_id}

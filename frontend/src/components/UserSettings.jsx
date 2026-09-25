@@ -137,7 +137,7 @@ function UserSettings({ user, initialTab }) {
                   required
                 />
                 <p className="field-hint">
-                  You'll receive a confirmation email from Buttondown to complete your subscription
+                  You&apos;ll receive a confirmation email from Buttondown to complete your subscription
                 </p>
               </div>
 
@@ -186,7 +186,7 @@ function UserSettings({ user, initialTab }) {
             <div className="settings-info-box">
               <div className="info-box-header">
                 <span className="info-icon">ℹ️</span>
-                <strong>What's in the Newsletter?</strong>
+                <strong>What&apos;s in the Newsletter?</strong>
               </div>
               <ul className="info-list">
                 <li>Events happening this weekend (Friday-Sunday)</li>

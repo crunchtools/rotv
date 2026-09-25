@@ -95,7 +95,7 @@ export function findPublicationDate(text, title, timezone = 'America/New_York') 
 
   const patterns = [
     /(?:published|posted|updated|written|date)\s*(?:on|:)?\s*(.+?)(?:\n|$)/i,
-    /(?:^|\n)\s*[Bb]y\s+.+?[\|–—-]\s*(.+?)(?:\n|$)/,
+    /(?:^|\n)\s*[Bb]y\s+.+?[|–—-]\s*(.+?)(?:\n|$)/,
     /(?:^|\n)\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{1,2},?\s+\d{4})/,
   ];
 
@@ -135,7 +135,7 @@ export function extractUrlDate(url) {
     if (isoDate) return isoDate;
   }
 
-  const compactMatch = path.match(/\/(\d{4})(\d{2})(\d{2})[^\/\d]/);
+  const compactMatch = path.match(/\/(\d{4})(\d{2})(\d{2})[^/\d]/);
   if (compactMatch) {
     const isoDate = validateDateParts(compactMatch[1], compactMatch[2], compactMatch[3]);
     if (isoDate) return isoDate;

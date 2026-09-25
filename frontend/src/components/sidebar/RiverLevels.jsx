@@ -80,7 +80,7 @@ function GaugeCard({ gauge, cachedReadings }) {
       </div>
 
       {error ? (
-        <p className="river-levels-empty">Couldn't load readings.</p>
+        <p className="river-levels-empty">Couldn&apos;t load readings.</p>
       ) : readings === null ? (
         <p className="river-levels-empty">Loading…</p>
       ) : (
