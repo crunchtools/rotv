@@ -39,11 +39,12 @@ fi
 
 echo "Running Gatehouse AI code review..."
 
-# Mount the repo read-only and run gatehouse with --base
+# Pipe the host-side diff in on stdin; the container never runs git, so this
+# works from a worktree, whose .git file points outside the mount.
 REPO_ROOT=$(git rev-parse --show-toplevel)
 
-podman run --rm \
+printf '%s\n' "$DIFF" | podman run --rm -i \
     -e "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
     -v "${REPO_ROOT}:/repo:ro,Z" \
     -w /repo \
-    "$GATEHOUSE_IMAGE" --base "$BASE" --advisory
+    "$GATEHOUSE_IMAGE" --stdin --advisory
