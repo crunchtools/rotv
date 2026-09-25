@@ -1,0 +1,61 @@
+import { describe, it, expect } from 'vitest';
+import { jsonLdVenueFor } from '../services/eventVenue.js';
+
+// JSON-LD from summitmetroparks.org/program-events/kayak-canoe-open-house-3/,
+// whose Readability markdown only names the Nature Realm contact line.
+const mfLakeArea = {
+  name: 'Kayak &amp; Canoe Open House',
+  location: {
+    '@type': 'Place',
+    name: 'MF/Lake Area',
+    url: 'https://www.summitmetroparks.org/venue/mf-lake-area/',
+    address: {
+      '@type': 'PostalAddress',
+      streetAddress: '521 S. River Rd.',
+      addressLocality: 'Munroe Falls',
+      addressRegion: 'OH',
+      postalCode: '44262',
+      addressCountry: 'United States'
+    }
+  }
+};
+
+describe('jsonLdVenueFor', () => {
+  it('uses the page\'s only event even when the model renamed it', () => {
+    expect(jsonLdVenueFor({ title: 'Paddling Program' }, [mfLakeArea]))
+      .toBe('MF/Lake Area, 521 S. River Rd., Munroe Falls, OH');
+  });
+
+  it('matches by title on a page with several events', () => {
+    const other = { name: 'Moth Night', location: { name: 'Nature Realm Visitors Center' } };
+    expect(jsonLdVenueFor({ title: 'Moth Night' }, [mfLakeArea, other])).toBe('Nature Realm Visitors Center');
+  });
+
+  it('returns null for a multi-event page with no title match', () => {
+    const other = { name: 'Moth Night', location: { name: 'Nature Realm Visitors Center' } };
+    expect(jsonLdVenueFor({ title: 'Bird Walk' }, [mfLakeArea, other])).toBeNull();
+  });
+
+  it('returns null when the page has no JSON-LD events or no locations', () => {
+    expect(jsonLdVenueFor({ title: 'Anything' }, undefined)).toBeNull();
+    expect(jsonLdVenueFor({ title: 'Anything' }, [])).toBeNull();
+    expect(jsonLdVenueFor({ title: 'Anything' }, [{ name: 'Anything', location: null }])).toBeNull();
+  });
+
+  it('handles a name-only place, an address-only place, and a plain string', () => {
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location: { name: 'Howe Meadow' } }])).toBe('Howe Meadow');
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location: { address: { streetAddress: '4040 Riverview Rd.', addressLocality: 'Peninsula', addressRegion: 'OH' } } }]))
+      .toBe('4040 Riverview Rd., Peninsula, OH');
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location: 'Boston Mill Visitor Center' }])).toBe('Boston Mill Visitor Center');
+  });
+
+  it('does not repeat a name the address already contains', () => {
+    const place = { name: 'Peninsula', address: '1565 Boston Mills Rd, Peninsula, OH' };
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location: place }])).toBe('1565 Boston Mills Rd, Peninsula, OH');
+  });
+
+  it('takes the first usable place from a location array', () => {
+    const location = [{ '@type': 'VirtualLocation' }, { name: 'Liberty Park' }];
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('Liberty Park');
+  });
+});

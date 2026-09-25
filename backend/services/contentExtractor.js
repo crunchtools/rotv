@@ -116,6 +116,7 @@ export async function extractPageContent(url, options = {}) {
         const getMetaName = (name) => document.querySelector(`meta[name="${name}"]`)?.content || null;
 
         const jsonLdDates = [];
+        const jsonLdEvents = [];
         let eventStartDate = null;
         let eventEndDate = null;
         document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
@@ -130,6 +131,13 @@ export async function extractPageContent(url, options = {}) {
                 item['@graph']?.map?.(n => n.datePublished || n.uploadDate || n.startDate)
               ].flat().filter(Boolean);
               jsonLdDates.push(...candidates);
+
+              for (const node of item['@graph'] || [item]) {
+                const types = [].concat(node?.['@type'] || []);
+                if (types.some(t => /Event$/.test(t))) {
+                  jsonLdEvents.push({ name: node.name || null, location: node.location || null });
+                }
+              }
 
               if (!eventStartDate) {
                 eventStartDate = item.startDate
@@ -174,6 +182,7 @@ export async function extractPageContent(url, options = {}) {
           parselyPubDate: getMetaName('parsely-pub-date'),
           dcDate: getMetaName('dc.date'),
           jsonLdDates,
+          jsonLdEvents,
           timeDates,
           socialDates,
           eventStartDate,
