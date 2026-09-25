@@ -2632,8 +2632,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       if (pipeline && !PIPELINE_LABELS[pipeline]) {
         return res.status(400).json({ error: `Unknown pipeline: ${pipeline}` });
       }
-      const tierLabel = pipeline ? PIPELINE_LABELS[pipeline] : 'all POIs';
-      console.log(`Admin ${req.user.email} triggered news collection for ${tierLabel}`);
+      const jobLabel = pipeline ? PIPELINE_LABELS[pipeline] : 'all POIs';
+      console.log(`Admin ${req.user.email} triggered news collection for ${jobLabel}`);
 
       const runningJobCheck = await pool.query(`
         SELECT id FROM news_job_status
@@ -2653,7 +2653,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         : await getAllPoisForCollection(pool);
 
       if (poiIds.length === 0) {
-        return res.status(400).json({ error: `No POIs found for ${tierLabel}` });
+        return res.status(400).json({ error: `No POIs found for ${jobLabel}` });
       }
 
       const source = pipeline ? `manual-${pipeline}` : 'manual';
@@ -2663,7 +2663,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       res.json({
         success: true,
-        message: `${pipeline ? tierLabel : 'News & events'} collection started (${totalPois} POIs)`,
+        message: `${pipeline ? jobLabel : 'News & events'} collection started (${totalPois} POIs)`,
         jobId,
         totalPois
       });

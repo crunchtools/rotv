@@ -2951,8 +2951,8 @@ async function start() {
     for (const retired of RETIRED_TIER_JOB_NAMES) {
       try {
         await unscheduleJob(retired);
-      } catch {
-        // Already removed — harmless
+      } catch (error) {
+        console.warn(`Could not unschedule retired job ${retired}: ${error.message}`);
       }
     }
 
