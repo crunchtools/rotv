@@ -162,6 +162,7 @@ import { searchNewsUrls } from './serperService.js';
 import { getDomainReputation } from './moderationService.js';
 import { loadListSetting } from './filterLists.js';
 import { classifyPoiType } from '../utils/poiClassify.js';
+import { jsonLdVenueFor } from './eventVenue.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -477,8 +478,9 @@ PAGE CONTENT:
 ${markdown}
 
 Return ONLY valid JSON:
-{"title": "Event name", "description": "Brief description", "event_type": "hike|race|concert|festival|program|volunteer|arts|community|alert", "location_details": "Where the event takes place"}
+{"title": "Event name", "description": "Brief description", "event_type": "hike|race|concert|festival|program|volunteer|arts|community|alert", "location_details": "Where attendees go: venue, park, trailhead, or address"}
 
+location_details: a phone number or "call X with questions" names a contact office, not the venue. Use "" if the page doesn't say where the event is.
 Do NOT include date or source_url fields — those are set separately.
 Return {} if no event found.`;
 }
@@ -593,6 +595,9 @@ async function processPage(pool, page, poi, contentType, options = {}) {
     let item;
     try { item = JSON.parse(jsonMatch[0]); } catch { continue; }
     if (!item.title) continue;
+    if (isEvent) {
+      item.location_details = jsonLdVenueFor(item, od.jsonLdEvents) || item.location_details || null;
+    }
 
     updateProgress(poi.id, { phase: 'dates', message: `${contentType} ${i}/${count} from ${url}` });
     const dateSnippet = `${item.title}\n${item.description || item.summary || ''}\n\n${pageText}`.substring(0, 2000);
