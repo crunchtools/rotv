@@ -964,7 +964,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
     const [searchUrlsResult, historyMaxRow] = await Promise.all([
       pool.query("SELECT value FROM admin_settings WHERE key = 'max_search_urls'"),
-      pool.query("SELECT value FROM admin_settings WHERE key = 'news_history_max_urls'")
+      isHistorical
+        ? pool.query("SELECT value FROM admin_settings WHERE key = 'news_history_max_urls'")
+        : { rows: [] }
     ]);
     const historyMaxUrls = (() => {
       const val = parseInt(historyMaxRow.rows[0]?.value, 10);

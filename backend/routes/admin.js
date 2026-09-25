@@ -2960,7 +2960,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   // nothing new. Reset one POI (poiId) or all of them to let the history search resume.
   router.post('/news/historical/reset', isAdmin, async (req, res) => {
     try {
-      const poiId = req.body?.poiId ? parseInt(req.body.poiId, 10) : null;
+      // Fix: a malformed poiId is rejected instead of falling through to reset-all (PR #621 review)
+      const hasPoiId = req.body?.poiId !== undefined && req.body?.poiId !== null;
+      const poiId = hasPoiId ? Number(req.body.poiId) : null;
+      if (hasPoiId && !(Number.isInteger(poiId) && poiId > 0)) {
+        return res.status(400).json({ error: 'poiId must be a positive integer' });
+      }
       const resetResult = poiId
         ? await pool.query('UPDATE pois SET history_dry_runs = 0 WHERE id = $1', [poiId])
         : await pool.query('UPDATE pois SET history_dry_runs = 0 WHERE history_dry_runs > 0');
