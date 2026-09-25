@@ -70,6 +70,14 @@ describe('jsonLdVenueFor', () => {
     expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('6751 Akron Peninsula Road, Peninsula, OH 44264');
   });
 
+  it('decodes WordPress HTML entities in names and titles', () => {
+    const grow = { name: 'Garden Day', location: { name: 'Let&#8217;s Grow Akron Headquarters', address: { streetAddress: '467 Harvey Ave.', addressLocality: 'Akron', addressRegion: 'OH' } } };
+    expect(jsonLdVenueFor({ title: 'Garden Day' }, [grow])).toBe('Let’s Grow Akron Headquarters, 467 Harvey Ave., Akron, OH');
+    const other = { name: 'Moth Night', location: { name: 'Nature Realm Visitors Center' } };
+    expect(jsonLdVenueFor({ title: 'Kayak & Canoe Open House' }, [mfLakeArea, other]))
+      .toBe('MF/Lake Area, 521 S. River Rd., Munroe Falls, OH');
+  });
+
   it('takes the first usable place from a location array', () => {
     const location = [{ '@type': 'VirtualLocation' }, { name: 'Liberty Park' }];
     expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('Liberty Park');
