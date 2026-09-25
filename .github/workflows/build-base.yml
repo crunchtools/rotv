@@ -78,8 +78,8 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
-      # Distinct event type: this workflow listens for parent-image-updated,
-      # so re-sending it here re-triggers this workflow forever.
+      # Fix: build-base.yml itself listens for parent-image-updated, so sending
+      # that event here re-triggered build-base forever (PR #627 review).
       - name: Trigger rotv rebuild
         env:
           GH_TOKEN: ${{ secrets.CRUNCHTOOLS_DISPATCH_TOKEN }}
