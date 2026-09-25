@@ -13,7 +13,7 @@ on:
       - 'image-server/**'
       - 'Containerfile.images'
   repository_dispatch:
-    types: [parent-image-updated]
+    types: [rotv-base-updated]
   workflow_dispatch:
 env:
   REGISTRY: quay.io

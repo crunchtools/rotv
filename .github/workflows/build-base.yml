@@ -78,12 +78,14 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
+      # Distinct event type: this workflow listens for parent-image-updated,
+      # so re-sending it here re-triggers this workflow forever.
       - name: Trigger rotv rebuild
         env:
           GH_TOKEN: ${{ secrets.CRUNCHTOOLS_DISPATCH_TOKEN }}
         run: |
           gh api repos/crunchtools/rotv/dispatches \
-            -f event_type=parent-image-updated
+            -f event_type=rotv-base-updated
 
   build-and-push-ghcr:
     runs-on: ubuntu-latest
