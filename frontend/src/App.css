@@ -1829,6 +1829,16 @@ body {
 }
 
 /* Source-POI label on rolled-up boundary/org news & events (#406) */
+.poi-news-history-tag {
+  display: inline-block;
+  font-size: 0.72rem;
+  color: #7a5a1e;
+  background: #f5ecd9;
+  border-radius: 0.75rem;
+  padding: 0.05rem 0.5rem;
+  font-weight: 500;
+}
+
 .poi-item-source {
   display: inline-block;
   font-size: 0.72rem;

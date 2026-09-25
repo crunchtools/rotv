@@ -2,31 +2,29 @@
 
 ## Overview
 
-Serper integration adds Layer 2 (external news) to the news collection system, providing comprehensive news coverage through two parallel layers:
+Serper (a Google search API) supplies the external coverage behind Phase II of news collection. It serves two pipelines (spec 044), each calling one endpoint:
 
-**Layer 1:** Official POI URLs (news_url field) - primary source
-**Layer 2:** Serper external news - runs for every POI
+| Pipeline | Endpoint | Date filter | Query | URLs crawled per POI |
+|----------|----------|-------------|-------|----------------------|
+| **Current News** | `/news` (Google News) | `tbs: qdr:m` (past month) | `"{POI}" {boundaries}` | `max_search_urls` |
+| **Historical News** | `/search` (web) | none | rotates: `history of {POI} {boundaries}`, `{POI} historic {boundaries}`, `{POI} {boundaries} archives photos` | `news_history_max_urls` (3) |
 
-Both layers use the same Playwright rendering → Gemini extraction pipeline.
+Before spec 044, every news collection called both endpoints with `Latest news for {POI} in {boundaries}` and no date filter. Without `tbs`, `/news` for Brandywine Falls returned stories 3-11 months old; with `qdr:m` all results were from the past month.
+
+Results from either endpoint go through the same Playwright rendering → Gemini extraction pipeline as the POI's own pages (see `docs/NEWS_EVENTS_ARCHITECTURE.md`). A result that can't be rendered but carries a date is saved from its search snippet (`from_snippet`), and Current News snippet items wait for human review.
 
 ---
 
 ## Architecture
 
 ```
-News Collection Flow:
-├── Layer 1: Official POI Content
-│   ├── If news_url exists: render with Playwright
-│   ├── Gemini classifier (LISTING/DETAIL/HYBRID)
-│   └── Extract structured news items
-│
-└── Layer 2: External News via Serper (NEW)
-    ├── Geographic grounding via PostGIS
-    │   └── Query: "POI_NAME BOUNDARY_NAME news"
-    ├── Serper API search (returns 9-10 URLs)
-    ├── Render each URL with Playwright (1.5s delay)
-    ├── Gemini extraction (no search grounding)
-    └── Deduplicate with Layer 1 by title
+Phase II (per POI):
+├── Geographic grounding via PostGIS (containing boundaries, smallest first)
+├── serperRequestFor(pipeline, name, boundaries, history_query_index)   ← newsPipelines.js
+├── POST google.serper.dev/{news|search}  { q, num, tbs? }
+├── Drop same-origin, blocklisted, and already-known URLs
+├── Render → classify → extract (pipeline prompt) → date → save (labeled by age)
+└── Historical News: zero fresh URLs → pois.history_dry_runs + 1
 ```
 
 ---
@@ -80,7 +78,7 @@ LIMIT 1
 
 **Functions:**
 1. `getGeographicContext(pool, poiId)` - PostGIS spatial query
-2. `searchNewsUrls(pool, poi)` - Serper API with grounding
+2. `searchNewsUrls(pool, poi, { contentType, pipeline, queryIndex })` - Serper API with grounding; the request per pipeline comes from `serperRequestFor` in `newsPipelines.js`
 3. `testSerperApiKey(pool)` - API key validation
 
 **Tests:** `backend/tests/serperService.unit.test.js` (16 test cases)
@@ -89,16 +87,16 @@ LIMIT 1
 
 **File:** `backend/services/newsService.js`
 
-**Integration Point:** Lines 1218-1388
+**Integration Point:** Phase II of `collectPoi`
 
 **Flow:**
-1. Layer 1 completes (official URLs)
+1. Phase I completes (the POI's `news_url`, Current News only)
 2. If `collectionType !== 'events'`:
-   - Call `searchNewsUrls(pool, poi)`
-   - Render each Serper URL with Playwright
-   - Extract news with Gemini (no search grounding)
+   - Call `searchNewsUrls(pool, poi, { pipeline })`
+   - Render each fresh Serper URL with Playwright (capped per pipeline)
+   - Extract news with the pipeline's prompt (no search grounding)
    - Deduplicate by title (case-insensitive)
-   - Merge with Layer 1 results
+   - Merge with Phase I results
 
 **Progress Tracking Phases:**
 - `serper_search`: "Searching for external news coverage..."

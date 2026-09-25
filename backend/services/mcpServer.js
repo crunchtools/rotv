@@ -19,6 +19,10 @@ import {
 } from './moderationService.js';
 
 import {
+  getPoisForPipeline,
+  getAllPoisForCollection,
+  createNewsCollectionJob,
+  PIPELINE_LABELS,
   getJobStatus as getNewsJobStatus,
   getDisplaySlots as getNewsDisplaySlots,
   getLatestJobStatus as getLatestNewsJobStatus
@@ -775,38 +779,24 @@ function registerTools(server, pool, boss, mcpUserId) {
 
   server.tool(
     'trigger_collection',
-    'Trigger news or trail status collection',
+    'Trigger a collection job: current_news, historical_news, events, or trail_status',
     {
-      type: z.enum(['news', 'trail_status']).describe('Collection type to trigger'),
-      poi_ids: z.array(z.number()).optional().describe('Specific POI IDs (omit for all)')
+      type: z.enum(['current_news', 'historical_news', 'events', 'news', 'trail_status']).describe('Job to trigger (news = legacy news-and-events run)'),
+      poi_ids: z.array(z.number()).optional().describe('Specific POI IDs (omit for the job\'s normal selection)')
     },
     async ({ type, poi_ids }) => {
-      if (type === 'news') {
-        let targetPoiIds = poi_ids;
-        if (!targetPoiIds || targetPoiIds.length === 0) {
-          const poisResult = await pool.query(`
-            SELECT id FROM pois
-            WHERE (deleted IS NULL OR deleted = FALSE)
-            ORDER BY
-              CASE
-                WHEN 'point' = ANY(poi_roles) THEN 1
-                WHEN 'boundary' = ANY(poi_roles) THEN 2
-                ELSE 3
-              END,
-              name
-          `);
-          targetPoiIds = poisResult.rows.map(r => r.id);
+      if (type !== 'trail_status') {
+        // Omitted poi_ids use the job's own selection, which honors the deny lists (spec 044)
+        const pipeline = type === 'news' ? null : type;
+        const targetPoiIds = poi_ids && poi_ids.length > 0
+          ? poi_ids
+          : pipeline ? await getPoisForPipeline(pool, pipeline) : await getAllPoisForCollection(pool);
+        if (targetPoiIds.length === 0) {
+          return { content: [{ type: 'text', text: `No POIs due for ${type}` }] };
         }
-
-        const jobResult = await pool.query(
-          `INSERT INTO news_job_status (job_type, status, started_at, created_at, total_pois, poi_ids, processed_poi_ids)
-           VALUES ('batch_collection', 'queued', NOW(), NOW(), $1, $2, $3) RETURNING id`,
-          [targetPoiIds.length, JSON.stringify(targetPoiIds), JSON.stringify([])]
-        );
-        const jobId = jobResult.rows[0].id;
-
+        const { jobId, totalPois } = await createNewsCollectionJob(pool, targetPoiIds, 'mcp', pipeline);
         await submitBatchNewsJob({ jobId, poiIds: targetPoiIds });
-        return { content: [{ type: 'text', text: `News collection job #${jobId} started for ${targetPoiIds.length} POIs` }] };
+        return { content: [{ type: 'text', text: `${pipeline ? PIPELINE_LABELS[pipeline] : 'News & events'} job #${jobId} started for ${totalPois} POIs` }] };
       } else {
         const trailJob = await runTrailStatusCollection(pool, boss, {
           poiIds: poi_ids || null,

@@ -117,7 +117,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 
 ### Database (PostgreSQL 17 + PostGIS)
 - Schema created by `backend/server.js` initDatabase() on first run
-- Migrations in `backend/migrations/*.sql` — run by rotv-init.service, NOT on every restart
+- Migrations in `backend/migrations/*.sql` — run by rotv-init.service on every container boot, so they must be idempotent
 - Seed data: `backend/tests/fixtures/test-seed-data.sql` (INSERT-only, no schema, no poi_media rows)
 
 ### Tests
@@ -154,7 +154,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 
 ### Gotchas
 - `CREATE OR REPLACE VIEW` fails if columns changed — must DROP first
-- Migrations only run on fresh DB init, not on restart — apply manually on deploy
+- Migrations re-run on every boot (rotv-init.sh runs all of them in order) — write them idempotent and guard one-time backfills
 - Test seed data is INSERT-only with no schema (server creates schema)
 - Multiple Claude Code sessions clobber each other's containers (same name/port)
 
@@ -165,7 +165,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 | Document | Contents |
 |----------|----------|
 | `docs/DEVELOPMENT_ARCHITECTURE.md` | Container workflow, ephemeral storage |
-| `docs/NEWS_EVENTS_ARCHITECTURE.md` | AI-powered content collection |
+| `docs/NEWS_EVENTS_ARCHITECTURE.md` | Collection jobs, Current vs Historical News, moderation gates, digest |
 | `docs/TRAIL_STATUS_ARCHITECTURE.md` | Trail condition monitoring |
 | `docs/RIVER_LEVELS_ARCHITECTURE.md` | USGS river gauge levels for kayakers |
 | `docs/CI_CD_TESTING.md` | GitHub Actions, test suite, code quality tools |

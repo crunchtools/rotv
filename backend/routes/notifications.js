@@ -43,6 +43,7 @@ export function createNotificationsRouter(pool) {
            JOIN pois p ON p.id = n.poi_id
           WHERE n.poi_id = ANY($1::int[])
             AND n.moderation_status IN ('published', 'auto_approved')
+            AND n.pipeline = 'current'
           ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
           LIMIT 30`,
         [poiIds]

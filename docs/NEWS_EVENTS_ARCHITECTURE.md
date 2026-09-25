@@ -2,215 +2,120 @@
 
 ## The Problem
 
-Roots of The Valley tracks hundreds of Points of Interest (POIs) across the Cuyahoga Valley region. Each POI may have news articles, upcoming events, trail alerts, and community announcements spread across dozens of websites. These websites use every framework imaginable — Wix, Squarespace, WordPress, React SPAs, plain HTML — making traditional scraping unreliable. Manually maintaining content for hundreds of destinations is impractical.
+Roots of The Valley tracks about 770 points of interest (POIs) across the Cuyahoga Valley region. Their news, events, history, and announcements are scattered across park district sites, local news outlets, social media, and small organizations' pages built on every framework there is. The pipeline discovers that content, extracts one item per story or event, dates it, moderates it, and publishes it to POI pages, the `/news` and events views, and the Friday newsletter.
 
-The system solves this with an automated pipeline that discovers, renders, classifies, crawls, date-stamps, summarizes, moderates, and saves content — with clear separation of responsibilities between tools.
+## Three Jobs
 
-## Pipeline Architecture
+Collection runs as three purpose jobs, shown separately in the admin Jobs tab (spec 044). They replaced the old "News & Events Daily/Weekly/Monthly" tier jobs.
 
-The pipeline is **per-item** — every news article or event gets its own summarization and date scoring. There is no batching or concatenation of content across items.
+| Job | Schedule (ET) | POIs | What it does |
+|-----|---------------|------|--------------|
+| **Events** | daily 04:30 | POIs with an `events_url` | Crawls each events page (Phase I). No search. |
+| **Current News** | daily 06:00 | POIs whose tier cadence is due | Crawls the POI's `news_url` (Phase I), then searches Google News for the past month (Phase II). |
+| **Historical News** | monthly, the 15th, 02:00 | POIs whose history search hasn't run dry | Web search for the POI's history, a few URLs per run. No Phase I. |
+
+**Tier is a cadence, not a job.** `pois.collection_tier` (`daily`, `weekly`, `monthly`) says how often Current News checks a POI. A POI is due when `last_current_news_collection` is older than about 1, 7, or 30 days (a couple of hours short, so scheduler jitter never skips a day). See `isDueForCurrentNews` in `backend/services/newsPipelines.js`.
+
+Schedules are registered in `backend/server.js` (`schedulePipelineCollection`); job metadata for the Jobs tab lives in `backend/services/collection/registry.js`. All three write to `news_job_status` with `pipeline` set to `current_news`, `historical_news`, or `events`.
+
+## Current News vs Historical News
+
+Both pipelines use the same crawl, render, and extraction machinery. Everything that differs lives in `backend/services/newsPipelines.js`.
+
+| | Current News | Historical News |
+|---|---|---|
+| Purpose | What is happening now | The story of the place |
+| Search | Serper `/news`, `tbs: qdr:m`, query `"{POI}" {boundaries}` | Serper `/search`, no date filter, rotating query (`history of {POI}`, `{POI} historic`, `{POI} archives photos`) |
+| URLs per run | `max_search_urls` | `news_history_max_urls` (default 3) |
+| Extraction prompt | What happened or is changing, and what it means for visitors | The interesting history the page tells, with `story_year` if stated |
+| Relevance criteria | Reports of something that happened or changed. Rejects evergreen guides, trip reports, social recaps | Content about the place's past. Rejects trip reports and reviews with no history |
+| Date gate | Required (see Moderation) | Not required; the date only orders items |
+| Published to | POI pages, `/news`, notifications, newsletter | POI pages only, labeled "History" |
+
+**Labels come from age, not from the search.** When an item is saved, `newsPipelineFor()` sets `poi_news.pipeline`: an item published within `news_current_window_days` (default 30) of when it was found is `current`; older or undated items are `historical`. A Google News hit can be old and a web-search hit can be fresh, so the search that found it doesn't decide.
+
+**Historical News stops on its own.** After each POI, if the search returned no URL that isn't already in `poi_news`, `pois.history_dry_runs` increments; otherwise it resets to 0. At `news_history_dry_run_limit` (default 3) the POI is skipped. The query angle rotates every run (`history_query_index`). Reset one POI or all with `POST /api/admin/news/historical/reset`.
+
+Why the split: before it, 411 of the 603 news items published in a 30-day window were already more than 90 days old. History was deliberately collected, but it arrived through the same path as news and crowded it out.
+
+## The Pipeline
 
 ```
-URL  →  [Render/Cache]  →  [Classify]  →  [ItemCount]  →  [Summarize]  →  [Dates]  →  [Save]
-        renderPage          Gemini         Gemini          Gemini          scoreDate    PostgreSQL
+URL → [Render/Cache] → [Classify] → [ItemCount] → [Extract] → [Venue] → [Dates] → [Save] → [Moderate]
 ```
 
-Every item produced by `[Summarize]` has `source_url` set to the URL that was rendered. This is deterministic — no guessing, no cross-page attribution.
+- **Render** — `renderPage` (`renderPage.js`) wraps `extractPageContent` (`contentExtractor.js`: Playwright, Readability → markdown, plus `rawText`, meta/og dates, JSON-LD dates and Event nodes, links). Results are cached in `rendered_page_cache`: detail pages forever, listings 23 hours, trail status 25 minutes.
+- **Classify** — Gemini decides listing / detail / neither (`classifyPage`). Listings are followed to detail pages within the POI's path or domain, or paths in `trusted_content_paths`.
+- **Skip known** — detail URLs already in `poi_news`/`poi_events` are skipped (`filterKnownPages`).
+- **ItemCount + Extract** — Gemini counts items on the page, then extracts each one: `buildEventPrompt` for events, `buildNewsPrompt(pipeline, …)` for news.
+- **Venue (events)** — schema.org JSON-LD `Event.location` wins over the model's `location_details` (`eventVenue.js`). The model only sees the Readability markdown, which on some sites drops the venue block and keeps a contact line ("call the Nature Realm Visitors Center"). The model's text survives when it already names the same street number and street as the JSON-LD address, or when the page has no JSON-LD.
+- **Dates** — see below.
+- **Save** — `saveNewsItems` / `saveEventItems` dedupe by normalized URL (any POI) and by normalized title within the POI (events: plus the same Eastern calendar day). A duplicate with a new URL is merged into `poi_news_urls` / `poi_event_urls`. Items are saved as `pending`.
 
-### The Core Function: `processPage`
+**Snippet recovery.** When a search result can't be rendered (paywall, WAF, login wall) but has a title, snippet, and date, the item is saved from the snippet with `from_snippet = true`. Current News snippet items never auto-publish; they wait in the moderation queue.
 
-Takes a pre-rendered page object (from `crawlPage`), counts items, then loops: summarize each item individually and score its dates. No Playwright call — works entirely from cached content.
+## Dates
 
-```
-processPage(pool, page, poi, contentType, options)
-  page = { url, markdown, rawText, ogDates, title }
+`scoreDate` (`newsService.js`) combines deterministic signals with four LLM votes and picks the date with the highest total (`scoreDateConsensus`, `dateExtractor.js`). A tie scores 0.
 
-  1. itemCount(pool, markdown, contentType)  → N items on page
-  2. For each item 1..N:
-     a. buildEventPrompt or buildNewsPrompt → Gemini → single item JSON
-     b. scoreDate per item (5-vote LLM + deterministic sources)
-     c. Attach source_url, rendered_content, date_signals
-  3. Return { news: [], events: [] }
-```
-
-### Render Cache
-
-All page rendering goes through `renderPage(pool, url, options)`, a cached wrapper around `extractPageContent` (Playwright). Results are stored in the `rendered_page_cache` table keyed by URL.
-
-TTL by page type:
-- **detail** — cached forever (article/event pages don't change)
-- **listing** — 23 hours (listing pages add new items over time)
-- **trail_status** — 25 minutes (trail conditions change frequently)
-
-`page_type` is set after classification via `setCachePageType()`. Trail status callers pass `pageType: 'trail_status'` upfront since they skip classification.
-
-### Discovery vs. Processing
-
-Discovery (finding and rendering URLs) is separate from processing (summarization + date scoring):
-
-- **Phase I Discovery**: `crawlPage` renders the POI's dedicated pages via `renderPage`, classifies each as listing or detail, follows links on listing pages. Returns fully-extracted page objects from cache.
-- **Phase II Discovery**: Serper API returns search result URLs. Each is crawled via `crawlPage` with the same cache-first rendering.
-- **Processing**: Every discovered page goes through `processPage` — no re-rendering needed. Content comes from `rendered_page_cache`.
-
-### The Stages
-
-| Stage | Log Prefix | Tool | Responsibility |
-|-------|-----------|------|----------------|
-| **Search** | `[Search]` | Serper API | Find URLs for external coverage (Phase II only) |
-| **Render** | `[Render]` | renderPage (Playwright + cache) | Render URL to markdown, cache result |
-| **Cache** | `[Cache]` | PostgreSQL | Cache hit — skip Playwright |
-| **Classify** | `[Classify]` | Google Gemini | Determine if a page is a listing or detail |
-| **Crawl** | `[Crawl]` | renderPage | Follow links from listing pages |
-| **ItemCount** | `[ItemCount]` | Google Gemini | Count distinct news/events on a page |
-| **Summarize** | `[Summarize]` | Google Gemini | Extract single item from page |
-| **Dates** | `[Dates]` | scoreDate (5-vote LLM + deterministic) | Score date per item |
-| **Save** | `[Save]` | PostgreSQL | Deduplicate, normalize, persist |
-
-### Key Design Principle: Tools Stay in Their Lane
-
-- **Gemini never extracts dates.** Dates are scored separately via `scoreDate` using deterministic sources (JSON-LD, meta tags, `<time>` elements, URL patterns) plus LLM 5-vote consensus.
-- **Gemini classifies pages, not content.** Classification asks "Is this page a listing or a detail page?" — it does not summarize or extract data.
-- **Gemini summarizes, moderation filters.** Collection prompts extract what's on the page. Relevance filtering happens in the moderation sweep.
-- **Serper never renders.** It returns URLs. `renderPage` renders them.
-- **source_url is deterministic.** Every item's source_url is the URL that was rendered — forced after Gemini returns.
-
-### Gemini's Four Roles
-
-Gemini is used for four distinct tasks, each with a clear boundary:
-
-1. **Classification** — "Is this page a listing or detail?" Called per-page during discovery. Returns a page type and links to follow.
-2. **Item counting** — "How many distinct items are on this page?" Called per-page before summarization.
-3. **Summarization** — "Summarize this single news/event." Called per-item via `buildNewsPrompt` or `buildEventPrompt`.
-4. **Moderation** — "Is this item relevant and high-quality?" Called per-item during the separate moderation sweep.
-
-### Date Scoring
-
-One function (`scoreDate`) handles both news dates and event datetimes. News calls it once (mode `'date'`, returns `YYYY-MM-DD`). Events call it twice — once for start, once for end (mode `'datetime'`, returns `YYYY-MM-DDTHH:MM`).
-
-Weights:
-| Source | Weight |
+| Signal | Weight |
 |--------|--------|
-| JSON-LD | 4 pts each |
-| LLM 5/5 unanimous | 4 pts (minus competing deterministic) |
-| LLM 3-4/5 majority | 1 pt |
-| Meta tags | 1 pt each |
-| `<time>` tags | 1 pt each |
-| URL pattern | 1 pt |
+| JSON-LD (`datePublished`, `startDate`, …) | 4 |
+| Search-engine date (Serper) | 4 |
+| Social post timestamp (Facebook/Instagram) | 4 |
+| Meta tags, `<time>` tags, URL date | 1 each |
+| LLM vote (4 persona voters) | 1 each |
 
-## Two-Phase Collection
+News gets one date; events get start and end. Date-only values are stored at noon Eastern so no US timezone shifts the calendar day.
 
-Content collection happens in two phases per POI. Logs show `Phase I:` or `Phase II:` prefix.
+## Moderation
 
-### Phase I: POI's Own Pages
+A sweep (`processPendingItems`, `moderationService.js`) runs every 15 minutes and on demand. Each item passes through, in order:
 
-If a POI has dedicated `events_url` or `news_url` configured:
+1. **Duplicate** — same normalized title already published for the same POI (events: same Eastern day) → rejected.
+2. **Source URL** — news, and AI events, must have one.
+3. **Deny lists** — POI and content deny lists (`filterLists.js`) → rejected.
+4. Four gates; all must pass to auto-publish:
+   - **Date** (spec 030) — present, not in a future Eastern calendar day (news), year ≥ `moderation_date_floor_year`, consensus score ≥ threshold (4, or the POI's own threshold for items from its configured URL). Historical News skips this gate.
+   - **Relevance** — 3 votes on title + summary with the pipeline's criteria (events use the shared criteria). 3/3 → pass, 0-1/3 → reject, 2/3 → review. For events, a vote counts if the item is relevant **or** about the POI; for news, only relevance counts.
+   - **Region** (spec 041) — 3 votes on whether the subject is physically in Northeast Ohio. Unanimous out → reject.
+   - **POI** — about the assigned POI (Tier 1), or reassigned to its owner organization or containing boundary (Tier 2), else review.
 
-1. **Render & Classify** the dedicated page using `crawlPage` — renders via `renderPage` (cache-first), classifies as listing or detail, follows links to detail pages.
-2. Each detail page goes through `processPage` — itemCount, per-item summarize + date scoring.
+Everything else stays `pending` for a human. **Fix Date** (`fixDate`) rescores from the stored `date_signals` (events read the `start` signals), or re-renders the page if there are none, and never erases an existing date.
 
-POIs without dedicated URLs skip Phase I entirely.
+## Newsletter
 
-### Phase II: External Coverage (Serper)
+The Friday digest (`newsletterDigestService.js`) is built from live data at send time. The Thursday preview uses the same query as of Friday.
 
-After Phase I, the system searches for external coverage:
+- **Events** — Friday through Sunday (Eastern), published, deduplicated by POI + title + day. Each shows `venue · organizer` from `location_details` and the POI name.
+- **News** — Current News only, collected in the 7 days before the send, excluding social and aggregator hosts, deduplicated two ways: same POI with mostly overlapping title and summary vocabulary, and the same outlet covering one story twice within 48 hours (headlines sharing at least 4 significant words), regardless of POI. The fuller summary wins.
+- **Greeting** — `admin_settings.digest_greeting`.
 
-1. **Search** via Serper API for news/events about the POI
-2. For each Serper URL: crawl via `crawlPage`, then `processPage`
-3. **Merge** with Phase I results, deduplicating by normalized title
+## Settings
 
-## AI Moderation Pipeline
-
-After collection saves items to the database, a separate moderation sweep scores each item for quality and relevance. The sweep runs every 15 minutes or can be triggered manually.
-
-### What Moderation Does
-
-- Renders the item's source URL via `renderPage` (uses cache if available)
-- Sends the title, summary, and rendered content to Gemini for quality scoring
-- Runs 3-vote relevance check: "Is this relevant to CVNP visitors?"
-- Checks for issues: content not on source page, wrong POI, wrong geography, misclassified type, private content
-- Applies domain reputation filters (trusted vs. competitor domains)
-- Auto-approves items above the confidence threshold, rejects items below the floor, holds everything else for human review
-
-### What Moderation Does NOT Do
-
-- **Does not extract or overwrite dates.** Dates are set during collection by `scoreDate` and preserved through moderation.
-- Does not re-summarize content. The summary from collection is kept.
-
-### Fix Date (Manual Admin Action)
-
-When an admin clicks "Fix Date" on a held item:
-
-1. **Render** the source URL via `renderPage` (cache-first)
-2. **scoreDate** rescores using deterministic sources + LLM 5-vote
-3. Updated date and score are saved
-
-## Job Execution
-
-### Scheduling
-
-- **Daily batch**: Runs at 6:00 AM Eastern via pg-boss cron, processing all POIs
-- **Manual single-POI**: Admin triggers from the sidebar in edit mode
-- **Manual batch**: Admin triggers from the Jobs dashboard for all POIs
-- **Moderation sweep**: Runs every 15 minutes via pg-boss, or manually from the Jobs dashboard
-
-### Batch Processing
-
-- POIs are processed with staggered dispatch and limited concurrency
-- pg-boss provides crash recovery — jobs survive container restarts
-- Progress is checkpointed after each POI so interrupted jobs can resume
-- Batch jobs can be cancelled at any time; in-flight POIs complete naturally
-
-### Pipeline Settings (admin-configurable)
-
-| Setting | Default | Description |
-|---------|---------|-------------|
+| Setting | Default | Purpose |
+|---------|---------|---------|
 | `max_concurrency` | 10 | POIs processed in parallel per job |
-| `max_search_urls` | 10 | Serper URLs crawled per POI in Phase II |
-| `page_concurrency` | 3 | Detail pages processed in parallel within a POI |
-| `page_delay_ms` | 2000 | Stagger between page processing dispatches |
-
-## Deduplication Strategy
-
-### During Collection (In-Memory)
-
-Phase II results are deduplicated against Phase I results by normalized title before saving.
-
-### At Save Time (Database)
-
-- **URL matching**: Same resolved URL across any POI = same article.
-- **Normalized title matching**: Strips date suffixes and compares titles within the same POI.
-
-When a duplicate is detected with a different URL, the new URL is merged into the existing item's URL list.
-
-## Technology Stack
-
-| Component | Technology | Purpose |
-|-----------|-----------|---------|
-| Search | Serper API | Web search and URL discovery |
-| Rendering | Playwright + Chromium + Readability | JavaScript rendering and content extraction |
-| Render cache | PostgreSQL (`rendered_page_cache`) | Cache rendered pages with TTL by page type |
-| Classification | Google Gemini | Page type classification (listing/detail) |
-| Item counting | Google Gemini | Count distinct items on a page |
-| Dates | scoreDate (LLM 5-vote + deterministic) | Consensus date scoring for news and events |
-| Summarization | Google Gemini | Per-item content extraction |
-| Quality scoring | Google Gemini | AI-powered moderation with issue detection |
-| Relevance voting | Google Gemini | 3-vote relevance check during moderation |
-| Job queue | pg-boss | Crash-recoverable background job processing |
-| Database | PostgreSQL | Content storage, deduplication, moderation state |
-| Frontend | React | Real-time progress tracking, moderation inbox |
+| `max_search_urls` | 10 | Serper results requested; Current News URLs crawled per POI |
+| `page_concurrency` / `page_delay_ms` | 3 / 2000 | Detail-page parallelism and stagger within a POI |
+| `news_current_window_days` | 30 | Age limit for Current News |
+| `news_history_max_urls` | 3 | Historical News URLs crawled per POI per run |
+| `news_history_dry_run_limit` | 3 | Consecutive dry runs before Historical News skips a POI |
+| `moderation_news_date_threshold` | 4 | Date-gate consensus threshold |
+| `moderation_date_floor_year` | 2010 | Earliest plausible date |
+| `news_collection_excluded_pois` / `_types` | — | POIs and amenity types never collected |
 
 ## Key Files
 
-| File | Stage | Purpose |
-|------|-------|---------|
-| `backend/services/newsService.js` | All stages | `collectPoi`, `crawlPage`, `processPage`, `itemCount`, prompt builders |
-| `backend/services/renderPage.js` | Render | Cached wrapper around `extractPageContent` with TTL |
-| `backend/services/contentExtractor.js` | Render | Pure Playwright + Readability extraction (no DB) |
-| `backend/services/dateExtractor.js` | Dates | `scoreDate`, `scoreDateConsensus`, `scoreLlmConsensus` |
-| `backend/services/geminiService.js` | Summarize, Moderation | Gemini API client, `moderateContent`, `moderatePhoto` |
-| `backend/services/moderationService.js` | Moderation | Quality scoring, relevance voting, Fix Date |
-| `backend/services/serperService.js` | Search | Serper API integration |
-| `backend/services/trailStatusService.js` | Trail Status | Trail condition extraction (separate pipeline) |
-| `backend/services/collection/registry.js` | — | Collection type registry (schedules, triggers) |
-| `frontend/src/components/JobsDashboard.jsx` | — | Job monitoring and log viewer |
-| `frontend/src/components/ModerationInbox.jsx` | — | Moderation review interface |
+| File | Purpose |
+|------|---------|
+| `backend/services/newsPipelines.js` | Current vs Historical: labels, cadence, search requests, prompts, relevance criteria |
+| `backend/services/newsService.js` | `collectPoi`, `crawlPage`, `processPage`, dates, save, job orchestration, `getPoisForPipeline` |
+| `backend/services/serperService.js` | Serper search with PostGIS geographic grounding |
+| `backend/services/contentExtractor.js` / `renderPage.js` | Playwright extraction and the render cache |
+| `backend/services/eventVenue.js` | JSON-LD event venues |
+| `backend/services/dateExtractor.js` | Date parsing and consensus scoring |
+| `backend/services/moderationService.js` | Moderation gates, sweep, queue, Fix Date |
+| `backend/services/newsletterDigestService.js` | Digest selection, dedup, rendering, send |
+| `backend/services/collection/registry.js` | Jobs tab registry |
+| `backend/migrations/089_news_pipelines.sql` | Pipeline columns, per-POI state, settings |

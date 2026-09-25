@@ -27,7 +27,8 @@ import {
   runBatchNewsCollection,
   createNewsCollectionJob,
   getAllPoisForCollection,
-  getPoisForTierCollection,
+  getPoisForPipeline,
+  PIPELINE_LABELS,
   getNewsForPoi,
   getEventsForPoi,
   getRecentNews,
@@ -638,7 +639,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'moderation_sweep_batch_size',
       'photo_submissions_enabled',
       'apify_api_token',
-      'news_collection_prompt',
+      'news_current_window_days',
+      'news_history_max_urls',
+      'news_history_dry_run_limit',
       'trail_status_prompt',
       'results_subtabs_config',
       'buttondown_api_key',
@@ -2625,8 +2628,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.post('/news/collect', isAdmin, async (req, res) => {
     try {
-      const tier = req.query.tier;
-      const tierLabel = tier ? `${tier} tier` : 'all POIs';
+      const pipeline = req.query.pipeline || null;
+      if (pipeline && !PIPELINE_LABELS[pipeline]) {
+        return res.status(400).json({ error: `Unknown pipeline: ${pipeline}` });
+      }
+      const tierLabel = pipeline ? PIPELINE_LABELS[pipeline] : 'all POIs';
       console.log(`Admin ${req.user.email} triggered news collection for ${tierLabel}`);
 
       const runningJobCheck = await pool.query(`
@@ -2642,22 +2648,22 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         });
       }
 
-      const poiIds = tier
-        ? await getPoisForTierCollection(pool, tier)
+      const poiIds = pipeline
+        ? await getPoisForPipeline(pool, pipeline)
         : await getAllPoisForCollection(pool);
 
       if (poiIds.length === 0) {
         return res.status(400).json({ error: `No POIs found for ${tierLabel}` });
       }
 
-      const source = tier ? `manual-${tier}` : 'manual';
-      const { jobId, totalPois } = await createNewsCollectionJob(pool, poiIds, source);
+      const source = pipeline ? `manual-${pipeline}` : 'manual';
+      const { jobId, totalPois } = await createNewsCollectionJob(pool, poiIds, source, pipeline);
 
       await submitBatchNewsJob({ jobId, poiIds });
 
       res.json({
         success: true,
-        message: `News & events collection started for ${tierLabel} (${totalPois} POIs)`,
+        message: `${pipeline ? tierLabel : 'News & events'} collection started (${totalPois} POIs)`,
         jobId,
         totalPois
       });
@@ -2950,9 +2956,24 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  // Historical News stops visiting a POI after news_history_dry_run_limit runs find
+  // nothing new. Reset one POI (poiId) or all of them to let the history search resume.
+  router.post('/news/historical/reset', isAdmin, async (req, res) => {
+    try {
+      const poiId = req.body?.poiId ? parseInt(req.body.poiId, 10) : null;
+      const resetResult = poiId
+        ? await pool.query('UPDATE pois SET history_dry_runs = 0 WHERE id = $1', [poiId])
+        : await pool.query('UPDATE pois SET history_dry_runs = 0 WHERE history_dry_runs > 0');
+      res.json({ success: true, reset: resetResult.rowCount });
+    } catch (error) {
+      console.error('Error resetting Historical News:', error);
+      res.status(500).json({ error: 'Failed to reset Historical News' });
+    }
+  });
+
   router.get('/news/status', isAdmin, async (req, res) => {
     try {
-      const status = await getLatestJobStatus(pool);
+      const status = await getLatestJobStatus(pool, req.query.pipeline || null);
       res.json(status || { message: 'No jobs have run yet' });
     } catch (error) {
       console.error('Error getting job status:', error);
@@ -2962,12 +2983,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.get('/news/ai-stats', isAdmin, async (req, res) => {
     try {
-      const recentJob = await pool.query(`
-        SELECT ai_usage, status
-        FROM news_job_status
-        ORDER BY created_at DESC
-        LIMIT 1
-      `);
+      const recentJob = req.query.pipeline
+        ? await pool.query('SELECT ai_usage, status FROM news_job_status WHERE pipeline = $1 ORDER BY created_at DESC LIMIT 1', [req.query.pipeline])
+        : await pool.query('SELECT ai_usage, status FROM news_job_status ORDER BY created_at DESC LIMIT 1');
 
       if (recentJob.rows.length === 0) {
         return res.json({ usage: { gemini: 0 }, errors: {}, activeProvider: 'gemini' });
@@ -4180,9 +4198,15 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  // News pipelines share news_job_status; each job's "last run" is its own pipeline's (spec 044)
+  const latestRunFor = (type) => (type.historySubType
+    ? pool.query(`SELECT id, status, started_at, completed_at FROM ${type.statusTable} WHERE pipeline = $1 ORDER BY id DESC LIMIT 1`, [type.historySubType])
+    : pool.query(`SELECT id, status, started_at, completed_at FROM ${type.statusTable} ORDER BY id DESC LIMIT 1`));
+
   router.get('/jobs/history', isAdmin, async (req, res) => {
     try {
       const type = req.query.type || null;
+      const subtype = req.query.subtype || null;
       const limit = Math.max(1, Math.min(parseInt(req.query.limit) || 20, 100));
       const offset = Math.max(0, parseInt(req.query.offset) || 0);
 
@@ -4231,6 +4255,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       if (type) {
         query += ` WHERE job_type = $${paramIdx}`;
         params.push(type);
+        paramIdx++;
+      }
+      if (subtype) {
+        query += `${type ? ' AND' : ' WHERE'} sub_type = $${paramIdx}`;
+        params.push(subtype);
         paramIdx++;
       }
 
@@ -4381,9 +4410,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         let lastJob = null;
         if (type.statusTable) {
           try {
-            const jobResult = await pool.query(
-              `SELECT id, status, started_at, completed_at FROM ${type.statusTable} ORDER BY id DESC LIMIT 1`
-            );
+            const jobResult = await latestRunFor(type);
             if (jobResult.rows.length > 0) lastJob = jobResult.rows[0];
           } catch { /* table may not exist */ }
         }
@@ -4503,9 +4530,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const enriched = await Promise.all(COLLECTION_TYPES.map(async (type) => {
         let lastJob = null;
         try {
-          const jobResult = await pool.query(
-            `SELECT id, status, started_at, completed_at FROM ${type.statusTable} ORDER BY id DESC LIMIT 1`
-          );
+          const jobResult = await latestRunFor(type);
           if (jobResult.rows.length > 0) {
             lastJob = jobResult.rows[0];
           }

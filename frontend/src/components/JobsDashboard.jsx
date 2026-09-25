@@ -13,23 +13,28 @@ const STATUS_COLORS = {
   pending: '#9e9e9e'
 };
 
+// Current News, Historical News, and Events share news_job_status; each registry id
+// asks for its own pipeline's latest run (spec 044).
+const NEWS_PIPELINE_IDS = ['current_news', 'historical_news', 'events'];
+const newsPipelineMap = (build) => Object.fromEntries(NEWS_PIPELINE_IDS.map(id => [id, build(id)]));
+
 const CANCEL_ENDPOINTS = {
-  news: { url: '/api/admin/news/job/:id/cancel', method: 'POST' },
+  ...newsPipelineMap(() => ({ url: '/api/admin/news/job/:id/cancel', method: 'POST' })),
   trail_status: { url: '/api/admin/trail-status/batch-collect/:id/cancel', method: 'PUT' }
 };
 
 const STATUS_ENDPOINTS = {
-  news: '/api/admin/news/status',
+  ...newsPipelineMap(id => `/api/admin/news/status?pipeline=${id}`),
   trail_status: '/api/admin/trail-status/job-status/latest'
 };
 
 const SLOTS_ENDPOINTS = {
-  news: '/api/admin/news/job/:id',
+  ...newsPipelineMap(() => '/api/admin/news/job/:id'),
   trail_status: '/api/admin/trail-status/job-status/:id'
 };
 
 const AI_STATS_ENDPOINTS = {
-  news: '/api/admin/news/ai-stats',
+  ...newsPipelineMap(id => `/api/admin/news/ai-stats?pipeline=${id}`),
   trail_status: '/api/admin/trail-status/ai-stats'
 };
 
@@ -128,13 +133,14 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, []);
 
-  const fetchJobHistory = useCallback(async (jobId, historyTypes) => {
+  const fetchJobHistory = useCallback(async (jobId, historyTypes, historySubType) => {
     if (!historyTypes || historyTypes.length === 0) return;
     setJobHistoryLoading(prev => ({ ...prev, [jobId]: true }));
     try {
       const allRuns = [];
       for (const type of historyTypes) {
         const params = new URLSearchParams({ limit: '10', offset: '0', type });
+        if (type === 'news' && historySubType) params.set('subtype', historySubType);
         const res = await fetch(`${API_BASE}/api/admin/jobs/history?${params}`, { credentials: 'include' });
         if (res.ok) allRuns.push(...(await res.json()));
       }
@@ -216,7 +222,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
           const job = scheduledJobs.find(j => j.id === id);
           if (job) {
             setJobHistory(h => ({ ...h, [id]: undefined }));
-            fetchJobHistory(id, job.historyTypes);
+            fetchJobHistory(id, job.historyTypes, job.historySubType);
           }
         }
       }
@@ -257,7 +263,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   useEffect(() => {
     if (expandedScheduled) {
       const job = scheduledJobs.find(j => j.id === expandedScheduled);
-      if (job && !jobHistory[job.id]) fetchJobHistory(job.id, job.historyTypes);
+      if (job && !jobHistory[job.id]) fetchJobHistory(job.id, job.historyTypes, job.historySubType);
     }
   }, [expandedScheduled, scheduledJobs, fetchJobHistory, jobHistory]);
 
@@ -286,7 +292,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       let tick = 0;
       const interval = setInterval(() => {
         fetchRunLogs(expandedRun.jobType, expandedRun.runId, expandedRun.poiId);
-        if (++tick % 5 === 0) fetchJobHistory(job.id, job.historyTypes);
+        if (++tick % 5 === 0) fetchJobHistory(job.id, job.historyTypes, job.historySubType);
       }, 2000);
       return () => clearInterval(interval);
     }
@@ -314,7 +320,8 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     if (expandedRun.jobType !== 'news_single' && expandedRun.jobType !== 'events_single') return;
     const hasCompleted = runLogs.some(l => l.details?.completed === true);
     if (hasCompleted) {
-      setJobHistory(prev => { const next = { ...prev }; delete next['news_daily']; return next; });
+      const registryId = expandedRun.jobType === 'events_single' ? 'events' : 'current_news';
+      setJobHistory(prev => { const next = { ...prev }; delete next[registryId]; return next; });
     }
   }, [expandedRun, runLogs]);
 
@@ -343,7 +350,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   useEffect(() => {
     if (urlJobId && urlJobType && !scheduledLoading) {
       if (urlJobType === 'news_single' || urlJobType === 'events_single') {
-        setExpandedScheduled('news_daily');
+        setExpandedScheduled(urlJobType === 'events_single' ? 'events' : 'current_news');
         setExpandedRun({ jobType: urlJobType, runId: urlJobId, poiId: urlPoiId || urlJobId });
 
         setSearchParams({}, { replace: true });
@@ -475,7 +482,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     const slots = activeSlots[job.id];
     const stats = aiStats[job.id];
 
-    const isNews = job.id.startsWith('news');
+    const isNews = job.statusTable === 'news_job_status';
     const processed = isNews ? (info.pois_processed || 0) : (info.trails_processed || 0);
     const total = isNews ? (info.total_pois || 0) : (info.total_trails || 0);
     const pct = total > 0 ? (processed / total) * 100 : 0;

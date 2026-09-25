@@ -8,6 +8,9 @@ const JOB_NAMES = {
   NEWS_COLLECTION_WEEKLY: 'news-collection-weekly',
   NEWS_COLLECTION_MONTHLY: 'news-collection-monthly',
   NEWS_COLLECTION_POI: 'news-collection-poi',
+  CURRENT_NEWS: 'news-current',
+  HISTORICAL_NEWS: 'news-historical',
+  EVENTS_COLLECTION: 'events-collection',
   NEWS_BATCH: 'news-batch-collection',
   TRAIL_STATUS_COLLECTION: 'trail-status-collection',
   TRAIL_STATUS_BATCH: 'trail-status-batch-collect',
@@ -53,17 +56,30 @@ export async function scheduleNewsCollection(cronExpression = '0 6 * * *') {
   console.log(`News collection scheduled with cron: ${cronExpression}`);
 }
 
-export async function scheduleTierNewsCollection(tier, cronExpression) {
-  const jobName = JOB_NAMES[`NEWS_COLLECTION_${tier.toUpperCase()}`];
-  if (!jobName) throw new Error(`Invalid tier: ${tier}`);
+// Current News, Historical News, and Events replace the three tier jobs (spec 044).
+const PIPELINE_JOB_NAMES = {
+  current_news: JOB_NAMES.CURRENT_NEWS,
+  historical_news: JOB_NAMES.HISTORICAL_NEWS,
+  events: JOB_NAMES.EVENTS_COLLECTION
+};
+
+export const RETIRED_TIER_JOB_NAMES = [
+  JOB_NAMES.NEWS_COLLECTION_DAILY,
+  JOB_NAMES.NEWS_COLLECTION_WEEKLY,
+  JOB_NAMES.NEWS_COLLECTION_MONTHLY
+];
+
+export async function schedulePipelineCollection(pipeline, cronExpression) {
+  const jobName = PIPELINE_JOB_NAMES[pipeline];
+  if (!jobName) throw new Error(`Invalid pipeline: ${pipeline}`);
   const scheduler = getJobScheduler();
-  await scheduler.schedule(jobName, cronExpression, { tier }, { tz: 'America/New_York' });
-  console.log(`${tier} news collection scheduled with cron: ${cronExpression}`);
+  await scheduler.schedule(jobName, cronExpression, { pipeline }, { tz: 'America/New_York' });
+  console.log(`${pipeline} collection scheduled with cron: ${cronExpression}`);
 }
 
-export async function registerTierNewsCollectionHandler(tier, handler) {
-  const jobName = JOB_NAMES[`NEWS_COLLECTION_${tier.toUpperCase()}`];
-  if (!jobName) throw new Error(`Invalid tier: ${tier}`);
+export async function registerPipelineCollectionHandler(pipeline, handler) {
+  const jobName = PIPELINE_JOB_NAMES[pipeline];
+  if (!jobName) throw new Error(`Invalid pipeline: ${pipeline}`);
   const scheduler = getJobScheduler();
 
   try {
@@ -76,12 +92,12 @@ export async function registerTierNewsCollectionHandler(tier, handler) {
   }
 
   await scheduler.work(jobName, async (job) => {
-    console.log(`Starting ${tier} news collection job:`, job.id);
+    console.log(`Starting ${pipeline} collection job:`, job.id);
     try {
       await handler(job.data);
-      console.log(`${tier} news collection job completed:`, job.id);
+      console.log(`${pipeline} collection job completed:`, job.id);
     } catch (error) {
-      console.error(`${tier} news collection job failed:`, error);
+      console.error(`${pipeline} collection job failed:`, error);
       throw error;
     }
   });
