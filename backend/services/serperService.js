@@ -15,6 +15,7 @@
 
 import fetch from 'node-fetch';
 import { getContainingBoundaries } from './geoService.js';
+import { serperRequestFor } from './newsPipelines.js';
 
 
 /**
@@ -39,7 +40,7 @@ import { getContainingBoundaries } from './geoService.js';
  * @returns {Promise<object>} - {query, grounded, groundingContext, urls[], credits}
  * @throws {Error} - If Serper API key not configured or API error
  */
-export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
+export async function searchNewsUrls(pool, poi, { contentType = 'news', pipeline = 'current', queryIndex = 0 } = {}) {
   const apiKeyResult = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'serper_api_key'"
   );
@@ -49,7 +50,6 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
   }
 
   const apiKey = apiKeyResult.rows[0].value;
-  const prefix = contentType === 'events' ? 'Upcoming events' : 'Latest news';
 
   const maxResultsRow = await pool.query(
     "SELECT value FROM admin_settings WHERE key = 'max_search_urls'"
@@ -62,16 +62,15 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
 
   const context = boundaries.join(', ');
 
-  const query = contentType === 'events'
-    ? `${prefix} at ${poi.name}${context ? ` (${context})` : ''}`
-    : context
-      ? `${prefix} for ${poi.name} in ${context}`
-      : `${prefix} for ${poi.name}`;
-
-  /* News pulls from both Google web search and Google News and merges the two;
-     events use web search only. */
-  const endpoints = contentType === 'events' ? ['search'] : ['search', 'news'];
-  console.log(`[Serper] Query: "${query}" (grounded: ${!!context}, endpoints: ${endpoints.join('+')})`);
+  /* News: one endpoint per pipeline (spec 044) — Current News asks Google News for the
+     past month, Historical News asks web search with a rotating angle. Events use web
+     search only. */
+  const request = contentType === 'events'
+    ? { endpoint: 'search', query: `Upcoming events at ${poi.name}${context ? ` (${context})` : ''}`, extraBody: {} }
+    : serperRequestFor(pipeline, poi.name, context, queryIndex);
+  const { query } = request;
+  const endpoints = [request.endpoint];
+  console.log(`[Serper] Query: "${query}" (grounded: ${!!context}, endpoint: ${request.endpoint}${request.extraBody.tbs ? `, tbs=${request.extraBody.tbs}` : ''})`);
 
   const perEndpoint = await Promise.all(endpoints.map(async endpoint => {
     const response = await fetch(`https://google.serper.dev/${endpoint}`, {
@@ -80,7 +79,7 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news' } = {}) {
         'X-API-KEY': apiKey,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ q: query, num: maxResults })
+      body: JSON.stringify({ q: query, num: maxResults, ...request.extraBody })
     });
     if (!response.ok) {
       const errorText = await response.text();

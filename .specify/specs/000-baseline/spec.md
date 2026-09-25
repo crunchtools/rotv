@@ -52,6 +52,7 @@ Acceptance Criteria:
 - [ ] News items show title, source, date
 - [ ] Clicking news item opens article in new tab
 - [ ] News is sorted by date (newest first)
+- [ ] Current News is listed first; Historical News items carry a "History" label with the story's year when known (spec 044)
 
 **US-011: View POI Events**
 > As a visitor, I want to see upcoming events at a POI so that I can plan my visit.
@@ -91,6 +92,7 @@ Acceptance Criteria:
 - [ ] Progress indicator shows collection status
 - [ ] New news items appear after collection
 - [ ] Duplicate detection prevents re-adding same items
+- [ ] Scheduled collection runs as three jobs: Current News (daily, by tier cadence), Historical News (monthly), and Events (daily) (spec 044)
 
 **US-031: Batch News Collection**
 > As an admin, I want to collect news for all POIs at once so that I can keep the entire system updated.

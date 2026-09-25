@@ -26,8 +26,9 @@ import {
   initJobScheduler,
   scheduleNewsCollection,
   registerNewsCollectionHandler,
-  scheduleTierNewsCollection,
-  registerTierNewsCollectionHandler,
+  schedulePipelineCollection,
+  registerPipelineCollectionHandler,
+  RETIRED_TIER_JOB_NAMES,
   unscheduleJob,
   registerBatchNewsHandler,
   submitBatchNewsJob,
@@ -54,7 +55,8 @@ import {
 import { processItem, processPendingItems } from './services/moderationService.js';
 import {
   runNewsCollection,
-  runTierNewsCollection,
+  runPipelineCollection,
+  PIPELINE_LABELS,
   processNewsCollectionJob,
   ensureNewsJobCheckpointColumns,
   findIncompleteJobs
@@ -825,6 +827,15 @@ async function initDatabase() {
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS date_consensus_score INTEGER DEFAULT 0`);
     await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS moderation_processed BOOLEAN DEFAULT FALSE`);
     await client.query(`CREATE INDEX IF NOT EXISTS idx_poi_news_moderation ON poi_news(moderation_status)`);
+    // Current News vs Historical News pipelines (spec 044, migration 089)
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS pipeline TEXT NOT NULL DEFAULT 'current'`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS from_snippet BOOLEAN NOT NULL DEFAULT false`);
+    await client.query(`ALTER TABLE poi_news ADD COLUMN IF NOT EXISTS story_year INTEGER`);
+    await client.query(`ALTER TABLE pois ADD COLUMN IF NOT EXISTS last_current_news_collection TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE pois ADD COLUMN IF NOT EXISTS last_historical_collection TIMESTAMPTZ`);
+    await client.query(`ALTER TABLE pois ADD COLUMN IF NOT EXISTS history_dry_runs INTEGER NOT NULL DEFAULT 0`);
+    await client.query(`ALTER TABLE pois ADD COLUMN IF NOT EXISTS history_query_index INTEGER NOT NULL DEFAULT 0`);
+    await client.query(`ALTER TABLE news_job_status ADD COLUMN IF NOT EXISTS pipeline TEXT`);
 
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS moderation_status VARCHAR(20) DEFAULT 'published'`);
     await client.query(`ALTER TABLE poi_events ADD COLUMN IF NOT EXISTS confidence_score DECIMAL(3,2)`);
@@ -1972,7 +1983,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
     const newsQuery = await pool.query(`
       SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
              n.publication_date, n.date_consensus_score, n.collection_date,
-             n.poi_id, n.image_url, src.name AS poi_name,
+             n.poi_id, n.image_url, src.name AS poi_name, n.pipeline, n.story_year,
              COALESCE(json_agg(json_build_object('url', u.url, 'source_name', u.source_name)) FILTER (WHERE u.id IS NOT NULL), '[]'::json) AS additional_urls
       FROM poi_news n
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
@@ -1981,6 +1992,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
         AND n.moderation_status IN ('published', 'auto_approved')
       GROUP BY n.id, src.name
       ORDER BY
+        (n.pipeline = 'current') DESC,
         COALESCE(n.publication_date, n.collection_date) DESC,
         n.collection_date DESC
       LIMIT $2
@@ -2251,6 +2263,7 @@ app.get('/api/news/recent', async (req, res) => {
       JOIN pois p ON n.poi_id = p.id
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
       WHERE n.moderation_status IN ('published', 'auto_approved')
+        AND n.pipeline = 'current'
         AND (p.deleted IS NULL OR p.deleted = FALSE)
       GROUP BY n.id, p.id, p.name, p.poi_roles
       ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.collection_date DESC
@@ -2935,22 +2948,31 @@ async function start() {
       // Already removed — harmless
     }
 
-    for (const { tier, cron } of [
-      { tier: 'daily',   cron: '0 6 * * *' },
-      { tier: 'weekly',  cron: '0 5 * * 4' },
-      { tier: 'monthly', cron: '0 1 1 * *' },
-    ]) {
-      await registerTierNewsCollectionHandler(tier, withJitter(async () => {
-        console.log(`Running scheduled ${tier} news collection...`);
-        const tierRun = await runTierNewsCollection(pool, tier, null);
-        if (tierRun.totalPois > 0) {
-          console.log(`${tier} news collection started for ${tierRun.totalPois} POIs`);
-        } else {
-          console.log(`No POIs to collect for ${tier} tier`);
-        }
-      }, `news-collection-${tier}`));
+    for (const retired of RETIRED_TIER_JOB_NAMES) {
+      try {
+        await unscheduleJob(retired);
+      } catch (error) {
+        console.warn(`Could not unschedule retired job ${retired}: ${error.message}`);
+      }
+    }
 
-      await scheduleTierNewsCollection(tier, cron);
+    // Purpose jobs replace the daily/weekly/monthly tier jobs (spec 044). Tier is now a
+    // per-POI cadence that Current News reads when choosing who is due.
+    for (const { pipeline, cron } of [
+      { pipeline: 'events',          cron: '30 4 * * *' },
+      { pipeline: 'current_news',    cron: '0 6 * * *' },
+      { pipeline: 'historical_news', cron: '0 2 15 * *' },
+    ]) {
+      const label = PIPELINE_LABELS[pipeline];
+      await registerPipelineCollectionHandler(pipeline, withJitter(async () => {
+        console.log(`Running scheduled ${label} collection...`);
+        const pipelineRun = await runPipelineCollection(pool, pipeline, null);
+        console.log(pipelineRun.totalPois > 0
+          ? `${label} collection started for ${pipelineRun.totalPois} POIs`
+          : `${label}: no POIs due`);
+      }, `${pipeline}-collection`));
+
+      await schedulePipelineCollection(pipeline, cron);
     }
 
     await registerBatchNewsHandler(async (pgBossJobId, jobData) => {

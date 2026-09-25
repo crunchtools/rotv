@@ -6,6 +6,7 @@ import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
 import { getReassignmentCandidates } from './geoService.js';
+import { newsRelevanceCriteria } from './newsPipelines.js';
 
 const TABLE_MAP = {
   news: 'poi_news',
@@ -53,15 +54,9 @@ function isSafePublicUrl(urlStr) {
   }
 }
 
-async function runContentRelevanceVotes(pool, { title, description, poiName, contentType }, numVotes = 3) {
-  const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park and the surrounding region including Cleveland Metroparks, Summit Metro Parks, and other nearby parks, trails, and outdoor recreation areas.
-
-Title: "${title}"
-Summary: "${description || '(none)'}"
-Location: ${poiName || '(unknown)'}
-Type: ${contentType}
-
-Is this content a good fit for this guide?
+// Relevance criteria for events. News uses per-pipeline criteria from newsPipelines.js
+// (Current News vs Historical News, spec 044).
+const EVENT_RELEVANCE_CRITERIA = `Is this content a good fit for this guide?
 
 APPROVE if the SUBJECT relates to the Cuyahoga Valley / Northeast Ohio outdoors —
 nature, trails, hiking, biking, paddling, outdoor recreation, conservation, ecology,
@@ -85,12 +80,24 @@ REJECT only if the content is genuinely a poor fit:
   parks, or regional history (e.g. book clubs, support groups, fitness classes, galas)
 - Spam, navigation chrome, an error page, or content with no discernible subject
 
+On-topic content about the parks, trails, nature, or history of the region is relevant
+even when it is purely descriptive.`;
+
+async function runContentRelevanceVotes(pool, { title, description, poiName, contentType, criteria = EVENT_RELEVANCE_CRITERIA }, numVotes = 3) {
+  const prompt = `You are evaluating content for "Roots of The Valley," a guide to Cuyahoga Valley National Park and the surrounding region including Cleveland Metroparks, Summit Metro Parks, and other nearby parks, trails, and outdoor recreation areas.
+
+Title: "${title}"
+Summary: "${description || '(none)'}"
+Location: ${poiName || '(unknown)'}
+Type: ${contentType}
+
+${criteria}
+
 Judge ONLY topical fit here — do NOT reject for geography. Whether the subject is
 physically in Northeast Ohio is decided by a separate region check, not this vote.
 
 IMPORTANT: judge by SUBJECT, not venue. An off-topic event (a wedding, a political
-rally) held at a park is still a reject. But on-topic content about the parks, trails,
-nature, or history of the region is relevant even when it is purely descriptive.
+rally) held at a park is still a reject.
 
 Also judge "about_poi": is this content specifically about "${poiName || '(unknown)'}"
 — either named directly or located there? Set about_poi false when the content is
@@ -201,7 +208,24 @@ Return ONLY valid JSON: {"choice": "assigned|owner|boundary|none"}`;
 // above the floor — catches hallucinated 1800s values), AND has consensus at/above the
 // threshold. Age is never penalized. Source reputation carries no weight here: an official
 // domain with a weak machine-readable date goes to manual review like any other source.
-export function evaluateDateGate(effectiveDate, dateScore, { threshold, floorYear, allowFuture = false }) {
+const easternDay = (date) => new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+}).format(date);
+
+// Events store date_signals as { start, end }; news stores the signals at the top level.
+// Reading events at the top level scored nothing and wiped the event's date.
+export function rescoreFromSignals(contentType, dateSignals) {
+  const signals = (contentType === 'event' ? dateSignals?.start : dateSignals) || {};
+  return scoreDateConsensus(
+    {
+      jsonLd: signals.jsonLd || [], meta: signals.meta || [], timeTags: signals.timeTags || [],
+      url: signals.url || null, searchDate: signals.searchDate || null, social: signals.social || []
+    },
+    signals.llmVotes || []
+  );
+}
+
+export function evaluateDateGate(effectiveDate, dateScore, { threshold, floorYear, allowFuture = false, now = new Date() }) {
   if (!effectiveDate) {
     return { verdict: 'review', reason: 'No publication date' };
   }
@@ -209,7 +233,9 @@ export function evaluateDateGate(effectiveDate, dateScore, { threshold, floorYea
   if (Number.isNaN(parsed.getTime())) {
     return { verdict: 'review', reason: 'Unparseable publication date' };
   }
-  if (!allowFuture && parsed > new Date()) {
+  // Compare Eastern calendar days, not instants: date-only news is stored at noon
+  // Eastern, so a same-day article swept at 7 AM used to read as "future" and stall.
+  if (!allowFuture && easternDay(parsed) > easternDay(now)) {
     return { verdict: 'review', reason: `Future publication date ${effectiveDate}` };
   }
   const year = parsed.getUTCFullYear();
@@ -295,7 +321,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   if (contentType === 'news' || contentType === 'event') {
     const table = contentType === 'news' ? 'poi_news' : 'poi_events';
     const descField = contentType === 'news' ? 'summary' : 'description';
-    const extraFields = contentType === 'event' ? ', t.start_date, t.content_source' : '';
+    const extraFields = contentType === 'event' ? ', t.start_date, t.content_source' : ', t.pipeline, t.from_snippet';
 
     const itemQuery = await pool.query(
       `SELECT t.id, t.poi_id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
@@ -311,12 +337,15 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // Strip leading "The" so "The David Mayfield Parade" matches "David Mayfield Parade"
     const titleNorm = `TRIM(LOWER(REGEXP_REPLACE(title, '^[Tt]he\\s+', '')))`;
     const paramNorm = normalizeTitle(row.title);
+    // Same POI only, matching save-time dedup: two parks can publish the same headline.
+    // Events also match on the Eastern calendar day, not the exact timestamp. (spec 044)
     const dupWhere = contentType === 'news'
-      ? `${titleNorm} = $1 AND id != $2`
-      : `${titleNorm} = $1 AND start_date = $3 AND id != $2`;
+      ? `${titleNorm} = $1 AND id != $2 AND poi_id = $3`
+      : `${titleNorm} = $1 AND id != $2 AND poi_id = $3
+         AND (start_date AT TIME ZONE 'America/New_York')::date = ($4::timestamptz AT TIME ZONE 'America/New_York')::date`;
     const dupParams = contentType === 'news'
-      ? [paramNorm, contentId]
-      : [paramNorm, contentId, row.start_date];
+      ? [paramNorm, contentId, row.poi_id]
+      : [paramNorm, contentId, row.poi_id, row.start_date];
     const dupCheck = await pool.query(
       `SELECT id FROM ${table} WHERE ${dupWhere}
        AND moderation_status IN ('published', 'auto_approved') LIMIT 1`,
@@ -375,11 +404,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       try {
         let consensus;
         if (row.date_signals) {
-          const signals = row.date_signals;
-          consensus = scoreDateConsensus(
-            { jsonLd: signals.jsonLd || [], meta: signals.meta || [], timeTags: signals.timeTags || [], url: signals.url || null, searchDate: signals.searchDate || null, social: signals.social || [] },
-            signals.llmVotes || []
-          );
+          consensus = rescoreFromSignals(contentType, row.date_signals);
         } else {
           let pageContent = null;
           let ogDates = {};
@@ -438,7 +463,11 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // otherwise a commercial POI's own news (e.g. a brewery) is wrongly rejected
     // while regional content passes. The POI gate still handles reassignment when
     // about_poi is false. (PR #483 follow-up)
-    const isAffirmativeVote = v => v.relevant || v.about_poi;
+    // News: the pipeline's own criteria decide (Current News rejects trip reports about a
+    // POI, so about_poi alone can't carry them). Events keep the about_poi override.
+    const isAffirmativeVote = contentType === 'news'
+      ? v => v.relevant
+      : v => v.relevant || v.about_poi;
     let yesCount = 0, noCount = 0, inRegionCount = 0;
     try {
       // Relevance and region are independent LLM votes — run concurrently so the
@@ -446,7 +475,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       [relevanceVotes, regionVotes] = await Promise.all([
         runContentRelevanceVotes(pool, {
           title: row.title, description: row.description,
-          poiName: row.poi_name, contentType
+          poiName: row.poi_name, contentType,
+          ...(contentType === 'news' ? { criteria: newsRelevanceCriteria(row.pipeline) } : {})
         }),
         runRegionVotes(pool, {
           title: row.title, description: row.description, poiName: row.poi_name
@@ -471,8 +501,13 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
 
     // Four independent gates — auto-publish only when all four pass (spec 030 + 041).
     // Events legitimately carry future dates, so the future-date check is news-only.
-    const dateGate = evaluateDateGate(effectiveDate, newScore,
-      { threshold: effectiveThreshold, floorYear: dateFloorYear, allowFuture: contentType === 'event' });
+    // Historical News is about the story, not when a page was posted, so its date is only
+    // used for ordering and never blocks publishing (spec 044).
+    const isHistorical = contentType === 'news' && row.pipeline === 'historical';
+    const dateGate = isHistorical
+      ? { verdict: 'pass', reason: 'Historical News: date not required' }
+      : evaluateDateGate(effectiveDate, newScore,
+        { threshold: effectiveThreshold, floorYear: dateFloorYear, allowFuture: contentType === 'event' });
 
     // 3/3 → pass, 0-1/3 → fail (auto-reject), 2/3 → review (human)
     const relevanceGate = unanimousYes
@@ -497,7 +532,8 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     } else if (relevanceGate.verdict === 'fail' || regionGate.verdict === 'fail') {
       resolvedStatus = 'rejected';
     } else if (dateGate.verdict === 'pass' && relevanceGate.verdict === 'pass' && regionGate.verdict === 'pass' && poiGate.verdict === 'pass') {
-      resolvedStatus = 'published';
+      // Current News built from a search snippet never read the page; a human confirms it
+      resolvedStatus = (contentType === 'news' && row.pipeline === 'current' && row.from_snippet) ? 'pending' : 'published';
     } else {
       resolvedStatus = 'pending';
     }
@@ -508,9 +544,11 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       region: { verdict: regionGate.verdict, reason: regionGate.reason, in_region: inRegionCount, total: regionVotes.length },
       poi: { verdict: poiGate.verdict, tier: poiGate.tier, reason: poiGate.reason, reassigned_from: poiGate.reassigned_from, reassigned_to: poiGate.reassigned_to }
     };
+    const snippetHold = contentType === 'news' && row.pipeline === 'current' && row.from_snippet && resolvedStatus === 'pending'
+      ? ' (snippet only, needs review)' : '';
     const reasoning = forceStatus
       ? `Forced to ${forceStatus}`
-      : `${resolvedStatus} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); region: ${regionGate.verdict} (${inRegionCount}/${regionVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
+      : `${resolvedStatus}${snippetHold} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); region: ${regionGate.verdict} (${inRegionCount}/${regionVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
 
     const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
     const newPoiId = poiGate.newPoiId; // Tier-2 reassignment target, or null to keep current poi_id
@@ -833,16 +871,7 @@ export async function fixDate(pool, contentType, contentId) {
 
   if (item.date_signals) {
     console.log(`[Moderation] fixDate ${contentType} #${contentId}: rescoring from cached date_signals`);
-    const signals = item.date_signals;
-    const deterministicSources = {
-      jsonLd: signals.jsonLd || [],
-      meta: signals.meta || [],
-      timeTags: signals.timeTags || [],
-      url: signals.url || null,
-      searchDate: signals.searchDate || null,
-      social: signals.social || []
-    };
-    consensus = scoreDateConsensus(deterministicSources, signals.llmVotes || []);
+    consensus = rescoreFromSignals(contentType, item.date_signals);
   } else {
     console.log(`[Moderation] fixDate ${contentType} #${contentId}: no cached signals, running full extraction`);
     let pageContent = null;
@@ -880,7 +909,8 @@ export async function fixDate(pool, contentType, contentId) {
   }
   const newScore = consensus.score || 0;
   await pool.query(
-    `UPDATE ${table} SET publication_date = $1, date_consensus_score = $2, moderation_processed = true WHERE id = $3`,
+    // A failed rescore keeps the existing date instead of wiping it
+    `UPDATE ${table} SET publication_date = COALESCE($1, publication_date), date_consensus_score = $2, moderation_processed = true WHERE id = $3`,
     [newDate, newScore, contentId]
   );
 

@@ -163,6 +163,7 @@ import { getDomainReputation } from './moderationService.js';
 import { loadListSetting } from './filterLists.js';
 import { classifyPoiType } from '../utils/poiClassify.js';
 import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
+import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, PIPELINE_DEFAULTS } from './newsPipelines.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -485,21 +486,6 @@ Do NOT include date or source_url fields — those are set separately.
 Return {} if no event found.`;
 }
 
-function buildNewsPrompt(poi, markdown) {
-  return `Summarize the news described in this text.
-
-POI: "${poi.name}"
-
-PAGE CONTENT:
-${markdown}
-
-Return ONLY valid JSON:
-{"title": "News headline", "summary": "2-3 sentence summary", "source_name": "Source name (e.g., NPS.gov, Cleveland.com)", "news_type": "general|alert|wildlife|infrastructure|community"}
-
-Do NOT include date or source_url fields — those are set separately.
-Return {} if no news found.`;
-}
-
 async function runConcurrent(tasks, limit = 10, delayMs = 0) {
   const results = new Array(tasks.length);
 
@@ -530,7 +516,7 @@ async function runConcurrent(tasks, limit = 10, delayMs = 0) {
 }
 
 async function processPage(pool, page, poi, contentType, options = {}) {
-  const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', jobType = 'news' } = options;
+  const { phase = 'Phase I', jobId = 0, timezone = 'America/New_York', jobType = 'news', pipeline = 'current' } = options;
   const url = page.url;
   const isEvent = contentType === 'event';
 
@@ -585,7 +571,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
     updateProgress(poi.id, { phase: 'summarize', message: `${contentType} ${i}/${count} from ${url}` });
     const prompt = isEvent
       ? buildEventPrompt(poi, page.markdown, i, count)
-      : buildNewsPrompt(poi, page.markdown);
+      : buildNewsPrompt(pipeline, poi, page.markdown);
     logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Summarize] ${contentType} ${i}/${count} from ${url}`);
     const aiResult = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 512, thinkingBudget: 0 });
     const text = (aiResult.response || aiResult || '').trim();
@@ -780,7 +766,10 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
 }
 
 export async function collectPoi(pool, poi, sheets = null, timezone = 'America/New_York', collectionType = 'both', onProgress = null, options = {}) {
-  const { skipPhaseTwo = false } = options;
+  // pipeline: 'current' (Current News: POI news page + Google News, past month) or
+  // 'historical' (Historical News: web search only, capped). Spec 044.
+  const { skipPhaseTwo = false, pipeline = 'current' } = options;
+  const isHistorical = pipeline === 'historical';
   const collectibleRoles = ['point', 'organization', 'river'];
   const poiRoles = poi.poi_roles || [];
   if (!poiRoles.some(r => collectibleRoles.includes(r))) {
@@ -846,6 +835,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
   const allEvents = [];
   const allNews = [];
   let usedDedicatedNewsUrl = false;
+  // Serper URLs not already in poi_news; Historical News uses it to tell a dry run.
+  let freshUrlCount = 0;
 
   const MAX_PHASE2_PAGES = 5;
 
@@ -903,7 +894,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
     }
   }
 
-  if (collectionType !== 'events' && newsUrl !== 'No dedicated news page') {
+  if (collectionType !== 'events' && !isHistorical && newsUrl !== 'No dedicated news page') {
     try {
       checkCancellation();
       reportProgress(`Phase I: [Render] Rendering news page: ${newsUrl}`);
@@ -926,7 +917,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
         { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase I' });
       const newsResults = await runConcurrent(freshNewsPages.map(page => () => {
         checkCancellation();
-        return processPage(pool, page, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone });
+        return processPage(pool, page, poi, 'news', { phase: 'Phase I', jobId, jobType, timezone, pipeline });
       }), pageConcurrency, pageDelayMs);
       for (const items of newsResults) {
         if (items && !(items instanceof Error)) allNews.push(...(items.news || []));
@@ -968,9 +959,16 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       logInfo(jobId, jobType, poi.id, poi.name, `News found:\n  ${newsList}`);
     }
 
-    const searchUrlsResult = await pool.query(
-      "SELECT value FROM admin_settings WHERE key = 'max_search_urls'"
-    );
+    const [searchUrlsResult, historyMaxRow] = await Promise.all([
+      pool.query("SELECT value FROM admin_settings WHERE key = 'max_search_urls'"),
+      isHistorical
+        ? pool.query("SELECT value FROM admin_settings WHERE key = 'news_history_max_urls'")
+        : { rows: [] }
+    ]);
+    const historyMaxUrls = (() => {
+      const val = parseInt(historyMaxRow.rows[0]?.value, 10);
+      return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : PIPELINE_DEFAULTS.historyMaxUrls;
+    })();
     const MAX_SEARCH_URLS = (() => {
       if (!searchUrlsResult.rows.length) return 10;
       const val = parseInt(searchUrlsResult.rows[0].value, 10);
@@ -988,7 +986,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
         reportProgress('Phase II: [Search] Querying Serper for external coverage');
         logInfo(jobId, jobType, poi.id, poi.name, 'Phase II: [Search] Querying Serper for external coverage');
 
-        const serperResult = await searchNewsUrls(pool, poi, { contentType: 'news' });
+        const serperResult = await searchNewsUrls(pool, poi, {
+          contentType: 'news', pipeline, queryIndex: poi.history_query_index || 0
+        });
         logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Search] "${serperResult.query}" → ${serperResult.urls.length} URLs (grounded: ${serperResult.grounded})`);
         reportProgress(`Phase II: [Search] ${serperResult.urls.length} URLs (query: "${serperResult.query}")`);
 
@@ -1016,9 +1016,11 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
              spent on fresh URLs, not consumed by ones we have already processed. */
           const freshUrls = await filterKnownPages(pool, externalUrls, 'news',
             { jobId, jobType, poiId: poi.id, poiName: poi.name, phase: 'Phase II' });
-          const urlsToProcess = freshUrls.slice(0, MAX_SEARCH_URLS);
-          if (freshUrls.length > MAX_SEARCH_URLS) {
-            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${MAX_SEARCH_URLS} URLs (${freshUrls.length} fresh of ${serperResult.urls.length} total)`);
+          freshUrlCount = freshUrls.length;
+          const urlCap = isHistorical ? historyMaxUrls : MAX_SEARCH_URLS;
+          const urlsToProcess = freshUrls.slice(0, urlCap);
+          if (freshUrls.length > urlCap) {
+            logInfo(jobId, jobType, poi.id, poi.name, `Phase II: Capped at ${urlCap} URLs (${freshUrls.length} fresh of ${serperResult.urls.length} total)`);
           }
 
           let renderedCount = 0;
@@ -1045,7 +1047,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             for (const page of freshPages) {
               checkCancellation();
               if (phase2PagesCollected >= MAX_PHASE2_PAGES) break;
-              const items = await processPage(pool, page, poi, 'news', { phase: 'Phase II', jobId, jobType: 'collectionPhaseTwo', timezone });
+              const items = await processPage(pool, page, poi, 'news', { phase: 'Phase II', jobId, jobType: 'collectionPhaseTwo', timezone, pipeline });
               pageItems.push(...(items.news || []));
               phase2PagesCollected++;
             }
@@ -1075,7 +1077,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
                 date_signals: consensus.rawSignals,
                 source_url: urlData.url,
                 rendered_content: urlData.snippet,
-                image_url: null
+                image_url: null,
+                from_snippet: true
               });
               logInfo(jobId, jobType, poi.id, poi.name, `Phase II: [Snippet] Recovered dated search result (render produced no item): ${urlData.url}`);
             }
@@ -1134,7 +1137,9 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       events: allEvents,
       metadata: {
         usedDedicatedNewsUrl,
-        provider: 'gemini'
+        provider: 'gemini',
+        pipeline,
+        freshUrlCount
       }
     };
   } catch (error) {
@@ -1230,6 +1235,12 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
   const { log = null, uriOwnershipMap = null, contentSource = 'ai' } = options;
+  const windowRow = newsItems.length > 0
+    ? await pool.query("SELECT value FROM admin_settings WHERE key = 'news_current_window_days'")
+    : { rows: [] };
+  const parsedWindow = parseInt(windowRow.rows[0]?.value, 10);
+  const currentWindowDays = Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : PIPELINE_DEFAULTS.currentWindowDays;
+  const thisYear = new Date().getFullYear();
 
   for (const item of newsItems) {
     try {
@@ -1297,9 +1308,13 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       }
 
       const dateScore = item.date_consensus_score || 0;
+      // Pipeline comes from the item's age when found, whichever search found it (spec 044)
+      const pipeline = newsPipelineFor(item.published_date, currentWindowDays);
+      const storyYear = Number.isInteger(item.story_year) && item.story_year >= 1000 && item.story_year <= thisYear
+        ? item.story_year : null;
       const inserted = await pool.query(`
-        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url, content_source)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        INSERT INTO poi_news (poi_id, title, summary, source_url, source_name, news_type, publication_date, date_consensus_score, moderation_status, rendered_content, date_signals, image_url, content_source, pipeline, from_snippet, story_year)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT DO NOTHING
       `, [
         effectivePoiId,
@@ -1314,7 +1329,10 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         item.rendered_content || null,
         item.date_signals ? JSON.stringify(item.date_signals) : null,
         item.image_url || null,
-        contentSource
+        contentSource,
+        pipeline,
+        item.from_snippet === true,
+        storyYear
       ]);
       if (inserted.rowCount === 0) {
         duplicateCount++;
@@ -1322,7 +1340,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         continue;
       }
       savedCount++;
-      if (log) log(`[Save] Saved (pending): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
+      if (log) log(`[Save] Saved (pending, ${pipeline}): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
       if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
       console.error(`Error saving news item for POI ${poiId}:`, error.message);
@@ -1516,7 +1534,9 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
   return { newsFound, eventsFound, processed };
 }
 
-export async function createNewsCollectionJob(pool, poiIds, source = 'batch') {
+// pipeline: 'current_news' | 'historical_news' | 'events', or null for a legacy
+// news-and-events run (the per-POI admin batch). Spec 044.
+export async function createNewsCollectionJob(pool, poiIds, source = 'batch', pipeline = null) {
   const startTime = new Date();
 
   const poisResult = await pool.query(
@@ -1533,20 +1553,21 @@ export async function createNewsCollectionJob(pool, poiIds, source = 'batch') {
   const jobResult = await pool.query(`
     INSERT INTO news_job_status (
       job_type, status, started_at, total_pois, pois_processed,
-      news_found, events_found, poi_ids, processed_poi_ids
+      news_found, events_found, poi_ids, processed_poi_ids, pipeline
     )
-    VALUES ($1, 'queued', $2, $3, 0, 0, 0, $4, $5)
+    VALUES ($1, 'queued', $2, $3, 0, 0, 0, $4, $5, $6)
     RETURNING id
   `, [
-    source === 'scheduled' ? 'scheduled_collection' : 'batch_collection',
+    pipeline || (source === 'scheduled' ? 'scheduled_collection' : 'batch_collection'),
     startTime,
     totalPois,
     JSON.stringify(validPoiIds),
-    JSON.stringify([])
+    JSON.stringify([]),
+    pipeline
   ]);
   const jobId = jobResult.rows[0].id;
 
-  logInfo(jobId, 'news', null, null, `Created news collection job for ${totalPois} POIs`);
+  logInfo(jobId, 'news', null, null, `Created ${PIPELINE_LABELS[pipeline] || 'news collection'} job for ${totalPois} POIs`);
 
   return { jobId, totalPois, poiIds: validPoiIds };
 }
@@ -1600,7 +1621,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   logInfo(jobId, 'news', null, null, `Job started: ${remainingPoiIds.length} POIs remaining`, { total: allPoiIds.length, already_done: processedPoiIds.length });
 
   const poisResult = await pool.query(
-    'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url FROM pois WHERE id = ANY($1)',
+    'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url, history_query_index FROM pois WHERE id = ANY($1)',
     [remainingPoiIds]
   );
   const pois = poisResult.rows;
@@ -1656,7 +1677,11 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       },
 
       collectFn: async (poi, { index, total }) => {
-        const { news, events, metadata } = await collectPoi(pool, poi, sheets, 'America/New_York');
+        const pipeline = job.pipeline;
+        const collectionType = pipeline === 'events' ? 'events'
+          : (pipeline === 'current_news' || pipeline === 'historical_news') ? 'news' : 'both';
+        const newsPipeline = pipeline === 'historical_news' ? 'historical' : 'current';
+        const { news, events, metadata } = await collectPoi(pool, poi, sheets, 'America/New_York', collectionType, null, { pipeline: newsPipeline });
         tracker.updateProgress(poi.id, { phase: 'save', message: `${news.length} news, ${events.length} events` });
         const saveLog = (msg) => { logInfo(jobId, 'news', poi.id, poi.name, msg); };
         const savedNews = await saveNewsItems(pool, poi.id, news, { log: saveLog, uriOwnershipMap });
@@ -1666,6 +1691,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
         await pool.query(`
           UPDATE pois SET last_news_collection = CURRENT_TIMESTAMP WHERE id = $1
         `, [poi.id]);
+        await recordPipelineRun(pool, pipeline, poi, metadata);
 
         return { savedNews, savedEvents, news, events };
       },
@@ -1758,8 +1784,8 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   }
 }
 
-export async function runBatchNewsCollection(pool, poiIds, sheets = null, source = 'batch') {
-  const { jobId, totalPois, poiIds: validPoiIds } = await createNewsCollectionJob(pool, poiIds, source);
+export async function runBatchNewsCollection(pool, poiIds, sheets = null, source = 'batch', pipeline = null) {
+  const { jobId, totalPois } = await createNewsCollectionJob(pool, poiIds, source, pipeline);
 
   setImmediate(async () => {
     try {
@@ -1879,53 +1905,86 @@ export async function getAllPoisForCollection(pool) {
   return filterExcludedTypePois(pool, collectionPoiRows.rows);
 }
 
-export async function getPoisForTierCollection(pool, tier) {
+export const PIPELINE_LABELS = {
+  current_news: 'Current News',
+  historical_news: 'Historical News',
+  events: 'Events'
+};
+
+async function readIntSetting(pool, key, fallback) {
+  const settingRow = await pool.query('SELECT value FROM admin_settings WHERE key = $1', [key]);
+  const parsed = parseInt(settingRow.rows[0]?.value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+// POIs each pipeline job should visit (spec 044). All three share the collectible-role,
+// deny-list, and amenity-type filters.
+//  - current_news: POIs whose tier cadence (daily/weekly/monthly) says they're due
+//  - historical_news: POIs whose history search hasn't run dry, least recently searched first
+//  - events: POIs with a dedicated events page
+export async function getPoisForPipeline(pool, pipeline, now = new Date()) {
+  if (!PIPELINE_LABELS[pipeline]) throw new Error(`Invalid news pipeline: ${pipeline}`);
   const excludedIds = (await loadListSetting(pool, 'news_collection_excluded_pois'))
     .filter(id => Number.isInteger(id));
 
-  const validTiers = ['daily', 'weekly', 'monthly'];
-  if (!validTiers.includes(tier)) {
-    throw new Error(`Invalid collection tier: ${tier}`);
-  }
-
-  const params = [tier];
-  let paramIdx = 2;
-  let excludeClause = '';
+  const params = [];
+  const clauses = [];
   if (excludedIds.length > 0) {
-    excludeClause = `AND id != ALL($${paramIdx})`;
     params.push(excludedIds);
+    clauses.push(`AND id != ALL($${params.length})`);
   }
+  if (pipeline === 'events') clauses.push(`AND events_url IS NOT NULL AND events_url <> ''`);
+  if (pipeline === 'historical_news') {
+    params.push(await readIntSetting(pool, 'news_history_dry_run_limit', PIPELINE_DEFAULTS.historyDryRunLimit));
+    clauses.push(`AND history_dry_runs < $${params.length}`);
+  }
+  const orderBy = pipeline === 'historical_news'
+    ? 'last_historical_collection NULLS FIRST, name'
+    : `CASE WHEN 'point' = ANY(poi_roles) THEN 1 WHEN 'organization' = ANY(poi_roles) THEN 2 ELSE 3 END, name`;
 
-  const tierPoiRows = await pool.query(
-    `SELECT id, name, primary_activities FROM pois
+  const pipelinePoiRows = await pool.query(
+    `SELECT id, name, primary_activities, collection_tier, last_current_news_collection FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
        AND poi_roles && ARRAY['point','organization','river']::text[]
-       AND collection_tier = $1
-       ${excludeClause}
-     ORDER BY
-       CASE
-         WHEN 'point' = ANY(poi_roles) THEN 1
-         WHEN 'organization' = ANY(poi_roles) THEN 2
-         ELSE 3
-       END,
-       name`,
+       ${clauses.join('\n       ')}
+     ORDER BY ${orderBy}`,
     params
   );
-  return filterExcludedTypePois(pool, tierPoiRows.rows);
+  const rows = pipeline === 'current_news'
+    ? pipelinePoiRows.rows.filter(r => isDueForCurrentNews(r.collection_tier, r.last_current_news_collection, now))
+    : pipelinePoiRows.rows;
+  return filterExcludedTypePois(pool, rows);
 }
 
-export async function runTierNewsCollection(pool, tier, sheets = null) {
-  const poiIds = await getPoisForTierCollection(pool, tier);
+// Per-POI state after a pipeline visit. Historical News stops visiting a POI once
+// news_history_dry_run_limit runs in a row find no URL we don't already have, and
+// rotates its search angle every run.
+async function recordPipelineRun(pool, pipeline, poi, metadata = {}) {
+  if (pipeline === 'current_news') {
+    await pool.query('UPDATE pois SET last_current_news_collection = NOW() WHERE id = $1', [poi.id]);
+  } else if (pipeline === 'historical_news' && Number.isInteger(metadata.freshUrlCount)) {
+    await pool.query(
+      `UPDATE pois SET last_historical_collection = NOW(),
+              history_query_index = history_query_index + 1,
+              history_dry_runs = CASE WHEN $2 = 0 THEN history_dry_runs + 1 ELSE 0 END
+       WHERE id = $1`,
+      [poi.id, metadata.freshUrlCount]
+    );
+  }
+}
+
+export async function runPipelineCollection(pool, pipeline, sheets = null, source = 'scheduled') {
+  const poiIds = await getPoisForPipeline(pool, pipeline);
+  const label = PIPELINE_LABELS[pipeline];
+  const runId = Math.floor(Date.now() / 1000);
 
   if (poiIds.length === 0) {
-    const runId = Math.floor(Date.now() / 1000);
-    logInfo(runId, 'news', null, null, `No POIs to collect for ${tier} tier`);
-    return { jobId: null, totalPois: 0, message: `No POIs to collect for ${tier} tier` };
+    logInfo(runId, 'news', null, null, `${label}: no POIs due`);
+    return { jobId: null, totalPois: 0, message: `${label}: no POIs due` };
   }
 
-  const runId = Math.floor(Date.now() / 1000);
-  logInfo(runId, 'news', null, null, `Starting ${tier} news collection for ${poiIds.length} POIs`);
-  return runBatchNewsCollection(pool, poiIds, sheets, `scheduled-${tier}`);
+  logInfo(runId, 'news', null, null, `Starting ${label} for ${poiIds.length} POIs`);
+  return runBatchNewsCollection(pool, poiIds, sheets, source, pipeline);
 }
 
 export async function runNewsCollection(pool, sheets = null) {
@@ -2014,12 +2073,10 @@ export async function getUpcomingEvents(pool, daysAhead = 30, tz = 'America/New_
   return upcomingEventRows.rows;
 }
 
-export async function getLatestJobStatus(pool) {
-  const latestJobRows = await pool.query(`
-    SELECT * FROM news_job_status
-    ORDER BY created_at DESC
-    LIMIT 1
-  `);
+export async function getLatestJobStatus(pool, pipeline = null) {
+  const latestJobRows = pipeline
+    ? await pool.query('SELECT * FROM news_job_status WHERE pipeline = $1 ORDER BY created_at DESC LIMIT 1', [pipeline])
+    : await pool.query('SELECT * FROM news_job_status ORDER BY created_at DESC LIMIT 1');
 
   return latestJobRows.rows[0] || null;
 }

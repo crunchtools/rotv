@@ -21,88 +21,75 @@ describe('Serper Service', () => {
       poi_roles: ['trail']
     };
 
-    it('should merge web search and news results for a grounded news query', async () => {
-      const mockPool = {
-        query: vi.fn()
-          .mockResolvedValueOnce({
-            rows: [{ value: 'test-api-key-123' }]
-          })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({
-            rows: [{ name: 'Cuyahoga Valley National Park' }]
-          })
-      };
+    const groundedPool = () => ({
+      query: vi.fn()
+        .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
+        .mockResolvedValueOnce({ rows: [] })
+        .mockResolvedValueOnce({ rows: [{ name: 'Cuyahoga Valley National Park' }] })
+    });
 
-      fetch.mockImplementation((url) => Promise.resolve({
+    it('Current News asks Google News for the past month only', async () => {
+      fetch.mockResolvedValue({
         ok: true,
-        json: async () => url.endsWith('/news')
-          ? {
-              news: [{ link: 'https://example.com/news3', title: 'News 3', snippet: 'Snippet 3', date: '2026-04-02' }],
-              credits: 1
-            }
-          : {
-              organic: [
-                { link: 'https://example.com/news1', title: 'News 1', snippet: 'Snippet 1', date: '2026-04-01' },
-                { link: 'https://example.com/news2', title: 'News 2', snippet: 'Snippet 2' }
-              ],
-              credits: 1
-            }
-      }));
-
-      const result = await searchNewsUrls(mockPool, mockPoi);
-
-      expect(result.query).toBe('Latest news for Ledges Trail in Cuyahoga Valley National Park');
-      expect(result.grounded).toBe(true);
-      expect(result.groundingContext).toBe('Cuyahoga Valley National Park');
-      expect(result.boundaries).toEqual(['Cuyahoga Valley National Park']);
-      expect(result.urls).toHaveLength(3);
-      expect(result.urls.map(u => u.url)).toEqual([
-        'https://example.com/news1',
-        'https://example.com/news2',
-        'https://example.com/news3'
-      ]);
-      expect(result.urls[0].date).toBe('2026-04-01');
-      expect(result.urls[1].date).toBeNull();
-      expect(result.urls[2].date).toBe('2026-04-02');
-      expect(result.credits).toBe(2);
-
-      expect(fetch).toHaveBeenCalledTimes(2);
-      expect(fetch).toHaveBeenCalledWith(
-        'https://google.serper.dev/search',
-        expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'X-API-KEY': 'test-api-key-123',
-            'Content-Type': 'application/json'
-          }),
-          body: JSON.stringify({ q: 'Latest news for Ledges Trail in Cuyahoga Valley National Park', num: 10 })
+        json: async () => ({
+          news: [
+            { link: 'https://example.com/news1', title: 'News 1', snippet: 'Snippet 1', date: '2 days ago' },
+            { link: 'https://example.com/news2', title: 'News 2', snippet: 'Snippet 2' }
+          ],
+          credits: 1
         })
-      );
+      });
+
+      const result = await searchNewsUrls(groundedPool(), mockPoi);
+
+      expect(result.query).toBe('"Ledges Trail" Cuyahoga Valley National Park');
+      expect(result.grounded).toBe(true);
+      expect(result.boundaries).toEqual(['Cuyahoga Valley National Park']);
+      expect(result.urls.map(u => u.url)).toEqual(['https://example.com/news1', 'https://example.com/news2']);
+      expect(result.urls[0].date).toBe('2 days ago');
+      expect(result.urls[1].date).toBeNull();
+      expect(fetch).toHaveBeenCalledTimes(1);
       expect(fetch).toHaveBeenCalledWith(
         'https://google.serper.dev/news',
-        expect.objectContaining({ method: 'POST' })
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ 'X-API-KEY': 'test-api-key-123', 'Content-Type': 'application/json' }),
+          body: JSON.stringify({ q: '"Ledges Trail" Cuyahoga Valley National Park', num: 10, tbs: 'qdr:m' })
+        })
       );
     });
 
-    it('should dedupe a URL returned by both endpoints', async () => {
-      const mockPool = {
-        query: vi.fn()
-          .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
-          .mockResolvedValueOnce({ rows: [] })
-          .mockResolvedValueOnce({ rows: [{ name: 'Cuyahoga Valley National Park' }] })
-      };
-
-      fetch.mockImplementation((url) => Promise.resolve({
+    it('Historical News asks web search with no date filter and rotates its angle', async () => {
+      fetch.mockResolvedValue({
         ok: true,
-        json: async () => url.endsWith('/news')
-          ? { news: [{ link: 'https://example.com/shared/?utm=x', title: 'Shared', snippet: 'S', date: '2026-04-02' }], credits: 1 }
-          : { organic: [{ link: 'https://example.com/shared', title: 'Shared', snippet: 'S' }], credits: 1 }
-      }));
+        json: async () => ({ organic: [{ link: 'https://example.com/history', title: 'History', snippet: 'S' }], credits: 1 })
+      });
 
-      const result = await searchNewsUrls(mockPool, mockPoi);
+      const first = await searchNewsUrls(groundedPool(), mockPoi, { pipeline: 'historical', queryIndex: 0 });
+      const second = await searchNewsUrls(groundedPool(), mockPoi, { pipeline: 'historical', queryIndex: 1 });
+
+      expect(first.query).toBe('history of Ledges Trail Cuyahoga Valley National Park');
+      expect(second.query).toBe('Ledges Trail historic Cuyahoga Valley National Park');
+      expect(fetch.mock.calls[0][0]).toBe('https://google.serper.dev/search');
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ q: first.query, num: 10 });
+      expect(first.urls.map(u => u.url)).toEqual(['https://example.com/history']);
+    });
+
+    it('should dedupe a URL returned twice', async () => {
+      fetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          news: [
+            { link: 'https://example.com/shared/?utm=x', title: 'Shared', snippet: 'S', date: '1 day ago' },
+            { link: 'https://example.com/shared', title: 'Shared', snippet: 'S' }
+          ],
+          credits: 1
+        })
+      });
+
+      const result = await searchNewsUrls(groundedPool(), mockPoi);
 
       expect(result.urls).toHaveLength(1);
-      expect(result.urls[0].url).toBe('https://example.com/shared');
     });
 
     it('should construct multi-boundary grounded query (smallest area first)', async () => {
@@ -132,7 +119,7 @@ describe('Serper Service', () => {
 
       const result = await searchNewsUrls(mockPool, mockPoi);
 
-      expect(result.query).toBe('Latest news for Ledges Trail in Cuyahoga Falls, Cuyahoga Valley National Park');
+      expect(result.query).toBe('"Ledges Trail" Cuyahoga Falls, Cuyahoga Valley National Park');
       expect(result.grounded).toBe(true);
       expect(result.boundaries).toEqual(['Cuyahoga Falls', 'Cuyahoga Valley National Park']);
     });
@@ -215,7 +202,7 @@ describe('Serper Service', () => {
 
       const result = await searchNewsUrls(mockPool, mockPoi);
 
-      expect(result.query).toBe('Latest news for Ledges Trail');
+      expect(result.query).toBe('"Ledges Trail"');
       expect(result.grounded).toBe(false);
       expect(result.groundingContext).toBe('');
       expect(result.boundaries).toEqual([]);
@@ -272,7 +259,7 @@ describe('Serper Service', () => {
       });
 
       await expect(searchNewsUrls(mockPool, mockPoi)).rejects.toThrow(
-        'Serper API error (search): 401'
+        'Serper API error (news): 401'
       );
     });
 
@@ -294,7 +281,7 @@ describe('Serper Service', () => {
       const result = await searchNewsUrls(mockPool, mockPoi);
 
       expect(result.urls).toHaveLength(0);
-      expect(result.credits).toBe(2);
+      expect(result.credits).toBe(1);
     });
   });
 

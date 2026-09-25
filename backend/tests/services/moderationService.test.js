@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { getDomainReputation, evaluateDateGate, evaluateRegionGate } from '../../services/moderationService.js';
+import { getDomainReputation, evaluateDateGate, evaluateRegionGate, rescoreFromSignals } from '../../services/moderationService.js';
 
 // Test domain lists (mirrors production config from migration 019)
 const TRUSTED_DOMAINS = [
@@ -84,6 +84,14 @@ describe('Date gate (spec 030)', () => {
     expect(evaluateDateGate('1899-01-01', 8, cfg).verdict).toBe('review');
   });
 
+  // spec 044: date-only news is stored at noon Eastern; the 7 AM sweep must not call a
+  // same-day article "future" and strand it in pending.
+  test('same-day noon date passes; tomorrow is still future', () => {
+    const now = new Date('2026-09-25T11:00:00Z'); // 7 AM Eastern
+    expect(evaluateDateGate('2026-09-25T16:00:00Z', 6, { ...cfg, now }).verdict).toBe('pass');
+    expect(evaluateDateGate('2026-09-26T16:00:00Z', 6, { ...cfg, now }).verdict).toBe('review');
+  });
+
   test('future news date -> review, but events allow future', () => {
     const future = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10);
     expect(evaluateDateGate(future, 6, cfg).verdict).toBe('review');
@@ -130,5 +138,29 @@ describe('Region gate (spec 041)', () => {
   test('fewer than 3 votes (LLM failures) -> review, never fail', () => {
     expect(evaluateRegionGate([outRegion, outRegion]).verdict).toBe('review');
     expect(evaluateRegionGate([]).verdict).toBe('review');
+  });
+});
+
+describe('rescoreFromSignals (spec 044)', () => {
+  test('events read the start signals instead of scoring nothing', () => {
+    const eventSignals = {
+      start: { jsonLd: ['2026-09-27T10:00'], meta: [], timeTags: [], url: null, llmVotes: ['2026-09-27T10:00'] },
+      end: { jsonLd: ['2026-09-27T14:00'], llmVotes: [] }
+    };
+    const consensus = rescoreFromSignals('event', eventSignals);
+    expect(consensus.date).toBe('2026-09-27T10:00');
+    expect(consensus.score).toBe(5);
+  });
+
+  test('missing or empty signals score nothing instead of throwing', () => {
+    for (const [type, signals] of [['event', null], ['event', {}], ['news', undefined], ['event', { start: null }]]) {
+      expect(rescoreFromSignals(type, signals)).toEqual({ date: null, score: 0, sourceMap: {} });
+    }
+  });
+
+  test('news reads top-level signals', () => {
+    const consensus = rescoreFromSignals('news', { jsonLd: ['2026-09-20'], llmVotes: ['2026-09-20'] });
+    expect(consensus.date).toBe('2026-09-20');
+    expect(consensus.score).toBe(5);
   });
 });

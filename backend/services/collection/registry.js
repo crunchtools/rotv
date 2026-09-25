@@ -9,49 +9,50 @@
  */
 
 export const COLLECTION_TYPES = [
+  // Current News, Historical News, and Events replace the daily/weekly/monthly tier
+  // jobs (spec 044). historySubType narrows the shared 'news' history to one pipeline.
   {
-    id: 'news_daily',
-    label: 'News & Events (Daily)',
-    description: 'Daily collection for POIs with dedicated URLs + high-value POIs',
-    icon: '\u{1F4F0}',
-    promptKeys: [{
-      key: 'news_collection_prompt',
-      label: 'News Collection Prompt',
-      placeholders: ['{{name}}', '{{poi_roles}}', '{{timezone}}', '{{website}}', '{{eventsUrl}}', '{{newsUrl}}']
-    }],
-    scheduleJobName: 'news-collection-daily',
-    schedule: '0 6 * * *',
-    statusTable: 'news_job_status',
-    historyTypes: ['news', 'news_single', 'events_single'],
-    triggerEndpoint: '/api/admin/news/collect?tier=daily',
-    manualTriggerMethod: 'POST',
-    hasPrompt: true
-  },
-  {
-    id: 'news_weekly',
-    label: 'News & Events (Weekly)',
-    description: 'Weekly collection for active parks, landmarks, and organizations',
+    id: 'current_news',
+    label: 'Current News',
+    description: 'Daily: POI news pages + Google News (past month) for POIs whose tier cadence is due',
     icon: '\u{1F4F0}',
     promptKeys: [],
-    scheduleJobName: 'news-collection-weekly',
-    schedule: '0 5 * * 4',
+    scheduleJobName: 'news-current',
+    schedule: '0 6 * * *',
     statusTable: 'news_job_status',
-    historyTypes: ['news'],
-    triggerEndpoint: '/api/admin/news/collect?tier=weekly',
+    historyTypes: ['news', 'news_single'],
+    historySubType: 'current_news',
+    triggerEndpoint: '/api/admin/news/collect?pipeline=current_news',
     manualTriggerMethod: 'POST',
     hasPrompt: false
   },
   {
-    id: 'news_monthly',
-    label: 'News & Events (Monthly)',
-    description: 'Monthly collection for low-activity and static POIs',
-    icon: '\u{1F4F0}',
+    id: 'historical_news',
+    label: 'Historical News',
+    description: 'Monthly: web search for the history of each POI, a few URLs per run; stops per POI once it runs dry',
+    icon: '\u{1F3DB}\u{FE0F}',
     promptKeys: [],
-    scheduleJobName: 'news-collection-monthly',
-    schedule: '0 1 1 * *',
+    scheduleJobName: 'news-historical',
+    schedule: '0 2 15 * *',
     statusTable: 'news_job_status',
     historyTypes: ['news'],
-    triggerEndpoint: '/api/admin/news/collect?tier=monthly',
+    historySubType: 'historical_news',
+    triggerEndpoint: '/api/admin/news/collect?pipeline=historical_news',
+    manualTriggerMethod: 'POST',
+    hasPrompt: false
+  },
+  {
+    id: 'events',
+    label: 'Events',
+    description: 'Daily: events pages for POIs that have one',
+    icon: '\u{1F4C5}',
+    promptKeys: [],
+    scheduleJobName: 'events-collection',
+    schedule: '30 4 * * *',
+    statusTable: 'news_job_status',
+    historyTypes: ['news', 'events_single'],
+    historySubType: 'events',
+    triggerEndpoint: '/api/admin/news/collect?pipeline=events',
     manualTriggerMethod: 'POST',
     hasPrompt: false
   },
@@ -201,8 +202,6 @@ export const COLLECTION_TYPES = [
  */
 export async function getDefaultPrompt(key) {
   switch (key) {
-    case 'news_collection_prompt':
-      return null;
     case 'trail_status_prompt': {
       const { TRAIL_STATUS_PROMPT } = await import('../trailStatusService.js');
       return TRAIL_STATUS_PROMPT;

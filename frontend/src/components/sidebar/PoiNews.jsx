@@ -125,7 +125,13 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
               </button>
             )}
           </div>
-          {(item.publication_date || item.collection_date) && (
+          {item.pipeline === 'historical' ? (
+            // Historical News: the story's year matters, not when a page was posted (spec 044)
+            <div className="poi-event-date">
+              {/* Fix: no web publish date here — it would read as when the history happened (PR #623 review) */}
+              <span className="poi-news-history-tag">History{item.story_year ? ` · ${item.story_year}` : ''}</span>
+            </div>
+          ) : (item.publication_date || item.collection_date) && (
             <div className="poi-event-date">
               {item.publication_date
                 ? formatPublicationDate(item.publication_date)

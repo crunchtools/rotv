@@ -202,15 +202,18 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     LIMIT ${DIGEST_EVENT_LIMIT * 2}
   `;
 
-  // The upper bound matters: publication_date is sometimes parsed off an event
-  // page and lands in the future, which sorts above genuine news and takes every slot.
+  // Current News collected in the week before the send (spec 044); Historical News never
+  // reaches subscribers. The publication_date upper bound still matters: a date parsed off
+  // an event page can land in the future and would sort above genuine news.
   const newsQuery = `
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
            n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
-      AND COALESCE(n.publication_date, n.collection_date) > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
+      AND n.pipeline = 'current'
+      AND n.collection_date > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
+      AND n.collection_date <= COALESCE($1::timestamptz, NOW())
       AND COALESCE(n.publication_date, n.collection_date) <= COALESCE($1::timestamptz, NOW())
     ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.id DESC
     LIMIT ${DIGEST_NEWS_LIMIT * DIGEST_NEWS_FETCH_MULTIPLIER}
@@ -691,7 +694,8 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
          JOIN pois p ON p.id = n.poi_id
         WHERE n.poi_id = ANY($1::int[])
           AND n.moderation_status IN ('published', 'auto_approved')
-          AND COALESCE(n.publication_date, n.collection_date) > NOW() - INTERVAL '7 days'
+          AND n.pipeline = 'current'
+          AND n.collection_date > NOW() - INTERVAL '7 days'
           AND COALESCE(n.publication_date, n.collection_date) <= NOW()
         ORDER BY COALESCE(n.publication_date, n.collection_date) DESC`,
       [allPoiIds]
