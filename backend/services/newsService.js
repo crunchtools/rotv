@@ -171,7 +171,8 @@ function debugLog(message) {
   const logMessage = `${timestamp} ${message}\n`;
   try {
     fs.appendFileSync('/tmp/logs/debug.log', logMessage);
-  } catch (err) {
+  } catch {
+    // The debug file is best-effort; the console line below always logs
   }
   console.error(message);
 }

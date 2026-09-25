@@ -15,6 +15,7 @@ const { Pool } = pg;
 // Import the JS renderer service
 import { renderJavaScriptPage, isJavaScriptHeavySite } from '../services/jsRenderer.js';
 
+import { TWITTER_COOKIES, hasTwitterCookies } from './helpers/twitterCookies.js';
 describe('Playwright Integration Tests', () => {
   let pool;
 
@@ -118,22 +119,9 @@ describe('Playwright Integration Tests', () => {
   });
 
   describe('MTB Trail Status Collection - Twitter/X Rendering', () => {
-    // Twitter cookies for authenticated access
-    const TWITTER_COOKIES = [
-      {"domain":".x.com","expirationDate":1803885827.426768,"hostOnly":false,"httpOnly":true,"name":"auth_token","path":"/","sameSite":"None","secure":true,"session":false,"value":"9e1d4d0bdee8dbebb364c2fffc0aa1fbfac74d7f"},
-      {"domain":".x.com","expirationDate":1803885694.853395,"hostOnly":false,"httpOnly":false,"name":"guest_id","path":"/","sameSite":"None","secure":true,"session":false,"value":"v1%3A176932569481346750"},
-      {"domain":".x.com","expirationDate":1801615263.323888,"hostOnly":false,"httpOnly":false,"name":"twid","path":"/","sameSite":"None","secure":true,"session":false,"value":"u%3D2015324658405408768"},
-      {"domain":".x.com","expirationDate":1803885827.426768,"hostOnly":false,"httpOnly":true,"name":"_twitter_sess","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"BAh7BiIKZmxhc2hJQzonQWN0aW9uQ29udHJvbGxlcjo6Rmxhc2g6OkZsYXNo%250ASGFzaHsABjoKQHVzZWR7AA%253D%253D--1164b91ac812d853b877e93ddb612b7471bebc74"},
-      {"domain":".x.com","expirationDate":1803885827.597045,"hostOnly":false,"httpOnly":false,"name":"ct0","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"35886c82558d14f431693bf87659a9cc4df3259668fae3ff0bff701a1a0a8c18579850cb19c8685aa37e1822c921e4c280b7a5eb1c125ec734c85c546a6437567ec2850428841105bfd2b1fd200d5430"},
-      {"domain":".x.com","expirationDate":1785614577.129721,"hostOnly":false,"httpOnly":false,"name":"d_prefs","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"MToxLGNvbnNlbnRfdmVyc2lvbjoyLHRleHRfdmVyc2lvbjoxMDAw"},
-      {"domain":".x.com","expirationDate":1803885694.708093,"hostOnly":false,"httpOnly":false,"name":"dnt","path":"/","sameSite":"None","secure":true,"session":false,"value":"1"},
-      {"domain":".x.com","expirationDate":1804276977.326857,"hostOnly":false,"httpOnly":false,"name":"guest_id_ads","path":"/","sameSite":"None","secure":true,"session":false,"value":"v1%3A176932569481346750"},
-      {"domain":".x.com","expirationDate":1804276977.327102,"hostOnly":false,"httpOnly":false,"name":"guest_id_marketing","path":"/","sameSite":"None","secure":true,"session":false,"value":"v1%3A176932569481346750"},
-      {"domain":".x.com","expirationDate":1803885827.426455,"hostOnly":false,"httpOnly":true,"name":"kdt","path":"/","sameSite":"Lax","secure":true,"session":false,"value":"Ponn8jflmTzrjRgr8rj1pqQh7LIshja0mUtU9b7s"}
-    ];
-
+    // Authenticated X rendering needs TEST_TWITTER_COOKIES (see helpers/twitterCookies.js)
     beforeAll(async () => {
-      // Ensure Twitter cookies are in the database for authenticated access
+      if (!hasTwitterCookies) return;
       await pool.query(`
         INSERT INTO admin_settings (key, value, updated_at)
         VALUES ('twitter_cookies', $1, CURRENT_TIMESTAMP)
@@ -150,7 +138,7 @@ describe('Playwright Integration Tests', () => {
       console.log('[Playwright Test] Twitter/X detection: PASS');
     });
 
-    it('should render Twitter/X page with authentication', async () => {
+    it.skipIf(!hasTwitterCookies)('should render Twitter/X page with authentication', async () => {
       // This tests Playwright rendering for MTB Trail Status collection
       // Uses the CVNP MTB Twitter account which publishes trail status
       const result = await renderJavaScriptPage('https://x.com/CVNPmtb', {
@@ -185,7 +173,7 @@ describe('Playwright Integration Tests', () => {
       }
     }, 35000);
 
-    it('should render Twitter/X MTB status page for East Rim', async () => {
+    it.skipIf(!hasTwitterCookies)('should render Twitter/X MTB status page for East Rim', async () => {
       // Specific test for the East Rim Trail status URL
       const EAST_RIM_STATUS_URL = 'https://x.com/CVNPmtb';
 

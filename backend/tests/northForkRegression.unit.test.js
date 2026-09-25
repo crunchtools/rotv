@@ -69,7 +69,7 @@ describe('North Fork Trail Regression Tests', () => {
       );
 
       // Find all RETURNING clauses
-      const returningPattern = /RETURNING\s+[\s\S]*?(?=\s*\`|\s*\'\s*,)/g;
+      const returningPattern = /RETURNING\s+[\s\S]*?(?=\s*`|\s*'\s*,)/g;
       const matches = [...source.matchAll(returningPattern)];
 
       for (const match of matches) {

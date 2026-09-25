@@ -470,7 +470,7 @@ function NewsletterSettings({ user }) {
               required
             />
             <p className="field-hint">
-              You'll receive a confirmation email from Buttondown to complete your subscription
+              You&apos;ll receive a confirmation email from Buttondown to complete your subscription
             </p>
           </div>
 
@@ -702,7 +702,7 @@ function NewsletterSettings({ user }) {
         )}
 
         {sources.length === 0 && !orphans ? (
-          <p style={{ color: '#666' }}>No newsletter sources yet. Click "Discover Sources" to find senders from existing emails.</p>
+          <p style={{ color: '#666' }}>No newsletter sources yet. Click &quot;Discover Sources&quot; to find senders from existing emails.</p>
         ) : (
           <>
             {newSources.length > 0 && (
@@ -759,7 +759,7 @@ function NewsletterSettings({ user }) {
           <li><strong>Get API Key:</strong> Generate an API key from Buttondown Settings &rarr; API</li>
           <li><strong>Schedule:</strong> Digest sends automatically every Friday at 8 AM EST</li>
           <li><strong>Content:</strong> Includes events (Fri-Sun) and recent news (last 7 days)</li>
-          <li><strong>Testing:</strong> Use Settings &rarr; Jobs &rarr; Newsletter Digest &rarr; "Run Now" to test</li>
+          <li><strong>Testing:</strong> Use Settings &rarr; Jobs &rarr; Newsletter Digest &rarr; &quot;Run Now&quot; to test</li>
         </ul>
       </div>
 
@@ -771,7 +771,7 @@ function NewsletterSettings({ user }) {
         </div>
         <ul className="info-list">
           <li>Settings are stored in the database and require a container restart to take effect</li>
-          <li>Without a valid API key, subscriptions are tracked locally but emails won't be sent</li>
+          <li>Without a valid API key, subscriptions are tracked locally but emails won&apos;t be sent</li>
           <li>The digest will skip sending if there are no events or news items</li>
           <li>Subscriber management (unsubscribe, etc.) is handled by Buttondown</li>
         </ul>

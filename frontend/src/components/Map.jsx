@@ -776,6 +776,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
         });
       }
     } catch {
+      // Best-effort visible-POI update: skip this pass if map state can't be read yet
     }
   }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search, iconConfig]);
 

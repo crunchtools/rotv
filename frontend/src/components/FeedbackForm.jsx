@@ -128,7 +128,7 @@ function FeedbackForm({ onClose, inline = false }) {
         </div>
 
         <div className="feedback-field">
-          <label htmlFor="feedback-email">Email <span className="field-optional">(optional, if you'd like a response)</span></label>
+          <label htmlFor="feedback-email">Email <span className="field-optional">(optional, if you&apos;d like a response)</span></label>
           <input
             type="email"
             id="feedback-email"
