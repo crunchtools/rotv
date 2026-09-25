@@ -163,7 +163,7 @@ import { getDomainReputation } from './moderationService.js';
 import { loadListSetting } from './filterLists.js';
 import { classifyPoiType } from '../utils/poiClassify.js';
 import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
-import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, DEFAULT_CURRENT_WINDOW_DAYS, DEFAULT_HISTORY_MAX_URLS, DEFAULT_HISTORY_DRY_RUN_LIMIT } from './newsPipelines.js';
+import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, PIPELINE_DEFAULTS } from './newsPipelines.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -967,7 +967,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
     ]);
     const historyMaxUrls = (() => {
       const val = parseInt(historyMaxRow.rows[0]?.value, 10);
-      return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : DEFAULT_HISTORY_MAX_URLS;
+      return Number.isFinite(val) ? Math.min(20, Math.max(1, val)) : PIPELINE_DEFAULTS.historyMaxUrls;
     })();
     const MAX_SEARCH_URLS = (() => {
       if (!searchUrlsResult.rows.length) return 10;
@@ -1239,7 +1239,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
     ? await pool.query("SELECT value FROM admin_settings WHERE key = 'news_current_window_days'")
     : { rows: [] };
   const parsedWindow = parseInt(windowRow.rows[0]?.value, 10);
-  const currentWindowDays = Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : DEFAULT_CURRENT_WINDOW_DAYS;
+  const currentWindowDays = Number.isFinite(parsedWindow) && parsedWindow > 0 ? parsedWindow : PIPELINE_DEFAULTS.currentWindowDays;
   const thisYear = new Date().getFullYear();
 
   for (const item of newsItems) {
@@ -1935,7 +1935,7 @@ export async function getPoisForPipeline(pool, pipeline, now = new Date()) {
   }
   if (pipeline === 'events') clauses.push(`AND events_url IS NOT NULL AND events_url <> ''`);
   if (pipeline === 'historical_news') {
-    params.push(await readIntSetting(pool, 'news_history_dry_run_limit', DEFAULT_HISTORY_DRY_RUN_LIMIT));
+    params.push(await readIntSetting(pool, 'news_history_dry_run_limit', PIPELINE_DEFAULTS.historyDryRunLimit));
     clauses.push(`AND history_dry_runs < $${params.length}`);
   }
   const orderBy = pipeline === 'historical_news'

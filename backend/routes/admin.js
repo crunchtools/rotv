@@ -2978,7 +2978,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.get('/news/status', isAdmin, async (req, res) => {
     try {
-      const status = await getLatestJobStatus(pool, req.query.pipeline || null);
+      // Fix: unknown pipelines are rejected like the collect endpoint does (PR #623 review)
+      const pipeline = req.query.pipeline || null;
+      if (pipeline && !PIPELINE_LABELS[pipeline]) return res.status(400).json({ error: `Unknown pipeline: ${pipeline}` });
+      const status = await getLatestJobStatus(pool, pipeline);
       res.json(status || { message: 'No jobs have run yet' });
     } catch (error) {
       console.error('Error getting job status:', error);
@@ -2988,6 +2991,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.get('/news/ai-stats', isAdmin, async (req, res) => {
     try {
+      if (req.query.pipeline && !PIPELINE_LABELS[req.query.pipeline]) {
+        return res.status(400).json({ error: `Unknown pipeline: ${req.query.pipeline}` });
+      }
       const recentJob = req.query.pipeline
         ? await pool.query('SELECT ai_usage, status FROM news_job_status WHERE pipeline = $1 ORDER BY created_at DESC LIMIT 1', [req.query.pipeline])
         : await pool.query('SELECT ai_usage, status FROM news_job_status ORDER BY created_at DESC LIMIT 1');

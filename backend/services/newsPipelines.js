@@ -4,16 +4,16 @@
 // window were already more than 90 days old. Everything that differs between the two
 // pipelines lives here; the collection, moderation, and digest code asks this module.
 
-export const DEFAULT_CURRENT_WINDOW_DAYS = 30;
-export const DEFAULT_HISTORY_MAX_URLS = 3;
-export const DEFAULT_HISTORY_DRY_RUN_LIMIT = 3;
+// Fallbacks for the news_current_window_days, news_history_max_urls, and
+// news_history_dry_run_limit settings
+export const PIPELINE_DEFAULTS = { currentWindowDays: 30, historyMaxUrls: 3, historyDryRunLimit: 3 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 // An item's pipeline comes from its age when found, not from which search found it:
 // a Google News hit can be old and a web-search hit can be fresh. Undated items are
 // historical — they can't prove they're news.
-export function newsPipelineFor(publishedDate, windowDays = DEFAULT_CURRENT_WINDOW_DAYS, now = new Date()) {
+export function newsPipelineFor(publishedDate, windowDays = PIPELINE_DEFAULTS.currentWindowDays, now = new Date()) {
   if (!publishedDate) return 'historical';
   const published = new Date(publishedDate);
   if (Number.isNaN(published.getTime())) return 'historical';
