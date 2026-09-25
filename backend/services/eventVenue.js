@@ -4,22 +4,33 @@
 // 258 SMP events were saved at Nature Realm. The Events Calendar emits the
 // real venue as Event.location on every event page; prefer it.
 
+// WordPress JSON-LD carries HTML entities ("Let&#8217;s", "Kayak &amp; Canoe")
+const NAMED_ENTITIES = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
+// Fix: out-of-range numeric entities left as-is instead of throwing (PR #619 review)
+const fromCode = (entity, code) => (code <= 0x10FFFF ? String.fromCodePoint(code) : entity);
+function decodeEntities(text) {
+  return (text || '')
+    .replace(/&#(\d+);/g, (entity, code) => fromCode(entity, Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (entity, code) => fromCode(entity, parseInt(code, 16)))
+    .replace(/&([a-z]+);/gi, (entity, name) => NAMED_ENTITIES[name.toLowerCase()] ?? entity);
+}
+
 function formatPlace(place) {
   if (!place) return null;
-  if (typeof place === 'string') return place.trim() || null;
+  if (typeof place === 'string') return decodeEntities(place).trim() || null;
   if (Array.isArray(place)) return formatPlace(place.find(p => formatPlace(p)));
 
-  const name = (place.name || '').trim();
+  const name = decodeEntities(place.name).trim();
   const address = place.address;
   let addressText = '';
   if (typeof address === 'string') {
-    addressText = address.trim();
+    addressText = decodeEntities(address).trim();
   } else if (address) {
     // Some sites stuff the whole address into streetAddress; don't repeat
     // the locality or region it already contains.
-    addressText = (address.streetAddress || '').trim();
+    addressText = decodeEntities(address.streetAddress).trim();
     for (const part of [address.addressLocality, address.addressRegion]) {
-      const trimmed = (part || '').trim();
+      const trimmed = decodeEntities(part).trim();
       if (trimmed && !addressText.toLowerCase().includes(trimmed.toLowerCase())) {
         addressText = addressText ? `${addressText}, ${trimmed}` : trimmed;
       }
@@ -33,7 +44,7 @@ function formatPlace(place) {
   return `${name}, ${addressText}`;
 }
 
-const normalizeTitle = (title) => (title || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const normalizeTitle = (title) => decodeEntities(title).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // Pick the JSON-LD event this extracted item came from: a title match, or the
 // page's only event. Listing pages with several events and no title match
