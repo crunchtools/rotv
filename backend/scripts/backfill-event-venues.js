@@ -19,6 +19,8 @@ const PAGE_DELAY_MS = 2000;
 /** Reads standard PG* env vars (PGHOST/PGUSER/PGPASSWORD/...); no hardcoded credentials. */
 const pool = new Pool();
 
+// CLI output: this script's report is its stdout
+const say = (line) => process.stdout.write(`${line}\n`);
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 async function main() {
@@ -35,7 +37,7 @@ async function main() {
     if (!byUrl.has(row.source_url)) byUrl.set(row.source_url, []);
     byUrl.get(row.source_url).push(row);
   }
-  console.log(`${rows.length} events across ${byUrl.size} pages${DRY_RUN ? ' (dry run)' : ''}`);
+  say(`${rows.length} events across ${byUrl.size} pages${DRY_RUN ? ' (dry run)' : ''}`);
 
   let changed = 0;
   let unreachable = 0;
@@ -45,7 +47,7 @@ async function main() {
     await sleep(PAGE_DELAY_MS);
     if (!page.reachable) {
       unreachable++;
-      console.log(`UNREACHABLE ${url} (${page.reason || 'no content'})`);
+      say(`UNREACHABLE ${url} (${page.reason || 'no content'})`);
       continue;
     }
 
@@ -56,7 +58,7 @@ async function main() {
       const venue = jsonLdVenueFor(event, jsonLdEvents);
       if (!venue || venue === event.location_details) continue;
       changed++;
-      console.log(`#${event.id} ${event.title}\n  was: ${event.location_details}\n  now: ${venue}`);
+      say(`#${event.id} ${event.title}\n  was: ${event.location_details}\n  now: ${venue}`);
       if (!DRY_RUN) {
         await pool.query('UPDATE poi_events SET location_details = $1, updated_at = NOW() WHERE id = $2', [venue, event.id]);
       }
@@ -67,7 +69,7 @@ async function main() {
     }
   }
 
-  console.log(`\n${changed} venue changes, ${unreachable} unreachable pages, ${noJsonLd} pages without JSON-LD events`);
+  say(`\n${changed} venue changes, ${unreachable} unreachable pages, ${noJsonLd} pages without JSON-LD events`);
 }
 
 await main();
