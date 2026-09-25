@@ -19,15 +19,16 @@ const DIGEST_EXCLUDED_NEWS_HOSTS = [
   'grokipedia.com'
 ];
 
+function sourceHost(sourceUrl) {
+  if (!sourceUrl || !URL.canParse(sourceUrl)) return null;
+  return new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
+}
+
 // Host-boundary match so 'x.com' excludes x.com and m.x.com but not phoenix.com.
 export function isDigestNewsSource(sourceUrl) {
-  if (!sourceUrl) return true;
-  let host;
-  try {
-    host = new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
-  } catch {
-    return true; // unparseable URL: let moderation decide, don't silently drop
-  }
+  const host = sourceHost(sourceUrl);
+  // Missing or unparseable URL: let moderation decide, don't silently drop
+  if (!host) return true;
   return !DIGEST_EXCLUDED_NEWS_HOSTS.some(h => host === h || host.endsWith(`.${h}`));
 }
 
@@ -92,14 +93,6 @@ function titleTokens(item) {
   );
 }
 
-function sourceHost(sourceUrl) {
-  try {
-    return new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
-  } catch {
-    return null;
-  }
-}
-
 const SAME_OUTLET_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 function newsTimestamp(item) {
@@ -116,7 +109,7 @@ function sharesEnough(a, b, minShared, minRatio) {
 
 // One outlet covering one event twice (a photo gallery and the story, a day
 // apart) often lands on two sibling POIs (John Brown Monument vs John Brown
-// House, Sept 25 2026 preview), and a caption-length summary shares almost no
+// House, in the Sept 25 preview), and a caption-length summary shares almost no
 // vocabulary with the article. Match on outlet + time window + headline
 // instead, ignoring POI.
 function isSameOutletRepeat(a, b) {

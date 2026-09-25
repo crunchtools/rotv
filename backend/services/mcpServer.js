@@ -3,7 +3,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { z } from 'zod';
 import crypto from 'crypto';
 import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
-import { redactSettingRow } from '../utils/settingsRedaction.js';
+import { isSecretSetting } from '../utils/settingsRedaction.js';
 
 import {
   getQueue,
@@ -625,7 +625,10 @@ function registerTools(server, pool, boss, mcpUserId) {
         FROM admin_settings
         ORDER BY key
       `);
-      const redacted = settingsRows.rows.map(redactSettingRow);
+      // Credentials expose only whether they are set
+      const redacted = settingsRows.rows.map(row => (isSecretSetting(row.key)
+        ? { key: row.key, isSet: !!row.value, updated_at: row.updated_at }
+        : row));
       return { content: [{ type: 'text', text: JSON.stringify(redacted, null, 2) }] };
     }
   );

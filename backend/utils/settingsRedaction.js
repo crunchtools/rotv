@@ -7,11 +7,3 @@ const SECRET_KEY_PATTERN = /(api_key|token|secret|password|cookie)/i;
 export function isSecretSetting(key) {
   return SECRET_KEY_PATTERN.test(key);
 }
-
-// Secrets expose only whether they are set; everything else passes through.
-export function redactSettingRow(row) {
-  if (isSecretSetting(row.key)) {
-    return { key: row.key, isSet: !!row.value, updated_at: row.updated_at };
-  }
-  return row;
-}
