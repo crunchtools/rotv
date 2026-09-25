@@ -162,7 +162,7 @@ import { searchNewsUrls } from './serperService.js';
 import { getDomainReputation } from './moderationService.js';
 import { loadListSetting } from './filterLists.js';
 import { classifyPoiType } from '../utils/poiClassify.js';
-import { jsonLdVenueFor } from './eventVenue.js';
+import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
 import fs from 'fs';
 
 function debugLog(message) {
@@ -596,7 +596,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
     try { item = JSON.parse(jsonMatch[0]); } catch { continue; }
     if (!item.title) continue;
     if (isEvent) {
-      item.location_details = jsonLdVenueFor(item, od.jsonLdEvents) || item.location_details || null;
+      item.location_details = chooseEventVenue(item.location_details, jsonLdVenueFor(item, od.jsonLdEvents));
     }
 
     updateProgress(poi.id, { phase: 'dates', message: `${contentType} ${i}/${count} from ${url}` });
