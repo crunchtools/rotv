@@ -67,7 +67,10 @@ export function jsonLdVenueFor(item, jsonLdEvents) {
 export function chooseEventVenue(modelVenue, jsonLdVenue) {
   if (!jsonLdVenue) return modelVenue || null;
   if (!modelVenue) return jsonLdVenue;
-  const streetNumber = jsonLdVenue.match(/\b\d{2,6}\b/)?.[0];
-  if (streetNumber && new RegExp(`\\b${streetNumber}\\b`).test(modelVenue)) return modelVenue;
-  return jsonLdVenue;
+  // Fix: agree on street number AND street name, not number alone (PR #620 review)
+  const street = jsonLdVenue.match(/\b(\d{2,6})\s+(?:(?:N|S|E|W|North|South|East|West)\.?\s+)?([A-Za-z]{3,})/i);
+  if (!street) return jsonLdVenue;
+  const [, number, streetName] = street;
+  const sameStreet = new RegExp(`\\b${number}\\b[^,\\d]{0,20}?\\b${streetName}\\b`, 'i');
+  return sameStreet.test(modelVenue) ? modelVenue : jsonLdVenue;
 }

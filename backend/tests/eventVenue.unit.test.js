@@ -105,6 +105,20 @@ describe('chooseEventVenue', () => {
     expect(chooseEventVenue('Trailhead at 15210 Main St', 'Lodge, 521 S. River Rd.')).toBe('Lodge, 521 S. River Rd.');
   });
 
+  it('does not keep model text with the same number on a different street', () => {
+    expect(chooseEventVenue('Other Place, 1565 Main St', 'Gallery, 1565 Boston Mills Rd, Peninsula, OH'))
+      .toBe('Gallery, 1565 Boston Mills Rd, Peninsula, OH');
+  });
+
+  it('treats abbreviated and spelled-out directions as the same street', () => {
+    const model = 'Hines Hill Campus, 1403 W Hines Hill Rd, Peninsula, Ohio 44264, in the event tent.';
+    expect(chooseEventVenue(model, '1403 West Hines Hill Road, Peninsula, OH')).toBe(model);
+  });
+
+  it('prefers JSON-LD when it has no street address to compare', () => {
+    expect(chooseEventVenue('Nature Realm Visitors Center', 'Liberty Park')).toBe('Liberty Park');
+  });
+
   it('falls back to whichever side exists', () => {
     expect(chooseEventVenue('Liberty Park', null)).toBe('Liberty Park');
     expect(chooseEventVenue('', mf)).toBe(mf);
