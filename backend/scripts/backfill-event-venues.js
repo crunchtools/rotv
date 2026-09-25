@@ -9,7 +9,7 @@
 //   node scripts/backfill-event-venues.js
 import pg from 'pg';
 import { extractPageContent } from '../services/contentExtractor.js';
-import { jsonLdVenueFor } from '../services/eventVenue.js';
+import { jsonLdVenueFor, chooseEventVenue } from '../services/eventVenue.js';
 
 const { Pool } = pg;
 
@@ -55,7 +55,7 @@ async function main() {
     if (jsonLdEvents.length === 0) noJsonLd++;
 
     for (const event of events) {
-      const venue = jsonLdVenueFor(event, jsonLdEvents);
+      const venue = chooseEventVenue(event.location_details, jsonLdVenueFor(event, jsonLdEvents));
       if (!venue || venue === event.location_details) continue;
       changed++;
       say(`#${event.id} ${event.title}\n  was: ${event.location_details}\n  now: ${venue}`);

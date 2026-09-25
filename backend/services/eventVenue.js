@@ -59,3 +59,18 @@ export function jsonLdVenueFor(item, jsonLdEvents) {
   if ((jsonLdEvents || []).length === 1) return formatPlace(events[0].location);
   return null;
 }
+
+// JSON-LD beats the model, except when the model's text already names the
+// same street number: then the two agree and the model's wording is usually
+// richer ("Boston Gallery, 1565 Boston Mills Rd" vs JSON-LD's "Gallery").
+// The Nature Realm contact line never carries the real venue's number.
+export function chooseEventVenue(modelVenue, jsonLdVenue) {
+  if (!jsonLdVenue) return modelVenue || null;
+  if (!modelVenue) return jsonLdVenue;
+  // Fix: agree on street number AND street name, not number alone (PR #620 review)
+  const street = jsonLdVenue.match(/\b(\d{2,6})\s+(?:(?:N|S|E|W|North|South|East|West)\.?\s+)?([A-Za-z]{3,})/i);
+  if (!street) return jsonLdVenue;
+  const [, number, streetName] = street;
+  const sameStreet = new RegExp(`\\b${number}\\b[^,\\d]{0,20}?\\b${streetName}\\b`, 'i');
+  return sameStreet.test(modelVenue) ? modelVenue : jsonLdVenue;
+}

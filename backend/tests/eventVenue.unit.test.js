@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { jsonLdVenueFor } from '../services/eventVenue.js';
+import { jsonLdVenueFor, chooseEventVenue } from '../services/eventVenue.js';
 
 // JSON-LD from summitmetroparks.org/program-events/kayak-canoe-open-house-3/,
 // whose Readability markdown only names the Nature Realm contact line.
@@ -86,5 +86,42 @@ describe('jsonLdVenueFor', () => {
   it('takes the first usable place from a location array', () => {
     const location = [{ '@type': 'VirtualLocation' }, { name: 'Liberty Park' }];
     expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('Liberty Park');
+  });
+});
+
+describe('chooseEventVenue', () => {
+  const mf = 'MF/Lake Area, 521 S. River Rd., Munroe Falls, OH';
+
+  it('replaces the Nature Realm contact line with the JSON-LD venue', () => {
+    expect(chooseEventVenue('Nature Realm Visitors Center (location subject to change based on water conditions)', mf)).toBe(mf);
+  });
+
+  it('keeps richer model text that already names the same street number', () => {
+    expect(chooseEventVenue('Boston Gallery, 1565 Boston Mills Rd, Peninsula, OH. Parking at Boston Trailhead.', 'Gallery, 1565 Boston Mills Rd, Peninsula, OH'))
+      .toBe('Boston Gallery, 1565 Boston Mills Rd, Peninsula, OH. Parking at Boston Trailhead.');
+  });
+
+  it('does not treat a number inside a longer number as a match', () => {
+    expect(chooseEventVenue('Trailhead at 15210 Main St', 'Lodge, 521 S. River Rd.')).toBe('Lodge, 521 S. River Rd.');
+  });
+
+  it('does not keep model text with the same number on a different street', () => {
+    expect(chooseEventVenue('Other Place, 1565 Main St', 'Gallery, 1565 Boston Mills Rd, Peninsula, OH'))
+      .toBe('Gallery, 1565 Boston Mills Rd, Peninsula, OH');
+  });
+
+  it('treats abbreviated and spelled-out directions as the same street', () => {
+    const model = 'Hines Hill Campus, 1403 W Hines Hill Rd, Peninsula, Ohio 44264, in the event tent.';
+    expect(chooseEventVenue(model, '1403 West Hines Hill Road, Peninsula, OH')).toBe(model);
+  });
+
+  it('prefers JSON-LD when it has no street address to compare', () => {
+    expect(chooseEventVenue('Nature Realm Visitors Center', 'Liberty Park')).toBe('Liberty Park');
+  });
+
+  it('falls back to whichever side exists', () => {
+    expect(chooseEventVenue('Liberty Park', null)).toBe('Liberty Park');
+    expect(chooseEventVenue('', mf)).toBe(mf);
+    expect(chooseEventVenue(undefined, undefined)).toBeNull();
   });
 });
