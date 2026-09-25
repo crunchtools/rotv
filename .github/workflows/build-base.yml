@@ -78,12 +78,14 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
+      # Fix: build-base.yml itself listens for parent-image-updated, so sending
+      # that event here re-triggered build-base forever (PR #627 review).
       - name: Trigger rotv rebuild
         env:
           GH_TOKEN: ${{ secrets.CRUNCHTOOLS_DISPATCH_TOKEN }}
         run: |
           gh api repos/crunchtools/rotv/dispatches \
-            -f event_type=parent-image-updated
+            -f event_type=rotv-base-updated
 
   build-and-push-ghcr:
     runs-on: ubuntu-latest
