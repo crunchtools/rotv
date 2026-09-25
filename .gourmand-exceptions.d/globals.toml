@@ -1,0 +1,17 @@
+# Tracked paths excluded from all Gourmand checks. Gourmand ignores
+# [global] excluded_paths in gourmand.toml, so they live here.
+# Untracked artifacts (node_modules/, frontend/dist/) are skipped via .gitignore.
+[global]
+excluded_paths = [
+    ".specify/**",
+    "docs/**",
+    "*.min.js",
+    "*.min.css",
+    # Backend test scripts are manual debugging utilities
+    "backend/test-*.js",
+    # Image server is a Python project with its own lint tooling (ruff, mypy)
+    "image-server/**",
+    "Containerfile.images",
+    # Boundary data and one-off GeoJSON generators, not part of the app
+    "data/**",
+]
