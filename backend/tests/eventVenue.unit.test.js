@@ -54,6 +54,22 @@ describe('jsonLdVenueFor', () => {
     expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location: place }])).toBe('1565 Boston Mills Rd, Peninsula, OH');
   });
 
+  it('does not repeat locality or region already inside streetAddress', () => {
+    const location = {
+      name: 'Twinsburg City Hall',
+      address: { streetAddress: '10075 Ravenna Road, Twinsburg, OH', addressLocality: 'Twinsburg', addressRegion: 'OH' }
+    };
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('Twinsburg City Hall, 10075 Ravenna Road, Twinsburg, OH');
+  });
+
+  it('drops a place name that is just the street address spelled differently', () => {
+    const location = {
+      name: '6751 Akron Peninsula Rd',
+      address: { streetAddress: '6751 Akron Peninsula Road, Peninsula, OH 44264', addressLocality: 'Peninsula', addressRegion: 'OH' }
+    };
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('6751 Akron Peninsula Road, Peninsula, OH 44264');
+  });
+
   it('takes the first usable place from a location array', () => {
     const location = [{ '@type': 'VirtualLocation' }, { name: 'Liberty Park' }];
     expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('Liberty Park');

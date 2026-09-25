@@ -15,14 +15,21 @@ function formatPlace(place) {
   if (typeof address === 'string') {
     addressText = address.trim();
   } else if (address) {
-    addressText = [address.streetAddress, address.addressLocality, address.addressRegion]
-      .map(part => (part || '').trim())
-      .filter(Boolean)
-      .join(', ');
+    // Some sites stuff the whole address into streetAddress; don't repeat
+    // the locality or region it already contains.
+    addressText = (address.streetAddress || '').trim();
+    for (const part of [address.addressLocality, address.addressRegion]) {
+      const trimmed = (part || '').trim();
+      if (trimmed && !addressText.toLowerCase().includes(trimmed.toLowerCase())) {
+        addressText = addressText ? `${addressText}, ${trimmed}` : trimmed;
+      }
+    }
   }
 
   if (!addressText) return name || null;
-  if (!name || addressText.toLowerCase().includes(name.toLowerCase())) return addressText;
+  const leadingNumber = (text) => text.match(/^\d+/)?.[0];
+  const nameIsAddress = leadingNumber(name) && leadingNumber(name) === leadingNumber(addressText);
+  if (!name || nameIsAddress || addressText.toLowerCase().includes(name.toLowerCase())) return addressText;
   return `${name}, ${addressText}`;
 }
 
