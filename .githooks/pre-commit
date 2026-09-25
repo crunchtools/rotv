@@ -1,0 +1,6 @@
+#!/bin/bash
+# Constitution XII pre-commit hooks (gatehouse, and gourmand once RT #1508
+# clears) run through the pre-commit framework. This repo keeps its git hooks
+# in .githooks via core.hooksPath, where `pre-commit install` refuses to write,
+# so this wrapper hands the staged change to it instead.
+exec pre-commit run --hook-stage pre-commit
