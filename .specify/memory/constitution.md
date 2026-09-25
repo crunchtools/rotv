@@ -1,9 +1,9 @@
 # rotv Constitution
 
-> **Version:** 2.1.0
+> **Version:** 2.1.1
 > **Ratified:** 2026-03-10
 > **Status:** Active
-> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.3.0
+> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.17.0
 > **Profile:** Web Application
 
 Roots of The Valley — interactive map exploring Cuyahoga Valley National Park history. Node.js + Express backend with React frontend, PostgreSQL 17 database, built on ubi10-core.
