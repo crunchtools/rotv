@@ -78,6 +78,11 @@ describe('jsonLdVenueFor', () => {
       .toBe('MF/Lake Area, 521 S. River Rd., Munroe Falls, OH');
   });
 
+  it('decodes hex entities and leaves out-of-range ones intact', () => {
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location: { name: 'Let&#x2019;s Grow' } }])).toBe('Let’s Grow');
+    expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location: { name: 'Bad &#9999999999; Place' } }])).toBe('Bad &#9999999999; Place');
+  });
+
   it('takes the first usable place from a location array', () => {
     const location = [{ '@type': 'VirtualLocation' }, { name: 'Liberty Park' }];
     expect(jsonLdVenueFor({ title: 'A' }, [{ name: 'A', location }])).toBe('Liberty Park');

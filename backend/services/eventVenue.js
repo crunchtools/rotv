@@ -6,10 +6,12 @@
 
 // WordPress JSON-LD carries HTML entities ("Let&#8217;s", "Kayak &amp; Canoe")
 const NAMED_ENTITIES = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
+// Fix: out-of-range numeric entities left as-is instead of throwing (PR #619 review)
+const fromCode = (entity, code) => (code <= 0x10FFFF ? String.fromCodePoint(code) : entity);
 function decodeEntities(text) {
   return (text || '')
-    .replace(/&#(\d+);/g, (_, code) => String.fromCodePoint(Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCodePoint(parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (entity, code) => fromCode(entity, Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (entity, code) => fromCode(entity, parseInt(code, 16)))
     .replace(/&([a-z]+);/gi, (entity, name) => NAMED_ENTITIES[name.toLowerCase()] ?? entity);
 }
 
