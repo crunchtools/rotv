@@ -78,7 +78,7 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
-      # Fix: distinct event type; this workflow listens for parent-image-updated, (PR #627 review)
+      # Distinct event type: this workflow listens for parent-image-updated,
       # so re-sending it here re-triggers this workflow forever.
       - name: Trigger rotv rebuild
         env:

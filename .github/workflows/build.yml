@@ -13,6 +13,7 @@ on:
       - 'image-server/**'
       - 'Containerfile.images'
   repository_dispatch:
+    # Fix: keep parent-image-updated; add rotv-base-updated from build-base (PR #627 review)
     types: [parent-image-updated, rotv-base-updated]
   workflow_dispatch:
 env:
