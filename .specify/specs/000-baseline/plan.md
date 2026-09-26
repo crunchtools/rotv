@@ -30,7 +30,7 @@
 │   │ - REST API for POIs, news, events                       │  │
 │   │ - OAuth via Passport.js                                 │  │
 │   │ - Job scheduler (pg-boss) for batch operations          │  │
-│   │ - AI services (Gemini, Perplexity) for content          │  │
+│   │ - LLM calls via OpenRouter for content                  │  │
 │   └─────────────────────────────────────────────────────────┘  │
 │                              │                                  │
 │                              ▼                                  │
@@ -70,8 +70,7 @@
 ### AI Services
 | Service | Purpose |
 |---------|---------|
-| Google Gemini | Content extraction, search grounding |
-| Perplexity | Fallback AI provider |
+| OpenRouter | LLM calls: classification, extraction, moderation, research |
 
 ### Infrastructure
 | Technology | Purpose |
