@@ -188,7 +188,9 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     clearTimeout(typeTimer.current);
     const text = typeBuffer.current;
     typeBuffer.current = '';
-    if (text) await sendInput({ type: 'type', text });
+    for (const chunk of chunkText(text)) {
+      if (!(await sendInput({ type: 'type', text: chunk }))) break;
+    }
   }, [sendInput]);
 
   const handleKeyDown = async (e) => {

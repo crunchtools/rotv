@@ -319,7 +319,9 @@ function DataCollectionSettings() {
   const fetchFacebookStatus = async () => {
     try {
       const response = await fetch('/api/admin/remote-login/facebook/status', { credentials: 'include' });
-      if (response.ok) setFacebookStatus(await response.json());
+      const outcome = await response.json();
+      if (response.ok) setFacebookStatus(outcome);
+      else setResult({ type: 'error', message: `Failed to check Facebook session: ${outcome.error || response.status}` });
     } catch (err) { setResult({ type: 'error', message: `Failed to check Facebook session: ${err.message}` }); }
   };
 

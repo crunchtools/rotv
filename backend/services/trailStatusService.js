@@ -40,6 +40,14 @@ function sessionFailuresKey(statusUrl) {
   return null;
 }
 
+/**
+ * Update the consecutive-failure counter for a login-backed source (X, Facebook).
+ * Other sources are ignored. Never throws; DB errors are logged.
+ * @param {import('pg').Pool} pool
+ * @param {string} statusUrl - the POI's status_url; selects the counter
+ * @param {boolean} success - true resets the counter to 0, false increments it
+ * @returns {Promise<void>}
+ */
 export async function trackSessionResult(pool, statusUrl, success) {
   const source = sessionFailuresKey(statusUrl);
   if (!source) return;

@@ -83,6 +83,24 @@ describe('sendInput', () => {
     expect(pageStub.mouse.wheel).toHaveBeenCalledWith(0, 2000);
   });
 
+  it.each([
+    [{ type: 'click', x: -1, y: 10 }, /viewport/],
+    [{ type: 'click', x: Number.NaN, y: 10 }, /viewport/],
+    [{ type: 'click', x: 10 }, /viewport/],
+    [{ type: 'type', text: '' }, /Invalid text/],
+    [{ type: 'type', text: 42 }, /Invalid text/],
+    [{ type: 'scroll', dy: Number.POSITIVE_INFINITY }, /Invalid scroll/],
+    [{ type: 'scroll' }, /Invalid scroll/],
+    [null, /Unknown input/]
+  ])('rejects %j', async (evt, message) => {
+    await expect(sendInput('facebook', ADMIN, evt)).rejects.toThrow(message);
+  });
+
+  it('clamps negative scrolls too', async () => {
+    await sendInput('facebook', ADMIN, { type: 'scroll', dy: -99999 });
+    expect(pageStub.mouse.wheel).toHaveBeenCalledWith(0, -2000);
+  });
+
   it('rejects out-of-viewport clicks, disallowed keys, and unknown events', async () => {
     await expect(sendInput('facebook', ADMIN, { type: 'click', x: 5000, y: 1 })).rejects.toThrow(/viewport/);
     await expect(sendInput('facebook', ADMIN, { type: 'key', key: 'Control+w' })).rejects.toThrow(/not allowed/);

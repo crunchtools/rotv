@@ -17,8 +17,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Facebook trail status uses a dedicated non-proxied browser with the saved session, and reports
   "Facebook login required" instead of passing login-page text to the classifier.
-
-### Changed
 - **Facebook trail status no longer uses Apify**: Reagan-Huffman (medinaTRAILS) status now comes
   from Facebook's public Page Plugin rendered in the shared Playwright pool (`facebookService.js`),
   with per-post dates from `[data-utime]`. The 30-minute cadence had exhausted Apify's free tier
