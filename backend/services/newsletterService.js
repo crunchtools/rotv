@@ -246,9 +246,10 @@ export async function processNewsletterById(pool, emailId) {
  * Stores raw email in newsletter_emails, queues a pg-boss job for
  * async processing, and returns immediately to the sending MTA.
  * @param {Pool} pool - Database pool
+ * @param {{port?: number, host?: string}} [options] - Listen address (tests bind an ephemeral port)
  * @returns {SMTPServer} The running SMTP server instance (for graceful shutdown)
  */
-export function startSmtpServer(pool) {
+export function startSmtpServer(pool, { port = 25, host = '::' } = {}) {
   const server = new SMTPServer({
     banner: 'Roots of The Valley Mail Receiver',
     authOptional: true,
@@ -327,8 +328,8 @@ export function startSmtpServer(pool) {
     smtpLogger.error('Server error:', err);
   });
 
-  server.listen(25, '::', () => {
-    smtpLogger.info('Mail receiver listening on port 25');
+  server.listen(port, host, () => {
+    smtpLogger.info(`Mail receiver listening on port ${server.server.address().port}`);
   });
 
   return server;
