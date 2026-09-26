@@ -69,6 +69,13 @@ describe('remote-login routes', () => {
     expect(res.body).toEqual({ success: true, cookiesCount: 2, expires: '2026-12-01T00:00:00.000Z' });
   });
 
+  it('cancel forwards provider and admin id, and maps ownership errors', async () => {
+    await request(admin).post('/api/admin/remote-login/facebook/cancel').expect(200);
+    expect(session.cancelLogin).toHaveBeenCalledWith('facebook', 7);
+    session.cancelLogin.mockRejectedValueOnce(new session.LoginSessionError('Another admin owns the running login session', 409));
+    await request(admin).post('/api/admin/remote-login/facebook/cancel').expect(409);
+  });
+
   it('maps session errors to their HTTP status', async () => {
     session.sendInput.mockRejectedValueOnce(new session.LoginSessionError('Key not allowed: F12'));
     session.getFrame.mockRejectedValueOnce(new session.LoginSessionError('No login session is running for this provider', 404));
