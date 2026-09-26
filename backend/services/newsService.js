@@ -1,8 +1,8 @@
 
-import { generateTextWithCustomPrompt as geminiGenerateText } from './geminiService.js';
+import { generateTextWithCustomPrompt as llmGenerateText } from './llmService.js';
 import { parseDate, parseDateTime, extractDatesFromText, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
 
-let geminiCallCount = 0;
+let llmCallCount = 0;
 
 
 // Four independent date voters. Four unanimous votes (each +1) reach the default date
@@ -95,7 +95,7 @@ export async function scoreDate(pool, { title, description, pageContent, sources
   const normalizedSources = normalizeDateSources(sources, timezone, mode);
 
   // Cost offset: if the deterministic sources alone already meet the threshold, the LLM
-  // voters cannot change the verdict — skip them and save the Gemini calls. 'date' mode only;
+  // voters cannot change the verdict — skip them and save the LLM calls. 'date' mode only;
   // events still need the voters to read start/end times. (PR #496)
   let votes = llmVotes;
   if (votes === undefined) {
@@ -127,25 +127,25 @@ export async function scoreDate(pool, { title, description, pageContent, sources
 
 
 export function resetJobUsage() {
-  geminiCallCount = 0;
+  llmCallCount = 0;
 }
 
 export function getJobUsage() {
-  return { gemini: geminiCallCount };
+  return { llm: llmCallCount };
 }
 
 export function getJobStats() {
   return {
-    usage: { gemini: geminiCallCount },
+    usage: { llm: llmCallCount },
     errors: {},
-    activeProvider: 'gemini'
+    activeProvider: 'openrouter'
   };
 }
 
 async function generateTextWithCustomPrompt(pool, prompt, options = {}) {
-  geminiCallCount++;
-  const text = await geminiGenerateText(pool, prompt, options);
-  return { response: text, provider: 'gemini' };
+  llmCallCount++;
+  const text = await llmGenerateText(pool, prompt, options);
+  return { response: text, provider: 'openrouter' };
 }
 import { renderPage, setCachePageType, setCacheItemCount } from './renderPage.js';
 import { healthCheck, forceKill } from './browserPool.js';
@@ -437,7 +437,7 @@ Respond with ONLY this JSON object, nothing else: {"count": N}`;
 
   const countOutput = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 64, thinkingBudget: 0 });
   const text = (countOutput.response || countOutput || '').trim();
-  logInfo(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] Gemini response: ${text}`);
+  logInfo(jobId, jobType, poiId, poiName, `${phase}: [ItemCount] LLM response: ${text}`);
   const MAX_ITEM_COUNT = 20;
   const clamp = (n) => {
     if (n > MAX_ITEM_COUNT) {
@@ -799,7 +799,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
     phase: 'initializing',
     message: `Starting ${typeLabel} search for ${poi.name}...`,
     poiName: poi.name,
-    provider: 'gemini',
+    provider: 'openrouter',
     newsFound: 0,
     eventsFound: 0,
     newsSaved: undefined,
@@ -1138,7 +1138,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       events: allEvents,
       metadata: {
         usedDedicatedNewsUrl,
-        provider: 'gemini',
+        provider: 'openrouter',
         pipeline,
         freshUrlCount
       }
@@ -1154,7 +1154,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       error: error.message
     });
 
-    return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false, provider: 'gemini' } };
+    return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false, provider: 'openrouter' } };
   }
 }
 
@@ -1664,12 +1664,12 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
       },
 
       onItemStart: async (poi, { slotId, jobId: jid }) => {
-        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, 'gemini');
+        tracker.assignPoiToSlot(jid, slotId, poi.id, poi.name, 'openrouter');
         tracker.updateProgress(poi.id, {
           phase: 'initializing',
           message: `Starting news & events search for ${poi.name}...`,
           poiName: poi.name,
-          provider: 'gemini',
+          provider: 'openrouter',
           slotId,
           jobId: jid,
           completed: false
@@ -1738,7 +1738,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
     });
 
     const usage = getJobUsage();
-    logInfo(jobId, 'news', null, null, `AI provider usage: Gemini=${usage.gemini}`, { gemini_calls: usage.gemini });
+    logInfo(jobId, 'news', null, null, `AI provider usage: OpenRouter=${usage.llm}`, { llm_calls: usage.llm });
 
     if (!jobCancelled) {
       await pool.query(`

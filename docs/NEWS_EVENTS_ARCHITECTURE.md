@@ -45,9 +45,9 @@ URL → [Render/Cache] → [Classify] → [ItemCount] → [Extract] → [Venue] 
 ```
 
 - **Render** — `renderPage` (`renderPage.js`) wraps `extractPageContent` (`contentExtractor.js`: Playwright, Readability → markdown, plus `rawText`, meta/og dates, JSON-LD dates and Event nodes, links). Results are cached in `rendered_page_cache`: detail pages forever, listings 23 hours, trail status 25 minutes.
-- **Classify** — Gemini decides listing / detail / neither (`classifyPage`). Listings are followed to detail pages within the POI's path or domain, or paths in `trusted_content_paths`.
+- **Classify** — the LLM decides listing / detail / neither (`classifyPage`). Listings are followed to detail pages within the POI's path or domain, or paths in `trusted_content_paths`.
 - **Skip known** — detail URLs already in `poi_news`/`poi_events` are skipped (`filterKnownPages`).
-- **ItemCount + Extract** — Gemini counts items on the page, then extracts each one: `buildEventPrompt` for events, `buildNewsPrompt(pipeline, …)` for news.
+- **ItemCount + Extract** — the LLM counts items on the page, then extracts each one: `buildEventPrompt` for events, `buildNewsPrompt(pipeline, …)` for news.
 - **Venue (events)** — schema.org JSON-LD `Event.location` wins over the model's `location_details` (`eventVenue.js`). The model only sees the Readability markdown, which on some sites drops the venue block and keeps a contact line ("call the Nature Realm Visitors Center"). The model's text survives when it already names the same street number and street as the JSON-LD address, or when the page has no JSON-LD.
 - **Dates** — see below.
 - **Save** — `saveNewsItems` / `saveEventItems` dedupe by normalized URL (any POI) and by normalized title within the POI (events: plus the same Eastern calendar day). A duplicate with a new URL is merged into `poi_news_urls` / `poi_event_urls`. Items are saved as `pending`.
@@ -119,3 +119,7 @@ The Friday digest (`newsletterDigestService.js`) is built from live data at send
 | `backend/services/newsletterDigestService.js` | Digest selection, dedup, rendering, send |
 | `backend/services/collection/registry.js` | Jobs tab registry |
 | `backend/migrations/089_news_pipelines.sql` | Pipeline columns, per-POI state, settings |
+
+## LLM Provider
+
+Every LLM call goes through `backend/services/llmService.js`, which posts to OpenRouter's chat-completions API. The default model is `deepseek/deepseek-v4-flash-0731`, served by DeepInfra first, with `openai/gpt-6-luna` as a cross-vendor fallback; `OPENROUTER_MODEL` overrides the default. Every request requires zero data retention (`provider.zdr`) and denies training on prompts. The key comes from `OPENROUTER_API_KEY`, falling back to `admin_settings.openrouter_api_key`. Callers that pass `thinkingBudget: 0` get `reasoning: {effort: 'none'}`, which the short classifiers (dates, item counts, page type) rely on for speed.

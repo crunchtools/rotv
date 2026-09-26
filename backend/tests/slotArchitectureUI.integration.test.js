@@ -245,27 +245,27 @@ describe('Slot Architecture UI Tests - News/Events', () => {
   });
 
   describe('AI Usage Badges', () => {
-    it('should display Gemini usage badge when count > 0', async () => {
+    it('should display OpenRouter usage badge when count > 0', async () => {
       await page.waitForTimeout(3000);
 
-      const geminiUsage = page.locator('text=/Gemini.*\\d+/')
-        .or(page.locator('[data-testid="gemini-usage"]'))
-        .or(page.locator('.ai-usage-badge:has-text("Gemini")'));
+      const llmUsage = page.locator('text=/OpenRouter.*\\d+/')
+        .or(page.locator('[data-testid="llm-usage"]'))
+        .or(page.locator('.ai-usage-badge:has-text("OpenRouter")'));
 
-      const isVisible = await geminiUsage.isVisible().catch(() => false);
+      const isVisible = await llmUsage.isVisible().catch(() => false);
 
-      // Badge might not be visible if no Gemini calls made yet
+      // Badge might not be visible if no OpenRouter calls made yet
       expect(typeof isVisible).toBe('boolean');
     }, TEST_TIMEOUT);
 
-    it('should display Gemini usage when count > 0', async () => {
+    it('should display OpenRouter usage when count > 0', async () => {
       await page.waitForTimeout(3000);
 
-      const geminiUsage = page.locator('text=/Gemini.*\\d+/')
-        .or(page.locator('[data-testid="gemini-usage"]'))
-        .or(page.locator('.ai-usage-badge:has-text("Gemini")'));
+      const llmUsage = page.locator('text=/OpenRouter.*\\d+/')
+        .or(page.locator('[data-testid="llm-usage"]'))
+        .or(page.locator('.ai-usage-badge:has-text("OpenRouter")'));
 
-      const isVisible = await geminiUsage.isVisible().catch(() => false);
+      const isVisible = await llmUsage.isVisible().catch(() => false);
 
       expect(typeof isVisible).toBe('boolean');
     }, TEST_TIMEOUT);

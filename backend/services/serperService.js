@@ -22,7 +22,7 @@ import { serperRequestFor } from './newsPipelines.js';
  * Search for news or events about a POI using Serper with geographic grounding
  *
  * Returns direct URLs to external news/events coverage. These URLs should be rendered
- * with Playwright (same pipeline as official POI URLs) and processed by Gemini.
+ * with Playwright (same pipeline as official POI URLs) and processed by the LLM.
  *
  * Geographic grounding is applied automatically using ALL containing boundaries
  * (ordered smallest area first):

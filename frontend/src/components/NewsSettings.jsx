@@ -247,11 +247,11 @@ function NewsSettings() {
             </div>
           </div>
 
-          {aiStats?.usage?.gemini > 0 && (
+          {aiStats?.usage?.llm > 0 && (
             <div className="ai-stats-table">
-              <div className="ai-stats-row gemini active">
-                <span className="ai-col-provider">Gemini</span>
-                <span className="ai-col-requests">{aiStats.usage.gemini} requests</span>
+              <div className="ai-stats-row llm active">
+                <span className="ai-col-provider">OpenRouter</span>
+                <span className="ai-col-requests">{aiStats.usage.llm} requests</span>
               </div>
             </div>
           )}

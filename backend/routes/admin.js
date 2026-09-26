@@ -622,7 +622,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const { value } = req.body;
 
     const allowedKeys = [
-      'gemini_api_key',
+      'openrouter_api_key',
       'serper_api_key',
       'usft_sharing_token',
       'gemini_prompt_brief',
@@ -778,7 +778,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const promptKey = promptType === 'historical' ? 'gemini_prompt_historical' : 'gemini_prompt_brief';
 
     try {
-      const { getInterpolatedPrompt } = await import('../services/geminiService.js');
+      const { getInterpolatedPrompt } = await import('../services/llmService.js');
       const prompt = await getInterpolatedPrompt(pool, promptKey, destination);
       res.json({ prompt });
     } catch (error) {
@@ -795,7 +795,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      const { generateTextWithCustomPrompt } = await import('../services/geminiService.js');
+      const { generateTextWithCustomPrompt } = await import('../services/llmService.js');
       const text = await generateTextWithCustomPrompt(pool, customPrompt);
 
       console.log(`Admin ${req.user.email} generated content for: ${destination?.name || 'unknown'}`);
@@ -811,10 +811,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.post('/ai/test-key', isAdmin, async (req, res) => {
     try {
-      const { testApiKey } = await import('../services/geminiService.js');
+      const { testApiKey } = await import('../services/llmService.js');
       const response = await testApiKey(pool);
 
-      console.log(`Admin ${req.user.email} tested Gemini API key - success`);
+      console.log(`Admin ${req.user.email} tested OpenRouter API key - success`);
       res.json({ success: true, message: 'API key is valid', response });
     } catch (error) {
       console.error('API key test failed:', error);
@@ -851,7 +851,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       );
       const availableSurfaces = surfacesResult.rows.map(row => row.name);
 
-      const { researchLocation } = await import('../services/geminiService.js');
+      const { researchLocation } = await import('../services/llmService.js');
       const researchData = await researchLocation(pool, destination, availableActivities, availableEras, availableSurfaces);
 
       console.log(`Admin ${req.user.email} researched location: ${destination.name}`);
@@ -885,7 +885,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const surfacesResult = await pool.query('SELECT name FROM surfaces ORDER BY sort_order, name');
       const availableSurfaces = surfacesResult.rows.map(row => row.name);
 
-      const { researchLocationMultiPass } = await import('../services/geminiService.js');
+      const { researchLocationMultiPass } = await import('../services/llmService.js');
       const researchData = await researchLocationMultiPass(pool, destWithContext, availableActivities, availableEras, availableSurfaces);
 
       console.log(`Admin ${req.user.email} researched (v2) location: ${destination.name}`);
@@ -1370,7 +1370,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     try {
-      const { generateIconSvg } = await import('../services/geminiService.js');
+      const { generateIconSvg } = await import('../services/llmService.js');
       const svgContent = await generateIconSvg(pool, description.trim(), color.trim());
 
       console.log(`Admin ${req.user.email} generated icon SVG for: ${description}`);
@@ -2999,7 +2999,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         : await pool.query('SELECT ai_usage, status FROM news_job_status ORDER BY created_at DESC LIMIT 1');
 
       if (recentJob.rows.length === 0) {
-        return res.json({ usage: { gemini: 0 }, errors: {}, activeProvider: 'gemini' });
+        return res.json({ usage: { llm: 0 }, errors: {}, activeProvider: 'openrouter' });
       }
 
       const job = recentJob.rows[0];
@@ -3020,17 +3020,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           aiUsage = JSON.parse(aiUsage);
         } catch (e) {
           console.error('Error parsing ai_usage:', e);
-          aiUsage = { gemini: 0 };
+          aiUsage = { llm: 0 };
         }
       }
-      aiUsage = aiUsage || { gemini: 0 };
+      aiUsage = aiUsage || { llm: 0 };
 
       res.json({
         usage: {
-          gemini: aiUsage.gemini || 0
+          // Jobs finished before the OpenRouter move stored their count under gemini
+          llm: aiUsage.llm ?? aiUsage.gemini ?? 0
         },
         errors: {},
-        activeProvider: 'gemini'
+        activeProvider: 'openrouter'
       });
     } catch (error) {
       console.error('Error getting AI stats:', error);
@@ -3431,7 +3432,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       `);
 
       if (recentTrailJob.rows.length === 0) {
-        return res.json({ usage: { gemini: 0 }, errors: {}, activeProvider: 'gemini' });
+        return res.json({ usage: { llm: 0 }, errors: {}, activeProvider: 'openrouter' });
       }
 
       const job = recentTrailJob.rows[0];
@@ -3452,17 +3453,18 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           aiUsage = JSON.parse(aiUsage);
         } catch (e) {
           console.error('Error parsing ai_usage:', e);
-          aiUsage = { gemini: 0 };
+          aiUsage = { llm: 0 };
         }
       }
-      aiUsage = aiUsage || { gemini: 0 };
+      aiUsage = aiUsage || { llm: 0 };
 
       res.json({
         usage: {
-          gemini: aiUsage.gemini || 0
+          // Jobs finished before the OpenRouter move stored their count under gemini
+          llm: aiUsage.llm ?? aiUsage.gemini ?? 0
         },
         errors: {},
-        activeProvider: 'gemini'
+        activeProvider: 'openrouter'
       });
     } catch (error) {
       console.error('Error getting AI stats:', error);
@@ -4365,7 +4367,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         [JOB_NAMES.NEWS_BATCH]: { label: 'News & Events (Manual)', description: 'Admin-triggered batch collection from Data Collection tab' },
         [JOB_NAMES.TRAIL_STATUS_COLLECTION]: { label: 'Trail Status Check', description: 'Checks MTB trail conditions via status URLs (every 30 min)' },
         [JOB_NAMES.TRAIL_STATUS_BATCH]: { label: 'Trail Status (Manual)', description: 'Admin-triggered trail status collection' },
-        [JOB_NAMES.CONTENT_MODERATION_SWEEP]: { label: 'Content Moderation', description: 'Scores pending content with Gemini (every 15 min)' },
+        [JOB_NAMES.CONTENT_MODERATION_SWEEP]: { label: 'Content Moderation', description: 'Scores pending content with AI (every 15 min)' },
         [JOB_NAMES.NEWSLETTER_PROCESS]: { label: 'Email Ingestion', description: 'Extracts news and events from inbound newsletters' },
         [JOB_NAMES.IMAGE_BACKUP]: { label: 'Image Server Backup', description: 'Syncs image server media files to Google Drive (2 AM daily)' },
         [JOB_NAMES.DATABASE_BACKUP]: { label: 'Database Backup', description: 'Uploads PostgreSQL dump to Google Drive (3 AM daily)' }

@@ -2,7 +2,7 @@
  * Geo Service - Shared PostGIS geographic grounding utilities
  *
  * Provides boundary lookup for POIs using PostGIS spatial queries.
- * Used by serperService.js (news/events search) and geminiService.js (AI research)
+ * Used by serperService.js (news/events search) and llmService.js (AI research)
  * to add geographic context that eliminates location ambiguity.
  */
 

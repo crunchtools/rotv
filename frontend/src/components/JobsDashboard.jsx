@@ -487,10 +487,6 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     const total = isNews ? (info.total_pois || 0) : (info.total_trails || 0);
     const pct = total > 0 ? (processed / total) * 100 : 0;
 
-    const geminiUsage = stats?.usage?.gemini || 0;
-    const perplexityUsage = stats?.usage?.perplexity || 0;
-    const total429 = (stats?.errors?.gemini429 || 0) + (stats?.errors?.perplexity429 || 0);
-
     return (
       <div className="running-job-section">
         <div className="running-job-header">

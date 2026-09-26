@@ -1,4 +1,4 @@
-import { generateTextWithCustomPrompt } from './geminiService.js';
+import { generateTextWithCustomPrompt } from './llmService.js';
 import { renderPage } from './renderPage.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
