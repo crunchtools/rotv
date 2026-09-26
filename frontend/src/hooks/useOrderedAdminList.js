@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import useDragReorder from './useDragReorder';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -25,6 +25,9 @@ export default function useOrderedAdminList(endpoint, noun, pluralNoun) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  // Latest list for saveOrder's revert, which is memoised on endpoint only.
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
   useEffect(() => {
     const loadItems = async () => {
@@ -103,7 +106,10 @@ export default function useOrderedAdminList(endpoint, noun, pluralNoun) {
   };
 
   const saveOrder = useCallback(async (ordered) => {
+    const previous = itemsRef.current;
     setItems(ordered);
+    // Show the new order immediately, but put the saved order back if the server rejects it.
+    const revert = () => setItems(current => (current === ordered ? previous : current));
     try {
       const response = await fetch(`${endpoint}/reorder`, {
         method: 'PUT',
@@ -112,12 +118,14 @@ export default function useOrderedAdminList(endpoint, noun, pluralNoun) {
         body: JSON.stringify({ orderedIds: ordered.map(entry => entry.id) })
       });
       if (!response.ok) {
+        revert();
         const failure = await response.json();
         setError(failure.error || 'Failed to save order');
       } else {
         setError(null);
       }
     } catch (err) {
+      revert();
       setError(`Failed to save order: ${err.message}`);
     }
   }, [endpoint]);

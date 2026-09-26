@@ -326,6 +326,17 @@ ENVFILE
             echo "  Install with: npm install"
         fi
 
+        # Run frontend unit tests (Vitest + jsdom) on the host
+        FRONTEND_TEST_EXIT_CODE=0
+        echo ""
+        echo "Running frontend unit tests..."
+        if [ -d "frontend/node_modules" ]; then
+            npm test --prefix frontend || FRONTEND_TEST_EXIT_CODE=$?
+        else
+            echo "⚠ Frontend dependencies not installed (skipping frontend unit tests)"
+            echo "  Install with: (cd frontend && npm install)"
+        fi
+
         # Run Gatehouse AI code review
         GATEHOUSE_EXIT_CODE=0
         echo ""
@@ -338,8 +349,8 @@ ENVFILE
         fi
 
         echo ""
-        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ] && [ $ESLINT_EXIT_CODE -eq 0 ] && [ $GATEHOUSE_EXIT_CODE -eq 0 ]; then
-            echo "✓ Tests, Gourmand, ESLint, and Gatehouse checks completed successfully"
+        if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ] && [ $ESLINT_EXIT_CODE -eq 0 ] && [ $FRONTEND_TEST_EXIT_CODE -eq 0 ] && [ $GATEHOUSE_EXIT_CODE -eq 0 ]; then
+            echo "✓ Tests, Gourmand, ESLint, frontend unit tests, and Gatehouse checks completed successfully"
         else
             if [ $TEST_EXIT_CODE -ne 0 ]; then
                 echo "❌ Tests failed"
@@ -350,6 +361,9 @@ ENVFILE
             if [ $ESLINT_EXIT_CODE -ne 0 ]; then
                 echo "❌ ESLint found issues"
                 echo "   Try: npm run lint:fix"
+            fi
+            if [ $FRONTEND_TEST_EXIT_CODE -ne 0 ]; then
+                echo "❌ Frontend unit tests failed"
             fi
             if [ $GATEHOUSE_EXIT_CODE -ne 0 ]; then
                 echo "❌ Gatehouse found blocking issues"
@@ -581,7 +595,7 @@ ENVFILE
         echo "  seed           Pull fresh data from production server via SSH"
         echo ""
         echo "TESTING COMMANDS"
-        echo "  test           Run full test suite (174 tests) + Gourmand + ESLint + Gatehouse"
+        echo "  test           Run full test suite + Gourmand + ESLint + frontend unit tests + Gatehouse"
         echo "  gourmand       Run Gourmand AI slop detection only (fast iteration)"
         echo "  lint           Run ESLint on JavaScript/React code (fast iteration)"
         echo "  gatehouse      Run Gatehouse AI code review only (fast iteration)"

@@ -1105,88 +1105,6 @@ body {
 }
 
 /* Associations Modal */
-.associations-modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-
-.associations-modal {
-  background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 500px;
-  max-height: 80vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.associations-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  background: #ff9800;
-  color: white;
-}
-
-.associations-modal-header h3 {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.associations-modal-close {
-  background: rgba(255,255,255,0.2);
-  border: none;
-  color: white;
-  font-size: 1.75rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  transition: background-color 0.2s;
-  flex-shrink: 0;
-}
-
-.associations-modal-close:hover {
-  background: rgba(255,255,255,0.35);
-}
-
-.associations-modal-content {
-  padding: 1.25rem;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.associations-modal-description {
-  margin: 0 0 1rem 0;
-  color: #525252;
-  font-size: 0.9rem;
-}
-
-.associations-modal-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.associations-modal-empty {
-  padding: 2rem;
-  text-align: center;
-  color: #767676;
-}
 
 /* Associations Tab View - shows button to open modal */
 .associations-tab-view {
@@ -2003,77 +1921,6 @@ body {
 }
 
 /* News and Events */
-.news-events-section {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid #e0e0e0;
-}
-
-.news-events-tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.news-events-tabs .tab-btn {
-  padding: 0.4rem 0.8rem;
-  border: 1px solid #ccc;
-  background: #f5f5f5;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.news-events-tabs .tab-btn:hover {
-  background: #e8e8e8;
-}
-
-.news-events-tabs .tab-btn.active {
-  background: #4a7c23;
-  color: white;
-  border-color: #4a7c23;
-}
-
-.news-list, .events-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.news-item, .event-item {
-  padding: 0.75rem;
-  background: #f9f9f9;
-  border-radius: 6px;
-  border-left: 3px solid #4a7c23;
-}
-
-.news-item.closure {
-  border-left-color: #c62828;
-  background: #fef1f1;
-}
-
-.news-item.maintenance {
-  border-left-color: #f57c00;
-  background: #fff8e1;
-}
-
-.news-item.seasonal {
-  border-left-color: #1565c0;
-  background: #e3f2fd;
-}
-
-.news-item.wildlife {
-  border-left-color: #2e7d32;
-  background: #e8f5e9;
-}
-
-.news-header, .event-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
-}
 
 .news-delete-btn {
   margin-left: auto;
@@ -2107,12 +1954,6 @@ body {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid #e0e0e0;
-}
-
-.news-management-section .news-events-section {
-  margin-top: 0.5rem;
-  border-top: none;
-  padding-top: 0;
 }
 
 /* Park News Tab */
@@ -2391,29 +2232,6 @@ body {
 .event-type-icon.educational { background: #f57c00; }
 .event-type-icon.concert { background: #d81b60; }
 
-.news-title, .event-title {
-  font-weight: 600;
-  font-size: 0.9rem;
-  color: #333;
-  line-height: 1.3;
-}
-
-.news-summary, .event-description {
-  font-size: 0.85rem;
-  color: #555;
-  margin: 0.3rem 0;
-  line-height: 1.4;
-}
-
-.news-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.4rem;
-  font-size: 0.75rem;
-  color: #777;
-}
-
 .news-source {
   background: #e0e0e0;
   padding: 0.1rem 0.4rem;
@@ -2452,27 +2270,6 @@ body {
 
 .event-link.calendar-link {
   color: #2563eb;
-}
-
-.event-date {
-  font-size: 0.8rem;
-  color: #525252;
-  font-weight: 500;
-  margin-bottom: 0.3rem;
-}
-
-.event-location {
-  font-size: 0.8rem;
-  color: #525252;
-  margin-top: 0.3rem;
-}
-
-.event-location .location-label {
-  font-weight: 500;
-}
-
-.event-actions {
-  margin-top: 0.5rem;
 }
 
 .loading-indicator {
@@ -3998,120 +3795,10 @@ body {
 }
 
 /* User Menu */
-.user-menu-container {
-  position: relative;
-}
-
-.user-menu-btn {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.35rem 0.75rem;
-  background: rgba(255,255,255,0.15);
-  border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 6px;
-  color: white;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.user-menu-btn:hover {
-  background: rgba(255,255,255,0.25);
-}
-
-.user-avatar {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  object-fit: cover;
-}
-
-.user-avatar-placeholder {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.25);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 0.85rem;
-}
-
-.user-name {
-  font-size: 0.9rem;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.admin-badge {
-  background: #f57c00;
-  color: white;
-  font-size: 0.65rem;
-  padding: 0.15rem 0.4rem;
-  border-radius: 4px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.user-dropdown {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 0.5rem;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-  min-width: 180px;
-  z-index: 1100;
-  overflow: hidden;
-}
-
-.user-info {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #eee;
-}
-
-.user-email {
-  font-size: 0.8rem;
-  color: #525252;
-}
-
-.dropdown-hint {
-  padding: 0.5rem 1rem;
-  font-size: 0.75rem;
-  color: #767676;
-  font-style: italic;
-  border-bottom: 1px solid #eee;
-  margin: 0;
-}
-
-.dropdown-item {
-  display: block;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  border: none;
-  background: white;
-  text-align: left;
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.dropdown-item:hover {
-  background: #f5f5f5;
-}
 
 .admin-item {
   color: #f57c00;
   font-weight: 500;
-}
-
-.logout-item {
-  color: #d32f2f;
 }
 
 /* Admin Panel Modal */
@@ -4924,15 +4611,6 @@ body {
   border-color: #4a7c23;
 }
 
-.new-content-form .form-row {
-  display: flex;
-  gap: 1rem;
-}
-
-.new-content-form .form-row .form-section {
-  flex: 1;
-}
-
 .new-content-form .form-error {
   color: #d32f2f;
   font-size: 0.85rem;
@@ -5296,67 +4974,6 @@ body {
 }
 
 /* New POI Form Modal */
-.new-poi-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 3000;
-}
-
-.new-poi-modal {
-  background: white;
-  border-radius: 12px;
-  max-width: 550px;
-  width: 95%;
-  max-height: 90vh;
-  overflow: auto;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-}
-
-.new-poi-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid #eee;
-  background: linear-gradient(135deg, #2d5016 0%, #4a7c23 100%);
-  color: white;
-  border-radius: 12px 12px 0 0;
-}
-
-.new-poi-header h2 {
-  margin: 0;
-  font-size: 1.15rem;
-}
-
-.new-poi-header .close-btn {
-  background: rgba(255,255,255,0.2);
-  border: none;
-  color: white;
-  font-size: 1.5rem;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.new-poi-header .close-btn:hover {
-  background: rgba(255,255,255,0.35);
-}
-
-.new-poi-form {
-  padding: 1.25rem;
-}
 
 .form-error {
   background: #ffebee;
@@ -5403,11 +5020,6 @@ body {
 .form-section textarea {
   resize: vertical;
   min-height: 60px;
-}
-
-.form-row {
-  display: flex;
-  gap: 1rem;
 }
 
 .form-section.half {
@@ -5719,17 +5331,6 @@ body {
   padding-bottom: 0.5rem;
 }
 
-.news-status-section {
-  margin-bottom: 1.5rem;
-}
-
-.job-status-card {
-  background: #f8f9fa;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 1rem;
-}
-
 .status-row {
   display: flex;
   justify-content: space-between;
@@ -5745,57 +5346,7 @@ body {
   color: #c62828;
 }
 
-.status-label {
-  color: #525252;
-  font-weight: 500;
-}
-
-.status-value {
-  font-weight: 600;
-}
-
-.status-value.status-completed {
-  color: #2e7d32;
-}
-
-.status-value.status-running {
-  color: #f57c00;
-}
-
-.status-value.status-failed {
-  color: #c62828;
-}
-
-.no-status {
-  color: #525252;
-  font-style: italic;
-}
-
 /* Live Progress Section */
-.live-progress .job-status-card {
-  background: #e8f5e9;
-  border-color: #4caf50;
-}
-
-.live-progress .job-status-card.running {
-  background: linear-gradient(135deg, #e3f2fd 0%, #e8f5e9 100%);
-  border-color: #2196f3;
-}
-
-.progress-bar-container {
-  height: 8px;
-  background: #e0e0e0;
-  border-radius: 4px;
-  overflow: hidden;
-  margin-bottom: 1rem;
-}
-
-.progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #4caf50, #8bc34a);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
 
 .progress-stats {
   display: flex;
@@ -5803,22 +5354,6 @@ body {
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-bottom: 0.75rem;
-}
-
-.progress-stat {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-
-.progress-stat .stat-label {
-  color: #525252;
-  font-size: 0.9rem;
-}
-
-.progress-stat .stat-value {
-  font-weight: 600;
-  color: #2d5016;
 }
 
 .progress-hint {
@@ -5926,38 +5461,6 @@ body {
   font-size: 0.85rem;
 }
 
-.news-actions-section {
-  margin-bottom: 1.5rem;
-}
-
-.action-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #fff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 1rem;
-}
-
-.action-info {
-  flex: 1;
-  margin-right: 1rem;
-}
-
-.action-info strong {
-  display: block;
-  color: #333;
-  margin-bottom: 0.25rem;
-}
-
-.action-info p {
-  color: #525252;
-  font-size: 0.9rem;
-  margin: 0;
-}
-
 .action-btn {
   padding: 0.75rem 1.5rem;
   border: none;
@@ -5992,116 +5495,9 @@ body {
   cursor: not-allowed;
 }
 
-.news-result {
-  padding: 1rem;
-  border-radius: 8px;
-  margin: 1rem 0;
-  font-weight: 500;
-}
-
-.news-result.success {
-  background: #e8f5e9;
-  color: #2e7d32;
-  border: 1px solid #a5d6a7;
-}
-
-.news-result.error {
-  background: #ffebee;
-  color: #c62828;
-  border: 1px solid #ef9a9a;
-}
-
-.news-schedule-section {
-  background: #f0f7ff;
-  border: 1px solid #bbdefb;
-  border-radius: 8px;
-  padding: 1rem;
-  margin-top: 1.5rem;
-}
-
-.news-schedule-section h4 {
-  border-bottom: none;
-  margin-top: 0;
-  padding-bottom: 0;
-  color: #1565c0;
-}
-
-.news-schedule-section p {
-  color: #555;
-  margin: 0;
-  font-size: 0.9rem;
-}
-
 /* Revamped News Settings */
-.news-settings-revamped {
-  padding: 1rem;
-}
-
-.news-settings-revamped h3 {
-  color: #2d5016;
-  margin-bottom: 0.5rem;
-  margin-top: 0;
-}
-
-.news-settings-revamped h4 {
-  color: #333;
-  margin: 1.5rem 0 1rem 0;
-  font-size: 1rem;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 0.5rem;
-}
 
 /* Collection Progress Card - Purple gradient like sidebar */
-.collection-progress-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 12px;
-  padding: 1.25rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  animation: slideDown 0.4s ease-out;
-}
-
-.progress-card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.75rem;
-}
-
-.progress-phase {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.progress-phase .phase-icon {
-  font-size: 1.5rem;
-  display: inline-block;
-}
-
-.progress-phase .phase-icon.pulse {
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-.progress-phase .phase-text {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.progress-phase .phase-label {
-  color: white;
-  font-weight: 600;
-  font-size: 1rem;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-.progress-phase .phase-detail {
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 0.85rem;
-  font-weight: 400;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
-}
 
 .progress-bar-wrapper {
   height: 6px;
@@ -6124,45 +5520,6 @@ body {
   gap: 1rem;
   margin-bottom: 0.75rem;
   flex-wrap: wrap;
-}
-
-.collection-progress-card .count-badge {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  background: rgba(255, 255, 255, 0.2);
-  padding: 0.5rem 0.75rem;
-  border-radius: 8px;
-  backdrop-filter: blur(10px);
-}
-
-.collection-progress-card .count-icon {
-  font-size: 1.1rem;
-}
-
-.collection-progress-card .count-value {
-  color: #0f172a;
-  font-weight: 700;
-  font-size: 1.1rem;
-}
-
-.collection-progress-card .count-label {
-  color: #334155;
-  font-size: 0.85rem;
-  font-weight: 500;
-}
-
-.collection-progress-card .count-details {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.progress-hint-text {
-  color: rgba(255, 255, 255, 0.9);
-  font-size: 0.85rem;
-  font-style: italic;
-  margin: 0;
 }
 
 /* Recent Results Section */
@@ -6212,13 +5569,6 @@ body {
 }
 
 /* Results list */
-.results-list {
-  max-height: 400px;
-  overflow-y: auto;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 0.5rem;
-}
 
 .results-loading {
   padding: 2rem;
@@ -7320,11 +6670,6 @@ body {
 }
 
 /* Progress Header Actions (cancel/close buttons) */
-.progress-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
 
 /* Progress Status Text */
 .progress-status-text {
@@ -7336,17 +6681,6 @@ body {
 }
 
 /* Cancelled Badge */
-.cancelled-badge {
-  background: rgba(244, 67, 54, 0.2);
-  color: #ef9a9a;
-  padding: 0.5rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  text-align: center;
-  margin: 0.5rem 0;
-  border: 1px solid rgba(244, 67, 54, 0.3);
-}
 
 /* Legacy step-check style (no longer used) */
 .step-check {
@@ -9369,24 +8703,6 @@ body {
 
 .news-btn {
   background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
-}
-
-.news-result {
-  background: #e3f2fd;
-  border: 1px solid #90caf9;
-  border-radius: 6px;
-  padding: 0.75rem;
-  margin-bottom: 1rem;
-  font-size: 0.85rem;
-}
-
-.news-result strong {
-  color: #1565c0;
-}
-
-.news-result p {
-  margin: 0.25rem 0 0 0;
-  color: #333;
 }
 
 /* Activities Settings */
@@ -12895,32 +12211,6 @@ img.type-filter-icon {
   font-size: 0.95rem;
 }
 
-.add-associations-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.75rem;
-}
-
-.add-associations-actions .btn-cancel,
-.add-associations-actions .btn-save {
-  padding: 0.6rem 1.2rem;
-  border-radius: 6px;
-  font-size: 0.95rem;
-  cursor: pointer;
-  border: none;
-  transition: all 0.2s ease;
-}
-
-.add-associations-actions .btn-cancel {
-  background: #e0e0e0;
-  color: #333;
-}
-
-.add-associations-actions .btn-cancel:hover {
-  background: #d0d0d0;
-}
-
 .add-associations-modal-footer .btn-cancel,
 .add-associations-modal-footer .btn-save {
   padding: 0.75rem 1.5rem;
@@ -13093,10 +12383,6 @@ svg.leaflet-zoom-animated {
 
 /* ===== TRAIL STATUS TAB ===== */
 
-.trail-status-tab {
-  padding: 1rem;
-}
-
 .back-to-mtb-list-btn {
   display: block;
   width: 100%;
@@ -13157,30 +12443,8 @@ svg.leaflet-zoom-animated {
 }
 
 /* Status badges row - container for status and source badges */
-.status-badges-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
 
 /* Source badge - links to external status source */
-.source-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 12px;
-  font-size: 0.85em;
-  font-weight: 600;
-  background-color: #6c757d;
-  color: white;
-  text-decoration: none;
-  transition: background-color 0.2s ease;
-}
-
-.source-badge:hover {
-  background-color: #5a6268;
-  text-decoration: none;
-}
 
 /* Legacy support for old-style parent-child selectors */
 .status-open .status-badge {
@@ -13286,9 +12550,7 @@ svg.leaflet-zoom-animated {
 }
 
 .status-conditions,
-.status-weather,
-.status-updated,
-.status-seasonal {
+.status-updated {
   margin: 0.75rem 0;
   font-size: 0.9rem;
 }
@@ -13307,14 +12569,6 @@ svg.leaflet-zoom-animated {
 
 .status-source-link:hover {
   background: #3d6a1e;
-}
-
-.status-seasonal {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
-  padding: 0.75rem;
-  border-radius: 4px;
-  margin-top: 1rem;
 }
 
 /* Trail Status inline on Info tab */
@@ -13374,87 +12628,13 @@ svg.leaflet-zoom-animated {
 }
 
 /* Status Tab - Main Tab View */
-.status-tab-content {
-  width: 100%;
-}
-
-.status-section {
-  margin-bottom: 2rem;
-}
-
-.status-section-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #2d5016;
-  margin-bottom: 1rem;
-  padding-bottom: 0.5rem;
-  border-bottom: 2px solid #4a7c23;
-}
-
-.status-group {
-  margin-bottom: 1.5rem;
-}
-
-.status-group-header {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 0.75rem;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
 
 /* Trail Status Tiles */
-.trail-status-tile {
-  cursor: pointer;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
 
-.trail-status-tile:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-}
-
-.trail-status-tile .results-tile-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 0.75rem;
-}
-
-.trail-status-tile .status-badge {
-  margin-bottom: 0;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.75rem;
-  flex-shrink: 0;
-}
-
-.trail-conditions,
-.trail-weather {
+.trail-weather{
   font-size: 0.85rem;
   margin: 0.5rem 0;
   color: #555;
-}
-
-.trail-status-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  margin-top: 0.75rem;
-  font-size: 0.8rem;
-  color: #525252;
-}
-
-.trail-meta-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
-.trail-updated {
-  font-style: italic;
-  color: #888;
 }
 
 .trail-seasonal-notice {
@@ -13465,13 +12645,6 @@ svg.leaflet-zoom-animated {
   margin-top: 0.75rem;
   font-size: 0.85rem;
   color: #856404;
-}
-
-.results-tab-empty-inline {
-  text-align: center;
-  padding: 2rem;
-  color: #525252;
-  font-size: 1rem;
 }
 
 /* Data Collection Settings (merged News/Events + Trail Status) */
@@ -13611,13 +12784,6 @@ svg.leaflet-zoom-animated {
 .job-icon {
   font-size: 2rem;
   flex-shrink: 0;
-}
-
-.job-details {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
 
 .job-title {
@@ -14278,132 +13444,6 @@ svg.leaflet-zoom-animated {
 }
 
 /* Permalink pages */
-.permalink-page {
-  min-height: 100vh;
-  background: #f5f5f0;
-  display: flex;
-  justify-content: center;
-  padding: 40px 16px;
-}
-
-.permalink-card {
-  background: #fff;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-  padding: 32px;
-  max-width: 720px;
-  width: 100%;
-  align-self: flex-start;
-}
-
-.permalink-nav {
-  margin-bottom: 24px;
-}
-
-.permalink-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.permalink-title {
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #1a1a1a;
-  margin: 0;
-  line-height: 1.3;
-}
-
-.permalink-poi-link {
-  background: none;
-  border: none;
-  color: #2e7d32;
-  font-size: 0.95rem;
-  cursor: pointer;
-  padding: 0;
-  margin-bottom: 16px;
-  display: inline-block;
-}
-
-.permalink-poi-link:hover {
-  text-decoration: underline;
-}
-
-.permalink-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  color: #525252;
-  font-size: 0.9rem;
-  margin-bottom: 20px;
-}
-
-.permalink-source {
-  background: #f0f0f0;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 0.85rem;
-}
-
-.permalink-summary {
-  font-size: 1rem;
-  line-height: 1.6;
-  color: #333;
-  margin-bottom: 24px;
-}
-
-.permalink-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.permalink-read-more {
-  color: #1565c0;
-  text-decoration: none;
-  font-size: 0.95rem;
-}
-
-.permalink-read-more:hover {
-  text-decoration: underline;
-}
-
-.permalink-additional-sources {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid #eee;
-  font-size: 0.9rem;
-  color: #525252;
-}
-
-.permalink-additional-sources a {
-  color: #1565c0;
-  margin-left: 8px;
-}
-
-.permalink-loading, .permalink-error {
-  text-align: center;
-  padding: 60px 20px;
-}
-
-.permalink-error h2 {
-  color: #c62828;
-}
-
-@media (max-width: 600px) {
-  .permalink-page {
-    padding: 16px 8px;
-  }
-  .permalink-card {
-    padding: 20px 16px;
-  }
-  .permalink-title {
-    font-size: 1.25rem;
-  }
-}
 
 /* Privacy Policy Page */
 .privacy-policy-page {

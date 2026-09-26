@@ -33,10 +33,6 @@ class ImageServerClient {
     return response;
   }
 
-  // Fetch a binary asset rendition. Non-2xx responses carry the upstream status so
-  // the proxy route can pass it through; network failures map to 503.
-  // Run an image-server call; on failure log it and return onError(error) so
-  // callers get a result object instead of an exception.
   // Send an optional JSON payload and parse the JSON reply.
   async sendJson(path, method, payload, failureLabel) {
     const init = { method };
@@ -48,6 +44,16 @@ class ImageServerClient {
     return response.json();
   }
 
+  /**
+   * Run an image-server call; on failure log it and return onError(error) so
+   * callers get a result object instead of an exception.
+   *
+   * @param {string} failureMessage - Log prefix for the failure.
+   * @param {() => Promise<*>} call - The request; its resolved value is returned as-is.
+   * @param {(error: Error) => *} [onError] - Builds the fallback result; defaults to
+   *   `{ success: false, error: error.message }`.
+   * @returns {Promise<*>} The call's result, or onError's. Never rejects.
+   */
   async guarded(failureMessage, call, onError = error => ({ success: false, error: error.message })) {
     try {
       return await call();
@@ -57,6 +63,15 @@ class ImageServerClient {
     }
   }
 
+  /**
+   * Fetch a binary asset rendition. Non-2xx responses carry the upstream status so
+   * the proxy route can pass it through; network failures map to 503.
+   *
+   * @param {string} path - Image-server path of the rendition (e.g. /api/assets/:id/thumbnail).
+   * @param {string} what - Label for log lines ("thumbnail", "original").
+   * @returns {Promise<{success: true, data: Buffer, contentType: string} |
+   *   {success: false, error: string, statusCode: number}>} Never rejects.
+   */
   async fetchAssetBinary(path, what) {
     try {
       const response = await fetch(`${this.serverUrl}${path}`);
@@ -209,8 +224,12 @@ class ImageServerClient {
     if (options.role) {
       path += `&role=${options.role}`;
     }
-    return this.guarded('Failed to get POI assets:',
-      async () => (await this.fetchOk(path, undefined, 'Fetch failed')).json(), () => []);
+    return this.guarded('Failed to get POI assets:', async () => {
+      const assets = await (await this.fetchOk(path, undefined, 'Fetch failed')).json();
+      // Callers iterate the result; a non-array body (error object, proxy page) must not reach them.
+      if (!Array.isArray(assets)) throw new Error(`expected an asset array, got ${typeof assets}`);
+      return assets;
+    }, () => []);
   }
 
   async getPrimaryAsset(poiId) {

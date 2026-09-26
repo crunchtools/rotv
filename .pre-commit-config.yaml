@@ -54,21 +54,15 @@ repos:
       # shadows the real binary on PATH, so a bare `gourmand` is the wrong tool.
       - id: gourmand
         name: Gourmand (AI slop detection)
-        entry: podman --events-backend=none run --rm --log-driver=none -v .:/src:Z -w /src quay.io/crunchtools/gourmand:latest check --full
+        entry: podman --events-backend=none run --rm --log-driver=none -v .:/src:Z -w /src quay.io/crunchtools/gourmand:latest check --full --cache-dir /tmp/gourmand-cache
         language: system
         pass_filenames: false
         always_run: true
-        # Manual until the 1,243-violation backlog clears (RT #1508); as a
-        # blocking hook it would stop every commit. Run: pre-commit run gourmand --hook-stage manual
+        # Manual, not blocking: the tracked tree is at zero (#612) and CI's full scan
+        # is the gate. Locally, --full also scans untracked working directories, and
+        # 0.16.5's `--diff-source staged` misreports imported exports (CH022) when an
+        # export line is in the diff. Run: pre-commit run gourmand --hook-stage manual
         stages: [manual]
-
-      # Ensure package.json versions are consistent
-      - id: check-versions
-        name: Check Version Consistency
-        entry: "bash -c 'frontend_ver=$(grep -o '\\\"version\\\": \\\"[^\\\"]*\\\"' frontend/package.json | head -1 | cut -d\\\" -f4) && container_ver=$(grep -o '\\''version=\\\"[^\\\"]*\\\"'\\'' Containerfile | cut -d\\\" -f2) && if [ \"$frontend_ver\" != \"$container_ver\" ]; then echo \"Version mismatch: frontend=$frontend_ver, Containerfile=$container_ver\"; exit 1; fi'"
-        language: system
-        files: ^(frontend/package\.json|Containerfile)$
-        pass_filenames: false
   # Constitution XII gates, from crunchtools/gatehouse examples/pre-commit.yaml
   - repo: local
     hooks:

@@ -51,18 +51,21 @@ export function getJobScheduler() {
   return boss;
 }
 
-// pg-boss queues must exist before work() is attached. A failure here is logged
-// rather than thrown: the queue normally already exists from a previous boot.
+/**
+ * pg-boss queues must exist before work() is attached. pg-boss 12's create_queue
+ * is INSERT ... ON CONFLICT DO NOTHING, so this is safe on every boot; it only
+ * throws on a real failure (bad name, DB error), which is logged, not rethrown.
+ *
+ * @param {import('pg-boss').PgBoss} scheduler - Started pg-boss instance.
+ * @param {string} queueName - Queue to create if missing.
+ * @returns {Promise<void>}
+ */
 async function ensureQueue(scheduler, queueName) {
   try {
     await scheduler.createQueue(queueName);
-    logger.info(`Queue '${queueName}' created`);
+    logger.debug(`Queue '${queueName}' ready`);
   } catch (error) {
-    if (error.message?.includes('already exists')) {
-      logger.debug(`Queue '${queueName}' already exists`);
-    } else {
-      logger.warn(`Queue '${queueName}' could not be created, assuming it exists: ${error.message}`);
-    }
+    logger.warn(`Queue '${queueName}' could not be created, assuming it exists: ${error.message}`);
   }
 }
 
