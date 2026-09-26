@@ -1,5 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { buildRequestBody, complete, getApiKey, LLM_MODEL } from '../services/llmService.js';
+import {
+  buildRequestBody, complete, getApiKey, LLM_MODEL, researchLocation, researchLocationMultiPass
+} from '../services/llmService.js';
+
+vi.mock('../services/jobLogger.js', () => ({ logInfo: vi.fn(), logError: vi.fn(), flush: vi.fn() }));
 
 const keyPool = () => ({ query: vi.fn().mockResolvedValue({ rows: [{ value: 'sk-or-test' }] }) });
 
@@ -34,11 +38,24 @@ describe('buildRequestBody', () => {
     expect(body.temperature).toBe(0);
   });
 
-  it('leaves reasoning at the model default when no budget is given', () => {
+  it('turns reasoning off when no budget is given', () => {
     const body = buildRequestBody('hi');
-    expect(body.reasoning).toBeUndefined();
+    expect(body.reasoning).toEqual({ effort: 'none' });
     expect(body.max_tokens).toBeUndefined();
     expect(body.temperature).toBe(0.3);
+  });
+
+  it('bounds reasoning to a positive thinkingBudget', () => {
+    const body = buildRequestBody('hi', { thinkingBudget: 2048, maxOutputTokens: 8192 });
+    expect(body.reasoning).toEqual({ max_tokens: 2048 });
+    expect(body.max_tokens).toBe(8192);
+  });
+
+  it('never leaves reasoning unbounded', () => {
+    for (const thinkingBudget of [undefined, 0, -1, 1, 2048]) {
+      const { reasoning } = buildRequestBody('hi', { thinkingBudget });
+      expect(reasoning.effort === 'none' || reasoning.max_tokens > 0).toBe(true);
+    }
   });
 });
 
@@ -161,5 +178,34 @@ describe('complete', () => {
 
     await expect(complete(keyPool(), 'x')).rejects.toThrow('OpenRouter returned 400');
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('POI research', () => {
+  const sentBodies = fetchMock => fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
+  const jsonReply = () => reply(200, { choices: [{ message: { content: '{"sources": []}' } }] });
+
+  it('bounds reasoning on single-pass research', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonReply());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await researchLocation(keyPool(), { name: 'Brandywine Falls' });
+    const [body] = sentBodies(fetchMock);
+    expect(body.reasoning).toEqual({ max_tokens: 2048 });
+    expect(body.max_tokens).toBe(8192);
+    expect(body.temperature).toBe(0);
+  });
+
+  it('bounds reasoning on both multi-pass calls', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonReply());
+    vi.stubGlobal('fetch', fetchMock);
+
+    await researchLocationMultiPass(keyPool(), { name: 'Brandywine Falls' });
+    const bodies = sentBodies(fetchMock);
+    expect(bodies).toHaveLength(2);
+    for (const body of bodies) {
+      expect(body.reasoning).toEqual({ max_tokens: 2048 });
+      expect(body.max_tokens).toBe(8192);
+    }
   });
 });
