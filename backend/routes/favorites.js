@@ -2,6 +2,9 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { isAuthenticated } from '../middleware/auth.js';
 import { parsePositiveId, resolveTimezone } from '../utils/requestParams.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Favorites');
 
 const favoriteWriteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -47,7 +50,7 @@ export function createFavoritesRouter(pool) {
       );
       res.json(favorites.rows);
     } catch (err) {
-      console.error('GET /api/favorites failed:', err);
+      logger.error('GET /api/favorites failed:', err);
       res.status(500).json({ error: 'Failed to load favorites' });
     }
   });
@@ -72,7 +75,7 @@ export function createFavoritesRouter(pool) {
       );
       res.status(201).json({ poiId, favorited: true });
     } catch (err) {
-      console.error('POST /api/favorites/:poiId failed:', err);
+      logger.error('POST /api/favorites/:poiId failed:', err);
       res.status(500).json({ error: 'Failed to add favorite' });
     }
   });
@@ -89,7 +92,7 @@ export function createFavoritesRouter(pool) {
       );
       res.json({ poiId, favorited: false });
     } catch (err) {
-      console.error('DELETE /api/favorites/:poiId failed:', err);
+      logger.error('DELETE /api/favorites/:poiId failed:', err);
       res.status(500).json({ error: 'Failed to remove favorite' });
     }
   });

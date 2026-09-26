@@ -1,5 +1,8 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Feedback');
 
 const router = express.Router();
 
@@ -65,12 +68,12 @@ export function createFeedbackRouter(pool) {
       const tokenQuery = await pool.query("SELECT value FROM admin_settings WHERE key = 'github_api_token'");
       token = tokenQuery.rows[0]?.value || process.env.GITHUB_TOKEN;
     } catch (err) {
-      console.error('Failed to read GitHub token from admin_settings, using GITHUB_TOKEN:', err.message);
+      logger.error('Failed to read GitHub token from admin_settings, using GITHUB_TOKEN:', err.message);
       token = process.env.GITHUB_TOKEN;
     }
 
     if (!token) {
-      console.error('GitHub token not configured — cannot create feedback issue');
+      logger.error('GitHub token not configured — cannot create feedback issue');
       return res.status(503).json({ error: 'Feedback service is temporarily unavailable. Please try again later.' });
     }
 
@@ -101,14 +104,14 @@ export function createFeedbackRouter(pool) {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        console.error(`GitHub API error (${response.status}): ${errorBody}`);
+        logger.error(`GitHub API error (${response.status}): ${errorBody}`);
         return res.status(502).json({ error: 'Failed to submit feedback. Please try again later.' });
       }
 
       const issue = await response.json();
       res.status(201).json({ success: true, issueNumber: issue.number });
     } catch (err) {
-      console.error('GitHub API request failed:', err.message);
+      logger.error('GitHub API request failed:', err.message);
       res.status(502).json({ error: 'Failed to submit feedback. Please try again later.' });
     }
   });

@@ -1,5 +1,8 @@
 import express from 'express';
 import passport from 'passport';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Auth');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
@@ -36,7 +39,7 @@ export function createAuthRouter(pool) {
               ? JSON.parse(req.user.oauth_credentials)
               : req.user.oauth_credentials;
           } catch (err) {
-            console.error('Failed to parse oauth_credentials:', err);
+            logger.error('Failed to parse oauth_credentials:', err);
             credentials = null;
           }
         }
@@ -103,7 +106,7 @@ export function createAuthRouter(pool) {
         );
         favorites = favResult.rows.map(r => r.poi_id);
       } catch (err) {
-        console.error('Failed to load favorites for /auth/user, returning none:', err);
+        logger.error('Failed to load favorites for /auth/user, returning none:', err);
         favorites = [];
       }
       let visited;
@@ -114,7 +117,7 @@ export function createAuthRouter(pool) {
         );
         visited = visitedResult.rows.map(r => r.poi_id);
       } catch (err) {
-        console.error('Failed to load visited for /auth/user, returning none:', err);
+        logger.error('Failed to load visited for /auth/user, returning none:', err);
         visited = [];
       }
       res.json({

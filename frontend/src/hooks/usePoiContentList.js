@@ -44,7 +44,7 @@ export default function usePoiContentList({ poiId, kind, listUrl, onCountChange 
   useEffect(() => {
     fetchItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiId]); // fetchItems intentionally excluded — re-fetch only on POI change, not on function reference churn
+  }, [poiId, listUrl]); // fetchItems/onCountChange excluded — both are new every render; listUrl already encodes poiId and tz
 
   const handleCollect = async () => {
     if (!poiId) return;

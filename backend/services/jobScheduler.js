@@ -72,9 +72,19 @@ async function scheduleCron(jobName, cronExpression, label, data = {}) {
   logger.info(`${label} scheduled with cron: ${cronExpression}`);
 }
 
-// Attach a worker that runs `run(job)` for every job pg-boss delivers (it may hand
-// over a single job or a batch), logging start/finish and rethrowing failures so
-// pg-boss applies its retry policy.
+/**
+ * Attach a worker that runs `run(job)` for every job pg-boss delivers (it may hand
+ * over a single job or a batch), logging start/finish and rethrowing failures so
+ * pg-boss applies its retry policy.
+ *
+ * @param {string} jobName - pg-boss queue name; created first if missing.
+ * @param {string} label - Human name used in the start/finish/failure log lines.
+ * @param {(job: {id: string, data: object}) => Promise<void>} run - Handles one job.
+ * @param {object} [opts]
+ * @param {object} [opts.workOptions] - Passed straight to pg-boss work() (e.g. batchSize).
+ * @param {{info: Function, error: Function}} [opts.log] - Logger to use; defaults to JobScheduler's.
+ * @returns {Promise<void>} Resolves once the worker is registered.
+ */
 async function registerWorker(jobName, label, run, { workOptions = {}, log = logger } = {}) {
   const scheduler = getJobScheduler();
   await ensureQueue(scheduler, jobName);

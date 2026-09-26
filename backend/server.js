@@ -3140,4 +3140,8 @@ async function shutdown(signal) {
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 
-start().catch(console.error);
+start().catch(error => {
+  // A half-initialised server must not keep running; exit non-zero so systemd restarts it.
+  logger.error('Startup failed:', error);
+  process.exit(1);
+});

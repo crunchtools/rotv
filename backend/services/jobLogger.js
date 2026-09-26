@@ -2,6 +2,14 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('JobLogger');
 
+const jobTypeLoggers = new Map();
+
+function loggerFor(jobType) {
+  const tag = jobType || 'Job';
+  if (!jobTypeLoggers.has(tag)) jobTypeLoggers.set(tag, createLogger(tag));
+  return jobTypeLoggers.get(tag);
+}
+
 let pool = null;
 let buffer = [];
 let flushTimer = null;
@@ -47,17 +55,17 @@ export function log(entry) {
 }
 
 export function logInfo(jobId, jobType, poiId, poiName, message, details = null) {
-  createLogger(jobType || 'Job').info(message);
+  loggerFor(jobType).info(message);
   log({ jobId, jobType, poiId, poiName, level: 'info', message, details });
 }
 
 export function logWarn(jobId, jobType, poiId, poiName, message, details = null) {
-  createLogger(jobType || 'Job').warn(message);
+  loggerFor(jobType).warn(message);
   log({ jobId, jobType, poiId, poiName, level: 'warn', message, details });
 }
 
 export function logError(jobId, jobType, poiId, poiName, message, details = null) {
-  createLogger(jobType || 'Job').error(message);
+  loggerFor(jobType).error(message);
   log({ jobId, jobType, poiId, poiName, level: 'error', message, details });
 }
 

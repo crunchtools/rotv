@@ -2,6 +2,9 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { isAuthenticated, optionalAuth } from '../middleware/auth.js';
 import { slugifyWithSuffix } from '../utils/slug.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Trips');
 
 const MAX_STOPS = 9;
 
@@ -106,11 +109,16 @@ export async function insertTripWithSlugRetry(client, fields, maxAttempts = 5) {
   throw new Error('slug collision after retries');
 }
 
-// Roll back after a failed transaction. A ROLLBACK failure is logged, not thrown,
-// so the caller's original error is the one that reaches the response.
+/**
+ * Roll back after a failed transaction. A ROLLBACK failure is logged, not thrown,
+ * so the caller's original error is the one that reaches the response.
+ *
+ * @param {import('pg').PoolClient} client - Checked-out client with an open transaction.
+ * @returns {Promise<void>} Resolves once the rollback was attempted; never rejects.
+ */
 export async function rollbackQuietly(client) {
   await client.query('ROLLBACK').catch(err => {
-    console.warn('ROLLBACK failed:', err.message);
+    logger.warn('ROLLBACK failed:', err.message);
   });
 }
 
@@ -129,7 +137,7 @@ export function createTripsRouter(pool) {
       );
       res.json(featuredRows.rows);
     } catch (err) {
-      console.error('GET /api/trips/featured failed:', err);
+      logger.error('GET /api/trips/featured failed:', err);
       res.status(500).json({ error: 'Failed to load featured trips' });
     }
   });
@@ -152,7 +160,7 @@ export function createTripsRouter(pool) {
       );
       res.json(discoverRows.rows);
     } catch (err) {
-      console.error('GET /api/trips/discover failed:', err);
+      logger.error('GET /api/trips/discover failed:', err);
       res.status(500).json({ error: 'Failed to load trips' });
     }
   });
@@ -174,7 +182,7 @@ export function createTripsRouter(pool) {
       );
       res.json(pendingRows.rows);
     } catch (err) {
-      console.error('GET /api/trips/pending failed:', err);
+      logger.error('GET /api/trips/pending failed:', err);
       res.status(500).json({ error: 'Failed to load pending trips' });
     }
   });
@@ -221,7 +229,7 @@ export function createTripsRouter(pool) {
       const fresh = await loadTripById(pool, id);
       res.json(fresh);
     } catch (err) {
-      console.error('POST /api/trips/:id/moderate failed:', err);
+      logger.error('POST /api/trips/:id/moderate failed:', err);
       res.status(500).json({ error: 'Failed to moderate trip' });
     }
   });
@@ -239,7 +247,7 @@ export function createTripsRouter(pool) {
       );
       res.json(mineRows.rows);
     } catch (err) {
-      console.error('GET /api/trips/mine failed:', err);
+      logger.error('GET /api/trips/mine failed:', err);
       res.status(500).json({ error: 'Failed to load your trips' });
     }
   });
@@ -263,7 +271,7 @@ export function createTripsRouter(pool) {
       if (!canView) return res.status(404).json({ error: 'Trip not found' });
       res.json(trip);
     } catch (err) {
-      console.error('GET /api/trips/:idOrSlug failed:', err);
+      logger.error('GET /api/trips/:idOrSlug failed:', err);
       res.status(500).json({ error: 'Failed to load trip' });
     }
   });
@@ -295,7 +303,7 @@ export function createTripsRouter(pool) {
       res.status(201).json(fresh);
     } catch (err) {
       await rollbackQuietly(client);
-      console.error('POST /api/trips failed:', err);
+      logger.error('POST /api/trips failed:', err);
       res.status(500).json({ error: 'Failed to create trip' });
     } finally {
       client.release();
@@ -377,7 +385,7 @@ export function createTripsRouter(pool) {
       res.json(fresh);
     } catch (err) {
       await rollbackQuietly(client);
-      console.error('PUT /api/trips/:id failed:', err);
+      logger.error('PUT /api/trips/:id failed:', err);
       res.status(500).json({ error: 'Failed to update trip' });
     } finally {
       client.release();
@@ -400,7 +408,7 @@ export function createTripsRouter(pool) {
       await pool.query('DELETE FROM trips WHERE id = $1', [id]);
       res.status(204).end();
     } catch (err) {
-      console.error('DELETE /api/trips/:id failed:', err);
+      logger.error('DELETE /api/trips/:id failed:', err);
       res.status(500).json({ error: 'Failed to delete trip' });
     }
   });
@@ -450,7 +458,7 @@ export function createTripsRouter(pool) {
       res.status(201).json(fresh);
     } catch (err) {
       await rollbackQuietly(client);
-      console.error('POST /api/trips/:id/duplicate failed:', err);
+      logger.error('POST /api/trips/:id/duplicate failed:', err);
       res.status(500).json({ error: 'Failed to duplicate trip' });
     } finally {
       client.release();
