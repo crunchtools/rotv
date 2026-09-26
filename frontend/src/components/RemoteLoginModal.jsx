@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const FRAME_INTERVAL_MS = 700;
@@ -240,8 +241,9 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     finally { setSaving(false); }
   };
 
-  return (
-    // Above the site header (z-index 10000), which otherwise covers the modal's title bar and close button
+  // Portal to <body>: an ancestor in the settings page forms a stacking context, so a z-index here alone
+  // still left the site header (z-index 10000) over the modal's title bar and close button
+  return createPortal(
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 10001 }}>
       <div className="remote-login-modal" onClick={e => e.stopPropagation()}
         style={{ background: 'var(--bg-primary, #fff)', borderRadius: '8px', maxWidth: '560px', width: '95vw', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}>
@@ -273,7 +275,8 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
