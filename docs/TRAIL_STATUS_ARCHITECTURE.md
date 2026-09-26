@@ -95,7 +95,7 @@ Twitter/X pages require authenticated access to load tweet content:
 - Renders `https://www.facebook.com/plugins/page.php?href=<page>&tabs=timeline&...` in the shared Chromium pool (`browserPool.js`); the timeline is client-rendered, so plain HTTP only gets the shell
 - Anchors on `[data-utime]` (epoch seconds per post) and reads `[data-testid="post_message"]` from each post root, avoiding obfuscated class names
 - Emits `[YYYY-MM-DD] text` blocks joined by `---`, the same format as the Bluesky path
-- Falls back to the plugin's full `innerText` if no timestamps are found (markup change), so the classifier still sees content
+- Falls back to the plugin's full `innerText` whenever no post text can be formatted (no timestamps, or the `post_message` selector misses), so the classifier still sees content
 - No credentials and no per-call cost, so the 30-minute cadence is free. If Facebook ever locks the plugin, the fallback is an admin session cookie, the same way `twitter_cookies` works
 
 **Public Bluesky API (Bluesky)**
