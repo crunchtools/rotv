@@ -7,11 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Connect Facebook (remote-browser login)** in Settings › Data Collection. Facebook only serves its
+  Page Plugin logged-out to residential IPs, and walls lotor and every VPN exit. An admin now logs in
+  through a browser running on the ROTV server (screenshots streamed into a modal, input relayed back),
+  and the session is saved for Facebook trail status. The mechanism is provider-generic
+  (`remoteLoginSession.js`), ready for X if cookie-paste stops working there.
+
 ### Changed
+- Facebook trail status uses a dedicated non-proxied browser with the saved session, and reports
+  "Facebook login required" instead of passing login-page text to the classifier.
 - **Facebook trail status no longer uses Apify**: Reagan-Huffman (medinaTRAILS) status now comes
-  from Facebook's public Page Plugin rendered in the shared Playwright pool (`facebookService.js`),
-  with per-post dates from `[data-utime]`. The 30-minute cadence had exhausted Apify's free tier
-  (403 on every fetch since 2026-09-25); the new path is free and needs no credentials.
+  from Facebook's Page Plugin (`facebookService.js`), with per-post dates from `[data-utime]`.
+  The 30-minute cadence had exhausted Apify's free tier (403 on every fetch since 2026-09-25).
 
 ### Removed
 - `apifyService.js`, the Apify API token card in Settings > Data Collection, and

@@ -13,7 +13,7 @@ vi.mock('../services/llmService.js', () => ({ generateTextWithCustomPrompt: vi.f
 
 const { fetchFacebookPosts } = await import('../services/facebookService.js');
 const { renderPage } = await import('../services/renderPage.js');
-const { collectTrailStatus } = await import('../services/trailStatusService.js');
+const { collectTrailStatus, trackSessionResult } = await import('../services/trailStatusService.js');
 
 describe('collectTrailStatus Facebook routing', () => {
   it('sends Facebook status URLs to facebookService and feeds its content into the pipeline', async () => {
@@ -24,8 +24,49 @@ describe('collectTrailStatus Facebook routing', () => {
 
     const result = await collectTrailStatus(pool, poi);
 
-    expect(fetchFacebookPosts).toHaveBeenCalledWith('https://www.facebook.com/medinaTRAILS/');
+    expect(fetchFacebookPosts).toHaveBeenCalledWith(pool, 'https://www.facebook.com/medinaTRAILS/');
     expect(renderPage).not.toHaveBeenCalled();
     expect(result).toEqual({ statusFound: 1, statusSaved: 0, skipped: true });
+  });
+
+  it('counts consecutive Facebook failures (login wall) under facebook_consecutive_failures', async () => {
+    fetchFacebookPosts.mockResolvedValueOnce({ markdown: null, reachable: false, reason: 'Facebook login required' });
+    const pool = { query: vi.fn(async () => ({ rows: [{ value: '3' }] })) };
+    const poi = { id: 5999, name: 'Reagan-Huffman', status_url: 'https://www.facebook.com/medinaTRAILS/' };
+
+    const result = await collectTrailStatus(pool, poi);
+
+    expect(result).toEqual({ statusFound: 0, statusSaved: 0 });
+    const increments = pool.query.mock.calls.filter(([sql, params]) =>
+      params?.[0] === 'facebook_consecutive_failures' && /::int \+ 1/.test(sql));
+    expect(increments).toHaveLength(1);
+    expect(pool.query.mock.calls.some(([, params]) => params?.[0] === 'twitter_consecutive_failures')).toBe(false);
+  });
+
+  it('still counts Twitter failures under twitter_consecutive_failures', async () => {
+    renderPage.mockResolvedValueOnce({ markdown: null, reachable: false, reason: 'timeout' });
+    const pool = { query: vi.fn(async () => ({ rows: [{ value: '1' }] })) };
+    await collectTrailStatus(pool, { id: 5527, name: 'East Rim', status_url: 'https://x.com/CVNPmtb' });
+    const keys = pool.query.mock.calls.map(([, params]) => params?.[0]);
+    expect(keys).toContain('twitter_consecutive_failures');
+    expect(keys).not.toContain('facebook_consecutive_failures');
+  });
+
+  it.each([
+    ['https://www.facebook.com/medinaTRAILS/', 'facebook_consecutive_failures'],
+    ['https://x.com/CVNPmtb', 'twitter_consecutive_failures']
+  ])('resets the counter on success for %s', async (url, key) => {
+    const pool = { query: vi.fn(async () => ({ rows: [] })) };
+    await trackSessionResult(pool, url, true);
+    expect(pool.query).toHaveBeenCalledTimes(1);
+    const [sql, params] = pool.query.mock.calls[0];
+    expect(params).toEqual([key]);
+    expect(sql).toMatch(/SET value = '0'/);
+  });
+
+  it('ignores sources without a login session', async () => {
+    const pool = { query: vi.fn() };
+    await trackSessionResult(pool, 'https://www.clevelandmetroparks.com/trails', false);
+    expect(pool.query).not.toHaveBeenCalled();
   });
 });

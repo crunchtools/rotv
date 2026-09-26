@@ -36,7 +36,8 @@ const WATCHDOG_TIMEOUT_MS = 90_000;
 const watchdogTimers = new Map(); // acquisitionId → timeoutId
 let nextAcquisitionId = 0;
 
-const LAUNCH_OPTIONS = {
+// Exported for callers that need a dedicated, non-proxied browser (Facebook login/scrape).
+export const LAUNCH_OPTIONS = {
   headless: true,
   args: [
     '--no-sandbox',

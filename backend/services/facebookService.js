@@ -1,4 +1,6 @@
-import { acquireBrowser, releaseBrowser } from './browserPool.js';
+import { chromium } from 'playwright';
+import { LAUNCH_OPTIONS } from './browserPool.js';
+import { CONTEXT_OPTIONS as LOGIN_CONTEXT_OPTIONS, PROVIDERS } from './remoteLoginSession.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Facebook');
@@ -9,9 +11,15 @@ const logger = createLogger('Facebook');
  * facebook.com/<page> is login-walled for anonymous visitors, but the official
  * embeddable Page Plugin (developers.facebook.com/docs/plugins/page-plugin)
  * serves a public Page's recent timeline to anyone — that's its whole purpose.
- * The timeline renders client-side, so it goes through the shared Chromium pool.
- * Each post carries an epoch timestamp in [data-utime], which gives us reliable
- * per-post dates (the visible text only says "last Monday").
+ * The timeline renders client-side, so a real browser is required. Each post
+ * carries an epoch timestamp in [data-utime], which gives us reliable per-post
+ * dates (the visible text only says "last Monday").
+ *
+ * Facebook only serves the plugin logged-out to residential IPs; from lotor
+ * (and every ExpressVPN exit) it redirects to /login. So the fetch reuses the
+ * session an admin creates via the remote-browser login (remoteLoginSession.js),
+ * in a dedicated non-proxied browser so it egresses from the same IP the session
+ * was created on.
  *
  * Replaces the paid Apify scraper (free tier exhausted by the 30-min cadence).
  */
@@ -19,12 +27,25 @@ const PLUGIN_BASE_URL = 'https://www.facebook.com/plugins/page.php';
 const SOCIAL_MAX_POSTS = 10;
 const NAV_TIMEOUT_MS = 45000;
 
-const CONTEXT_OPTIONS = {
-  userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  locale: 'en-US',
-  timezoneId: 'America/New_York',
-  viewport: { width: 520, height: 3000 }
-};
+const CONTEXT_OPTIONS = { ...LOGIN_CONTEXT_OPTIONS, viewport: { width: 520, height: 3000 } };
+const LOGIN_REQUIRED_REASON = 'Facebook login required — connect Facebook in Settings › Data Collection';
+
+// Throws on DB/JSON errors so they surface as themselves, not as a login wall.
+async function loadSessionCookies(pool) {
+  const result = await pool.query('SELECT value FROM admin_settings WHERE key = $1', [PROVIDERS.facebook.settingsKey]);
+  return result.rows[0]?.value ? JSON.parse(result.rows[0].value) : [];
+}
+
+/**
+ * True when Facebook bounced us to its login page instead of rendering the plugin.
+ * @param {string} url - final page URL
+ * @param {number} postCount
+ * @param {string} bodyText
+ */
+export function isLoginWall(url, postCount, bodyText) {
+  if (/facebook\.com\/login/.test(url)) return true;
+  return postCount === 0 && /Log in(to)? (to )?Facebook/i.test(bodyText);
+}
 
 /**
  * Normalize any facebook.com Page URL to its root.
@@ -119,15 +140,17 @@ export function formatPosts(posts, maxItems = SOCIAL_MAX_POSTS) {
 /**
  * Fetch a public Facebook Page's recent posts for trail-status extraction.
  *
+ * @param {import('pg').Pool} pool - for the saved Facebook session (admin_settings.facebook_cookies)
  * @param {string} statusUrl - Any facebook.com Page URL (normalized to the Page root).
  * @param {number} [maxItems=10] - Maximum number of posts to include.
  * @returns {Promise<{markdown: string|null, reachable: boolean, reason: string|null}>}
  *   - reachable:true, markdown set — posts as "[YYYY-MM-DD] text" blocks joined by "---"
  *     (or raw plugin text if the post markup couldn't be parsed)
  *   - reachable:true, markdown null — plugin loaded but had no content ("no posts found")
- *   - reachable:false — invalid Page URL or render/navigation error; reason says which
+ *   - reachable:false — invalid Page URL, login wall (no/expired session), or
+ *     render/navigation error; reason says which
  */
-export async function fetchFacebookPosts(statusUrl, maxItems = SOCIAL_MAX_POSTS) {
+export async function fetchFacebookPosts(pool, statusUrl, maxItems = SOCIAL_MAX_POSTS) {
   const target = extractFacebookPageUrl(statusUrl);
   if (!target) {
     logger.info(`Could not extract Facebook page from: ${statusUrl}`);
@@ -136,16 +159,22 @@ export async function fetchFacebookPosts(statusUrl, maxItems = SOCIAL_MAX_POSTS)
 
   logger.info(`Fetching Facebook posts for ${target} via page plugin (max ${maxItems})...`);
 
-  let acquisitionId = null;
-  let context = null;
+  let browser = null;
+  let cookies = [];
   try {
-    const acquired = await acquireBrowser();
-    acquisitionId = acquired.acquisitionId;
-    context = await acquired.browser.newContext(CONTEXT_OPTIONS);
+    cookies = await loadSessionCookies(pool);
+    browser = await chromium.launch(LAUNCH_OPTIONS);
+    const context = await browser.newContext(CONTEXT_OPTIONS);
+    if (cookies.length > 0) await context.addCookies(cookies);
     const page = await context.newPage();
     await page.goto(buildPagePluginUrl(target), { waitUntil: 'networkidle', timeout: NAV_TIMEOUT_MS });
 
     const { posts, bodyText } = await page.evaluate(scrapePluginPosts);
+
+    if (isLoginWall(page.url(), posts.length, bodyText)) {
+      logger.warn(`Login wall for ${target} (${cookies.length > 0 ? 'saved session rejected' : 'no saved session'})`);
+      return { markdown: null, reachable: false, reason: LOGIN_REQUIRED_REASON };
+    }
 
     let markdown = formatPosts(posts, maxItems);
     if (!markdown && bodyText.trim()) {
@@ -166,7 +195,6 @@ export async function fetchFacebookPosts(statusUrl, maxItems = SOCIAL_MAX_POSTS)
     logger.error(`Facebook fetch error for ${target}:`, err.message);
     return { markdown: null, reachable: false, reason: `Facebook page plugin error: ${err.message}` };
   } finally {
-    if (context) await context.close().catch(err => logger.debug(`Context close failed: ${err.message}`));
-    if (acquisitionId !== null) releaseBrowser(acquisitionId);
+    if (browser) await browser.close().catch(err => logger.debug(`Browser close failed: ${err.message}`));
   }
 }

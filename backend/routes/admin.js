@@ -3637,6 +3637,111 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  // Remote-browser login (Facebook today; see PROVIDERS in remoteLoginSession.js).
+  // The admin UI polls /frame for JPEG screenshots and relays input via /input.
+  const remoteLoginError = (res, error) => {
+    const status = error.status || 500;
+    if (status >= 500) logger.error('Remote login error:', error);
+    res.status(status).json({ success: false, error: error.message });
+  };
+
+  router.post('/remote-login/:provider/start', isAdmin, async (req, res) => {
+    try {
+      const { startLogin, VIEWPORT } = await import('../services/remoteLoginSession.js');
+      await startLogin(req.params.provider, req.user.id);
+      res.json({ success: true, viewport: VIEWPORT });
+    } catch (error) {
+      remoteLoginError(res, error);
+    }
+  });
+
+  router.get('/remote-login/:provider/frame', isAdmin, async (req, res) => {
+    try {
+      const { getFrame } = await import('../services/remoteLoginSession.js');
+      const { image, url, loggedIn } = await getFrame(req.params.provider, req.user.id);
+      res.set({
+        'Content-Type': 'image/jpeg',
+        'Cache-Control': 'no-store',
+        'X-Login-Url': encodeURI(url),
+        'X-Logged-In': String(loggedIn)
+      });
+      res.send(image);
+    } catch (error) {
+      remoteLoginError(res, error);
+    }
+  });
+
+  router.post('/remote-login/:provider/input', isAdmin, async (req, res) => {
+    try {
+      const { sendInput } = await import('../services/remoteLoginSession.js');
+      await sendInput(req.params.provider, req.user.id, req.body);
+      res.json({ success: true });
+    } catch (error) {
+      remoteLoginError(res, error);
+    }
+  });
+
+  router.post('/remote-login/:provider/save', isAdmin, async (req, res) => {
+    try {
+      const { saveLogin } = await import('../services/remoteLoginSession.js');
+      const result = await saveLogin(pool, req.params.provider, req.user.id);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      remoteLoginError(res, error);
+    }
+  });
+
+  router.post('/remote-login/:provider/cancel', isAdmin, async (req, res) => {
+    try {
+      const { cancelLogin } = await import('../services/remoteLoginSession.js');
+      await cancelLogin(req.params.provider, req.user.id);
+      res.json({ success: true });
+    } catch (error) {
+      remoteLoginError(res, error);
+    }
+  });
+
+  router.get('/remote-login/:provider/status', isAdmin, async (req, res) => {
+    try {
+      const { getProvider } = await import('../services/remoteLoginSession.js');
+      const provider = getProvider(req.params.provider);
+      const rows = await pool.query(
+        'SELECT key, value, updated_at FROM admin_settings WHERE key IN ($1, $2)',
+        [provider.settingsKey, provider.failuresKey]
+      );
+      const byKey = Object.fromEntries(rows.rows.map(r => [r.key, r]));
+      const failures = parseInt(byKey[provider.failuresKey]?.value) || 0;
+      const saved = byKey[provider.settingsKey];
+      if (!saved) {
+        return res.json({ connected: false, consecutive_failures: failures });
+      }
+      const cookies = JSON.parse(saved.value);
+      const expiryCookie = cookies.find(c => c.name === provider.expiryCookie);
+      const expires = expiryCookie && expiryCookie.expires > 0 ? new Date(expiryCookie.expires * 1000) : null;
+      res.json({
+        connected: true,
+        saved_at: saved.updated_at,
+        expires: expires ? expires.toISOString() : null,
+        is_expired: expires ? expires < new Date() : false,
+        consecutive_failures: failures,
+        possibly_stale: failures >= 3
+      });
+    } catch (error) {
+      remoteLoginError(res, error);
+    }
+  });
+
+  router.delete('/remote-login/:provider/session', isAdmin, async (req, res) => {
+    try {
+      const { getProvider } = await import('../services/remoteLoginSession.js');
+      const provider = getProvider(req.params.provider);
+      await pool.query('DELETE FROM admin_settings WHERE key IN ($1, $2)', [provider.settingsKey, provider.failuresKey]);
+      res.json({ success: true });
+    } catch (error) {
+      remoteLoginError(res, error);
+    }
+  });
+
   router.get('/playwright/status', isAdmin, async (req, res) => {
     const startTime = Date.now();
     let browser = null;
