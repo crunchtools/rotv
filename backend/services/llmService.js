@@ -255,13 +255,13 @@ export async function complete(pool, prompt, options = {}) {
       throw error;
     }
 
-    const data = await response.json();
-    if (data.error) {
-      lastError = new Error(`OpenRouter upstream error: ${data.error.message || JSON.stringify(data.error)}`);
+    const completion = await response.json();
+    if (completion.error) {
+      lastError = new Error(`OpenRouter upstream error: ${completion.error.message || JSON.stringify(completion.error)}`);
       if (!(await pause(response, attempt))) break;
       continue;
     }
-    return data.choices?.[0]?.message?.content || '';
+    return completion.choices?.[0]?.message?.content || '';
   }
 
   throw lastError;
