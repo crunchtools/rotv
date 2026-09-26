@@ -50,6 +50,11 @@ describe('getApiKey', () => {
     expect(pool.query).not.toHaveBeenCalled();
   });
 
+  it('reads admin_settings when the environment has no key', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    expect(await getApiKey(keyPool())).toBe('sk-or-test');
+  });
+
   it('explains a missing key', async () => {
     vi.stubEnv('OPENROUTER_API_KEY', '');
     const pool = { query: vi.fn().mockResolvedValue({ rows: [] }) };
@@ -93,6 +98,30 @@ describe('complete', () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(await pending).toBe('ok');
     vi.useRealTimers();
+  });
+
+  it('honours an HTTP-date Retry-After', async () => {
+    vi.useFakeTimers();
+    const retryAt = new Date(Date.now() + 5000).toUTCString();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(reply(429, {}, { 'retry-after': retryAt }))
+      .mockResolvedValueOnce(reply(200, { choices: [{ message: { content: 'ok' } }] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const pending = complete(keyPool(), 'x');
+    await vi.advanceTimersByTimeAsync(3500);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(await pending).toBe('ok');
+    vi.useRealTimers();
+  });
+
+  it('gives up on a persistent 429', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(reply(429, {}));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(complete(keyPool(), 'x')).rejects.toThrow('OpenRouter returned 429');
+    expect(fetchMock).toHaveBeenCalledTimes(5);
   });
 
   it('names OpenRouter when the request itself fails', async () => {
