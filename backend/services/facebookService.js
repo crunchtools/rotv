@@ -63,10 +63,18 @@ export function buildPagePluginUrl(pageUrl) {
 }
 
 /* global document -- scrapePluginPosts runs in the browser via page.evaluate */
-// Runs in the browser via page.evaluate, so it must stay self-contained.
-// Anchors on [data-utime] (stable across Facebook's obfuscated class churn)
-// and climbs to the largest ancestor that holds no other timestamp — that's
-// the post root.
+/**
+ * Scrape posts from a rendered Page Plugin DOM. Runs in the browser via
+ * page.evaluate, so it must stay self-contained (no closures, no imports).
+ *
+ * Anchors on [data-utime] (stable across Facebook's obfuscated class churn)
+ * and climbs to the largest ancestor that holds no other timestamp — that's
+ * the post root.
+ *
+ * @returns {{posts: Array<{utime: string|null, text: string}>, bodyText: string}}
+ *   posts in page order (text '' when no post_message is found); bodyText is the
+ *   whole page's visible text for the fallback path
+ */
 export function scrapePluginPosts() {
   const stamps = Array.from(document.querySelectorAll('[data-utime]'));
   const visibleText = el => (el.innerText ?? el.textContent ?? '');
@@ -92,7 +100,8 @@ export function formatPosts(posts, maxItems = SOCIAL_MAX_POSTS) {
   return posts
     .map(p => {
       const epoch = Number(p.utime);
-      const isoDate = Number.isFinite(epoch) && epoch > 0 ? new Date(epoch * 1000).toISOString().substring(0, 10) : null;
+      const date = epoch > 0 ? new Date(epoch * 1000) : null;
+      const isoDate = date && Number.isFinite(date.getTime()) ? date.toISOString().substring(0, 10) : null;
       return { text: String(p.text || '').trim(), isoDate };
     })
     .filter(p => p.text.length > 0)

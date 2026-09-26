@@ -53,6 +53,19 @@ describe('formatPosts', () => {
   });
 });
 
+describe('formatPosts timestamp boundaries', () => {
+  it('treats malformed, non-positive, and out-of-range utime as undated', () => {
+    const md = formatPosts([
+      { utime: 'abc', text: 'a' },
+      { utime: '0', text: 'b' },
+      { utime: '-5', text: 'c' },
+      { utime: '1e20', text: 'd' },
+      { utime: '1790198756', text: 'e' }
+    ]);
+    expect(md).toBe('a\n\n---\n\nb\n\n---\n\nc\n\n---\n\nd\n\n---\n\n[2026-09-23] e');
+  });
+});
+
 describe('fetchFacebookPosts', () => {
   it('renders the page plugin and returns dated markdown', async () => {
     pageStub.evaluate.mockResolvedValue({
