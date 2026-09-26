@@ -8,10 +8,13 @@ const FRAME_RETRY_MS = 2000;
 const SESSION_ENDED_STATUSES = new Set([401, 403, 404, 409]);
 const TYPE_FLUSH_MS = 120;
 const MAX_TEXT_CHUNK = 256; // server-side limit per 'type' event
-const SPECIAL_KEYS = new Set([
-  'Enter', 'Backspace', 'Tab', 'Escape', 'Delete',
+// Pressed on the remote page directly; they must not edit or move the caret in the local mirror field.
+const PASSTHROUGH_KEYS = new Set([
+  'Enter', 'Tab', 'Escape', 'Delete',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'
 ]);
+// Keys that move the remote caret to another field, so the mirror starts over.
+const FIELD_CHANGE_KEYS = new Set(['Enter', 'Tab']);
 
 /**
  * Map a click on the scaled screenshot to remote-viewport pixels.
@@ -50,17 +53,21 @@ export function chunkText(text, size = MAX_TEXT_CHUNK) {
 }
 
 /**
- * Decide how a keydown is relayed: printable characters are batched as text,
- * navigation/editing keys are pressed individually, shortcuts are ignored.
- * @param {{key: string, ctrlKey?: boolean, metaKey?: boolean, altKey?: boolean}} evt - a React/DOM
- *   KeyboardEvent (only these fields are read)
- * @returns {'text'|'key'|null}
+ * Edits that turn the remote field's text from `before` into `after`: backspaces
+ * past the common prefix, then the new tail. Mobile keyboards (Gboard) rewrite
+ * text through composition and autocorrect rather than per-key events, so the
+ * mirror field is diffed instead of relaying keydowns. Works on code points so
+ * an emoji is one backspace.
+ * @param {string} before - text already relayed
+ * @param {string} after - current mirror value
+ * @returns {{backspaces: number, text: string}}
  */
-export function classifyKey(evt) {
-  if (evt.ctrlKey || evt.metaKey || evt.altKey) return null;
-  if (evt.key.length === 1) return 'text';
-  if (SPECIAL_KEYS.has(evt.key)) return 'key';
-  return null;
+export function diffTyping(before, after) {
+  const a = [...before];
+  const b = [...after];
+  let common = 0;
+  while (common < a.length && common < b.length && a[common] === b[common]) common += 1;
+  return { backspaces: a.length - common, text: b.slice(common).join('') };
 }
 
 /**
@@ -82,8 +89,11 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const savedRef = useRef(false);
-  const typeBuffer = useRef('');
+  // Hidden input that holds keyboard focus: a real text field is what opens a phone's keyboard.
+  const mirrorRef = useRef(null);
+  const relayedText = useRef('');
   const typeTimer = useRef(null);
+  const sendQueue = useRef(Promise.resolve());
   const refreshNow = useRef(null);
 
   // Start the remote session once; cancel it on unmount unless it was saved.
@@ -185,47 +195,64 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     return accepted;
   }, [base]);
 
-  const flushTyping = useCallback(async () => {
+  // Every relay goes through one queue so backspaces, text, keys and clicks arrive in order.
+  const enqueue = useCallback((task) => {
+    sendQueue.current = sendQueue.current.then(task);
+    return sendQueue.current;
+  }, []);
+
+  // Relay whatever the mirror gained or lost since the last flush. The diff is taken now,
+  // synchronously, so a click or key queued right after lands after this text.
+  const flushTyping = useCallback(() => {
     clearTimeout(typeTimer.current);
-    const text = typeBuffer.current;
-    typeBuffer.current = '';
-    for (const chunk of chunkText(text)) {
-      if (!(await sendInput({ type: 'type', text: chunk }))) break;
-    }
-  }, [sendInput]);
+    const current = mirrorRef.current ? mirrorRef.current.value : relayedText.current;
+    const { backspaces, text } = diffTyping(relayedText.current, current);
+    relayedText.current = current;
+    if (!backspaces && !text) return sendQueue.current;
+    return enqueue(async () => {
+      for (let i = 0; i < backspaces; i += 1) {
+        if (!(await sendInput({ type: 'key', key: 'Backspace' }))) return;
+      }
+      // Stop at the first rejected chunk so the field never gets partial, out-of-order text.
+      for (const chunk of chunkText(text)) {
+        if (!(await sendInput({ type: 'type', text: chunk }))) return;
+      }
+    });
+  }, [enqueue, sendInput]);
 
-  const handleKeyDown = async (e) => {
-    const kind = classifyKey(e);
-    if (!kind) return;
-    e.preventDefault();
-    if (kind === 'text') {
-      typeBuffer.current += e.key;
-      clearTimeout(typeTimer.current);
-      typeTimer.current = setTimeout(flushTyping, TYPE_FLUSH_MS);
-      return;
-    }
-    await flushTyping();
-    await sendInput({ type: 'key', key: e.key });
+  const resetMirror = () => {
+    if (mirrorRef.current) mirrorRef.current.value = '';
+    relayedText.current = '';
   };
 
-  // Paste is how password-manager users get credentials in — autofill can't reach the remote browser.
-  const handlePaste = async (e) => {
-    const text = e.clipboardData.getData('text');
-    if (!text) return;
-    e.preventDefault();
-    await flushTyping();
-    // Stop at the first rejected chunk so the field never gets partial, out-of-order text.
-    for (const chunk of chunkText(text)) {
-      if (!(await sendInput({ type: 'type', text: chunk }))) break;
-    }
+  // Typing, autocorrect and paste (including a password manager's) all land here as value changes.
+  const handleMirrorInput = () => {
+    clearTimeout(typeTimer.current);
+    typeTimer.current = setTimeout(flushTyping, TYPE_FLUSH_MS);
   };
 
-  const handleClick = async (e) => {
+  const handleMirrorKeyDown = (e) => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return; // leave paste shortcuts to the input event
+    const emptyBackspace = e.key === 'Backspace' && !e.currentTarget.value;
+    if (!PASSTHROUGH_KEYS.has(e.key) && !emptyBackspace) return;
+    e.preventDefault();
+    const { key } = e;
+    flushTyping();
+    if (FIELD_CHANGE_KEYS.has(key)) resetMirror();
+    enqueue(() => sendInput({ type: 'key', key }));
+  };
+
+  const handleClick = (e) => {
     // Fix: map the point before awaiting; React nulls e.currentTarget once dispatch ends, so every real click threw
     const point = toViewportPoint(e, e.currentTarget.getBoundingClientRect(), viewport);
-    await flushTyping();
-    await sendInput({ type: 'click', ...point });
+    // Focus inside the tap itself: mobile browsers only open the keyboard for a focus made during a user gesture.
+    if (mirrorRef.current) mirrorRef.current.focus({ preventScroll: true });
+    flushTyping();
+    resetMirror(); // a click may pick a different remote field
+    enqueue(() => sendInput({ type: 'click', ...point }));
   };
+
+  useEffect(() => () => clearTimeout(typeTimer.current), []);
 
   const handleWheel = (e) => { sendInput({ type: 'scroll', dy: e.deltaY }); };
 
@@ -253,14 +280,19 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
         </div>
         <div className="modal-body" style={{ overflow: 'auto' }}>
           <p className="settings-description" style={{ fontSize: '0.85rem' }}>
-            This is a browser running on the ROTV server. Click into it and log in as usual,
-            including any security check. Paste works for passwords.
+            This is a browser running on the ROTV server. Tap or click a field and type as usual
+            (your keyboard opens on phones), including any security check. Paste works for passwords.
           </p>
           {error && <div className="sync-error">{error}</div>}
-          {/* The frame is a live remote screen, so it needs raw keyboard focus rather than a form control. */}
-          <div tabIndex={0} role="application" aria-label={`${label} login browser`}
-            onKeyDown={handleKeyDown} onPaste={handlePaste} onWheel={handleWheel}
-            style={{ outline: '2px solid #1877f2', borderRadius: '4px', lineHeight: 0 }}>
+          <div role="application" aria-label={`${label} login browser`} onWheel={handleWheel}
+            style={{ position: 'relative', outline: '2px solid #1877f2', borderRadius: '4px', lineHeight: 0 }}>
+            {/* Invisible but focusable (not display:none) so phones open their keyboard; type=password keeps
+                keyboards from suggesting or learning what's typed. 16px avoids iOS zoom-on-focus. */}
+            <input ref={mirrorRef} type="password" aria-label={`${label} keyboard input`}
+              autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+              onInput={handleMirrorInput} onKeyDown={handleMirrorKeyDown}
+              style={{ position: 'absolute', top: 0, left: 0, width: '1px', height: '1px', opacity: 0,
+                border: 0, padding: 0, fontSize: '16px', pointerEvents: 'none' }} />
             {frameUrl
               ? <img src={frameUrl} alt={`${label} login screen`} onClick={handleClick}
                   style={{ width: '100%', height: 'auto', cursor: 'pointer', userSelect: 'none' }} draggable={false} />
