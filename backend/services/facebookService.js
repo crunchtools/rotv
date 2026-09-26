@@ -78,10 +78,16 @@ export function buildPagePluginUrl(pageUrl) {
 export function scrapePluginPosts() {
   const stamps = Array.from(document.querySelectorAll('[data-utime]'));
   const visibleText = el => (el.innerText ?? el.textContent ?? '');
+  // One pass: how many timestamps sit under each ancestor.
+  const stampCounts = new Map();
+  for (const stamp of stamps) {
+    for (let el = stamp; el; el = el.parentElement) {
+      stampCounts.set(el, (stampCounts.get(el) || 0) + 1);
+    }
+  }
   const posts = stamps.map(stamp => {
-    const others = stamps.filter(s => s !== stamp);
     let root = stamp;
-    while (root.parentElement && !others.some(o => root.parentElement.contains(o))) {
+    while (root.parentElement && stampCounts.get(root.parentElement) === 1) {
       root = root.parentElement;
     }
     const message = root.querySelector('[data-testid="post_message"], .userContent');
