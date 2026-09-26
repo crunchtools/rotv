@@ -33,6 +33,8 @@ const SLOTS_ENDPOINTS = {
   trail_status: '/api/admin/trail-status/job-status/:id'
 };
 
+const POLL_STALL_MS = 30000;
+
 const AI_STATS_ENDPOINTS = {
   ...newsPipelineMap(id => `/api/admin/news/ai-stats?pipeline=${id}`),
   trail_status: '/api/admin/trail-status/ai-stats'
@@ -93,6 +95,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const urlPoiId = searchParams.get('poi');
 
   const [scheduledJobs, setScheduledJobs] = useState([]);
+  // Read scheduledJobs through a ref so checkRunningJobs keeps a stable identity;
+  // depending on scheduledJobs re-ran the mount effect after every fetch, polling in a tight loop (#638)
+  const scheduledJobsRef = useRef(scheduledJobs);
+  scheduledJobsRef.current = scheduledJobs;
   const [scheduledLoading, setScheduledLoading] = useState(true);
   const [expandedScheduled, setExpandedScheduled] = useState(null);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -123,12 +129,17 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const [autoExpandNewestRun, setAutoExpandNewestRun] = useState(null);
 
+  // Fix: drop scheduled-jobs responses that a newer fetch has overtaken (PR #639 review)
+  const scheduledGenerationRef = useRef(0);
   const fetchScheduledJobs = useCallback(async () => {
+    const generation = ++scheduledGenerationRef.current;
     try {
       const res = await fetch(`${API_BASE}/api/admin/jobs/scheduled`, { credentials: 'include' });
-      if (res.ok) setScheduledJobs(await res.json());
+      if (!res.ok) return;
+      const jobs = await res.json();
+      if (generation === scheduledGenerationRef.current) setScheduledJobs(jobs);
     } catch (err) {
-      setDashboardError(`Failed to fetch scheduled jobs: ${err.message}`);
+      if (generation === scheduledGenerationRef.current) setDashboardError(`Failed to fetch scheduled jobs: ${err.message}`);
     } finally {
       setScheduledLoading(false);
     }
@@ -177,7 +188,9 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, []);
 
+  const checkGenerationRef = useRef(0);
   const checkRunningJobs = useCallback(async () => {
+    const generation = ++checkGenerationRef.current;
     const running = {};
     const slots = {};
     const stats = {};
@@ -216,11 +229,16 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       } catch { void 0; }
     }
 
+    // Fix: drop results from a check that a newer one has overtaken, so a late response can't restore stale status (PR #639 review)
+    if (generation !== checkGenerationRef.current) return;
+
     setRunningJobs(prev => {
+      // Keep the same object while idle so the polling interval isn't torn down on every check (#638)
+      if (Object.keys(prev).length === 0 && Object.keys(running).length === 0) return prev;
       for (const id of Object.keys(prev)) {
         if (!running[id]) {
           setCompletedJobs(c => ({ ...c, [id]: prev[id] }));
-          const job = scheduledJobs.find(j => j.id === id);
+          const job = scheduledJobsRef.current.find(j => j.id === id);
           if (job) {
             setJobHistory(h => ({ ...h, [id]: undefined }));
             fetchJobHistory(id, job.historyTypes, job.historySubType);
@@ -232,7 +250,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
     setActiveSlots(slots);
     setAiStats(stats);
-  }, [scheduledJobs, fetchJobHistory]);
+  }, [fetchJobHistory]);
 
   useEffect(() => {
     Promise.all([fetchScheduledJobs(), checkRunningJobs()]).then(() => setLoading(false));
@@ -246,18 +264,24 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
   }, [expandTarget, scheduledLoading, onExpandTargetConsumed]);
 
+  // Fix: skip a tick while the previous poll is still in flight so slow responses can't land out of order;
+  // the guard expires after POLL_STALL_MS so a request that never settles can't stop polling (PR #639 review)
+  const pollStartedAtRef = useRef(0);
   useEffect(() => {
     const hasRunning = Object.keys(runningJobs).length > 0;
     const interval = setInterval(() => {
-      if (hasRunning) checkRunningJobs();
-      else fetchScheduledJobs();
+      if (document.hidden || Date.now() - pollStartedAtRef.current < POLL_STALL_MS) return;
+      const startedAt = Date.now();
+      pollStartedAtRef.current = startedAt;
+      (hasRunning ? checkRunningJobs() : fetchScheduledJobs())
+        .finally(() => { if (pollStartedAtRef.current === startedAt) pollStartedAtRef.current = 0; });
     }, hasRunning ? 2000 : 15000);
     return () => clearInterval(interval);
   }, [fetchScheduledJobs, checkRunningJobs, runningJobs]);
 
   useEffect(() => {
     if (Object.keys(runningJobs).length === 0) return;
-    const interval = setInterval(fetchScheduledJobs, 15000);
+    const interval = setInterval(() => { if (!document.hidden) fetchScheduledJobs(); }, 15000);
     return () => clearInterval(interval);
   }, [fetchScheduledJobs, runningJobs]);
 
