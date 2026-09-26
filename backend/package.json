@@ -16,13 +16,13 @@
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@mozilla/readability": "^0.6.0",
     "axios": "^1.6.0",
-    "chrono-node": "^2.9.0",
+    "chrono-node": "^2.10.1",
     "connect-pg-simple": "^9.0.1",
-    "cors": "^2.8.5",
+    "cors": "^2.8.6",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.5.0",
-    "express-session": "^1.17.3",
+    "express-session": "^1.19.0",
     "googleapis": "^144.0.0",
     "jsdom": "^29.0.1",
     "mailparser": "^3.9.28",
@@ -32,17 +32,17 @@
     "passport": "^0.7.0",
     "passport-facebook": "^3.0.0",
     "passport-google-oauth20": "^2.0.0",
-    "pg": "^8.11.3",
-    "pg-boss": "^12.5.4",
-    "playwright": "1.58.1",
+    "pg": "^8.23.0",
+    "pg-boss": "^12.34.0",
+    "playwright": "1.63.0",
     "smtp-server": "^3.19.13",
     "socket.io-client": "^2.5.0",
-    "turndown": "^7.2.2",
-    "zod": "^4.3.6"
+    "turndown": "^7.2.4",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.10.0",
-    "supertest": "^7.2.2",
+    "@axe-core/playwright": "^4.13.0",
+    "supertest": "^7.3.0",
     "vitest": "^2.1.8"
   }
 }
