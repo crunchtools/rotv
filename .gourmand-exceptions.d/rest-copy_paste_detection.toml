@@ -1,6 +1,0 @@
-check = "copy_paste_detection"
-
-[[locations]]
-path = "backend/services/newsService.js"
-justification = "getNewsForPoi, getRecentNews and getUpcomingEvents share only the shape 'await pool.query(<SQL>, params); return rows'. The SQL differs in table (poi_news vs poi_events), join (none vs JOIN pois), filter (poi_id vs moderation status vs Eastern-date window) and ordering; there is no common logic to extract."
-classification = "gourmand_bug"

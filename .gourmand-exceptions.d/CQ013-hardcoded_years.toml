@@ -1,4 +1,4 @@
-check = "hardcoded_years"
+check = "CQ013-hardcoded_years"
 
 [[locations]]
 path = "backend/services/trainTrackerService.js"

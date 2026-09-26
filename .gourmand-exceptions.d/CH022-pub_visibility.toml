@@ -1,4 +1,4 @@
-check = "pub_visibility"
+check = "CH022-pub_visibility"
 
 [[locations]]
 path = "frontend/src/hooks/useAnimatedTrackerPosition.js"

@@ -1,4 +1,4 @@
-check = "absolute_paths"
+check = "CH001-absolute_paths"
 
 [[locations]]
 path = "backend/routes/admin.js"

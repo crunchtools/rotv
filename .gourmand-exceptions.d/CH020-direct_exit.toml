@@ -1,4 +1,4 @@
-check = "direct_exit"
+check = "CH020-direct_exit"
 
 [[locations]]
 path = "backend/server.js"

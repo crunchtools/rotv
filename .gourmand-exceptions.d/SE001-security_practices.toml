@@ -1,4 +1,4 @@
-check = "security_practices"
+check = "SE001-security_practices"
 
 [[locations]]
 path = "backend/services/backupService.js"

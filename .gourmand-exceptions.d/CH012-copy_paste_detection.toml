@@ -1,6 +1,11 @@
-check = "copy_paste_detection"
+check = "CH012-copy_paste_detection"
 
 [[locations]]
 path = "frontend/src/hooks/useModeration.js"
 justification = "Approve/reject/requeue already share moderateItem and every POST goes through postJson. The remaining matches (moderateItem vs handleDelete/handleSave, handleAddUrl vs handleMerge) share only the fetch -> if ok notify+refresh -> else notify error skeleton; the endpoints, payloads and follow-up state (confirmDelete, editFields, newUrlInput, mergingItem, poi-media-updated events) all differ."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "backend/services/newsService.js"
+justification = "getNewsForPoi, getRecentNews and getUpcomingEvents share only the shape 'await pool.query(<SQL>, params); return rows'. The SQL differs in table (poi_news vs poi_events), join (none vs JOIN pois), filter (poi_id vs moderation status vs Eastern-date window) and ordering; there is no common logic to extract."
 classification = "gourmand_bug"

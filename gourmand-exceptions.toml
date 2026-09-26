@@ -1,6 +1,6 @@
 
 [[exceptions]]
-check = "summary_litter"
+check = "CH008-summary_litter"
 path = "NEWSLETTER_DEPLOYMENT.md"
 justification = "Ops runbook for newsletter SMTP deployment — referenced by the team during infra changes"
 classification = "by_design"
@@ -10,13 +10,13 @@ classification = "by_design"
 # ============================================================================
 
 [[exceptions]]
-check = "random_scripts"
+check = "CH009-random_scripts"
 path = "run.sh"
 justification = "Primary dev workflow entrypoint — invoked as ./run.sh by every contributor"
 classification = "by_design"
 
 [[exceptions]]
-check = "random_scripts"
+check = "CH009-random_scripts"
 path = "entrypoint.sh"
 justification = "Container entrypoint script referenced by Containerfile CMD"
 classification = "by_design"
@@ -38,31 +38,31 @@ classification = "by_design"
 # longer than most entire service files.
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "backend/server.js"
 justification = "server.js is 3,000+ lines; getMosaicFromCache, setMosaicCache, initDatabase (560 lines), setupAiSearchDefaults, and start are named sections of a monolithic entry point — inlining any of them would make the file unnavigable"
 classification = "by_design"
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "backend/services/driveImageService.js"
 justification = "downloadFileFromDrive and createOAuth2Client are named for the distinct concerns of file download vs OAuth credential management"
 classification = "by_design"
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "backend/services/eventSeriesService.js"
 justification = "getAllActiveSeries (54-line DB query) and materializeSeries (35-line event generation) are named pipeline stages"
 classification = "by_design"
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "backend/services/newsletterDigestService.js"
 justification = "normalizeEventTitle, dayInTimezone, fetchDigestContent are named steps in the weekly digest generation pipeline"
 classification = "by_design"
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "backend/services/waterTaxiTrackerService.js"
 justification = "seedFromPage, updatePosition, connect, checkSettingAndConnect are named lifecycle stages of the WebSocket tracker"
 classification = "by_design"
@@ -71,19 +71,19 @@ classification = "by_design"
 # These are standalone scripts with idiomatic JS structure (named functions + main).
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "backend/migrations/generate-osm-matches.js"
 justification = "jaccard, isContained, distanceMeters, fetchCandidates are named math/API utilities in a standalone OSM matching script"
 classification = "by_design"
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "frontend/src/utils/iconUtils.js"
 justification = "getDestinationIconTypeFromConfig (37 lines), poiMatchesActivityForTypes (16 lines), isActivityFilterActive (9 lines) are exported utility functions consumed by map components"
 classification = "by_design"
 
 [[exceptions]]
-check = "single_use_helpers"
+check = "EV010-single_use_helpers"
 path = "frontend/src/utils/trackInterpolation.js"
 justification = "metersPerPixel has one caller INSIDE this file (bearingHalfSpan) but is exported and also consumed by trainConsist.js unitSpacingMeters — inlining it would duplicate the Web Mercator ground-resolution expression across two files, which is the exact duplication extracting it removed (#533). It is also unit-tested directly for the per-zoom halving, the absolute resolution at z16/z18, and the z13 fallback"
 classification = "by_design"
@@ -93,19 +93,19 @@ classification = "by_design"
 # ============================================================================
 
 [[exceptions]]
-check = "generic_names"
+check = "CH003-generic_names"
 path = "frontend/src/utils/snapToLine.js"
 justification = "x and y are the standard variable names in the forward azimuth / atan2 bearing formula from the spherical law of cosines — renaming would make the math harder to verify against reference implementations"
 classification = "by_design"
 
 [[exceptions]]
-check = "over_abstraction"
+check = "CH010-over_abstraction"
 path = "image-server/src/image_server/thumbnails.py"
 justification = "_normalize_orientation wraps ImageOps.exif_transpose, and its docstring is why it exists: phones store portrait photos as landscape pixels plus an orientation tag, and dropping that tag on resize rendered thumbnails sideways (issue #393). The name marks the call sites that must not lose it."
 classification = "by_design"
 
 [[exceptions]]
-check = "copy_paste_detection"
+check = "CH012-copy_paste_detection"
 path = "image-server/src/image_server/config.py"
 justification = "reset_config and reset_backend each clear one module-level singleton for tests. Three statements, two different globals."
 classification = "by_design"
@@ -128,31 +128,31 @@ classification = "by_design"
 # ============================================================================
 
 [[exceptions]]
-check = "verbose_comments"
+check = "CQ005-verbose_comments"
 path = "backend/server.js"
 justification = "Both hits match a truncated 'Validate a'/'UPDATE q' substring inside comments that explain a security fix (SSRF finding) and a query-avoidance optimization respectively -- not restating the following line"
 classification = "gourmand_bug"
 
 [[exceptions]]
-check = "verbose_comments"
+check = "CQ005-verbose_comments"
 path = "backend/services/trainTrackerService.js"
 justification = "Matches a truncated 'Validate t' substring inside a comment documenting testSharingToken's purpose and scope boundary (does not touch the live poller's state) -- not restating the following line"
 classification = "gourmand_bug"
 
 [[exceptions]]
-check = "verbose_comments"
+check = "CQ005-verbose_comments"
 path = "frontend/src/App.jsx"
 justification = "Matches a truncated 'Update d' substring inside a comment explaining the dispatch rule for the unified POI update/delete handler (spec 019) -- not restating the following line"
 classification = "gourmand_bug"
 
 [[exceptions]]
-check = "verbose_comments"
+check = "CQ005-verbose_comments"
 path = "frontend/src/components/Map.jsx"
 justification = "A 9-line comment (max 8) documenting why the CVSR locomotive sprite is drawn nose-up with a specific body footprint, referencing the bug (#533) it replaces -- a good comment that happens to exceed the line count, not filler"
 classification = "gourmand_bug"
 
 [[exceptions]]
-check = "verbose_comments"
+check = "CQ005-verbose_comments"
 path = "frontend/src/utils/trainConsist.js"
 justification = "An 11-line comment (max 8) documenting the physical consist order and why the GPS-tracked unit is not the lead engine (a real-world fact that broke #573 when assumed otherwise) -- a good comment that happens to exceed the line count, not filler"
 classification = "gourmand_bug"
@@ -168,19 +168,19 @@ classification = "gourmand_bug"
 # ============================================================================
 
 [[exceptions]]
-check = "console_log_production"
+check = "AI004-console_log_production"
 path = "backend/migrations/*.js"
 justification = "Hand-run operator CLI tools (node /app/migrations/<name>.js); rotv-init.sh runs only *.sql and no server module imports them — printing progress to stdout is their interface"
 classification = "by_design"
 
 [[exceptions]]
-check = "console_log_production"
+check = "AI004-console_log_production"
 path = "backend/scripts/*.js"
 justification = "Hand-run operator CLI tools (backfills, cleanup with --dry-run); not imported by the server — printing progress to stdout is their interface"
 classification = "by_design"
 
 [[exceptions]]
-check = "console_log_bracket_tag_prefix"
+check = "AI006-console_log_bracket_tag_prefix"
 path = "backend/migrations/*.js"
 justification = "Same hand-run CLI tools as the console_log_production entry above; the bracket tag labels the phase in a one-shot terminal report, not a stand-in for a server logger"
 classification = "by_design"
