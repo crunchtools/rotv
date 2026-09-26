@@ -1,0 +1,6 @@
+check = "redundant_error_handling"
+
+[[locations]]
+path = "frontend/src/components/MyValley.jsx"
+justification = "Anonymous-favorites enrichment is optional: load() calls setFavoriteList(baseRows) with names before the /api/pois/summary fetch, and the catch only runs if that enrichment fetch fails, leaving the already-rendered name-only rows in place (the recovery) and logging the cause at warn. No error state exists or is warranted for a cosmetic enrichment; rethrowing would abort load() for anonymous users."
+classification = "by_design"

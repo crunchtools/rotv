@@ -56,9 +56,9 @@ const ResultsTab = memo(function ResultsTab({
   useEffect(() => {
     fetch('/api/results-subtabs')
       .then(res => res.json())
-      .then(data => {
-        if (data.subtabs && data.subtabs.length > 0) {
-          setSubtabConfig(data.subtabs);
+      .then(subtabResponse => {
+        if (subtabResponse.subtabs && subtabResponse.subtabs.length > 0) {
+          setSubtabConfig(subtabResponse.subtabs);
         }
       })
       .catch(err => console.error('Failed to fetch subtab config:', err));

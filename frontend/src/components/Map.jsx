@@ -25,6 +25,27 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+function appendGlyph(button, glyph) {
+  const span = document.createElement('span');
+  span.setAttribute('aria-hidden', 'true');
+  span.textContent = glyph;
+  button.appendChild(span);
+}
+
+function createControlIcon(pathData) {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('width', '16');
+  svg.setAttribute('height', '16');
+  svg.setAttribute('fill', 'currentColor');
+  const path = document.createElementNS(SVG_NS, 'path');
+  path.setAttribute('d', pathData);
+  svg.appendChild(path);
+  return svg;
+}
+
 // River gauge marker (#92): a labeled pin showing the latest discharge (cfs)
 function createGaugeIcon(label, active) {
   return L.divIcon({
@@ -695,88 +716,86 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
   const search = (searchQuery || '').toLowerCase();
 
   const updateVisiblePois = useCallback(() => {
-    try {
-      const bounds = map.getBounds();
-      if (!bounds || !bounds.isValid()) return;
+    // Leaflet throws from getBounds() until the map has a center and zoom; skip until then.
+    if (!map._loaded) return;
+    const bounds = map.getBounds();
+    if (!bounds || !bounds.isValid()) return;
 
-      const visibleIds = [];
+    const visibleIds = [];
 
-      if (destinations && destinations.length > 0) {
-        destinations.forEach(dest => {
-          if (!dest.latitude || !dest.longitude) return;
+    if (destinations && destinations.length > 0) {
+      destinations.forEach(dest => {
+        if (!dest.latitude || !dest.longitude) return;
 
-          // While searching, destinations are already title-filtered upstream — count
-          // them regardless of category; otherwise honor the category toggles.
-          const iconType = getDestinationIconType(dest);
-          if (!search && !visibleTypes.has(iconType) && !poiMatchesActivityForTypes(dest, visibleTypes, iconConfig)) {
-            return;
+        // While searching, destinations are already title-filtered upstream — count
+        // them regardless of category; otherwise honor the category toggles.
+        const iconType = getDestinationIconType(dest);
+        if (!search && !visibleTypes.has(iconType) && !poiMatchesActivityForTypes(dest, visibleTypes, iconConfig)) {
+          return;
+        }
+
+        const lat = parseFloat(dest.latitude);
+        const lng = parseFloat(dest.longitude);
+        if (bounds.contains([lat, lng])) {
+          visibleIds.push(dest.id);
+        }
+      });
+    }
+
+    const isFilteredMode = visibleTypes.size < 10; // Small specific set means filtered mode
+    const includeLinearFeatures = !!search || !isFilteredMode ||
+                                  visibleTypes.has('trail') ||
+                                  visibleTypes.has('river') ||
+                                  visibleTypes.has('water_taxi') ||
+                                  visibleTypes.has('boundary') ||
+                                  isFilteredMode;
+
+    if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
+      linearFeatures.forEach(feature => {
+        let isLayerVisible = false;
+        if (search) {
+          // Title search matches across all linear types, ignoring layer toggles
+          isLayerVisible = feature.name?.toLowerCase().includes(search);
+        } else if (feature.poi_roles?.includes('trail')) {
+          isLayerVisible = (showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig))
+            && trailPassesActivityFilter(feature, visibleTypes, iconConfig);
+        } else if (feature.poi_roles?.includes('river')) {
+          isLayerVisible = showRivers;
+        } else if (feature.poi_roles?.includes('water_taxi')) {
+          isLayerVisible = showWaterTaxis;
+        } else if (feature.poi_roles?.includes('railroad')) {
+          isLayerVisible = visibleTypes.has('train');
+        } else if (feature.poi_roles?.includes('boundary')) {
+          isLayerVisible = visibleBoundaries.has(feature.id);
+        }
+
+        if (!isLayerVisible) return;
+
+        if (feature.geometry) {
+          const geoBounds = getGeometryBounds(feature.geometry);
+          if (boundsIntersect(bounds, geoBounds)) {
+            visibleIds.push(feature.id);
           }
+        }
+      });
+    }
 
-          const lat = parseFloat(dest.latitude);
-          const lng = parseFloat(dest.longitude);
-          if (bounds.contains([lat, lng])) {
-            visibleIds.push(dest.id);
-          }
-        });
-      }
+    if (onVisiblePoisChange && !map._isProgrammaticMove) {
+      onVisiblePoisChange(visibleIds);
+    }
 
-      const isFilteredMode = visibleTypes.size < 10; // Small specific set means filtered mode
-      const includeLinearFeatures = !!search || !isFilteredMode ||
-                                    visibleTypes.has('trail') ||
-                                    visibleTypes.has('river') ||
-                                    visibleTypes.has('water_taxi') ||
-                                    visibleTypes.has('boundary') ||
-                                    isFilteredMode;
-
-      if (includeLinearFeatures && linearFeatures && linearFeatures.length > 0) {
-        linearFeatures.forEach(feature => {
-          let isLayerVisible = false;
-          if (search) {
-            // Title search matches across all linear types, ignoring layer toggles
-            isLayerVisible = feature.name?.toLowerCase().includes(search);
-          } else if (feature.poi_roles?.includes('trail')) {
-            isLayerVisible = (showTrails || poiMatchesActivityForTypes(feature, visibleTypes, iconConfig))
-              && trailPassesActivityFilter(feature, visibleTypes, iconConfig);
-          } else if (feature.poi_roles?.includes('river')) {
-            isLayerVisible = showRivers;
-          } else if (feature.poi_roles?.includes('water_taxi')) {
-            isLayerVisible = showWaterTaxis;
-          } else if (feature.poi_roles?.includes('railroad')) {
-            isLayerVisible = visibleTypes.has('train');
-          } else if (feature.poi_roles?.includes('boundary')) {
-            isLayerVisible = visibleBoundaries.has(feature.id);
-          }
-
-          if (!isLayerVisible) return;
-
-          if (feature.geometry) {
-            const geoBounds = getGeometryBounds(feature.geometry);
-            if (boundsIntersect(bounds, geoBounds)) {
-              visibleIds.push(feature.id);
-            }
-          }
-        });
-      }
-
-      if (onVisiblePoisChange && !map._isProgrammaticMove) {
-        onVisiblePoisChange(visibleIds);
-      }
-
-      if (onMapStateChange) {
-        const center = map.getCenter();
-        const zoom = map.getZoom();
-        const container = map.getContainer();
-        const width = container.clientWidth;
-        const height = container.clientHeight;
-        onMapStateChange({
-          center: [center.lat, center.lng],
-          zoom: zoom,
-          bounds: [[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]],
-          aspectRatio: width / height
-        });
-      }
-    } catch {
-      // Best-effort visible-POI update: skip this pass if map state can't be read yet
+    if (onMapStateChange) {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      const container = map.getContainer();
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      onMapStateChange({
+        center: [center.lat, center.lng],
+        zoom: zoom,
+        bounds: [[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]],
+        aspectRatio: width / height
+      });
     }
   }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search, iconConfig]);
 
@@ -888,36 +907,28 @@ function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onS
         zoomIn.title = 'Zoom in';
         zoomIn.setAttribute('role', 'button');
         zoomIn.setAttribute('aria-label', 'Zoom in');
-        zoomIn.innerHTML = '<span aria-hidden="true">+</span>';
+        appendGlyph(zoomIn, '+');
 
         const zoomOut = L.DomUtil.create('a', 'zoom-locate-btn zoom-out-btn', container);
         zoomOut.href = '#';
         zoomOut.title = 'Zoom out';
         zoomOut.setAttribute('role', 'button');
         zoomOut.setAttribute('aria-label', 'Zoom out');
-        zoomOut.innerHTML = '<span aria-hidden="true">−</span>';
+        appendGlyph(zoomOut, '−');
 
         const locate = L.DomUtil.create('a', 'zoom-locate-btn locate-button', container);
         locate.href = '#';
         locate.title = 'Find my location';
         locate.setAttribute('role', 'button');
         locate.setAttribute('aria-label', 'Find my location');
-        locate.innerHTML = `
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z"/>
-          </svg>
-        `;
+        locate.appendChild(createControlIcon('M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm8.94 3A8.994 8.994 0 0 0 13 3.06V1h-2v2.06A8.994 8.994 0 0 0 3.06 11H1v2h2.06A8.994 8.994 0 0 0 11 20.94V23h2v-2.06A8.994 8.994 0 0 0 20.94 13H23v-2h-2.06zM12 19c-3.87 0-7-3.13-7-7s3.13-7 7-7 7 3.13 7 7-3.13 7-7 7z'));
 
         const satelliteToggle = L.DomUtil.create('a', 'zoom-locate-btn satellite-toggle-button', container);
         satelliteToggle.href = '#';
         satelliteToggle.title = 'Switch to satellite view';
         satelliteToggle.setAttribute('role', 'button');
         satelliteToggle.setAttribute('aria-label', 'Switch to satellite view');
-        satelliteToggle.innerHTML = `
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
-          </svg>
-        `;
+        satelliteToggle.appendChild(createControlIcon('M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z'));
 
         const measure = L.DomUtil.create('a', 'zoom-locate-btn measure-button', container);
         measure.href = '#';
@@ -925,11 +936,7 @@ function ZoomLocateControl({ onLocationFound, onLocationError, useSatellite, onS
         measure.setAttribute('role', 'button');
         measure.setAttribute('aria-label', 'Measure distance');
         measure.setAttribute('aria-pressed', 'false');
-        measure.innerHTML = `
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
-            <path d="M21.71 8.04l-5.75-5.75a1 1 0 0 0-1.41 0L2.29 14.55a1 1 0 0 0 0 1.41l5.75 5.75a1 1 0 0 0 1.41 0L21.71 9.45a1 1 0 0 0 0-1.41zM8.75 19.59l-4.34-4.34L14.96 4.7l1.0 1.0-2.12 2.12 1.06 1.06 2.12-2.12 1.06 1.06-1.06 1.06 1.06 1.06 1.06-1.06 1.05 1.06L8.75 19.59z"/>
-          </svg>
-        `;
+        measure.appendChild(createControlIcon('M21.71 8.04l-5.75-5.75a1 1 0 0 0-1.41 0L2.29 14.55a1 1 0 0 0 0 1.41l5.75 5.75a1 1 0 0 0 1.41 0L21.71 9.45a1 1 0 0 0 0-1.41zM8.75 19.59l-4.34-4.34L14.96 4.7l1.0 1.0-2.12 2.12 1.06 1.06 2.12-2.12 1.06 1.06-1.06 1.06 1.06 1.06 1.06-1.06 1.05 1.06L8.75 19.59z'));
 
         L.DomEvent.disableClickPropagation(container);
 
@@ -1132,7 +1139,7 @@ function DestinationMarker({ dest, icon, isSelected, isEditMode, onSelect, onDra
   const tooltipDirection = isSelected ? 'top' : getTooltipDirection();
 
   const eventHandlers = {
-    click: () => onSelect(dest),
+    click: () => onSelect?.(dest),
     dragend: () => {
       const marker = markerRef.current;
       if (marker) {
@@ -1316,8 +1323,11 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     let cancelled = false;
     fetch('/api/river-gauges')
       .then(res => (res.ok ? res.json() : []))
-      .then(data => { if (!cancelled) setRiverGauges(Array.isArray(data) ? data : []); })
-      .catch(() => { if (!cancelled) setRiverGauges([]); });
+      .then(gauges => { if (!cancelled) setRiverGauges(Array.isArray(gauges) ? gauges : []); })
+      .catch((err) => {
+        console.warn('Failed to load river gauges:', err);
+        if (!cancelled) setRiverGauges([]);
+      });
     return () => { cancelled = true; };
   }, []);
 
@@ -2131,7 +2141,6 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             icon={getDestinationIcon(newPOI)}
             isSelected={true}
             isEditMode={true}
-            onSelect={() => {}}
             mapMoveCount={mapMoveCount}
             onDragEnd={(d, lat, lng) => onPreviewCoordsChange({ lat, lng })}
           />
@@ -2249,7 +2258,6 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
         editMode={editMode}
         activeTab={activeTab}
         iconConfig={iconConfig}
-        onOpenAdmin={() => {}}
         onFileSelect={handleFileSelect}
         selectedFileName={selectedFileName}
         importType={importType}

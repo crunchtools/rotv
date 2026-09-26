@@ -15,13 +15,6 @@ function formatDate(iso) {
   }
 }
 
-function shareStatusLabel(trip) {
-  if (trip.is_featured) return '⭐ Featured';
-  if (trip.is_public && trip.is_approved) return '🌐 Shared';
-  if (trip.is_public && !trip.is_approved) return '⏳ Pending review';
-  return null;
-}
-
 /**
  * The trip management UI (mine / discover / pending views) without any modal
  * chrome. Rendered both inside the standalone MyTripsModal and embedded in the
@@ -114,23 +107,27 @@ export default function TripsManager({ active = true, onClosed }) {
     try {
       const res = await fetch(`/api/trips/${encodeURIComponent(slug)}`, { credentials: 'include' });
       if (!res.ok) throw new Error('Could not load trip');
-      const data = await res.json();
-      loadTrip(data);
+      loadTrip(await res.json());
       closeAfterOpen();
     } catch (err) {
       setError(err.message);
     }
   };
 
-  const handleDuplicate = async (id) => {
+  // Copies a trip into the user's own list, then shows that list.
+  const duplicateTrip = async (id, failureMessage) => {
     try {
       const res = await fetch(`/api/trips/${id}/duplicate`, { method: 'POST', credentials: 'include' });
-      if (!res.ok) throw new Error('Could not duplicate trip');
+      if (!res.ok) throw new Error(failureMessage);
+      setView('mine');
       await refreshMine();
     } catch (err) {
       setError(err.message);
     }
   };
+
+  const handleDuplicate = (id) => duplicateTrip(id, 'Could not duplicate trip');
+  const handleClone = (id) => duplicateTrip(id, 'Could not add trip to your list');
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this trip?')) return;
@@ -165,10 +162,16 @@ export default function TripsManager({ active = true, onClosed }) {
         ta.style.left = '-9999px';
         document.body.appendChild(ta);
         ta.select();
-        try { ok = document.execCommand('copy'); } catch { ok = false; }
+        try {
+          ok = document.execCommand('copy');
+        } catch (err) {
+          console.warn('execCommand copy failed; falling back to a prompt:', err);
+          ok = false;
+        }
         document.body.removeChild(ta);
       }
-    } catch {
+    } catch (err) {
+      console.warn('Clipboard copy failed; falling back to a prompt:', err);
       ok = false;
     }
     if (ok) {
@@ -176,17 +179,6 @@ export default function TripsManager({ active = true, onClosed }) {
       setTimeout(() => setCopiedId(prev => (prev === trip.id ? null : prev)), 1800);
     } else {
       window.prompt('Copy this link:', url);
-    }
-  };
-
-  const handleClone = async (id) => {
-    try {
-      const res = await fetch(`/api/trips/${id}/duplicate`, { method: 'POST', credentials: 'include' });
-      if (!res.ok) throw new Error('Could not add trip to your list');
-      setView('mine');
-      await refreshMine();
-    } catch (err) {
-      setError(err.message);
     }
   };
 
@@ -234,7 +226,10 @@ export default function TripsManager({ active = true, onClosed }) {
           ) : (
             <ul className="my-trips-list">
               {mine.map(trip => {
-                const status = shareStatusLabel(trip);
+                const status = trip.is_featured ? '⭐ Featured'
+                  : trip.is_public && trip.is_approved ? '🌐 Shared'
+                  : trip.is_public ? '⏳ Pending review'
+                  : null;
                 return (
                   <li key={trip.id || trip.slug} className="my-trips-row">
                     <div className="my-trips-row-info">

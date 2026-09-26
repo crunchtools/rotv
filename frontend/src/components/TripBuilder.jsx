@@ -4,10 +4,6 @@ import { useAuth } from '../hooks/useAuth';
 import { buildGoogleMapsUrl } from './NavigateButton';
 import './TripBuilder.css';
 
-function stopDisplayName(stop, index) {
-  return stop.label || stop.poi_name || `Stop ${index + 1}`;
-}
-
 export default function TripBuilder({ onOpenMyTrips }) {
   const {
     trip, showBuilder, setShowBuilder,
@@ -121,7 +117,7 @@ export default function TripBuilder({ onOpenMyTrips }) {
             {trip.stops.map((stop, i) => (
               <li key={`${i}:${stop.poi_id || stop.latitude}`} className="trip-stop-row">
                 <span className="trip-stop-position">{i + 1}</span>
-                <span className="trip-stop-label">{stopDisplayName(stop, i)}</span>
+                <span className="trip-stop-label">{stop.label || stop.poi_name || `Stop ${i + 1}`}</span>
                 <div className="trip-stop-actions">
                   <button
                     type="button"

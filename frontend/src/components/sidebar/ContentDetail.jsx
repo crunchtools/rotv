@@ -17,7 +17,7 @@ function ContentDetail({ permalinkInfo, onBack, onItemLoaded, showBack = true })
         if (!res.ok) throw new Error(res.status === 404 ? 'Not found' : 'Failed to load');
         return res.json();
       })
-      .then(data => { setItem(data); setLoading(false); if (onItemLoaded) onItemLoaded(data); })
+      .then(content => { setItem(content); setLoading(false); if (onItemLoaded) onItemLoaded(content); })
       .catch(err => { setError(err.message); setLoading(false); });
   }, [permalinkInfo, onItemLoaded]);
 

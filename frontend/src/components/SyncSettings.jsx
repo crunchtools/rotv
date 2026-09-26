@@ -105,31 +105,51 @@ function SyncSettings({ onDataRefresh, onNavigateToJobs }) {
     setTimeout(() => setRefreshing(false), 800);
   };
 
-  const handleBackup = async () => {
-    setBackingUp(true);
+  /**
+   * Runs one admin backup/restore request, reporting the outcome in message/error.
+   *
+   * @param {object} action
+   * @param {(busy: boolean) => void} action.setBusy - Spinner state for the button.
+   * @param {string} action.url - POST endpoint.
+   * @param {RequestInit} [action.options] - Extra fetch options (headers, body).
+   * @param {string} action.failureMessage - Shown when the server replies non-2xx without `error`.
+   * @param {string} action.errorMessage - Shown (and logged) when the request or JSON parse throws.
+   * @param {(result: object) => Promise<void>|void} action.onSuccess - Receives the parsed JSON
+   *   body of a 2xx reply; sets the success message and refreshes status.
+   * @returns {Promise<void>} Never rejects.
+   */
+  const runAction = async ({ setBusy, url, options, failureMessage, errorMessage, onSuccess }) => {
+    setBusy(true);
     setMessage(null);
     setError(null);
 
     try {
-      const response = await fetch('/api/admin/backup/trigger', {
-        method: 'POST',
-        credentials: 'include'
-      });
-
+      const response = await fetch(url, { method: 'POST', credentials: 'include', ...options });
       const result = await response.json();
       if (response.ok) {
-        setMessage(`Database backup created: ${result.filename}`);
-        setActionJobLinks(prev => ({ ...prev, db_backup: 'database_backup' }));
-        fetchStatus();
+        await onSuccess(result);
       } else {
-        setError(result.error || 'Database backup failed');
+        setError(result.error || failureMessage);
       }
-    } catch {
-      setError('Failed to create database backup');
+    } catch (err) {
+      console.error(`${errorMessage}:`, err);
+      setError(errorMessage);
     } finally {
-      setBackingUp(false);
+      setBusy(false);
     }
   };
+
+  const handleBackup = () => runAction({
+    setBusy: setBackingUp,
+    url: '/api/admin/backup/trigger',
+    failureMessage: 'Database backup failed',
+    errorMessage: 'Failed to create database backup',
+    onSuccess: (result) => {
+      setMessage(`Database backup created: ${result.filename}`);
+      setActionJobLinks(prev => ({ ...prev, db_backup: 'database_backup' }));
+      fetchStatus();
+    }
+  });
 
   const handleShowRestore = async () => {
     if (showRestoreList) {
@@ -156,121 +176,74 @@ function SyncSettings({ onDataRefresh, onNavigateToJobs }) {
     }
   };
 
-  const handleRestore = async (fileId, filename) => {
+  const handleRestore = (fileId, filename) => {
     if (!confirm(`Restore database from "${filename}"?\n\nThis will overwrite current data.`)) {
       return;
     }
 
-    setRestoring(true);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/admin/backup/restore', {
-        method: 'POST',
+    return runAction({
+      setBusy: setRestoring,
+      url: '/api/admin/backup/restore',
+      options: {
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
         body: JSON.stringify({ fileId })
-      });
-
-      const result = await response.json();
-      if (response.ok) {
+      },
+      failureMessage: 'Restore failed',
+      errorMessage: 'Failed to restore database',
+      onSuccess: async () => {
         setMessage('Database restored successfully');
         setActionJobLinks(prev => ({ ...prev, db_restore: 'database_backup' }));
         setShowRestoreList(false);
         if (onDataRefresh) await onDataRefresh();
-      } else {
-        setError(result.error || 'Restore failed');
       }
-    } catch {
-      setError('Failed to restore database');
-    } finally {
-      setRestoring(false);
-    }
+    });
   };
 
-  const handleImageBackup = async () => {
-    setBackingUpImages(true);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/admin/backup/images/trigger', {
-        method: 'POST',
-        credentials: 'include'
-      });
-
-      const result = await response.json();
-      if (response.ok) {
-        setMessage(`Image backup: ${result.uploaded} uploaded, ${result.skipped} already backed up`);
-        setActionJobLinks(prev => ({ ...prev, img_backup: 'image_backup' }));
-        fetchStatus();
-      } else {
-        setError(result.error || 'Image backup failed');
-      }
-    } catch {
-      setError('Failed to backup images');
-    } finally {
-      setBackingUpImages(false);
+  const handleImageBackup = () => runAction({
+    setBusy: setBackingUpImages,
+    url: '/api/admin/backup/images/trigger',
+    failureMessage: 'Image backup failed',
+    errorMessage: 'Failed to backup images',
+    onSuccess: (result) => {
+      setMessage(`Image backup: ${result.uploaded} uploaded, ${result.skipped} already backed up`);
+      setActionJobLinks(prev => ({ ...prev, img_backup: 'image_backup' }));
+      fetchStatus();
     }
-  };
+  });
 
-  const handleImageRestore = async () => {
+  const handleImageRestore = () => {
     if (!confirm('Restore images from Drive?\n\nThis will download images from Drive and upload them to the image server.')) {
       return;
     }
 
-    setRestoringImages(true);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/admin/backup/images/restore', {
-        method: 'POST',
-        credentials: 'include'
-      });
-
-      const result = await response.json();
-      if (response.ok) {
+    return runAction({
+      setBusy: setRestoringImages,
+      url: '/api/admin/backup/images/restore',
+      failureMessage: 'Image restore failed',
+      errorMessage: 'Failed to restore images',
+      onSuccess: (result) => {
         setMessage(`Image restore: ${result.restored} restored, ${result.skipped} skipped`);
         fetchStatus();
-      } else {
-        setError(result.error || 'Image restore failed');
       }
-    } catch {
-      setError('Failed to restore images');
-    } finally {
-      setRestoringImages(false);
-    }
+    });
   };
 
-  const handleWipeDatabase = async () => {
+  const handleWipeDatabase = () => {
     if (!confirm('WARNING: This will permanently delete ALL POIs from the local database.\n\nThis action cannot be undone!')) return;
     if (!confirm('FINAL WARNING: Click OK to confirm you want to wipe the database.')) return;
 
-    setWiping(true);
-    setMessage(null);
-    setError(null);
-
-    try {
-      const response = await fetch('/api/admin/sync/wipe-database', {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      const result = await response.json();
-      if (response.ok) {
+    return runAction({
+      setBusy: setWiping,
+      url: '/api/admin/sync/wipe-database',
+      options: { method: 'DELETE' },
+      failureMessage: 'Failed to wipe database',
+      errorMessage: 'Failed to wipe database',
+      onSuccess: async (result) => {
         setMessage(result.message);
         fetchStatus();
         if (onDataRefresh) await onDataRefresh();
-      } else {
-        setError(result.error || 'Failed to wipe database');
       }
-    } catch {
-      setError('Failed to wipe database');
-    } finally {
-      setWiping(false);
-    }
+    });
   };
 
   const formatDate = (isoString) => {

@@ -1,0 +1,6 @@
+check = "single_use_helpers"
+
+[[locations]]
+path = "frontend/src/components/JobsDashboard.jsx"
+justification = "formatTime (ISO -> localized 'Mon D, HH:MM', '--' for null) and formatCronHuman (5-field cron -> 'Daily at 3:00 AM' etc., 19 lines with a nested ordinal helper) are pure module-level formatters called from JSX inside the run-history and scheduled-job lists. They were not extracted to dodge a complexity lint (the caller is an 800-line component render); inlining them into JSX attribute/children expressions would hurt readability."
+classification = "by_design"

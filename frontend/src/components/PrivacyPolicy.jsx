@@ -1,82 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import MarkdownRenderer from './MarkdownRenderer';
 import BackButton from './BackButton';
-
-function PrivacyEditor({ content, onSave }) {
-  const [draft, setDraft] = useState(content || '');
-  const [saving, setSaving] = useState(false);
-  const textareaRef = useRef(null);
-
-  useEffect(() => {
-    setDraft(content || '');
-  }, [content]);
-
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (ta) {
-      ta.style.height = 'auto';
-      ta.style.height = ta.scrollHeight + 'px';
-    }
-  }, [draft]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch('/api/admin/settings/about_privacy_md', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ value: draft })
-      });
-      if (!res.ok) throw new Error('Save failed');
-      onSave(draft);
-    } catch (err) {
-      console.error('Error saving privacy content:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setDraft(content || '');
-    onSave(null);
-  };
-
-  return (
-    <div className="about-editor">
-      <textarea
-        ref={textareaRef}
-        className="about-editor-textarea"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        disabled={saving}
-      />
-      <div className="about-editor-actions">
-        <button className="save-btn" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        <button className="cancel-btn" onClick={handleCancel} disabled={saving}>
-          Cancel
-        </button>
-        <a
-          href="https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="about-editor-help"
-        >
-          Markdown Guide
-        </a>
-      </div>
-    </div>
-  );
-}
+import MarkdownContentEditor from './MarkdownContentEditor';
 
 function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [localContent, setLocalContent] = useState(content);
   const [standaloneContent, setStandaloneContent] = useState(null);
+  const [loadError, setLoadError] = useState(null);
 
   useEffect(() => {
     setLocalContent(content);
@@ -86,12 +19,15 @@ function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
     if (!inline && !content) {
       fetch('/api/about-content')
         .then(res => res.ok ? res.json() : {})
-        .then(data => {
-          if (data.about_privacy_md) {
-            setStandaloneContent(data.about_privacy_md);
+        .then(aboutContent => {
+          if (aboutContent.about_privacy_md) {
+            setStandaloneContent(aboutContent.about_privacy_md);
           }
         })
-        .catch(() => {});
+        .catch(err => {
+          console.error('Error loading privacy policy:', err);
+          setLoadError('Could not load the privacy policy. Please try again later.');
+        });
     }
   }, [inline, content]);
 
@@ -114,7 +50,14 @@ function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
         )}
 
         {editing ? (
-          <PrivacyEditor content={displayContent} onSave={handleSave} />
+          <MarkdownContentEditor
+            contentKey="about_privacy_md"
+            content={displayContent}
+            onSaved={handleSave}
+            onCancel={() => setEditing(false)}
+          />
+        ) : loadError && !displayContent ? (
+          <div className="error-message">{loadError}</div>
         ) : (
           <MarkdownRenderer content={displayContent} className="privacy-markdown-content" />
         )}

@@ -16,8 +16,7 @@ function AISettings() {
         credentials: 'include'
       });
       if (response.ok) {
-        const data = await response.json();
-        setSettings(data);
+        setSettings(await response.json());
         setError(null);
       } else if (response.status === 401 || response.status === 403) {
         setError('Please log in as admin to view AI settings');

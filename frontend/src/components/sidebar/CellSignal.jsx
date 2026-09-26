@@ -2,11 +2,11 @@ function CellSignal({ level }) {
   const bars = [1, 2, 3, 4, 5];
   return (
     <div className="cell-signal">
-      {bars.map(bar => (
+      {bars.map(barLevel => (
         <div
-          key={bar}
-          className={`signal-bar ${bar <= level ? 'active' : ''}`}
-          style={{ height: `${8 + bar * 3}px` }}
+          key={barLevel}
+          className={`signal-bar ${barLevel <= level ? 'active' : ''}`}
+          style={{ height: `${8 + barLevel * 3}px` }}
         />
       ))}
     </div>

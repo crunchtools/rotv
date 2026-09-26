@@ -21,11 +21,12 @@ function UsersSettings() {
     try {
       const res = await fetch('/api/admin/users', { credentials: 'include' });
       if (res.ok) {
-        const data = await res.json();
-        setUsers(data);
+        setUsers(await res.json());
+      } else {
+        setResult({ type: 'error', message: `Failed to load users (HTTP ${res.status})` });
       }
     } catch (err) {
-      console.error('Failed to fetch users:', err);
+      setResult({ type: 'error', message: 'Failed to load users: ' + err.message });
     } finally {
       setLoading(false);
     }

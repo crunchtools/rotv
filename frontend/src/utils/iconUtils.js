@@ -67,7 +67,7 @@ export function poiMatchesActivityForTypes(poi, visibleTypes, iconConfig) {
  * refined by activity while this is true; with all (or no) activity types
  * selected it stays all-or-nothing, preserving plain "show me the trails" browsing.
  */
-export function isActivityFilterActive(visibleTypes, iconConfig) {
+function isActivityFilterActive(visibleTypes, iconConfig) {
   if (!iconConfig || iconConfig.length === 0) return false;
   let activityTypes = 0, selected = 0;
   for (const icon of iconConfig) {

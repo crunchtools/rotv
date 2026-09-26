@@ -40,17 +40,17 @@ function UserSettings({ user, initialTab }) {
         credentials: 'include'
       });
 
-      const data = await res.json();
+      const subscribeResponse = await res.json();
 
       if (res.ok) {
         setStatus('success');
-        setMessage(data.message);
+        setMessage(subscribeResponse.message);
         if (!user?.email) {
           writeSubscribed(true);
         }
       } else {
         setStatus('error');
-        setMessage(data.error || 'Subscription failed');
+        setMessage(subscribeResponse.error || 'Subscription failed');
       }
     } catch (err) {
       setStatus('error');

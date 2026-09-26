@@ -17,12 +17,12 @@ const METRIC_META = {
 function LevelChart({ readings, metric }) {
   const meta = METRIC_META[metric] || METRIC_META.discharge_cfs;
 
-  const data = useMemo(() => (readings || [])
+  const points = useMemo(() => (readings || [])
     .filter(r => r[metric] != null)
     .map(r => ({ t: new Date(r.reading_time).getTime(), value: Number(r[metric]) })),
   [readings, metric]);
 
-  if (data.length === 0) {
+  if (points.length === 0) {
     return <p className="river-levels-empty">No {meta.label.toLowerCase()} data for this window.</p>;
   }
 
@@ -33,7 +33,7 @@ function LevelChart({ readings, metric }) {
 
   return (
     <ResponsiveContainer width="100%" height={160}>
-      <LineChart data={data} margin={{ top: 8, right: 40, bottom: 4, left: 28 }}>
+      <LineChart data={points} margin={{ top: 8, right: 40, bottom: 4, left: 28 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
         <XAxis
           dataKey="t"

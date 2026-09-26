@@ -1,0 +1,26 @@
+check = "pub_visibility"
+
+[[locations]]
+path = "frontend/src/hooks/useAnimatedTrackerPosition.js"
+justification = "Default export imported by Map.jsx:9 (import useAnimatedTrackerPosition from '../hooks/useAnimatedTrackerPosition') and called twice there for the boat and train markers. The detector misses default imports."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "frontend/src/hooks/usePoiMedia.js"
+justification = "Default export imported by Sidebar.jsx:8 (import usePoiMedia from '../hooks/usePoiMedia') and called at Sidebar.jsx:97. The detector misses default imports."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "frontend/src/utils/iconUtils.js"
+justification = "poiMatchesActivityForTypes and trailPassesActivityFilter are both named imports on Map.jsx:6 and are called at Map.jsx:733 and :760 (and later in the same file). The detector misses this import."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "frontend/src/components/NewsEventsShared.jsx"
+justification = "DetailImage is a named import on Sidebar.jsx:5 (import { DetailImage } from './NewsEventsShared') and rendered at Sidebar.jsx:947. The detector misses this import, as it does for Sidebar.jsx's usePoiMedia default import."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "frontend/src/utils/anonSettings.js"
+justification = "createPoiIdListStore is exported on purpose: .specify/memory/constitution.md (Anonymous path) requires every new 'list of POI ids' localStorage collection to use this shared factory instead of re-implementing read/write. Today's two stores live in the same file, so the export has no importer yet."
+classification = "by_design"

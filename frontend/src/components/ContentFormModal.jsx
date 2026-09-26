@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
+import { renderFieldInput } from './ModerationExtras';
 import { FIELD_CONFIGS } from '../hooks/useModeration';
 
 function ContentFormModal({
@@ -79,11 +80,15 @@ function ContentFormModal({
     }
     fetch('/api/pois', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
-      .then(data => setLocalPois(Array.isArray(data) ? data.filter(p => !p.deleted).sort((a, b) => a.name.localeCompare(b.name)) : []))
-      .catch(() => setLocalPois([]));
+      .then(allPois => setLocalPois(Array.isArray(allPois) ? allPois.filter(p => !p.deleted).sort((a, b) => a.name.localeCompare(b.name)) : []))
+      .catch((err) => {
+        console.warn('Failed to load POIs for content form:', err);
+        setLocalPois([]);
+      });
   }, [pois]);
 
   const allFieldConfigs = FIELD_CONFIGS[contentType] || [];
+  const exampleYear = new Date().getFullYear();
   // In recurring mode the one-off date fields are replaced by the recurrence/season fields.
   const fieldConfigs = showRecurring
     ? allFieldConfigs.filter(fc => !['start_date', 'end_date', 'publication_date'].includes(fc.key))
@@ -178,37 +183,6 @@ function ContentFormModal({
     }
   };
 
-  const renderFieldInput = (fc) => {
-    const val = activeFields[fc.key] || '';
-    const onChange = (v) => activeSetFields(prev => ({ ...prev, [fc.key]: v }));
-
-    if (fc.type === 'textarea') {
-      return <textarea value={val} onChange={e => onChange(e.target.value)}
-        rows={3} placeholder={fc.label} />;
-    }
-    if (fc.type === 'select') {
-      return (
-        <select value={val} onChange={e => onChange(e.target.value)}>
-          <option value="">-- Select --</option>
-          {fc.options.map(o => <option key={o} value={o}>{o}</option>)}
-        </select>
-      );
-    }
-    if (fc.type === 'poi') {
-      return (
-        <PoiSearchSelect
-          pois={localPois}
-          value={val}
-          onChange={(id) => onChange(id || '')}
-          placeholder="Search POIs..."
-        />
-      );
-    }
-    const lang = fc.type === 'date' ? 'en-US' : undefined;
-    return <input type={fc.type || 'text'} value={val} onChange={e => onChange(e.target.value)}
-      placeholder={fc.label} required={fc.required} lang={lang} />;
-  };
-
   const title = isSeriesEdit
     ? 'Edit Recurring Event'
     : isEdit
@@ -259,7 +233,7 @@ function ContentFormModal({
           {fieldConfigs.map(fc => (
             <div className="form-section" key={fc.key}>
               <label>{fc.key === 'poi_id' && showRecurring ? 'Organizer POI' : fc.label}{fc.required ? ' *' : ''}</label>
-              {renderFieldInput(fc)}
+              {renderFieldInput(fc, activeFields, activeSetFields, localPois, null)}
             </div>
           ))}
 
@@ -315,7 +289,7 @@ function ContentFormModal({
                   type="text"
                   value={recur.exdates}
                   onChange={e => setRecur(prev => ({ ...prev, exdates: e.target.value }))}
-                  placeholder="Comma-separated, e.g. 2026-11-28, 2026-12-26"
+                  placeholder={`Comma-separated, e.g. ${exampleYear}-11-28, ${exampleYear}-12-26`}
                 />
               </div>
             </>

@@ -1,0 +1,11 @@
+check = "single_use_helpers"
+
+[[locations]]
+path = "frontend/src/components/NavigateButton.jsx"
+justification = "buildGoogleMapsUrl has two callers: NavigateButton itself (NavigateButton.jsx:30) and TripBuilder.jsx:26, which imports it on line 4. The detector does not count the cross-file import."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "frontend/src/components/NotificationBell.jsx"
+justification = "timeAgo (relative/future time label, used in the item list JSX) and normalize (maps the news+events feed payload into one sorted item list, used by loadFeed) are pure module-level functions. Keeping them outside the component keeps the render body and the useCallback readable and avoids redefining them each render."
+classification = "by_design"

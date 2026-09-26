@@ -18,8 +18,8 @@ function readLocalSet() {
 function writeLocalSet(set) {
   try {
     localStorage.setItem(READ_KEY, JSON.stringify([...set]));
-  } catch {
-    /* ignore */
+  } catch (err) {
+    console.warn('[NotificationBell] Could not persist read notifications:', err);
   }
 }
 
@@ -97,7 +97,9 @@ export default function NotificationBell() {
           return merged;
         });
         serverSynced.current = true;
-      } catch { /* ignore */ }
+      } catch (err) {
+        console.warn('[NotificationBell] Could not load server-side read state:', err);
+      }
     })();
     return () => { cancelled = true; };
   }, [isAuthenticated]);
@@ -115,7 +117,7 @@ export default function NotificationBell() {
       if (!res.ok) return;
       setItems(normalize(await res.json()));
     } catch (err) {
-      /* keep last known state on transient failure */
+      console.warn('[NotificationBell] Feed refresh failed; keeping last known items:', err);
     }
   }, [isAuthenticated, favorites]);
 
@@ -154,9 +156,9 @@ export default function NotificationBell() {
     setOpen(next);
     if (next) {
       const container = containerRef.current;
-      const bar = container?.closest('.header-tabs') || container;
-      if (bar && container) {
-        const barRect = bar.getBoundingClientRect();
+      const headerBar = container?.closest('.header-tabs') || container;
+      if (headerBar && container) {
+        const barRect = headerBar.getBoundingClientRect();
         setAnchorBottom(barRect.bottom);
         setAnchorRight(container.getBoundingClientRect().right - barRect.right);
       }
@@ -176,7 +178,7 @@ export default function NotificationBell() {
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',
           body: JSON.stringify({ keys: [key] })
-        }).catch(() => {});
+        }).catch(err => console.warn('[NotificationBell] Could not sync read state to server:', err));
       }
       return next;
     });

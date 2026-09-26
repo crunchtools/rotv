@@ -55,13 +55,13 @@ function FeedbackForm({ onClose, inline = false }) {
         })
       });
 
-      const data = await res.json();
+      const feedbackResult = await res.json();
       if (!res.ok) {
-        setError(data.error || 'Something went wrong. Please try again.');
+        setError(feedbackResult.error || 'Something went wrong. Please try again.');
         return;
       }
 
-      setSuccess(data.issueNumber);
+      setSuccess(feedbackResult.issueNumber);
     } catch {
       setError('Network error. Please check your connection and try again.');
     } finally {

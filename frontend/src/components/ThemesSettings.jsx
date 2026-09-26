@@ -12,9 +12,9 @@ function ThemesSettings() {
     try {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
       if (response.ok) {
-        const data = await response.json();
-        if (data.seasonal_themes?.value) {
-          setConfig(JSON.parse(data.seasonal_themes.value));
+        const settings = await response.json();
+        if (settings.seasonal_themes?.value) {
+          setConfig(JSON.parse(settings.seasonal_themes.value));
         }
         setError(null);
       } else if (response.status === 401 || response.status === 403) {

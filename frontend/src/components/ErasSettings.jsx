@@ -1,71 +1,30 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import useOrderedAdminList from '../hooks/useOrderedAdminList';
+
+const EMPTY_ERA = { name: '', year_start: '', year_end: '', description: '' };
+
+const eraPayload = (era) => ({
+  name: era.name.trim(),
+  year_start: era.year_start ? parseInt(era.year_start) : null,
+  year_end: era.year_end ? parseInt(era.year_end) : null,
+  description: era.description.trim() || null
+});
 
 function ErasSettings() {
-  const [eras, setEras] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newEra, setNewEra] = useState({ name: '', year_start: '', year_end: '', description: '' });
+  const {
+    items: eras, loading, error, saving,
+    createItem, updateItem, deleteItem, saveOrder,
+    dragProps, dragClassName
+  } = useOrderedAdminList('/api/admin/eras', 'era', 'eras');
+  const [newEra, setNewEra] = useState(EMPTY_ERA);
   const [editingId, setEditingId] = useState(null);
-  const [editingEra, setEditingEra] = useState({ name: '', year_start: '', year_end: '', description: '' });
-  const [saving, setSaving] = useState(false);
-
-  const [draggedIndex, setDraggedIndex] = useState(null);
-  const [dragOverIndex, setDragOverIndex] = useState(null);
-
-  const fetchEras = useCallback(async () => {
-    try {
-      const response = await fetch('/api/admin/eras', {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setEras(data);
-        setError(null);
-      } else {
-        setError('Failed to fetch eras');
-      }
-    } catch {
-      setError('Failed to fetch eras');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchEras();
-  }, [fetchEras]);
+  const [editingEra, setEditingEra] = useState(EMPTY_ERA);
 
   const handleAddEra = async (e) => {
     e.preventDefault();
     if (!newEra.name.trim()) return;
-
-    setSaving(true);
-    try {
-      const response = await fetch('/api/admin/eras', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: newEra.name.trim(),
-          year_start: newEra.year_start ? parseInt(newEra.year_start) : null,
-          year_end: newEra.year_end ? parseInt(newEra.year_end) : null,
-          description: newEra.description.trim() || null
-        })
-      });
-
-      if (response.ok) {
-        const created = await response.json();
-        setEras(prev => [...prev, created]);
-        setNewEra({ name: '', year_start: '', year_end: '', description: '' });
-        setError(null);
-      } else {
-        const err = await response.json();
-        setError(err.error || 'Failed to add era');
-      }
-    } catch {
-      setError('Failed to add era');
-    } finally {
-      setSaving(false);
+    if (await createItem(eraPayload(newEra))) {
+      setNewEra(EMPTY_ERA);
     }
   };
 
@@ -81,139 +40,23 @@ function ErasSettings() {
 
   const handleCancelEdit = () => {
     setEditingId(null);
-    setEditingEra({ name: '', year_start: '', year_end: '', description: '' });
+    setEditingEra(EMPTY_ERA);
   };
 
   const handleSaveEdit = async (id) => {
     if (!editingEra.name.trim()) return;
-
-    setSaving(true);
-    try {
-      const response = await fetch(`/api/admin/eras/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          name: editingEra.name.trim(),
-          year_start: editingEra.year_start ? parseInt(editingEra.year_start) : null,
-          year_end: editingEra.year_end ? parseInt(editingEra.year_end) : null,
-          description: editingEra.description.trim() || null
-        })
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        setEras(prev => prev.map(e => e.id === id ? updated : e));
-        setEditingId(null);
-        setEditingEra({ name: '', year_start: '', year_end: '', description: '' });
-        setError(null);
-      } else {
-        const err = await response.json();
-        setError(err.error || 'Failed to update era');
-      }
-    } catch {
-      setError('Failed to update era');
-    } finally {
-      setSaving(false);
+    if (await updateItem(id, eraPayload(editingEra))) {
+      handleCancelEdit();
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!confirm(`Delete era "${name}"? This cannot be undone.`)) return;
-
-    try {
-      const response = await fetch(`/api/admin/eras/${id}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        setEras(prev => prev.filter(e => e.id !== id));
-        setError(null);
-      } else {
-        const err = await response.json();
-        setError(err.error || 'Failed to delete era');
-      }
-    } catch {
-      setError('Failed to delete era');
-    }
-  };
-
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', e.target.outerHTML);
-    setTimeout(() => {
-      e.target.classList.add('dragging');
-    }, 0);
-  };
-
-  const handleDragEnd = (e) => {
-    e.target.classList.remove('dragging');
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (index !== dragOverIndex) {
-      setDragOverIndex(index);
-    }
-  };
-
-  const handleDragLeave = (e) => {
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverIndex(null);
-    }
-  };
-
-  const handleDrop = async (e, dropIndex) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-      return;
-    }
-
-    const newOrder = [...eras];
-    const [draggedItem] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(dropIndex, 0, draggedItem);
-    setEras(newOrder);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-
-    try {
-      await fetch('/api/admin/eras/reorder', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ orderedIds: newOrder.map(e => e.id) })
-      });
-    } catch (err) {
-      console.error('Failed to save order:', err);
-    }
-  };
-
-  const handleSortChronologically = async () => {
-    const sorted = [...eras].sort((a, b) => {
+  const handleSortChronologically = () => {
+    saveOrder([...eras].sort((a, b) => {
       if (!a.year_start && !b.year_start) return 0;
       if (!a.year_start) return 1;
       if (!b.year_start) return -1;
       return a.year_start - b.year_start;
-    });
-    setEras(sorted);
-
-    try {
-      await fetch('/api/admin/eras/reorder', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ orderedIds: sorted.map(e => e.id) })
-      });
-    } catch (err) {
-      console.error('Failed to save order:', err);
-    }
+    }));
   };
 
   const formatYearRange = (era) => {
@@ -289,13 +132,8 @@ function ErasSettings() {
           eras.map((era, index) => (
             <div
               key={era.id}
-              className={`era-item ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
-              draggable={editingId !== era.id}
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, index)}
+              className={`era-item ${dragClassName(index)}`}
+              {...dragProps(index, editingId !== era.id)}
             >
               <div className="era-drag-handle" title="Drag to reorder">
                 ⋮⋮
@@ -358,7 +196,7 @@ function ErasSettings() {
                     <button onClick={() => handleStartEdit(era)}>Edit</button>
                     <button
                       className="delete-btn-small"
-                      onClick={() => handleDelete(era.id, era.name)}
+                      onClick={() => deleteItem(era.id, era.name)}
                     >
                       Delete
                     </button>

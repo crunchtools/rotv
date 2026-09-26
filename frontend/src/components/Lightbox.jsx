@@ -90,13 +90,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
   }
 
   const currentMedia = media[currentIndex];
-
-  const handleUploadSuccess = () => {
-    setUploadModalOpen(false);
-    if (onMediaUpdate) {
-      onMediaUpdate();
-    }
-  };
+  const poiMediaUrl = `/api/pois/${poiId}/media`;
 
   const handleDelete = async () => {
     if (!window.confirm('Are you sure you want to delete this image?')) {
@@ -105,7 +99,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
 
     setDeleting(true);
     try {
-      const response = await fetch(`/api/pois/${poiId}/media/${currentMedia.id}`, {
+      const response = await fetch(`${poiMediaUrl}/${currentMedia.id}`, {
         method: 'DELETE',
         credentials: 'include'
       });
@@ -149,7 +143,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
     const currentMediaId = currentMedia.id;
     setSettingPrimary(true);
     try {
-      const response = await fetch(`/api/pois/${poiId}/media/${currentMedia.id}/set-primary`, {
+      const response = await fetch(`${poiMediaUrl}/${currentMedia.id}/set-primary`, {
         method: 'PATCH',
         credentials: 'include'
       });
@@ -365,7 +359,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
         <MediaUploadModal
           poiId={poiId}
           onClose={() => setUploadModalOpen(false)}
-          onSuccess={handleUploadSuccess}
+          onSuccess={() => { setUploadModalOpen(false); onMediaUpdate?.(); }}
         />
       )}
     </div>,

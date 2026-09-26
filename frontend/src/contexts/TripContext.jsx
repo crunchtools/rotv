@@ -139,9 +139,9 @@ export function TripProvider({ children }) {
   const loadFromSlug = useCallback(async (slug) => {
     const res = await fetch(`/api/trips/${encodeURIComponent(slug)}`, { credentials: 'include' });
     if (!res.ok) throw new Error(res.status === 404 ? 'Trip not found' : 'Failed to load trip');
-    const data = await res.json();
-    loadTrip(data);
-    return data;
+    const loaded = await res.json();
+    loadTrip(loaded);
+    return loaded;
   }, [loadTrip]);
 
   const saveTrip = useCallback(async () => {
@@ -177,7 +177,10 @@ export function TripProvider({ children }) {
       body: JSON.stringify(payload)
     });
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ error: 'Save failed' }));
+      const error = await res.json().catch(parseErr => {
+        console.warn('Trip save error response was not JSON:', parseErr);
+        return { error: 'Save failed' };
+      });
       throw new Error(error.error || 'Save failed');
     }
     const saved = await res.json();

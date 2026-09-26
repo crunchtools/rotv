@@ -119,6 +119,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const [completedJobs, setCompletedJobs] = useState({});
 
   const [loading, setLoading] = useState(true);
+  const [dashboardError, setDashboardError] = useState(null);
 
   const [autoExpandNewestRun, setAutoExpandNewestRun] = useState(null);
 
@@ -127,7 +128,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       const res = await fetch(`${API_BASE}/api/admin/jobs/scheduled`, { credentials: 'include' });
       if (res.ok) setScheduledJobs(await res.json());
     } catch (err) {
-      console.error('Failed to fetch scheduled jobs:', err);
+      setDashboardError(`Failed to fetch scheduled jobs: ${err.message}`);
     } finally {
       setScheduledLoading(false);
     }
@@ -147,7 +148,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       allRuns.sort((a, b) => toUtcDate(b.created_at) - toUtcDate(a.created_at));
       setJobHistory(prev => ({ ...prev, [jobId]: allRuns.slice(0, 10) }));
     } catch (err) {
-      console.error('Failed to fetch job history:', err);
+      setDashboardError(`Failed to fetch job history: ${err.message}`);
     } finally {
       setJobHistoryLoading(prev => ({ ...prev, [jobId]: false }));
     }
@@ -172,7 +173,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
         }
       }
     } catch (err) {
-      console.error('Failed to fetch run logs:', err);
+      setDashboardError(`Failed to fetch run logs: ${err.message}`);
     }
   }, []);
 
@@ -185,11 +186,11 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       try {
         const res = await fetch(`${API_BASE}${endpoint}`, { credentials: 'include' });
         if (res.ok) {
-          const data = await res.json();
-          const isActive = data && (data.status === 'running' || data.status === 'queued');
+          const jobStatus = await res.json();
+          const isActive = jobStatus && (jobStatus.status === 'running' || jobStatus.status === 'queued');
           if (isActive) {
-            const runId = data.id || data.jobId;
-            running[registryId] = { ...data, runId };
+            const runId = jobStatus.id || jobStatus.jobId;
+            running[registryId] = { ...jobStatus, runId };
 
             const slotsEndpoint = SLOTS_ENDPOINTS[registryId];
             if (slotsEndpoint && runId) {
@@ -439,7 +440,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       const url = cancelInfo.url.replace(':id', runId);
       await fetch(`${API_BASE}${url}`, { method: cancelInfo.method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' });
       await checkRunningJobs();
-    } catch (err) { console.error('Failed to cancel job:', err); }
+    } catch (err) { setDashboardError(`Failed to cancel job: ${err.message}`); }
     finally { setCancellingJob(null); }
   };
 
@@ -618,6 +619,12 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   return (
     <div className="jobs-dashboard">
+      {dashboardError && (
+        <div className="job-error-banner">
+          {dashboardError}{' '}
+          <button type="button" className="status-close-btn" onClick={() => setDashboardError(null)} title="Dismiss">×</button>
+        </div>
+      )}
       <h3>Scheduled Jobs</h3>
       {scheduledLoading ? (
         <p style={{ color: '#999' }}>Loading scheduled jobs...</p>

@@ -4,6 +4,7 @@ import { NewsCardBody } from './NewsEventsShared';
 import ContentFormModal from './ContentFormModal';
 import useModeration from '../hooks/useModeration';
 import ModerationExtras from './ModerationExtras';
+import useFetchedList from '../hooks/useFetchedList';
 
 const DEFAULT_PARK_BOUNDS = [
   [41.13, -81.85],
@@ -11,9 +12,7 @@ const DEFAULT_PARK_BOUNDS = [
 ];
 
 function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
-  const [news, setNews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const { items: news, loading, error, reload: fetchNews } = useFetchedList('/api/news/recent', 'Failed to load news');
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -34,25 +33,6 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
   useEffect(() => {
     fetchNews();
   }, [refreshTrigger]);
-
-  const fetchNews = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await fetch('/api/news/recent');
-      if (response.ok) {
-        const data = await response.json();
-        setNews(data);
-      } else {
-        setError('Failed to load news');
-      }
-    } catch (err) {
-      setError('Failed to load news');
-      console.error('Error fetching park news:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   let currentBounds;
   if (bypassViewportFilter) {

@@ -26,7 +26,8 @@ self.addEventListener('fetch', function (event) {
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    fetch(event.request).catch(function () {
+    fetch(event.request).catch(function (err) {
+      console.warn('[sw] Network fetch failed, serving from cache:', event.request.url, err);
       if (event.request.mode === 'navigate') {
         return caches.match('/');
       }
