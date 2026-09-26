@@ -136,6 +136,27 @@ describe('JobsDashboard polling (#638)', () => {
     expect(callsTo(TRAIL_STATUS_URL)).toBeGreaterThan(2);
   });
 
+  it('resumes idle polling after a scheduled-jobs fetch stalls for 30s', async () => {
+    let scheduledCalls = 0;
+    fetchMock.mockImplementation((url) => {
+      if (url.includes(SCHEDULED_URL)) {
+        scheduledCalls++;
+        if (scheduledCalls === 2) return new Promise(() => {});
+        return Promise.resolve(fetchResponse([]));
+      }
+      return Promise.resolve(fetchResponse({ status: 'completed' }));
+    });
+
+    renderDashboard();
+    for (let i = 0; i < 5; i++) await flush();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(40000); });
+    expect(callsTo(SCHEDULED_URL)).toBe(2);
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
+    expect(callsTo(SCHEDULED_URL)).toBe(3);
+  });
+
   it('ignores a stalled check that resolves after a newer one', async () => {
     let releaseStale;
     let trailCalls = 0;

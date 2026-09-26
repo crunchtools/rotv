@@ -129,10 +129,15 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   const [autoExpandNewestRun, setAutoExpandNewestRun] = useState(null);
 
+  // Fix: drop scheduled-jobs responses that a newer fetch has overtaken (PR #639 review)
+  const scheduledGenerationRef = useRef(0);
   const fetchScheduledJobs = useCallback(async () => {
+    const generation = ++scheduledGenerationRef.current;
     try {
       const res = await fetch(`${API_BASE}/api/admin/jobs/scheduled`, { credentials: 'include' });
-      if (res.ok) setScheduledJobs(await res.json());
+      if (!res.ok) return;
+      const jobs = await res.json();
+      if (generation === scheduledGenerationRef.current) setScheduledJobs(jobs);
     } catch (err) {
       setDashboardError(`Failed to fetch scheduled jobs: ${err.message}`);
     } finally {
