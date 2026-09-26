@@ -26,15 +26,29 @@ const CONTEXT_OPTIONS = {
   viewport: { width: 520, height: 3000 }
 };
 
+/**
+ * Normalize any facebook.com Page URL to its root.
+ * @param {string} url
+ * @returns {string|null} e.g. "https://www.facebook.com/medinaTRAILS/", or null if no Page slug
+ */
 export function extractFacebookPageUrl(url) {
   const match = String(url || '').match(/(?:www\.|m\.)?facebook\.com\/([A-Za-z0-9._-]+)/);
   return match ? `https://www.facebook.com/${match[1]}/` : null;
 }
 
+/**
+ * @param {unknown} url
+ * @returns {boolean} true if url is a string pointing at facebook.com
+ */
 export function isFacebookUrl(url) {
   return typeof url === 'string' && url.includes('facebook.com');
 }
 
+/**
+ * Build the Page Plugin timeline URL for a Page.
+ * @param {string} pageUrl - Normalized Page URL from extractFacebookPageUrl
+ * @returns {string}
+ */
 export function buildPagePluginUrl(pageUrl) {
   const params = new URLSearchParams({
     href: pageUrl,
@@ -46,23 +60,6 @@ export function buildPagePluginUrl(pageUrl) {
     adapt_container_width: 'false'
   });
   return `${PLUGIN_BASE_URL}?${params}`;
-}
-
-export function toIsoDate(raw) {
-  if (raw == null) return null;
-  const str = String(raw).trim();
-  if (!str) return null;
-
-  if (/^\d+$/.test(str)) {
-    let n = Number(str);
-    if (!Number.isFinite(n) || n <= 0) return null;
-    if (n < 1e12) n *= 1000;  // epoch seconds → milliseconds
-    const d = new Date(n);
-    return Number.isNaN(d.getTime()) ? null : d.toISOString().substring(0, 10);
-  }
-
-  const d = new Date(str);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString().substring(0, 10);
 }
 
 /* global document -- scrapePluginPosts runs in the browser via page.evaluate */
@@ -85,9 +82,19 @@ export function scrapePluginPosts() {
   return { posts, bodyText: document.body ? visibleText(document.body) : '' };
 }
 
+/**
+ * Format scraped posts as the "[YYYY-MM-DD] text" blocks trailStatusService expects.
+ * @param {Array<{utime: string|null, text: string}>} posts - utime is epoch seconds from [data-utime]
+ * @param {number} [maxItems=10] - Maximum posts to keep (after dropping empty ones)
+ * @returns {string} Blocks joined by "---"; empty string if no post has text
+ */
 export function formatPosts(posts, maxItems = SOCIAL_MAX_POSTS) {
   return posts
-    .map(p => ({ text: String(p.text || '').trim(), isoDate: toIsoDate(p.utime) }))
+    .map(p => {
+      const epoch = Number(p.utime);
+      const isoDate = Number.isFinite(epoch) && epoch > 0 ? new Date(epoch * 1000).toISOString().substring(0, 10) : null;
+      return { text: String(p.text || '').trim(), isoDate };
+    })
     .filter(p => p.text.length > 0)
     .slice(0, maxItems)
     .map(p => (p.isoDate ? `[${p.isoDate}] ${p.text}` : p.text))

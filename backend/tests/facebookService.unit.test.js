@@ -11,7 +11,7 @@ vi.mock('../services/browserPool.js', () => ({
 
 const { acquireBrowser, releaseBrowser } = await import('../services/browserPool.js');
 const {
-  isFacebookUrl, toIsoDate, extractFacebookPageUrl, buildPagePluginUrl, formatPosts, fetchFacebookPosts,
+  isFacebookUrl, extractFacebookPageUrl, buildPagePluginUrl, formatPosts, fetchFacebookPosts,
   scrapePluginPosts
 } = await import('../services/facebookService.js');
 
@@ -25,18 +25,6 @@ describe('isFacebookUrl', () => {
     expect(isFacebookUrl('https://www.facebook.com/medinaTRAILS/')).toBe(true);
     expect(isFacebookUrl('https://clevelandmagazine.com/article')).toBe(false);
     expect(isFacebookUrl(null)).toBe(false);
-  });
-});
-
-describe('toIsoDate', () => {
-  it('parses epoch seconds and milliseconds', () => {
-    expect(toIsoDate('1700000000')).toBe('2023-11-14');
-    expect(toIsoDate(1700000000000)).toBe('2023-11-14');
-  });
-  it('returns null for garbage / empty / null', () => {
-    expect(toIsoDate('not a date')).toBeNull();
-    expect(toIsoDate('')).toBeNull();
-    expect(toIsoDate(null)).toBeNull();
   });
 });
 
