@@ -177,6 +177,33 @@ describe('RemoteLoginModal', () => {
       expect(relayed()).toEqual([]);
     });
 
+  it('sends pending text to the old field before a click, then starts fresh', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    const img = screen.getByAltText('Facebook login screen');
+    vi.spyOn(img, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: VIEWPORT.width, height: VIEWPORT.height });
+    typeInto(mirror, 'me');
+    fireEvent.click(img, { clientX: 400, clientY: 410 });
+    expect(mirror.value).toBe('');
+    typeInto(mirror, 'pw');
+    await settle();
+    expect(relayed()).toEqual([
+      { type: 'type', text: 'me' },
+      { type: 'click', x: 400, y: 410 },
+      { type: 'type', text: 'pw' }
+    ]);
+  });
+
+  it('merges wheel deltas that arrive while a scroll is queued', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const surface = screen.getByRole('application');
+    for (const deltaY of [100, 100, 50]) fireEvent.wheel(surface, { deltaY });
+    await settle();
+    expect(relayed()).toEqual([{ type: 'scroll', dy: 250 }]);
+  });
+
   it('presses Backspace on the remote page when the mirror is already empty', async () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();

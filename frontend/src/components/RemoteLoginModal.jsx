@@ -109,6 +109,7 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   const relayedText = useRef('');
   const typeTimer = useRef(null);
   const sendQueue = useRef(Promise.resolve());
+  const pendingScroll = useRef(0);
   const refreshNow = useRef(null);
 
   // Start the remote session once; cancel it on unmount unless it was saved.
@@ -282,8 +283,18 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
 
   useEffect(() => () => clearTimeout(typeTimer.current), []);
 
-  // Fix: scroll joins the same ordered queue as clicks and keys (PR #671 review)
-  const handleWheel = (e) => { const dy = e.deltaY; enqueue(() => sendInput({ type: 'scroll', dy })); };
+  // Fix: scroll joins the ordered queue, and wheel deltas that arrive while a scroll is queued
+  // merge into it so a flick can't pile up requests ahead of the next click (PR #671 review)
+  const handleWheel = (e) => {
+    const alreadyQueued = pendingScroll.current !== 0;
+    pendingScroll.current += e.deltaY;
+    if (alreadyQueued) return;
+    enqueue(() => {
+      const dy = pendingScroll.current;
+      pendingScroll.current = 0;
+      return dy ? sendInput({ type: 'scroll', dy }) : undefined;
+    });
+  };
 
   const handleSave = async () => {
     setSaving(true);
