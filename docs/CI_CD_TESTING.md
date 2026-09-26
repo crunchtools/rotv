@@ -294,6 +294,40 @@ Prevent merging PRs with failing tests:
 - 🔄 **Forces updates** if master branch changes during PR review
 - ✅ **Ensures quality** - only tested code reaches production
 
+---
+
+## Security Scanning
+
+Findings from everything below land in **Security → Code scanning** (SARIF) or **Security → Dependabot**.
+
+| What | Where | Blocks a PR? |
+|------|-------|--------------|
+| CVE Lite CLI (OSV) on `/`, `backend/`, `frontend/` lockfiles | `dependency-scan.yml` | Yes, required checks `CVE Lite (.)`, `(backend)`, `(frontend)` — new findings at high+ only |
+| CVE Lite full scan, SARIF upload | `dependency-scan.yml`, weekly + manual | No |
+| Trivy on the pushed rotv image (fixable CRITICAL/HIGH) | `build.yml` → `Trivy image scan` | Yes on PRs; report-only on master |
+| Trivy on images-rotv | `build-images.yml` → `Trivy image scan` | No (push-only workflow) |
+| Dependabot alerts + security PRs, secret scanning + push protection | repo settings | Push protection blocks pushes containing secrets |
+
+The in-job Trivy step in `build-and-push-quay` stays report-only because the org constitution requires it. The separate `trivy-scan` job does the gating.
+
+CVE Lite uses OSV rather than the npm registry. npm audit misses advisories on prerelease-tagged versions (multer `1.4.5-lts.2`, #640).
+
+### Baselines (CVE Lite ratchet)
+
+Each scanned directory has a committed `.cve-lite/baseline.json` of accepted debt. A PR fails only on a finding that isn't in it, meaning a new package, a new version, or a new advisory ID. After fixing debt, shrink the baseline:
+
+```bash
+podman run --rm -v "$PWD":/src:Z -w /src/backend docker.io/library/node:20 \
+  npx -y cve-lite-cli@1.37.0 . --ratchet
+git add backend/.cve-lite/baseline.json
+```
+
+Never regenerate a baseline just to get a red PR through. Fix the dependency instead.
+
+### Accepting a Trivy finding
+
+Add the CVE ID to `.trivyignore` with a comment giving the reason, owner, and a review-by date.
+
 ## Troubleshooting
 
 ### Local Tests Pass, CI Fails
