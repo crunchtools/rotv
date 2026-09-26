@@ -93,6 +93,10 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   const urlPoiId = searchParams.get('poi');
 
   const [scheduledJobs, setScheduledJobs] = useState([]);
+  // Read scheduledJobs through a ref so checkRunningJobs keeps a stable identity;
+  // depending on scheduledJobs re-ran the mount effect after every fetch, polling in a tight loop (#638)
+  const scheduledJobsRef = useRef(scheduledJobs);
+  scheduledJobsRef.current = scheduledJobs;
   const [scheduledLoading, setScheduledLoading] = useState(true);
   const [expandedScheduled, setExpandedScheduled] = useState(null);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -217,10 +221,12 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
     }
 
     setRunningJobs(prev => {
+      // Keep the same object while idle so the polling interval isn't torn down on every check (#638)
+      if (Object.keys(prev).length === 0 && Object.keys(running).length === 0) return prev;
       for (const id of Object.keys(prev)) {
         if (!running[id]) {
           setCompletedJobs(c => ({ ...c, [id]: prev[id] }));
-          const job = scheduledJobs.find(j => j.id === id);
+          const job = scheduledJobsRef.current.find(j => j.id === id);
           if (job) {
             setJobHistory(h => ({ ...h, [id]: undefined }));
             fetchJobHistory(id, job.historyTypes, job.historySubType);
@@ -232,7 +238,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
     setActiveSlots(slots);
     setAiStats(stats);
-  }, [scheduledJobs, fetchJobHistory]);
+  }, [fetchJobHistory]);
 
   useEffect(() => {
     Promise.all([fetchScheduledJobs(), checkRunningJobs()]).then(() => setLoading(false));
@@ -249,6 +255,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
   useEffect(() => {
     const hasRunning = Object.keys(runningJobs).length > 0;
     const interval = setInterval(() => {
+      if (document.hidden) return;
       if (hasRunning) checkRunningJobs();
       else fetchScheduledJobs();
     }, hasRunning ? 2000 : 15000);
@@ -257,7 +264,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
 
   useEffect(() => {
     if (Object.keys(runningJobs).length === 0) return;
-    const interval = setInterval(fetchScheduledJobs, 15000);
+    const interval = setInterval(() => { if (!document.hidden) fetchScheduledJobs(); }, 15000);
     return () => clearInterval(interval);
   }, [fetchScheduledJobs, runningJobs]);
 
