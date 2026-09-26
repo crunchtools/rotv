@@ -19,6 +19,9 @@ const MAX_RETRY_AFTER_MS = 30000;
 // Caps one call's total wait during an outage so a collection job keeps moving
 const RETRY_DEADLINE_MS = 180000;
 const RETRYABLE_STATUSES = new Set([429, 502, 503]);
+// POI research is the one task where reasoning plausibly helps (multi-fact
+// synthesis), so it gets a bounded budget; max_tokens leaves room for the JSON
+const RESEARCH_OPTIONS = { temperature: 0, thinkingBudget: 2048, maxOutputTokens: 8192 };
 
 const DEFAULT_PROMPTS = {
   gemini_prompt_brief: `You are a local historian writing for the Cuyahoga Valley National Park visitor guide.
@@ -183,7 +186,9 @@ function backoffMs(response, attempt) {
  * Build the OpenRouter request body for a single-turn prompt.
  * @param {string} prompt
  * @param {{temperature?: number, maxOutputTokens?: number, thinkingBudget?: number}} [options]
- *   Gemini-era option names, kept so callers didn't change; thinkingBudget 0 turns reasoning off.
+ *   Gemini-era option names, kept so callers didn't change. Reasoning is off
+ *   unless thinkingBudget is positive, which caps reasoning at that many tokens:
+ *   an unbounded model default can run to the output cap (#632).
  * @returns {object} chat-completions body with model fallbacks and the ZDR provider policy
  */
 export function buildRequestBody(prompt, options = {}) {
@@ -195,7 +200,9 @@ export function buildRequestBody(prompt, options = {}) {
     provider: PROVIDER_POLICY
   };
   if (options.maxOutputTokens) body.max_tokens = options.maxOutputTokens;
-  if (options.thinkingBudget === 0) body.reasoning = { effort: 'none' };
+  body.reasoning = options.thinkingBudget > 0
+    ? { max_tokens: options.thinkingBudget }
+    : { effort: 'none' };
   return body;
 }
 
@@ -295,15 +302,6 @@ export async function getInterpolatedPrompt(pool, promptKey, destination) {
   return interpolatePrompt(template, destination);
 }
 
-export async function generateText(pool, promptKey, destination) {
-  const template = await getPromptTemplate(pool, promptKey);
-  const prompt = interpolatePrompt(template, destination);
-
-  console.log(`Generating ${promptKey} for destination: ${destination.name}`);
-
-  return complete(pool, prompt, { temperature: 0 });
-}
-
 export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {
   console.log(`Generating with custom prompt (${customPrompt.length} chars)`);
   return complete(pool, customPrompt, options);
@@ -332,7 +330,7 @@ export async function researchLocation(pool, destination, availableActivities = 
   console.log(`Researching location: ${destination.name} (${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
   logInfo(runId, 'research', null, destination.name, `Research: ${destination.name}`);
 
-  const text = await complete(pool, prompt, { temperature: 0 });
+  const text = await complete(pool, prompt, RESEARCH_OPTIONS);
 
   try {
     const researchData = parseJsonResponse(text);
@@ -527,7 +525,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   console.log(`[Research v2] Pass 1 for: ${destination.name}`);
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1: ${destination.name}`);
 
-  const pass1Text = await complete(pool, pass1Prompt, { temperature: 0 });
+  const pass1Text = await complete(pool, pass1Prompt, RESEARCH_OPTIONS);
   let pass1Data;
 
   try {
@@ -551,7 +549,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   console.log(`[Research v2] Pass 2 for: ${destination.name}`);
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 2: ${destination.name}`);
 
-  const pass2Text = await complete(pool, pass2Prompt, { temperature: 0 });
+  const pass2Text = await complete(pool, pass2Prompt, RESEARCH_OPTIONS);
   let pass2Data;
 
   try {
@@ -595,106 +593,4 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   await flushJobLogs();
 
   return mergedResearch;
-}
-
-export async function moderateContent(pool, content) {
-  let sourceSection = '';
-  if (content.source_page_content) {
-    sourceSection = `
-Source URL: ${content.source_url}
-Source Page Content (rendered and converted to markdown):
----
-${content.source_page_content}
----
-
-CRITICAL: You must verify that the source page actually contains or references
-the claimed title/summary. If the page exists but does NOT mention the specific
-news/event, set confidence_score to 0.0 and add "content_not_on_source_page" to issues.`;
-  } else {
-    sourceSection = `Source: ${content.source_url || '(none)'}`;
-  }
-
-  const prompt = `You are a content moderator for Cuyahoga Valley National Park.
-Evaluate this ${content.type} for accuracy and relevance.
-Title: ${content.title}
-Summary: ${content.summary || '(none)'}
-${sourceSection}
-Claimed POI: ${content.poi_name || '(unknown)'}
-
-IMPORTANT: The claimed POI is an admin-curated location in our database.
-Do NOT reject content just because a venue (e.g. Blossom Music Center) is "near"
-rather than "inside" the park — venues near the park are valid POIs.
-
-However, a valid POI does NOT mean all content about that POI is relevant.
-This site is "Roots of The Valley" — a guide to Cuyahoga Valley National Park.
-Content must connect to the park's mission: nature, trails, outdoor recreation,
-conservation, local history, ecology, wildlife, community stewardship, scenic
-railroads, canal towpath heritage, or arts/culture organizations that serve the valley.
-
-For broad POIs like cities (e.g., "City of Cleveland", "City of Akron"):
-- A nature photography exhibit in Cleveland → RELEVANT (arts + nature)
-- A trail race through Akron → RELEVANT (outdoor recreation)
-- A random bar show or concert in Cleveland → NOT RELEVANT (generic entertainment)
-- A restaurant opening → NOT RELEVANT (urban dining)
-- A community cleanup of a creek → RELEVANT (conservation + community)
-Ask: "Would a Cuyahoga Valley National Park visitor care about this?"
-If not, add "off_mission" to issues and score 0.0.
-
-Score 0.0-1.0 on these criteria:
-1. Geographic relevance: Verify the content is about Northeast Ohio / Cuyahoga Valley
-   region. A name match alone is not enough — "Missing Link Trail" in CVNP is different
-   from "Missing Link Snowmobile Club" in upstate New York. If the content describes a
-   location clearly outside the CVNP region (different state, different country), add
-   "wrong_geography" to issues and score 0.0.
-2. Mission relevance: Does the content connect to nature, trails, outdoor recreation,
-   conservation, local history, ecology, wildlife, community stewardship, heritage, or
-   arts/culture organizations serving the valley? Generic urban entertainment, nightlife,
-   dining, sports, or commercial activity unrelated to the park mission should be rejected.
-   Add "off_mission" to issues and score 0.0.
-3. Factual accuracy and source credibility
-4. Content safety
-5. Whether the source page actually contains this content
-6. TIMELINESS: Is this actual news/event (timely, new information) or just a static
-   reference page (permanent visitor info, place description, general park page)?
-   Static pages that describe a location, trail, or facility are NOT news.
-   Score static/reference content 0.0 and add "static_reference_page" to issues.
-7. POI RELEVANCE: Remove the POI name from the content and re-read it. Is the article
-   STILL about that POI? If not, the POI is just a geographic reference and the content
-   is NOT relevant. The true test: what is the HEADLINE TOPIC of this content?
-   - "Bus rapid transit lanes on West 25th" → topic is transit policy, NOT a bridge
-   - "Bridge closure for construction" → topic IS the bridge
-   - "Obituary for Jane Doe" → topic is a person, NOT a cemetery
-   - "Concert at Blossom Music Center" → topic IS an event at a park venue (RELEVANT)
-   - "Concert at a random Cleveland bar" → generic entertainment (NOT RELEVANT)
-   - "Restaurant opening new location in Streetsboro" → topic is a DIFFERENT location,
-     NOT the existing POI. News about other branches/locations of the same business
-     is NOT relevant to the POI in our system.
-   If the headline topic is NOT the specific POI location, add "wrong_poi" and score 0.0.
-8. CONTENT TYPE: If this is classified as "${content.type}", is that correct?
-   News articles that REPORT ON upcoming events are legitimate news — "Board to meet
-   Tuesday," "5K planned for May," "Progress report scheduled." Most news is about
-   something happening in the future. Do NOT reject these.
-   Only add "misclassified_type" (score 0.0) if the content is a BARE event listing
-   with no editorial content — just a date, time, venue, and registration link with
-   no surrounding news narrative or context. If the article has a headline, a lede,
-   quotes, background, or any journalistic framing, it is news, not a bare listing.
-9. PRIVATE/PERSONAL CONTENT: Reject content about private individuals' personal events
-   that happen to take place at a park location. Examples: wedding photography blog posts,
-   personal trip reports, engagement announcements, family reunion recaps. These are not
-   park news — they are private moments. Add "private_content" to issues and score 0.0.
-
-NOTE: Old content is NOT a reason to reject. ROTV is a living history journal.
-
-Return ONLY valid JSON (no markdown, no code blocks):
-{"confidence_score": 0.0, "reasoning": "...", "issues": []}`;
-
-  const text = (await complete(pool, prompt, { temperature: 0 })).trim();
-
-  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
-  try {
-    return JSON.parse(jsonMatch[1].trim());
-  } catch {
-    console.error('[LLM] Failed to parse moderation response:', text);
-    return { confidence_score: 0.5, reasoning: 'Failed to parse AI response', issues: ['parse_error'] };
-  }
 }
