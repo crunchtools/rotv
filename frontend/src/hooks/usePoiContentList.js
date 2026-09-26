@@ -30,6 +30,10 @@ export default function usePoiContentList({ poiId, kind, listUrl, onCountChange 
     const loadId = ++latestLoad.current;
     // Nothing to load: clear the initial loading state so callers don't spin forever.
     if (!poiId) {
+      // No POI: drop whatever the previous one loaded rather than showing it here.
+      setItems([]);
+      setError(null);
+      if (onCountChange) onCountChange(0);
       setLoading(false);
       return;
     }

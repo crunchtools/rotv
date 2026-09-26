@@ -76,6 +76,22 @@ describe('usePoiContentList load', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('clears the previous POI\'s items and count when the poiId goes away', async () => {
+    const onCountChange = vi.fn();
+    fetchMock.mockResolvedValueOnce(fetchResponse([STORY_A, STORY_B]));
+    const { result, rerender } = renderHook(
+      ({ poiId }) => usePoiContentList({ poiId, kind: 'news', listUrl: `/api/pois/${poiId}/news`, onCountChange }),
+      { wrapper, initialProps: { poiId: 7 } }
+    );
+    await waitFor(() => expect(result.current.items).toEqual([STORY_A, STORY_B]));
+
+    rerender({ poiId: null });
+
+    await waitFor(() => expect(result.current.items).toEqual([]));
+    expect(onCountChange).toHaveBeenLastCalledWith(0);
+    expect(result.current.loading).toBe(false);
+  });
+
   it('ignores a late failure from a POI the user has already left', async () => {
     let rejectFirst;
     fetchMock

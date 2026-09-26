@@ -113,8 +113,9 @@ function parseOAuthCredentials(user) {
  * @param {number|string} poiId - POI whose primary image is replaced.
  * @param {string} assetId - Image-server asset id of the new primary.
  * @param {number} userId - Admin recorded as moderated_by.
- * @returns {Promise<void>} Resolves after COMMIT. Rejects with the original error if
- *   connecting or any statement fails; the transaction is rolled back and the client released.
+ * @returns {Promise<void>} Resolves after COMMIT. Rejects if pool.connect() fails (no
+ *   transaction started, nothing to release), or with the original error if a statement
+ *   fails, after rolling back and releasing the client.
  */
 export async function swapPrimaryMedia(pool, poiId, assetId, userId) {
   const client = await pool.connect();
