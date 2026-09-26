@@ -11,45 +11,18 @@ function testBypass(req, role = 'admin') {
   return false;
 }
 
-export function isAuthenticated(req, res, next) {
-  if (testBypass(req)) {
-    return next();
-  }
-  if (req.isAuthenticated()) {
-    return next();
-  }
-  res.status(401).json({ error: 'Authentication required' });
+function requireUser(allows, status, error) {
+  return (req, res, next) => {
+    if (testBypass(req, 'admin') || (req.isAuthenticated() && allows(req.user))) {
+      return next();
+    }
+    res.status(status).json({ error });
+  };
 }
 
-export function isAdmin(req, res, next) {
-  if (testBypass(req, 'admin')) {
-    return next();
-  }
-  if (req.isAuthenticated() && req.user.is_admin) {
-    return next();
-  }
-  res.status(403).json({ error: 'Admin access required' });
-}
+export const isAuthenticated = requireUser(() => true, 401, 'Authentication required');
 
-export function isMediaAdmin(req, res, next) {
-  if (testBypass(req, 'media_admin')) {
-    return next();
-  }
-  if (req.isAuthenticated() && (req.user.role === 'media_admin' || req.user.role === 'admin')) {
-    return next();
-  }
-  res.status(403).json({ error: 'Media admin access required' });
-}
-
-export function isPoiAdmin(req, res, next) {
-  if (testBypass(req, 'poi_admin')) {
-    return next();
-  }
-  if (req.isAuthenticated() && (req.user.role === 'poi_admin' || req.user.role === 'admin')) {
-    return next();
-  }
-  res.status(403).json({ error: 'POI admin access required' });
-}
+export const isAdmin = requireUser(user => user.is_admin, 403, 'Admin access required');
 
 export function optionalAuth(req, res, next) {
   testBypass(req);

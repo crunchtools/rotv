@@ -1,6 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { isAuthenticated } from '../middleware/auth.js';
+import { parsePositiveId, resolveTimezone } from '../utils/requestParams.js';
 
 const favoriteWriteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -11,21 +12,12 @@ const favoriteWriteLimiter = rateLimit({
   keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip)
 });
 
-function parsePoiId(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
-
 export function createFavoritesRouter(pool) {
   const router = express.Router();
 
   router.get('/', isAuthenticated, async (req, res) => {
     try {
-      // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE takes arbitrary input (PR #368 review)
-      const rawTz = req.query.tz;
-      const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-        ? rawTz
-        : 'America/New_York';
+      const tz = resolveTimezone(req.query.tz);
       const favorites = await pool.query(
         `SELECT p.id, p.name, p.poi_roles, p.brief_description, p.has_primary_image,
                 f.created_at AS favorited_at,
@@ -61,7 +53,7 @@ export function createFavoritesRouter(pool) {
   });
 
   router.post('/:poiId', isAuthenticated, favoriteWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
@@ -86,7 +78,7 @@ export function createFavoritesRouter(pool) {
   });
 
   router.delete('/:poiId', isAuthenticated, favoriteWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }

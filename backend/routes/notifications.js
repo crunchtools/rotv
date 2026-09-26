@@ -89,12 +89,11 @@ export function createNotificationsRouter(pool) {
     const validKeys = keys.filter(k => typeof k === 'string' && k.length <= 128).slice(0, 200);
     if (validKeys.length === 0) return res.json({ ok: true });
     try {
-      const values = validKeys.map((k, i) => `($1, $${i + 2}, CURRENT_TIMESTAMP)`).join(',');
       await pool.query(
         `INSERT INTO user_notification_reads (user_id, notification_key, read_at)
-         VALUES ${values}
+         SELECT $1, k, CURRENT_TIMESTAMP FROM UNNEST($2::text[]) AS k
          ON CONFLICT (user_id, notification_key) DO NOTHING`,
-        [req.user.id, ...validKeys]
+        [req.user.id, validKeys]
       );
       res.json({ ok: true });
     } catch (err) {

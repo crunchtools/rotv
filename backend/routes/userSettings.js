@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { isAuthenticated } from '../middleware/auth.js';
-import { validateStops, insertStops, insertTripWithSlugRetry } from './trips.js';
+import { validateStops, insertStops, insertTripWithSlugRetry, rollbackQuietly } from './trips.js';
 import { addSubscriber } from '../services/buttondownClient.js';
 
 const MAX_SYNC_TRIPS = 50;
@@ -82,7 +82,8 @@ export function createUserSettingsRouter(pool) {
           });
           synced.newsletter = true;
         } catch (err) {
-          console.error('settings/sync newsletter failed:', err.message);
+          console.error('settings/sync newsletter failed, continuing sync:', err.message);
+          synced.newsletter = false;
         }
       }
 
@@ -121,7 +122,7 @@ export function createUserSettingsRouter(pool) {
           await client.query('COMMIT');
           synced.trips = count;
         } catch (err) {
-          await client.query('ROLLBACK').catch(() => {});
+          await rollbackQuietly(client);
           throw err;
         } finally {
           client.release();

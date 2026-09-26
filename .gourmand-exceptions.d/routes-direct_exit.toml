@@ -1,0 +1,6 @@
+check = "direct_exit"
+
+[[locations]]
+path = "backend/server.js"
+justification = "server.js is the process entry point (node server.js). process.exit(0) is the last step of the SIGTERM/SIGINT shutdown() handler after trackers, SMTP, job logger and pg-boss are stopped; the pg pool and HTTP listener would otherwise keep the event loop alive."
+classification = "by_design"

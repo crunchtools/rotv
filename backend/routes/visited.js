@@ -1,6 +1,7 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { isAuthenticated } from '../middleware/auth.js';
+import { parsePositiveId } from '../utils/requestParams.js';
 
 const visitedWriteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -10,11 +11,6 @@ const visitedWriteLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip)
 });
-
-function parsePoiId(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
 
 export function createVisitedRouter(pool) {
   const router = express.Router();
@@ -61,7 +57,7 @@ export function createVisitedRouter(pool) {
   });
 
   router.post('/:poiId', isAuthenticated, visitedWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
@@ -86,7 +82,7 @@ export function createVisitedRouter(pool) {
   });
 
   router.delete('/:poiId', isAuthenticated, visitedWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }

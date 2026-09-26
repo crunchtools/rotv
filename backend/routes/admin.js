@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { isAdmin, isAuthenticated } from '../middleware/auth.js';
 import { isSecretSetting } from '../utils/settingsRedaction.js';
+import { consolidateFeatures } from '../utils/geojson.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -13,7 +14,6 @@ import {
   createDriveServiceWithRefresh,
   ensureDriveFolders,
   uploadIconToDrive,
-  downloadFileFromDrive,
   deleteFileFromDrive,
   getDriveFolderLink,
   getDriveImageUrl,
@@ -91,7 +91,45 @@ const iaDateLogger = createLogger('IA Date');
 
 const router = express.Router();
 
+// oauth_credentials arrives as JSONB (object) or as a legacy JSON string; an
+// unparseable string is treated as "no credentials" so the admin is asked to re-login.
+function parseOAuthCredentials(user) {
+  const credentials = user.oauth_credentials;
+  if (typeof credentials !== 'string') return credentials;
+  try {
+    return JSON.parse(credentials);
+  } catch (error) {
+    logger.warn(`Unparseable oauth_credentials for user ${user.id}:`, error.message);
+    return null;
+  }
+}
+
 export function createAdminRouter(pool, invalidateMosaicCache) {
+  // Atomic swap: delete old primary + insert new (admin uploads bypass moderation).
+  // Runs on one checked-out client — BEGIN/COMMIT via pool.query can land on different connections.
+  async function swapPrimaryMedia(poiId, assetId, userId) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
+        [poiId]
+      );
+      await client.query(`
+        INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_by, moderated_at)
+        VALUES ($1, 'image', $2, 'primary', 'auto_approved', $3, CURRENT_TIMESTAMP)
+      `, [poiId, assetId, userId]);
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(rollbackError => {
+        logger.warn('ROLLBACK failed after primary media swap error:', rollbackError.message);
+      });
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
   router.put('/pois/:id/coordinates', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { latitude, longitude } = req.body;
@@ -1577,14 +1615,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.get('/sync/status', isAdmin, async (req, res) => {
     try {
-      let credentials = req.user.oauth_credentials;
-      if (typeof credentials === 'string') {
-        try {
-          credentials = JSON.parse(credentials);
-        } catch (e) {
-          credentials = null;
-        }
-      }
+      const credentials = parseOAuthCredentials(req.user);
 
       const hasCredentials = !!(credentials && credentials.access_token);
       const status = {
@@ -1632,7 +1663,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         try {
           const { getImageBackupStatus } = await import('../services/backupService.js');
           status.image_backup = await getImageBackupStatus(pool, drive);
-        } catch (e) {
+        } catch (imageBackupError) {
+          logger.warn('Could not get image backup status:', imageBackupError.message);
           status.image_backup = null;
         }
       } catch (driveInfoError) {
@@ -1645,7 +1677,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           "SELECT value FROM admin_settings WHERE key = 'last_backup'"
         );
         status.last_backup = backupResult.rows[0]?.value || null;
-      } catch (e) {
+      } catch (lastBackupError) {
+        logger.warn('Could not read last_backup setting:', lastBackupError.message);
         status.last_backup = null;
       }
 
@@ -1658,10 +1691,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.post('/backup/trigger', isAdmin, async (req, res) => {
     try {
-      let credentials = req.user.oauth_credentials;
-      if (typeof credentials === 'string') {
-        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
-      }
+      const credentials = parseOAuthCredentials(req.user);
       if (!credentials || !credentials.access_token) {
         return res.status(401).json({ error: 'Google authentication required' });
       }
@@ -1691,10 +1721,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.get('/backup/list', isAdmin, async (req, res) => {
     try {
-      let credentials = req.user.oauth_credentials;
-      if (typeof credentials === 'string') {
-        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
-      }
+      const credentials = parseOAuthCredentials(req.user);
       if (!credentials || !credentials.access_token) {
         return res.status(401).json({ error: 'Google authentication required' });
       }
@@ -1716,10 +1743,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'fileId is required' });
       }
 
-      let credentials = req.user.oauth_credentials;
-      if (typeof credentials === 'string') {
-        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
-      }
+      const credentials = parseOAuthCredentials(req.user);
       if (!credentials || !credentials.access_token) {
         return res.status(401).json({ error: 'Google authentication required' });
       }
@@ -1738,10 +1762,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.post('/backup/images/trigger', isAdmin, async (req, res) => {
     try {
-      let credentials = req.user.oauth_credentials;
-      if (typeof credentials === 'string') {
-        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
-      }
+      const credentials = parseOAuthCredentials(req.user);
       if (!credentials || !credentials.access_token) {
         return res.status(401).json({ error: 'Google authentication required' });
       }
@@ -1761,10 +1782,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.get('/backup/images/status', isAdmin, async (req, res) => {
     try {
       let drive = null;
-      let credentials = req.user.oauth_credentials;
-      if (typeof credentials === 'string') {
-        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
-      }
+      const credentials = parseOAuthCredentials(req.user);
       if (credentials?.access_token) {
         drive = await createDriveServiceWithRefresh(credentials, pool, req.user.id);
       }
@@ -1780,10 +1798,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
   router.post('/backup/images/restore', isAdmin, async (req, res) => {
     try {
-      let credentials = req.user.oauth_credentials;
-      if (typeof credentials === 'string') {
-        try { credentials = JSON.parse(credentials); } catch (e) { credentials = null; }
-      }
+      const credentials = parseOAuthCredentials(req.user);
       if (!credentials || !credentials.access_token) {
         return res.status(401).json({ error: 'Google authentication required' });
       }
@@ -1876,18 +1891,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       if (imageServerAssetId) {
-        // Atomic swap: delete old primary + insert new (admin uploads bypass moderation)
-        await pool.query('BEGIN');
-        await pool.query(
-          `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
-          [id]
-        );
-
-        await pool.query(`
-          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_by, moderated_at)
-          VALUES ($1, 'image', $2, 'primary', 'auto_approved', $3, CURRENT_TIMESTAMP)
-        `, [id, imageServerAssetId, req.user.id]);
-        await pool.query('COMMIT');
+        await swapPrimaryMedia(id, imageServerAssetId, req.user.id);
       }
 
       await pool.query(
@@ -1902,7 +1906,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         image_server_asset_id: imageServerAssetId
       });
     } catch (error) {
-      await pool.query('ROLLBACK').catch(() => {});
       logger.error('Error uploading POI image:', error);
       if (error.message?.includes('Invalid file type')) {
         return res.status(400).json({ error: error.message });
@@ -1967,18 +1970,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       if (imageServerAssetId) {
-        // Atomic swap: delete old primary + insert new (admin uploads bypass moderation)
-        await pool.query('BEGIN');
-        await pool.query(
-          `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
-          [id]
-        );
-
-        await pool.query(`
-          INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_by, moderated_at)
-          VALUES ($1, 'image', $2, 'primary', 'auto_approved', $3, CURRENT_TIMESTAMP)
-        `, [id, imageServerAssetId, req.user.id]);
-        await pool.query('COMMIT');
+        await swapPrimaryMedia(id, imageServerAssetId, req.user.id);
       }
 
       await pool.query(
@@ -1993,7 +1985,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         image_server_asset_id: imageServerAssetId
       });
     } catch (error) {
-      await pool.query('ROLLBACK').catch(() => {});
       logger.error('Error uploading POI image:', error);
       res.status(500).json({ error: 'Failed to upload image' });
     }
@@ -2278,32 +2269,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const results = { trails: 0, rivers: 0, boundaries: 0, errors: [] };
 
-      function consolidateFeatures(features) {
-        const byName = {};
-        for (const feature of features) {
-          const name = feature.properties?.name || 'Unnamed';
-          if (!byName[name]) {
-            byName[name] = [];
-          }
-          byName[name].push(feature.geometry);
-        }
-
-        const consolidated = [];
-        for (const [name, geometries] of Object.entries(byName)) {
-          let geometry;
-          if (geometries.length === 1) {
-            geometry = geometries[0];
-          } else {
-            const allCoords = geometries.map(g =>
-              g.type === 'MultiLineString' ? g.coordinates : [g.coordinates]
-            ).flat();
-            geometry = { type: 'MultiLineString', coordinates: allCoords };
-          }
-          consolidated.push({ name, geometry });
-        }
-        return consolidated;
-      }
-
       if (feature_type === 'trail' || feature_type === 'all') {
         try {
           const trailsFile = path.join(dataPath, 'cvnp-trails.geojson');
@@ -2444,40 +2409,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'GeoJSON must be a FeatureCollection' });
       }
 
-      function consolidateFeatures(features) {
-        const byName = {};
-        for (const feature of features) {
-          const name = feature.properties?.name || 'Unnamed';
-          if (!byName[name]) {
-            byName[name] = [];
-          }
-          byName[name].push(feature.geometry);
-        }
-
-        const consolidated = [];
-        for (const [name, geometries] of Object.entries(byName)) {
-          let geometry;
-          if (geometries.length === 1) {
-            geometry = geometries[0];
-          } else {
-            const firstType = geometries[0]?.type;
-            if (firstType === 'Polygon' || firstType === 'MultiPolygon') {
-              const allCoords = geometries.map(g =>
-                g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates]
-              ).flat();
-              geometry = { type: 'MultiPolygon', coordinates: allCoords };
-            } else {
-              const allCoords = geometries.map(g =>
-                g.type === 'MultiLineString' ? g.coordinates : [g.coordinates]
-              ).flat();
-              geometry = { type: 'MultiLineString', coordinates: allCoords };
-            }
-          }
-          consolidated.push({ name, geometry });
-        }
-        return consolidated;
-      }
-
       const consolidatedFeatures = consolidateFeatures(geojsonData.features);
       let importedCount = 0;
       const errors = [];
@@ -2532,40 +2463,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       if (geojson.type !== 'FeatureCollection') {
         return res.status(400).json({ error: 'GeoJSON must be a FeatureCollection' });
-      }
-
-      function consolidateFeatures(features) {
-        const byName = {};
-        for (const feature of features) {
-          const name = feature.properties?.name || 'Unnamed';
-          if (!byName[name]) {
-            byName[name] = [];
-          }
-          byName[name].push(feature.geometry);
-        }
-
-        const consolidated = [];
-        for (const [name, geometries] of Object.entries(byName)) {
-          let geometry;
-          if (geometries.length === 1) {
-            geometry = geometries[0];
-          } else {
-            const firstType = geometries[0]?.type;
-            if (firstType === 'Polygon' || firstType === 'MultiPolygon') {
-              const allCoords = geometries.map(g =>
-                g.type === 'MultiPolygon' ? g.coordinates : [g.coordinates]
-              ).flat();
-              geometry = { type: 'MultiPolygon', coordinates: allCoords };
-            } else {
-              const allCoords = geometries.map(g =>
-                g.type === 'MultiLineString' ? g.coordinates : [g.coordinates]
-              ).flat();
-              geometry = { type: 'MultiLineString', coordinates: allCoords };
-            }
-          }
-          consolidated.push({ name, geometry });
-        }
-        return consolidated;
       }
 
       const consolidatedFeatures = consolidateFeatures(geojson.features);
@@ -3725,7 +3622,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         if (failResult.rows.length > 0) {
           consecutiveFailures = parseInt(failResult.rows[0].value) || 0;
         }
-      } catch (_) { /* ignore */ }
+      } catch (failCountError) {
+        twitterAuthLogger.warn('Could not read twitter_consecutive_failures:', failCountError.message);
+      }
 
       res.json({
         authenticated: !isExpired,
@@ -4057,7 +3956,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       let cdxRows;
       try {
         cdxRows = await response.json();
-      } catch {
+      } catch (parseError) {
+        iaDateLogger.warn(`CDX API returned non-JSON for ${url}:`, parseError.message);
         return res.status(502).json({ error: 'Internet Archive returned non-JSON response' });
       }
       // CDX response shape: [[header], [row]] — first row after header is earliest snapshot
@@ -4391,7 +4291,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
             description: info.description,
             size: size || 0
           });
-        } catch {
+        } catch (queueError) {
+          logger.debug(`Queue size unavailable for ${name}:`, queueError.message);
           queues.push({ name, label: info.label, description: info.description, size: 0 });
         }
       }
@@ -4420,20 +4321,26 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
             if (pgbossResult.rows.length > 0) {
               currentSchedule = pgbossResult.rows[0].cron;
             }
-          } catch { /* pgboss.schedule may not exist on first boot */ }
+          } catch (scheduleError) {
+            logger.debug(`pgboss.schedule unreadable for ${type.scheduleJobName} (absent on first boot):`, scheduleError.message);
+          }
         }
 
         let queueSize = 0;
         try {
           queueSize = await boss.getQueueSize(type.scheduleJobName) || 0;
-        } catch { /* queue may not exist yet */ }
+        } catch (queueError) {
+          logger.debug(`Queue ${type.scheduleJobName} not created yet:`, queueError.message);
+        }
 
         let lastJob = null;
         if (type.statusTable) {
           try {
             const jobResult = await latestRunFor(type);
             if (jobResult.rows.length > 0) lastJob = jobResult.rows[0];
-          } catch { /* table may not exist */ }
+          } catch (statusError) {
+            logger.debug(`${type.statusTable} unreadable (table may not exist yet):`, statusError.message);
+          }
         }
 
         let prompts = [];

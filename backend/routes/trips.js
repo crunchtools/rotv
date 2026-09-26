@@ -106,6 +106,14 @@ export async function insertTripWithSlugRetry(client, fields, maxAttempts = 5) {
   throw new Error('slug collision after retries');
 }
 
+// Roll back after a failed transaction. A ROLLBACK failure is logged, not thrown,
+// so the caller's original error is the one that reaches the response.
+export async function rollbackQuietly(client) {
+  await client.query('ROLLBACK').catch(err => {
+    console.warn('ROLLBACK failed:', err.message);
+  });
+}
+
 export function createTripsRouter(pool) {
   const router = express.Router();
 
@@ -286,7 +294,7 @@ export function createTripsRouter(pool) {
       const fresh = await loadTripById(pool, created.id);
       res.status(201).json(fresh);
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await rollbackQuietly(client);
       console.error('POST /api/trips failed:', err);
       res.status(500).json({ error: 'Failed to create trip' });
     } finally {
@@ -368,7 +376,7 @@ export function createTripsRouter(pool) {
       const fresh = await loadTripById(pool, id);
       res.json(fresh);
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await rollbackQuietly(client);
       console.error('PUT /api/trips/:id failed:', err);
       res.status(500).json({ error: 'Failed to update trip' });
     } finally {
@@ -441,7 +449,7 @@ export function createTripsRouter(pool) {
       const fresh = await loadTripById(pool, created.id);
       res.status(201).json(fresh);
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await rollbackQuietly(client);
       console.error('POST /api/trips/:id/duplicate failed:', err);
       res.status(500).json({ error: 'Failed to duplicate trip' });
     } finally {

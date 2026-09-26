@@ -22,6 +22,8 @@ import { createFavoritesRouter } from './routes/favorites.js';
 import { createVisitedRouter } from './routes/visited.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { isAuthenticated } from './middleware/auth.js';
+import { consolidateFeatures } from './utils/geojson.js';
+import { resolveTimezone } from './utils/requestParams.js';
 import {
   initJobScheduler,
   scheduleNewsCollection,
@@ -155,7 +157,7 @@ app.set('trust proxy', 1);
 
 // Return date/timestamp columns as ISO strings, not JavaScript Date objects.
 // Date objects lose the year when passed through String().slice(0,10) because
-// their .toString() format is locale-dependent ("Sat May 31 2025 ...").
+// their .toString() format is locale-dependent ("Sat May 31 ..."), not ISO.
 // OID 1082 = date, 1114 = timestamp without tz, 1184 = timestamp with tz
 const { types } = pg;
 types.setTypeParser(1082, (val) => val);
@@ -229,30 +231,6 @@ app.use('/api/notifications', createNotificationsRouter(pool));
 async function importGeoJSONFeatures(client) {
   const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/public');
   const dataPath = path.join(staticPath, 'data');
-
-  function consolidateFeatures(features) {
-    const byName = {};
-    for (const feature of features) {
-      const name = feature.properties?.name || 'Unnamed';
-      if (!byName[name]) byName[name] = [];
-      byName[name].push(feature.geometry);
-    }
-
-    const consolidated = [];
-    for (const [name, geometries] of Object.entries(byName)) {
-      let geometry;
-      if (geometries.length === 1) {
-        geometry = geometries[0];
-      } else {
-        const allCoords = geometries.map(g =>
-          g.type === 'MultiLineString' ? g.coordinates : [g.coordinates]
-        ).flat();
-        geometry = { type: 'MultiLineString', coordinates: allCoords };
-      }
-      consolidated.push({ name, geometry });
-    }
-    return consolidated;
-  }
 
   try {
     const trailsFile = path.join(dataPath, 'cvnp-trails.geojson');
@@ -1025,11 +1003,7 @@ app.get('/api/pois/summary', async (req, res) => {
     if (ids.length === 0) {
       return res.json([]);
     }
-    // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE takes arbitrary input (PR #368 review)
-    const rawTz = req.query.tz;
-    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-      ? rawTz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const summary = await pool.query(`
       SELECT p.id,
              ts.status AS trail_status,
@@ -1961,11 +1935,7 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
-    // Whitelist tz to IANA Region/City format — Postgres AT TIME ZONE accepts arbitrary input (PR #368 review)
-    const rawTz = req.query.tz;
-    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-      ? rawTz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     // Roll up boundary/org POIs to include contained/owned POIs (#406)
     const poiIds = await getRollupPoiIds(pool, id);
     const tabCountsQuery = await pool.query(`
@@ -2025,7 +1995,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const { id } = req.params;
     const upcomingOnly = req.query.upcoming !== 'false';
     const limit = parseInt(req.query.limit) || 50;
-    const tz = req.query.tz || 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     // Roll up boundary/org POIs to include contained/owned POIs (#406)
     const poiIds = await getRollupPoiIds(pool, id);
     let query = `
@@ -2293,7 +2263,7 @@ app.get('/api/news/recent', async (req, res) => {
 
 app.get('/api/events/upcoming', async (req, res) => {
   try {
-    const tz = req.query.tz || 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
     const adminColumns = isAdmin
       ? `, e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
@@ -2325,7 +2295,7 @@ app.get('/api/events/upcoming', async (req, res) => {
 app.get('/api/events/past', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    const tz = req.query.tz || 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
     const adminColumns = isAdmin
       ? `, e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
@@ -2361,11 +2331,7 @@ app.get('/api/events/past', async (req, res) => {
 app.get('/api/events/window', async (req, res) => {
   try {
     const range = req.query.range === 'today' ? 'today' : 'weekend';
-    const rawTz = req.query.tz;
-    // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE accepts arbitrary input (PR #368 review)
-    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-      ? rawTz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
 
     // "Today" as a calendar date in the venue timezone.
@@ -2417,9 +2383,7 @@ app.get('/api/events/window', async (req, res) => {
 // Active recurring series with their next occurrence — backs the recurring filter/badge.
 app.get('/api/events/recurring', async (req, res) => {
   try {
-    const tz = (typeof req.query.tz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(req.query.tz))
-      ? req.query.tz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const todayRow = await pool.query('SELECT (CURRENT_TIMESTAMP AT TIME ZONE $1)::date::text AS today', [tz]);
     const today = todayRow.rows[0].today;
     const series = await getAllActiveSeries(pool);
@@ -2919,10 +2883,10 @@ async function start() {
     const CANONICAL_EVENT_TYPES = ['hike', 'race', 'concert', 'festival', 'program', 'volunteer', 'arts', 'community', 'alert'];
     const CANONICAL_NEWS_TYPES = ['general', 'alert', 'wildlife', 'infrastructure', 'community'];
     const { rows: nonCanonical } = await pool.query(`
-      SELECT 'events' AS src, COUNT(*) AS cnt FROM poi_events WHERE event_type NOT IN (${CANONICAL_EVENT_TYPES.map((_, i) => `$${i + 1}`).join(',')})
+      SELECT 'events' AS src, COUNT(*) AS cnt FROM poi_events WHERE event_type <> ALL($1::text[])
       UNION ALL
-      SELECT 'news', COUNT(*) FROM poi_news WHERE news_type NOT IN (${CANONICAL_NEWS_TYPES.map((_, i) => `$${i + CANONICAL_EVENT_TYPES.length + 1}`).join(',')})
-    `, [...CANONICAL_EVENT_TYPES, ...CANONICAL_NEWS_TYPES]);
+      SELECT 'news', COUNT(*) FROM poi_news WHERE news_type <> ALL($2::text[])
+    `, [CANONICAL_EVENT_TYPES, CANONICAL_NEWS_TYPES]);
     const needsNormalization = nonCanonical.some(r => parseInt(r.cnt) > 0);
     if (needsNormalization) {
       logger.info('Non-canonical content types detected, normalizing...');
@@ -3163,24 +3127,17 @@ process.on('unhandledRejection', reason => {
   unhandledRejectionLogger.error('Backend stayed up; investigate:', reason);
 });
 
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, shutting down gracefully...');
+async function shutdown(signal) {
+  logger.info(`${signal} received, shutting down gracefully...`);
   stopTracker();
   stopTrainTracker();
   if (activeSmtpServer) activeSmtpServer.close();
   await stopJobLogger();
   await stopJobScheduler();
   process.exit(0);
-});
+}
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, shutting down gracefully...');
-  stopTracker();
-  stopTrainTracker();
-  if (activeSmtpServer) activeSmtpServer.close();
-  await stopJobLogger();
-  await stopJobScheduler();
-  process.exit(0);
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 start().catch(console.error);
