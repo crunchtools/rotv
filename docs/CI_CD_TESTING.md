@@ -322,7 +322,7 @@ podman run --rm -v "$PWD":/src:Z -w /src/backend docker.io/library/node:20 \
 git add backend/.cve-lite/baseline.json
 ```
 
-Never regenerate a baseline just to get a red PR through. Fix the dependency instead.
+The PR gate compares against the **base branch's** baseline, so a PR that edits its own baseline changes nothing. Fixing a dependency is always the first answer. To accept new debt, a maintainer adds the `security-debt-accepted` label, and the gate then uses the PR's baseline.
 
 ### Accepting a Trivy finding
 
