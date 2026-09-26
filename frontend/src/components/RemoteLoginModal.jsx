@@ -241,8 +241,8 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     finally { setSaving(false); }
   };
 
-  // Portal to <body>: an ancestor in the settings page forms a stacking context, so a z-index here alone
-  // still left the site header (z-index 10000) over the modal's title bar and close button
+  // Fix: portal to <body>; an ancestor forms a stacking context, so z-index alone left the site header
+  // (z-index 10000) over the modal's title bar and close button (PR #669 review)
   return createPortal(
     <div className="modal-overlay" onClick={onClose} style={{ zIndex: 10001 }}>
       <div className="remote-login-modal" onClick={e => e.stopPropagation()}
