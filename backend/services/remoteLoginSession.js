@@ -80,7 +80,7 @@ export class LoginSessionError extends Error {
  * @throws {LoginSessionError} 404 for an unknown provider
  */
 export function getProvider(name) {
-  const provider = PROVIDERS[name];
+  const provider = Object.hasOwn(PROVIDERS, name) ? PROVIDERS[name] : null;
   if (!provider) throw new LoginSessionError(`Unknown login provider: ${name}`, 404);
   return provider;
 }

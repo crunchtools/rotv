@@ -51,6 +51,8 @@ describe('startLogin', () => {
 
   it('rejects unknown providers and a second admin', async () => {
     await expect(startLogin('myspace', ADMIN)).rejects.toMatchObject({ status: 404 });
+    await expect(startLogin('constructor', ADMIN)).rejects.toMatchObject({ status: 404 });
+    await expect(startLogin('__proto__', ADMIN)).rejects.toMatchObject({ status: 404 });
     await expect(startLogin('facebook', OTHER_ADMIN)).rejects.toMatchObject({ status: 409 });
   });
 });
