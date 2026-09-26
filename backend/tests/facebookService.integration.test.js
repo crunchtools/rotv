@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
-import { scrapePluginPosts, formatPosts } from '../services/facebookService.js';
+import { scrapePluginPosts, formatPosts, fetchFacebookPosts } from '../services/facebookService.js';
 
 const FIXTURE = `<!doctype html><body>
   <div class="_2pi9">
@@ -31,4 +31,12 @@ describe('facebookService in Chromium', () => {
       '[2026-09-21] 9/21/26 All trails CLOSED\nToo much continuous rain'
     );
   });
+
+  // Opt-in contract check against the real Page Plugin (network, Facebook-controlled).
+  // Run with FACEBOOK_LIVE_TEST=1 to confirm Facebook hasn't changed the plugin markup.
+  it.skipIf(!process.env.FACEBOOK_LIVE_TEST)('fetches dated posts from the live medinaTRAILS Page Plugin', async () => {
+    const r = await fetchFacebookPosts('https://www.facebook.com/medinaTRAILS/');
+    expect(r.reachable).toBe(true);
+    expect(r.markdown).toMatch(/^\[\d{4}-\d{2}-\d{2}\] \S/);
+  }, 60000);
 });
