@@ -266,9 +266,13 @@ export async function saveLogin(pool, providerName, userId) {
 }
 
 /**
- * Close the caller's running session for this provider, if any.
+ * Close the caller's session for this provider. If the caller's start is still
+ * launching, marks it cancelled instead; startLogin then closes the browser and
+ * rejects with 409. No-op when nothing is running for this provider.
  * @param {string} providerName
  * @param {number} userId
+ * @returns {Promise<void>}
+ * @throws {LoginSessionError} 409 when the running session belongs to another admin
  */
 export async function cancelLogin(providerName, userId) {
   if (pendingStart && pendingStart.provider === providerName && pendingStart.userId === userId) {
