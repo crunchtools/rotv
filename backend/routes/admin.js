@@ -104,32 +104,42 @@ function parseOAuthCredentials(user) {
   }
 }
 
-export function createAdminRouter(pool, invalidateMosaicCache) {
-  // Atomic swap: delete old primary + insert new (admin uploads bypass moderation).
-  // Runs on one checked-out client — BEGIN/COMMIT via pool.query can land on different connections.
-  async function swapPrimaryMedia(poiId, assetId, userId) {
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(
-        `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
-        [poiId]
-      );
-      await client.query(`
-        INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_by, moderated_at)
-        VALUES ($1, 'image', $2, 'primary', 'auto_approved', $3, CURRENT_TIMESTAMP)
-      `, [poiId, assetId, userId]);
-      await client.query('COMMIT');
-    } catch (error) {
-      await client.query('ROLLBACK').catch(rollbackError => {
-        logger.warn('ROLLBACK failed after primary media swap error:', rollbackError.message);
-      });
-      throw error;
-    } finally {
-      client.release();
-    }
+/**
+ * Atomic swap: delete the POI's old primary image row and insert the new one
+ * (admin uploads bypass moderation). Runs on one checked-out client, because
+ * BEGIN/COMMIT via pool.query can land on different connections.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {number|string} poiId - POI whose primary image is replaced.
+ * @param {string} assetId - Image-server asset id of the new primary.
+ * @param {number} userId - Admin recorded as moderated_by.
+ * @returns {Promise<void>} Resolves after COMMIT. Rejects with the original error if
+ *   connecting or any statement fails; the transaction is rolled back and the client released.
+ */
+export async function swapPrimaryMedia(pool, poiId, assetId, userId) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `DELETE FROM poi_media WHERE poi_id = $1 AND role = 'primary'`,
+      [poiId]
+    );
+    await client.query(`
+      INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status, moderated_by, moderated_at)
+      VALUES ($1, 'image', $2, 'primary', 'auto_approved', $3, CURRENT_TIMESTAMP)
+    `, [poiId, assetId, userId]);
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(rollbackError => {
+      logger.warn('ROLLBACK failed after primary media swap error:', rollbackError.message);
+    });
+    throw error;
+  } finally {
+    client.release();
   }
+}
 
+export function createAdminRouter(pool, invalidateMosaicCache) {
   router.put('/pois/:id/coordinates', isAdmin, async (req, res) => {
     const { id } = req.params;
     const { latitude, longitude } = req.body;
@@ -1891,7 +1901,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       if (imageServerAssetId) {
-        await swapPrimaryMedia(id, imageServerAssetId, req.user.id);
+        await swapPrimaryMedia(pool, id, imageServerAssetId, req.user.id);
       }
 
       await pool.query(
@@ -1970,7 +1980,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       }
 
       if (imageServerAssetId) {
-        await swapPrimaryMedia(id, imageServerAssetId, req.user.id);
+        await swapPrimaryMedia(pool, id, imageServerAssetId, req.user.id);
       }
 
       await pool.query(

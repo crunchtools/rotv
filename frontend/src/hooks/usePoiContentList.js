@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 /**
@@ -23,21 +23,31 @@ export default function usePoiContentList({ poiId, kind, listUrl, onCountChange 
   const [collecting, setCollecting] = useState(false);
   const [error, setError] = useState(null);
 
+  // Id of the newest load; a response for an older poiId/listUrl is dropped.
+  const latestLoad = useRef(0);
+
   const fetchItems = async () => {
-    if (!poiId) return;
+    const loadId = ++latestLoad.current;
+    // Nothing to load: clear the initial loading state so callers don't spin forever.
+    if (!poiId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
       const response = await fetch(listUrl);
       if (!response.ok) throw new Error(`HTTP ${response.status} ${response.statusText}`);
       const list = await response.json();
+      if (loadId !== latestLoad.current) return;
       setItems(list);
       if (onCountChange) onCountChange(list.length);
     } catch (err) {
+      if (loadId !== latestLoad.current) return;
       console.error(`Error fetching POI ${kind}:`, err);
       setError(`Failed to load ${kind}`);
     } finally {
-      setLoading(false);
+      if (loadId === latestLoad.current) setLoading(false);
     }
   };
 
