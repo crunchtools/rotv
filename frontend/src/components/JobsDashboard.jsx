@@ -139,7 +139,7 @@ export default function JobsDashboard({ expandTarget, onExpandTargetConsumed }) 
       const jobs = await res.json();
       if (generation === scheduledGenerationRef.current) setScheduledJobs(jobs);
     } catch (err) {
-      setDashboardError(`Failed to fetch scheduled jobs: ${err.message}`);
+      if (generation === scheduledGenerationRef.current) setDashboardError(`Failed to fetch scheduled jobs: ${err.message}`);
     } finally {
       setScheduledLoading(false);
     }

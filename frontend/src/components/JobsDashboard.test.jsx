@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import JobsDashboard from './JobsDashboard';
 import { fetchResponse } from '../test/fetchResponse';
@@ -155,6 +155,51 @@ describe('JobsDashboard polling (#638)', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(10000); });
     expect(callsTo(SCHEDULED_URL)).toBe(3);
+  });
+
+  it('keeps the newer scheduled jobs when an overtaken fetch resolves late', async () => {
+    let releaseStale;
+    let scheduledCalls = 0;
+    fetchMock.mockImplementation((url) => {
+      if (url.includes(SCHEDULED_URL)) {
+        scheduledCalls++;
+        if (scheduledCalls === 2) return new Promise(resolve => { releaseStale = resolve; });
+        return Promise.resolve(fetchResponse(scheduledCalls === 1 ? [] : [{ id: 'fresh', label: 'Fresh job' }]));
+      }
+      return Promise.resolve(fetchResponse({ status: 'completed' }));
+    });
+
+    renderDashboard();
+    for (let i = 0; i < 5; i++) await flush();
+    await act(async () => { await vi.advanceTimersByTimeAsync(45000); });
+    for (let i = 0; i < 5; i++) await flush();
+    expect(screen.getByText('Fresh job')).toBeTruthy();
+
+    await act(async () => { releaseStale(fetchResponse([{ id: 'stale', label: 'Stale job' }])); await vi.advanceTimersByTimeAsync(0); });
+    for (let i = 0; i < 5; i++) await flush();
+    expect(screen.getByText('Fresh job')).toBeTruthy();
+    expect(screen.queryByText('Stale job')).toBeNull();
+  });
+
+  it('does not show an error from an overtaken scheduled-jobs fetch', async () => {
+    let failStale;
+    let scheduledCalls = 0;
+    fetchMock.mockImplementation((url) => {
+      if (url.includes(SCHEDULED_URL)) {
+        scheduledCalls++;
+        if (scheduledCalls === 2) return new Promise((_, reject) => { failStale = reject; });
+        return Promise.resolve(fetchResponse([]));
+      }
+      return Promise.resolve(fetchResponse({ status: 'completed' }));
+    });
+
+    renderDashboard();
+    for (let i = 0; i < 5; i++) await flush();
+    await act(async () => { await vi.advanceTimersByTimeAsync(45000); });
+
+    await act(async () => { failStale(new Error('stale network error')); await vi.advanceTimersByTimeAsync(0); });
+    for (let i = 0; i < 5; i++) await flush();
+    expect(screen.queryByText(/stale network error/)).toBeNull();
   });
 
   it('ignores a stalled check that resolves after a newer one', async () => {
