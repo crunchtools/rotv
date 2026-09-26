@@ -76,6 +76,25 @@ describe('usePoiContentList load', () => {
     expect(result.current.loading).toBe(false);
   });
 
+  it('ignores a late failure from a POI the user has already left', async () => {
+    let rejectFirst;
+    fetchMock
+      .mockReturnValueOnce(new Promise((_, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce(fetchResponse([STORY_B]));
+    const { result, rerender } = renderHook(
+      ({ poiId }) => usePoiContentList({ poiId, kind: 'news', listUrl: `/api/pois/${poiId}/news` }),
+      { wrapper, initialProps: { poiId: 7 } }
+    );
+
+    rerender({ poiId: 8 });
+    await waitFor(() => expect(result.current.items).toEqual([STORY_B]));
+    await act(async () => { rejectFirst(new Error('network down')); });
+
+    expect(result.current.error).toBeNull();
+    expect(result.current.items).toEqual([STORY_B]);
+    expect(result.current.loading).toBe(false);
+  });
+
   it('reports a non-2xx load without calling onCountChange', async () => {
     const onCountChange = vi.fn();
     fetchMock.mockResolvedValueOnce(fetchResponse({}, { status: 503, statusText: 'Service Unavailable' }));

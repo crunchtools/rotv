@@ -210,6 +210,22 @@ describe('useOrderedAdminList saveOrder', () => {
     expect(result.current.items).toEqual([HIKING, BIKING]);
   });
 
+  it('does not undo a newer reorder when an older one fails late', async () => {
+    const { result } = await renderLoaded([HIKING, BIKING, PADDLING]);
+    let rejectFirst;
+    fetchMock
+      .mockReturnValueOnce(new Promise((_, reject) => { rejectFirst = reject; }))
+      .mockResolvedValueOnce(fetchResponse({ success: true }));
+
+    let first;
+    act(() => { first = result.current.saveOrder([BIKING, HIKING, PADDLING]); });
+    await act(async () => { await result.current.saveOrder([PADDLING, BIKING, HIKING]); });
+    await act(async () => { rejectFirst(new Error('timeout')); await first; });
+
+    expect(result.current.items).toEqual([PADDLING, BIKING, HIKING]);
+    expect(result.current.error).toBe('Failed to save order: timeout');
+  });
+
   it('keeps the new order when the reorder succeeds', async () => {
     const { result } = await renderLoaded();
     fetchMock.mockResolvedValueOnce(fetchResponse({ success: true }));
