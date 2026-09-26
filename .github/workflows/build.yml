@@ -62,6 +62,10 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=pr
             type=sha,prefix=
+          # Fix: metadata-action's default latest=auto also tags semver builds as latest, so a tag
+          # build racing the same-commit master build strips master's manifest before trivy-scan pulls it
+          flavor: |
+            latest=false
 
       - name: Build and push
         id: build
@@ -161,6 +165,10 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=pr
             type=sha,prefix=
+          # Fix: metadata-action's default latest=auto also tags semver builds as latest, so a tag
+          # build racing the same-commit master build strips master's manifest before trivy-scan pulls it
+          flavor: |
+            latest=false
 
       - name: Build and push container image
         uses: docker/build-push-action@v6
