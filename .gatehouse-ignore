@@ -1,0 +1,11 @@
+# Paths Gatehouse never reviews (gitignore syntax). Read from the base branch in CI.
+package-lock.json
+.specify/templates/
+# Map geometry and OSM extracts
+*.geojson
+*.geojson.backup
+backend/data/osm/
+data/boundaries/insert_*.sql
+# Icon and brand artwork
+frontend/public/icons/
+frontend/public/brand/
