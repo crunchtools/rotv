@@ -7,7 +7,7 @@ classification = "by_design"
 
 [[locations]]
 path = "frontend/src/components/NavigateButton.jsx"
-justification = "buildGoogleMapsUrl has two callers: NavigateButton itself (NavigateButton.jsx:30) and TripBuilder.jsx:26, which imports it on line 4. The detector does not count the cross-file import."
+justification = "buildGoogleMapsUrl has two callers: NavigateButton itself (NavigateButton.jsx:30) and TripBuilder.jsx:26, which imports it on line 4. The detector does not count the cross-file import. Upstream: gitlab.com/mattdm/gourmand#24."
 classification = "gourmand_bug"
 
 [[locations]]
