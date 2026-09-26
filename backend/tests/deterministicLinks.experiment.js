@@ -20,18 +20,18 @@ const CALENDAR_VIEW_SUFFIXES = ['/list/', '/list', '/month/', '/month', '/today/
   '/summary/', '/summary', '/calendar/', '/calendar'];
 
 function isNoiseLink(url, sourceUrl) {
-  let parsed;
-  try { parsed = new URL(url); } catch { return true; }
+  if (!URL.canParse(url)) return true;
+  const parsed = new URL(url);
 
   const path = parsed.pathname.toLowerCase();
   const search = parsed.search.toLowerCase();
 
   if (/\.(png|jpe?g|gif|svg|webp|pdf|css|js|ico|woff2?|mp[34]|zip|ics)$/i.test(path)) return true;
 
-  try {
+  if (URL.canParse(sourceUrl)) {
     const source = new URL(sourceUrl);
     if (parsed.origin === source.origin && parsed.pathname === source.pathname && parsed.hash) return true;
-  } catch { /* ignore */ }
+  }
 
   if (path === '/' || path === '') return true;
 
@@ -118,39 +118,40 @@ function rankLinks(links, sourceUrl) {
 }
 
 function computeBasePath(startUrl) {
-  try {
-    const parsed = new URL(startUrl);
-    let rawPath = parsed.pathname.replace(/\/$/, '') || '/';
-    if (/\/[^/]+\.(html?|aspx?|php|jsp|shtml)$/i.test(rawPath)) {
-      const dir = rawPath.replace(/\/[^/]+$/, '');
-      if (dir && dir !== '/') {
-        rawPath = dir;
-      }
+  if (!URL.canParse(startUrl)) return null;
+  const parsed = new URL(startUrl);
+  let rawPath = parsed.pathname.replace(/\/$/, '') || '/';
+  if (/\/[^/]+\.(html?|aspx?|php|jsp|shtml)$/i.test(rawPath)) {
+    const dir = rawPath.replace(/\/[^/]+$/, '');
+    if (dir && dir !== '/') {
+      rawPath = dir;
     }
-    return rawPath;
-  } catch { return null; }
+  }
+  return rawPath;
 }
 
 function filterDetailLinks(detailLinks, sourceUrl, basePath, trustedPaths = [], cap = 15) {
   if (!detailLinks?.length) return [];
-  let sourceOrigin;
-  try { sourceOrigin = new URL(sourceUrl).origin; } catch { return []; }
+  if (!URL.canParse(sourceUrl)) return [];
+  const sourceOrigin = new URL(sourceUrl).origin;
   const seen = new Set();
   return detailLinks.map(link => {
-    try { const u = new URL(link); u.hash = ''; return u.toString(); } catch { return link; }
+    if (!URL.canParse(link)) return link;
+    const u = new URL(link);
+    u.hash = '';
+    return u.toString();
   }).filter(link => {
-    try {
-      const parsed = new URL(link);
-      if (parsed.origin !== sourceOrigin) return false;
-      if (isNoiseLink(link, sourceUrl)) return false;
-      if (basePath && !parsed.pathname.startsWith(basePath)) {
-        const matchesTrusted = trustedPaths.some(p => parsed.pathname.includes(p));
-        if (!matchesTrusted) return false;
-      }
-      if (seen.has(link)) return false;
-      seen.add(link);
-      return true;
-    } catch { return false; }
+    if (!URL.canParse(link)) return false;
+    const parsed = new URL(link);
+    if (parsed.origin !== sourceOrigin) return false;
+    if (isNoiseLink(link, sourceUrl)) return false;
+    if (basePath && !parsed.pathname.startsWith(basePath)) {
+      const matchesTrusted = trustedPaths.some(p => parsed.pathname.includes(p));
+      if (!matchesTrusted) return false;
+    }
+    if (seen.has(link)) return false;
+    seen.add(link);
+    return true;
   }).slice(0, cap);
 }
 
@@ -228,7 +229,7 @@ for (const poi of poisResult.rows) {
   const hits = final.filter(u => detailUrlSet.has(normUrl(u)) || savedUrlSet.has(normUrl(u)));
 
   const allBeforeNoise = ranked.all.map(l => l.url).filter(u => {
-    try { const p = new URL(u); return p.origin === new URL(cached.url).origin; } catch { return false; }
+    return URL.canParse(u) && URL.canParse(cached.url) && new URL(u).origin === new URL(cached.url).origin;
   });
   const noiseRemoved = allBeforeNoise.filter(u => isNoiseLink(u, cached.url));
 
@@ -286,7 +287,7 @@ for (const poi of poisResult.rows) {
   const hits = filtered.filter(u => detailUrlSet.has(normUrl(u)) || savedNewsSet.has(normUrl(u)));
 
   const noiseRemoved = ranked.all.map(l => l.url).filter(u => {
-    try { const p = new URL(u); return p.origin === new URL(cached.url).origin; } catch { return false; }
+    return URL.canParse(u) && URL.canParse(cached.url) && new URL(u).origin === new URL(cached.url).origin;
   }).filter(u => isNoiseLink(u, cached.url));
 
   totalNewsSelected += filtered.length;

@@ -46,6 +46,7 @@ console.log(`Applying ${matches.length} OSM matches...\n`);
 let linked = 0;   // rows that gained an osm_id
 let enriched = 0; // rows that gained at least one visitor-info value
 let missing = 0;  // matched names with no POI in this database
+let failed = 0;   // matches whose UPDATE raised an error
 
 for (const m of matches) {
   try {
@@ -78,9 +79,10 @@ for (const m of matches) {
     );
     linked += link.rowCount;
   } catch (err) {
+    failed++;
     console.error(`  ERROR ${m.poi_name} (${m.osm_id}) — ${err.message}`);
   }
 }
 
-console.log(`\nDone. linked=${linked} enriched_rows=${enriched} missing=${missing}`);
+console.log(`\nDone. linked=${linked} enriched_rows=${enriched} missing=${missing} failed=${failed}`);
 await pool.end();

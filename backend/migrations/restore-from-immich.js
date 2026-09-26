@@ -1,6 +1,8 @@
 /**
  * Restore POI images from Immich backup
  * Runs inside ROTV container
+ *
+ * Usage: node restore-from-immich.js <immich-poi-images.csv> <immich-backup-dir>
  */
 
 import fs from 'fs';
@@ -9,8 +11,10 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import imageServerClient from '../services/imageServerClient.js';
 
-const CSV_FILE = '/tmp/immich-poi-images.csv';
-const BACKUP_BASE = '/mnt/immich-backup';
+const [CSV_FILE, BACKUP_BASE] = process.argv.slice(2);
+if (!CSV_FILE || !BACKUP_BASE) {
+  throw new Error('Usage: node restore-from-immich.js <immich-poi-images.csv> <immich-backup-dir>');
+}
 
 const pool = new Pool({
   host: process.env.PGHOST || 'localhost',

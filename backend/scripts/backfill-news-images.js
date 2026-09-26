@@ -21,13 +21,11 @@ function extractOgImage(html, pageUrl) {
   for (const re of patterns) {
     const m = html.match(re);
     if (m && m[1]) {
-      try {
-        const url = new URL(m[1].trim().replace(/&amp;/gi, '&').replace(/&#0*38;/g, '&').replace(/&#x0*26;/gi, '&'), pageUrl).href;
-        if (EXPIRING_HOST.test(url)) return null;
-        return url;
-      } catch {
-        return null;
-      }
+      const raw = m[1].trim().replace(/&amp;/gi, '&').replace(/&#0*38;/g, '&').replace(/&#x0*26;/gi, '&');
+      if (!URL.canParse(raw, pageUrl)) return null;
+      const url = new URL(raw, pageUrl).href;
+      if (EXPIRING_HOST.test(url)) return null;
+      return url;
     }
   }
   return null;

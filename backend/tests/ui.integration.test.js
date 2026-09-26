@@ -173,7 +173,8 @@ describe('UI Integration Tests', () => {
       // Close legend if it's overlaying the map controls
       const legend = page.locator('.legend');
       if (await legend.isVisible()) {
-        await legend.locator('.legend-toggle, .close-btn').first().click().catch(() => {});
+        await legend.locator('.legend-close-btn').click({ timeout: 5000 })
+          .catch((err) => console.debug(`[ui] legend close click failed: ${err.message}`));
         await page.waitForTimeout(300);
       }
 

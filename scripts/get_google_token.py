@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Get Google OAuth refresh token for Google Workspace MCP."""
 
+from pathlib import Path
+
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 SCOPES = [
@@ -12,11 +14,13 @@ SCOPES = [
     'https://www.googleapis.com/auth/presentations',
 ]
 
-CREDENTIALS_FILE = '/home/fatherlinux/.config/google-workspace-mcp/credentials.json'
+CONFIG_DIR = Path.home() / '.config' / 'google-workspace-mcp'
+CREDENTIALS_FILE = CONFIG_DIR / 'credentials.json'
+TOKEN_ENV_FILE = CONFIG_DIR / 'token_env.txt'
 OAUTH_CALLBACK_PORT = 8085
 
 def main():
-    flow = InstalledAppFlow.from_client_secrets_file(CREDENTIALS_FILE, SCOPES)
+    flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_FILE), SCOPES)
     creds = flow.run_local_server(port=OAUTH_CALLBACK_PORT)
 
     print("\n" + "="*60)
@@ -28,11 +32,11 @@ def main():
     print("\n" + "="*60)
 
     # Save to file
-    with open('/home/fatherlinux/.config/google-workspace-mcp/token_env.txt', 'w') as f:
+    with open(TOKEN_ENV_FILE, 'w') as f:
         f.write(f"GOOGLE_WORKSPACE_CLIENT_ID={creds.client_id}\n")
         f.write(f"GOOGLE_WORKSPACE_CLIENT_SECRET={creds.client_secret}\n")
         f.write(f"GOOGLE_WORKSPACE_REFRESH_TOKEN={creds.refresh_token}\n")
-    print("Saved to /home/fatherlinux/.config/google-workspace-mcp/token_env.txt")
+    print(f"Saved to {TOKEN_ENV_FILE}")
 
 if __name__ == '__main__':
     main()

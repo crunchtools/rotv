@@ -21,10 +21,10 @@
  *         COALESCE(longitude::float, ST_X(ST_PointOnSurface(ST_GeomFromGeoJSON(geometry)))) lon
  *       FROM pois WHERE deleted IS NOT TRUE AND osm_id IS NULL
  *         AND (latitude IS NOT NULL OR geometry IS NOT NULL)
- *     ) s WHERE lat IS NOT NULL;" > /tmp/curated-pois.json
+ *     ) s WHERE lat IS NOT NULL;" > curated-pois.json
  *
  *   # 2. Generate the match snapshot:
- *   node backend/migrations/generate-osm-matches.js /tmp/curated-pois.json
+ *   node backend/migrations/generate-osm-matches.js curated-pois.json
  *
  * Matching is deliberately high-precision: name token similarity gates every
  * match, and the allowed distance scales with name confidence (a park or trail's
@@ -121,8 +121,7 @@ async function fetchCandidates() {
 
 const poisPath = process.argv[2];
 if (!poisPath) {
-  console.error('Usage: node generate-osm-matches.js <curated-pois.json>');
-  process.exit(1);
+  throw new Error('Usage: node generate-osm-matches.js <curated-pois.json>');
 }
 
 const pois = JSON.parse(readFileSync(poisPath, 'utf-8'));

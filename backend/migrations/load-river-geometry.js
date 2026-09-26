@@ -40,6 +40,8 @@ const rivers = [
 
 console.log('Loading river/creek geometries...\n');
 
+let failed = 0;
+
 for (const river of rivers) {
   try {
     const existing = await pool.query(
@@ -77,9 +79,10 @@ for (const river of rivers) {
 
     console.log(`  OK   ${river.name} — geometry loaded (${(geometryJson.length / 1024).toFixed(0)}KB)`);
   } catch (err) {
+    failed++;
     console.error(`  ERROR ${river.name} — ${err.message}`);
   }
 }
 
-console.log('\nDone.');
+console.log(`\nDone. failed=${failed}`);
 await pool.end();

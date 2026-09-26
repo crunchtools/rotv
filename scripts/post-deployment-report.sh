@@ -1,6 +1,6 @@
 #!/bin/bash
 # Generate post-deployment report
-# Run after deployment to generate comprehensive health report
+# Run after deployment to generate a health report
 
 CONTAINER_NAME="rootsofthevalley.org"
 DB_NAME="rotv"

@@ -98,7 +98,7 @@ describe('End-to-End Slot Architecture Tests', () => {
     it('should complete full collection workflow with slot management', async () => {
       console.log('[E2E Test] Starting full news collection workflow');
 
-      // Step 1: Start job
+      // Start job
       const startResponse = await request(BASE_URL)
         .post('/api/admin/news/collect-batch')
         .set('Cookie', authCookie || '')
@@ -116,13 +116,13 @@ describe('End-to-End Slot Architecture Tests', () => {
       expect(jobId).toBeDefined();
       console.log(`[E2E Test] Job started: ${jobId}`);
 
-      // Step 2: Observe job progress for 10 seconds
+      // Observe job progress for 10 seconds
       console.log('[E2E Test] Observing job progress...');
       const observations = await observeJobProgress('/api/admin/news/job', jobId, 10000);
 
       expect(observations.length).toBeGreaterThan(0);
 
-      // Step 3: Verify slots fill progressively
+      // Verify slots fill progressively
       const slotsOverTime = observations.map(obs => obs.activeSlots);
       console.log(`[E2E Test] Active slots over time: ${slotsOverTime.join(' → ')}`);
 
@@ -131,19 +131,19 @@ describe('End-to-End Slot Architecture Tests', () => {
       expect(maxSlots).toBeLessThanOrEqual(10);
       expect(maxSlots).toBeGreaterThan(0);
 
-      // Step 4: Verify all observations have exactly 10 slots
+      // Verify all observations have exactly 10 slots
       observations.forEach((obs, i) => {
         expect(obs.displaySlots.length).toBe(10);
       });
 
-      // Step 5: Wait for job to complete (or timeout)
+      // Wait for job to complete (or timeout)
       console.log('[E2E Test] Waiting for job completion...');
       const finalJob = await waitForJobCompletion('/api/admin/news/job', jobId);
 
       expect(finalJob.status).toBe('completed');
       console.log(`[E2E Test] Job completed: ${finalJob.status}`);
 
-      // Step 6: Verify final slot state is frozen
+      // Verify final slot state is frozen
       const finalResponse = await request(BASE_URL)
         .get(`/api/admin/news/job/${jobId}`)
         .set('Cookie', authCookie || '')
@@ -152,7 +152,7 @@ describe('End-to-End Slot Architecture Tests', () => {
       expect(finalResponse.body.displaySlots.length).toBe(10);
       console.log(`[E2E Test] Final slots: ${finalResponse.body.displaySlots.filter(s => s.poiId !== null).length} active`);
 
-      // Step 7: Verify AI usage badges persist
+      // Verify AI usage badges persist
       const statsResponse = await request(BASE_URL)
         .get('/api/admin/news/ai-stats')
         .set('Cookie', authCookie || '')
@@ -209,7 +209,7 @@ describe('End-to-End Slot Architecture Tests', () => {
     it('should cancel mid-job and freeze state', async () => {
       console.log('[E2E Test] Starting cancellation workflow');
 
-      // Step 1: Start job
+      // Start job
       const startResponse = await request(BASE_URL)
         .post('/api/admin/news/collect-batch')
         .set('Cookie', authCookie || '')
@@ -226,11 +226,11 @@ describe('End-to-End Slot Architecture Tests', () => {
       const jobId = startResponse.body.jobId;
       console.log(`[E2E Test] Job started: ${jobId}`);
 
-      // Step 2: Wait for some POIs to process (5 seconds)
+      // Wait for some POIs to process (5 seconds)
       console.log('[E2E Test] Waiting for POIs to start processing...');
       await new Promise(resolve => setTimeout(resolve, 5000));
 
-      // Step 3: Get current state
+      // Get current state
       const beforeCancelResponse = await request(BASE_URL)
         .get(`/api/admin/news/job/${jobId}`)
         .set('Cookie', authCookie || '')
@@ -239,7 +239,7 @@ describe('End-to-End Slot Architecture Tests', () => {
       const activeSlotsBeforeCancel = beforeCancelResponse.body.displaySlots.filter(s => s.poiId !== null).length;
       console.log(`[E2E Test] Active slots before cancel: ${activeSlotsBeforeCancel}`);
 
-      // Step 4: Cancel job
+      // Cancel job
       console.log('[E2E Test] Cancelling job...');
       const cancelResponse = await request(BASE_URL)
         .post(`/api/admin/news/job/${jobId}/cancel`)
@@ -253,7 +253,7 @@ describe('End-to-End Slot Architecture Tests', () => {
         console.log(`[E2E Test] Cancel response: ${cancelResponse.body.message}`);
       }
 
-      // Step 5: Verify in-progress POIs continue (slots don't immediately clear)
+      // Verify in-progress POIs continue (slots don't immediately clear)
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       const afterCancelResponse = await request(BASE_URL)
@@ -263,14 +263,14 @@ describe('End-to-End Slot Architecture Tests', () => {
 
       expect(afterCancelResponse.body.displaySlots.length).toBe(10);
 
-      // Step 6: Wait for in-progress POIs to finish
+      // Wait for in-progress POIs to finish
       console.log('[E2E Test] Waiting for in-progress POIs to finish...');
       const finalJob = await waitForJobCompletion('/api/admin/news/job', jobId);
 
       expect(finalJob.status).toBe('cancelled');
       console.log(`[E2E Test] Job status after cancel: ${finalJob.status}`);
 
-      // Step 7: Verify slots are frozen (not cleared)
+      // Verify slots are frozen (not cleared)
       const frozenSlotsResponse = await request(BASE_URL)
         .get(`/api/admin/news/job/${jobId}`)
         .set('Cookie', authCookie || '')
@@ -284,7 +284,7 @@ describe('End-to-End Slot Architecture Tests', () => {
       // Should have at least some slots preserved
       expect(finalActiveSlots).toBeGreaterThanOrEqual(0);
 
-      // Step 8: Verify AI usage badges persist
+      // Verify AI usage badges persist
       const statsResponse = await request(BASE_URL)
         .get('/api/admin/news/ai-stats')
         .set('Cookie', authCookie || '')
@@ -303,7 +303,7 @@ describe('End-to-End Slot Architecture Tests', () => {
     it('should prevent starting job while one is running', async () => {
       console.log('[E2E Test] Testing duplicate job prevention');
 
-      // Step 1: Start first job
+      // Start first job
       const job1Response = await request(BASE_URL)
         .post('/api/admin/news/collect-batch')
         .set('Cookie', authCookie || '')
@@ -316,7 +316,7 @@ describe('End-to-End Slot Architecture Tests', () => {
         console.log('[E2E Test] First job already running or auth required');
       }
 
-      // Step 2: Attempt to start second job immediately
+      // Attempt to start second job immediately
       const job2Response = await request(BASE_URL)
         .post('/api/admin/news/collect-batch')
         .set('Cookie', authCookie || '')
@@ -338,7 +338,7 @@ describe('End-to-End Slot Architecture Tests', () => {
     it('should allow News and Trail Status jobs to run independently', async () => {
       console.log('[E2E Test] Testing independent job execution');
 
-      // Step 1: Start News job
+      // Start News job
       const newsJobResponse = await request(BASE_URL)
         .post('/api/admin/news/collect-batch')
         .set('Cookie', authCookie || '')
@@ -351,7 +351,7 @@ describe('End-to-End Slot Architecture Tests', () => {
         console.log('[E2E Test] News job already running or auth required');
       }
 
-      // Step 2: Start Trail Status job (should succeed - different job type)
+      // Start Trail Status job (should succeed - different job type)
       const trailJobResponse = await request(BASE_URL)
         .post('/api/admin/trail-status/collect-batch')
         .set('Cookie', authCookie || '')
@@ -392,7 +392,7 @@ describe('End-to-End Slot Architecture Tests', () => {
     it('should complete trail status collection workflow', async () => {
       console.log('[E2E Test] Starting trail status collection workflow');
 
-      // Step 1: Start trail status job
+      // Start trail status job
       const startResponse = await request(BASE_URL)
         .post('/api/admin/trail-status/collect-batch')
         .set('Cookie', authCookie || '')
@@ -409,12 +409,12 @@ describe('End-to-End Slot Architecture Tests', () => {
       const jobId = startResponse.body.jobId;
       console.log(`[E2E Test] Trail status job started: ${jobId}`);
 
-      // Step 2: Observe job progress
+      // Observe job progress
       const observations = await observeJobProgress('/api/admin/trail-status/job-status', jobId, 10000);
 
       expect(observations.length).toBeGreaterThan(0);
 
-      // Step 3: Verify slot behavior
+      // Verify slot behavior
       observations.forEach(obs => {
         expect(obs.displaySlots.length).toBe(10);
         expect(obs.activeSlots).toBeLessThanOrEqual(10);
@@ -422,7 +422,7 @@ describe('End-to-End Slot Architecture Tests', () => {
 
       console.log('[E2E Test] Trail status slot behavior verified');
 
-      // Step 4: Wait for completion or cancel
+      // Wait for completion or cancel
       const finalJob = await waitForJobCompletion('/api/admin/trail-status/job-status', jobId, 30);
 
       expect(['completed', 'cancelled', 'failed']).toContain(finalJob.status);
