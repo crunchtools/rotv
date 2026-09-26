@@ -4,7 +4,7 @@ import FilterList, { FilterChip, FILTER_COLORS } from './FilterList';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const MASKED_SECRET = '••••••••••••••••••••••••';
-const SECRET_KEYS = ['openrouter_api_key', 'apify_api_token', 'serper_api_key', 'usft_sharing_token', 'github_api_token'];
+const SECRET_KEYS = ['openrouter_api_key', 'serper_api_key', 'usft_sharing_token', 'github_api_token'];
 
 const KNOWN_ROUTES = [
   { value: '/', label: '/ (Home / All Results)' },
@@ -514,19 +514,6 @@ function DataCollectionSettings() {
       <div className="ai-config-section">
         <h4>API Keys</h4>
         <p className="settings-description">Configure external API keys for data collection services.</p>
-
-        <ApiKeySetting
-          title="Apify"
-          settingKey="apify_api_token"
-          testUrl="/api/admin/settings/apify-api-token/test"
-          noun="API token"
-          placeholder="Enter API token..."
-          isSet={secretsSet.apify_api_token}
-          onSaved={markSecretSet}
-          sectionStyle={BORDERED_SECTION}
-        >
-          Facebook trail status scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
-        </ApiKeySetting>
 
         <ApiKeySetting
           title="GitHub"

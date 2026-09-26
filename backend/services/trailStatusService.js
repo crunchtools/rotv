@@ -2,7 +2,7 @@
 import crypto from 'crypto';
 import { generateTextWithCustomPrompt } from './llmService.js';
 import { renderPage } from './renderPage.js';
-import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
+import { fetchFacebookPosts, isFacebookUrl } from './facebookService.js';
 import { fetchBlueskyPosts, isBlueskyUrl } from './blueskyService.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
@@ -137,13 +137,13 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     let rendered;
 
     if (isFacebookUrl(statusUrl)) {
-      trailStatusLogger.info(`Fetching Facebook posts via Apify for: ${statusUrl}`);
+      trailStatusLogger.info(`Fetching Facebook posts via page plugin for: ${statusUrl}`);
       updateProgress(poi.id, {
         phase: 'rendering',
-        message: 'Fetching Facebook posts via Apify...',
+        message: 'Fetching Facebook posts via page plugin...',
         steps: ['Initialized', 'Fetching Facebook posts']
       });
-      rendered = await fetchFacebookPosts(pool, statusUrl);
+      rendered = await fetchFacebookPosts(statusUrl);
     } else if (isBlueskyUrl(statusUrl)) {
       trailStatusLogger.info(`Fetching Bluesky posts via public API for: ${statusUrl}`);
       updateProgress(poi.id, {

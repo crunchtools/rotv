@@ -695,7 +695,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'moderation_date_floor_year',
       'moderation_sweep_batch_size',
       'photo_submissions_enabled',
-      'apify_api_token',
       'news_current_window_days',
       'news_history_max_urls',
       'news_history_dry_run_limit',
@@ -779,22 +778,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       logger.error('Error testing USFT sharing token:', error);
       res.status(500).json({ success: false, message: 'Failed to test token', error: error.message });
-    }
-  });
-
-  router.post('/settings/apify-api-token/test', isAdmin, async (req, res) => {
-    try {
-      const { testApifyToken } = await import('../services/apifyService.js');
-      const isValid = await testApifyToken(pool);
-
-      if (isValid) {
-        res.json({ success: true, message: 'Apify API token is valid' });
-      } else {
-        res.json({ success: false, message: 'Apify API token is invalid or not configured' });
-      }
-    } catch (error) {
-      logger.error('Error testing Apify API token:', error);
-      res.status(500).json({ success: false, message: 'Failed to test API token', error: error.message });
     }
   });
 
