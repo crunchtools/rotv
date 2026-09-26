@@ -180,9 +180,11 @@ describe('RemoteLoginModal', () => {
   it('presses Backspace on the remote page when the mirror is already empty', async () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
-    fireEvent.keyDown(screen.getByLabelText('Facebook keyboard input'), { key: 'Backspace' });
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    fireEvent.keyDown(mirror, { key: 'Backspace' });
     await settle();
     expect(relayed()).toEqual([{ type: 'key', key: 'Backspace' }]);
+    expect(mirror.value).toBe('');
   });
 
   // Fix: a real click's React event loses currentTarget after dispatch, so the point must be read synchronously

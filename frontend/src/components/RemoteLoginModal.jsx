@@ -53,9 +53,17 @@ export function chunkText(text, size = MAX_TEXT_CHUNK) {
 }
 
 // Fix: count what one Backspace deletes (a grapheme), not code points, so a ZWJ emoji can't eat preceding text (PR #671 review)
-const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+const GRAPHEME_SEGMENTER = typeof Intl !== 'undefined' && Intl.Segmenter
+  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  : null;
+
+/**
+ * Split text into user-perceived characters (grapheme clusters).
+ * @param {string} text
+ * @returns {string[]} one entry per grapheme; code points where Intl.Segmenter is unavailable
+ */
 function graphemes(text) {
-  return segmenter ? Array.from(segmenter.segment(text), s => s.segment) : [...text];
+  return GRAPHEME_SEGMENTER ? Array.from(GRAPHEME_SEGMENTER.segment(text), s => s.segment) : [...text];
 }
 
 /**
@@ -227,17 +235,26 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     });
   }, [enqueue, sendInput]);
 
+  /** Clear the mirror and the relayed-text record, e.g. when the remote caret moves to another field. */
   const resetMirror = () => {
     if (mirrorRef.current) mirrorRef.current.value = '';
     relayedText.current = '';
   };
 
-  // Typing, autocorrect and paste (including a password manager's) all land here as value changes.
+  /**
+   * Debounce mirror value changes into one flush. Typing, autocorrect and paste
+   * (including a password manager's) all land here.
+   */
   const handleMirrorInput = () => {
     clearTimeout(typeTimer.current);
     typeTimer.current = setTimeout(flushTyping, TYPE_FLUSH_MS);
   };
 
+  /**
+   * Press navigation/editing keys on the remote page. Printable keys are left to the
+   * mirror's input event on purpose: that is the only path phone keyboards use.
+   * @param {React.KeyboardEvent<HTMLInputElement>} e
+   */
   const handleMirrorKeyDown = (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) return; // leave paste shortcuts to the input event
     const emptyBackspace = e.key === 'Backspace' && !e.currentTarget.value;
@@ -249,6 +266,10 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     enqueue(() => sendInput({ type: 'key', key }));
   };
 
+  /**
+   * Relay a click at the mapped remote point and focus the mirror within the gesture.
+   * @param {React.MouseEvent<HTMLImageElement>} e
+   */
   const handleClick = (e) => {
     // Fix: map the point before awaiting; React nulls e.currentTarget once dispatch ends, so every real click threw
     const point = toViewportPoint(e, e.currentTarget.getBoundingClientRect(), viewport);
