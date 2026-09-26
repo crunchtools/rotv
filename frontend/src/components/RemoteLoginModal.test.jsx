@@ -42,6 +42,10 @@ describe('diffTyping', () => {
   it('deletes whole code points, so an emoji is one backspace', () => {
     expect(diffTyping('a😀', 'a')).toEqual({ backspaces: 1, text: '' });
   });
+  it('deletes a ZWJ emoji or combined accent as one grapheme', () => {
+    expect(diffTyping('a👩‍💻', 'a')).toEqual({ backspaces: 1, text: '' });
+    expect(diffTyping('xe\u0301', 'x')).toEqual({ backspaces: 1, text: '' });
+  });
   it('is a no-op when nothing changed', () => {
     expect(diffTyping('same', 'same')).toEqual({ backspaces: 0, text: '' });
   });
@@ -140,6 +144,38 @@ describe('RemoteLoginModal', () => {
       { type: 'type', text: 'pw' }
     ]);
   });
+
+  it.each(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Escape', 'Delete'])(
+    'relays %s without touching the mirror', async (key) => {
+      render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+      await flush();
+      const mirror = screen.getByLabelText('Facebook keyboard input');
+      typeInto(mirror, 'ab');
+      fireEvent.keyDown(mirror, { key });
+      await settle();
+      expect(mirror.value).toBe('ab');
+      expect(relayed()).toEqual([{ type: 'type', text: 'ab' }, { type: 'key', key }]);
+    });
+
+  it('treats Tab like Enter: flush, relay, and start the next field fresh', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    typeInto(mirror, 'me');
+    fireEvent.keyDown(mirror, { key: 'Tab' });
+    await settle();
+    expect(mirror.value).toBe('');
+    expect(relayed()).toEqual([{ type: 'type', text: 'me' }, { type: 'key', key: 'Tab' }]);
+  });
+
+  it.each([{ key: 'v', ctrlKey: true }, { key: 'a', metaKey: true }, { key: 'F5' }, { key: 'Shift' }])(
+    'ignores %o (shortcuts and unsupported keys)', async (evt) => {
+      render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+      await flush();
+      fireEvent.keyDown(screen.getByLabelText('Facebook keyboard input'), evt);
+      await settle();
+      expect(relayed()).toEqual([]);
+    });
 
   it('presses Backspace on the remote page when the mirror is already empty', async () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);

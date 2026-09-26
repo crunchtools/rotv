@@ -52,19 +52,26 @@ export function chunkText(text, size = MAX_TEXT_CHUNK) {
   return chunks;
 }
 
+// Fix: count what one Backspace deletes (a grapheme), not code points, so a ZWJ emoji can't eat preceding text (PR #671 review)
+const segmenter = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+function graphemes(text) {
+  return segmenter ? Array.from(segmenter.segment(text), s => s.segment) : [...text];
+}
+
 /**
  * Edits that turn the remote field's text from `before` into `after`: backspaces
  * past the common prefix, then the new tail. Mobile keyboards (Gboard) rewrite
  * text through composition and autocorrect rather than per-key events, so the
- * mirror field is diffed instead of relaying keydowns. Works on code points so
- * an emoji is one backspace.
+ * mirror field is diffed instead of relaying keydowns. Works on grapheme
+ * clusters, matching what one Backspace deletes, so a ZWJ emoji or accented
+ * letter is one Backspace.
  * @param {string} before - text already relayed
  * @param {string} after - current mirror value
  * @returns {{backspaces: number, text: string}}
  */
 export function diffTyping(before, after) {
-  const a = [...before];
-  const b = [...after];
+  const a = graphemes(before);
+  const b = graphemes(after);
   let common = 0;
   while (common < a.length && common < b.length && a[common] === b[common]) common += 1;
   return { backspaces: a.length - common, text: b.slice(common).join('') };
@@ -254,7 +261,8 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
 
   useEffect(() => () => clearTimeout(typeTimer.current), []);
 
-  const handleWheel = (e) => { sendInput({ type: 'scroll', dy: e.deltaY }); };
+  // Fix: scroll joins the same ordered queue as clicks and keys (PR #671 review)
+  const handleWheel = (e) => { const dy = e.deltaY; enqueue(() => sendInput({ type: 'scroll', dy })); };
 
   const handleSave = async () => {
     setSaving(true);
