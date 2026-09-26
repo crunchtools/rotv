@@ -38,7 +38,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await cancelLogin('facebook', ADMIN).catch(() => {});
+  await cancelLogin('facebook', ADMIN);
   vi.useRealTimers();
 });
 

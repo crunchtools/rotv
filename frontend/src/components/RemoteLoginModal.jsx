@@ -6,7 +6,8 @@ const FRAME_RETRY_MS = 2000;
 // 404/409 mean the server-side session is gone or someone else's — stop polling.
 const SESSION_ENDED_STATUSES = new Set([401, 403, 404, 409]);
 const TYPE_FLUSH_MS = 120;
-export const SPECIAL_KEYS = new Set([
+const MAX_TEXT_CHUNK = 256; // server-side limit per 'type' event
+const SPECIAL_KEYS = new Set([
   'Enter', 'Backspace', 'Tab', 'Escape', 'Delete',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'
 ]);
@@ -20,12 +21,31 @@ export const SPECIAL_KEYS = new Set([
  * @returns {{x: number, y: number}}
  */
 export function toViewportPoint(evt, rect, viewport) {
-  const x = Math.round((evt.clientX - rect.left) * viewport.width / rect.width);
-  const y = Math.round((evt.clientY - rect.top) * viewport.height / rect.height);
+  const scaledX = Math.round((evt.clientX - rect.left) * viewport.width / rect.width);
+  const scaledY = Math.round((evt.clientY - rect.top) * viewport.height / rect.height);
   return {
-    x: Math.min(viewport.width, Math.max(0, x)),
-    y: Math.min(viewport.height, Math.max(0, y))
+    x: Math.min(viewport.width, Math.max(0, scaledX)),
+    y: Math.min(viewport.height, Math.max(0, scaledY))
   };
+}
+
+/**
+ * Split text into chunks the server accepts, so long pastes arrive whole.
+ * Splits on code points (never inside a surrogate pair); each chunk's UTF-16
+ * length stays within `size`, which is what the server checks.
+ * @param {string} text
+ * @param {number} [size=256]
+ * @returns {string[]}
+ */
+export function chunkText(text, size = MAX_TEXT_CHUNK) {
+  const chunks = [];
+  let current = '';
+  for (const char of text) {
+    if (current.length + char.length > size) { chunks.push(current); current = ''; }
+    current += char;
+  }
+  if (current) chunks.push(current);
+  return chunks;
 }
 
 /**
@@ -68,19 +88,20 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   // Start the remote session once; cancel it on unmount unless it was saved.
   useEffect(() => {
     let cancelled = false;
+    const cancelRemote = () => fetch(`${base}/cancel`, { method: 'POST', credentials: 'include' })
+      .catch(err => console.warn('Remote login cancel failed:', err.message));
     fetch(`${base}/start`, { method: 'POST', credentials: 'include' })
       .then(r => r.json())
       .then(outcome => {
-        if (cancelled) return;
+        // Unmounted before start finished: our earlier cancel may have beaten it to the server.
+        if (cancelled) { if (outcome.success) cancelRemote(); return; }
         if (outcome.success) setViewport(outcome.viewport);
         else setError(outcome.error || 'Could not start the login browser');
       })
       .catch(err => { if (!cancelled) setError(err.message); });
     return () => {
       cancelled = true;
-      if (!savedRef.current) {
-        fetch(`${base}/cancel`, { method: 'POST', credentials: 'include' }).catch(() => {});
-      }
+      if (!savedRef.current) cancelRemote();
     };
   }, [base]);
 
@@ -90,12 +111,25 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     let stopped = false;
     let timer = null;
     let currentUrl = null;
+    let inFlight = false;
+    let refreshQueued = false;
     const poll = async () => {
+      // Coalesce: an input-triggered refresh during a poll becomes one follow-up poll.
+      if (inFlight) { refreshQueued = true; return; }
+      inFlight = true;
       clearTimeout(timer);
+      try {
+        await pollOnce();
+      } finally {
+        inFlight = false;
+      }
+      if (refreshQueued && !stopped) { refreshQueued = false; poll(); }
+    };
+    const pollOnce = async () => {
       try {
         const response = await fetch(`${base}/frame`, { credentials: 'include', cache: 'no-store' });
         if (!response.ok) {
-          const outcome = await response.json().catch(() => ({}));
+          const outcome = await response.json().catch(err => ({ error: `Screen update failed (${err.message})` }));
           if (stopped) return;
           if (SESSION_ENDED_STATUSES.has(response.status)) {
             setError(outcome.error || 'Login session ended');
@@ -132,17 +166,22 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     };
   }, [base, viewport]);
 
+  // Resolves true when the server accepted the event; failures are shown, not thrown.
   const sendInput = useCallback(async (evt) => {
+    let accepted = false;
     try {
       const response = await fetch(`${base}/input`, {
         method: 'POST', headers: JSON_HEADERS, credentials: 'include', body: JSON.stringify(evt)
       });
-      if (!response.ok) {
-        const outcome = await response.json().catch(() => ({}));
+      if (response.ok) {
+        accepted = true;
+      } else {
+        const outcome = await response.json().catch(err => ({ error: `Input was rejected (${err.message})` }));
         setError(outcome.error || 'Input was rejected');
       }
     } catch (err) { setError(err.message); }
     if (refreshNow.current) refreshNow.current();
+    return accepted;
   }, [base]);
 
   const flushTyping = useCallback(async () => {
@@ -172,7 +211,10 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     if (!text) return;
     e.preventDefault();
     await flushTyping();
-    await sendInput({ type: 'type', text: text.slice(0, 256) });
+    // Stop at the first rejected chunk so the field never gets partial, out-of-order text.
+    for (const chunk of chunkText(text)) {
+      if (!(await sendInput({ type: 'type', text: chunk }))) break;
+    }
   };
 
   const handleClick = async (e) => {

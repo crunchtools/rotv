@@ -62,6 +62,11 @@ let pendingStart = null; // { provider, userId, cancelled }
  * @property {number} [dy] - scroll: vertical wheel delta, clamped to ±2000
  */
 
+/**
+ * Expected, user-facing failure from the login session API.
+ * `status` is the HTTP status the admin routes respond with (400 bad input,
+ * 404 no such provider/session, 409 conflicting or cancelled session).
+ */
 export class LoginSessionError extends Error {
   constructor(message, status = 400) {
     super(message);
@@ -69,6 +74,11 @@ export class LoginSessionError extends Error {
   }
 }
 
+/**
+ * @param {string} name - key of PROVIDERS, e.g. 'facebook'
+ * @returns {typeof PROVIDERS.facebook} provider config
+ * @throws {LoginSessionError} 404 for an unknown provider
+ */
 export function getProvider(name) {
   const provider = PROVIDERS[name];
   if (!provider) throw new LoginSessionError(`Unknown login provider: ${name}`, 404);
@@ -140,7 +150,7 @@ export async function startLogin(providerName, userId) {
     await page.goto(provider.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
   } catch (err) {
     if (session?.browser === browser) await closeSession('start failed');
-    else if (browser) await browser.close().catch(() => {});
+    else if (browser) await browser.close().catch(err => logger.warn(`Browser close failed: ${err.message}`));
     throw err;
   } finally {
     pendingStart = null;

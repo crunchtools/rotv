@@ -40,7 +40,7 @@ function sessionFailuresKey(statusUrl) {
   return null;
 }
 
-async function trackSessionResult(pool, statusUrl, success) {
+export async function trackSessionResult(pool, statusUrl, success) {
   const source = sessionFailuresKey(statusUrl);
   if (!source) return;
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act, screen, fireEvent, cleanup } from '@testing-library/react';
-import RemoteLoginModal, { toViewportPoint, classifyKey } from './RemoteLoginModal';
+import RemoteLoginModal, { toViewportPoint, classifyKey, chunkText } from './RemoteLoginModal';
 import { fetchResponse } from '../test/fetchResponse';
 
 const VIEWPORT = { width: 800, height: 900 };
@@ -13,6 +13,22 @@ describe('toViewportPoint', () => {
   it('clamps to the viewport', () => {
     const rect = { left: 0, top: 0, width: 400, height: 450 };
     expect(toViewportPoint({ clientX: -5, clientY: 999 }, rect, VIEWPORT)).toEqual({ x: 0, y: 900 });
+  });
+});
+
+describe('chunkText', () => {
+  it('splits long text into server-sized chunks without losing characters', () => {
+    const text = 'p'.repeat(600);
+    const chunks = chunkText(text);
+    expect(chunks.map(c => c.length)).toEqual([256, 256, 88]);
+    expect(chunks.join('')).toBe(text);
+  });
+
+  it('never splits a surrogate pair', () => {
+    const text = 'a'.repeat(255) + '😀' + 'b';
+    const chunks = chunkText(text);
+    expect(chunks).toEqual(['a'.repeat(255), '😀b']);
+    expect(chunks.every(c => c.length <= 256)).toBe(true);
   });
 });
 
@@ -147,5 +163,78 @@ describe('RemoteLoginModal', () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
     expect(frameCalls).toBeGreaterThanOrEqual(2);
     expect(screen.getByAltText('Facebook login screen')).toBeTruthy();
+  });
+
+  it('relays a long paste in full, chunked', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const long = 'x'.repeat(300);
+    await act(async () => {
+      fireEvent.paste(screen.getByRole('application'), { clipboardData: { getData: () => long } });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    const typed = calls('/input').map(([, init]) => JSON.parse(init.body).text).join('');
+    expect(typed).toBe(long);
+  });
+
+  it('cancels a session whose start completes after the modal already closed', async () => {
+    let resolveStart;
+    fetchMock.mockImplementation((url) => {
+      if (url.endsWith('/start')) return new Promise(resolve => { resolveStart = resolve; });
+      return Promise.resolve(fetchResponse({ success: true }));
+    });
+    const { unmount } = render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    unmount();
+    expect(calls('/cancel')).toHaveLength(1);
+    await act(async () => {
+      resolveStart(fetchResponse({ success: true, viewport: VIEWPORT }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(calls('/cancel')).toHaveLength(2);
+  });
+
+  it('stops a chunked paste at the first rejected chunk', async () => {
+    let inputCalls = 0;
+    fetchMock.mockImplementation((url) => {
+      if (url.endsWith('/start')) return Promise.resolve(fetchResponse({ success: true, viewport: VIEWPORT }));
+      if (url.endsWith('/input')) {
+        inputCalls += 1;
+        return Promise.resolve(fetchResponse({ error: 'Invalid text' }, { status: 400 }));
+      }
+      return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['jpeg'])), headers: { get: () => 'false' } });
+    });
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    await act(async () => {
+      fireEvent.paste(screen.getByRole('application'), { clipboardData: { getData: () => 'x'.repeat(600) } });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(inputCalls).toBe(1);
+  });
+
+  it('coalesces input-triggered refreshes during an in-flight frame into one follow-up poll', async () => {
+    let frameCalls = 0;
+    let releaseFrame;
+    const okFrame = () => ({ ok: true, blob: () => Promise.resolve(new Blob(['jpeg'])), headers: { get: () => 'false' } });
+    fetchMock.mockImplementation((url) => {
+      if (url.endsWith('/start')) return Promise.resolve(fetchResponse({ success: true, viewport: VIEWPORT }));
+      if (url.endsWith('/frame')) {
+        frameCalls += 1;
+        if (frameCalls === 1) return new Promise(resolve => { releaseFrame = () => resolve(okFrame()); });
+        return Promise.resolve(okFrame());
+      }
+      return Promise.resolve(fetchResponse({ success: true }));
+    });
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    expect(frameCalls).toBe(1);
+    const surface = screen.getByRole('application');
+    await act(async () => {
+      for (const key of ['Enter', 'Tab', 'Enter']) fireEvent.keyDown(surface, { key });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(frameCalls).toBe(1);
+    await act(async () => { releaseFrame(); await vi.advanceTimersByTimeAsync(0); });
+    expect(frameCalls).toBe(2);
   });
 });
