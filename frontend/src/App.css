@@ -2983,7 +2983,6 @@ body {
   box-shadow: 0 0 0 2px rgba(74, 124, 35, 0.1);
 }
 
-
 /* Loading */
 .loading {
   display: flex;
@@ -7249,69 +7248,6 @@ body {
   font-weight: 500;
 }
 
-.ai-provider-name {
-  font-size: 0.9rem;
-  font-weight: 600;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-}
-
-.ai-provider-name.gemini {
-  background: rgba(33, 150, 243, 0.3);
-  color: #90caf9;
-}
-
-.ai-provider-name.perplexity {
-  background: rgba(156, 39, 176, 0.3);
-  color: #ce93d8;
-}
-
-.ai-errors {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.ai-error-count {
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  background: rgba(244, 67, 54, 0.3);
-  color: #ef9a9a;
-}
-
-.ai-error-count.gemini {
-  background: rgba(244, 67, 54, 0.25);
-}
-
-.ai-error-count.perplexity {
-  background: rgba(244, 67, 54, 0.25);
-}
-
-.ai-usage {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.ai-usage-count {
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-}
-
-.ai-usage-count.gemini {
-  background: rgba(33, 150, 243, 0.2);
-  color: #90caf9;
-}
-
-.ai-usage-count.perplexity {
-  background: rgba(156, 39, 176, 0.2);
-  color: #ce93d8;
-}
-
 /* AI Stats Table for NewsSettings */
 .ai-stats-table {
   margin: 0.75rem 0;
@@ -7321,51 +7257,6 @@ body {
 }
 
 /* Provider usage counter badges */
-.ai-usage-counters {
-  display: flex;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  background: rgba(0, 0, 0, 0.15);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.usage-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 0.375rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: white;
-}
-
-.usage-badge.gemini {
-  background: linear-gradient(135deg, #2196f3 0%, #1976d2 100%);
-  box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3);
-}
-
-.usage-badge.perplexity {
-  background: linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%);
-  box-shadow: 0 2px 4px rgba(156, 39, 176, 0.3);
-}
-
-.usage-badge.error {
-  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
-  box-shadow: 0 2px 4px rgba(244, 67, 54, 0.3);
-}
-
-.ai-stats-header {
-  display: grid;
-  grid-template-columns: 2fr 1.5fr 1fr 1fr;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  background: rgba(0, 0, 0, 0.2);
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
 
 .ai-stats-row {
   display: grid;
@@ -7383,10 +7274,6 @@ body {
 
 .ai-stats-row.llm.active {
   background: rgba(33, 150, 243, 0.15);
-}
-
-.ai-stats-row.perplexity.active {
-  background: rgba(156, 39, 176, 0.15);
 }
 
 .ai-col-provider {
@@ -11994,8 +11881,6 @@ img.type-filter-icon {
   display: inline-block;
   vertical-align: middle;
 }
-
-
 
 .type-filter-chip.organization,
 .type-filter-chip.virtual {

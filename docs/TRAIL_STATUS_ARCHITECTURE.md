@@ -530,7 +530,7 @@ Returns progress of a batch collection job.
   "totalTrails": 50,
   "trailsProcessed": 25,
   "statusFound": 20,
-  "aiUsage": { "gemini": 15, "perplexity": 10 }
+  "aiUsage": { "llm": 15 }
 }
 ```
 
