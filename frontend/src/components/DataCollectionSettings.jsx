@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
 import FilterList, { FilterChip, FILTER_COLORS } from './FilterList';
+import RemoteLoginModal from './RemoteLoginModal';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const MASKED_SECRET = '••••••••••••••••••••••••';
@@ -154,6 +155,10 @@ function DataCollectionSettings() {
   const [twitterAuthTesting, setTwitterAuthTesting] = useState(false);
   const [twitterCookiesJson, setTwitterCookiesJson] = useState('');
   const [showCookieInput, setShowCookieInput] = useState(false);
+
+  const [facebookStatus, setFacebookStatus] = useState(null);
+  const [showFacebookLogin, setShowFacebookLogin] = useState(false);
+  const [facebookDisconnecting, setFacebookDisconnecting] = useState(false);
 
   const [playwrightStatus, setPlaywrightStatus] = useState(null);
   const [playwrightLoading, setPlaywrightLoading] = useState(true);
@@ -311,6 +316,29 @@ function DataCollectionSettings() {
     } catch (err) { setResult({ type: 'error', message: `Failed to check Twitter auth status: ${err.message}` }); }
   };
 
+  const fetchFacebookStatus = async () => {
+    try {
+      const response = await fetch('/api/admin/remote-login/facebook/status', { credentials: 'include' });
+      if (response.ok) setFacebookStatus(await response.json());
+    } catch (err) { setResult({ type: 'error', message: `Failed to check Facebook session: ${err.message}` }); }
+  };
+
+  const handleFacebookSaved = (outcome) => {
+    setShowFacebookLogin(false);
+    setResult({ type: 'success', message: `Facebook session saved${outcome.expires ? ` (expires ${new Date(outcome.expires).toLocaleDateString()})` : ''}` });
+    fetchFacebookStatus();
+  };
+
+  const handleFacebookDisconnect = () => sendAndReport(
+    setFacebookDisconnecting,
+    () => fetch('/api/admin/remote-login/facebook/session', { method: 'DELETE', credentials: 'include' }),
+    (outcome) => (outcome.success
+      ? { type: 'success', message: 'Facebook session removed' }
+      : { type: 'error', message: outcome.error || 'Failed to remove Facebook session' }),
+    'Disconnect failed',
+    fetchFacebookStatus
+  );
+
   const fetchPlaywrightStatus = async () => {
     setPlaywrightLoading(true);
     try {
@@ -329,6 +357,7 @@ function DataCollectionSettings() {
     };
     loadPage();
     fetchTwitterAuthStatus();
+    fetchFacebookStatus();
     fetchPlaywrightStatus();
     fetchSubtabs();
   }, []);
@@ -931,6 +960,49 @@ function DataCollectionSettings() {
           </>
         )}
       </div>
+
+      <div className="ai-config-section">
+        <h4>Facebook Session</h4>
+        <p className="settings-description">
+          Used for Facebook trail status pages (e.g. Reagan-Huffman). Facebook blocks logged-out access from the server,
+          so log in once through the built-in browser — it runs on the ROTV server, so the session matches the scraper&apos;s IP.
+        </p>
+        {facebookStatus && (
+          <div className="config-row" style={{ marginBottom: '1rem' }}>
+            <label>Status:</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              {facebookStatus.connected && !facebookStatus.is_expired ? (
+                <>
+                  <span style={{ color: '#4caf50', fontWeight: 'bold' }}>Connected</span>
+                  {facebookStatus.expires && <span style={{ fontSize: '0.85rem', color: '#666' }}>Expires: {new Date(facebookStatus.expires).toLocaleDateString()}</span>}
+                </>
+              ) : (
+                <span style={{ color: '#f44336', fontWeight: 'bold' }}>{facebookStatus.is_expired ? 'Expired' : 'Not Connected'}</span>
+              )}
+            </div>
+          </div>
+        )}
+        {facebookStatus && facebookStatus.possibly_stale && (
+          <div style={{ padding: '0.75rem', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '4px', marginBottom: '1rem', fontSize: '0.85rem' }}>
+            <strong>Session may be stale.</strong> Facebook trail status has failed {facebookStatus.consecutive_failures} times in a row. Reconnect below.
+          </div>
+        )}
+        <div style={{ display: 'flex', gap: '10px', marginTop: '0.5rem' }}>
+          <button className="action-btn primary" onClick={() => setShowFacebookLogin(true)}>
+            {facebookStatus?.connected ? 'Reconnect Facebook' : 'Connect Facebook'}
+          </button>
+          {facebookStatus?.connected && (
+            <button className="action-btn secondary" onClick={handleFacebookDisconnect} disabled={facebookDisconnecting}>
+              {facebookDisconnecting ? 'Removing...' : 'Disconnect'}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showFacebookLogin && (
+        <RemoteLoginModal provider="facebook" label="Facebook"
+          onClose={() => setShowFacebookLogin(false)} onSaved={handleFacebookSaved} />
+      )}
 
     </div>
   );

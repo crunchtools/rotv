@@ -35,7 +35,8 @@ describe('facebookService in Chromium', () => {
   // Opt-in contract check against the real Page Plugin (network, Facebook-controlled).
   // Run with FACEBOOK_LIVE_TEST=1 to confirm Facebook hasn't changed the plugin markup.
   it.skipIf(!process.env.FACEBOOK_LIVE_TEST)('fetches dated posts from the live medinaTRAILS Page Plugin', async () => {
-    const r = await fetchFacebookPosts('https://www.facebook.com/medinaTRAILS/');
+    // No saved session: only works from a residential IP.
+    const r = await fetchFacebookPosts({ query: async () => ({ rows: [] }) }, 'https://www.facebook.com/medinaTRAILS/');
     expect(r.reachable).toBe(true);
     expect(r.markdown).toMatch(/^\[\d{4}-\d{2}-\d{2}\] \S/);
   }, 60000);

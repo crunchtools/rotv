@@ -89,14 +89,14 @@ Twitter/X pages require authenticated access to load tweet content:
 - **Cookies expire after 30-90 days and must be refreshed periodically** via Settings > Data Collection
 - Twitter gets an extended `dynamicContentWait` (8s vs 3s) for SPA rendering
 
-**Facebook Page Plugin (Facebook)**
+**Facebook Page Plugin + remote-browser session (Facebook)**
 
-`facebook.com/<page>` is login-walled for anonymous visitors (logged-out `www.`, `m.` and `mbasic.` all return 400), so the page itself can't be rendered. Facebook's official embeddable [Page Plugin](https://developers.facebook.com/docs/plugins/page-plugin) serves any public, non-age/country-restricted Page's recent timeline to logged-out visitors, which is what `facebookService.js` uses:
-- Renders `https://www.facebook.com/plugins/page.php?href=<page>&tabs=timeline&...` in the shared Chromium pool (`browserPool.js`); the timeline is client-rendered, so plain HTTP only gets the shell
-- Anchors on `[data-utime]` (epoch seconds per post) and reads `[data-testid="post_message"]` from each post root, avoiding obfuscated class names
-- Emits `[YYYY-MM-DD] text` blocks joined by `---`, the same format as the Bluesky path
-- Falls back to the plugin's full `innerText` whenever no post text can be formatted (no timestamps, or the `post_message` selector misses), so the classifier still sees content
-- No credentials and no per-call cost, so the 30-minute cadence is free. If Facebook ever locks the plugin, the fallback is an admin session cookie, the same way `twitter_cookies` works
+`facebook.com/<page>` is login-walled for anonymous visitors. Facebook's official embeddable [Page Plugin](https://developers.facebook.com/docs/plugins/page-plugin) serves a Page's recent timeline, but **logged-out only to residential IPs**: from lotor's own IP and from every ExpressVPN exit tested (13, US and international) it redirects to `/login`. So `facebookService.js` renders the plugin with a logged-in session:
+- A dedicated, **non-proxied** Chromium per fetch (not `browserPool`), so it egresses from lotor's own IP, the same IP the session was created on
+- Session cookies come from `admin_settings.facebook_cookies`, created by an admin through **Settings › Data Collection › Connect Facebook**. That's a remote browser (`remoteLoginSession.js` + `RemoteLoginModal.jsx`): ROTV runs facebook.com/login in its own Chromium, the modal polls JPEG frames and relays clicks, typing, paste and scroll, and **Save session** stores the context's facebook.com cookies. Facebook's login can't be iframed (`X-Frame-Options: DENY`), and this also lets the admin clear any checkpoint from the server's IP.
+- Login-wall detection (`/login` redirect or login-form text with no posts) returns `reachable:false` with "Facebook login required" and never feeds login text to the classifier. `facebook_consecutive_failures` drives the settings "session may be stale" banner, same as Twitter.
+- Anchors on `[data-utime]` (epoch seconds per post) and reads `[data-testid="post_message"]`, emitting `[YYYY-MM-DD] text` blocks joined by `---`
+- `remoteLoginSession.js` is provider-generic (`PROVIDERS` map). Moving Twitter/X from cookie-paste to the remote login is a config entry plus a button
 
 **Public Bluesky API (Bluesky)**
 
@@ -738,6 +738,11 @@ psql -U postgres -d rotv -f backend/migrations/001_add_trail_status_support.sql
 ---
 
 ## Changelog
+
+**Version 4.1.0 (2026-09-26)**
+- Facebook needs a logged-in session from lotor (the plugin login-walls datacenter and VPN IPs). Added the provider-generic remote-browser login (`remoteLoginSession.js`, `/api/admin/remote-login/:provider/*`, `RemoteLoginModal.jsx`) and the Connect Facebook settings section
+- `facebookService.js` now uses a dedicated non-proxied browser with the saved session, and reports login walls as unreachable
+- Generalized Twitter failure tracking to per-source counters (`facebook_consecutive_failures`)
 
 **Version 4.0.0 (2026-09-26)**
 - Replaced the Apify Facebook scraper with `facebookService.js`, which renders Facebook's public Page Plugin in the shared Playwright pool

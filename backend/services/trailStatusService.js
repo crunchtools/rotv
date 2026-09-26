@@ -32,28 +32,39 @@ export const getDisplaySlots = (jobId) => tracker.getDisplaySlots(jobId);
 export const requestCancellation = (poiId) => tracker.requestCancellation(poiId);
 export const isCancellationRequested = (poiId) => tracker.isCancellationRequested(poiId);
 
-async function trackTwitterResult(pool, statusUrl, success) {
-  if (!isTwitterUrl(statusUrl)) return;
+// Consecutive-failure counters for login-backed sources; the settings UI shows
+// a "session may be stale" banner at 3+.
+function sessionFailuresKey(statusUrl) {
+  if (isTwitterUrl(statusUrl)) return { key: 'twitter_consecutive_failures', label: 'Twitter' };
+  if (isFacebookUrl(statusUrl)) return { key: 'facebook_consecutive_failures', label: 'Facebook' };
+  return null;
+}
+
+async function trackSessionResult(pool, statusUrl, success) {
+  const source = sessionFailuresKey(statusUrl);
+  if (!source) return;
 
   try {
     if (success) {
       await pool.query(
-        `INSERT INTO admin_settings (key, value, updated_at) VALUES ('twitter_consecutive_failures', '0', NOW())
-         ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = NOW()`
+        `INSERT INTO admin_settings (key, value, updated_at) VALUES ($1, '0', NOW())
+         ON CONFLICT (key) DO UPDATE SET value = '0', updated_at = NOW()`,
+        [source.key]
       );
     } else {
       const failureCountRow = await pool.query(
-        `INSERT INTO admin_settings (key, value, updated_at) VALUES ('twitter_consecutive_failures', '1', NOW())
+        `INSERT INTO admin_settings (key, value, updated_at) VALUES ($1, '1', NOW())
          ON CONFLICT (key) DO UPDATE SET value = (COALESCE(admin_settings.value, '0')::int + 1)::text, updated_at = NOW()
-         RETURNING value`
+         RETURNING value`,
+        [source.key]
       );
       const failures = parseInt(failureCountRow.rows[0]?.value) || 0;
       if (failures >= 3) {
-        trailStatusLogger.warn(`WARNING: ${failures} consecutive Twitter failures — cookies may be stale. Refresh at Settings > Data Collection.`);
+        trailStatusLogger.warn(`WARNING: ${failures} consecutive ${source.label} failures — session may be stale. Refresh at Settings > Data Collection.`);
       }
     }
   } catch (err) {
-    trailStatusLogger.error('Error tracking Twitter result:', err.message);
+    trailStatusLogger.error(`Error tracking ${source.label} result:`, err.message);
   }
 }
 
@@ -143,7 +154,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
         message: 'Fetching Facebook posts via page plugin...',
         steps: ['Initialized', 'Fetching Facebook posts']
       });
-      rendered = await fetchFacebookPosts(statusUrl);
+      rendered = await fetchFacebookPosts(pool, statusUrl);
     } else if (isBlueskyUrl(statusUrl)) {
       trailStatusLogger.info(`Fetching Bluesky posts via public API for: ${statusUrl}`);
       updateProgress(poi.id, {
@@ -184,7 +195,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     if (!rendered.reachable || !rendered.markdown) {
       trailStatusLogger.info(`Page not reachable or no content extracted (reason: ${rendered.reason || 'unknown'})`);
-      await trackTwitterResult(pool, statusUrl, false);
+      await trackSessionResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: `Page not reachable: ${rendered.reason || 'no content'}`,
@@ -198,7 +209,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     const MIN_CONTENT_LENGTH = 200;
     if (rendered.markdown.length < MIN_CONTENT_LENGTH) {
       trailStatusLogger.info(`Insufficient content (${rendered.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
-      await trackTwitterResult(pool, statusUrl, false);
+      await trackSessionResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: 'Insufficient page content',
@@ -280,7 +291,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       trailStatusLogger.error('No JSON found in response');
-      await trackTwitterResult(pool, statusUrl, false);
+      await trackSessionResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: 'No status found',
@@ -295,7 +306,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     if (!status || status.status === 'unknown') {
       trailStatusLogger.info(`No current status found for ${poi.name}`);
-      await trackTwitterResult(pool, statusUrl, false);
+      await trackSessionResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
         message: 'No status found',
@@ -310,7 +321,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     trailStatusLogger.info(`  Conditions: ${status.conditions || 'N/A'}`);
     trailStatusLogger.info(`  Source: ${status.source_name || 'N/A'}`);
     trailStatusLogger.info(`  Last Updated: ${status.last_updated || 'N/A'}`);
-    await trackTwitterResult(pool, statusUrl, true);
+    await trackSessionResult(pool, statusUrl, true);
 
     status.source_url = poi.status_url;
     if (isTwitterUrl(poi.status_url)) {
