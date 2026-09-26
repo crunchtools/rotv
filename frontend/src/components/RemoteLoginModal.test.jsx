@@ -104,6 +104,13 @@ describe('RemoteLoginModal', () => {
     expect(inputs).toEqual([{ type: 'click', x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 }]);
   });
 
+  // Fix: the site header is z-index 10000 and covered the modal's title bar and close button (PR #669 review)
+  it('stacks the overlay above the site header', async () => {
+    const { container } = render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    expect(Number(container.querySelector('.modal-overlay').style.zIndex)).toBeGreaterThan(10000);
+  });
+
   it('cancels the remote session on unmount when not saved', async () => {
     const { unmount } = render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
