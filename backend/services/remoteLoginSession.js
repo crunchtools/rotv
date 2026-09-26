@@ -108,7 +108,13 @@ async function closeSession(reason) {
   await browser.close().catch(err => logger.warn(`Browser close failed: ${err.message}`));
 }
 
-/** Exact domain or a dot-delimited subdomain — never "evilfacebook.com". */
+/**
+ * Whether a cookie belongs to the provider: exact domain or a dot-delimited
+ * subdomain, never a lookalike such as "evilfacebook.com".
+ * @param {{domain?: string}} cookie - Playwright cookie (leading dot allowed)
+ * @param {{cookieDomain: string}} provider - entry from PROVIDERS
+ * @returns {boolean}
+ */
 export function isProviderCookie(cookie, provider) {
   const domain = String(cookie.domain || '').replace(/^\./, '');
   return domain === provider.cookieDomain || domain.endsWith(`.${provider.cookieDomain}`);
@@ -167,6 +173,8 @@ export async function startLogin(providerName, userId) {
  * @param {string} providerName
  * @param {number} userId
  * @returns {Promise<{image: Buffer, url: string, loggedIn: boolean}>}
+ * @throws {LoginSessionError} 404 no session for this provider; 409 owned by another admin
+ * @throws {Error} screenshot failures from the remote page
  */
 export async function getFrame(providerName, userId) {
   const s = requireSession(providerName, userId);
@@ -225,6 +233,9 @@ export async function sendInput(providerName, userId, evt) {
  * @param {string} providerName
  * @param {number} userId
  * @returns {Promise<{cookiesCount: number, expires: string|null}>}
+ * @throws {LoginSessionError} 404 no session; 409 owned by another admin;
+ *   400 the login hasn't completed (no session cookie yet)
+ * @throws {Error} database errors while persisting (the session stays open to retry)
  */
 export async function saveLogin(pool, providerName, userId) {
   const s = requireSession(providerName, userId);
