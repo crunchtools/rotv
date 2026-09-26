@@ -220,8 +220,10 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   };
 
   const handleClick = async (e) => {
+    // Fix: map the point before awaiting; React nulls e.currentTarget once dispatch ends, so every real click threw
+    const point = toViewportPoint(e, e.currentTarget.getBoundingClientRect(), viewport);
     await flushTyping();
-    await sendInput({ type: 'click', ...toViewportPoint(e, e.currentTarget.getBoundingClientRect(), viewport) });
+    await sendInput({ type: 'click', ...point });
   };
 
   const handleWheel = (e) => { sendInput({ type: 'scroll', dy: e.deltaY }); };
@@ -239,7 +241,8 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   };
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    // Above the site header (z-index 10000), which otherwise covers the modal's title bar and close button
+    <div className="modal-overlay" onClick={onClose} style={{ zIndex: 10001 }}>
       <div className="remote-login-modal" onClick={e => e.stopPropagation()}
         style={{ background: 'var(--bg-primary, #fff)', borderRadius: '8px', maxWidth: '560px', width: '95vw', maxHeight: '95vh', display: 'flex', flexDirection: 'column' }}>
         <div className="modal-header">
