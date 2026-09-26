@@ -3,7 +3,6 @@ package-lock.json
 .specify/templates/
 # Map geometry and OSM extracts
 *.geojson
-*.geojson.backup
 backend/data/osm/
 data/boundaries/insert_*.sql
 # Icon and brand artwork
