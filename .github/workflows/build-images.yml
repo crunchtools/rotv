@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -47,6 +49,7 @@ jobs:
             type=sha,prefix=
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -70,6 +73,41 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
+
+  # Separate from the constitution-mandated report-only Trivy step above:
+  # this job needs security-events: write for SARIF, which build-and-push-quay
+  # must not hold. Report-only: this workflow has no PR trigger, so the image is already published.
+  trivy-scan:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    needs: build-and-push-quay
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan pushed image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push-quay.outputs.digest }}
+          scanners: vuln
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy.sarif
+          # Without this, trivy-action drops the severity filter for SARIF and gates on every severity
+          limit-severities-for-sarif: true
+          exit-code: '0'
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-images-rotv
 
   build-and-push-ghcr:
     runs-on: ubuntu-latest

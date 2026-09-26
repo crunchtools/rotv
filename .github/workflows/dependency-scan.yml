@@ -1,0 +1,82 @@
+name: Dependency Scan
+
+# CVE Lite CLI (OSV-backed) over each npm lockfile. See docs/CI_CD_TESTING.md.
+#
+# PRs: gate on findings above the committed <dir>/.cve-lite/baseline.json, so
+# known debt doesn't block but anything new at high or above does. The gate
+# uses the BASE branch's baseline, so a PR can't accept its own new debt; a
+# maintainer opts in by labeling the PR security-debt-accepted. Runs on every
+# PR (no path filter) because these are required checks.
+#
+# Weekly: full scan with the baseline removed, uploaded as SARIF so all debt,
+# including advisories published since the last PR, shows in the Security tab.
+
+on:
+  pull_request:
+    branches: [main, master]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cve-lite:
+    name: CVE Lite (${{ matrix.dir }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        dir: [., backend, frontend]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Fix: gate against the base branch's baseline unless a maintainer labels the PR (PR #653 review)
+      - name: Use base branch baseline
+        if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'security-debt-accepted')
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BASELINE: ${{ matrix.dir }}/.cve-lite/baseline.json
+        run: |
+          git fetch --no-tags --depth=1 origin "$BASE_REF"
+          if git cat-file -e "FETCH_HEAD:$BASELINE" 2>/dev/null; then
+            git show "FETCH_HEAD:$BASELINE" > "$BASELINE"
+          else
+            rm -f "$BASELINE"
+          fi
+
+      - name: Gate on new findings
+        if: github.event_name == 'pull_request'
+        uses: OWASP/cve-lite-cli@v1.37.0
+        with:
+          version: "1.37.0"
+          path: ${{ matrix.dir }}
+          fail-on: high
+          usage: "true"
+
+      - name: Drop baseline for full report
+        if: github.event_name != 'pull_request'
+        run: rm -f "${{ matrix.dir }}/.cve-lite/baseline.json"
+
+      - name: Full scan
+        if: github.event_name != 'pull_request'
+        uses: OWASP/cve-lite-cli@v1.37.0
+        with:
+          version: "1.37.0"
+          path: ${{ matrix.dir }}
+          usage: "true"
+          sarif: "true"
+          output: sarif-out
+
+      - name: Upload SARIF
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: sarif-out
+          category: cve-lite-${{ matrix.dir == '.' && 'root' || matrix.dir }}
