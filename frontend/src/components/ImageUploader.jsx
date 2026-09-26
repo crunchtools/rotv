@@ -128,13 +128,6 @@ function ImageUploader({
     fileInputRef.current?.click();
   };
 
-  const handleUploadSuccess = () => {
-    setUploadModalOpen(false);
-    if (onMediaUpdate) {
-      onMediaUpdate();
-    }
-  };
-
   const isMediaAdmin = user && (user.role === 'media_admin' || user.role === 'admin');
 
   return (
@@ -222,7 +215,7 @@ function ImageUploader({
         <MediaUploadModal
           poiId={poiId}
           onClose={() => setUploadModalOpen(false)}
-          onSuccess={handleUploadSuccess}
+          onSuccess={() => { setUploadModalOpen(false); onMediaUpdate?.(); }}
         />
       )}
     </div>

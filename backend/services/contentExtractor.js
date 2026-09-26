@@ -3,6 +3,9 @@ import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import { EXPIRING_HOST } from '../utils/sourceImage.js';
 import { acquireBrowser, releaseBrowser } from './browserPool.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ContentExtractor');
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -105,18 +108,21 @@ export async function extractPageContent(url, options = {}) {
         try {
           await page.waitForNavigation({ waitUntil: 'networkidle', timeout: 10000 });
           await page.waitForTimeout(1000);
-        } catch { /* challenge didn't redirect — proceed with what we have */ }
+        } catch (err) {
+          logger.debug(`Challenge page did not redirect for ${url}, proceeding with current content: ${err.message}`);
+        }
       }
 
       const html = await page.content();
       const pageTitle = await page.title();
 
-      const ogDates = await page.evaluate(() => {
+      const { jsonLdErrors, ...ogDates } = await page.evaluate(() => {
         const getMeta = (prop) => document.querySelector(`meta[property="${prop}"]`)?.content || null;
         const getMetaName = (name) => document.querySelector(`meta[name="${name}"]`)?.content || null;
 
         const jsonLdDates = [];
         const jsonLdEvents = [];
+        const jsonLdErrors = [];
         let eventStartDate = null;
         let eventEndDate = null;
         document.querySelectorAll('script[type="application/ld+json"]').forEach(script => {
@@ -150,7 +156,9 @@ export async function extractPageContent(url, options = {}) {
                   || null;
               }
             }
-          } catch { /* ignore malformed JSON-LD */ }
+          } catch (err) {
+            jsonLdErrors.push(err.message);
+          }
         });
 
         const timeDates = [];
@@ -186,9 +194,13 @@ export async function extractPageContent(url, options = {}) {
           timeDates,
           socialDates,
           eventStartDate,
-          eventEndDate
+          eventEndDate,
+          jsonLdErrors
         };
       });
+      if (jsonLdErrors.length > 0) {
+        logger.debug(`Skipped ${jsonLdErrors.length} malformed JSON-LD block(s) on ${url}: ${jsonLdErrors.join('; ')}`);
+      }
 
       const rawOgImage = await page.evaluate(() => {
         const pick = (sel) => document.querySelector(sel)?.content?.trim() || null;
@@ -197,7 +209,7 @@ export async function extractPageContent(url, options = {}) {
           || pick('meta[name="twitter:image"]')
           || pick('meta[property="twitter:image"]')
           || null;
-        try { return raw ? new URL(raw, document.baseURI).href : null; } catch { return null; }
+        return raw && URL.canParse(raw, document.baseURI) ? new URL(raw, document.baseURI).href : null;
       });
       const ogImage = (rawOgImage && !EXPIRING_HOST.test(rawOgImage)) ? rawOgImage : null;
 
@@ -319,7 +331,7 @@ export async function extractPageContent(url, options = {}) {
   } finally {
     clearTimeout(hardTimeoutId);
     if (context) {
-      await context.close().catch(() => {});
+      await context.close().catch(err => logger.debug(`Context close failed for ${url}: ${err.message}`));
       releaseBrowser(acquisitionId);
     }
   }

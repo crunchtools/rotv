@@ -1,5 +1,8 @@
 import express from 'express';
 import { optionalAuth } from '../middleware/auth.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Notifications');
 
 const MAX_POIS = 200;
 
@@ -63,7 +66,7 @@ export function createNotificationsRouter(pool) {
       const [newsResult, eventsResult] = await Promise.all([news, events]);
       res.json({ news: newsResult.rows, events: eventsResult.rows });
     } catch (err) {
-      console.error('GET /api/notifications/feed failed:', err);
+      logger.error('GET /api/notifications/feed failed:', err);
       res.status(500).json({ error: 'Failed to load notification feed' });
     }
   });
@@ -77,7 +80,7 @@ export function createNotificationsRouter(pool) {
       );
       res.json({ keys: readsRows.rows.map(r => r.notification_key) });
     } catch (err) {
-      console.error('GET /api/notifications/reads failed:', err);
+      logger.error('GET /api/notifications/reads failed:', err);
       res.status(500).json({ error: 'Failed to load read state' });
     }
   });
@@ -89,16 +92,15 @@ export function createNotificationsRouter(pool) {
     const validKeys = keys.filter(k => typeof k === 'string' && k.length <= 128).slice(0, 200);
     if (validKeys.length === 0) return res.json({ ok: true });
     try {
-      const values = validKeys.map((k, i) => `($1, $${i + 2}, CURRENT_TIMESTAMP)`).join(',');
       await pool.query(
         `INSERT INTO user_notification_reads (user_id, notification_key, read_at)
-         VALUES ${values}
+         SELECT $1, k, CURRENT_TIMESTAMP FROM UNNEST($2::text[]) AS k
          ON CONFLICT (user_id, notification_key) DO NOTHING`,
-        [req.user.id, ...validKeys]
+        [req.user.id, validKeys]
       );
       res.json({ ok: true });
     } catch (err) {
-      console.error('POST /api/notifications/reads failed:', err);
+      logger.error('POST /api/notifications/reads failed:', err);
       res.status(500).json({ error: 'Failed to save read state' });
     }
   });

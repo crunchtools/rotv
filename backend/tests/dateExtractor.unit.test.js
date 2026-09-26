@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { extractUrlDate, normalizeDateSources, scoreDateConsensus } from '../services/dateExtractor.js';
+import { normalizeRenderUrl } from '../services/newsService.js';
 
 describe('extractUrlDate', () => {
   it('extracts /YYYY/MM/DD/ from a WordPress-style URL', () => {
@@ -231,30 +232,23 @@ describe('scoreDateConsensus', () => {
 });
 
 describe('normalizeRenderUrl', () => {
-  let normalizeRenderUrl;
-
-  it('loads normalizeRenderUrl', async () => {
-    const mod = await import('../services/newsService.js').catch(() => null);
-    if (mod) normalizeRenderUrl = mod.normalizeRenderUrl;
+  it('is exported from newsService', () => {
+    expect(normalizeRenderUrl).toBeTypeOf('function');
   });
 
   it('converts /reel/ to /p/', () => {
-    if (!normalizeRenderUrl) return;
     expect(normalizeRenderUrl('https://www.instagram.com/reel/DWkModtDZNH/')).toBe('https://www.instagram.com/p/DWkModtDZNH/');
   });
 
   it('converts /reels/ to /p/', () => {
-    if (!normalizeRenderUrl) return;
     expect(normalizeRenderUrl('https://www.instagram.com/reels/DWkModtDZNH/')).toBe('https://www.instagram.com/p/DWkModtDZNH/');
   });
 
   it('leaves /p/ URLs unchanged', () => {
-    if (!normalizeRenderUrl) return;
     expect(normalizeRenderUrl('https://www.instagram.com/p/DWkModtDZNH/')).toBe('https://www.instagram.com/p/DWkModtDZNH/');
   });
 
   it('leaves non-Instagram URLs unchanged', () => {
-    if (!normalizeRenderUrl) return;
     expect(normalizeRenderUrl('https://www.example.com/reel/123')).toBe('https://www.example.com/reel/123');
   });
 });

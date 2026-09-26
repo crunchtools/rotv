@@ -22,6 +22,8 @@ import { createFavoritesRouter } from './routes/favorites.js';
 import { createVisitedRouter } from './routes/visited.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { isAuthenticated } from './middleware/auth.js';
+import { consolidateFeatures } from './utils/geojson.js';
+import { resolveTimezone } from './utils/requestParams.js';
 import {
   initJobScheduler,
   scheduleNewsCollection,
@@ -86,6 +88,22 @@ import {
   cadenceLabel,
   materializeAllSeries
 } from './services/eventSeriesService.js';
+import { createLogger } from './utils/logger.js';
+
+const logger = createLogger('Server');
+const aiSearchLogger = createLogger('AI Search');
+const pgBossLogger = createLogger('pg-boss');
+const jobLogsLogger = createLogger('JobLogger');
+const poiImageLogger = createLogger('POI Image');
+const thumbnailLogger = createLogger('Thumbnail');
+const uploadLogger = createLogger('upload');
+const assetThumbnailLogger = createLogger('Asset Thumbnail');
+const assetOriginalLogger = createLogger('Asset Original');
+const themeVideoLogger = createLogger('Theme Video');
+const errorLogger = createLogger('error');
+const waterTaxiTrackerLogger = createLogger('WaterTaxiTracker');
+const trainTrackerLogger = createLogger('TrainTracker');
+const unhandledRejectionLogger = createLogger('unhandledRejection');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -139,7 +157,7 @@ app.set('trust proxy', 1);
 
 // Return date/timestamp columns as ISO strings, not JavaScript Date objects.
 // Date objects lose the year when passed through String().slice(0,10) because
-// their .toString() format is locale-dependent ("Sat May 31 2025 ...").
+// their .toString() format is locale-dependent ("Sat May 31 ..."), not ISO.
 // OID 1082 = date, 1114 = timestamp without tz, 1184 = timestamp with tz
 const { types } = pg;
 types.setTypeParser(1082, (val) => val);
@@ -214,30 +232,6 @@ async function importGeoJSONFeatures(client) {
   const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/public');
   const dataPath = path.join(staticPath, 'data');
 
-  function consolidateFeatures(features) {
-    const byName = {};
-    for (const feature of features) {
-      const name = feature.properties?.name || 'Unnamed';
-      if (!byName[name]) byName[name] = [];
-      byName[name].push(feature.geometry);
-    }
-
-    const consolidated = [];
-    for (const [name, geometries] of Object.entries(byName)) {
-      let geometry;
-      if (geometries.length === 1) {
-        geometry = geometries[0];
-      } else {
-        const allCoords = geometries.map(g =>
-          g.type === 'MultiLineString' ? g.coordinates : [g.coordinates]
-        ).flat();
-        geometry = { type: 'MultiLineString', coordinates: allCoords };
-      }
-      consolidated.push({ name, geometry });
-    }
-    return consolidated;
-  }
-
   try {
     const trailsFile = path.join(dataPath, 'cvnp-trails.geojson');
     const trailsData = JSON.parse(await fs.readFile(trailsFile, 'utf-8'));
@@ -251,7 +245,7 @@ async function importGeoJSONFeatures(client) {
         [trail.name, JSON.stringify(trail.geometry)]
       );
     }
-    console.log(`Imported ${consolidatedTrails.length} trails`);
+    logger.info(`Imported ${consolidatedTrails.length} trails`);
 
     const riverFile = path.join(dataPath, 'cvnp-river.geojson');
     const riverData = JSON.parse(await fs.readFile(riverFile, 'utf-8'));
@@ -265,7 +259,7 @@ async function importGeoJSONFeatures(client) {
         [river.name, JSON.stringify(river.geometry)]
       );
     }
-    console.log(`Imported ${consolidatedRivers.length} rivers`);
+    logger.info(`Imported ${consolidatedRivers.length} rivers`);
 
     const boundaryFile = path.join(dataPath, 'cvnp-boundary.geojson');
     const boundaryData = JSON.parse(await fs.readFile(boundaryFile, 'utf-8'));
@@ -279,10 +273,10 @@ async function importGeoJSONFeatures(client) {
         [name, JSON.stringify(feature.geometry)]
       );
     }
-    console.log(`Imported ${boundaryData.features.length} boundaries`);
+    logger.info(`Imported ${boundaryData.features.length} boundaries`);
 
   } catch (err) {
-    console.error('Error importing GeoJSON features:', err.message);
+    logger.error('Error importing GeoJSON features:', err.message);
   }
 }
 
@@ -418,7 +412,7 @@ async function initDatabase() {
         RETURNING id
       `);
       if (migrated.rowCount > 0) {
-        console.log(`Migrated ${migrated.rowCount} destinations to pois table`);
+        logger.info(`Migrated ${migrated.rowCount} destinations to pois table`);
       }
     }
 
@@ -448,7 +442,7 @@ async function initDatabase() {
         RETURNING id
       `);
       if (migrated.rowCount > 0) {
-        console.log(`Migrated ${migrated.rowCount} linear features to pois table`);
+        logger.info(`Migrated ${migrated.rowCount} linear features to pois table`);
       }
     }
 
@@ -929,7 +923,7 @@ async function initDatabase() {
       ON CONFLICT (key) DO NOTHING
     `);
 
-    console.log('Database initialized');
+    logger.info('Database initialized');
   } finally {
     client.release();
   }
@@ -946,7 +940,7 @@ app.get('/api/about-content', async (req, res) => {
     }
     res.json(content);
   } catch (error) {
-    console.error('Error fetching about content:', error);
+    logger.error('Error fetching about content:', error);
     res.status(500).json({ error: 'Failed to fetch about content' });
   }
 });
@@ -990,7 +984,7 @@ app.get('/api/pois', async (req, res) => {
     const poisQuery = await pool.query(query, params);
     res.json(poisQuery.rows);
   } catch (error) {
-    console.error('Error fetching POIs:', error);
+    logger.error('Error fetching POIs:', error);
     res.status(500).json({ error: 'Failed to fetch POIs' });
   }
 });
@@ -1009,11 +1003,7 @@ app.get('/api/pois/summary', async (req, res) => {
     if (ids.length === 0) {
       return res.json([]);
     }
-    // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE takes arbitrary input (PR #368 review)
-    const rawTz = req.query.tz;
-    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-      ? rawTz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const summary = await pool.query(`
       SELECT p.id,
              ts.status AS trail_status,
@@ -1040,7 +1030,7 @@ app.get('/api/pois/summary', async (req, res) => {
     );
     res.json(summary.rows);
   } catch (error) {
-    console.error('Error fetching POI summary:', error);
+    logger.error('Error fetching POI summary:', error);
     res.status(500).json({ error: 'Failed to fetch POI summary' });
   }
 });
@@ -1071,7 +1061,7 @@ app.get('/api/pois/:id', async (req, res) => {
     }
     res.json(poiQuery.rows[0]);
   } catch (error) {
-    console.error('Error fetching POI:', error);
+    logger.error('Error fetching POI:', error);
     res.status(500).json({ error: 'Failed to fetch POI' });
   }
 });
@@ -1091,7 +1081,7 @@ app.get('/api/pois/:id/image', async (req, res) => {
 
     const assetFetch = await imageServerClient.fetchAssetData(asset.id);
     if (!assetFetch.success) {
-      console.error(`[POI Image] Fetch failed for POI ${id}:`, assetFetch.error);
+      poiImageLogger.error(`Fetch failed for POI ${id}:`, assetFetch.error);
       return res.status(404).json({ error: 'Image not found' });
     }
 
@@ -1100,7 +1090,7 @@ app.get('/api/pois/:id/image', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(assetFetch.data);
   } catch (error) {
-    console.error('Error serving POI image:', error);
+    logger.error('Error serving POI image:', error);
     res.status(500).json({ error: 'Failed to serve image' });
   }
 });
@@ -1170,7 +1160,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
           // Stream to avoid loading full payload into memory (DoS prevention)
           return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
-          console.error(`[Thumbnail] Production fallback failed for POI ${id}, asset ${assetId}:`, fallbackError.message);
+          thumbnailLogger.error(`Production fallback failed for POI ${id}, asset ${assetId}:`, fallbackError.message);
           return res.status(404).json({ error: 'Image not found' });
         }
       }
@@ -1179,7 +1169,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
 
     const thumbnailResult = await imageServerClient.fetchThumbnailData(assetId, size);
     if (!thumbnailResult.success) {
-      console.error(`[Thumbnail] Fetch failed for POI ${id}:`, thumbnailResult.error);
+      thumbnailLogger.error(`Fetch failed for POI ${id}:`, thumbnailResult.error);
       return res.status(404).json({ error: 'Image not found' });
     }
 
@@ -1188,7 +1178,7 @@ app.get('/api/pois/:id/thumbnail', async (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(thumbnailResult.data);
   } catch (error) {
-    console.error('Error serving POI thumbnail:', error);
+    logger.error('Error serving POI thumbnail:', error);
     res.status(500).json({ error: 'Failed to serve thumbnail' });
   }
 });
@@ -1276,7 +1266,7 @@ app.get('/api/pois/:id/media', async (req, res) => {
 
     res.json(response);
   } catch (error) {
-    console.error('Error fetching POI media:', error);
+    logger.error('Error fetching POI media:', error);
     res.status(500).json({ error: 'Failed to fetch media' });
   }
 });
@@ -1398,12 +1388,12 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
         try {
           const rollback = await imageServerClient.deleteAsset(assetId);
           if (rollback && rollback.success) {
-            console.warn(`[upload] Rolled back orphan asset ${assetId} after DB insert failure`);
+            uploadLogger.warn(`Rolled back orphan asset ${assetId} after DB insert failure`);
           } else {
-            console.error(`[upload] Orphan asset ${assetId} — manual cleanup required:`, rollback && rollback.error);
+            uploadLogger.error(`Orphan asset ${assetId} — manual cleanup required:`, rollback && rollback.error);
           }
         } catch (rollbackErr) {
-          console.error(`[upload] Orphan asset ${assetId} — manual cleanup required:`, rollbackErr);
+          uploadLogger.error(`Orphan asset ${assetId} — manual cleanup required:`, rollbackErr);
         }
       }
       throw insertErr;
@@ -1422,7 +1412,7 @@ app.post('/api/pois/:id/media', isAuthenticated, upload.single('file'), async (r
       moderation_status: moderationStatus
     });
   } catch (error) {
-    console.error('Error uploading media:', error);
+    logger.error('Error uploading media:', error);
     res.status(500).json({ error: 'Failed to upload media' });
   }
 });
@@ -1476,8 +1466,8 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
       try {
         await imageServerClient.deleteAsset(media.image_server_asset_id);
       } catch (err) {
-        console.error('Failed to delete asset from image server:', err);
-        console.error('Orphaned asset (manual cleanup required):', media.image_server_asset_id);
+        logger.error('Failed to delete asset from image server:', err);
+        logger.error('Orphaned asset (manual cleanup required):', media.image_server_asset_id);
         imageServerDeleted = false;
       }
     }
@@ -1495,7 +1485,7 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
     res.json({ success: true, message: 'Media deleted' });
   } catch (error) {
     await pool.query('ROLLBACK');
-    console.error('Error deleting media:', error);
+    logger.error('Error deleting media:', error);
     res.status(500).json({ error: 'Failed to delete media' });
   }
 });
@@ -1555,7 +1545,7 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
     res.json({ success: true, message: 'Primary image updated' });
   } catch (error) {
     await pool.query('ROLLBACK');
-    console.error('Error setting primary media:', error);
+    logger.error('Error setting primary media:', error);
     res.status(500).json({ error: 'Failed to set primary media' });
   }
 });
@@ -1595,7 +1585,7 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
           // Stream to avoid loading full payload into memory (DoS prevention)
           return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
-          console.error(`[Asset Thumbnail] Production fallback failed for asset ${assetId}:`, fallbackError.message);
+          assetThumbnailLogger.error(`Production fallback failed for asset ${assetId}:`, fallbackError.message);
           return res.status(503).json({ error: 'Image service unavailable' });
         }
       }
@@ -1617,7 +1607,7 @@ app.get('/api/assets/:assetId/thumbnail', assetProxyLimiter, async (req, res) =>
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(thumbnailFetch.data);
   } catch (error) {
-    console.error('Error serving asset thumbnail:', error);
+    logger.error('Error serving asset thumbnail:', error);
     res.status(500).json({ error: 'Failed to serve thumbnail' });
   }
 });
@@ -1655,7 +1645,7 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
           // Stream response to avoid memory exhaustion (DoS prevention)
           return Readable.fromWeb(productionResponse.body).pipe(res);
         } catch (fallbackError) {
-          console.error(`[Asset Original] Production fallback failed for asset ${assetId}:`, fallbackError.message);
+          assetOriginalLogger.error(`Production fallback failed for asset ${assetId}:`, fallbackError.message);
           return res.status(503).json({ error: 'Image service unavailable' });
         }
       }
@@ -1678,7 +1668,7 @@ app.get('/api/assets/:assetId/original', assetProxyLimiter, async (req, res) => 
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.send(assetFetch.data);
   } catch (error) {
-    console.error('Error serving asset:', error);
+    logger.error('Error serving asset:', error);
     res.status(500).json({ error: 'Failed to serve asset' });
   }
 });
@@ -1720,7 +1710,7 @@ app.get('/api/filters', async (req, res) => {
       surfaces: surfaces.rows.map(r => r.surface)
     });
   } catch (error) {
-    console.error('Error fetching filters:', error);
+    logger.error('Error fetching filters:', error);
     res.status(500).json({ error: 'Failed to fetch filters' });
   }
 });
@@ -1736,7 +1726,7 @@ app.get('/api/owner-organizations', async (req, res) => {
     `);
     res.json(organizationsQuery.rows);
   } catch (error) {
-    console.error('Error fetching owner organizations:', error);
+    logger.error('Error fetching owner organizations:', error);
     res.status(500).json({ error: 'Failed to fetch owner organizations' });
   }
 });
@@ -1759,7 +1749,7 @@ app.get('/api/pois/:id/associations', async (req, res) => {
     `, [id]);
     res.json(associationsQuery.rows);
   } catch (error) {
-    console.error('Error fetching POI associations:', error);
+    logger.error('Error fetching POI associations:', error);
     res.status(500).json({ error: 'Failed to fetch associations' });
   }
 });
@@ -1785,7 +1775,7 @@ app.get('/api/pois/:id/serving-taxis', async (req, res) => {
     `, [poiId]);
     res.json(servingTaxisQuery.rows);
   } catch (error) {
-    console.error('Error fetching serving taxis:', error);
+    logger.error('Error fetching serving taxis:', error);
     res.status(500).json({ error: 'Failed to fetch serving taxis' });
   }
 });
@@ -1804,7 +1794,7 @@ app.get('/api/associations', async (req, res) => {
     `);
     res.json(associationsQuery.rows);
   } catch (error) {
-    console.error('Error fetching all associations:', error);
+    logger.error('Error fetching all associations:', error);
     res.status(500).json({ error: 'Failed to fetch associations' });
   }
 });
@@ -1846,7 +1836,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
 
     res.json(virtualPoisQuery.rows);
   } catch (error) {
-    console.error('Error fetching virtual POIs in viewport:', error);
+    logger.error('Error fetching virtual POIs in viewport:', error);
     res.status(500).json({ error: 'Failed to fetch virtual POIs' });
   }
 });
@@ -1905,7 +1895,7 @@ app.get('/api/theme-config', async (req, res) => {
       res.json({ seasonal_themes: null, video_urls: {} });
     }
   } catch (error) {
-    console.error('Error fetching theme config:', error);
+    logger.error('Error fetching theme config:', error);
     res.status(500).json({ error: 'Failed to fetch theme configuration' });
   }
 });
@@ -1934,7 +1924,7 @@ app.get('/api/theme-video/:theme', async (req, res) => {
     res.set('Content-Length', String(themeVideoFetch.data.length));
     res.send(themeVideoFetch.data);
   } catch (error) {
-    console.error(`[Theme Video] Error serving video:`, error);
+    themeVideoLogger.error(`Error serving video:`, error);
     res.status(500).json({ error: 'Failed to serve video' });
   }
 });
@@ -1945,11 +1935,7 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
     if (!Number.isInteger(id) || id <= 0) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
-    // Whitelist tz to IANA Region/City format — Postgres AT TIME ZONE accepts arbitrary input (PR #368 review)
-    const rawTz = req.query.tz;
-    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-      ? rawTz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     // Roll up boundary/org POIs to include contained/owned POIs (#406)
     const poiIds = await getRollupPoiIds(pool, id);
     const tabCountsQuery = await pool.query(`
@@ -1969,7 +1955,7 @@ app.get('/api/pois/:id/tab-counts', async (req, res) => {
       events_count: parseInt(row.events_count, 10)
     });
   } catch (error) {
-    console.error('Error fetching POI tab counts:', error);
+    logger.error('Error fetching POI tab counts:', error);
     res.status(500).json({ error: 'Failed to fetch tab counts' });
   }
 });
@@ -1999,7 +1985,7 @@ app.get('/api/pois/:id/news', async (req, res) => {
     `, [poiIds, limit]);
     res.json(newsQuery.rows);
   } catch (error) {
-    console.error('Error fetching POI news:', error);
+    logger.error('Error fetching POI news:', error);
     res.status(500).json({ error: 'Failed to fetch news' });
   }
 });
@@ -2009,7 +1995,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const { id } = req.params;
     const upcomingOnly = req.query.upcoming !== 'false';
     const limit = parseInt(req.query.limit) || 50;
-    const tz = req.query.tz || 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     // Roll up boundary/org POIs to include contained/owned POIs (#406)
     const poiIds = await getRollupPoiIds(pool, id);
     let query = `
@@ -2032,7 +2018,7 @@ app.get('/api/pois/:id/events', async (req, res) => {
     const eventsQuery = await pool.query(query, upcomingOnly ? [poiIds, limit, tz] : [poiIds, limit]);
     res.json(eventsQuery.rows);
   } catch (error) {
-    console.error('Error fetching POI events:', error);
+    logger.error('Error fetching POI events:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
@@ -2044,7 +2030,7 @@ app.get('/api/pois/:poiSlug/news/:titleSlug', async (req, res) => {
     const { _poi, ...data } = item;
     res.json(data);
   } catch (error) {
-    console.error('Error fetching news permalink:', error);
+    logger.error('Error fetching news permalink:', error);
     res.status(500).json({ error: 'Failed to fetch news item' });
   }
 });
@@ -2056,7 +2042,7 @@ app.get('/api/pois/:poiSlug/events/:titleSlug', async (req, res) => {
     const { _poi, ...data } = item;
     res.json(data);
   } catch (error) {
-    console.error('Error fetching event permalink:', error);
+    logger.error('Error fetching event permalink:', error);
     res.status(500).json({ error: 'Failed to fetch event' });
   }
 });
@@ -2088,7 +2074,7 @@ app.get('/api/pois/:id/status', async (req, res) => {
       seasonal_closure: status.seasonal_closure
     });
   } catch (error) {
-    console.error('Error fetching trail status:', error);
+    logger.error('Error fetching trail status:', error);
     res.status(500).json({ error: 'Failed to fetch trail status' });
   }
 });
@@ -2099,7 +2085,7 @@ app.get('/api/river-gauges', async (req, res) => {
     const gauges = await getAllGaugesWithLatest(pool);
     res.json(gauges);
   } catch (error) {
-    console.error('Error fetching river gauges:', error);
+    logger.error('Error fetching river gauges:', error);
     res.status(500).json({ error: 'Failed to fetch river gauges' });
   }
 });
@@ -2110,7 +2096,7 @@ app.get('/api/pois/:id/river-gauges', async (req, res) => {
     const gauges = await getGaugesForPoi(pool, req.params.id);
     res.json(gauges);
   } catch (error) {
-    console.error('Error fetching POI river gauges:', error);
+    logger.error('Error fetching POI river gauges:', error);
     res.status(500).json({ error: 'Failed to fetch river gauges' });
   }
 });
@@ -2122,7 +2108,7 @@ app.get('/api/river-gauges/:id/readings', async (req, res) => {
     const readings = await getGaugeReadings(pool, req.params.id, days);
     res.json({ gauge_id: Number(req.params.id), readings });
   } catch (error) {
-    console.error('Error fetching gauge readings:', error);
+    logger.error('Error fetching gauge readings:', error);
     res.status(500).json({ error: 'Failed to fetch gauge readings' });
   }
 });
@@ -2182,7 +2168,7 @@ app.get('/api/trails/mtb', async (req, res) => {
 
     res.json(trails);
   } catch (error) {
-    console.error('Error fetching MTB trails:', error);
+    logger.error('Error fetching MTB trails:', error);
     res.status(500).json({ error: 'Failed to fetch MTB trails' });
   }
 });
@@ -2203,7 +2189,7 @@ app.get('/api/results-subtabs', async (req, res) => {
       res.json({ subtabs: DEFAULT_SUBTABS });
     }
   } catch (error) {
-    console.error('Error fetching results subtabs:', error);
+    logger.error('Error fetching results subtabs:', error);
     res.json({ subtabs: DEFAULT_SUBTABS });
   }
 });
@@ -2242,7 +2228,7 @@ app.get('/api/trail-status/mtb-trails', async (req, res) => {
 
     res.json(trailStatusQuery.rows);
   } catch (error) {
-    console.error('Error fetching MTB trail status:', error);
+    logger.error('Error fetching MTB trail status:', error);
     res.status(500).json({ error: 'Failed to fetch MTB trail status' });
   }
 });
@@ -2270,14 +2256,14 @@ app.get('/api/news/recent', async (req, res) => {
     `);
     res.json(recentNewsQuery.rows);
   } catch (error) {
-    console.error('Error fetching recent news:', error);
+    logger.error('Error fetching recent news:', error);
     res.status(500).json({ error: 'Failed to fetch recent news' });
   }
 });
 
 app.get('/api/events/upcoming', async (req, res) => {
   try {
-    const tz = req.query.tz || 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
     const adminColumns = isAdmin
       ? `, e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
@@ -2301,7 +2287,7 @@ app.get('/api/events/upcoming', async (req, res) => {
     `, [tz]);
     res.json(upcomingEventsQuery.rows);
   } catch (error) {
-    console.error('Error fetching upcoming events:', error);
+    logger.error('Error fetching upcoming events:', error);
     res.status(500).json({ error: 'Failed to fetch upcoming events' });
   }
 });
@@ -2309,7 +2295,7 @@ app.get('/api/events/upcoming', async (req, res) => {
 app.get('/api/events/past', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 50;
-    const tz = req.query.tz || 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
     const adminColumns = isAdmin
       ? `, e.moderation_status, e.confidence_score, e.ai_reasoning, e.ai_issues,
@@ -2334,7 +2320,7 @@ app.get('/api/events/past', async (req, res) => {
     `, [limit, tz]);
     res.json(pastEventsQuery.rows);
   } catch (error) {
-    console.error('Error fetching past events:', error);
+    logger.error('Error fetching past events:', error);
     res.status(500).json({ error: 'Failed to fetch past events' });
   }
 });
@@ -2345,11 +2331,7 @@ app.get('/api/events/past', async (req, res) => {
 app.get('/api/events/window', async (req, res) => {
   try {
     const range = req.query.range === 'today' ? 'today' : 'weekend';
-    const rawTz = req.query.tz;
-    // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE accepts arbitrary input (PR #368 review)
-    const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-      ? rawTz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const isAdmin = req.user && (req.user.role === 'admin' || req.user.isAdmin);
 
     // "Today" as a calendar date in the venue timezone.
@@ -2393,7 +2375,7 @@ app.get('/api/events/window', async (req, res) => {
     `, [from, to, tz]);
     res.json({ range, from, to, count: windowEvents.rows.length, events: windowEvents.rows });
   } catch (error) {
-    console.error('Error fetching event window:', error);
+    logger.error('Error fetching event window:', error);
     res.status(500).json({ error: 'Failed to fetch events' });
   }
 });
@@ -2401,9 +2383,7 @@ app.get('/api/events/window', async (req, res) => {
 // Active recurring series with their next occurrence — backs the recurring filter/badge.
 app.get('/api/events/recurring', async (req, res) => {
   try {
-    const tz = (typeof req.query.tz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(req.query.tz))
-      ? req.query.tz
-      : 'America/New_York';
+    const tz = resolveTimezone(req.query.tz);
     const todayRow = await pool.query('SELECT (CURRENT_TIMESTAMP AT TIME ZONE $1)::date::text AS today', [tz]);
     const today = todayRow.rows[0].today;
     const series = await getAllActiveSeries(pool);
@@ -2427,7 +2407,7 @@ app.get('/api/events/recurring', async (req, res) => {
     }));
     res.json(recurring);
   } catch (error) {
-    console.error('Error fetching recurring series:', error);
+    logger.error('Error fetching recurring series:', error);
     res.status(500).json({ error: 'Failed to fetch recurring series' });
   }
 });
@@ -2448,7 +2428,7 @@ app.get('/api/icons/:name.svg', async (req, res) => {
     res.setHeader('Cache-Control', 'public, max-age=86400');
     res.send(iconQuery.rows[0].svg_content);
   } catch (error) {
-    console.error('Error serving icon:', error);
+    logger.error('Error serving icon:', error);
     res.status(500).json({ error: 'Failed to serve icon' });
   }
 });
@@ -2514,7 +2494,7 @@ app.get('/share/destination/:id', async (req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (error) {
-    console.error('Error generating share page:', error);
+    logger.error('Error generating share page:', error);
     res.redirect('/');
   }
 });
@@ -2579,7 +2559,7 @@ app.get('/share/linear-feature/:id', async (req, res) => {
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (error) {
-    console.error('Error generating share page:', error);
+    logger.error('Error generating share page:', error);
     res.redirect('/');
   }
 });
@@ -2672,7 +2652,7 @@ async function resolvePoiOgImage(poiId, baseUrl) {
         url = `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
       }
     } catch (error) {
-      console.error('Error resolving POI OG image:', error);
+      logger.error('Error resolving POI OG image:', error);
     }
   }
   if (!url) {
@@ -2767,7 +2747,7 @@ app.use(async (req, res, next) => {
         return res.send(html);
       }
     } catch (error) {
-      console.error('Error injecting OG tags:', error);
+      logger.error('Error injecting OG tags:', error);
     }
   }
   next();
@@ -2813,7 +2793,7 @@ app.use(async (req, res, next) => {
     res.setHeader('Content-Type', 'text/html');
     return res.send(html);
   } catch (error) {
-    console.error('Error injecting OG tags for permalink:', error);
+    logger.error('Error injecting OG tags for permalink:', error);
   }
   next();
 });
@@ -2836,7 +2816,7 @@ app.use((err, req, res, next) => {
   const message = err.code === 'LIMIT_FILE_SIZE'
     ? 'File too large (max 10MB)'
     : (err.expose ? err.message : (status >= 500 ? 'Internal server error' : err.message || 'Request failed'));
-  console.error(`[error] ${req.method} ${req.path} -> ${status}:`, err.message);
+  errorLogger.error(`${req.method} ${req.path} -> ${status}:`, err.message);
   res.status(status).json({ error: message, code: err.code });
 });
 
@@ -2888,9 +2868,9 @@ async function setupAiSearchDefaults() {
       ADD COLUMN IF NOT EXISTS last_news_collection TIMESTAMP
     `);
 
-    console.log('[AI Search] Default configuration verified');
+    aiSearchLogger.info('Default configuration verified');
   } catch (error) {
-    console.error('[AI Search] Error setting up defaults:', error.message);
+    aiSearchLogger.error('Error setting up defaults:', error.message);
   }
 }
 
@@ -2903,13 +2883,13 @@ async function start() {
     const CANONICAL_EVENT_TYPES = ['hike', 'race', 'concert', 'festival', 'program', 'volunteer', 'arts', 'community', 'alert'];
     const CANONICAL_NEWS_TYPES = ['general', 'alert', 'wildlife', 'infrastructure', 'community'];
     const { rows: nonCanonical } = await pool.query(`
-      SELECT 'events' AS src, COUNT(*) AS cnt FROM poi_events WHERE event_type NOT IN (${CANONICAL_EVENT_TYPES.map((_, i) => `$${i + 1}`).join(',')})
+      SELECT 'events' AS src, COUNT(*) AS cnt FROM poi_events WHERE event_type <> ALL($1::text[])
       UNION ALL
-      SELECT 'news', COUNT(*) FROM poi_news WHERE news_type NOT IN (${CANONICAL_NEWS_TYPES.map((_, i) => `$${i + CANONICAL_EVENT_TYPES.length + 1}`).join(',')})
-    `, [...CANONICAL_EVENT_TYPES, ...CANONICAL_NEWS_TYPES]);
+      SELECT 'news', COUNT(*) FROM poi_news WHERE news_type <> ALL($2::text[])
+    `, [CANONICAL_EVENT_TYPES, CANONICAL_NEWS_TYPES]);
     const needsNormalization = nonCanonical.some(r => parseInt(r.cnt) > 0);
     if (needsNormalization) {
-      console.log('Non-canonical content types detected, normalizing...');
+      logger.info('Non-canonical content types detected, normalizing...');
       await pool.query(`
         UPDATE poi_events SET event_type = 'hike' WHERE LOWER(event_type) IN ('guided-tour', 'hiking', 'hikes & outdoor adventures', 'trail', 'recreation', 'scenic-drive', 'wildlife viewing', 'tour') AND event_type != 'hike';
         UPDATE poi_events SET event_type = 'race' WHERE LOWER(event_type) IN ('sports', 'sporting', 'sport', 'sporting event', 'trail-race', 'trail run', 'trail-run', 'trail running', 'marathon', 'running', 'run/walk', 'fun-run', 'athletics', 'fitness', 'tournament') AND event_type != 'race';
@@ -2924,10 +2904,10 @@ async function start() {
         UPDATE poi_news SET news_type = 'alert' WHERE LOWER(news_type) IN ('closure', 'maintenance', 'seasonal') AND news_type != 'alert';
         UPDATE poi_news SET news_type = 'general' WHERE news_type NOT IN ('general', 'alert', 'wildlife', 'infrastructure', 'community');
       `);
-      console.log('Content types normalized');
+      logger.info('Content types normalized');
     }
   } catch (err) {
-    console.error('Content type normalization failed:', err.message);
+    logger.error('Content type normalization failed:', err.message);
   }
 
   imageServerClient.initialize();
@@ -2943,7 +2923,7 @@ async function start() {
 
     try {
       await unscheduleJob('news-collection');
-      console.log('Legacy news-collection schedule removed');
+      logger.info('Legacy news-collection schedule removed');
     } catch (e) {
       // Already removed — harmless
     }
@@ -2952,7 +2932,7 @@ async function start() {
       try {
         await unscheduleJob(retired);
       } catch (error) {
-        console.warn(`Could not unschedule retired job ${retired}: ${error.message}`);
+        logger.warn(`Could not unschedule retired job ${retired}: ${error.message}`);
       }
     }
 
@@ -2965,9 +2945,9 @@ async function start() {
     ]) {
       const label = PIPELINE_LABELS[pipeline];
       await registerPipelineCollectionHandler(pipeline, withJitter(async () => {
-        console.log(`Running scheduled ${label} collection...`);
+        logger.info(`Running scheduled ${label} collection...`);
         const pipelineRun = await runPipelineCollection(pool, pipeline, null);
-        console.log(pipelineRun.totalPois > 0
+        logger.info(pipelineRun.totalPois > 0
           ? `${label} collection started for ${pipelineRun.totalPois} POIs`
           : `${label}: no POIs due`);
       }, `${pipeline}-collection`));
@@ -2976,26 +2956,26 @@ async function start() {
     }
 
     await registerBatchNewsHandler(async (pgBossJobId, jobData) => {
-      console.log(`[pg-boss] Processing batch news job: ${pgBossJobId}`);
+      pgBossLogger.info(`Processing batch news job: ${pgBossJobId}`);
       await processNewsCollectionJob(pool, null, pgBossJobId, jobData);
     });
 
     await registerTrailStatusHandler(withJitter(async () => {
-      console.log('Running scheduled trail status collection for all MTB trails...');
+      logger.info('Running scheduled trail status collection for all MTB trails...');
       const { runTrailStatusCollection } = await import('./services/trailStatusService.js');
       const boss = app.get('boss');
       const trailStatusResult = await runTrailStatusCollection(pool, boss, {
         jobType: 'scheduled_collection'
       });
       if (trailStatusResult.totalTrails > 0) {
-        console.log(`Trail status collection started for ${trailStatusResult.totalTrails} trails`);
+        logger.info(`Trail status collection started for ${trailStatusResult.totalTrails} trails`);
       } else {
-        console.log('No MTB trails to collect');
+        logger.info('No MTB trails to collect');
       }
     }, 'trail-status'));
 
     await registerBatchTrailStatusHandler(async (jobId, poiIds) => {
-      console.log(`[pg-boss] Processing batch trail status job: ${jobId}`);
+      pgBossLogger.info(`Processing batch trail status job: ${jobId}`);
       await processTrailStatusCollectionJob(pool, jobId, poiIds);
     });
 
@@ -3005,9 +2985,9 @@ async function start() {
 
     // River gauge levels (#92): hourly fetch from USGS — no AI, no rendering, just polite polling
     await registerRiverLevelsHandler(withJitter(async (jobData) => {
-      console.log('Running scheduled river levels collection...');
+      logger.info('Running scheduled river levels collection...');
       const summary = await runRiverLevelsCollection(pool, { jobId: jobData?.jobId || 0 });
-      console.log(`River levels collection: ${summary.gaugesProcessed}/${summary.totalGauges} gauges, ${summary.readingsInserted} new readings`);
+      logger.info(`River levels collection: ${summary.gaugesProcessed}/${summary.totalGauges} gauges, ${summary.readingsInserted} new readings`);
     }, 'river-levels'));
     await scheduleRiverLevelsCollection('*/30 * * * *');
 
@@ -3016,10 +2996,10 @@ async function start() {
       try {
         const deleted = await pool.query(`DELETE FROM job_logs WHERE created_at < NOW() - INTERVAL '30 days'`);
         if (deleted.rowCount > 0) {
-          console.log(`[JobLogger] Purged ${deleted.rowCount} log entries older than 30 days`);
+          jobLogsLogger.info(`Purged ${deleted.rowCount} log entries older than 30 days`);
         }
       } catch (err) {
-        console.error('[JobLogger] Retention cleanup failed:', err.message);
+        jobLogsLogger.error('Retention cleanup failed:', err.message);
       }
     }, 'moderation-sweep'));
 
@@ -3042,11 +3022,11 @@ async function start() {
       );
       const email = rows[0]?.value?.trim();
       if (!email) {
-        console.log('Newsletter preview skipped — newsletter_preview_email setting empty');
+        logger.info('Newsletter preview skipped — newsletter_preview_email setting empty');
         return;
       }
       const previewSend = await sendDigestPreviewTo(pool, email, 'America/New_York', pgBossJobId);
-      console.log('Newsletter preview result:', JSON.stringify(previewSend));
+      logger.info('Newsletter preview result:', JSON.stringify(previewSend));
     });
 
     await schedulePreview('0 8 * * 4');
@@ -3070,21 +3050,21 @@ async function start() {
     };
 
     await registerImageBackupHandler(withJitter(async () => {
-      console.log('Running scheduled image backup...');
+      logger.info('Running scheduled image backup...');
       const { triggerImageBackup } = await import('./services/backupService.js');
       const drive = await getAdminDriveService();
       const imageBackupResult = await triggerImageBackup(pool, drive);
-      console.log(`Image backup completed: ${imageBackupResult.uploaded} uploaded, ${imageBackupResult.skipped} skipped, ${imageBackupResult.failed} failed`);
+      logger.info(`Image backup completed: ${imageBackupResult.uploaded} uploaded, ${imageBackupResult.skipped} skipped, ${imageBackupResult.failed} failed`);
     }, 'image-backup'));
 
     await scheduleImageBackup('0 2 * * *');
 
     await registerDatabaseBackupHandler(withJitter(async () => {
-      console.log('Running scheduled database backup...');
+      logger.info('Running scheduled database backup...');
       const { triggerBackup } = await import('./services/backupService.js');
       const drive = await getAdminDriveService();
       const dbBackupResult = await triggerBackup(pool, drive);
-      console.log(`Database backup completed: ${dbBackupResult.filename} (${dbBackupResult.driveFileId})`);
+      logger.info(`Database backup completed: ${dbBackupResult.filename} (${dbBackupResult.driveFileId})`);
     }, 'database-backup'));
 
     await scheduleDatabaseBackup('0 3 * * *');
@@ -3093,21 +3073,21 @@ async function start() {
 
     const incompleteJobs = await findIncompleteJobs(pool);
     if (incompleteJobs.length > 0) {
-      console.log(`[pg-boss] Found ${incompleteJobs.length} incomplete job(s) to resume`);
+      pgBossLogger.info(`Found ${incompleteJobs.length} incomplete job(s) to resume`);
       for (const job of incompleteJobs) {
         let poiIds = job.poi_ids;
         if (typeof poiIds === 'string') {
           poiIds = JSON.parse(poiIds);
         }
         if (poiIds && poiIds.length > 0) {
-          console.log(`[pg-boss] Resuming job ${job.id} with ${poiIds.length} POIs`);
+          pgBossLogger.info(`Resuming job ${job.id} with ${poiIds.length} POIs`);
           await submitBatchNewsJob({ jobId: job.id, poiIds });
         }
       }
     }
   } catch (error) {
     // Scheduler failure is non-fatal — admin route can still trigger jobs manually
-    console.error('Failed to initialize job scheduler:', error.message);
+    logger.error('Failed to initialize job scheduler:', error.message);
   }
 
   // CI/tests must never reach the live TrackMyShuttle service. The test env files
@@ -3116,12 +3096,12 @@ async function start() {
   // tests) stays off. Unset in prod, so the tracker runs there. (PR #417 review)
   if (process.env.DISABLE_LIVE_BOAT_TRACKER !== 'true') {
     startTracker(pool).catch(err =>
-      console.error('[WaterTaxiTracker] Failed to start:', err.message));
+      waterTaxiTrackerLogger.error('Failed to start:', err.message));
   }
 
   if (process.env.DISABLE_LIVE_TRAIN_TRACKER !== 'true') {
     startTrainTracker(pool).catch(err =>
-      console.error('[TrainTracker] Failed to start:', err.message));
+      trainTrackerLogger.error('Failed to start:', err.message));
   }
 
   activeSmtpServer = startSmtpServer(pool);
@@ -3133,10 +3113,10 @@ async function start() {
   const mcpHandler = mcpMiddleware(pool, app.get('boss'));
   app.all('/mcp/:token', mcpHandler);
   app.all('/mcp', mcpHandler);
-  console.log('MCP server mounted at /mcp/:token and /mcp?token=');
+  logger.info('MCP server mounted at /mcp/:token and /mcp?token=');
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Roots of The Valley API running on port ${PORT}`);
+    logger.info(`Roots of The Valley API running on port ${PORT}`);
   });
 }
 
@@ -3144,27 +3124,24 @@ async function start() {
 // transient failure (usually a pg pool timeout) would otherwise exit the process and
 // take the site down with it. Stay up and log — a dropped job beats a dropped site.
 process.on('unhandledRejection', reason => {
-  console.error('[unhandledRejection] Backend stayed up; investigate:', reason);
+  unhandledRejectionLogger.error('Backend stayed up; investigate:', reason);
 });
 
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully...');
+async function shutdown(signal) {
+  logger.info(`${signal} received, shutting down gracefully...`);
   stopTracker();
   stopTrainTracker();
   if (activeSmtpServer) activeSmtpServer.close();
   await stopJobLogger();
   await stopJobScheduler();
   process.exit(0);
-});
+}
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully...');
-  stopTracker();
-  stopTrainTracker();
-  if (activeSmtpServer) activeSmtpServer.close();
-  await stopJobLogger();
-  await stopJobScheduler();
-  process.exit(0);
-});
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
-start().catch(console.error);
+start().catch(error => {
+  // A half-initialised server must not keep running; exit non-zero so systemd restarts it.
+  logger.error('Startup failed:', error);
+  process.exit(1);
+});

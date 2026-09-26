@@ -1,15 +1,6 @@
 import React from 'react';
 import ShareButton from './ShareButton';
-
-function generateSlug(name) {
-  if (!name) return '';
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '');
-}
+import { generateSlug } from './sidebar/helpers';
 
 export function formatDate(dateString) {
   if (!dateString) return '';
@@ -22,7 +13,7 @@ export function formatDate(dateString) {
   });
 }
 
-export function formatDateWithWeekday(dateString) {
+function formatDateWithWeekday(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleDateString('en-US', {
@@ -56,7 +47,7 @@ export function formatDateTime(dateString) {
   });
 }
 
-export const NEWS_TYPES = {
+const NEWS_TYPES = {
   general: { icon: 'N', label: 'General', color: '#6a1b9a' },
   alert: { icon: '!', label: 'Alert', color: '#c62828' },
   wildlife: { icon: 'W', label: 'Wildlife', color: '#2e7d32' },
@@ -64,7 +55,7 @@ export const NEWS_TYPES = {
   community: { icon: 'M', label: 'Community', color: '#1565c0' }
 };
 
-export const EVENT_TYPES = {
+const EVENT_TYPES = {
   'hike': { icon: 'H', label: 'Hike', color: '#2e7d32' },
   'race': { icon: 'R', label: 'Race', color: '#e65100' },
   'concert': { icon: 'C', label: 'Concert', color: '#e91e63' },
@@ -110,142 +101,27 @@ export function DetailImage({ imageUrl, poiId, alt }) {
   );
 }
 
-export function NewsTypeIcon({ type }) {
-  const config = NEWS_TYPES[type] || NEWS_TYPES.general;
+function TypeIcon({ types, fallbackType, iconClass, type }) {
+  const config = types[type] || types[fallbackType];
   return (
     <span
-      className={`news-type-icon ${type || 'general'}`}
+      className={`${iconClass} ${type || fallbackType}`}
       title={config.label}
     >
       {config.icon}
     </span>
   );
+}
+
+export function NewsTypeIcon({ type }) {
+  return <TypeIcon types={NEWS_TYPES} fallbackType="general" iconClass="news-type-icon" type={type} />;
 }
 
 export function EventTypeIcon({ type }) {
-  const config = EVENT_TYPES[type] || EVENT_TYPES.program;
-  return (
-    <span
-      className={`event-type-icon ${type || 'program'}`}
-      title={config.label}
-    >
-      {config.icon}
-    </span>
-  );
+  return <TypeIcon types={EVENT_TYPES} fallbackType="program" iconClass="event-type-icon" type={type} />;
 }
 
-export function NewsItemCard({ item, onDelete, deleting, isAdmin }) {
-  return (
-    <div className={`news-item-card ${item.news_type || 'general'}`}>
-      <div className="item-card-header">
-        <NewsTypeIcon type={item.news_type} />
-        <span className="item-card-title">{item.title}</span>
-        {isAdmin && onDelete && (
-          <button
-            className="item-card-delete"
-            onClick={() => onDelete(item.id)}
-            disabled={deleting === item.id}
-            title="Delete"
-          >
-            {deleting === item.id ? '...' : '×'}
-          </button>
-        )}
-      </div>
-      {item.summary && <p className="item-card-summary">{item.summary}</p>}
-      <div className="item-card-meta">
-        {item.poi_name && <span className="item-card-poi">{item.poi_name}</span>}
-        {item.source_name && <span className="item-card-source">{item.source_name}</span>}
-        {(item.publication_date || item.collection_date) && (
-          <span className="item-card-date">
-            {item.publication_date
-              ? formatPublicationDate(item.publication_date)
-              : new Date(item.collection_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York' })}
-          </span>
-        )}
-        {item.source_url && (
-          <a
-            href={item.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="item-card-link"
-          >
-            Read more
-          </a>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export function EventItemCard({ item, onDelete, deleting, isAdmin }) {
-  return (
-    <div className={`event-item-card ${item.event_type || 'program'}`}>
-      <div className="item-card-header">
-        <EventTypeIcon type={item.event_type} />
-        <span className="item-card-title">{item.title}</span>
-        {isAdmin && onDelete && (
-          <button
-            className="item-card-delete"
-            onClick={() => onDelete(item.id)}
-            disabled={deleting === item.id}
-            title="Delete"
-          >
-            {deleting === item.id ? '...' : '×'}
-          </button>
-        )}
-      </div>
-      <div className="item-card-date-row">
-        {(() => {
-          const startStr = String(item.start_date || '');
-          const endStr = String(item.end_date || '');
-          const _hasTime = (s) => { const m = s.match(/[T ](\d{2}:\d{2}:\d{2})/); return m && m[1] !== '00:00:00'; };
-          const _toISO = (s) => s.replace(/^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})/, '$1T$2').replace(/([+-]\d{2})$/, '$1:00');
-          const endHasTime = _hasTime(endStr);
-          const startHasTime = _hasTime(startStr) || endHasTime;
-          const _localDate = (s) => new Date(_toISO(s)).toLocaleDateString('en-US', { timeZone: 'America/New_York' });
-          const sameDay = endStr ? _localDate(startStr) === _localDate(endStr) : true;
-
-          if (sameDay && startHasTime) {
-            const startDate = new Date(_toISO(startStr));
-            const dateLabel = startDate.toLocaleDateString('en-US', {
-              weekday: 'short', year: 'numeric', month: 'short', day: 'numeric', timeZone: 'America/New_York'
-            });
-            const startTime = startDate.toLocaleTimeString('en-US', {
-              hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
-            });
-            if (endHasTime) {
-              const endTime = new Date(_toISO(endStr)).toLocaleTimeString('en-US', {
-                hour: 'numeric', minute: '2-digit', timeZone: 'America/New_York'
-              });
-              return `${dateLabel}, ${startTime} – ${endTime}`;
-            }
-            return `${dateLabel}, ${startTime}`;
-          } else if (endStr && !sameDay) {
-            return <>{formatPublicationDate(startStr)} – {formatPublicationDate(endStr)}</>;
-          }
-          return formatPublicationDate(startStr);
-        })()}
-      </div>
-      {item.description && <p className="item-card-summary">{item.description}</p>}
-      <div className="item-card-meta">
-        {item.poi_name && <span className="item-card-poi">{item.poi_name}</span>}
-        {item.location_details && <span className="item-card-location">{item.location_details}</span>}
-        {item.source_url && (
-          <a
-            href={item.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="item-card-link"
-          >
-            More info
-          </a>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export function formatEventDateRange(startDate, endDate) {
+function formatEventDateRange(startDate, endDate) {
   const startStr = String(startDate || '');
   const endStr = String(endDate || '');
   if (!startStr) return '';
@@ -416,40 +292,6 @@ export function EventCardBody({ item, onSelectPoi, calendarButtons, children, cl
         )}
       </div>
       {children}
-    </div>
-  );
-}
-
-export function NewsTypeFilters({ filters, onChange }) {
-  return (
-    <div className="type-filter-chips">
-      {Object.entries(NEWS_TYPES).map(([type, config]) => (
-        <div
-          key={type}
-          className={`type-filter-chip ${type} ${filters[type] ? 'active' : 'inactive'}`}
-          onClick={() => onChange({ ...filters, [type]: !filters[type] })}
-        >
-          <span className="type-filter-icon">{config.icon}</span>
-          {config.label}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-export function EventTypeFilters({ filters, onChange }) {
-  return (
-    <div className="type-filter-chips">
-      {Object.entries(EVENT_TYPES).map(([type, config]) => (
-        <div
-          key={type}
-          className={`type-filter-chip ${type} ${filters[type] ? 'active' : 'inactive'}`}
-          onClick={() => onChange({ ...filters, [type]: !filters[type] })}
-        >
-          <span className="type-filter-icon">{config.icon}</span>
-          {config.label}
-        </div>
-      ))}
     </div>
   );
 }

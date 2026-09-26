@@ -1,0 +1,6 @@
+check = "CQ013-hardcoded_years"
+
+[[locations]]
+path = "backend/services/trainTrackerService.js"
+justification = "Line 15 is a doc comment citing the date of a real incident ('#038 follow-up, 2026-07-10 outage') that motivated the lazy-auth retry design; it is historical provenance, not a generated timestamp or a stale runtime value."
+classification = "gourmand_bug"

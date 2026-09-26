@@ -11,6 +11,7 @@ fi
 BASE_IMAGE_NAME="quay.io/crunchtools/rotv-base"
 IMAGE_NAME="quay.io/crunchtools/rotv"
 CONTAINER_NAME="${ROTV_CONTAINER:-rotv}"
+GOURMAND_IMAGE="quay.io/crunchtools/gourmand:latest"
 HOST_PORT="${ROTV_PORT:-8080}"
 
 # Development uses ephemeral storage (tmpfs) - data is thrown away on restart
@@ -297,8 +298,8 @@ ENVFILE
 
         # Run tests INSIDE container
         echo "Running tests inside container..."
-        podman exec "$CONTAINER_NAME" sh -c "cd /app && npm test"
-        TEST_EXIT_CODE=$?
+        TEST_EXIT_CODE=0
+        podman exec "$CONTAINER_NAME" sh -c "cd /app && npm test" || TEST_EXIT_CODE=$?
 
         # Clean up - stop test container
         echo ""
@@ -310,26 +311,16 @@ ENVFILE
         GOURMAND_EXIT_CODE=0
         echo ""
         echo "Running Gourmand AI slop detection..."
-        GOURMAND_BIN="$HOME/.cargo/bin/gourmand"
-        if [ -x "$GOURMAND_BIN" ]; then
-            "$GOURMAND_BIN" --full .
-            GOURMAND_EXIT_CODE=$?
-        elif command -v gourmand &> /dev/null; then
-            gourmand --full .
-            GOURMAND_EXIT_CODE=$?
-        else
-            echo "⚠ Gourmand not installed locally (skipping)"
-            echo "  Install with: cargo install --git https://codeberg.org/mattdm/gourmand.git"
-            echo "  CI will still run Gourmand checks on pull requests"
-        fi
+        # Same image the CI gourmand job uses (crunchtools/gatehouse gourmand.yml)
+        podman run --rm -v "$PWD":/src:Z -w /src "$GOURMAND_IMAGE" \
+            check --full --cache-dir /tmp/gourmand-cache . || GOURMAND_EXIT_CODE=$?
 
         # Run ESLint on JavaScript/React code
         ESLINT_EXIT_CODE=0
         echo ""
         echo "Running ESLint on JavaScript/React code..."
         if [ -d "node_modules" ]; then
-            npm run lint
-            ESLINT_EXIT_CODE=$?
+            npm run lint || ESLINT_EXIT_CODE=$?
         else
             echo "⚠ Node dependencies not installed (skipping ESLint)"
             echo "  Install with: npm install"
@@ -340,8 +331,7 @@ ENVFILE
         echo ""
         echo "Running Gatehouse AI code review..."
         if command -v gatehouse &> /dev/null; then
-            gatehouse
-            GATEHOUSE_EXIT_CODE=$?
+            gatehouse || GATEHOUSE_EXIT_CODE=$?
         else
             echo "⚠ Gatehouse not installed (skipping)"
             echo "  Install with: uv tool install gatehouse"
@@ -377,18 +367,8 @@ ENVFILE
 
     gourmand)
         echo "Running Gourmand AI slop detection..."
-        GOURMAND_BIN="$HOME/.cargo/bin/gourmand"
-        if [ -x "$GOURMAND_BIN" ]; then
-            "$GOURMAND_BIN" --full .
-        elif command -v gourmand &> /dev/null; then
-            gourmand --full .
-        else
-            echo "❌ Gourmand not installed"
-            echo ""
-            echo "Install with:"
-            echo "  cargo install --git https://codeberg.org/mattdm/gourmand.git"
-            exit 1
-        fi
+        podman run --rm -v "$PWD":/src:Z -w /src "$GOURMAND_IMAGE" \
+            check --full --cache-dir /tmp/gourmand-cache .
         ;;
 
     gatehouse)

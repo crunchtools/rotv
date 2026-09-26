@@ -1,3 +1,7 @@
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('EventSeries');
+
 /**
  * Event Series Service - recurring events (spec 034, issue #436).
  *
@@ -207,10 +211,10 @@ export async function materializeAllSeries(pool) {
     const series = await getAllActiveSeries(pool);
     let total = 0;
     for (const s of series) total += await materializeSeries(pool, s);
-    if (total > 0) console.log(`[EventSeries] Materialized ${total} recurring occurrence(s) across ${series.length} series`);
+    if (total > 0) logger.info(`Materialized ${total} recurring occurrence(s) across ${series.length} series`);
     return total;
   } catch (err) {
-    console.warn(`[EventSeries] materializeAllSeries skipped: ${err.message}`);
+    logger.warn(`materializeAllSeries skipped: ${err.message}`);
     return 0;
   }
 }

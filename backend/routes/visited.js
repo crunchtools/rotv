@@ -1,6 +1,10 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { isAuthenticated } from '../middleware/auth.js';
+import { parsePositiveId } from '../utils/requestParams.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Visited');
 
 const visitedWriteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -10,11 +14,6 @@ const visitedWriteLimiter = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip)
 });
-
-function parsePoiId(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
 
 export function createVisitedRouter(pool) {
   const router = express.Router();
@@ -32,7 +31,7 @@ export function createVisitedRouter(pool) {
       );
       res.json(visited.rows);
     } catch (err) {
-      console.error('GET /api/visited failed:', err);
+      logger.error('GET /api/visited failed:', err);
       res.status(500).json({ error: 'Failed to load visited list' });
     }
   });
@@ -55,13 +54,13 @@ export function createVisitedRouter(pool) {
       const counts = stats.rows[0] || {};
       res.json({ visited: Number(counts.visited) || 0, total: Number(counts.total) || 0 });
     } catch (err) {
-      console.error('GET /api/visited/stats failed:', err);
+      logger.error('GET /api/visited/stats failed:', err);
       res.status(500).json({ error: 'Failed to load visited stats' });
     }
   });
 
   router.post('/:poiId', isAuthenticated, visitedWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
@@ -80,13 +79,13 @@ export function createVisitedRouter(pool) {
       );
       res.status(201).json({ poiId, visited: true });
     } catch (err) {
-      console.error('POST /api/visited/:poiId failed:', err);
+      logger.error('POST /api/visited/:poiId failed:', err);
       res.status(500).json({ error: 'Failed to mark visited' });
     }
   });
 
   router.delete('/:poiId', isAuthenticated, visitedWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
@@ -97,7 +96,7 @@ export function createVisitedRouter(pool) {
       );
       res.json({ poiId, visited: false });
     } catch (err) {
-      console.error('DELETE /api/visited/:poiId failed:', err);
+      logger.error('DELETE /api/visited/:poiId failed:', err);
       res.status(500).json({ error: 'Failed to remove visited' });
     }
   });

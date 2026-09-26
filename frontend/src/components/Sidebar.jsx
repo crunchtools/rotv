@@ -13,9 +13,7 @@ import EditView from './sidebar/EditView';
 import PoiNews from './sidebar/PoiNews';
 import ContentDetail from './sidebar/ContentDetail';
 import PoiEvents from './sidebar/PoiEvents';
-import AssociationsModal from './sidebar/AssociationsModal';
 import AssociationsTabContent from './sidebar/AssociationsTabContent';
-import TrailStatus from './sidebar/TrailStatus';
 import RiverLevels from './sidebar/RiverLevels';
 
 const SIDEBAR_TAB_LABELS = {
@@ -64,7 +62,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   }, [initialSidebarTab]);
 
   const [showShareModal, setShowShareModal] = useState(false);
-  const [showAssociationsModal, setShowAssociationsModal] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [pendingImage, setPendingImage] = useState(null);
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -84,7 +81,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     let cancelled = false;
     fetch(`/api/pois/${pointId}/serving-taxis`)
       .then(r => (r.ok ? r.json() : []))
-      .then(data => { if (!cancelled) setServingTaxis(Array.isArray(data) ? data : []); })
+      .then(taxis => { if (!cancelled) setServingTaxis(Array.isArray(taxis) ? taxis : []); })
       .catch((err) => { if (!cancelled) { console.error('Error fetching serving taxis:', err); setServingTaxis([]); } });
     return () => { cancelled = true; };
   }, [destination?.id, destination?.poi_roles]);
@@ -204,7 +201,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     const controller = new AbortController();
     fetch(`/api/pois/${poiId}/tab-counts?tz=${encodeURIComponent(tz)}`, { signal: controller.signal })
       .then(res => (res.ok ? res.json() : { news_count: 0, events_count: 0 }))
-      .then(data => setTabCounts(data))
+      .then(counts => setTabCounts(counts))
       .catch(err => {
         if (err.name === 'AbortError') return;
         setTabCounts({ news_count: 0, events_count: 0 });
@@ -222,7 +219,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     const controller = new AbortController();
     fetch(`/api/pois/${poiId}/river-gauges`, { signal: controller.signal })
       .then(res => (res.ok ? res.json() : []))
-      .then(data => setHasGauges(Array.isArray(data) && data.length > 0))
+      .then(gauges => setHasGauges(Array.isArray(gauges) && gauges.length > 0))
       .catch(err => { if (err.name !== 'AbortError') setHasGauges(false); });
     return () => controller.abort();
   }, [displayItem?.id, displayItem?.poi_roles]);
@@ -346,8 +343,8 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         }
         throw new Error('Failed to fetch status');
       })
-      .then(data => {
-        setTrailStatus(data);
+      .then(status => {
+        setTrailStatus(status);
       })
       .catch(err => {
         console.error('Failed to fetch trail status:', err);
@@ -365,8 +362,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       if (response.ok) {
         const statusResponse = await fetch(`/api/pois/${displayItem.id}/status`);
         if (statusResponse.ok) {
-          const data = await statusResponse.json();
-          setTrailStatus(data);
+          setTrailStatus(await statusResponse.json());
         }
       } else {
         const error = await response.json();
@@ -864,21 +860,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           poiName={linearFeature.name}
           poiDescription={linearFeature.brief_description}
         />
-
-        <AssociationsModal
-          isOpen={showAssociationsModal}
-          onClose={() => setShowAssociationsModal(false)}
-          poi={linearFeature}
-          associations={associations}
-          allDestinations={allDestinations}
-          allLinearFeatures={allLinearFeatures}
-          allVirtualPois={allVirtualPois}
-          onSelectDestination={onSelectDestination}
-          onSelectLinearFeature={onSelectLinearFeature}
-          isAdmin={isAdmin}
-          editMode={editMode}
-          onAssociationsChanged={onAssociationsChanged}
-        />
       </div>
     );
   }
@@ -1172,21 +1153,6 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         onClose={() => setShowShareModal(false)}
         poiName={destination?.name || ''}
         poiDescription={destination?.brief_description}
-      />
-
-      <AssociationsModal
-        isOpen={showAssociationsModal}
-        onClose={() => setShowAssociationsModal(false)}
-        poi={destination}
-        associations={associations}
-        allDestinations={allDestinations}
-        allLinearFeatures={allLinearFeatures}
-        allVirtualPois={allVirtualPois}
-        onSelectDestination={onSelectDestination}
-        onSelectLinearFeature={onSelectLinearFeature}
-        isAdmin={isAdmin}
-        editMode={editMode}
-        onAssociationsChanged={onAssociationsChanged}
       />
 
       {uploadModalOpen && destination?.id && (

@@ -1,0 +1,6 @@
+check = "SE001-security_practices"
+
+[[locations]]
+path = "backend/services/backupService.js"
+justification = "triggerBackup and restoreBackup call spawn('pg_dump' | 'psql', [argv array]) with no shell option, so the args are never shell-parsed. The args are -h/-p/-U plus the database name, taken from the PGHOST/PGPORT/PGUSER/PGDATABASE env vars (operator config, defaults localhost/5432/rotv/rotv). No request data is used. Dump data travels only over stdout/stdin, never argv."
+classification = "by_design"

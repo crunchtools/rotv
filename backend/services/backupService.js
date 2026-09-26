@@ -3,6 +3,12 @@ import { Readable } from 'stream';
 import { getDriveSetting, setDriveSetting, uploadImageToDrive } from './driveImageService.js';
 import imageServerClient from './imageServerClient.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Backup');
+const restoreLogger = createLogger('Restore');
+const imageBackupLogger = createLogger('ImageBackup');
+const imageRestoreLogger = createLogger('ImageRestore');
 
 const BACKUPS_FOLDER_NAME = 'Database';
 
@@ -28,7 +34,7 @@ async function ensureBackupsFolder(drive, pool) {
     throw new Error('Root Drive folder not configured. Set up Drive folders first.');
   }
 
-  console.log('Creating Database folder...');
+  logger.info('Creating Database folder...');
   const response = await drive.files.create({
     requestBody: {
       name: BACKUPS_FOLDER_NAME,
@@ -62,7 +68,7 @@ export async function triggerBackup(pool, drive) {
       stdio: ['ignore', 'pipe', 'pipe']
     });
     proc.stdout.on('data', (chunk) => chunks.push(chunk));
-    proc.stderr.on('data', (chunk) => console.warn('[Backup] pg_dump stderr:', chunk.toString()));
+    proc.stderr.on('data', (chunk) => logger.warn('pg_dump stderr:', chunk.toString()));
     proc.on('close', (code) => {
       if (code !== 0) return reject(new Error(`pg_dump exited with code ${code}`));
       resolve(Buffer.concat(chunks).toString('utf-8'));
@@ -98,7 +104,7 @@ export async function triggerBackup(pool, drive) {
       updated_at = CURRENT_TIMESTAMP
   `, [now]);
 
-  console.log(`Backup uploaded to Drive: ${filename} (${driveFileId})`);
+  logger.info(`Backup uploaded to Drive: ${filename} (${driveFileId})`);
   logInfo(runId, 'database_backup', null, null, `Complete: ${filename} uploaded to Drive`, { completed: true, filename, driveFileId });
   await flushJobLogs();
 
@@ -123,7 +129,7 @@ export async function listBackups(drive, pool) {
     });
     return response.data.files || [];
   } catch (error) {
-    console.error('Error listing backups:', error.message);
+    logger.error('Error listing backups:', error.message);
     return [];
   }
 }
@@ -162,12 +168,12 @@ export async function restoreBackup(pool, drive, fileId) {
 
     proc.on('close', async (code) => {
       if (code !== 0) {
-        console.error('[Restore] psql stderr:', stderr);
+        restoreLogger.error('psql stderr:', stderr);
         logError(runId, 'database_backup', null, null, `Restore failed: psql exit code ${code}`, { error_stack: stderr.slice(0, 2000) });
         await flushJobLogs();
         return reject(new Error(`psql exited with code ${code}: ${stderr.slice(0, 500)}`));
       }
-      console.log('[Restore] Database restored successfully');
+      restoreLogger.info('Database restored successfully');
       logInfo(runId, 'database_backup', null, null, 'Database restore complete', { completed: true });
       await flushJobLogs();
       resolve({ success: true });
@@ -242,7 +248,7 @@ export async function triggerImageBackup(pool, drive) {
     fields: 'id'
   });
   logInfo(runId, 'backup', null, null, `Uploaded DB dump: ${dbFilename}`);
-  console.log(`[ImageBackup] Uploaded DB dump: ${dbFilename}`);
+  imageBackupLogger.info(`Uploaded DB dump: ${dbFilename}`);
 
   const mediaFiles = await imageServerClient.listMediaFiles();
   const driveFiles = await listDriveImages(drive, imagesFolderId);
@@ -282,7 +288,7 @@ export async function triggerImageBackup(pool, drive) {
 
       uploaded++;
     } catch (error) {
-      console.warn(`[ImageBackup] Failed to backup ${media.subdir}/${media.filename}:`, error.message);
+      imageBackupLogger.warn(`Failed to backup ${media.subdir}/${media.filename}:`, error.message);
       failed++;
     }
   }
@@ -296,7 +302,7 @@ export async function triggerImageBackup(pool, drive) {
       updated_at = CURRENT_TIMESTAMP
   `, [now]);
 
-  console.log(`[ImageBackup] Done: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
+  imageBackupLogger.info(`Done: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`);
   logInfo(runId, 'backup', null, null, `Complete: ${uploaded} uploaded, ${skipped} skipped, ${failed} failed`, { completed: true, uploaded, skipped, failed });
   await flushJobLogs();
 
@@ -315,7 +321,7 @@ export async function getImageBackupStatus(pool, drive) {
       const mediaFiles = await imageServerClient.listMediaFiles();
       mediaFileCount = mediaFiles.length;
     } catch (error) {
-      console.warn('[ImageBackup] Could not list media files:', error);
+      imageBackupLogger.warn('Could not list media files:', error);
     }
   }
 
@@ -370,7 +376,7 @@ export async function restoreImagesFromDrive(pool, drive) {
   let dbRestored = false;
   if (dbDumps.length > 0) {
     const latestDump = dbDumps[0];
-    console.log(`[ImageRestore] Restoring DB from: ${latestDump.name}`);
+    imageRestoreLogger.info(`Restoring DB from: ${latestDump.name}`);
 
     const response = await drive.files.get(
       { fileId: latestDump.id, alt: 'media' },
@@ -382,9 +388,9 @@ export async function restoreImagesFromDrive(pool, drive) {
 
     if (restoreResult.success) {
       dbRestored = true;
-      console.log('[ImageRestore] DB restored successfully');
+      imageRestoreLogger.info('DB restored successfully');
     } else {
-      console.error('[ImageRestore] DB restore failed:', restoreResult.error);
+      imageRestoreLogger.error('DB restore failed:', restoreResult.error);
       throw new Error(`Database restore failed: ${restoreResult.error}`);
     }
   }
@@ -403,7 +409,7 @@ export async function restoreImagesFromDrive(pool, drive) {
 
     const separatorIdx = file.name.indexOf('--');
     if (separatorIdx === -1) {
-      console.warn(`[ImageRestore] Skipping unrecognized file: ${file.name}`);
+      imageRestoreLogger.warn(`Skipping unrecognized file: ${file.name}`);
       skipped++;
       continue;
     }
@@ -431,12 +437,12 @@ export async function restoreImagesFromDrive(pool, drive) {
         failed++;
       }
     } catch (error) {
-      console.warn(`[ImageRestore] Failed to restore ${file.name}:`, error.message);
+      imageRestoreLogger.warn(`Failed to restore ${file.name}:`, error.message);
       failed++;
     }
   }
 
-  console.log(`[ImageRestore] Done: DB=${dbRestored ? 'yes' : 'no'}, ${restored} media restored, ${skipped} skipped, ${failed} failed`);
+  imageRestoreLogger.info(`Done: DB=${dbRestored ? 'yes' : 'no'}, ${restored} media restored, ${skipped} skipped, ${failed} failed`);
   logInfo(runId, 'backup', null, null, `Restore complete: DB=${dbRestored ? 'yes' : 'no'}, ${restored} media restored, ${skipped} skipped, ${failed} failed`, { completed: true, dbRestored, restored, skipped, failed });
   await flushJobLogs();
 

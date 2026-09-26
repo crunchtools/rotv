@@ -13,11 +13,11 @@
 # [tool.ruff.lint.mccabe] threshold in the placeholder pyproject.toml (kept
 # solely to give gourmand a config file to find on this JS project); fixed
 # directly instead of re-disabling the check.
-lint_suppression = false  # verified below: every suppression covered by this
+EV001-lint_suppression = false  # verified below: every suppression covered by this
                           # override carries an adjacent WHY-comment
 
 [[check_overrides]]
-check = "lint_suppression"
+check = "EV001-lint_suppression"
 justification = "Project policy permits eslint-disable-next-line react-hooks/exhaustive-deps suppressions when each carries an adjacent WHY-comment naming the excluded reference — verified all 8 current sites carry one; the documented suppressions are deliberate dependency-array decisions, not hidden lint debt"
 classification = "by_design"
 

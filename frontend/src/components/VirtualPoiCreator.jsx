@@ -95,7 +95,8 @@ function VirtualPoiCreator({ isActive, onCancel, destinations, linearFeatures, o
               return contains;
             }
           } catch (err) {
-            console.error('Error parsing geometry:', err);
+            console.warn(`Skipping POI ${poi.id}: geometry is not valid GeoJSON`, err);
+            return false;
           }
         }
         return false;

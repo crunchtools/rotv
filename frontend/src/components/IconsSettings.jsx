@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import IconGeneratorModal from './IconGeneratorModal';
+import useDragReorder from '../hooks/useDragReorder';
 
 function IconsSettings() {
   const [icons, setIcons] = useState([]);
@@ -10,8 +11,6 @@ function IconsSettings() {
   const [saving, setSaving] = useState(false);
   const [showGeneratorModal, setShowGeneratorModal] = useState(false);
 
-  const [draggedIndex, setDraggedIndex] = useState(null);
-  const [dragOverIndex, setDragOverIndex] = useState(null);
 
   const fetchIcons = useCallback(async () => {
     try {
@@ -19,8 +18,7 @@ function IconsSettings() {
         credentials: 'include'
       });
       if (response.ok) {
-        const data = await response.json();
-        setIcons(data);
+        setIcons(await response.json());
         setError(null);
       } else {
         setError('Failed to fetch icons');
@@ -106,9 +104,11 @@ function IconsSettings() {
       if (response.ok) {
         const updated = await response.json();
         setIcons(prev => prev.map(i => i.id === icon.id ? updated : i));
+      } else {
+        setError('Failed to toggle icon');
       }
     } catch (err) {
-      console.error('Failed to toggle icon:', err);
+      setError(`Failed to toggle icon: ${err.message}`);
     }
   };
 
@@ -137,61 +137,22 @@ function IconsSettings() {
     }
   };
 
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', e.target.outerHTML);
-    setTimeout(() => {
-      e.target.classList.add('dragging');
-    }, 0);
-  };
-
-  const handleDragEnd = (e) => {
-    e.target.classList.remove('dragging');
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (index !== dragOverIndex) {
-      setDragOverIndex(index);
-    }
-  };
-
-  const handleDragLeave = (e) => {
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverIndex(null);
-    }
-  };
-
-  const handleDrop = async (e, dropIndex) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-      return;
-    }
-
-    const newOrder = [...icons];
-    const [draggedItem] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(dropIndex, 0, draggedItem);
+  const saveIconOrder = async (newOrder) => {
     setIcons(newOrder);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-
     try {
-      await fetch('/api/admin/icons/reorder', {
+      const response = await fetch('/api/admin/icons/reorder', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ orderedIds: newOrder.map(i => i.id) })
       });
+      if (!response.ok) setError('Failed to save order');
     } catch (err) {
-      console.error('Failed to save order:', err);
+      setError(`Failed to save order: ${err.message}`);
     }
   };
+
+  const { dragProps, dragClassName } = useDragReorder(icons, saveIconOrder);
 
   const parseKeywords = (keywordsStr) => {
     if (!keywordsStr) return [];
@@ -244,13 +205,8 @@ function IconsSettings() {
           icons.map((icon, index) => (
             <div
               key={icon.id}
-              className={`icon-item ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''} ${!icon.enabled ? 'disabled' : ''}`}
-              draggable={editingId !== icon.id}
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, index)}
+              className={`icon-item ${dragClassName(index)} ${!icon.enabled ? 'disabled' : ''}`}
+              {...dragProps(index, editingId !== icon.id)}
             >
               <div className="icon-drag-handle" title="Drag to reorder">
                 ⋮⋮

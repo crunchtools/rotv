@@ -1,8 +1,11 @@
 import express from 'express';
 import crypto from 'crypto';
 import { isAuthenticated } from '../middleware/auth.js';
-import { validateStops, insertStops, insertTripWithSlugRetry } from './trips.js';
+import { validateStops, insertStops, insertTripWithSlugRetry, rollbackQuietly } from './trips.js';
 import { addSubscriber } from '../services/buttondownClient.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('UserSettings');
 
 const MAX_SYNC_TRIPS = 50;
 
@@ -82,7 +85,8 @@ export function createUserSettingsRouter(pool) {
           });
           synced.newsletter = true;
         } catch (err) {
-          console.error('settings/sync newsletter failed:', err.message);
+          logger.error('settings/sync newsletter failed, continuing sync:', err.message);
+          synced.newsletter = false;
         }
       }
 
@@ -121,7 +125,7 @@ export function createUserSettingsRouter(pool) {
           await client.query('COMMIT');
           synced.trips = count;
         } catch (err) {
-          await client.query('ROLLBACK').catch(() => {});
+          await rollbackQuietly(client);
           throw err;
         } finally {
           client.release();
@@ -130,7 +134,7 @@ export function createUserSettingsRouter(pool) {
 
       res.json({ synced });
     } catch (err) {
-      console.error('POST /api/user/settings/sync failed:', err);
+      logger.error('POST /api/user/settings/sync failed:', err);
       res.status(500).json({ error: 'Failed to sync settings' });
     }
   });
@@ -149,7 +153,7 @@ export function createUserSettingsRouter(pool) {
       }
       res.json({ token });
     } catch (err) {
-      console.error('GET /api/user/settings/mcp-token failed:', err);
+      logger.error('GET /api/user/settings/mcp-token failed:', err);
       res.status(500).json({ error: 'Failed to get MCP token' });
     }
   });
@@ -162,7 +166,7 @@ export function createUserSettingsRouter(pool) {
       );
       res.json({ token });
     } catch (err) {
-      console.error('POST /api/user/settings/mcp-token/regenerate failed:', err);
+      logger.error('POST /api/user/settings/mcp-token/regenerate failed:', err);
       res.status(500).json({ error: 'Failed to regenerate MCP token' });
     }
   });

@@ -1,5 +1,8 @@
 import { Readable } from 'stream';
 import { google } from 'googleapis';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('DriveImage');
 
 const ROOT_FOLDER_NAME = 'Roots of The Valley';
 const ICONS_FOLDER_NAME = 'Icons';
@@ -69,49 +72,33 @@ async function createFolder(drive, name, parentId = null) {
 export async function ensureDriveFolders(drive, pool) {
   let rootFolderId = await getDriveSetting(pool, 'root_folder_id');
   if (!rootFolderId || !(await folderExists(drive, rootFolderId))) {
-    console.log('Creating Roots of The Valley folder...');
+    logger.info('Creating Roots of The Valley folder...');
     rootFolderId = await createFolder(drive, ROOT_FOLDER_NAME);
     await setDriveSetting(pool, 'root_folder_id', rootFolderId);
   }
 
   let iconsFolderId = await getDriveSetting(pool, 'icons_folder_id');
   if (!iconsFolderId || !(await folderExists(drive, iconsFolderId))) {
-    console.log('Creating Icons folder...');
+    logger.info('Creating Icons folder...');
     iconsFolderId = await createFolder(drive, ICONS_FOLDER_NAME, rootFolderId);
     await setDriveSetting(pool, 'icons_folder_id', iconsFolderId);
   }
 
   let imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
   if (!imagesFolderId || !(await folderExists(drive, imagesFolderId))) {
-    console.log('Creating Images folder...');
+    logger.info('Creating Images folder...');
     imagesFolderId = await createFolder(drive, IMAGES_FOLDER_NAME, rootFolderId);
     await setDriveSetting(pool, 'images_folder_id', imagesFolderId);
   }
 
   let geospatialFolderId = await getDriveSetting(pool, 'geospatial_folder_id');
   if (!geospatialFolderId || !(await folderExists(drive, geospatialFolderId))) {
-    console.log('Creating Geospatial folder...');
+    logger.info('Creating Geospatial folder...');
     geospatialFolderId = await createFolder(drive, GEOSPATIAL_FOLDER_NAME, rootFolderId);
     await setDriveSetting(pool, 'geospatial_folder_id', geospatialFolderId);
   }
 
   return { rootFolderId, iconsFolderId, imagesFolderId, geospatialFolderId };
-}
-
-export async function moveFileToFolder(drive, fileId, folderId) {
-  const file = await drive.files.get({
-    fileId,
-    fields: 'parents'
-  });
-
-  const previousParents = file.data.parents?.join(',') || '';
-
-  await drive.files.update({
-    fileId,
-    addParents: folderId,
-    removeParents: previousParents,
-    fields: 'id,parents'
-  });
 }
 
 export async function uploadIconToDrive(drive, pool, iconName, svgContent) {
@@ -186,95 +173,30 @@ export async function uploadImageToDrive(drive, pool, filename, buffer, mimeType
         }
       });
     } catch (permError) {
-      console.warn(`Failed to set public permission (non-fatal):`, permError.message);
+      logger.warn(`Failed to set public permission (non-fatal):`, permError.message);
     }
   }
 
   return fileId;
 }
 
-export async function uploadGeoJSONToDrive(drive, pool, filename, geojsonData) {
-  const { geospatialFolderId } = await ensureDriveFolders(drive, pool);
-
-  if (!filename.endsWith('.geojson')) {
-    filename = `${filename}.geojson`;
-  }
-
-  const content = typeof geojsonData === 'string' ? geojsonData : JSON.stringify(geojsonData, null, 2);
-
-  const existingFileId = await findFileInFolder(drive, geospatialFolderId, filename);
-
-  let fileId;
-  if (existingFileId) {
-    await drive.files.update({
-      fileId: existingFileId,
-      media: {
-        mimeType: 'application/geo+json',
-        body: Readable.from([content])
-      }
-    });
-    fileId = existingFileId;
-  } else {
-    const response = await drive.files.create({
-      requestBody: {
-        name: filename,
-        mimeType: 'application/geo+json',
-        parents: [geospatialFolderId]
-      },
-      media: {
-        mimeType: 'application/geo+json',
-        body: Readable.from([content])
-      },
-      fields: 'id'
-    });
-    fileId = response.data.id;
-  }
-
-  return fileId;
-}
-
-export async function downloadGeoJSONFromDrive(drive, fileId) {
-  const buffer = await downloadFileFromDrive(drive, fileId);
-  if (!buffer) return null;
-
-  try {
-    return JSON.parse(buffer.toString('utf-8'));
-  } catch (error) {
-    console.error('Failed to parse GeoJSON from Drive:', error.message);
-    return null;
-  }
+// Drive query string literals are single-quoted; backslash-escape \ and ' so a
+// filename containing a quote cannot break (or alter) the query.
+function escapeDriveQueryValue(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 async function findFileInFolder(drive, folderId, filename) {
   try {
     const response = await drive.files.list({
-      q: `'${folderId}' in parents and name = '${filename}' and trashed = false`,
+      q: `'${escapeDriveQueryValue(folderId)}' in parents and name = '${escapeDriveQueryValue(filename)}' and trashed = false`,
       fields: 'files(id)',
       pageSize: 1
     });
     return response.data.files?.[0]?.id || null;
   } catch (error) {
-    console.error('Error finding file in folder:', error.message);
+    logger.error('Error finding file in folder:', error.message);
     return null;
-  }
-}
-
-export async function downloadFileFromDrive(drive, fileId) {
-  try {
-    const response = await drive.files.get({
-      fileId,
-      alt: 'media'
-    }, {
-      responseType: 'arraybuffer'
-    });
-
-    return Buffer.from(response.data);
-  } catch (error) {
-    if (error.code === 404) {
-      console.warn(`File ${fileId} not found in Drive`);
-      return null;
-    }
-    throw error;
   }
 }
 
@@ -285,21 +207,6 @@ export async function deleteFileFromDrive(drive, fileId) {
   } catch (error) {
     if (error.code === 404) {
       return true;
-    }
-    throw error;
-  }
-}
-
-export async function getFileMetadata(drive, fileId) {
-  try {
-    const response = await drive.files.get({
-      fileId,
-      fields: 'id,name,mimeType,size,createdTime,modifiedTime,webViewLink'
-    });
-    return response.data;
-  } catch (error) {
-    if (error.code === 404) {
-      return null;
     }
     throw error;
   }
@@ -335,7 +242,7 @@ export async function countDriveFiles(drive, pool) {
       });
       iconsCount = response.data.files?.length || 0;
     } catch (error) {
-      console.error('Error counting icons:', error.message);
+      logger.error('Error counting icons:', error.message);
     }
   }
 
@@ -348,7 +255,7 @@ export async function countDriveFiles(drive, pool) {
       });
       imagesCount = response.data.files?.length || 0;
     } catch (error) {
-      console.error('Error counting images:', error.message);
+      logger.error('Error counting images:', error.message);
     }
   }
 
@@ -361,7 +268,7 @@ export async function countDriveFiles(drive, pool) {
       });
       geospatialCount = response.data.files?.length || 0;
     } catch (error) {
-      console.error('Error counting geospatial files:', error.message);
+      logger.error('Error counting geospatial files:', error.message);
     }
   }
 
@@ -392,7 +299,7 @@ async function createOAuth2Client(credentials, pool, userId) {
         );
       }
     } catch (refreshError) {
-      console.warn('Token refresh failed:', refreshError.message);
+      logger.warn('Token refresh failed:', refreshError.message);
     }
   }
 
@@ -411,19 +318,4 @@ export function createDriveService(credentials) {
 export async function createDriveServiceWithRefresh(credentials, pool, userId) {
   const oauth2Client = await createOAuth2Client(credentials, pool, userId);
   return google.drive({ version: 'v3', auth: oauth2Client });
-}
-
-export async function isFileTrashed(drive, fileId) {
-  try {
-    const response = await drive.files.get({
-      fileId,
-      fields: 'trashed'
-    });
-    return response.data.trashed === true;
-  } catch (error) {
-    if (error.code === 404) {
-      return null;
-    }
-    throw error;
-  }
 }

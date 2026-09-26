@@ -9,9 +9,12 @@ export default function McpSettings() {
 
   useEffect(() => {
     fetch('/api/user/settings/mcp-token', { credentials: 'include' })
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(data => setToken(data.token))
-      .catch(() => setToken(null))
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(tokenInfo => setToken(tokenInfo.token))
+      .catch((err) => {
+        console.warn('Failed to load MCP token:', err);
+        setToken(null);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -29,8 +32,8 @@ export default function McpSettings() {
         method: 'POST', credentials: 'include'
       });
       if (res.ok) {
-        const data = await res.json();
-        setToken(data.token);
+        const tokenInfo = await res.json();
+        setToken(tokenInfo.token);
         setRevealed(false);
       }
     } finally {

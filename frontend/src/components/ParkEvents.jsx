@@ -5,6 +5,7 @@ import { handleRovingKeyDown } from '../utils/a11yUtils';
 import ContentFormModal from './ContentFormModal';
 import useModeration from '../hooks/useModeration';
 import ModerationExtras from './ModerationExtras';
+import useFetchedList from '../hooks/useFetchedList';
 
 const DEFAULT_PARK_BOUNDS = [
   [41.13, -81.85],
@@ -17,10 +18,21 @@ function formatDateForCalendar(dateString) {
   return date.toISOString().replace(/-|:|\.\d{3}/g, '').slice(0, 15) + 'Z';
 }
 
+const appTz = () => localStorage.getItem('app-timezone')
+  || Intl.DateTimeFormat().resolvedOptions().timeZone
+  || 'America/New_York';
+
+// Today / This Weekend windows (#436), fetched together.
+async function fetchEventWindows() {
+  const tz = encodeURIComponent(appTz());
+  const [today, weekend] = await Promise.all([
+    fetch(`/api/events/window?range=today&tz=${tz}`).then(r => r.ok ? r.json() : null),
+    fetch(`/api/events/window?range=weekend&tz=${tz}`).then(r => r.ok ? r.json() : null)
+  ]);
+  return { today, weekend };
+}
+
 function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -31,6 +43,8 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
   // Today / This Weekend windows (#436): { count, events } keyed by range.
   const [windowData, setWindowData] = useState({ today: null, weekend: null });
   const [windowLoading, setWindowLoading] = useState(true);
+  const [windowError, setWindowError] = useState(null);
+  const [pastError, setPastError] = useState(null);
   const [typeFilters, setTypeFilters] = useState({
     'hike': true,
     'race': true,
@@ -56,9 +70,9 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     { key: 'past', label: 'Past' }
   ];
 
-  const appTz = () => localStorage.getItem('app-timezone')
-    || Intl.DateTimeFormat().resolvedOptions().timeZone
-    || 'America/New_York';
+  const { items: events, loading, error, reload: fetchEvents } = useFetchedList(
+    `/api/events/upcoming?tz=${encodeURIComponent(appTz())}`, 'Failed to load events'
+  );
 
   useEffect(() => {
     fetchEvents();
@@ -71,18 +85,16 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     (async () => {
       setWindowLoading(true);
       try {
-        const tz = encodeURIComponent(appTz());
-        const [today, weekend] = await Promise.all([
-          fetch(`/api/events/window?range=today&tz=${tz}`).then(r => r.ok ? r.json() : null),
-          fetch(`/api/events/window?range=weekend&tz=${tz}`).then(r => r.ok ? r.json() : null)
-        ]);
+        const { today, weekend } = await fetchEventWindows();
         if (cancelled) return;
+        setWindowError(null);
         setWindowData({ today, weekend });
         if (today && today.count === 0 && weekend && weekend.count > 0) {
           setActiveSubTab(prev => (prev === 'today' ? 'weekend' : prev));
         }
       } catch (err) {
         console.error('Error fetching event windows:', err);
+        if (!cancelled) setWindowError('Failed to load events');
       } finally {
         if (!cancelled) setWindowLoading(false);
       }
@@ -90,27 +102,6 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     return () => { cancelled = true; };
   }, [refreshTrigger]);
 
-  const fetchEvents = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const tz = localStorage.getItem('app-timezone')
-        || Intl.DateTimeFormat().resolvedOptions().timeZone
-        || 'America/New_York';
-      const response = await fetch(`/api/events/upcoming?tz=${encodeURIComponent(tz)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setEvents(data);
-      } else {
-        setError('Failed to load events');
-      }
-    } catch (err) {
-      setError('Failed to load events');
-      console.error('Error fetching park events:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     if (activeSubTab === 'past' && pastEvents.length === 0 && !pastLoading) {
@@ -120,14 +111,14 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
 
   const fetchPastEvents = async () => {
     setPastLoading(true);
+    setPastError(null);
     try {
       const response = await fetch('/api/events/past?limit=50');
-      if (response.ok) {
-        const data = await response.json();
-        setPastEvents(data);
-      }
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      setPastEvents(await response.json());
     } catch (err) {
       console.error('Error fetching past events:', err);
+      setPastError('Failed to load past events');
     } finally {
       setPastLoading(false);
     }
@@ -138,14 +129,11 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     fetchEvents();
     fetchPastEvents();
     try {
-      const tz = encodeURIComponent(appTz());
-      const [today, weekend] = await Promise.all([
-        fetch(`/api/events/window?range=today&tz=${tz}`).then(r => r.ok ? r.json() : null),
-        fetch(`/api/events/window?range=weekend&tz=${tz}`).then(r => r.ok ? r.json() : null)
-      ]);
-      setWindowData({ today, weekend });
+      setWindowData(await fetchEventWindows());
+      setWindowError(null);
     } catch (err) {
       console.error('Error reloading event windows:', err);
+      setWindowError('Failed to load events');
     }
   };
 
@@ -158,7 +146,7 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
       const series = all.find(s => s.id === seriesId);
       if (series) setSeriesEditData(series);
     } catch (err) {
-      console.error('Error loading series for edit:', err);
+      mod.notify('error', `Failed to load recurring event: ${err.message}`);
     }
   };
 
@@ -168,7 +156,7 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
       const res = await fetch(`/api/admin/event-series/${seriesId}`, { method: 'DELETE', credentials: 'include' });
       if (res.ok) reloadAll();
     } catch (err) {
-      console.error('Error deleting series:', err);
+      mod.notify('error', `Failed to delete recurring event: ${err.message}`);
     }
   };
 
@@ -310,11 +298,16 @@ END:VCALENDAR`;
     );
   }
 
-  if (error && activeSubTab === 'future') {
+  const activeError =
+    activeSubTab === 'future' ? error :
+    activeSubTab === 'past' ? pastError :
+    windowError;
+  if (activeError) {
     return (
       <div className="park-events-tab">
         <h2>{tabLabel}</h2>
-        <div className="error-message">{error}</div>
+        {renderSubTabs()}
+        <div className="error-message">{activeError}</div>
       </div>
     );
   }

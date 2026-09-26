@@ -37,6 +37,8 @@ const boundaries = [
 
 console.log('Loading county/state boundary geometries...\n');
 
+let failed = 0;
+
 for (const boundary of boundaries) {
   try {
     const existing = await pool.query(
@@ -75,6 +77,7 @@ for (const boundary of boundaries) {
 
     console.log(`  OK   ${boundary.name} — geometry loaded (${(geometryJson.length / 1024).toFixed(0)}KB)`);
   } catch (err) {
+    failed++;
     console.error(`  ERROR ${boundary.name} — ${err.message}`);
   }
 }
@@ -103,5 +106,5 @@ if (verify.rows.length > 0) {
   console.log('\nVerification: Liberty Park Nature Center not found or no grounding match');
 }
 
-console.log('\nDone.');
+console.log(`\nDone. failed=${failed}`);
 await pool.end();

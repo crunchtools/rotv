@@ -7,8 +7,8 @@ export function isUsableSourceImage(url) {
 
 /** SSRF guard: reject non-public hosts (localhost, internal TLDs, private/loopback/link-local IP literals). No DNS resolution. */
 export function isPublicHttpUrl(url) {
-  let u;
-  try { u = new URL(url); } catch { return false; }
+  if (!URL.canParse(url)) return false;
+  const u = new URL(url);
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
   const host = u.hostname.toLowerCase();
   if (host === 'localhost' || host.endsWith('.local') || host.endsWith('.internal')) return false;

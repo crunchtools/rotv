@@ -1,85 +1,15 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatPublicationDate, NewsTypeIcon } from '../NewsEventsShared';
 import { generateSlug } from './helpers';
+import usePoiContentList from '../../hooks/usePoiContentList';
 
 function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNews, navigateOnSelect = true }) {
   const navigate = useNavigate();
-  const [news, setNews] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(null);
-  const [collecting, setCollecting] = useState(false);
+  const {
+    items: news, loading, deleting, collecting, error,
+    handleCollect: handleCollectNews, handleDelete
+  } = usePoiContentList({ poiId, kind: 'news', listUrl: `/api/pois/${poiId}/news?limit=50`, onCountChange });
 
-  const fetchNews = async () => {
-    if (!poiId) {
-      return;
-    }
-    setLoading(true);
-    try {
-      const response = await fetch(`/api/pois/${poiId}/news?limit=50`);
-      if (response.ok) {
-        const data = await response.json();
-        setNews(data);
-        if (onCountChange) onCountChange(data.length);
-      } else {
-        console.error(`[fetchNews] Request failed: ${response.status} ${response.statusText}`);
-      }
-    } catch (err) {
-      console.error('[fetchNews] Error fetching POI news:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchNews();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiId]); // fetchNews intentionally excluded — re-fetch only on POI change, not on function reference churn
-
-  const handleCollectNews = async () => {
-    if (!poiId) return;
-    setCollecting(true);
-
-    try {
-      const timezone = localStorage.getItem('app-timezone') || 'America/New_York';
-      const response = await fetch(`/api/admin/pois/${poiId}/news/collect`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timezone })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const targetUrl = `/admin/jobs?job=${result.jobId}&type=${result.jobType}&poi=${result.poiId || result.jobId}`;
-        navigate(targetUrl);
-      } else {
-        const error = await response.json();
-        alert(`Collection failed: ${error.error || 'Unknown error'}`);
-        setCollecting(false);
-      }
-    } catch (err) {
-      alert(`Collection failed: ${err.message}`);
-      setCollecting(false);
-    }
-  };
-
-  const handleDelete = async (newsId) => {
-    setDeleting(newsId);
-    try {
-      const response = await fetch(`/api/admin/news/${newsId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (response.ok) {
-        setNews(prev => prev.filter(n => n.id !== newsId));
-      }
-    } catch (err) {
-      console.error('Error deleting news:', err);
-    } finally {
-      setDeleting(null);
-    }
-  };
 
   if (loading) return <div className="sidebar-tab-loading">Loading news...</div>;
 
@@ -96,6 +26,8 @@ function PoiNews({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectNew
           </button>
         </div>
       )}
+
+      {error && <div className="error-message">{error}</div>}
 
       <div className="poi-news-list-content">
         {news.length === 0 ? (

@@ -6,6 +6,11 @@ import { fetchFacebookPosts, isFacebookUrl } from './apifyService.js';
 import { fetchBlueskyPosts, isBlueskyUrl } from './blueskyService.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('TrailStatus');
+const trailStatusLogger = createLogger('Trail Status');
+const trailStatusCollectionLogger = createLogger('Trail Status Collection');
 
 const HASH_SKIP_MAX_AGE_HOURS = 48;
 
@@ -44,11 +49,11 @@ async function trackTwitterResult(pool, statusUrl, success) {
       );
       const failures = parseInt(failureCountRow.rows[0]?.value) || 0;
       if (failures >= 3) {
-        console.warn(`[Trail Status] WARNING: ${failures} consecutive Twitter failures — cookies may be stale. Refresh at Settings > Data Collection.`);
+        trailStatusLogger.warn(`WARNING: ${failures} consecutive Twitter failures — cookies may be stale. Refresh at Settings > Data Collection.`);
       }
     }
   } catch (err) {
-    console.error('[Trail Status] Error tracking Twitter result:', err.message);
+    trailStatusLogger.error('Error tracking Twitter result:', err.message);
   }
 }
 
@@ -87,10 +92,10 @@ Return ONLY valid JSON with this exact structure:
 If you cannot find current status, return: {"status": {"status": "unknown", "conditions": null, "last_updated": null, "source_name": null, "source_url": null, "weather_impact": null, "seasonal_closure": false}}`;
 
 export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'America/New_York') {
-  console.log(`\n[Trail Status] ======== Collecting status for: ${poi.name} ========`);
+  logger.info(`\n[Trail Status] ======== Collecting status for: ${poi.name} ========`);
 
   if (!poi.status_url || !poi.status_url.trim()) {
-    console.log(`[Trail Status] No status_url configured, skipping`);
+    trailStatusLogger.info(`No status_url configured, skipping`);
     updateProgress(poi.id, {
       phase: 'complete',
       message: 'No status URL configured',
@@ -119,7 +124,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
   try {
     if (isCancellationRequested(poi.id)) {
-      console.log(`[Trail Status] Cancellation requested, aborting`);
+      trailStatusLogger.info(`Cancellation requested, aborting`);
       updateProgress(poi.id, {
         phase: 'cancelled',
         message: 'Collection cancelled',
@@ -132,7 +137,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     let rendered;
 
     if (isFacebookUrl(statusUrl)) {
-      console.log(`[Trail Status] Fetching Facebook posts via Apify for: ${statusUrl}`);
+      trailStatusLogger.info(`Fetching Facebook posts via Apify for: ${statusUrl}`);
       updateProgress(poi.id, {
         phase: 'rendering',
         message: 'Fetching Facebook posts via Apify...',
@@ -140,7 +145,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       });
       rendered = await fetchFacebookPosts(pool, statusUrl);
     } else if (isBlueskyUrl(statusUrl)) {
-      console.log(`[Trail Status] Fetching Bluesky posts via public API for: ${statusUrl}`);
+      trailStatusLogger.info(`Fetching Bluesky posts via public API for: ${statusUrl}`);
       updateProgress(poi.id, {
         phase: 'rendering',
         message: 'Fetching Bluesky posts via public API...',
@@ -156,14 +161,14 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
           );
           if (cookieResult.rows.length > 0 && cookieResult.rows[0].value) {
             cookies = JSON.parse(cookieResult.rows[0].value);
-            console.log(`[Trail Status] Loaded ${cookies.length} Twitter cookies`);
+            trailStatusLogger.info(`Loaded ${cookies.length} Twitter cookies`);
           }
         } catch (cookieErr) {
-          console.log(`[Trail Status] No Twitter cookies available: ${cookieErr.message}`);
+          trailStatusLogger.info(`No Twitter cookies available: ${cookieErr.message}`);
         }
       }
 
-      console.log(`[Trail Status] Rendering status page: ${statusUrl}`);
+      trailStatusLogger.info(`Rendering status page: ${statusUrl}`);
       updateProgress(poi.id, {
         phase: 'rendering',
         message: 'Rendering status page...',
@@ -178,7 +183,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     }
 
     if (!rendered.reachable || !rendered.markdown) {
-      console.log(`[Trail Status] Page not reachable or no content extracted (reason: ${rendered.reason || 'unknown'})`);
+      trailStatusLogger.info(`Page not reachable or no content extracted (reason: ${rendered.reason || 'unknown'})`);
       await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
@@ -192,7 +197,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     const MIN_CONTENT_LENGTH = 200;
     if (rendered.markdown.length < MIN_CONTENT_LENGTH) {
-      console.log(`[Trail Status] Insufficient content (${rendered.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
+      trailStatusLogger.info(`Insufficient content (${rendered.markdown.length} chars, need ${MIN_CONTENT_LENGTH}+)`);
       await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
@@ -204,7 +209,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    console.log(`[Trail Status] Extracted content (${rendered.markdown.length} chars)`);
+    trailStatusLogger.info(`Extracted content (${rendered.markdown.length} chars)`);
 
     const contentHash = crypto.createHash('sha256').update(rendered.markdown).digest('hex');
 
@@ -216,7 +221,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     if (lastRow && lastRow.content_hash === contentHash) {
       const ageHours = (Date.now() - new Date(lastRow.created_at).getTime()) / (1000 * 60 * 60);
       if (ageHours < HASH_SKIP_MAX_AGE_HOURS) {
-        console.log(`[Trail Status] Content unchanged for ${poi.name} (hash ${contentHash.slice(0, 12)}, age ${ageHours.toFixed(1)}h), skipping LLM extraction`);
+        trailStatusLogger.info(`Content unchanged for ${poi.name} (hash ${contentHash.slice(0, 12)}, age ${ageHours.toFixed(1)}h), skipping LLM extraction`);
         updateProgress(poi.id, {
           phase: 'skipped_unchanged',
           message: 'Content unchanged since last check',
@@ -228,7 +233,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     }
 
     if (isCancellationRequested(poi.id)) {
-      console.log(`[Trail Status] Cancellation requested after rendering, aborting`);
+      trailStatusLogger.info(`Cancellation requested after rendering, aborting`);
       updateProgress(poi.id, {
         phase: 'cancelled',
         message: 'Collection cancelled',
@@ -256,13 +261,13 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       .replace(/\{\{timezone\}\}/g, timezone)
       .replace(/\{\{renderedContent\}\}/g, rendered.markdown);
 
-    console.log(`[Trail Status] Extracting status with AI (${prompt.length} char prompt)...`);
+    trailStatusLogger.info(`Extracting status with AI (${prompt.length} char prompt)...`);
     const response = await generateTextWithCustomPrompt(pool, prompt, { thinkingBudget: 0 });
 
-    console.log(`[Trail Status] Received response (${response.length} chars)`);
+    trailStatusLogger.info(`Received response (${response.length} chars)`);
 
     if (isCancellationRequested(poi.id)) {
-      console.log(`[Trail Status] Cancellation requested after extraction, aborting`);
+      trailStatusLogger.info(`Cancellation requested after extraction, aborting`);
       updateProgress(poi.id, {
         phase: 'cancelled',
         message: 'Collection cancelled',
@@ -274,7 +279,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
 
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
-      console.error('[Trail Status] No JSON found in response');
+      trailStatusLogger.error('No JSON found in response');
       await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
@@ -289,7 +294,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     const status = parsedStatus.status;
 
     if (!status || status.status === 'unknown') {
-      console.log(`[Trail Status] No current status found for ${poi.name}`);
+      trailStatusLogger.info(`No current status found for ${poi.name}`);
       await trackTwitterResult(pool, statusUrl, false);
       updateProgress(poi.id, {
         phase: 'complete',
@@ -301,10 +306,10 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
       return { statusFound: 0, statusSaved: 0 };
     }
 
-    console.log(`[Trail Status] Found status: ${status.status}`);
-    console.log(`[Trail Status]   Conditions: ${status.conditions || 'N/A'}`);
-    console.log(`[Trail Status]   Source: ${status.source_name || 'N/A'}`);
-    console.log(`[Trail Status]   Last Updated: ${status.last_updated || 'N/A'}`);
+    trailStatusLogger.info(`Found status: ${status.status}`);
+    trailStatusLogger.info(`  Conditions: ${status.conditions || 'N/A'}`);
+    trailStatusLogger.info(`  Source: ${status.source_name || 'N/A'}`);
+    trailStatusLogger.info(`  Last Updated: ${status.last_updated || 'N/A'}`);
     await trackTwitterResult(pool, statusUrl, true);
 
     status.source_url = poi.status_url;
@@ -341,7 +346,7 @@ export async function collectTrailStatus(pool, poi, sheets = null, timezone = 'A
     return { statusFound: 1, statusSaved: saved ? 1 : 0, rendered_content: rendered.markdown, ai_response: response };
 
   } catch (error) {
-    console.error(`[Trail Status] Error collecting status for ${poi.name}:`, error.message);
+    trailStatusLogger.error(`Error collecting status for ${poi.name}:`, error.message);
     updateProgress(poi.id, {
       phase: 'error',
       message: `Error: ${error.message}`,
@@ -360,7 +365,7 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
       if (lastUpdated < ninetyDaysAgo) {
-        console.log(`[Trail Status] Skipping outdated status (last updated: ${status.last_updated})`);
+        trailStatusLogger.info(`Skipping outdated status (last updated: ${status.last_updated})`);
         return false;
       }
     }
@@ -387,7 +392,7 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
             [contentHash, recent.id]
           );
         }
-        console.log(`[Trail Status] Status unchanged, skipping duplicate`);
+        trailStatusLogger.info(`Status unchanged, skipping duplicate`);
         return false;
       }
     }
@@ -396,7 +401,7 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
     if (lastUpdated) {
       const parsedDate = new Date(lastUpdated);
       if (!isNaN(parsedDate) && parsedDate > new Date()) {
-        console.log(`[Trail Status] Capping future last_updated ${lastUpdated} to now`);
+        trailStatusLogger.info(`Capping future last_updated ${lastUpdated} to now`);
         lastUpdated = new Date().toISOString();
       }
     }
@@ -425,11 +430,11 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
       contentHash
     ]);
 
-    console.log(`[Trail Status] Status saved to database`);
+    trailStatusLogger.info(`Status saved to database`);
     return true;
 
   } catch (error) {
-    console.error(`[Trail Status] Error saving status:`, error.message);
+    trailStatusLogger.error(`Error saving status:`, error.message);
     throw error;
   }
 }
@@ -437,7 +442,7 @@ async function saveTrailStatus(pool, poiId, status, contentHash = null) {
 export async function runTrailStatusCollection(pool, boss, options = {}) {
   const { poiIds = null, jobType = 'batch_collection', sheets = null } = options;
 
-  console.log(`\n[Trail Status Collection] Starting ${jobType}...`);
+  logger.info(`\n[Trail Status Collection] Starting ${jobType}...`);
 
   try {
     let trails;
@@ -463,11 +468,11 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
     }
 
     if (trails.length === 0) {
-      console.log('[Trail Status Collection] No MTB trails found');
+      trailStatusCollectionLogger.info('No MTB trails found');
       return { jobId: null, message: 'No MTB trails found' };
     }
 
-    console.log(`[Trail Status Collection] Found ${trails.length} MTB trails to process`);
+    trailStatusCollectionLogger.info(`Found ${trails.length} MTB trails to process`);
 
     const jobResult = await pool.query(`
       INSERT INTO trail_status_job_status (
@@ -490,7 +495,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
     ]);
 
     const jobId = jobResult.rows[0].id;
-    console.log(`[Trail Status Collection] Created job ${jobId}`);
+    trailStatusCollectionLogger.info(`Created job ${jobId}`);
 
     const pgBossJobId = await boss.send('trail-status-batch-collect', {
       jobId,
@@ -504,7 +509,7 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
       WHERE id = $2
     `, [pgBossJobId, jobId]);
 
-    console.log(`[Trail Status Collection] Submitted to pg-boss: ${pgBossJobId}`);
+    trailStatusCollectionLogger.info(`Submitted to pg-boss: ${pgBossJobId}`);
 
     return {
       jobId,
@@ -513,13 +518,13 @@ export async function runTrailStatusCollection(pool, boss, options = {}) {
     };
 
   } catch (error) {
-    console.error('[Trail Status Collection] Error starting batch collection:', error.message);
+    trailStatusCollectionLogger.error('Error starting batch collection:', error.message);
     throw error;
   }
 }
 
 export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheets = null) {
-  console.log(`\n[Trail Status Job ${jobId}] Starting batch processing for ${poiIds.length} trails`);
+  logger.info(`\n[Trail Status Job ${jobId}] Starting batch processing for ${poiIds.length} trails`);
   logInfo(jobId, 'trail_status', null, null, `Job started: ${poiIds.length} trails`, { total: poiIds.length });
 
   let llmCalls = 0;
@@ -587,7 +592,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
         `, [poiId]);
 
         if (poiResult.rows.length === 0) {
-          console.error(`[Trail Status Job ${jobId}] Trail ${poiId} not found`);
+          logger.error(`[Trail Status Job ${jobId}] Trail ${poiId} not found`);
           return { statusFound: 0, statusSaved: 0, notFound: true };
         }
 
@@ -595,7 +600,7 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
         const statusCollection = await collectTrailStatus(pool, poi, sheets, 'America/New_York');
         llmCalls++;
 
-        console.log(`[Trail Status Job ${jobId}] [${index + 1}/${total}] ${poi.name}: ${statusCollection.statusFound} status found`);
+        logger.info(`[Trail Status Job ${jobId}] [${index + 1}/${total}] ${poi.name}: ${statusCollection.statusFound} status found`);
         if (statusCollection.statusFound > 0) {
           logInfo(jobId, 'trail_status', poi.id, poi.name, `Status found: ${statusCollection.statusSaved ? 'saved' : 'unchanged'}`, { status_found: statusCollection.statusFound, status_saved: statusCollection.statusSaved, rendered_content: statusCollection.rendered_content, ai_response: statusCollection.ai_response });
         }
@@ -643,17 +648,17 @@ export async function processTrailStatusCollectionJob(pool, jobId, poiIds, sheet
       WHERE id = $3
     `, [processedPois.size, totalStatusFound, jobId, finalAiUsage]);
 
-    console.log(`\n[Trail Status Job ${jobId}] Completed`);
-    console.log(`[Trail Status Job ${jobId}] Trails processed: ${processedPois.size}/${poiIds.length}`);
-    console.log(`[Trail Status Job ${jobId}] Status found: ${totalStatusFound}`);
-    console.log(`[Trail Status Job ${jobId}] Status saved: ${totalStatusSaved}`);
-    console.log(`[Trail Status Job ${jobId}] LLM calls: ${llmCalls}`);
+    logger.info(`\n[Trail Status Job ${jobId}] Completed`);
+    logger.info(`[Trail Status Job ${jobId}] Trails processed: ${processedPois.size}/${poiIds.length}`);
+    logger.info(`[Trail Status Job ${jobId}] Status found: ${totalStatusFound}`);
+    logger.info(`[Trail Status Job ${jobId}] Status saved: ${totalStatusSaved}`);
+    logger.info(`[Trail Status Job ${jobId}] LLM calls: ${llmCalls}`);
     logInfo(jobId, 'trail_status', null, null, `Job completed: ${processedPois.size} trails, ${totalStatusFound} status found`, { trails_processed: processedPois.size, status_found: totalStatusFound, status_saved: totalStatusSaved, llm_calls: llmCalls });
     await flushJobLogs();
 
 
   } catch (error) {
-    console.error(`[Trail Status Job ${jobId}] Failed:`, error.message);
+    logger.error(`[Trail Status Job ${jobId}] Failed:`, error.message);
     logError(jobId, 'trail_status', null, null, `Job failed: ${error.message}`);
     await flushJobLogs();
 

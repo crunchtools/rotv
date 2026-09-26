@@ -21,12 +21,12 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   useEffect(() => {
     fetch('/api/auth/status', { credentials: 'include' })
       .then(res => res.ok ? res.json() : null)
-      .then(data => setUser(data?.user || null))
-      .catch(() => setUser(null));
+      .then(authStatus => setUser(authStatus?.user || null))
+      .catch(err => {
+        console.warn('Could not load auth status for the image uploader:', err);
+        setUser(null);
+      });
   }, []);
-
-  const handleMediaUpdate = () => {
-  };
 
   const handleSaveWithImage = async () => {
     if (!destination?.id) {
@@ -77,67 +77,23 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
   const [availableOwnerOrgs, setAvailableOwnerOrgs] = useState([]);
 
+  const [optionsError, setOptionsError] = useState(null);
+
   useEffect(() => {
-    async function fetchActivities() {
+    const loadOptions = async (url, setOptions, label) => {
       try {
-        const response = await fetch('/api/admin/activities', {
-          credentials: 'include'
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableActivities(data);
-        }
+        const response = await fetch(url, { credentials: 'include' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        setOptions(await response.json());
       } catch (err) {
-        console.error('Failed to fetch activities:', err);
+        setOptionsError(`Failed to load ${label}: ${err.message}`);
       }
-    }
+    };
 
-    async function fetchEras() {
-      try {
-        const response = await fetch('/api/admin/eras', {
-          credentials: 'include'
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableEras(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch eras:', err);
-      }
-    }
-
-    async function fetchSurfaces() {
-      try {
-        const response = await fetch('/api/admin/surfaces', {
-          credentials: 'include'
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableSurfaces(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch surfaces:', err);
-      }
-    }
-
-    async function fetchOwnerOrgs() {
-      try {
-        const response = await fetch('/api/owner-organizations', {
-          credentials: 'include'
-        });
-        if (response.ok) {
-          const data = await response.json();
-          setAvailableOwnerOrgs(data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch owner organizations:', err);
-      }
-    }
-
-    fetchActivities();
-    fetchEras();
-    fetchSurfaces();
-    fetchOwnerOrgs();
+    loadOptions('/api/admin/activities', setAvailableActivities, 'activities');
+    loadOptions('/api/admin/eras', setAvailableEras, 'eras');
+    loadOptions('/api/admin/surfaces', setAvailableSurfaces, 'surfaces');
+    loadOptions('/api/owner-organizations', setAvailableOwnerOrgs, 'owner organizations');
   }, []);
 
   const selectedActivities = (editedData.primary_activities || '')
@@ -246,7 +202,6 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             isVirtualPoi={destination?.poi_roles?.includes('organization') && !destination?.geometry && !destination?.latitude}
             user={user}
             poiId={destination.id}
-            onMediaUpdate={handleMediaUpdate}
           />
         ) : (
           <div className="sidebar-image">
@@ -260,6 +215,13 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
             })()}
           </div>
         )
+      )}
+
+      {optionsError && (
+        <div className="ai-error-banner">
+          <span>{optionsError}</span>
+          <button onClick={() => setOptionsError(null)}>Dismiss</button>
+        </div>
       )}
 
       {aiError && (

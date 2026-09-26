@@ -2,50 +2,158 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
 import FilterList, { FilterChip, FILTER_COLORS } from './FilterList';
 
-function DataCollectionSettings() {
+const JSON_HEADERS = { 'Content-Type': 'application/json' };
+const MASKED_SECRET = '••••••••••••••••••••••••';
+const SECRET_KEYS = ['openrouter_api_key', 'apify_api_token', 'serper_api_key', 'usft_sharing_token', 'github_api_token'];
+
+const KNOWN_ROUTES = [
+  { value: '/', label: '/ (Home / All Results)' },
+  { value: '/mtb-trail-status', label: '/mtb-trail-status (MTB Trails)' },
+  { value: '/organizations', label: '/organizations (Organizations)' }
+];
+
+async function putSetting(key, value) {
+  const response = await fetch(`/api/admin/settings/${key}`, {
+    method: 'PUT', headers: JSON_HEADERS, credentials: 'include',
+    body: JSON.stringify({ value })
+  });
+  if (!response.ok) {
+    const failure = await response.json();
+    throw new Error(failure.error || `Failed to save ${key}`);
+  }
+}
+
+const positiveIntOr = (raw, fallback, min = 1) => {
+  const parsed = parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed >= min ? parsed : fallback;
+};
+
+const stringsOnly = (list) => (Array.isArray(list) ? list.filter(entry => typeof entry === 'string') : []);
+
+// Result messages clear themselves after five seconds.
+function useTransientResult() {
   const [result, setResult] = useState(null);
-  const [openRouterResult, setOpenRouterResult] = useState(null);
-  const [serperResult, setSerperResult] = useState(null);
-  const [apifyResult, setApifyResult] = useState(null);
+  useEffect(() => {
+    if (!result) return;
+    const timer = setTimeout(() => setResult(null), 5000);
+    return () => clearTimeout(timer);
+  }, [result]);
+  return [result, setResult];
+}
 
-  const [aiConfigLoading, setAiConfigLoading] = useState(false);
+/**
+ * One API-key panel: status dot, save-new-key input and a Test button.
+ *
+ * @param {object} props
+ * @param {string} props.title - Panel heading.
+ * @param {string} props.settingKey - Admin setting the key is saved under.
+ * @param {string} props.testUrl - POST endpoint returning `{ success, ... }`.
+ * @param {string} [props.testErrorField='message'] - Response field shown when success is false.
+ * @param {string} [props.testPassedMessage] - Banner text when the test passes.
+ * @param {string} props.noun - Name used in the "cannot be empty" message.
+ * @param {string} props.placeholder - Input placeholder.
+ * @param {boolean} props.isSet - Whether a key is already stored (drives the status dot).
+ * @param {(settingKey: string) => void} props.onSaved - Called after a successful save,
+ *   so the parent can refresh which keys are set.
+ * @param {object} [props.sectionStyle] - Inline style for the panel wrapper.
+ * @param {import('react').ReactNode} [props.children] - Extra content under the input.
+ * Save and test outcomes show in the panel's own auto-dismissing result badge.
+ */
+function ApiKeySetting({ title, settingKey, testUrl, testErrorField = 'message', testPassedMessage = 'Test passed ✓', noun, placeholder, isSet, onSaved, sectionStyle, children }) {
+  const [value, setValue] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [result, setResult] = useTransientResult();
 
-  const [twitterCredentials, setTwitterCredentials] = useState({ username: '', password: '' });
-  const [twitterLoading, setTwitterLoading] = useState(true);
-  const [twitterSaving, setTwitterSaving] = useState(false);
+  const handleSave = async () => {
+    if (!value.trim()) { setResult({ type: 'error', message: `${noun} cannot be empty` }); return; }
+    setSaving(true); setResult(null);
+    try {
+      await putSetting(settingKey, value);
+      setResult({ type: 'success', message: 'Saved successfully' });
+      setValue('');
+      onSaved(settingKey);
+    } catch (err) { setResult({ type: 'error', message: `Save failed: ${err.message}` }); }
+    finally { setSaving(false); }
+  };
+
+  const handleTest = async () => {
+    setTesting(true); setResult(null);
+    try {
+      const response = await fetch(testUrl, { method: 'POST', credentials: 'include' });
+      const outcome = await response.json();
+      if (outcome.success) {
+        setResult({ type: 'success', message: testPassedMessage });
+      } else {
+        setResult({ type: 'error', message: outcome[testErrorField] || 'Test failed' });
+      }
+    } catch (err) { setResult({ type: 'error', message: `Test failed: ${err.message}` }); }
+    finally { setTesting(false); }
+  };
+
+  return (
+    <div style={sectionStyle}>
+      <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>{title}</h5>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
+        <span className={`status-indicator ${isSet ? 'configured' : 'not-configured'}`}></span>
+        <span style={{ fontSize: '0.9rem' }}>{isSet ? 'Configured' : 'Not configured'}</span>
+        {result && (
+          <span
+            style={{
+              marginLeft: '12px',
+              padding: '4px 10px',
+              borderRadius: '4px',
+              fontSize: '0.85rem',
+              fontWeight: '500',
+              backgroundColor: result.type === 'success' ? '#d4edda' : '#f8d7da',
+              color: result.type === 'success' ? '#155724' : '#721c24',
+              cursor: 'pointer'
+            }}
+            onClick={() => setResult(null)}
+            title="Click to dismiss"
+          >
+            {result.message}
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
+        <input
+          type="password"
+          value={value || (isSet ? MASKED_SECRET : '')}
+          onChange={e => setValue(e.target.value)}
+          placeholder={placeholder}
+          disabled={saving}
+          style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
+        />
+        <button className="action-btn primary" onClick={handleSave} disabled={saving || !value.trim()}
+          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+        <button className="action-btn secondary" onClick={handleTest} disabled={testing || !isSet}
+          style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+          {testing ? 'Testing...' : 'Test'}
+        </button>
+      </div>
+      <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
+        {children}
+      </p>
+    </div>
+  );
+}
+
+const BORDERED_SECTION = { marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' };
+
+function DataCollectionSettings() {
+  const [result, setResult] = useTransientResult();
+  const [secretsSet, setSecretsSet] = useState({});
+
+  const [settingsLoading, setSettingsLoading] = useState(true);
 
   const [twitterAuthStatus, setTwitterAuthStatus] = useState(null);
   const [twitterAuthLoading, setTwitterAuthLoading] = useState(false);
   const [twitterAuthTesting, setTwitterAuthTesting] = useState(false);
   const [twitterCookiesJson, setTwitterCookiesJson] = useState('');
   const [showCookieInput, setShowCookieInput] = useState(false);
-
-  const [openRouterApiKey, setOpenRouterApiKey] = useState('');
-  const [openRouterApiKeySet, setOpenRouterApiKeySet] = useState(false);
-  const [openRouterSaving, setOpenRouterSaving] = useState(false);
-  const [openRouterTesting, setOpenRouterTesting] = useState(false);
-
-  const [apifyToken, setApifyToken] = useState('');
-  const [apifyTokenSet, setApifyTokenSet] = useState(false);
-  const [apifySaving, setApifySaving] = useState(false);
-  const [apifyTesting, setApifyTesting] = useState(false);
-
-  const [serperApiKey, setSerperApiKey] = useState('');
-  const [serperApiKeySet, setSerperApiKeySet] = useState(false);
-  const [serperSaving, setSerperSaving] = useState(false);
-  const [serperTesting, setSerperTesting] = useState(false);
-
-  const [usftToken, setUsftToken] = useState('');
-  const [usftTokenSet, setUsftTokenSet] = useState(false);
-  const [usftSaving, setUsftSaving] = useState(false);
-  const [usftTesting, setUsftTesting] = useState(false);
-  const [usftResult, setUsftResult] = useState(null);
-
-  const [githubToken, setGithubToken] = useState('');
-  const [githubTokenSet, setGithubTokenSet] = useState(false);
-  const [githubSaving, setGithubSaving] = useState(false);
-  const [githubTesting, setGithubTesting] = useState(false);
-  const [githubResult, setGithubResult] = useState(null);
 
   const [playwrightStatus, setPlaywrightStatus] = useState(null);
   const [playwrightLoading, setPlaywrightLoading] = useState(true);
@@ -54,11 +162,9 @@ function DataCollectionSettings() {
   const [moderationConfig, setModerationConfig] = useState({
     enabled: true, autoApproveEnabled: true, newsDateThreshold: 4, photoSubmissionsEnabled: false
   });
-  const [moderationConfigLoading, setModerationConfigLoading] = useState(true);
   const [moderationConfigSaving, setModerationConfigSaving] = useState(false);
 
   const [domainLists, setDomainLists] = useState({ competitor: [] });
-  const [domainListsLoading, setDomainListsLoading] = useState(true);
   const [filtersSaving, setFiltersSaving] = useState(false);
   const [newCompetitorDomain, setNewCompetitorDomain] = useState('');
   const [contentBlocklist, setContentBlocklist] = useState([]);
@@ -77,7 +183,6 @@ function DataCollectionSettings() {
   const [maxSearchUrls, setMaxSearchUrls] = useState(10);
   const [pageConcurrency, setPageConcurrency] = useState(3);
   const [pageDelayMs, setPageDelayMs] = useState(2000);
-  const [contentCollectionLoading, setContentCollectionLoading] = useState(true);
   const [contentCollectionSaving, setContentCollectionSaving] = useState(false);
 
   const [subtabs, setSubtabs] = useState([]);
@@ -87,315 +192,123 @@ function DataCollectionSettings() {
   const [addingSubtab, setAddingSubtab] = useState(false);
   const [subtabForm, setSubtabForm] = useState({ id: '', label: '', shortLabel: '', route: '/', filterTypes: [] });
 
-  const KNOWN_ROUTES = [
-    { value: '/', label: '/ (Home / All Results)' },
-    { value: '/mtb-trail-status', label: '/mtb-trail-status (MTB Trails)' },
-    { value: '/organizations', label: '/organizations (Organizations)' }
-  ];
+  const markSecretSet = useCallback((key) => setSecretsSet(prev => ({ ...prev, [key]: true })), []);
 
   const fetchSubtabs = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/results-subtabs', { credentials: 'include' });
-      if (res.ok) { const data = await res.json(); setSubtabs(data.subtabs || []); }
-    } catch (err) { console.error('Failed to fetch subtabs:', err); }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const subtabConfig = await res.json();
+      setSubtabs(subtabConfig.subtabs || []);
+    } catch (err) { setResult({ type: 'error', message: `Failed to load results sub-tabs: ${err.message}` }); }
     finally { setSubtabsLoading(false); }
-  }, []);
+  }, [setResult]);
 
-  const handleSaveSubtabs = async () => {
-    setSubtabsSaving(true);
+  /**
+   * Sends a request and reports its JSON outcome in the page-level result banner.
+   *
+   * @param {(busy: boolean) => void} setBusy - Spinner state for the triggering button.
+   * @param {() => Promise<Response>} request - Performs the fetch.
+   * @param {(outcome: object, response: Response) => {type: string, message: string}} describeOutcome
+   *   Maps the parsed JSON body (and response, for .ok) to the banner result.
+   * @param {string} failurePrefix - Banner prefix when the request or JSON parse throws.
+   * @param {() => Promise<void>} [afterSend] - Runs after a request that did not throw, e.g. a refetch.
+   * @returns {Promise<void>} Never rejects; failures go to the banner.
+   */
+  const sendAndReport = async (setBusy, request, describeOutcome, failurePrefix, afterSend) => {
+    setBusy(true); setResult(null);
     try {
-      const res = await fetch('/api/admin/results-subtabs', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ subtabs })
-      });
-      if (res.ok) { setResult({ type: 'success', message: 'Results sub-tabs saved successfully' }); await fetchSubtabs(); }
-      else { const err = await res.json(); setResult({ type: 'error', message: err.error || 'Failed to save sub-tabs' }); }
-    } catch (err) { setResult({ type: 'error', message: 'Failed to save sub-tabs: ' + err.message }); }
-    finally { setSubtabsSaving(false); }
+      const response = await request();
+      setResult(describeOutcome(await response.json(), response));
+      if (afterSend) await afterSend();
+    } catch (err) { setResult({ type: 'error', message: `${failurePrefix}: ${err.message}` }); }
+    finally { setBusy(false); }
   };
 
-  useEffect(() => {
-    fetchTwitterCredentials();
-    fetchTwitterAuthStatus();
-    fetchOpenRouterStatus();
-    fetchApifyStatus();
-    fetchSerperStatus();
-    fetchUsftStatus();
-    fetchGithubStatus();
-    fetchPlaywrightStatus();
-    fetchModerationConfig();
-    fetchDomainLists();
-    fetchExcludedPois();
-    fetchContentCollection();
-    fetchSubtabs();
-  }, []);
+  const handleSaveSubtabs = () => sendAndReport(
+    setSubtabsSaving,
+    () => fetch('/api/admin/results-subtabs', {
+      method: 'PUT', headers: JSON_HEADERS, credentials: 'include',
+      body: JSON.stringify({ subtabs })
+    }),
+    (outcome, response) => (response.ok
+      ? { type: 'success', message: 'Results sub-tabs saved successfully' }
+      : { type: 'error', message: outcome.error || 'Failed to save sub-tabs' }),
+    'Failed to save sub-tabs',
+    fetchSubtabs
+  );
 
-  useEffect(() => {
-    if (!result) return;
-    const timer = setTimeout(() => setResult(null), 5000);
-    return () => clearTimeout(timer);
-  }, [result]);
+  const applyDomainLists = (settings) => {
+    try {
+      const parsedBlocklist = JSON.parse(settings.blocklist_urls?.value || '[]');
+      setContentBlocklist(stringsOnly(JSON.parse(settings.event_content_blocklist?.value || '[]')));
+      setNewsTopicBlocklist(stringsOnly(JSON.parse(settings.news_topic_blocklist?.value || '[]')));
+      setDomainLists({ competitor: stringsOnly(parsedBlocklist) });
+      setTrustedEventPaths(stringsOnly(JSON.parse(settings.trusted_content_paths?.value || '[]')));
+      if (!Array.isArray(parsedBlocklist)) {
+        setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
+      }
+    } catch (err) {
+      console.error('Failed to parse domain lists:', err);
+      setResult({ type: 'error', message: 'Failed to load domain lists - invalid JSON' });
+    }
+  };
 
-  useEffect(() => {
-    if (!openRouterResult) return;
-    const timer = setTimeout(() => setOpenRouterResult(null), 5000);
-    return () => clearTimeout(timer);
-  }, [openRouterResult]);
+  const loadExcludedPois = async (settings) => {
+    try {
+      const poisRes = await fetch('/api/pois', { credentials: 'include' });
+      if (!poisRes.ok) throw new Error(`HTTP ${poisRes.status}`);
+      const pois = await poisRes.json();
+      setAllPois(pois.filter(p => !p.deleted).sort((a, b) => a.name.localeCompare(b.name)));
+      let excludedIds = [];
+      try {
+        const parsed = JSON.parse(settings.news_collection_excluded_pois?.value || '[]');
+        excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
+      } catch (err) {
+        setResult({ type: 'error', message: `Failed to parse excluded POIs: ${err.message}` });
+      }
+      setExcludedPois(
+        excludedIds
+          .map(id => pois.find(p => p.id === id))
+          .filter(Boolean)
+          .map(p => ({ id: p.id, name: p.name }))
+      );
+    } catch (err) { setResult({ type: 'error', message: `Failed to load POIs: ${err.message}` }); }
+    finally { setExcludedPoisLoading(false); }
+  };
 
-  useEffect(() => {
-    if (!serperResult) return;
-    const timer = setTimeout(() => setSerperResult(null), 5000);
-    return () => clearTimeout(timer);
-  }, [serperResult]);
-
-  useEffect(() => {
-    if (!usftResult) return;
-    const timer = setTimeout(() => setUsftResult(null), 5000);
-    return () => clearTimeout(timer);
-  }, [usftResult]);
-
-  useEffect(() => {
-    if (!apifyResult) return;
-    const timer = setTimeout(() => setApifyResult(null), 5000);
-    return () => clearTimeout(timer);
-  }, [apifyResult]);
-
-  const fetchTwitterCredentials = async () => {
+  // One read of /api/admin/settings feeds every section on this page.
+  const loadSettings = async () => {
     try {
       const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        setTwitterCredentials({ username: settings.twitter_username?.value || '', password: settings.twitter_password?.value || '' });
-      }
-    } catch (err) { console.error('Error fetching Twitter credentials:', err); }
-    finally { setTwitterLoading(false); }
-  };
-
-  const fetchOpenRouterStatus = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) { const settings = await response.json(); setOpenRouterApiKeySet(settings.openrouter_api_key?.isSet || false); }
-    } catch (err) { console.error('Error fetching OpenRouter status:', err); }
-  };
-
-  const fetchApifyStatus = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) { const settings = await response.json(); setApifyTokenSet(settings.apify_api_token?.isSet || false); }
-    } catch (err) { console.error('Error fetching Apify status:', err); }
-  };
-
-  const handleSaveOpenRouterApiKey = async () => {
-    if (!openRouterApiKey.trim()) { setOpenRouterResult({ type: 'error', message: 'API key cannot be empty' }); return; }
-    setOpenRouterSaving(true); setOpenRouterResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/openrouter_api_key', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: openRouterApiKey })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const settings = await response.json();
+      setSecretsSet(Object.fromEntries(SECRET_KEYS.map(key => [key, settings[key]?.isSet || false])));
+      setModerationConfig({
+        enabled: settings.moderation_enabled?.value !== 'false',
+        autoApproveEnabled: settings.moderation_auto_approve_enabled?.value !== 'false',
+        newsDateThreshold: parseInt(settings.moderation_news_date_threshold?.value) || 4,
+        photoSubmissionsEnabled: settings.photo_submissions_enabled?.value === 'true'
       });
-      if (response.ok) {
-        setOpenRouterResult({ type: 'success', message: 'Saved successfully' });
-        setOpenRouterApiKey('');
-        setOpenRouterApiKeySet(true);
-        await fetchOpenRouterStatus();
-      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save key'); }
-    } catch (err) { setOpenRouterResult({ type: 'error', message: `Save failed: ${err.message}` }); }
-    finally { setOpenRouterSaving(false); }
-  };
-
-  const handleTestOpenRouterApiKey = async () => {
-    setOpenRouterTesting(true); setOpenRouterResult(null);
-    try {
-      const response = await fetch('/api/admin/ai/test-key', { method: 'POST', credentials: 'include' });
-      const data = await response.json();
-      if (data.success) {
-        setOpenRouterResult({ type: 'success', message: 'Test passed ✓' });
-      } else {
-        setOpenRouterResult({ type: 'error', message: data.error || 'Test failed' });
-      }
-    } catch (err) { setOpenRouterResult({ type: 'error', message: `Test failed: ${err.message}` }); }
-    finally { setOpenRouterTesting(false); }
-  };
-
-  const handleSaveApifyToken = async () => {
-    if (!apifyToken.trim()) { setApifyResult({ type: 'error', message: 'API token cannot be empty' }); return; }
-    setApifySaving(true); setApifyResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/apify_api_token', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: apifyToken })
-      });
-      if (response.ok) {
-        setApifyResult({ type: 'success', message: 'Saved successfully' });
-        setApifyToken('');
-        setApifyTokenSet(true);
-        await fetchApifyStatus();
-      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
-    } catch (err) { setApifyResult({ type: 'error', message: `Save failed: ${err.message}` }); }
-    finally { setApifySaving(false); }
-  };
-
-  const handleTestApifyToken = async () => {
-    setApifyTesting(true); setApifyResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/apify-api-token/test', {
-        method: 'POST', credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setApifyResult({ type: 'success', message: 'Test passed ✓' });
-      } else {
-        setApifyResult({ type: 'error', message: data.message || 'Test failed' });
-      }
-    } catch (err) { setApifyResult({ type: 'error', message: `Test failed: ${err.message}` }); }
-    finally { setApifyTesting(false); }
-  };
-
-  const fetchSerperStatus = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) { const settings = await response.json(); setSerperApiKeySet(settings.serper_api_key?.isSet || false); }
-    } catch (err) { console.error('Error fetching Serper status:', err); }
-  };
-
-  const handleSaveSerperApiKey = async () => {
-    if (!serperApiKey.trim()) { setSerperResult({ type: 'error', message: 'API key cannot be empty' }); return; }
-    setSerperSaving(true); setSerperResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/serper_api_key', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: serperApiKey })
-      });
-      if (response.ok) {
-        setSerperResult({ type: 'success', message: 'Saved successfully' });
-        setSerperApiKey('');
-        setSerperApiKeySet(true);
-        await fetchSerperStatus();
-      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save key'); }
-    } catch (err) { setSerperResult({ type: 'error', message: `Save failed: ${err.message}` }); }
-    finally { setSerperSaving(false); }
-  };
-
-  const handleTestSerperApiKey = async () => {
-    setSerperTesting(true); setSerperResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/serper-api-key/test', {
-        method: 'POST', credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setSerperResult({ type: 'success', message: 'Test passed ✓' });
-      } else {
-        setSerperResult({ type: 'error', message: data.message || 'Test failed' });
-      }
-    } catch (err) { setSerperResult({ type: 'error', message: `Test failed: ${err.message}` }); }
-    finally { setSerperTesting(false); }
-  };
-
-  const fetchUsftStatus = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) { const settings = await response.json(); setUsftTokenSet(settings.usft_sharing_token?.isSet || false); }
-    } catch (err) { console.error('Error fetching USFT status:', err); }
-  };
-
-  const handleSaveUsftToken = async () => {
-    if (!usftToken.trim()) { setUsftResult({ type: 'error', message: 'Token cannot be empty' }); return; }
-    setUsftSaving(true); setUsftResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/usft_sharing_token', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: usftToken })
-      });
-      if (response.ok) {
-        setUsftResult({ type: 'success', message: 'Saved successfully' });
-        setUsftToken('');
-        setUsftTokenSet(true);
-        await fetchUsftStatus();
-      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
-    } catch (err) { setUsftResult({ type: 'error', message: `Save failed: ${err.message}` }); }
-    finally { setUsftSaving(false); }
-  };
-
-  const handleTestUsftToken = async () => {
-    setUsftTesting(true); setUsftResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/usft-sharing-token/test', {
-        method: 'POST', credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setUsftResult({ type: 'success', message: 'Test passed ✓' });
-      } else {
-        setUsftResult({ type: 'error', message: data.message || 'Test failed' });
-      }
-    } catch (err) { setUsftResult({ type: 'error', message: `Test failed: ${err.message}` }); }
-    finally { setUsftTesting(false); }
-  };
-
-  const fetchGithubStatus = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) { const settings = await response.json(); setGithubTokenSet(settings.github_api_token?.isSet || false); }
-    } catch (err) { console.error('Error fetching GitHub status:', err); }
-  };
-
-  const handleSaveGithubToken = async () => {
-    if (!githubToken.trim()) { setGithubResult({ type: 'error', message: 'Token cannot be empty' }); return; }
-    setGithubSaving(true); setGithubResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/github_api_token', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ value: githubToken })
-      });
-      if (response.ok) {
-        setGithubResult({ type: 'success', message: 'Saved successfully' });
-        setGithubToken('');
-        setGithubTokenSet(true);
-        await fetchGithubStatus();
-      } else { const error = await response.json(); throw new Error(error.error || 'Failed to save token'); }
-    } catch (err) { setGithubResult({ type: 'error', message: `Save failed: ${err.message}` }); }
-    finally { setGithubSaving(false); }
-  };
-
-  const handleTestGithubToken = async () => {
-    setGithubTesting(true); setGithubResult(null);
-    try {
-      const response = await fetch('/api/admin/settings/github-api-token/test', { method: 'POST', credentials: 'include' });
-      const data = await response.json();
-      if (data.success) {
-        setGithubResult({ type: 'success', message: 'Test passed' });
-      } else {
-        setGithubResult({ type: 'error', message: data.message || 'Test failed' });
-      }
-    } catch (err) { setGithubResult({ type: 'error', message: `Test failed: ${err.message}` }); }
-    finally { setGithubTesting(false); }
-  };
-
-  const handleSaveTwitterCredentials = async () => {
-    setTwitterSaving(true); setResult(null);
-    try {
-      const settings = [
-        { key: 'twitter_username', value: twitterCredentials.username },
-        { key: 'twitter_password', value: twitterCredentials.password }
-      ];
-      for (const setting of settings) {
-        const response = await fetch(`/api/admin/settings/${setting.key}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ value: setting.value })
-        });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to save setting'); }
-      }
-      setResult({ type: 'success', message: 'Twitter credentials saved successfully' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save Twitter credentials: ${err.message}` }); }
-    finally { setTwitterSaving(false); }
+      applyDomainLists(settings);
+      setMaxConcurrency(positiveIntOr(settings.max_concurrency?.value, 10));
+      setMaxSearchUrls(positiveIntOr(settings.max_search_urls?.value, 10));
+      setPageConcurrency(positiveIntOr(settings.page_concurrency?.value, 3));
+      setPageDelayMs(positiveIntOr(settings.page_delay_ms?.value, 2000, 0));
+      return settings;
+    } catch (err) {
+      setResult({ type: 'error', message: `Failed to load settings: ${err.message}` });
+      return null;
+    } finally {
+      setSettingsLoading(false);
+    }
   };
 
   const fetchTwitterAuthStatus = async () => {
     try {
       const response = await fetch('/api/admin/twitter/auth-status', { credentials: 'include' });
       if (response.ok) setTwitterAuthStatus(await response.json());
-    } catch (err) { console.error('Error fetching Twitter auth status:', err); }
+    } catch (err) { setResult({ type: 'error', message: `Failed to check Twitter auth status: ${err.message}` }); }
   };
 
   const fetchPlaywrightStatus = async () => {
@@ -408,98 +321,62 @@ function DataCollectionSettings() {
     finally { setPlaywrightLoading(false); }
   };
 
-  const fetchModerationConfig = async () => {
+  useEffect(() => {
+    const loadPage = async () => {
+      const settings = await loadSettings();
+      if (settings) await loadExcludedPois(settings);
+      else setExcludedPoisLoading(false);
+    };
+    loadPage();
+    fetchTwitterAuthStatus();
+    fetchPlaywrightStatus();
+    fetchSubtabs();
+  }, []);
+
+  /**
+   * Saves several admin settings one after another and reports once in the banner.
+   *
+   * @param {(busy: boolean) => void} setBusy - Spinner state for the Save button.
+   * @param {Array<[string, string]>} entries - [settingKey, value] pairs, saved in order.
+   * @param {string} successMessage - Banner text when every save succeeds.
+   * @param {string} failurePrefix - Banner prefix for the first failure.
+   * @returns {Promise<void>} Never rejects. Stops at the first failed save, so earlier
+   *   keys in `entries` stay saved (no rollback).
+   */
+  const saveSettingsGroup = async (setBusy, entries, successMessage, failurePrefix) => {
+    setBusy(true); setResult(null);
     try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        setModerationConfig({
-          enabled: settings.moderation_enabled?.value !== 'false',
-          autoApproveEnabled: settings.moderation_auto_approve_enabled?.value !== 'false',
-          newsDateThreshold: parseInt(settings.moderation_news_date_threshold?.value) || 4,
-          photoSubmissionsEnabled: settings.photo_submissions_enabled?.value === 'true'
-        });
+      for (const [key, value] of entries) {
+        await putSetting(key, value);
       }
-    } catch (err) { console.error('Error fetching moderation config:', err); }
-    finally { setModerationConfigLoading(false); }
+      setResult({ type: 'success', message: successMessage });
+    } catch (err) { setResult({ type: 'error', message: `${failurePrefix}: ${err.message}` }); }
+    finally { setBusy(false); }
   };
 
-  const handleSaveModerationConfig = async () => {
-    setModerationConfigSaving(true); setResult(null);
-    try {
-      const settings = [
-        { key: 'moderation_enabled', value: String(moderationConfig.enabled) },
-        { key: 'moderation_auto_approve_enabled', value: String(moderationConfig.autoApproveEnabled) },
-        { key: 'moderation_news_date_threshold', value: String(moderationConfig.newsDateThreshold) },
-        { key: 'photo_submissions_enabled', value: String(moderationConfig.photoSubmissionsEnabled) }
-      ];
-      for (const setting of settings) {
-        const response = await fetch(`/api/admin/settings/${setting.key}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ value: setting.value })
-        });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to save setting'); }
-      }
-      setResult({ type: 'success', message: 'Moderation configuration saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save moderation config: ${err.message}` }); }
-    finally { setModerationConfigSaving(false); }
-  };
-
-  const fetchDomainLists = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        const blocklist = settings.blocklist_urls?.value || '[]';
-        const eventPaths = settings.trusted_content_paths?.value || '[]';
-        const contentBlock = settings.event_content_blocklist?.value || '[]';
-        const newsTopics = settings.news_topic_blocklist?.value || '[]';
-        try {
-          const parsedBlocklist = JSON.parse(blocklist);
-          const parsedEventPaths = JSON.parse(eventPaths);
-          const parsedContentBlock = JSON.parse(contentBlock);
-          const parsedNewsTopics = JSON.parse(newsTopics);
-          setContentBlocklist(Array.isArray(parsedContentBlock) ? parsedContentBlock.filter(p => typeof p === 'string') : []);
-          setNewsTopicBlocklist(Array.isArray(parsedNewsTopics) ? parsedNewsTopics.filter(p => typeof p === 'string') : []);
-          setDomainLists({
-            competitor: Array.isArray(parsedBlocklist) ? parsedBlocklist.filter(d => typeof d === 'string') : []
-          });
-          setTrustedEventPaths(Array.isArray(parsedEventPaths) ? parsedEventPaths.filter(d => typeof d === 'string') : []);
-          if (!Array.isArray(parsedBlocklist)) {
-            setResult({ type: 'error', message: 'Domain lists configuration error - invalid format' });
-          }
-        } catch (e) {
-          console.error('Failed to parse domain lists:', e);
-          setResult({ type: 'error', message: 'Failed to load domain lists - invalid JSON' });
-        }
-      }
-    } catch (err) { console.error('Error fetching domain lists:', err); }
-    finally { setDomainListsLoading(false); }
-  };
+  const handleSaveModerationConfig = () => saveSettingsGroup(setModerationConfigSaving, [
+    ['moderation_enabled', String(moderationConfig.enabled)],
+    ['moderation_auto_approve_enabled', String(moderationConfig.autoApproveEnabled)],
+    ['moderation_news_date_threshold', String(moderationConfig.newsDateThreshold)],
+    ['photo_submissions_enabled', String(moderationConfig.photoSubmissionsEnabled)]
+  ], 'Moderation configuration saved', 'Failed to save moderation config');
 
   // Single save for the unified News & Events Filters section — persists all
   // allow/block lists in one click.
-  const handleSaveAllFilters = async () => {
-    setFiltersSaving(true); setResult(null);
-    try {
-      const settings = [
-        { key: 'blocklist_urls', value: JSON.stringify(domainLists.competitor) },
-        { key: 'trusted_content_paths', value: JSON.stringify(trustedEventPaths) },
-        { key: 'news_collection_excluded_pois', value: JSON.stringify(excludedPois.map(p => p.id)) },
-        { key: 'event_content_blocklist', value: JSON.stringify(contentBlocklist) },
-        { key: 'news_topic_blocklist', value: JSON.stringify(newsTopicBlocklist) }
-      ];
-      for (const setting of settings) {
-        const response = await fetch(`/api/admin/settings/${setting.key}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ value: setting.value })
-        });
-        if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Failed to save setting'); }
-      }
-      setResult({ type: 'success', message: 'Filters saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save filters: ${err.message}` }); }
-    finally { setFiltersSaving(false); }
-  };
+  const handleSaveAllFilters = () => saveSettingsGroup(setFiltersSaving, [
+    ['blocklist_urls', JSON.stringify(domainLists.competitor)],
+    ['trusted_content_paths', JSON.stringify(trustedEventPaths)],
+    ['news_collection_excluded_pois', JSON.stringify(excludedPois.map(p => p.id))],
+    ['event_content_blocklist', JSON.stringify(contentBlocklist)],
+    ['news_topic_blocklist', JSON.stringify(newsTopicBlocklist)]
+  ], 'Filters saved', 'Failed to save filters');
+
+  const handleSaveContentCollection = () => saveSettingsGroup(setContentCollectionSaving, [
+    ['max_concurrency', String(maxConcurrency)],
+    ['max_search_urls', String(maxSearchUrls)],
+    ['page_concurrency', String(pageConcurrency)],
+    ['page_delay_ms', String(pageDelayMs)]
+  ], 'Content collection settings saved', 'Failed to save content collection settings');
 
   const handleAddCompetitorDomain = () => {
     const domain = newCompetitorDomain.trim().toLowerCase().replace(/^https?:\/\//, '');
@@ -558,35 +435,6 @@ function DataCollectionSettings() {
     setTrustedEventPaths(trustedEventPaths.filter(p => p !== path));
   };
 
-  const fetchExcludedPois = async () => {
-    setExcludedPoisLoading(true);
-    try {
-      const [settingsRes, poisRes] = await Promise.all([
-        fetch('/api/admin/settings', { credentials: 'include' }),
-        fetch('/api/pois', { credentials: 'include' })
-      ]);
-      if (settingsRes.ok && poisRes.ok) {
-        const settings = await settingsRes.json();
-        const pois = await poisRes.json();
-        setAllPois(pois.filter(p => !p.deleted).sort((a, b) => a.name.localeCompare(b.name)));
-        let excludedIds = [];
-        try {
-          const parsed = JSON.parse(settings.news_collection_excluded_pois?.value || '[]');
-          excludedIds = Array.isArray(parsed) ? parsed.filter(id => Number.isInteger(id)) : [];
-        } catch (e) {
-          console.error('Failed to parse excluded POIs:', e);
-        }
-        setExcludedPois(
-          excludedIds
-            .map(id => pois.find(p => p.id === id))
-            .filter(Boolean)
-            .map(p => ({ id: p.id, name: p.name }))
-        );
-      }
-    } catch (err) { console.error('Error fetching excluded POIs:', err); }
-    finally { setExcludedPoisLoading(false); }
-  };
-
   const handleAddExcludedPoi = () => {
     const id = parseInt(selectedPoiId);
     if (!id) return;
@@ -602,62 +450,18 @@ function DataCollectionSettings() {
     setExcludedPois(excludedPois.filter(p => p.id !== id));
   };
 
-  const fetchContentCollection = async () => {
-    try {
-      const response = await fetch('/api/admin/settings', { credentials: 'include' });
-      if (response.ok) {
-        const settings = await response.json();
-        const concurrency = parseInt(settings.max_concurrency?.value, 10);
-        const searchUrls = parseInt(settings.max_search_urls?.value, 10);
-        const pageConc = parseInt(settings.page_concurrency?.value, 10);
-        const delay = parseInt(settings.page_delay_ms?.value, 10);
-        setMaxConcurrency(Number.isFinite(concurrency) && concurrency >= 1 ? concurrency : 10);
-        setMaxSearchUrls(Number.isFinite(searchUrls) && searchUrls >= 1 ? searchUrls : 10);
-        setPageConcurrency(Number.isFinite(pageConc) && pageConc >= 1 ? pageConc : 3);
-        setPageDelayMs(Number.isFinite(delay) && delay >= 0 ? delay : 2000);
-      }
-    } catch (err) { console.error('Error fetching content collection settings:', err); }
-    finally { setContentCollectionLoading(false); }
-  };
-
-  const handleSaveContentCollection = async () => {
-    setContentCollectionSaving(true); setResult(null);
-    try {
-      const updates = [
-        ['max_concurrency', maxConcurrency],
-        ['max_search_urls', maxSearchUrls],
-        ['page_concurrency', pageConcurrency],
-        ['page_delay_ms', pageDelayMs]
-      ];
-      for (const [key, value] of updates) {
-        const response = await fetch(`/api/admin/settings/${key}`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-          body: JSON.stringify({ value: String(value) })
-        });
-        if (!response.ok) { const err = await response.json(); throw new Error(err.error || `Failed to save ${key}`); }
-      }
-      setResult({ type: 'success', message: 'Content collection settings saved' });
-    } catch (err) { setResult({ type: 'error', message: `Failed to save content collection settings: ${err.message}` }); }
-    finally { setContentCollectionSaving(false); }
-  };
-
-  const handleTestPlaywright = async () => {
-    setPlaywrightTesting(true); setResult(null);
-    try {
-      const response = await fetch('/api/admin/playwright/test', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
-        body: JSON.stringify({ url: 'https://example.com' })
-      });
-      const data = await response.json();
-      if (data.status === 'success') {
-        setResult({ type: 'success', message: `Playwright test passed! Rendered "${data.title}" (${data.text_length} chars, ${data.links_found} links) in ${data.elapsed_ms}ms` });
-      } else {
-        setResult({ type: 'error', message: `Playwright test failed: ${data.message}` });
-      }
-      await fetchPlaywrightStatus();
-    } catch (err) { setResult({ type: 'error', message: `Playwright test error: ${err.message}` }); }
-    finally { setPlaywrightTesting(false); }
-  };
+  const handleTestPlaywright = () => sendAndReport(
+    setPlaywrightTesting,
+    () => fetch('/api/admin/playwright/test', {
+      method: 'POST', headers: JSON_HEADERS, credentials: 'include',
+      body: JSON.stringify({ url: 'https://example.com' })
+    }),
+    (outcome) => (outcome.status === 'success'
+      ? { type: 'success', message: `Playwright test passed! Rendered "${outcome.title}" (${outcome.text_length} chars, ${outcome.links_found} links) in ${outcome.elapsed_ms}ms` }
+      : { type: 'error', message: `Playwright test failed: ${outcome.message}` }),
+    'Playwright test error',
+    fetchPlaywrightStatus
+  );
 
   const handleTwitterLogin = () => {
     window.open('https://x.com/login', '_blank');
@@ -665,34 +469,33 @@ function DataCollectionSettings() {
     setResult({ type: 'info', message: 'Twitter login opened in new tab. After logging in, use a browser extension like "Cookie-Editor" to export cookies from x.com as JSON, then paste below.' });
   };
 
-  const handleSaveCookies = async () => {
-    setTwitterAuthLoading(true); setResult(null);
-    try {
-      if (!twitterCookiesJson.trim()) { setResult({ type: 'error', message: 'Please paste cookies JSON' }); setTwitterAuthLoading(false); return; }
-      const response = await fetch('/api/admin/twitter/save-cookies', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include',
+  const handleSaveCookies = () => {
+    if (!twitterCookiesJson.trim()) { setResult({ type: 'error', message: 'Please paste cookies JSON' }); return; }
+    sendAndReport(
+      setTwitterAuthLoading,
+      () => fetch('/api/admin/twitter/save-cookies', {
+        method: 'POST', headers: JSON_HEADERS, credentials: 'include',
         body: JSON.stringify({ cookies: twitterCookiesJson })
-      });
-      const data = await response.json();
-      if (data.success) {
-        setResult({ type: 'success', message: `Twitter cookies saved! Expires: ${new Date(data.expires).toLocaleDateString()}` });
-        setTwitterCookiesJson(''); setShowCookieInput(false); await fetchTwitterAuthStatus();
-      } else { setResult({ type: 'error', message: data.error || 'Failed to save cookies' }); }
-    } catch (err) { setResult({ type: 'error', message: `Save error: ${err.message}` }); }
-    finally { setTwitterAuthLoading(false); }
+      }),
+      (outcome) => {
+        if (!outcome.success) return { type: 'error', message: outcome.error || 'Failed to save cookies' };
+        setTwitterCookiesJson(''); setShowCookieInput(false);
+        return { type: 'success', message: `Twitter cookies saved! Expires: ${new Date(outcome.expires).toLocaleDateString()}` };
+      },
+      'Save error',
+      fetchTwitterAuthStatus
+    );
   };
 
-  const handleTestTwitterAuth = async () => {
-    setTwitterAuthTesting(true); setResult(null);
-    try {
-      const response = await fetch('/api/admin/twitter/test-cookies', { method: 'POST', credentials: 'include' });
-      const data = await response.json();
-      if (data.success && data.logged_in) { setResult({ type: 'success', message: 'Twitter authentication is working! Cookies are valid.' }); }
-      else { setResult({ type: 'error', message: data.message || 'Twitter cookies have expired. Please log in again.' }); }
-      await fetchTwitterAuthStatus();
-    } catch (err) { setResult({ type: 'error', message: `Test failed: ${err.message}` }); }
-    finally { setTwitterAuthTesting(false); }
-  };
+  const handleTestTwitterAuth = () => sendAndReport(
+    setTwitterAuthTesting,
+    () => fetch('/api/admin/twitter/test-cookies', { method: 'POST', credentials: 'include' }),
+    (outcome) => (outcome.success && outcome.logged_in
+      ? { type: 'success', message: 'Twitter authentication is working! Cookies are valid.' }
+      : { type: 'error', message: outcome.message || 'Twitter cookies have expired. Please log in again.' }),
+    'Test failed',
+    fetchTwitterAuthStatus
+  );
 
   return (
     <div className="data-collection-settings">
@@ -701,251 +504,83 @@ function DataCollectionSettings() {
         Configure AI providers, credentials, and infrastructure for data collection jobs.
         To trigger and monitor jobs, use the <strong>Jobs</strong> tab.
       </p>
+      {result && (
+        <div className={`sync-message ${result.type}`} style={{ position: 'sticky', top: 0, zIndex: 1 }} role="status">
+          {result.message}
+        </div>
+      )}
 
 
       <div className="ai-config-section">
         <h4>API Keys</h4>
         <p className="settings-description">Configure external API keys for data collection services.</p>
 
+        <ApiKeySetting
+          title="Apify"
+          settingKey="apify_api_token"
+          testUrl="/api/admin/settings/apify-api-token/test"
+          noun="API token"
+          placeholder="Enter API token..."
+          isSet={secretsSet.apify_api_token}
+          onSaved={markSecretSet}
+          sectionStyle={BORDERED_SECTION}
+        >
+          Facebook trail status scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
+        </ApiKeySetting>
 
-        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Apify</h5>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${apifyTokenSet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{apifyTokenSet ? 'Configured' : 'Not configured'}</span>
-            {apifyResult && (
-              <span
-                style={{
-                  marginLeft: '12px',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  backgroundColor: apifyResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: apifyResult.type === 'success' ? '#155724' : '#721c24',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setApifyResult(null)}
-                title="Click to dismiss"
-              >
-                {apifyResult.message}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
-            <input
-              type="password"
-              value={apifyToken || (apifyTokenSet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setApifyToken(e.target.value)}
-              placeholder="Enter API token..."
-              disabled={apifySaving}
-              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
-            />
-            <button className="action-btn primary" onClick={handleSaveApifyToken} disabled={apifySaving || !apifyToken.trim()}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {apifySaving ? 'Saving...' : 'Save'}
-            </button>
-            <button className="action-btn secondary" onClick={handleTestApifyToken} disabled={apifyTesting || !apifyTokenSet}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {apifyTesting ? 'Testing...' : 'Test'}
-            </button>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            Facebook trail status scraping. Get token from <a href="https://console.apify.com/account/integrations" target="_blank" rel="noopener noreferrer">Apify Console</a>
-          </p>
-        </div>
+        <ApiKeySetting
+          title="GitHub"
+          settingKey="github_api_token"
+          testUrl="/api/admin/settings/github-api-token/test"
+          testPassedMessage="Test passed"
+          noun="Token"
+          placeholder="Enter GitHub token..."
+          isSet={secretsSet.github_api_token}
+          onSaved={markSecretSet}
+          sectionStyle={BORDERED_SECTION}
+        >
+          Feedback form creates GitHub Issues. Use a fine-grained PAT with <code>issues:write</code> scope for <code>crunchtools/rotv</code>.
+        </ApiKeySetting>
 
+        <ApiKeySetting
+          title="OpenRouter"
+          settingKey="openrouter_api_key"
+          testUrl="/api/admin/ai/test-key"
+          testErrorField="error"
+          noun="API key"
+          placeholder="Enter API key..."
+          isSet={secretsSet.openrouter_api_key}
+          onSaved={markSecretSet}
+          sectionStyle={BORDERED_SECTION}
+        >
+          AI-powered content generation. Get key from <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a>
+        </ApiKeySetting>
 
-        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>GitHub</h5>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${githubTokenSet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{githubTokenSet ? 'Configured' : 'Not configured'}</span>
-            {githubResult && (
-              <span
-                style={{
-                  marginLeft: '12px',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  backgroundColor: githubResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: githubResult.type === 'success' ? '#155724' : '#721c24',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setGithubResult(null)}
-                title="Click to dismiss"
-              >
-                {githubResult.message}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
-            <input
-              type="password"
-              value={githubToken || (githubTokenSet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setGithubToken(e.target.value)}
-              placeholder="Enter GitHub token..."
-              disabled={githubSaving}
-              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
-            />
-            <button className="action-btn primary" onClick={handleSaveGithubToken} disabled={githubSaving || !githubToken.trim()}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {githubSaving ? 'Saving...' : 'Save'}
-            </button>
-            <button className="action-btn secondary" onClick={handleTestGithubToken} disabled={githubTesting || !githubTokenSet}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {githubTesting ? 'Testing...' : 'Test'}
-            </button>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            Feedback form creates GitHub Issues. Use a fine-grained PAT with <code>issues:write</code> scope for <code>crunchtools/rotv</code>.
-          </p>
-        </div>
+        <ApiKeySetting
+          title="Serper"
+          settingKey="serper_api_key"
+          testUrl="/api/admin/settings/serper-api-key/test"
+          noun="API key"
+          placeholder="Enter API key..."
+          isSet={secretsSet.serper_api_key}
+          onSaved={markSecretSet}
+          sectionStyle={BORDERED_SECTION}
+        >
+          External news search with geographic grounding. Get key from <a href="https://serper.dev/api-key" target="_blank" rel="noopener noreferrer">Serper Dashboard</a>
+        </ApiKeySetting>
 
-
-        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>OpenRouter</h5>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${openRouterApiKeySet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{openRouterApiKeySet ? 'Configured' : 'Not configured'}</span>
-            {openRouterResult && (
-              <span
-                style={{
-                  marginLeft: '12px',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  backgroundColor: openRouterResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: openRouterResult.type === 'success' ? '#155724' : '#721c24',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setOpenRouterResult(null)}
-                title="Click to dismiss"
-              >
-                {openRouterResult.message}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
-            <input
-              type="password"
-              value={openRouterApiKey || (openRouterApiKeySet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setOpenRouterApiKey(e.target.value)}
-              placeholder="Enter API key..."
-              disabled={openRouterSaving}
-              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
-            />
-            <button className="action-btn primary" onClick={handleSaveOpenRouterApiKey} disabled={openRouterSaving || !openRouterApiKey.trim()}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {openRouterSaving ? 'Saving...' : 'Save'}
-            </button>
-            <button className="action-btn secondary" onClick={handleTestOpenRouterApiKey} disabled={openRouterTesting || !openRouterApiKeySet}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {openRouterTesting ? 'Testing...' : 'Test'}
-            </button>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            AI-powered content generation. Get key from <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer">OpenRouter</a>
-          </p>
-        </div>
-
-
-        <div style={{ marginTop: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #e0e0e0' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>Serper</h5>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${serperApiKeySet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{serperApiKeySet ? 'Configured' : 'Not configured'}</span>
-            {serperResult && (
-              <span
-                style={{
-                  marginLeft: '12px',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  backgroundColor: serperResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: serperResult.type === 'success' ? '#155724' : '#721c24',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setSerperResult(null)}
-                title="Click to dismiss"
-              >
-                {serperResult.message}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
-            <input
-              type="password"
-              value={serperApiKey || (serperApiKeySet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setSerperApiKey(e.target.value)}
-              placeholder="Enter API key..."
-              disabled={serperSaving}
-              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
-            />
-            <button className="action-btn primary" onClick={handleSaveSerperApiKey} disabled={serperSaving || !serperApiKey.trim()}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {serperSaving ? 'Saving...' : 'Save'}
-            </button>
-            <button className="action-btn secondary" onClick={handleTestSerperApiKey} disabled={serperTesting || !serperApiKeySet}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {serperTesting ? 'Testing...' : 'Test'}
-            </button>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            External news search with geographic grounding. Get key from <a href="https://serper.dev/api-key" target="_blank" rel="noopener noreferrer">Serper Dashboard</a>
-          </p>
-        </div>
-
-
-        <div style={{ marginTop: '1.5rem' }}>
-          <h5 style={{ fontSize: '0.95rem', marginBottom: '0.5rem' }}>US Fleet Tracking</h5>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '0.75rem' }}>
-            <span className={`status-indicator ${usftTokenSet ? 'configured' : 'not-configured'}`}></span>
-            <span style={{ fontSize: '0.9rem' }}>{usftTokenSet ? 'Configured' : 'Not configured'}</span>
-            {usftResult && (
-              <span
-                style={{
-                  marginLeft: '12px',
-                  padding: '4px 10px',
-                  borderRadius: '4px',
-                  fontSize: '0.85rem',
-                  fontWeight: '500',
-                  backgroundColor: usftResult.type === 'success' ? '#d4edda' : '#f8d7da',
-                  color: usftResult.type === 'success' ? '#155724' : '#721c24',
-                  cursor: 'pointer'
-                }}
-                onClick={() => setUsftResult(null)}
-                title="Click to dismiss"
-              >
-                {usftResult.message}
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch', marginBottom: '0.5rem' }}>
-            <input
-              type="password"
-              value={usftToken || (usftTokenSet ? '••••••••••••••••••••••••' : '')}
-              onChange={e => setUsftToken(e.target.value)}
-              placeholder="Enter sharing token..."
-              disabled={usftSaving}
-              style={{ flex: 1, padding: '8px', fontSize: '0.9rem', border: '1px solid #ccc', borderRadius: '4px', minWidth: 0 }}
-            />
-            <button className="action-btn primary" onClick={handleSaveUsftToken} disabled={usftSaving || !usftToken.trim()}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {usftSaving ? 'Saving...' : 'Save'}
-            </button>
-            <button className="action-btn secondary" onClick={handleTestUsftToken} disabled={usftTesting || !usftTokenSet}
-              style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-              {usftTesting ? 'Testing...' : 'Test'}
-            </button>
-          </div>
-          <p style={{ fontSize: '0.85rem', color: '#666', margin: 0 }}>
-            US Fleet Tracking (USFT) sharing token for the CVSR live train tracker. Falls back to the <code>USFT_SHARING_TOKEN</code> env var when unset.
-          </p>
-        </div>
+        <ApiKeySetting
+          title="US Fleet Tracking"
+          settingKey="usft_sharing_token"
+          testUrl="/api/admin/settings/usft-sharing-token/test"
+          noun="Token"
+          placeholder="Enter sharing token..."
+          isSet={secretsSet.usft_sharing_token}
+          onSaved={markSecretSet}
+          sectionStyle={{ marginTop: '1.5rem' }}
+        >
+          US Fleet Tracking (USFT) sharing token for the CVSR live train tracker. Falls back to the <code>USFT_SHARING_TOKEN</code> env var when unset.
+        </ApiKeySetting>
       </div>
 
 
@@ -989,7 +624,7 @@ function DataCollectionSettings() {
       <div className="ai-config-section">
         <h4>Content Collection</h4>
         <p className="settings-description">Tune how aggressively collection jobs crawl. These apply to every news and events run.</p>
-        {contentCollectionLoading ? <p>Loading...</p> : (
+        {settingsLoading ? <p>Loading...</p> : (
           <>
             <div className="config-row">
               <label>Places collected at once</label>
@@ -1030,7 +665,7 @@ function DataCollectionSettings() {
       <div className="ai-config-section">
         <h4>Content Moderation</h4>
         <p className="settings-description">Configure AI-powered moderation for news, events, and photo submissions.</p>
-        {moderationConfigLoading ? <p>Loading configuration...</p> : (
+        {settingsLoading ? <p>Loading configuration...</p> : (
           <>
             <div className="config-row">
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -1070,7 +705,7 @@ function DataCollectionSettings() {
       <div className="ai-config-section">
         <h4>News &amp; Events Filters</h4>
         <p className="settings-description">Allow lists (green) and deny lists (red) that govern what gets collected and what passes moderation. Add to each list independently, then Save Filters once to apply everything.</p>
-        {(domainListsLoading || excludedPoisLoading) ? <p>Loading filters...</p> : (
+        {(settingsLoading || excludedPoisLoading) ? <p>Loading filters...</p> : (
           <>
             <FilterList
               title="Content Path Allow List"
@@ -1249,7 +884,7 @@ function DataCollectionSettings() {
       <div className="ai-config-section">
         <h4>Twitter/X Credentials</h4>
         <p className="settings-description">Login credentials for scraping Twitter content (used for Trail Status).</p>
-        {twitterLoading ? <p>Loading credentials...</p> : (
+        {settingsLoading ? <p>Loading credentials...</p> : (
           <>
             <div style={{ marginTop: '0.5rem' }}>
               <h5 style={{ marginBottom: '0.5rem' }}>Authentication Status</h5>

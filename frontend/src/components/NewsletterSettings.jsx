@@ -1,5 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
+const getJson = async (url) => {
+  const res = await fetch(url, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+};
+
 function NewsletterSettings({ user }) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle');
@@ -41,71 +47,71 @@ function NewsletterSettings({ user }) {
         credentials: 'include'
       });
       if (res.ok) {
-        const data = await res.json();
+        const settings = await res.json();
 
         setApiKey('');
 
-        if (data.buttondown_from_email?.value) {
-          setFromEmail(data.buttondown_from_email.value);
+        if (settings.buttondown_from_email?.value) {
+          setFromEmail(settings.buttondown_from_email.value);
         } else {
           setFromEmail('newsletter@rootsofthevalley.org');
         }
       }
     } catch (err) {
-      console.error('Failed to load newsletter settings:', err);
+      setAdminMessage({ type: 'error', text: `Failed to load newsletter settings: ${err.message}` });
     }
   };
 
   const loadStats = async () => {
     try {
-      const res = await fetch('/api/admin/newsletter/stats', {
-        credentials: 'include'
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
+      setStats(await getJson('/api/admin/newsletter/stats'));
     } catch (err) {
-      console.error('Failed to load newsletter stats:', err);
+      setAdminMessage({ type: 'error', text: `Failed to load newsletter stats: ${err.message}` });
     }
   };
 
   const loadSources = async () => {
     try {
-      const res = await fetch('/api/newsletter/sources', { credentials: 'include' });
-      if (res.ok) setSources(await res.json());
+      setSources(await getJson('/api/newsletter/sources'));
     } catch (err) {
-      console.error('Failed to load newsletter sources:', err);
+      setSourceMsg({ type: 'error', text: `Failed to load newsletter sources: ${err.message}` });
     }
   };
 
   const loadPois = async () => {
     try {
-      const res = await fetch('/api/pois', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setPois((data || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')));
-      }
+      const allPois = await getJson('/api/pois');
+      setPois((allPois || []).slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')));
     } catch (err) {
-      console.error('Failed to load POIs:', err);
+      setSourceMsg({ type: 'error', text: `Failed to load POIs: ${err.message}` });
     }
   };
 
-  const toggleSubscribers = async () => {
-    if (subscribers) {
-      setSubscribers(null);
+  // Show/hide a panel whose contents are fetched each time it opens.
+  const togglePanel = async ({ current, setCurrent, setBusy, url, failureText, report }) => {
+    if (current) {
+      setCurrent(null);
       return;
     }
-    setLoadingSubscribers(true);
+    setBusy(true);
     try {
-      const res = await fetch('/api/admin/newsletter/subscribers', { credentials: 'include' });
-      if (res.ok) setSubscribers(await res.json());
+      setCurrent(await getJson(url));
     } catch (err) {
-      console.error('Failed to load subscribers:', err);
+      report({ type: 'error', text: `${failureText}: ${err.message}` });
     } finally {
-      setLoadingSubscribers(false);
+      setBusy(false);
     }
   };
+
+  const toggleSubscribers = () => togglePanel({
+    current: subscribers, setCurrent: setSubscribers, setBusy: setLoadingSubscribers,
+    url: '/api/admin/newsletter/subscribers', failureText: 'Failed to load subscribers', report: setAdminMessage
+  });
+
+  const toggleDiscover = () => togglePanel({
+    current: orphans, setCurrent: setOrphans, setBusy: setLoadingOrphans,
+    url: '/api/newsletter/sources/discover', failureText: 'Failed to discover sources', report: setSourceMsg
+  });
 
   const toggleEmails = async (pattern) => {
     if (expandedEmails[pattern]) {
@@ -120,23 +126,7 @@ function NewsletterSettings({ user }) {
         setExpandedEmails((prev) => ({ ...prev, [pattern]: true }));
       }
     } catch (err) {
-      console.error('Failed to load emails for source:', err);
-    }
-  };
-
-  const toggleDiscover = async () => {
-    if (orphans) {
-      setOrphans(null);
-      return;
-    }
-    setLoadingOrphans(true);
-    try {
-      const res = await fetch('/api/newsletter/sources/discover', { credentials: 'include' });
-      if (res.ok) setOrphans(await res.json());
-    } catch (err) {
-      console.error('Failed to discover sources:', err);
-    } finally {
-      setLoadingOrphans(false);
+      setSourceMsg({ type: 'error', text: `Failed to load emails for source: ${err.message}` });
     }
   };
 
@@ -149,14 +139,14 @@ function NewsletterSettings({ user }) {
         body: JSON.stringify({ from_pattern: fromAddress, status: 'new' }),
         credentials: 'include'
       });
-      const data = await res.json();
-      setSourceMsg(res.ok ? { type: 'success', text: data.message } : { type: 'error', text: data.error });
+      const sourceReply = await res.json();
+      setSourceMsg(res.ok ? { type: 'success', text: sourceReply.message } : { type: 'error', text: sourceReply.error });
       if (res.ok) {
         setOrphans((prev) => prev ? prev.filter(o => o.from_address !== fromAddress) : null);
         loadSources();
       }
     } catch (err) {
-      setSourceMsg({ type: 'error', text: 'Failed to add source' });
+      setSourceMsg({ type: 'error', text: `Failed to add source: ${err.message}` });
     }
   };
 
@@ -169,14 +159,14 @@ function NewsletterSettings({ user }) {
         body: JSON.stringify(body),
         credentials: 'include'
       });
-      const data = await res.json();
-      setSourceMsg(res.ok ? { type: 'success', text: data.message } : { type: 'error', text: data.error });
+      const sourceReply = await res.json();
+      setSourceMsg(res.ok ? { type: 'success', text: sourceReply.message } : { type: 'error', text: sourceReply.error });
       if (res.ok) {
         setSourceEdits((prev) => { const next = { ...prev }; delete next[pattern]; return next; });
         loadSources();
       }
     } catch (err) {
-      setSourceMsg({ type: 'error', text: 'Update failed' });
+      setSourceMsg({ type: 'error', text: `Update failed: ${err.message}` });
     }
   };
 
@@ -188,11 +178,11 @@ function NewsletterSettings({ user }) {
         method: 'DELETE',
         credentials: 'include'
       });
-      const data = await res.json();
-      setSourceMsg(res.ok ? { type: 'success', text: data.message } : { type: 'error', text: data.error });
+      const sourceReply = await res.json();
+      setSourceMsg(res.ok ? { type: 'success', text: sourceReply.message } : { type: 'error', text: sourceReply.error });
       if (res.ok) loadSources();
     } catch (err) {
-      setSourceMsg({ type: 'error', text: 'Delete failed' });
+      setSourceMsg({ type: 'error', text: `Delete failed: ${err.message}` });
     }
   };
 
@@ -222,15 +212,15 @@ function NewsletterSettings({ user }) {
         credentials: 'include'
       });
 
-      const data = await res.json();
+      const subscribeResponse = await res.json();
 
       if (res.ok) {
         setStatus('success');
-        setMessage(data.message);
+        setMessage(subscribeResponse.message);
         loadStats();
       } else {
         setStatus('error');
-        setMessage(data.error || 'Subscription failed');
+        setMessage(subscribeResponse.error || 'Subscription failed');
       }
     } catch (err) {
       setStatus('error');
@@ -251,8 +241,8 @@ function NewsletterSettings({ user }) {
       });
 
       if (!apiKeyRes.ok) {
-        const data = await apiKeyRes.json();
-        throw new Error(data.error || 'Failed to save API key');
+        const failure = await apiKeyRes.json();
+        throw new Error(failure.error || 'Failed to save API key');
       }
 
       const emailRes = await fetch('/api/admin/settings/buttondown_from_email', {
@@ -263,8 +253,8 @@ function NewsletterSettings({ user }) {
       });
 
       if (!emailRes.ok) {
-        const data = await emailRes.json();
-        throw new Error(data.error || 'Failed to save from email');
+        const failure = await emailRes.json();
+        throw new Error(failure.error || 'Failed to save from email');
       }
 
       setAdminMessage({ type: 'success', text: 'Settings saved! Restart container to apply changes.' });
@@ -286,17 +276,17 @@ function NewsletterSettings({ user }) {
         credentials: 'include'
       });
 
-      const data = await res.json();
+      const testResult = await res.json();
 
-      if (data.success) {
+      if (testResult.success) {
         setTestMessage({
           type: 'success',
-          text: `API key is valid! You have ${data.subscriberCount} subscriber${data.subscriberCount !== 1 ? 's' : ''}.`
+          text: `API key is valid! You have ${testResult.subscriberCount} subscriber${testResult.subscriberCount !== 1 ? 's' : ''}.`
         });
       } else {
         setTestMessage({
           type: 'error',
-          text: data.error || 'API key test failed'
+          text: testResult.error || 'API key test failed'
         });
       }
 

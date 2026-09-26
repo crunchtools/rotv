@@ -1,0 +1,61 @@
+check = "DB002-unsafe_sql_construction"
+
+[[locations]]
+path = "backend/services/newsService.js"
+justification = "Four sites, all interpolating only code constants: filterKnownPages uses table = contentType === 'event' ? 'poi_events' : 'poi_news' with URLs bound as $1/$2; saveNewsItems and saveEventItems interpolate the module constant SQL_NORMALIZE_TITLE (a fixed TRIM/LOWER/REGEXP_REPLACE expression) with all values bound as $1..$4; getPoisForPipeline joins hard-coded clause fragments ('AND id != ALL($n)', 'AND events_url IS NOT NULL ...', 'AND history_dry_runs < $n') and a hard-coded ORDER BY ternary, with every value pushed to params. No request, LLM or row data reaches the SQL text."
+classification = "by_design"
+
+[[locations]]
+path = "backend/scripts/backfill-news-images.js"
+justification = "processTable(table) interpolates the table name only; its sole callers are main()'s literal processTable('poi_news') and processTable('poi_events'). image_url and id are bound as $1/$2. Operator CLI, not reachable from requests."
+classification = "by_design"
+
+[[locations]]
+path = "backend/config/userAccount.js"
+justification = "findOrCreateUser: the interpolated SET list is built only from hard-coded column fragments ('name = $n', 'is_admin = $n', 'role = $n', 'oauth_credentials = $n', ...); every value, including the id, is pushed to updateValues and bound as $1..$n."
+classification = "by_design"
+
+[[locations]]
+path = "backend/routes/admin.js"
+justification = "Traced every site: PUT /pois/:id, PUT /destinations/:id, POST /destinations, POST /linear-features, PUT /linear-features/:id iterate a local allowedFields string array and only emit those names (req.body keys never reach SQL); PUT /boundaries/:id uses hard-coded 'boundary_type = $n'/'boundary_color = $n'; latestRunFor interpolates type.statusTable from COLLECTION_TYPES in services/collection/registry.js ('news_job_status' | 'trail_status_job_status', null-guarded). All values bound as $1..$n."
+classification = "by_design"
+
+[[locations]]
+path = "backend/routes/newsletter.js"
+justification = "PUT /sources/:pattern: SET list is only the hard-coded fragments 'poi_id = $n', 'status = $n', 'display_name = $n'; the three values and the decoded :pattern are bound parameters."
+classification = "by_design"
+
+[[locations]]
+path = "backend/routes/trips.js"
+justification = "PUT /:id: SET list is only hard-coded fragments ('name = $n', 'description = $n', 'is_public = $n', 'is_featured = $n', 'is_approved = FALSE', 'updated_at = CURRENT_TIMESTAMP'); values and id are bound."
+classification = "by_design"
+
+[[locations]]
+path = "backend/routes/userSettings.js"
+justification = "syncPoiIdList interpolates a table name looked up in the POI_ID_LIST_TABLES constant {favorites: 'user_poi_favorites', visited: 'user_visits'}; both callers pass the literal field names and an unknown key returns early. User id and ids array are bound as $1/$2."
+classification = "by_design"
+
+[[locations]]
+path = "backend/server.js"
+justification = "/api/news/recent, /api/events/upcoming, /api/events/past, /api/events/window interpolate only adminColumns, a hard-coded column list chosen by an isAdmin ternary (or ''). tz/limit/date values are bound parameters."
+classification = "by_design"
+
+[[locations]]
+path = "backend/services/moderationService.js"
+justification = "Only identifiers and fixed fragments are interpolated; every value is bound as $n. Table names come from tableFor() (Object.hasOwn over TABLE_MAP {news: 'poi_news', event: 'poi_events', photo: 'poi_media'}, throws on anything else) or from news/event ternaries in functions that first reject other types (poi_news|poi_events, poi_news_urls|poi_event_urls, news_id|event_id). descField, extraFields, titleNorm and dupWhere are ternaries over string constants. editAndPublish SET columns come from the EDITABLE_NEWS/EVENT/PHOTO allowlists; getQueue filters are constant 'col = $n' strings."
+classification = "by_design"
+
+[[locations]]
+path = "backend/services/mcpServer.js"
+justification = "MCP tool args are client input, so none reach SQL text. poi_create's INSERT column list comes from the POI_CREATE_COLUMNS constant, not from the argument keys; values go in as $1..$n. job_logs WHERE clauses are fixed 'job_type|job_id|poi_id|level = $n' strings. poi_update_urls SET clauses are fixed 'news_url|events_url|status_url = $n' strings. All values are bound. The SDK (1.28) also zod-validates args with safeParseAsync before the handler runs."
+classification = "by_design"
+
+[[locations]]
+path = "backend/services/filterLists.js"
+justification = "sweepDenyLists interpolates table.name from a local constant (poi_events|poi_news) and frag.sql from the DENY_LISTS sweepFragment builders. Those builders emit only constant column names (the textCols constant) and $n placeholders. The deny-list values from admin_settings are bound as params: ids via ANY($1), phrases as ILIKE patterns, topic terms regex-escaped into one bound pattern."
+classification = "by_design"
+
+[[locations]]
+path = "backend/services/jobLogger.js"
+justification = "flush() builds a multi-row INSERT. The only interpolation is the VALUES list of generated placeholder tuples ($n..$n+6), and all seven fields of every buffered entry are bound through the values array."
+classification = "by_design"

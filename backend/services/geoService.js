@@ -6,6 +6,22 @@
  * to add geographic context that eliminates location ambiguity.
  */
 
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Geo');
+
+// PostGIS lookups degrade gracefully: a failed query is logged and reported as
+// null so each caller can fall back to its non-spatial result.
+async function queryRowsOrNull(pool, sql, params, failureMessage) {
+  try {
+    const queryResult = await pool.query(sql, params);
+    return queryResult.rows;
+  } catch (err) {
+    logger.warn(`${failureMessage}: ${err.message}`);
+    return null;
+  }
+}
+
 /**
  * Find all boundary polygons containing a POI, ordered smallest-first.
  *
@@ -17,8 +33,7 @@
  * @returns {Promise<string[]>} - Array of boundary names (smallest area first), empty on error
  */
 export async function getContainingBoundaries(pool, poiId) {
-  try {
-    const boundaryQuery = await pool.query(`
+  const boundaryRows = await queryRowsOrNull(pool, `
       WITH poi_point AS (
         SELECT
           id,
@@ -39,12 +54,8 @@ export async function getContainingBoundaries(pool, poiId) {
         AND ST_Contains(boundary.boundary_geom, poi_point.point_geom)
       WHERE poi_point.point_geom IS NOT NULL
       ORDER BY ST_Area(boundary.boundary_geom) ASC
-    `, [poiId]);
-    return boundaryQuery.rows.map(r => r.name).filter(Boolean);
-  } catch (err) {
-    console.warn(`[Geo] Boundary lookup unavailable for POI ${poiId}: ${err.message}`);
-    return [];
-  }
+    `, [poiId], `Boundary lookup unavailable for POI ${poiId}`);
+  return (boundaryRows ?? []).map(r => r.name).filter(Boolean);
 }
 
 /**
@@ -67,21 +78,15 @@ export async function getReassignmentCandidates(pool, poiId) {
   const candidates = { owner: null, boundary: null };
   if (!Number.isInteger(id) || id <= 0) return candidates;
 
-  try {
-    const ownerQuery = await pool.query(
-      `SELECT o.id, o.name
-         FROM pois x
-         JOIN pois o ON o.id = x.owner_id
-        WHERE x.id = $1 AND (o.deleted IS NULL OR o.deleted = FALSE)`,
-      [id]
-    );
-    if (ownerQuery.rows.length) candidates.owner = ownerQuery.rows[0];
-  } catch (err) {
-    console.warn(`[Geo] Owner lookup failed for POI ${id}: ${err.message}`);
-  }
+  const ownerRows = await queryRowsOrNull(pool,
+    `SELECT o.id, o.name
+       FROM pois x
+       JOIN pois o ON o.id = x.owner_id
+      WHERE x.id = $1 AND (o.deleted IS NULL OR o.deleted = FALSE)`,
+    [id], `Owner lookup failed for POI ${id}`);
+  if (ownerRows?.length) candidates.owner = ownerRows[0];
 
-  try {
-    const boundaryQuery = await pool.query(`
+  const boundaryRows = await queryRowsOrNull(pool, `
       WITH poi_point AS (
         SELECT
           CASE
@@ -104,11 +109,8 @@ export async function getReassignmentCandidates(pool, poiId) {
       WHERE poi_point.point_geom IS NOT NULL
       ORDER BY ST_Area(boundary.boundary_geom) ASC
       LIMIT 1
-    `, [id]);
-    if (boundaryQuery.rows.length) candidates.boundary = boundaryQuery.rows[0];
-  } catch (err) {
-    console.warn(`[Geo] Boundary candidate lookup unavailable for POI ${id}: ${err.message}`);
-  }
+    `, [id], `Boundary candidate lookup unavailable for POI ${id}`);
+  if (boundaryRows?.length) candidates.boundary = boundaryRows[0];
 
   return candidates;
 }
@@ -136,20 +138,14 @@ export async function getRollupPoiIds(pool, poiId) {
   if (!Number.isInteger(id) || id <= 0) return [];
   const ids = new Set([id]);
 
-  let target;
-  try {
-    const targetQuery = await pool.query(
-      `SELECT poi_roles, (boundary_geom IS NOT NULL) AS has_boundary
-       FROM pois WHERE id = $1`,
-      [id]
-    );
-    // Fix: non-existent POI rolls up to nothing, consistent with the invalid-input path (PR #424 review)
-    if (targetQuery.rows.length === 0) return [];
-    target = targetQuery.rows[0];
-  } catch (err) {
-    console.warn(`[Geo] Rollup target lookup failed for POI ${id}: ${err.message}`);
-    return [id];
-  }
+  const targetRows = await queryRowsOrNull(pool,
+    `SELECT poi_roles, (boundary_geom IS NOT NULL) AS has_boundary
+     FROM pois WHERE id = $1`,
+    [id], `Rollup target lookup failed for POI ${id}`);
+  if (targetRows === null) return [id];
+  // Fix: non-existent POI rolls up to nothing, consistent with the invalid-input path (PR #424 review)
+  if (targetRows.length === 0) return [];
+  const target = targetRows[0];
 
   const roles = target.poi_roles || [];
   const isOrg = roles.includes('organization');
@@ -158,19 +154,14 @@ export async function getRollupPoiIds(pool, poiId) {
   // Organization: directly owned + associated POIs (non-spatial).
   let ownedIds = [];
   if (isOrg) {
-    try {
-      const ownedQuery = await pool.query(
-        `SELECT id FROM pois
-           WHERE owner_id = $1 AND (deleted IS NULL OR deleted = FALSE)
-         UNION
-         SELECT physical_poi_id AS id FROM poi_associations WHERE virtual_poi_id = $1`,
-        [id]
-      );
-      ownedIds = ownedQuery.rows.map(row => row.id).filter(Number.isInteger);
-      ownedIds.forEach(ownedId => ids.add(ownedId));
-    } catch (err) {
-      console.warn(`[Geo] Org ownership lookup failed for POI ${id}: ${err.message}`);
-    }
+    const ownedRows = await queryRowsOrNull(pool,
+      `SELECT id FROM pois
+         WHERE owner_id = $1 AND (deleted IS NULL OR deleted = FALSE)
+       UNION
+       SELECT physical_poi_id AS id FROM poi_associations WHERE virtual_poi_id = $1`,
+      [id], `Org ownership lookup failed for POI ${id}`);
+    ownedIds = (ownedRows ?? []).map(row => row.id).filter(Number.isInteger);
+    ownedIds.forEach(ownedId => ids.add(ownedId));
   }
 
   // Spatial containment: a boundary target contains POIs inside its own polygon;
@@ -180,37 +171,32 @@ export async function getRollupPoiIds(pool, poiId) {
   if (isOrg && ownedIds.length > 0) boundarySourceIds.push(...ownedIds);
 
   if (boundarySourceIds.length > 0) {
-    try {
-      // Two index-friendly paths instead of one all-POIs CTE (PR #424 review):
-      // point POIs join directly on the indexed `geom` column (uses idx_pois_geom);
-      // linear features parse GeoJSON only for the small trail/boundary/river subset.
-      const containedQuery = await pool.query(
-        `WITH boundaries AS (
-           SELECT boundary_geom FROM pois
-           WHERE id = ANY($1)
-             AND 'boundary' = ANY(poi_roles)
-             AND boundary_geom IS NOT NULL
-         )
-         SELECT p.id
-         FROM pois p
-         JOIN boundaries b ON ST_Contains(b.boundary_geom, p.geom)
-         WHERE 'point' = ANY(p.poi_roles)
-           AND p.geom IS NOT NULL
-           AND (p.deleted IS NULL OR p.deleted = FALSE)
-         UNION
-         SELECT p.id
-         FROM pois p
-         JOIN boundaries b
-           ON ST_Contains(b.boundary_geom, ST_PointOnSurface(ST_GeomFromGeoJSON(p.geometry)))
-         WHERE p.poi_roles && ARRAY['trail','boundary','river']::text[]
-           AND p.geometry IS NOT NULL
-           AND (p.deleted IS NULL OR p.deleted = FALSE)`,
-        [boundarySourceIds]
-      );
-      containedQuery.rows.forEach(row => { if (Number.isInteger(row.id)) ids.add(row.id); });
-    } catch (err) {
-      console.warn(`[Geo] Containment rollup unavailable for POI ${id}: ${err.message}`);
-    }
+    // Two index-friendly paths instead of one all-POIs CTE (PR #424 review):
+    // point POIs join directly on the indexed `geom` column (uses idx_pois_geom);
+    // linear features parse GeoJSON only for the small trail/boundary/river subset.
+    const containedRows = await queryRowsOrNull(pool,
+      `WITH boundaries AS (
+         SELECT boundary_geom FROM pois
+         WHERE id = ANY($1)
+           AND 'boundary' = ANY(poi_roles)
+           AND boundary_geom IS NOT NULL
+       )
+       SELECT p.id
+       FROM pois p
+       JOIN boundaries b ON ST_Contains(b.boundary_geom, p.geom)
+       WHERE 'point' = ANY(p.poi_roles)
+         AND p.geom IS NOT NULL
+         AND (p.deleted IS NULL OR p.deleted = FALSE)
+       UNION
+       SELECT p.id
+       FROM pois p
+       JOIN boundaries b
+         ON ST_Contains(b.boundary_geom, ST_PointOnSurface(ST_GeomFromGeoJSON(p.geometry)))
+       WHERE p.poi_roles && ARRAY['trail','boundary','river']::text[]
+         AND p.geometry IS NOT NULL
+         AND (p.deleted IS NULL OR p.deleted = FALSE)`,
+      [boundarySourceIds], `Containment rollup unavailable for POI ${id}`);
+    (containedRows ?? []).forEach(row => { if (Number.isInteger(row.id)) ids.add(row.id); });
   }
 
   return Array.from(ids);

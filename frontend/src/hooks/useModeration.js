@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 
+const postJson = (url, body) => fetch(url, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  credentials: 'include', body: JSON.stringify(body)
+});
+
 export default function useModeration({ onItemsChanged, onCountChange } = {}) {
   const [editingItem, setEditingItem] = useState(null);
   const [editFields, setEditFields] = useState({});
@@ -27,61 +32,39 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
     fetch('/api/pois', { credentials: 'include' })
       .then(r => r.ok ? r.json() : [])
       .then(poisFromApi => setPois(Array.isArray(poisFromApi) ? poisFromApi : []))
-      .catch(() => setPois([]));
-  }, []);
+      .catch(err => {
+        notify('error', `Failed to load POIs: ${err.message}`);
+        setPois([]);
+      });
+  }, [notify]);
 
   const refreshItems = useCallback(() => {
     if (onItemsChanged) onItemsChanged();
   }, [onItemsChanged]);
 
-  const handleApprove = async (type, id, item) => {
+  const PAST_TENSE = { approve: 'approved', reject: 'rejected', requeue: 'requeued' };
+
+  const moderateItem = async (action, type, id, item) => {
+    const body = action === 'reject' ? { type, id, reason: '' } : { type, id };
     try {
-      const response = await fetch('/api/admin/moderation/approve', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ type, id })
-      });
+      const response = await postJson(`/api/admin/moderation/${action}`, body);
       if (response.ok) {
-        notify('success', `${type} #${id} approved`);
+        notify('success', `${type} #${id} ${PAST_TENSE[action]}`);
         refreshItems();
         if (onCountChange) onCountChange();
-        if (type === 'photo' && item?.poi_id) {
+        if (action !== 'requeue' && type === 'photo' && item?.poi_id) {
           window.dispatchEvent(new CustomEvent('poi-media-updated', { detail: { poiId: item.poi_id } }));
-          window.dispatchEvent(new CustomEvent('poi-updated', { detail: { poiId: item.poi_id } }));
+          if (action === 'approve') {
+            window.dispatchEvent(new CustomEvent('poi-updated', { detail: { poiId: item.poi_id } }));
+          }
         }
       }
     } catch (err) { notify('error', err.message); }
   };
 
-  const handleReject = async (type, id, item) => {
-    try {
-      const response = await fetch('/api/admin/moderation/reject', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ type, id, reason: '' })
-      });
-      if (response.ok) {
-        notify('success', `${type} #${id} rejected`);
-        refreshItems();
-        if (onCountChange) onCountChange();
-        if (type === 'photo' && item?.poi_id) {
-          window.dispatchEvent(new CustomEvent('poi-media-updated', { detail: { poiId: item.poi_id } }));
-        }
-      }
-    } catch (err) { notify('error', err.message); }
-  };
-
-  const handleRequeue = async (type, id) => {
-    try {
-      const response = await fetch('/api/admin/moderation/requeue', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ type, id })
-      });
-      if (response.ok) {
-        notify('success', `${type} #${id} requeued`);
-        refreshItems();
-        if (onCountChange) onCountChange();
-      }
-    } catch (err) { notify('error', err.message); }
-  };
+  const handleApprove = (type, id, item) => moderateItem('approve', type, id, item);
+  const handleReject = (type, id, item) => moderateItem('reject', type, id, item);
+  const handleRequeue = (type, id) => moderateItem('requeue', type, id);
 
   const handleDelete = async (type, id) => {
     const endpoint = type === 'news' ? `/api/admin/news/${id}` : `/api/admin/events/${id}`;
@@ -109,10 +92,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
       if (response.ok) {
         const iaResponse = await response.json();
         if (iaResponse.date) {
-          const saveResponse = await fetch('/api/admin/moderation/save', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            credentials: 'include', body: JSON.stringify({ type, id, edits: { publication_date: iaResponse.date } })
-          });
+          const saveResponse = await postJson('/api/admin/moderation/save', { type, id, edits: { publication_date: iaResponse.date } });
           if (saveResponse.ok) {
             notify('success', `${type} #${id} — date set to ${iaResponse.date} (earliest IA snapshot)`);
             refreshItems();
@@ -138,7 +118,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
         const detail = await response.json();
         setItemUrls(prev => ({ ...prev, [itemKey]: detail.additional_urls || [] }));
       }
-    } catch (err) { console.error('Error fetching item URLs:', err); }
+    } catch (err) { notify('error', `Failed to load item URLs: ${err.message}`); }
   };
 
   const startEditing = async (item) => {
@@ -178,7 +158,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
         }
       }
     } catch (err) {
-      notify('error', 'Failed to load item details');
+      notify('error', `Failed to load item details: ${err.message}`);
     }
   };
 
@@ -189,10 +169,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
 
   const handleSave = async (type, id, item) => {
     try {
-      const response = await fetch('/api/admin/moderation/save', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ type, id, edits: editFields })
-      });
+      const response = await postJson('/api/admin/moderation/save', { type, id, edits: editFields });
       if (response.ok) {
         notify('success', `${type} #${id} saved`);
         setEditingItem(null);
@@ -215,11 +192,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
     if (!newUrlInput.trim()) return;
     setAddingUrl(true);
     try {
-      const response = await fetch('/api/admin/moderation/add-url', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ type, id, url: newUrlInput.trim() })
-      });
+      const response = await postJson('/api/admin/moderation/add-url', { type, id, url: newUrlInput.trim() });
       if (response.ok) {
         const addUrlResponse = await response.json();
         if (addUrlResponse.added) {
@@ -240,11 +213,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
 
   const handleRemoveUrl = async (type, contentId, urlId) => {
     try {
-      const response = await fetch('/api/admin/moderation/remove-url', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ type, id: contentId, urlId })
-      });
+      const response = await postJson('/api/admin/moderation/remove-url', { type, id: contentId, urlId });
       if (response.ok) {
         notify('success', 'URL removed');
         fetchItemUrls(type, contentId);
@@ -280,11 +249,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
     if (!mergingItem) return;
     setMerging(true);
     try {
-      const response = await fetch('/api/admin/moderation/merge', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ type: mergingItem.type, sourceId: mergingItem.id, targetId })
-      });
+      const response = await postJson('/api/admin/moderation/merge', { type: mergingItem.type, sourceId: mergingItem.id, targetId });
       if (response.ok) {
         const mergeResponse = await response.json();
         notify('success', `Merged ${mergingItem.type} #${mergingItem.id} into #${targetId} (${mergeResponse.movedUrls} URLs moved)`);
@@ -318,10 +283,7 @@ export default function useModeration({ onItemsChanged, onCountChange } = {}) {
       }
     });
     try {
-      const response = await fetch('/api/admin/moderation/bulk-approve', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        credentials: 'include', body: JSON.stringify({ items })
-      });
+      const response = await postJson('/api/admin/moderation/bulk-approve', { items });
       if (response.ok) {
         const bulkApproveResponse = await response.json();
         notify('success', `${bulkApproveResponse.approved} items approved`);

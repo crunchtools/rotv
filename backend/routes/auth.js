@@ -1,5 +1,8 @@
 import express from 'express';
 import passport from 'passport';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Auth');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
@@ -36,7 +39,7 @@ export function createAuthRouter(pool) {
               ? JSON.parse(req.user.oauth_credentials)
               : req.user.oauth_credentials;
           } catch (err) {
-            console.error('Failed to parse oauth_credentials:', err);
+            logger.error('Failed to parse oauth_credentials:', err);
             credentials = null;
           }
         }
@@ -95,7 +98,7 @@ export function createAuthRouter(pool) {
 
     if (req.isAuthenticated()) {
       const { id, email, name, picture_url, is_admin, role, preferences } = req.user;
-      let favorites = [];
+      let favorites;
       try {
         const favResult = await pool.query(
           `SELECT poi_id FROM user_poi_favorites WHERE user_id = $1 ORDER BY created_at DESC`,
@@ -103,9 +106,10 @@ export function createAuthRouter(pool) {
         );
         favorites = favResult.rows.map(r => r.poi_id);
       } catch (err) {
-        console.error('Failed to load favorites for /auth/user:', err);
+        logger.error('Failed to load favorites for /auth/user, returning none:', err);
+        favorites = [];
       }
-      let visited = [];
+      let visited;
       try {
         const visitedResult = await pool.query(
           `SELECT poi_id FROM user_visits WHERE user_id = $1 ORDER BY visited_at DESC`,
@@ -113,7 +117,8 @@ export function createAuthRouter(pool) {
         );
         visited = visitedResult.rows.map(r => r.poi_id);
       } catch (err) {
-        console.error('Failed to load visited for /auth/user:', err);
+        logger.error('Failed to load visited for /auth/user, returning none:', err);
+        visited = [];
       }
       res.json({
         id,

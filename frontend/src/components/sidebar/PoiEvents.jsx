@@ -1,101 +1,18 @@
-import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { formatPublicationDate } from '../NewsEventsShared';
 import { generateSlug } from './helpers';
+import usePoiContentList from '../../hooks/usePoiContentList';
 
 function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectEvent, navigateOnSelect = true }) {
   const navigate = useNavigate();
-  const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [deleting, setDeleting] = useState(null);
-  const [collecting, setCollecting] = useState(false);
+  const tz = localStorage.getItem('app-timezone')
+    || Intl.DateTimeFormat().resolvedOptions().timeZone
+    || 'America/New_York';
+  const {
+    items: events, loading, deleting, collecting, error,
+    handleCollect: handleCollectEvents, handleDelete
+  } = usePoiContentList({ poiId, kind: 'events', listUrl: `/api/pois/${poiId}/events?limit=50&tz=${encodeURIComponent(tz)}`, onCountChange });
 
-  const fetchEvents = async () => {
-    if (!poiId) return;
-    setLoading(true);
-    try {
-      const tz = localStorage.getItem('app-timezone')
-        || Intl.DateTimeFormat().resolvedOptions().timeZone
-        || 'America/New_York';
-      const response = await fetch(`/api/pois/${poiId}/events?limit=50&tz=${encodeURIComponent(tz)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setEvents(data);
-        if (onCountChange) onCountChange(data.length);
-      }
-    } catch (err) {
-      console.error('Error fetching POI events:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchEvents();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poiId]); // fetchEvents intentionally excluded — re-fetch only on POI change, not on function reference churn
-
-  const handleCollectEvents = async () => {
-    if (!poiId) return;
-    setCollecting(true);
-
-    try {
-      const timezone = localStorage.getItem('app-timezone') || 'America/New_York';
-      const response = await fetch(`/api/admin/pois/${poiId}/events/collect`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timezone })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const targetUrl = `/admin/jobs?job=${result.jobId}&type=${result.jobType}&poi=${result.poiId || result.jobId}`;
-        navigate(targetUrl);
-      } else {
-        const error = await response.json();
-        alert(`Collection failed: ${error.error || 'Unknown error'}`);
-        setCollecting(false);
-      }
-    } catch (err) {
-      alert(`Collection failed: ${err.message}`);
-      setCollecting(false);
-    }
-  };
-
-  const handleDelete = async (eventId) => {
-    setDeleting(eventId);
-    try {
-      const response = await fetch(`/api/admin/events/${eventId}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-      if (response.ok) {
-        setEvents(prev => prev.filter(e => e.id !== eventId));
-      }
-    } catch (err) {
-      console.error('Error deleting event:', err);
-    } finally {
-      setDeleting(null);
-    }
-  };
-
-  const createGoogleCalendarLink = (event, poiName) => {
-    const title = encodeURIComponent(event.title);
-    const description = encodeURIComponent(event.description || '');
-    const location = encodeURIComponent(event.location_details || poiName || '');
-
-    const formatForGoogle = (dateStr) => {
-      if (!dateStr) return '';
-      const [year, month, day] = dateStr.split('T')[0].split('-');
-      return `${year}${month}${day}`;
-    };
-
-    const startDate = formatForGoogle(event.start_date);
-    const endDate = formatForGoogle(event.end_date || event.start_date);
-
-    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${startDate}/${endDate}&details=${description}&location=${location}`;
-  };
 
   if (loading) return <div className="sidebar-tab-loading">Loading events...</div>;
 
@@ -112,6 +29,8 @@ function PoiEvents({ poiId, poiName, isAdmin, editMode, onCountChange, onSelectE
           </button>
         </div>
       )}
+
+      {error && <div className="error-message">{error}</div>}
 
       <div className="poi-events-list-content">
         {events.length === 0 ? (

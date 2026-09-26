@@ -3,6 +3,11 @@
 // complete() and the task helpers built on it (research, moderation, icons).
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { getContainingBoundaries } from './geoService.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('LLM');
+const researchV2Logger = createLogger('Research v2');
+const parseJsonResponseLogger = createLogger('parseJsonResponse');
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 export const LLM_MODEL = process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v4-flash-0731';
@@ -103,7 +108,7 @@ export function parseJsonResponse(text) {
     jsonText = jsonText.replace(/,\s*$/, '');
     for (let i = 0; i < bracketCount; i++) jsonText += ']';
     for (let i = 0; i < braceCount; i++) jsonText += '}';
-    console.warn('[parseJsonResponse] Salvaged truncated JSON by closing', bracketCount, 'brackets and', braceCount, 'braces');
+    parseJsonResponseLogger.warn('Salvaged truncated JSON by closing', bracketCount, 'brackets and', braceCount, 'braces');
   }
 
   return JSON.parse(jsonText);
@@ -303,7 +308,7 @@ export async function getInterpolatedPrompt(pool, promptKey, destination) {
 }
 
 export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {
-  console.log(`Generating with custom prompt (${customPrompt.length} chars)`);
+  logger.info(`Generating with custom prompt (${customPrompt.length} chars)`);
   return complete(pool, customPrompt, options);
 }
 
@@ -327,7 +332,7 @@ export async function researchLocation(pool, destination, availableActivities = 
   const prompt = interpolatePrompt(promptTemplate, destination);
 
   const runId = Math.floor(Date.now() / 1000);
-  console.log(`Researching location: ${destination.name} (${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
+  logger.info(`Researching location: ${destination.name} (${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
   logInfo(runId, 'research', null, destination.name, `Research: ${destination.name}`);
 
   const text = await complete(pool, prompt, RESEARCH_OPTIONS);
@@ -338,8 +343,8 @@ export async function researchLocation(pool, destination, availableActivities = 
     await flushJobLogs();
     return researchData;
   } catch (e) {
-    console.error('Failed to parse research response as JSON:', e);
-    console.error('Raw response:', text);
+    logger.error('Failed to parse research response as JSON:', e);
+    logger.error('Raw response:', text);
     logError(runId, 'research', null, destination.name, `Research failed: invalid AI response for ${destination.name}`, { completed: true, error_stack: text.slice(0, 500) });
     await flushJobLogs();
     throw new Error('AI returned invalid format. Please try again.');
@@ -394,7 +399,7 @@ ${EXAMPLE_SVGS}
 Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
 
   const runId = Math.floor(Date.now() / 1000);
-  console.log(`Generating icon SVG for: ${description} (color: ${color})`);
+  logger.info(`Generating icon SVG for: ${description} (color: ${color})`);
   logInfo(runId, 'research', null, null, `Icon generation: ${description} (${color})`);
 
   let text = await complete(pool, prompt);
@@ -497,7 +502,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     const boundaries = await getContainingBoundaries(pool, destination.id);
     if (boundaries.length > 0) {
       optionalSections.push(`Geographic context: Located in ${boundaries.join(', ')}`);
-      console.log(`[Research v2] Geographic grounding for ${destination.name}: ${boundaries.join(', ')}`);
+      researchV2Logger.info(`Geographic grounding for ${destination.name}: ${boundaries.join(', ')}`);
     }
   }
 
@@ -522,7 +527,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   const pass1Prompt = interpolatePrompt(pass1Template, destination);
 
   const runId = Math.floor(Date.now() / 1000);
-  console.log(`[Research v2] Pass 1 for: ${destination.name}`);
+  researchV2Logger.info(`Pass 1 for: ${destination.name}`);
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1: ${destination.name}`);
 
   const pass1Text = await complete(pool, pass1Prompt, RESEARCH_OPTIONS);
@@ -531,10 +536,10 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   try {
     pass1Data = parseJsonResponse(pass1Text);
   } catch (e) {
-    console.error('Failed to parse Pass 1 response:', pass1Text);
+    logger.error('Failed to parse Pass 1 response:', pass1Text);
     logError(runId, 'research', null, destination.name, `Research v2 Pass 1 failed: ${destination.name}`, { error_stack: pass1Text.slice(0, 500) });
     await flushJobLogs();
-    throw new Error('AI returned invalid format in Pass 1. Please try again.');
+    throw new Error('AI returned invalid format in Pass 1. Please try again.', { cause: e });
   }
 
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1 complete: ${destination.name}`, { fields: Object.keys(pass1Data) });
@@ -546,7 +551,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
 
   const pass2Prompt = interpolatePrompt(pass2Template, destination);
 
-  console.log(`[Research v2] Pass 2 for: ${destination.name}`);
+  researchV2Logger.info(`Pass 2 for: ${destination.name}`);
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 2: ${destination.name}`);
 
   const pass2Text = await complete(pool, pass2Prompt, RESEARCH_OPTIONS);
@@ -555,10 +560,10 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   try {
     pass2Data = parseJsonResponse(pass2Text);
   } catch (e) {
-    console.error('Failed to parse Pass 2 response:', pass2Text);
+    logger.error('Failed to parse Pass 2 response:', pass2Text);
     logError(runId, 'research', null, destination.name, `Research v2 Pass 2 failed: ${destination.name}`, { error_stack: pass2Text.slice(0, 500) });
     await flushJobLogs();
-    throw new Error('AI returned invalid format in Pass 2. Please try again.');
+    throw new Error('AI returned invalid format in Pass 2. Please try again.', { cause: e });
   }
 
   let eraId = null;

@@ -1,7 +1,6 @@
 import React from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
 import { formatPublicationDate } from './NewsEventsShared';
-import { FIELD_CONFIGS } from '../hooks/useModeration';
 import ContentFormModal from './ContentFormModal';
 
 const badgeStyle = (bg) => ({
@@ -78,17 +77,28 @@ const getSourceBadge = (source) => {
   }
 };
 
-function renderFieldInput(fc, values, setValues, pois) {
+/**
+ * Render the form control for one moderation edit field.
+ *
+ * @param {{key: string, type: string, label?: string}} fc - Field config (FIELD_CONFIGS entry).
+ * @param {object} values - Current form values keyed by field key.
+ * @param {(update: (prev: object) => object) => void} setValues - React state setter; called
+ *   with an updater that replaces only `fc.key`.
+ * @param {Array<{id: number, name: string}>} pois - Options for POI picker fields.
+ * @param {object} [style=inputStyle] - Inline style for the control.
+ * @returns {import('react').ReactElement}
+ */
+function renderFieldInput(fc, values, setValues, pois, style = inputStyle) {
   const val = values[fc.key] || '';
-  const onChange = (v) => setValues({ ...values, [fc.key]: v });
+  const onChange = (v) => setValues(prev => ({ ...prev, [fc.key]: v }));
 
   if (fc.type === 'textarea') {
     return <textarea value={val} onChange={e => onChange(e.target.value)}
-      rows={3} style={inputStyle} placeholder={fc.label} />;
+      rows={3} style={style} placeholder={fc.label} />;
   }
   if (fc.type === 'select') {
     return (
-      <select value={val} onChange={e => onChange(e.target.value)} style={inputStyle}>
+      <select value={val} onChange={e => onChange(e.target.value)} style={style}>
         <option value="">-- Select --</option>
         {fc.options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
@@ -106,7 +116,7 @@ function renderFieldInput(fc, values, setValues, pois) {
   }
   const lang = fc.type === 'date' ? 'en-US' : undefined;
   return <input type={fc.type || 'text'} value={val} onChange={e => onChange(e.target.value)}
-    style={inputStyle} placeholder={fc.label} required={fc.required} lang={lang} />;
+    style={style} placeholder={fc.label} required={fc.required} lang={lang} />;
 }
 
 export default function ModerationExtras({
@@ -153,7 +163,14 @@ export default function ModerationExtras({
         )}
 
         {item.content_type !== 'photo' && (() => {
-          const issues = item.ai_issues ? (() => { try { return JSON.parse(item.ai_issues); } catch { return []; } })() : [];
+          const issues = item.ai_issues ? (() => {
+            try {
+              return JSON.parse(item.ai_issues);
+            } catch (err) {
+              console.warn(`Unparseable ai_issues on item ${item.id}:`, err);
+              return [];
+            }
+          })() : [];
           const urlIssueCodes = ['content_not_on_source_page', 'missing_source_url'];
           const hasNoDate = item.content_type === 'event'
             ? !item.publication_date && !item.start_date
@@ -301,4 +318,4 @@ export default function ModerationExtras({
   );
 }
 
-export { FIELD_CONFIGS, badgeStyle, actionBtn, btnStyle, inputStyle, renderFieldInput, getTypeBadgeColor, getSourceBadge };
+export { badgeStyle, actionBtn, btnStyle, inputStyle, renderFieldInput };

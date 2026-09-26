@@ -1,3 +1,7 @@
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ImageServer');
+
 class ImageServerClient {
   constructor() {
     this.serverUrl = null;
@@ -10,12 +14,77 @@ class ImageServerClient {
     this.initialized = !!this.serverUrl;
 
     if (this.initialized) {
-      console.log(`[ImageServer] Initialized with server: ${this.serverUrl}`);
+      logger.info(`Initialized with server: ${this.serverUrl}`);
     } else {
-      console.warn('[ImageServer] Not configured - set IMAGE_SERVER_URL');
+      logger.warn('Not configured - set IMAGE_SERVER_URL');
     }
 
     return this.initialized;
+  }
+
+  // Fetch `path` from the image server; a non-2xx response throws
+  // "<failureLabel>: <status>" (plus the response body when includeBody is set).
+  async fetchOk(path, init, failureLabel, { includeBody = false } = {}) {
+    const response = await fetch(`${this.serverUrl}${path}`, init);
+    if (!response.ok) {
+      const detail = includeBody ? ` - ${await response.text()}` : '';
+      throw new Error(`${failureLabel}: ${response.status}${detail}`);
+    }
+    return response;
+  }
+
+  // Fetch a binary asset rendition. Non-2xx responses carry the upstream status so
+  // the proxy route can pass it through; network failures map to 503.
+  // Run an image-server call; on failure log it and return onError(error) so
+  // callers get a result object instead of an exception.
+  // Send an optional JSON payload and parse the JSON reply.
+  async sendJson(path, method, payload, failureLabel) {
+    const init = { method };
+    if (payload !== undefined) {
+      init.headers = { 'Content-Type': 'application/json' };
+      init.body = JSON.stringify(payload);
+    }
+    const response = await this.fetchOk(path, init, failureLabel);
+    return response.json();
+  }
+
+  async guarded(failureMessage, call, onError = error => ({ success: false, error: error.message })) {
+    try {
+      return await call();
+    } catch (error) {
+      logger.error(failureMessage, error);
+      return onError(error);
+    }
+  }
+
+  async fetchAssetBinary(path, what) {
+    try {
+      const response = await fetch(`${this.serverUrl}${path}`);
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: `Fetch failed: ${response.status}`,
+          statusCode: response.status
+        };
+      }
+
+      const buffer = await response.arrayBuffer();
+      const contentType = response.headers.get('content-type') || 'image/jpeg';
+
+      return {
+        success: true,
+        data: Buffer.from(buffer),
+        contentType
+      };
+    } catch (error) {
+      logger.error(`Failed to fetch ${what}:`, error);
+      return {
+        success: false,
+        error: error.message,
+        statusCode: 503
+      };
+    }
   }
 
   async testConnection() {
@@ -65,11 +134,11 @@ class ImageServerClient {
       }
 
       const asset = await response.json();
-      console.log(`[ImageServer] Uploaded ${role} image for POI ${poiId}: asset ${asset.id}`);
+      logger.info(`Uploaded ${role} image for POI ${poiId}: asset ${asset.id}`);
 
       return { success: true, assetId: asset.id, asset };
     } catch (error) {
-      console.error(`[ImageServer] Failed to upload image:`, error);
+      logger.error(`Failed to upload image:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -97,11 +166,11 @@ class ImageServerClient {
       }
 
       const asset = await response.json();
-      console.log(`[ImageServer] Uploaded video for POI ${poiId}: asset ${asset.id}`);
+      logger.info(`Uploaded video for POI ${poiId}: asset ${asset.id}`);
 
       return { success: true, assetId: asset.id, asset };
     } catch (error) {
-      console.error(`[ImageServer] Failed to upload video:`, error);
+      logger.error(`Failed to upload video:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -110,115 +179,38 @@ class ImageServerClient {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/original`);
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: `Fetch failed: ${response.status}`,
-          statusCode: response.status
-        };
-      }
-
-      const buffer = await response.arrayBuffer();
-      const contentType = response.headers.get('content-type') || 'image/jpeg';
-
-      return {
-        success: true,
-        data: Buffer.from(buffer),
-        contentType
-      };
-    } catch (error) {
-      console.error(`[ImageServer] Failed to fetch asset data:`, error);
-      return {
-        success: false,
-        error: error.message,
-        statusCode: 503
-      };
-    }
+    return this.fetchAssetBinary(`/api/assets/${assetId}/original`, 'asset data');
   }
 
   async fetchThumbnailData(assetId, size) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
     }
-
-    try {
-      const sizeParam = size && ['small', 'medium', 'large'].includes(size) ? `?size=${size}` : '';
-      const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/thumbnail${sizeParam}`);
-
-      if (!response.ok) {
-        return {
-          success: false,
-          error: `Fetch failed: ${response.status}`,
-          statusCode: response.status
-        };
-      }
-
-      const buffer = await response.arrayBuffer();
-      const contentType = response.headers.get('content-type') || 'image/jpeg';
-
-      return {
-        success: true,
-        data: Buffer.from(buffer),
-        contentType
-      };
-    } catch (error) {
-      console.error(`[ImageServer] Failed to fetch thumbnail:`, error);
-      return {
-        success: false,
-        error: error.message,
-        statusCode: 503
-      };
-    }
+    const sizeParam = size && ['small', 'medium', 'large'].includes(size) ? `?size=${size}` : '';
+    return this.fetchAssetBinary(`/api/assets/${assetId}/thumbnail${sizeParam}`, 'thumbnail');
   }
 
   async deleteAsset(assetId) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/assets/${assetId}`, {
-        method: 'DELETE'
-      });
-
-      if (!response.ok) {
-        throw new Error(`Delete failed: ${response.status}`);
-      }
-
-      console.log(`[ImageServer] Deleted asset: ${assetId}`);
+    return this.guarded('Failed to delete asset:', async () => {
+      await this.fetchOk(`/api/assets/${assetId}`, { method: 'DELETE' }, 'Delete failed');
+      logger.info(`Deleted asset: ${assetId}`);
       return { success: true };
-    } catch (error) {
-      console.error(`[ImageServer] Failed to delete asset:`, error);
-      return { success: false, error: error.message };
-    }
+    });
   }
 
   async getPoiAssets(poiId, options = {}) {
     if (!this.initialized) {
       return [];
     }
-
-    try {
-      let url = `${this.serverUrl}/api/assets?poi_id=${poiId}`;
-      if (options.role) {
-        url += `&role=${options.role}`;
-      }
-
-      const response = await fetch(url);
-
-      if (!response.ok) {
-        throw new Error(`Fetch failed: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error(`[ImageServer] Failed to get POI assets:`, error);
-      return [];
+    let path = `/api/assets?poi_id=${poiId}`;
+    if (options.role) {
+      path += `&role=${options.role}`;
     }
+    return this.guarded('Failed to get POI assets:',
+      async () => (await this.fetchOk(path, undefined, 'Fetch failed')).json(), () => []);
   }
 
   async getPrimaryAsset(poiId) {
@@ -241,46 +233,16 @@ class ImageServerClient {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/assets/${assetId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Update failed: ${response.status}`);
-      }
-
-      const asset = await response.json();
-      return { success: true, asset };
-    } catch (error) {
-      console.error(`[ImageServer] Failed to update asset:`, error);
-      return { success: false, error: error.message };
-    }
+    return this.guarded('Failed to update asset:', async () =>
+      ({ success: true, asset: await this.sendJson(`/api/assets/${assetId}`, 'PUT', updates, 'Update failed') }));
   }
 
   async triggerCaption(assetId) {
     if (!this.initialized || !assetId) {
       return { success: false, error: 'Image server not configured or no asset ID' };
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/assets/${assetId}/caption`, {
-        method: 'POST'
-      });
-
-      if (!response.ok) {
-        throw new Error(`Caption failed: ${response.status}`);
-      }
-
-      const asset = await response.json();
-      return { success: true, asset };
-    } catch (error) {
-      console.error(`[ImageServer] Failed to caption asset:`, error);
-      return { success: false, error: error.message };
-    }
+    return this.guarded('Failed to caption asset:', async () =>
+      ({ success: true, asset: await this.sendJson(`/api/assets/${assetId}/caption`, 'POST', undefined, 'Caption failed') }));
   }
 
   async search(query, options = {}) {
@@ -306,7 +268,7 @@ class ImageServerClient {
 
       return await response.json();
     } catch (error) {
-      console.error(`[ImageServer] Search failed:`, error);
+      logger.error(`Search failed:`, error);
       return [];
     }
   }
@@ -340,7 +302,7 @@ class ImageServerClient {
         contentType
       };
     } catch (error) {
-      console.error(`[ImageServer] Failed to fetch theme video:`, error);
+      logger.error(`Failed to fetch theme video:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -395,89 +357,40 @@ class ImageServerClient {
     if (!this.initialized) {
       return [];
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/assets/all`);
-
-      if (!response.ok) {
-        throw new Error(`Fetch failed: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error(`[ImageServer] Failed to list all assets:`, error);
-      return [];
-    }
+    return this.guarded('Failed to list all assets:',
+      async () => (await this.fetchOk('/api/assets/all', undefined, 'Fetch failed')).json(), () => []);
   }
 
   async bulkCaption(assetIds) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/bulk/caption`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ asset_ids: assetIds })
-      });
-
-      if (!response.ok) {
-        throw new Error(`Bulk caption failed: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error(`[ImageServer] Bulk caption failed:`, error);
-      return { success: false, error: error.message };
-    }
+    return this.guarded('Bulk caption failed:',
+      () => this.sendJson('/api/bulk/caption', 'POST', { asset_ids: assetIds }, 'Bulk caption failed'));
   }
 
   async fetchDbDump() {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/backup/db`);
-      if (!response.ok) {
-        throw new Error(`DB dump failed: ${response.status}`);
-      }
-
-      const buffer = await response.arrayBuffer();
-      return { success: true, data: Buffer.from(buffer) };
-    } catch (error) {
-      console.error('[ImageServer] Failed to fetch DB dump:', error);
-      return { success: false, error: error.message };
-    }
+    return this.guarded('Failed to fetch DB dump:', async () => {
+      const response = await this.fetchOk('/api/backup/db', undefined, 'DB dump failed');
+      return { success: true, data: Buffer.from(await response.arrayBuffer()) };
+    });
   }
 
   async restoreDb(sqlBuffer) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
     }
-
-    try {
+    return this.guarded('Failed to restore DB:', async () => {
       const formData = new FormData();
-      const blob = new Blob([sqlBuffer], { type: 'application/sql' });
-      formData.append('file', blob, 'restore.sql');
-
-      const response = await fetch(`${this.serverUrl}/api/restore/db`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`DB restore failed: ${response.status} - ${errorText}`);
-      }
-
+      formData.append('file', new Blob([sqlBuffer], { type: 'application/sql' }), 'restore.sql');
+      const response = await this.fetchOk('/api/restore/db', { method: 'POST', body: formData },
+        'DB restore failed', { includeBody: true });
       const restoreResponse = await response.json();
       return { success: true, output: restoreResponse.output };
-    } catch (error) {
-      console.error('[ImageServer] Failed to restore DB:', error);
-      return { success: false, error: error.message };
-    }
+    });
   }
 
   async listMediaFiles() {
@@ -501,49 +414,26 @@ class ImageServerClient {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
     }
-
-    try {
-      const response = await fetch(`${this.serverUrl}/api/media/${subdir}/${filename}`);
-      if (!response.ok) {
-        throw new Error(`Fetch media failed: ${response.status}`);
-      }
-
-      const buffer = await response.arrayBuffer();
+    return this.guarded(`Failed to fetch media ${subdir}/${filename}:`, async () => {
+      const response = await this.fetchOk(`/api/media/${subdir}/${filename}`, undefined, 'Fetch media failed');
       const contentType = response.headers.get('content-type') || 'application/octet-stream';
-
-      return { success: true, data: Buffer.from(buffer), contentType };
-    } catch (error) {
-      console.error(`[ImageServer] Failed to fetch media ${subdir}/${filename}:`, error);
-      return { success: false, error: error.message };
-    }
+      return { success: true, data: Buffer.from(await response.arrayBuffer()), contentType };
+    });
   }
 
   async uploadMediaFile(subdir, filename, buffer) {
     if (!this.initialized) {
       return { success: false, error: 'Image server not configured' };
     }
-
-    try {
+    return this.guarded(`Failed to upload media ${subdir}/${filename}:`, async () => {
       const formData = new FormData();
-      const blob = new Blob([buffer], { type: 'application/octet-stream' });
-      formData.append('file', blob, filename);
-
-      const response = await fetch(`${this.serverUrl}/api/media/${subdir}/${filename}`, {
-        method: 'PUT',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Upload media failed: ${response.status} - ${errorText}`);
-      }
-
+      formData.append('file', new Blob([buffer], { type: 'application/octet-stream' }), filename);
+      await this.fetchOk(`/api/media/${subdir}/${filename}`, { method: 'PUT', body: formData },
+        'Upload media failed', { includeBody: true });
       return { success: true };
-    } catch (error) {
-      console.error(`[ImageServer] Failed to upload media ${subdir}/${filename}:`, error);
-      return { success: false, error: error.message };
-    }
+    });
   }
+
 }
 
 export default new ImageServerClient();

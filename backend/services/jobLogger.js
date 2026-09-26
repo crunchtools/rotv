@@ -1,3 +1,15 @@
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('JobLogger');
+
+const jobTypeLoggers = new Map();
+
+function loggerFor(jobType) {
+  const tag = jobType || 'Job';
+  if (!jobTypeLoggers.has(tag)) jobTypeLoggers.set(tag, createLogger(tag));
+  return jobTypeLoggers.get(tag);
+}
+
 let pool = null;
 let buffer = [];
 let flushTimer = null;
@@ -12,7 +24,7 @@ export function initJobLogger(dbPool) {
   flushTimer = setInterval(() => {
     if (buffer.length > 0) flush();
   }, FLUSH_INTERVAL_MS);
-  console.log('[JobLogger] Initialized');
+  logger.info('Initialized');
 }
 
 export async function stopJobLogger() {
@@ -23,7 +35,7 @@ export async function stopJobLogger() {
   if (buffer.length > 0) {
     await flush();
   }
-  console.log('[JobLogger] Stopped');
+  logger.info('Stopped');
 }
 
 export function log(entry) {
@@ -43,17 +55,17 @@ export function log(entry) {
 }
 
 export function logInfo(jobId, jobType, poiId, poiName, message, details = null) {
-  console.log(message);
+  loggerFor(jobType).info(message);
   log({ jobId, jobType, poiId, poiName, level: 'info', message, details });
 }
 
 export function logWarn(jobId, jobType, poiId, poiName, message, details = null) {
-  console.warn(message);
+  loggerFor(jobType).warn(message);
   log({ jobId, jobType, poiId, poiName, level: 'warn', message, details });
 }
 
 export function logError(jobId, jobType, poiId, poiName, message, details = null) {
-  console.error(message);
+  loggerFor(jobType).error(message);
   log({ jobId, jobType, poiId, poiName, level: 'error', message, details });
 }
 
@@ -88,6 +100,6 @@ export async function flush() {
       VALUES ${placeholders.join(', ')}
     `, values);
   } catch (error) {
-    console.error('[JobLogger] Flush failed:', error.message);
+    logger.error('Flush failed:', error.message);
   }
 }

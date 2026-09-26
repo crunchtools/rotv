@@ -2,6 +2,9 @@ import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as FacebookStrategy } from 'passport-facebook';
 import { findOrCreateUser as resolveUserAccount } from './userAccount.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Passport');
 
 export function configurePassport(pool) {
   const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
@@ -60,9 +63,9 @@ export function configurePassport(pool) {
       }
     }));
 
-    console.log('Google OAuth strategies configured (standard + upgrade)');
+    logger.info('Google OAuth strategies configured (standard + upgrade)');
   } else {
-    console.log('Google OAuth not configured (missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET)');
+    logger.info('Google OAuth not configured (missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET)');
   }
 
   if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
@@ -79,9 +82,9 @@ export function configurePassport(pool) {
         done(error);
       }
     }));
-    console.log('Facebook OAuth strategy configured');
+    logger.info('Facebook OAuth strategy configured');
   } else {
-    console.log('Facebook OAuth not configured (missing FACEBOOK_APP_ID or FACEBOOK_APP_SECRET)');
+    logger.info('Facebook OAuth not configured (missing FACEBOOK_APP_ID or FACEBOOK_APP_SECRET)');
   }
 
   return passport;

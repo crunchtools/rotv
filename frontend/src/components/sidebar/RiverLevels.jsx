@@ -108,26 +108,32 @@ function RiverLevels({ poiId, onActiveGaugeChange }) {
     setCacheVersion(0);
     fetch(`/api/pois/${poiId}/river-gauges`)
       .then(res => (res.ok ? res.json() : []))
-      .then(data => {
+      .then(gaugeList => {
         if (cancelled) return;
-        setGauges(data);
+        setGauges(gaugeList);
         const focusId = new URLSearchParams(window.location.search).get('gauge');
         if (focusId) {
-          const i = data.findIndex(g => String(g.id) === String(focusId));
+          const i = gaugeList.findIndex(g => String(g.id) === String(focusId));
           if (i >= 0) setIndex(i);
         }
-        Promise.all(data.map(g =>
+        Promise.all(gaugeList.map(g =>
           fetch(`/api/river-gauges/${g.id}/readings?days=7`)
             .then(res => (res.ok ? res.json() : { readings: [] }))
             .then(d => ({ id: g.id, readings: d.readings || [] }))
-            .catch(() => ({ id: g.id, readings: [] }))
+            .catch(err => {
+              console.warn(`Could not load readings for gauge ${g.id}:`, err);
+              return { id: g.id, readings: [] };
+            })
         )).then(results => {
           if (cancelled) return;
           results.forEach(r => readingsCache.current.set(r.id, r.readings));
           setCacheVersion(v => v + 1);
         });
       })
-      .catch(() => { if (!cancelled) setGauges([]); });
+      .catch(err => {
+        console.warn(`Could not load river gauges for POI ${poiId}:`, err);
+        if (!cancelled) setGauges([]);
+      });
     return () => { cancelled = true; };
   }, [poiId]);
 

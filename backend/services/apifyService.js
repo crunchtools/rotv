@@ -1,3 +1,7 @@
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Apify');
+
 /**
  * Apify Facebook scraper — scoped to trail-status collection only.
  *
@@ -23,7 +27,7 @@ async function getApifyToken(pool) {
       return tokenRow.rows[0].value;
     }
   } catch (err) {
-    console.error('[Apify] Error loading API token:', err.message);
+    logger.error('Error loading API token:', err.message);
   }
   return null;
 }
@@ -39,7 +43,7 @@ async function runActorSync(actorId, input, token) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'unknown error');
+    const errorText = await response.text().catch(err => `unreadable error body: ${err.message}`);
     throw new Error(`Apify API error ${response.status}: ${errorText}`);
   }
 
@@ -78,22 +82,22 @@ export function toIsoDate(raw) {
 export async function fetchFacebookPosts(pool, statusUrl, maxItems = SOCIAL_MAX_POSTS) {
   const token = await getApifyToken(pool);
   if (!token) {
-    console.log('[Apify] No API token configured');
+    logger.info('No API token configured');
     return { markdown: null, reachable: false, reason: 'Apify API token not configured' };
   }
 
   const target = extractFacebookPageUrl(statusUrl);
   if (!target) {
-    console.log(`[Apify] Could not extract Facebook page from: ${statusUrl}`);
+    logger.info(`Could not extract Facebook page from: ${statusUrl}`);
     return { markdown: null, reachable: false, reason: 'invalid Facebook URL' };
   }
 
-  console.log(`[Apify] Fetching Facebook posts for ${target} (max ${maxItems})...`);
+  logger.info(`Fetching Facebook posts for ${target} (max ${maxItems})...`);
 
   try {
     const items = await runActorSync(FACEBOOK_ACTOR_ID, { startUrls: [{ url: target }], maxPosts: maxItems }, token);
     if (!items || items.length === 0) {
-      console.log(`[Apify] No posts found for ${target}`);
+      logger.info(`No posts found for ${target}`);
       return { markdown: null, reachable: true, reason: 'no posts found' };
     }
 
@@ -106,16 +110,16 @@ export async function fetchFacebookPosts(pool, statusUrl, maxItems = SOCIAL_MAX_
       .filter(p => p.text.length > 0);
 
     if (posts.length === 0) {
-      console.log(`[Apify] Posts returned but no text content for ${target}`);
+      logger.info(`Posts returned but no text content for ${target}`);
       return { markdown: null, reachable: true, reason: 'posts found but no text content' };
     }
 
     const markdown = posts.map(p => (p.isoDate ? `[${p.isoDate}] ${p.text}` : p.text)).join('\n\n---\n\n');
-    console.log(`[Apify] Got ${posts.length} posts for ${target} (${markdown.length} chars)`);
+    logger.info(`Got ${posts.length} posts for ${target} (${markdown.length} chars)`);
 
     return { markdown, reachable: true, reason: null };
   } catch (err) {
-    console.error(`[Apify] Facebook fetch error for ${target}:`, err.message);
+    logger.error(`Facebook fetch error for ${target}:`, err.message);
     return { markdown: null, reachable: false, reason: `Apify error: ${err.message}` };
   }
 }
@@ -135,7 +139,7 @@ export async function testApifyToken(pool) {
 
     return response.ok;
   } catch (err) {
-    console.error('[Apify] API token test failed:', err.message);
+    logger.error('API token test failed:', err.message);
     return false;
   }
 }

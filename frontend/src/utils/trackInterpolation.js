@@ -54,7 +54,7 @@ function segmentBearing(p1, p2) {
   return ((Math.atan2(eastward, northward) * 180 / Math.PI) + 360) % 360;
 }
 
-export function walkAlongTrack(lineCoords, snap, distMeters) {
+function walkAlongTrack(lineCoords, snap, distMeters) {
   const si = snap.segmentIndex;
   const startPt = snap.position;
 

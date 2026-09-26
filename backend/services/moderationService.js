@@ -7,12 +7,24 @@ import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js'
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
 import { getReassignmentCandidates } from './geoService.js';
 import { newsRelevanceCriteria } from './newsPipelines.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Moderation');
 
 const TABLE_MAP = {
   news: 'poi_news',
   event: 'poi_events',
   photo: 'poi_media'
 };
+
+// Content type arrives from admin requests and MCP tool calls; only a TABLE_MAP key
+// may select a table name.
+function tableFor(contentType) {
+  if (!Object.hasOwn(TABLE_MAP, contentType)) {
+    throw new Error(`Unknown content type: ${contentType}`);
+  }
+  return TABLE_MAP[contentType];
+}
 
 // blocklistSet entries are URL prefixes (domain or domain+path), matched as startsWith.
 // trustedSet entries are hostnames only.
@@ -34,24 +46,21 @@ export function getDomainReputation(url, trustedSet = new Set(), blocklistSet = 
 
 // SSRF protection: reject internal IPs, localhost, cloud metadata endpoints, and non-http schemes
 function isSafePublicUrl(urlStr) {
-  try {
-    const parsed = new URL(urlStr);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
-    if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return false;
-    const parts = hostname.split('.');
-    if (parts.length === 4 && parts.every(p => /^\d+$/.test(p))) {
-      const [a, b] = parts.map(Number);
-      if (a === 10) return false;
-      if (a === 172 && b >= 16 && b <= 31) return false;
-      if (a === 192 && b === 168) return false;
-      if (a === 0) return false;
-    }
-    return true;
-  } catch {
-    return false;
+  if (!URL.canParse(urlStr)) return false;
+  const parsed = new URL(urlStr);
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const hostname = parsed.hostname.toLowerCase();
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
+  if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal') return false;
+  const parts = hostname.split('.');
+  if (parts.length === 4 && parts.every(p => /^\d+$/.test(p))) {
+    const [a, b] = parts.map(Number);
+    if (a === 10) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 0) return false;
   }
+  return true;
 }
 
 // Relevance criteria for events. News uses per-pipeline criteria from newsPipelines.js
@@ -113,11 +122,15 @@ Return ONLY valid JSON: {"relevant": true, "about_poi": true, "reasoning": "one 
           try {
             const parsed = JSON.parse(raw);
             return { relevant: !!parsed.relevant, about_poi: !!parsed.about_poi, reasoning: parsed.reasoning || '' };
-          } catch {
+          } catch (err) {
+            logger.debug(`Discarding unparseable relevance vote (${err.message}): ${raw.slice(0, 200)}`);
             return null;
           }
         })
-        .catch(() => null)
+        .catch(err => {
+          logger.warn(`Relevance vote failed: ${err.message}`);
+          return null;
+        })
     )
   );
   return results.filter(Boolean);
@@ -158,11 +171,15 @@ Return ONLY valid JSON: {"in_region": true, "reasoning": "one sentence why"}`;
           try {
             const parsed = JSON.parse(raw);
             return { in_region: !!parsed.in_region, reasoning: parsed.reasoning || '' };
-          } catch {
+          } catch (err) {
+            logger.debug(`Discarding unparseable region vote (${err.message}): ${raw.slice(0, 200)}`);
             return null;
           }
         })
-        .catch(() => null)
+        .catch(err => {
+          logger.warn(`Region vote failed: ${err.message}`);
+          return null;
+        })
     )
   );
   return results.filter(Boolean);
@@ -274,7 +291,7 @@ export function evaluateRegionGate(regionVotes) {
 // can never route an item onto a deny-listed POI — that would silently defeat the
 // hard-reject deny check, which runs once against the original poi_id earlier in the
 // pipeline. A would-be denied target drops the item to Tier 3 (manual review) instead.
-export async function evaluatePoiGate(pool, row, votes, deniedPoiIds = new Set()) {
+async function evaluatePoiGate(pool, row, votes, deniedPoiIds = new Set()) {
   const total = votes.length;
   const aboutCount = votes.filter(v => v.about_poi).length;
   if (total > 0 && aboutCount * 2 >= total) {
@@ -305,7 +322,7 @@ export async function evaluatePoiGate(pool, row, votes, deniedPoiIds = new Set()
 
 export async function processItem(pool, contentType, contentId, { forceStatus = null, runId = null } = {}) {
   const itemRunId = runId || Math.floor(Date.now() / 1000);
-  console.log(`[Moderation] Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
+  logger.info(`Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
 
   const settingsRows = await pool.query(
     `SELECT key, value FROM admin_settings WHERE key IN ('moderation_news_date_threshold', 'moderation_date_floor_year')`
@@ -356,7 +373,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         [`Rejected: duplicate of approved ${contentType} #${dupCheck.rows[0].id}`, contentId]
       );
-      console.log(`[Moderation] ${contentType} #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
+      logger.info(`${contentType} #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: duplicate of #${dupCheck.rows[0].id}`, { completed: true });
       return;
     }
@@ -367,7 +384,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         [`Rejected: no source URL`, contentId]
       );
-      console.log(`[Moderation] ${contentType} #${contentId}: rejected (no source URL)`);
+      logger.info(`${contentType} #${contentId}: rejected (no source URL)`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: no source URL`, { completed: true });
       return;
     }
@@ -379,7 +396,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
         [reason, contentId]
       );
-      console.log(`[Moderation] ${contentType} #${contentId}: ${reason}`);
+      logger.info(`${contentType} #${contentId}: ${reason}`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: ${reason}`, { completed: true });
       return;
     }
@@ -387,9 +404,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     // Per-POI threshold only applies when item came from the POI's configured URL
     const poiConfigUrl = contentType === 'news' ? row.news_url : row.events_url;
     const poiThreshold = contentType === 'news' ? row.news_score_threshold : row.events_score_threshold;
-    let fromConfiguredUrl = false;
-    try { fromConfiguredUrl = row.source_url && poiConfigUrl && new URL(row.source_url).origin === new URL(poiConfigUrl).origin; }
-    catch { /* malformed URL — treat as not from configured source */ }
+    // A malformed URL on either side means "not from the configured source".
+    const fromConfiguredUrl = URL.canParse(row.source_url) && URL.canParse(poiConfigUrl)
+      && new URL(row.source_url).origin === new URL(poiConfigUrl).origin;
     const effectiveThreshold = (fromConfiguredUrl && poiThreshold != null) ? poiThreshold : newsDateThreshold;
 
     let dateScore = row.date_consensus_score || 0;
@@ -398,7 +415,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     let rescoredDate = false;
 
     if (dateScore < effectiveThreshold || forceStatus) {
-      console.log(`[Moderation] ${contentType} #${contentId}: rescoring (current score=${dateScore}, threshold=${effectiveThreshold})`);
+      logger.info(`${contentType} #${contentId}: rescoring (current score=${dateScore}, threshold=${effectiveThreshold})`);
       logInfo(itemRunId, 'moderation', null, row.title, `Rescoring ${contentType} #${contentId} (score=${dateScore})`);
 
       try {
@@ -417,7 +434,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
                 ogDates = extracted.ogDates || {};
               }
             } catch (err) {
-              console.error(`[Moderation] ${contentType} #${contentId}: page extraction failed: ${err.message}`);
+              logger.error(`${contentType} #${contentId}: page extraction failed: ${err.message}`);
               logError(itemRunId, 'moderation', null, row.title, `Page extraction failed: ${err.message}`);
             }
           }
@@ -451,7 +468,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
         logInfo(itemRunId, 'moderation', null, row.title,
           `Rescored ${contentType} #${contentId}: ${newDate || 'none'} (score=${newScore}, sources=${JSON.stringify(consensus.sourceMap)})`);
       } catch (err) {
-        console.error(`[Moderation] ${contentType} #${contentId}: date scoring failed: ${err.message}`);
+        logger.error(`${contentType} #${contentId}: date scoring failed: ${err.message}`);
         logError(itemRunId, 'moderation', null, row.title, `Date scoring failed: ${err.message}`);
       }
     }
@@ -486,11 +503,11 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       yesCount = relevanceVotes.filter(isAffirmativeVote).length;
       noCount = relevanceVotes.filter(v => !isAffirmativeVote(v)).length;
       inRegionCount = regionVotes.filter(v => v.in_region).length;
-      console.log(`[Moderation] ${contentType} #${contentId}: relevance ${yesCount}/${relevanceVotes.length} yes, region ${inRegionCount}/${regionVotes.length} in`);
+      logger.info(`${contentType} #${contentId}: relevance ${yesCount}/${relevanceVotes.length} yes, region ${inRegionCount}/${regionVotes.length} in`);
       logInfo(itemRunId, 'moderation', null, row.title,
         `Relevance ${contentType} #${contentId}: ${yesCount}/${relevanceVotes.length} yes; region ${inRegionCount}/${regionVotes.length} in`);
     } catch (err) {
-      console.error(`[Moderation] ${contentType} #${contentId}: relevance/region voting failed: ${err.message}`);
+      logger.error(`${contentType} #${contentId}: relevance/region voting failed: ${err.message}`);
       logError(itemRunId, 'moderation', null, row.title, `Relevance/region voting failed: ${err.message}`);
     }
 
@@ -578,7 +595,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       `UPDATE photo_submissions SET moderation_status = $1, moderation_processed = true WHERE id = $2`,
       [resolvedStatus, contentId]
     );
-    console.log(`[Moderation] photo #${contentId}: → ${resolvedStatus} (manual review)`);
+    logger.info(`photo #${contentId}: → ${resolvedStatus} (manual review)`);
   }
 }
 
@@ -588,7 +605,7 @@ export async function processPendingItems(pool) {
     "SELECT value FROM admin_settings WHERE key = 'moderation_enabled'"
   );
   if (enabledQuery.rows.length && enabledQuery.rows[0].value === 'false') {
-    console.log('[Moderation] Moderation disabled, skipping sweep');
+    logger.info('Moderation disabled, skipping sweep');
     return { processed: 0 };
   }
 
@@ -597,7 +614,7 @@ export async function processPendingItems(pool) {
   try {
     await sweepDenyLists(pool, { runId, logInfo });
   } catch (e) {
-    console.error('[Moderation] Deny-list sweep failed:', e.message);
+    logger.error('Deny-list sweep failed:', e.message);
   }
 
   // Per-cycle batch size is configurable so a monthly collection dump clears in a few
@@ -623,7 +640,7 @@ export async function processPendingItems(pool) {
   const totalPending = pendingNews.rows.length + pendingEvents.rows.length + pendingPhotos.rows.length;
 
   if (totalPending === 0) {
-    console.log('[Moderation] Sweep complete: 0 items processed');
+    logger.info('Sweep complete: 0 items processed');
     return { processed: 0 };
   }
 
@@ -636,7 +653,7 @@ export async function processPendingItems(pool) {
       processed++;
     } catch (error) {
       logError(runId, 'moderation', null, null, `Failed to process news #${row.id}: ${error.message}`);
-      console.error(`[Moderation] Failed to process news #${row.id}:`, error.message);
+      logger.error(`Failed to process news #${row.id}:`, error.message);
     }
   }
 
@@ -646,7 +663,7 @@ export async function processPendingItems(pool) {
       processed++;
     } catch (error) {
       logError(runId, 'moderation', null, null, `Failed to process event #${row.id}: ${error.message}`);
-      console.error(`[Moderation] Failed to process event #${row.id}:`, error.message);
+      logger.error(`Failed to process event #${row.id}:`, error.message);
     }
   }
 
@@ -656,13 +673,13 @@ export async function processPendingItems(pool) {
       processed++;
     } catch (error) {
       logError(runId, 'moderation', null, null, `Failed to process photo #${row.id}: ${error.message}`);
-      console.error(`[Moderation] Failed to process photo #${row.id}:`, error.message);
+      logger.error(`Failed to process photo #${row.id}:`, error.message);
     }
   }
 
   logInfo(runId, 'moderation', null, null, `Sweep complete: ${processed}/${totalPending} processed`, { completed: true, pending: totalPending, processed });
   await flushJobLogs();
-  console.log(`[Moderation] Sweep complete: ${processed} items processed`);
+  logger.info(`Sweep complete: ${processed} items processed`);
   return { processed };
 }
 
@@ -684,8 +701,8 @@ async function bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId) {
   `, [contentId]);
 }
 
-export async function approveItem(pool, contentType, contentId, adminUserId) {
-  const table = TABLE_MAP[contentType];
+async function markPublished(pool, contentType, contentId, adminUserId) {
+  const table = tableFor(contentType);
   await pool.query(
     `UPDATE ${table} SET moderation_status = 'published', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP WHERE id = $2`,
     [adminUserId, contentId]
@@ -693,44 +710,38 @@ export async function approveItem(pool, contentType, contentId, adminUserId) {
   await bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId);
 }
 
-export async function rejectItem(pool, contentType, contentId, adminUserId, reason) {
-  const table = TABLE_MAP[contentType];
+export async function approveItem(pool, contentType, contentId, adminUserId) {
+  await markPublished(pool, contentType, contentId, adminUserId);
+}
+
+// Marks an item rejected and appends `note` to its ai_reasoning trail.
+async function markRejected(pool, contentType, contentId, adminUserId, note) {
+  const table = tableFor(contentType);
   await pool.query(
     `UPDATE ${table}
      SET moderation_status = 'rejected', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP,
-         ai_reasoning = COALESCE(ai_reasoning, '') || E'\n--- Admin rejection: ' || $3
+         ai_reasoning = COALESCE(ai_reasoning, '') || E'\n--- ' || $3
      WHERE id = $2`,
-    [adminUserId, contentId, reason || 'Rejected by admin']
+    [adminUserId, contentId, note]
   );
 }
 
+export async function rejectItem(pool, contentType, contentId, adminUserId, reason) {
+  await markRejected(pool, contentType, contentId, adminUserId, `Admin rejection: ${reason || 'Rejected by admin'}`);
+}
+
 export async function bulkApprove(pool, items, adminUserId) {
-  let approved = 0;
   for (const { type, id } of items) {
-    const table = TABLE_MAP[type];
-    await pool.query(
-      `UPDATE ${table} SET moderation_status = 'published', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP WHERE id = $2`,
-      [adminUserId, id]
-    );
-    await bumpHasPrimaryImageOnPhotoPublish(pool, type, id);
-    approved++;
+    await markPublished(pool, type, id, adminUserId);
   }
-  return { approved };
+  return { approved: items.length };
 }
 
 export async function bulkReject(pool, items, adminUserId) {
-  let rejected = 0;
   for (const { type, id } of items) {
-    const table = TABLE_MAP[type];
-    await pool.query(
-      `UPDATE ${table} SET moderation_status = 'rejected', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP,
-         ai_reasoning = COALESCE(ai_reasoning, '') || E'\n--- Bulk rejected by admin'
-       WHERE id = $2`,
-      [adminUserId, id]
-    );
-    rejected++;
+    await markRejected(pool, type, id, adminUserId, 'Bulk rejected by admin');
   }
-  return { rejected };
+  return { rejected: items.length };
 }
 
 export async function editAndPublish(pool, contentType, contentId, edits, adminUserId, { publish = true } = {}) {
@@ -738,11 +749,11 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   const EDITABLE_EVENT = ['title', 'description', 'start_date', 'end_date', 'event_type', 'location_details', 'source_url', 'poi_id', 'publication_date'];
   const EDITABLE_PHOTO = ['caption', 'poi_id'];
 
+  const table = tableFor(contentType);
   const allowedFields = contentType === 'news' ? EDITABLE_NEWS
     : contentType === 'event' ? EDITABLE_EVENT : EDITABLE_PHOTO;
-  const table = TABLE_MAP[contentType];
 
-  console.log('[editAndPublish]', { contentType, contentId, edits, table, allowedFields });
+  logger.debug('editAndPublish', { contentType, contentId, edits, table, allowedFields });
 
   const setClauses = [];
   const values = [contentId];
@@ -780,7 +791,7 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   }
 
   if (setClauses.length === 0) return;
-  console.log('[editAndPublish] SQL:', `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
+  logger.debug('editAndPublish SQL:', `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
   await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
   if (publish) {
     await bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId);
@@ -815,32 +826,8 @@ export async function createItem(pool, contentType, fields, adminUserId) {
   }
 }
 
-export async function purgeRejected(pool, contentType) {
-  const runId = Math.floor(Date.now() / 1000);
-  if (contentType) {
-    const table = TABLE_MAP[contentType];
-    if (!table) throw new Error(`Unknown content type: ${contentType}`);
-    const purgeResult = await pool.query(
-      `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
-    );
-    logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${purgeResult.rowCount} ${contentType} items`, { completed: true, deleted: purgeResult.rowCount, type: contentType });
-    await flushJobLogs();
-    return { deleted: purgeResult.rowCount };
-  }
-  let total = 0;
-  for (const table of Object.values(TABLE_MAP)) {
-    const purgeResult = await pool.query(
-      `DELETE FROM ${table} WHERE moderation_status = 'rejected'`
-    );
-    total += purgeResult.rowCount;
-  }
-  logInfo(runId, 'cleanup', null, null, `Purge rejected: deleted ${total} items (all types)`, { completed: true, deleted: total, type: 'all' });
-  await flushJobLogs();
-  return { deleted: total };
-}
-
 export async function requeueItem(pool, contentType, contentId) {
-  const table = TABLE_MAP[contentType];
+  const table = tableFor(contentType);
   await pool.query(
     `UPDATE ${table}
      SET moderation_status = 'pending', moderation_processed = false,
@@ -856,7 +843,7 @@ export async function fixDate(pool, contentType, contentId) {
     throw new Error('Fix Date is only available for news and event items');
   }
 
-  const table = TABLE_MAP[contentType];
+  const table = tableFor(contentType);
   const descField = contentType === 'news' ? 'summary' : 'description';
 
   const itemQuery = await pool.query(
@@ -870,10 +857,10 @@ export async function fixDate(pool, contentType, contentId) {
   let consensus;
 
   if (item.date_signals) {
-    console.log(`[Moderation] fixDate ${contentType} #${contentId}: rescoring from cached date_signals`);
+    logger.info(`fixDate ${contentType} #${contentId}: rescoring from cached date_signals`);
     consensus = rescoreFromSignals(contentType, item.date_signals);
   } else {
-    console.log(`[Moderation] fixDate ${contentType} #${contentId}: no cached signals, running full extraction`);
+    logger.info(`fixDate ${contentType} #${contentId}: no cached signals, running full extraction`);
     let pageContent = null;
     let ogDates = {};
     if (item.source_url && isSafePublicUrl(item.source_url)) {
@@ -885,7 +872,7 @@ export async function fixDate(pool, contentType, contentId) {
           ogDates = extracted.ogDates || {};
         }
       } catch (err) {
-        console.error(`[Moderation] fixDate ${contentType} #${contentId}: page extraction failed: ${err.message}`);
+        logger.error(`fixDate ${contentType} #${contentId}: page extraction failed: ${err.message}`);
       }
     }
 
@@ -1121,7 +1108,7 @@ export async function mergeItems(pool, contentType, sourceId, targetId) {
 
   await pool.query(`DELETE FROM ${table} WHERE id = $1`, [sourceId]);
 
-  console.log(`[Moderation] Merged ${contentType} #${sourceId} into #${targetId} (${movedUrls} URLs moved)`);
+  logger.info(`Merged ${contentType} #${sourceId} into #${targetId} (${movedUrls} URLs moved)`);
   return { merged: true, sourceId, targetId, movedUrls };
 }
 
@@ -1193,7 +1180,7 @@ export async function addItemUrl(pool, contentType, contentId, url, sourceName) 
     return { added: false, reason: 'URL already exists' };
   }
 
-  console.log(`[Moderation] Added URL to ${contentType} #${contentId}: ${url}`);
+  logger.info(`Added URL to ${contentType} #${contentId}: ${url}`);
   return { added: true, urlId: urlInsert.rows[0].id };
 }
 
@@ -1208,6 +1195,6 @@ export async function removeItemUrl(pool, contentType, contentId, urlId) {
 
   if (deleteResult.rows.length === 0) throw new Error('URL not found');
 
-  console.log(`[Moderation] Removed URL #${urlId} from ${contentType} #${contentId}`);
+  logger.info(`Removed URL #${urlId} from ${contentType} #${contentId}`);
   return { removed: true };
 }

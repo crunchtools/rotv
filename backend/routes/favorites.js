@@ -1,6 +1,10 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { isAuthenticated } from '../middleware/auth.js';
+import { parsePositiveId, resolveTimezone } from '../utils/requestParams.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Favorites');
 
 const favoriteWriteLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -11,21 +15,12 @@ const favoriteWriteLimiter = rateLimit({
   keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip)
 });
 
-function parsePoiId(value) {
-  const n = Number(value);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
-
 export function createFavoritesRouter(pool) {
   const router = express.Router();
 
   router.get('/', isAuthenticated, async (req, res) => {
     try {
-      // Whitelist tz to IANA Region/City — Postgres AT TIME ZONE takes arbitrary input (PR #368 review)
-      const rawTz = req.query.tz;
-      const tz = (typeof rawTz === 'string' && /^[A-Za-z_]+\/[A-Za-z_]+(?:\/[A-Za-z_]+)?$/.test(rawTz))
-        ? rawTz
-        : 'America/New_York';
+      const tz = resolveTimezone(req.query.tz);
       const favorites = await pool.query(
         `SELECT p.id, p.name, p.poi_roles, p.brief_description, p.has_primary_image,
                 f.created_at AS favorited_at,
@@ -55,13 +50,13 @@ export function createFavoritesRouter(pool) {
       );
       res.json(favorites.rows);
     } catch (err) {
-      console.error('GET /api/favorites failed:', err);
+      logger.error('GET /api/favorites failed:', err);
       res.status(500).json({ error: 'Failed to load favorites' });
     }
   });
 
   router.post('/:poiId', isAuthenticated, favoriteWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
@@ -80,13 +75,13 @@ export function createFavoritesRouter(pool) {
       );
       res.status(201).json({ poiId, favorited: true });
     } catch (err) {
-      console.error('POST /api/favorites/:poiId failed:', err);
+      logger.error('POST /api/favorites/:poiId failed:', err);
       res.status(500).json({ error: 'Failed to add favorite' });
     }
   });
 
   router.delete('/:poiId', isAuthenticated, favoriteWriteLimiter, async (req, res) => {
-    const poiId = parsePoiId(req.params.poiId);
+    const poiId = parsePositiveId(req.params.poiId);
     if (!poiId) {
       return res.status(400).json({ error: 'Invalid POI id' });
     }
@@ -97,7 +92,7 @@ export function createFavoritesRouter(pool) {
       );
       res.json({ poiId, favorited: false });
     } catch (err) {
-      console.error('DELETE /api/favorites/:poiId failed:', err);
+      logger.error('DELETE /api/favorites/:poiId failed:', err);
       res.status(500).json({ error: 'Failed to remove favorite' });
     }
   });

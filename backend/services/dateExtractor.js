@@ -1,4 +1,17 @@
 import * as chrono from 'chrono-node';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('DateExtractor');
+
+// chrono-node can throw on pathological input; treat that as "no dates found" but keep it visible.
+function chronoParse(text, timezone) {
+  try {
+    return chrono.parse(text, { instant: new Date(), timezone });
+  } catch (err) {
+    logger.debug(`chrono.parse failed on ${JSON.stringify(text.slice(0, 80))}: ${err.message}`);
+    return [];
+  }
+}
 
 export function parseDate(raw, timezone = 'America/New_York') {
   if (!raw || typeof raw !== 'string') return null;
@@ -14,10 +27,7 @@ export function parseDate(raw, timezone = 'America/New_York') {
     }
   }
 
-  let parsedDates;
-  try {
-    parsedDates = chrono.parse(trimmed, { instant: new Date(), timezone });
-  } catch { return null; }
+  const parsedDates = chronoParse(trimmed, timezone);
   if (parsedDates.length === 0) return null;
 
   const d = parsedDates[0].start;
@@ -43,80 +53,13 @@ export function parseDateTime(raw, timezone = 'America/New_York') {
     return localToUTC(trimmed, timezone);
   }
 
-  let parsedDates;
-  try {
-    parsedDates = chrono.parse(trimmed, { instant: new Date(), timezone });
-  } catch { return null; }
+  const parsedDates = chronoParse(trimmed, timezone);
   if (parsedDates.length === 0) return null;
 
   const d = parsedDates[0].start.date();
   return d.toISOString().substring(0, 19);
 }
 
-const RELATIVE_DATE_WORDS = /^(now|today|tomorrow|yesterday|this morning|this evening|this afternoon|tonight|last night)$/i;
-
-export function extractDatesFromText(text, timezone = 'America/New_York') {
-  if (!text || typeof text !== 'string') return [];
-
-  let parsedDates;
-  try {
-    parsedDates = chrono.parse(text, { instant: new Date(), timezone });
-  } catch { return []; }
-  parsedDates = parsedDates.filter(r => {
-    const text = r.text.trim();
-    if (RELATIVE_DATE_WORDS.test(text)) return false;
-    if (text.length < 5) return false;
-    return true;
-  });
-  return parsedDates.map(r => {
-    const s = r.start;
-    const startStr = `${s.get('year')}-${String(s.get('month')).padStart(2, '0')}-${String(s.get('day')).padStart(2, '0')}`;
-    const hasTime = s.isCertain('hour');
-    const startFull = hasTime
-      ? `${startStr} ${String(s.get('hour') ?? 0).padStart(2, '0')}:${String(s.get('minute') ?? 0).padStart(2, '0')}`
-      : startStr;
-
-    let endFull = null;
-    if (r.end) {
-      const e = r.end;
-      const endStr = `${e.get('year')}-${String(e.get('month')).padStart(2, '0')}-${String(e.get('day')).padStart(2, '0')}`;
-      const endHasTime = e.isCertain('hour');
-      endFull = endHasTime
-        ? `${endStr} ${String(e.get('hour') ?? 0).padStart(2, '0')}:${String(e.get('minute') ?? 0).padStart(2, '0')}`
-        : endStr;
-    }
-
-    return { text: r.text, start: startFull, end: endFull, index: r.index };
-  });
-}
-
-export function findPublicationDate(text, title, timezone = 'America/New_York') {
-  if (!text) return null;
-
-  const patterns = [
-    /(?:published|posted|updated|written|date)\s*(?:on|:)?\s*(.+?)(?:\n|$)/i,
-    /(?:^|\n)\s*[Bb]y\s+.+?[|–—-]\s*(.+?)(?:\n|$)/,
-    /(?:^|\n)\s*((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{1,2},?\s+\d{4})/,
-  ];
-
-  for (const pattern of patterns) {
-    const match = text.match(pattern);
-    if (match) {
-      const parsed = parseDate(match[1], timezone);
-      if (parsed) return parsed;
-    }
-  }
-
-  if (title) {
-    const titleDate = parseDate(title, timezone);
-    if (titleDate) return titleDate;
-  }
-
-  const dates = extractDatesFromText(text, timezone);
-  if (dates.length > 0) return dates[0].start.slice(0, 10);
-
-  return null;
-}
 
 export function extractUrlDate(url) {
   if (!url) return null;
@@ -169,7 +112,7 @@ export function normalizeDateSources(rawSources = {}, timezone = 'America/New_Yo
   };
 }
 
-export function scoreDeterministicSources(sources = {}) {
+function scoreDeterministicSources(sources = {}) {
   const today = new Date().toISOString().substring(0, 10);
   const scores = {};
   const sourceMap = {};
@@ -221,29 +164,6 @@ export function scoreDateConsensus(deterministicSources = {}, llmResults = []) {
   }
 
   return { date: sorted[0][0], score: sorted[0][1], sourceMap };
-}
-
-export function findEventDates(text, title, timezone = 'America/New_York') {
-  const eventDates = { startDate: null, startTime: null, endDate: null, endTime: null };
-  if (!text) return eventDates;
-
-  const dates = extractDatesFromText(text, timezone);
-  if (dates.length === 0) return eventDates;
-
-  const first = dates[0];
-  eventDates.startDate = first.start.slice(0, 10);
-  if (first.start.length > 10) {
-    eventDates.startTime = first.start.slice(11);
-  }
-
-  if (first.end) {
-    eventDates.endDate = first.end.slice(0, 10);
-    if (first.end.length > 10) {
-      eventDates.endTime = first.end.slice(11);
-    }
-  }
-
-  return eventDates;
 }
 
 export function localToUTC(localStr, timezone = 'America/New_York') {

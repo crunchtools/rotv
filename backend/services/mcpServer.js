@@ -4,6 +4,7 @@ import { z } from 'zod';
 import crypto from 'crypto';
 import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
 import { isSecretSetting } from '../utils/settingsRedaction.js';
+import { createLogger } from '../utils/logger.js';
 
 import {
   getQueue,
@@ -39,6 +40,15 @@ import {
   submitBatchNewsJob,
   queueNewsletterJob
 } from './jobScheduler.js';
+
+const logger = createLogger('MCP');
+
+// Columns poi_create may write. Tool arguments are client input, so the INSERT
+// column list comes from this constant, never from the argument object's keys.
+const POI_CREATE_COLUMNS = [
+  'name', 'poi_roles', 'brief_description', 'latitude', 'longitude',
+  'news_url', 'events_url', 'status_url', 'more_info_link', 'owner_id'
+];
 
 function registerTools(server, pool, boss, mcpUserId) {
 
@@ -185,7 +195,7 @@ function registerTools(server, pool, boss, mcpUserId) {
         return { content: [{ type: 'text', text: `POI roles '${(args.poi_roles || []).join(', ')}' require latitude and longitude.` }], isError: true };
       }
 
-      const fields = Object.keys(args).filter(key => args[key] !== undefined);
+      const fields = POI_CREATE_COLUMNS.filter(column => args[column] !== undefined);
       const values = fields.map(key => args[key]);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
       const insertedPoi = await pool.query(
@@ -816,7 +826,7 @@ setInterval(() => {
   const now = Date.now();
   for (const [id, session] of sessions) {
     if (now - session.lastAccess > SESSION_TIMEOUT_MS) {
-      session.transport.close().catch(() => {});
+      session.transport.close().catch(err => logger.warn(`Closing idle session ${id} failed: ${err.message}`));
       sessions.delete(id);
     }
   }

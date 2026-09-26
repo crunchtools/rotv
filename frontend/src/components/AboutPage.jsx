@@ -1,79 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { handleRovingKeyDown } from '../utils/a11yUtils';
 import FeedbackForm from './FeedbackForm';
 import PrivacyPolicy from './PrivacyPolicy';
 import MarkdownRenderer from './MarkdownRenderer';
+import MarkdownContentEditor from './MarkdownContentEditor';
 
-function AboutEditor({ contentKey, content, onSave }) {
-  const [draft, setDraft] = useState(content || '');
-  const [saving, setSaving] = useState(false);
-  const textareaRef = useRef(null);
-
-  useEffect(() => {
-    setDraft(content || '');
-  }, [content]);
-
-  useEffect(() => {
-    const ta = textareaRef.current;
-    if (ta) {
-      ta.style.height = 'auto';
-      ta.style.height = ta.scrollHeight + 'px';
-    }
-  }, [draft]);
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/admin/settings/${contentKey}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ value: draft })
-      });
-      if (!res.ok) throw new Error('Save failed');
-      onSave(contentKey, draft);
-    } catch (err) {
-      console.error('Error saving about content:', err);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setDraft(content || '');
-    onSave(null);
-  };
-
-  return (
-    <div className="about-editor">
-      <textarea
-        ref={textareaRef}
-        className="about-editor-textarea"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        disabled={saving}
-      />
-      <div className="about-editor-actions">
-        <button className="save-btn" onClick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
-        </button>
-        <button className="cancel-btn" onClick={handleCancel} disabled={saving}>
-          Cancel
-        </button>
-        <a
-          href="https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="about-editor-help"
-        >
-          Markdown Guide
-        </a>
-      </div>
-    </div>
-  );
-}
-
-function AboutStory({ content, isAdmin, editMode }) {
+function EditableMarkdownSection({ className, contentKey, content, isAdmin, editMode, children }) {
   const [editing, setEditing] = useState(false);
   const [localContent, setLocalContent] = useState(content);
 
@@ -81,52 +13,44 @@ function AboutStory({ content, isAdmin, editMode }) {
     setLocalContent(content);
   }, [content]);
 
-  const handleSave = (key, newContent) => {
-    if (key) setLocalContent(newContent);
+  const handleSaved = (newContent) => {
+    setLocalContent(newContent);
     setEditing(false);
   };
 
   return (
-    <div className="about-story">
+    <div className={className}>
       {isAdmin && editMode && !editing && (
         <button className="about-edit-btn" onClick={() => setEditing(true)}>Edit</button>
       )}
       {editing ? (
-        <AboutEditor contentKey="about_story_md" content={localContent} onSave={handleSave} />
+        <MarkdownContentEditor
+          contentKey={contentKey}
+          content={localContent}
+          onSaved={handleSaved}
+          onCancel={() => setEditing(false)}
+        />
       ) : (
-        <MarkdownRenderer content={localContent} className="about-story-content" />
+        <MarkdownRenderer content={localContent} className={`${className}-content`} />
       )}
+      {children}
     </div>
   );
 }
 
-function AboutTutorial({ onStartTour, content, contentKey = 'about_tutorial_md', buttonLabel = 'Take a Tour', isAdmin, editMode }) {
-  const [editing, setEditing] = useState(false);
-  const [localContent, setLocalContent] = useState(content);
-
-  useEffect(() => {
-    setLocalContent(content);
-  }, [content]);
-
-  const handleSave = (key, newContent) => {
-    if (key) setLocalContent(newContent);
-    setEditing(false);
-  };
-
+function AboutTutorial({ onStartTour, content, contentKey, buttonLabel, isAdmin, editMode }) {
   return (
-    <div className="about-tutorial">
-      {isAdmin && editMode && !editing && (
-        <button className="about-edit-btn" onClick={() => setEditing(true)}>Edit</button>
-      )}
-      {editing ? (
-        <AboutEditor contentKey={contentKey} content={localContent} onSave={handleSave} />
-      ) : (
-        <MarkdownRenderer content={localContent} className="about-tutorial-content" />
-      )}
+    <EditableMarkdownSection
+      className="about-tutorial"
+      contentKey={contentKey}
+      content={content}
+      isAdmin={isAdmin}
+      editMode={editMode}
+    >
       <button className="about-tour-btn" onClick={onStartTour}>
         {buttonLabel}
       </button>
-    </div>
+    </EditableMarkdownSection>
   );
 }
 
@@ -136,8 +60,8 @@ function AboutPage({ onStartTour, onStartTripTour, aboutTab, onTabChange, isAdmi
   useEffect(() => {
     fetch('/api/about-content')
       .then(res => res.ok ? res.json() : {})
-      .then(data => setAboutContent(data))
-      .catch(() => {});
+      .then(setAboutContent)
+      .catch((err) => console.error('Failed to load about content:', err));
   }, []);
 
   return (
@@ -185,7 +109,13 @@ function AboutPage({ onStartTour, onStartTripTour, aboutTab, onTabChange, isAdmi
 
       <div className="about-tab-content" role="tabpanel">
         {aboutTab === 'story' && (
-          <AboutStory content={aboutContent.about_story_md} isAdmin={isAdmin} editMode={editMode} />
+          <EditableMarkdownSection
+            className="about-story"
+            contentKey="about_story_md"
+            content={aboutContent.about_story_md}
+            isAdmin={isAdmin}
+            editMode={editMode}
+          />
         )}
         {aboutTab === 'tutorial' && (
           <>

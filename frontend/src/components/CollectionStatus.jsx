@@ -60,9 +60,10 @@ const PHASE_CONFIG = {
 function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, _type }) {
   const [progress, setProgress] = useState(null);
   const [finalStats, setFinalStats] = useState(null);
+  const [pollError, setPollError] = useState(null);
   const startTimeRef = React.useRef(Date.now());
   const [frozenElapsedTime, setFrozenElapsedTime] = React.useState(null);
-  const [, forceUpdate] = React.useReducer(x => x + 1, 0);
+  const [, forceUpdate] = React.useReducer(tick => tick + 1, 0);
 
   const elapsed = frozenElapsedTime !== null ? frozenElapsedTime : (Date.now() - startTimeRef.current);
 
@@ -78,22 +79,24 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
         });
 
         if (response.ok) {
-          const data = await response.json();
+          const snapshot = await response.json();
+          setPollError(null);
 
-          if (data.phase !== 'idle') {
-            if (data.startTime && startTimeRef.current > data.startTime) {
-              startTimeRef.current = data.startTime;
+          if (snapshot.phase !== 'idle') {
+            if (snapshot.startTime && startTimeRef.current > snapshot.startTime) {
+              startTimeRef.current = snapshot.startTime;
             }
 
-            setProgress(data);
+            setProgress(snapshot);
 
-            if (data.completed && onComplete) {
-              onComplete(data);
+            if (snapshot.completed && onComplete) {
+              onComplete(snapshot);
             }
           }
         }
       } catch (err) {
         console.error('Error fetching progress:', err);
+        setPollError(err.message);
       }
     };
 
@@ -175,6 +178,9 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
 
       {!isComplete && (
         <div className="status-message">{displayProgress.message}</div>
+      )}
+      {!isComplete && pollError && (
+        <div className="status-message">Progress update failed: {pollError}</div>
       )}
 
       {displayProgress.aiStats?.usage?.llm > 0 && (

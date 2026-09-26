@@ -1,66 +1,21 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import useOrderedAdminList from '../hooks/useOrderedAdminList';
 
 function ActivitiesSettings() {
-  const [activities, setActivities] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const {
+    items: activities, loading, error, saving,
+    createItem, updateItem, deleteItem, saveOrder,
+    dragProps, dragClassName
+  } = useOrderedAdminList('/api/admin/activities', 'activity', 'activities');
   const [newActivityName, setNewActivityName] = useState('');
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const [draggedIndex, setDraggedIndex] = useState(null);
-  const [dragOverIndex, setDragOverIndex] = useState(null);
-
-  const fetchActivities = useCallback(async () => {
-    try {
-      const response = await fetch('/api/admin/activities', {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setActivities(data);
-        setError(null);
-      } else {
-        setError('Failed to fetch activities');
-      }
-    } catch {
-      setError('Failed to fetch activities');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchActivities();
-  }, [fetchActivities]);
 
   const handleAddActivity = async (e) => {
     e.preventDefault();
     if (!newActivityName.trim()) return;
-
-    setSaving(true);
-    try {
-      const response = await fetch('/api/admin/activities', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ name: newActivityName.trim() })
-      });
-
-      if (response.ok) {
-        const newActivity = await response.json();
-        setActivities(prev => [...prev, newActivity]);
-        setNewActivityName('');
-        setError(null);
-      } else {
-        const err = await response.json();
-        setError(err.error || 'Failed to add activity');
-      }
-    } catch {
-      setError('Failed to add activity');
-    } finally {
-      setSaving(false);
+    if (await createItem({ name: newActivityName.trim() })) {
+      setNewActivityName('');
     }
   };
 
@@ -76,126 +31,15 @@ function ActivitiesSettings() {
 
   const handleSaveEdit = async (id) => {
     if (!editingName.trim()) return;
-
-    setSaving(true);
-    try {
-      const response = await fetch(`/api/admin/activities/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ name: editingName.trim() })
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        setActivities(prev => prev.map(a => a.id === id ? updated : a));
-        setEditingId(null);
-        setEditingName('');
-        setError(null);
-      } else {
-        const err = await response.json();
-        setError(err.error || 'Failed to update activity');
-      }
-    } catch {
-      setError('Failed to update activity');
-    } finally {
-      setSaving(false);
+    if (await updateItem(id, { name: editingName.trim() })) {
+      handleCancelEdit();
     }
   };
 
-  const handleDelete = async (id, name) => {
-    if (!confirm(`Delete activity "${name}"? This cannot be undone.`)) return;
-
-    try {
-      const response = await fetch(`/api/admin/activities/${id}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        setActivities(prev => prev.filter(a => a.id !== id));
-        setError(null);
-      } else {
-        const err = await response.json();
-        setError(err.error || 'Failed to delete activity');
-      }
-    } catch {
-      setError('Failed to delete activity');
-    }
-  };
-
-  const handleDragStart = (e, index) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', e.target.outerHTML);
-    setTimeout(() => {
-      e.target.classList.add('dragging');
-    }, 0);
-  };
-
-  const handleDragEnd = (e) => {
-    e.target.classList.remove('dragging');
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-  };
-
-  const handleDragOver = (e, index) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-    if (index !== dragOverIndex) {
-      setDragOverIndex(index);
-    }
-  };
-
-  const handleDragLeave = (e) => {
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverIndex(null);
-    }
-  };
-
-  const handleDrop = async (e, dropIndex) => {
-    e.preventDefault();
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      setDraggedIndex(null);
-      setDragOverIndex(null);
-      return;
-    }
-
-    const newOrder = [...activities];
-    const [draggedItem] = newOrder.splice(draggedIndex, 1);
-    newOrder.splice(dropIndex, 0, draggedItem);
-    setActivities(newOrder);
-    setDraggedIndex(null);
-    setDragOverIndex(null);
-
-    try {
-      await fetch('/api/admin/activities/reorder', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ orderedIds: newOrder.map(a => a.id) })
-      });
-    } catch {
-      console.error('Failed to save order');
-    }
-  };
-
-  const handleSortAlphabetically = async () => {
-    const sorted = [...activities].sort((a, b) =>
+  const handleSortAlphabetically = () => {
+    saveOrder([...activities].sort((a, b) =>
       a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-    );
-    setActivities(sorted);
-
-    try {
-      await fetch('/api/admin/activities/reorder', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ orderedIds: sorted.map(a => a.id) })
-      });
-    } catch {
-      console.error('Failed to save order');
-    }
+    ));
   };
 
   if (loading) {
@@ -246,13 +90,8 @@ function ActivitiesSettings() {
           activities.map((activity, index) => (
             <div
               key={activity.id}
-              className={`activity-item ${draggedIndex === index ? 'dragging' : ''} ${dragOverIndex === index ? 'drag-over' : ''}`}
-              draggable={editingId !== activity.id}
-              onDragStart={(e) => handleDragStart(e, index)}
-              onDragEnd={handleDragEnd}
-              onDragOver={(e) => handleDragOver(e, index)}
-              onDragLeave={handleDragLeave}
-              onDrop={(e) => handleDrop(e, index)}
+              className={`activity-item ${dragClassName(index)}`}
+              {...dragProps(index, editingId !== activity.id)}
             >
               <div className="activity-drag-handle" title="Drag to reorder">
                 ⋮⋮
@@ -280,7 +119,7 @@ function ActivitiesSettings() {
                     <button onClick={() => handleStartEdit(activity)}>Edit</button>
                     <button
                       className="delete-btn-small"
-                      onClick={() => handleDelete(activity.id, activity.name)}
+                      onClick={() => deleteItem(activity.id, activity.name)}
                     >
                       Delete
                     </button>

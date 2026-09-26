@@ -11,6 +11,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   const [filter, setFilter] = useState(null);
   const [statusFilter, setStatusFilter] = useState(() => focusItemId ? 'all' : 'pending');
   const [loading, setLoading] = useState(true);
+  const [queueError, setQueueError] = useState(null);
   const [creating, setCreating] = useState(null);
   const [createFields, setCreateFields] = useState({});
   const [sourceFilter, setSourceFilter] = useState(null);
@@ -40,13 +41,17 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         credentials: 'include'
       });
       if (response.ok) {
-        const data = await response.json();
-        setQueue(data.items);
-        setTotal(data.total);
-        if (data.typeCounts) setTypeCounts(data.typeCounts);
+        const queuePage = await response.json();
+        setQueue(queuePage.items);
+        setTotal(queuePage.total);
+        if (queuePage.typeCounts) setTypeCounts(queuePage.typeCounts);
+        setQueueError(null);
+      } else {
+        setQueueError(`Failed to load moderation queue (HTTP ${response.status})`);
       }
     } catch (err) {
       console.error('Error fetching moderation queue:', err);
+      setQueueError(`Failed to load moderation queue: ${err.message}`);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -67,8 +72,11 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
   useEffect(() => {
     fetch('/api/user', { credentials: 'include' })
       .then(r => r.ok ? r.json() : null)
-      .then(data => setUser(data))
-      .catch(() => setUser(null));
+      .then(setUser)
+      .catch((err) => {
+        console.warn('Failed to load current user:', err);
+        setUser(null);
+      });
   }, []);
 
   const startEditingRef = React.useRef(null);
@@ -119,14 +127,17 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     if (!item.poi_id) return;
     try {
       const response = await fetch(`/api/pois/${item.poi_id}/media`, { credentials: 'include' });
-      if (!response.ok) return;
-      const data = await response.json();
-      const allMedia = data.all_media || [];
+      if (!response.ok) {
+        mod.notify('error', `Failed to load media (HTTP ${response.status})`);
+        return;
+      }
+      const poiMedia = await response.json();
+      const allMedia = poiMedia.all_media || [];
       const index = allMedia.findIndex(m => m.id === item.id);
       setLightboxMedia(allMedia);
       setLightboxIndex(index >= 0 ? index : 0);
       setLightboxPoiId(item.poi_id);
-    } catch (err) { console.error('Failed to load media for lightbox:', err); }
+    } catch (err) { mod.notify('error', `Failed to load media for lightbox: ${err.message}`); }
   };
 
   const handleMediaUpdate = () => {
@@ -134,7 +145,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
     if (lightboxPoiId) {
       fetch(`/api/pois/${lightboxPoiId}/media`, { credentials: 'include' })
         .then(r => r.json())
-        .then(data => setLightboxMedia(data.all_media || []))
+        .then(poiMedia => setLightboxMedia(poiMedia.all_media || []))
         .catch(err => console.error('Failed to refresh lightbox media:', err));
     }
   };
@@ -147,8 +158,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         credentials: 'include', body: JSON.stringify({ type: creating, fields: createFields })
       });
       if (response.ok) {
-        const data = await response.json();
-        mod.notify('success', `Created ${creating} #${data.id}`);
+        const created = await response.json();
+        mod.notify('success', `Created ${creating} #${created.id}`);
         setCreating(null);
         setCreateFields({});
         fetchQueue();
@@ -170,8 +181,8 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
         credentials: 'include', body: JSON.stringify({ items })
       });
       if (response.ok) {
-        const data = await response.json();
-        mod.notify('success', `Rejected ${data.rejected} items`);
+        const rejection = await response.json();
+        mod.notify('success', `Rejected ${rejection.rejected} items`);
         fetchQueue();
         if (onCountChange) onCountChange();
       }
@@ -337,6 +348,7 @@ function ModerationInbox({ onCountChange, focusItemId, focusItemTitle, onSelectP
       )}
 
 
+      {queueError && <div className="sync-error">{queueError}</div>}
       {loading ? (
         <p style={{ color: '#999', textAlign: 'center', padding: '2rem' }}>Loading...</p>
       ) : queue.length === 0 ? (

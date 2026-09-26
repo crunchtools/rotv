@@ -23,6 +23,9 @@
  */
 
 import { chromium } from 'playwright';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('BrowserPool');
 
 let sharedBrowser = null;
 let browserRefCount = 0;
@@ -44,7 +47,7 @@ const LAUNCH_OPTIONS = {
     // --disable-gpu alone does not stop headless Chrome from spawning a GPU
     // process for SwiftShader software GL. That process segfaults on some
     // scrape targets (~12 coredumps/hr on lotor; spiked to 81/hr and helped
-    // trigger the 2026-09-03 outage). This keeps it off the SwiftShader path.
+    // trigger an outage on lotor). This keeps it off the SwiftShader path.
     // Deliberately NOT using --in-process-gpu: a separate GPU process crash is
     // recoverable (Chrome respawns it), but in-process it would kill the whole
     // browser and fail the scrape.
@@ -58,7 +61,7 @@ const LAUNCH_OPTIONS = {
  * Used by the watchdog and the circuit breaker health check.
  */
 export async function forceKill(reason = 'unknown') {
-  console.error(`[BrowserPool] Force-kill: ${reason} (refCount was ${browserRefCount})`);
+  logger.error(`Force-kill: ${reason} (refCount was ${browserRefCount})`);
   const browser = sharedBrowser;
   sharedBrowser = null;
   browserRefCount = 0;
@@ -69,7 +72,7 @@ export async function forceKill(reason = 'unknown') {
   }
   for (const [, t] of watchdogTimers) clearTimeout(t);
   watchdogTimers.clear();
-  if (browser) await browser.close().catch(() => {});
+  if (browser) await browser.close().catch(err => logger.warn(`Force-kill: browser close failed: ${err.message}`));
 }
 
 /**
@@ -87,10 +90,11 @@ export async function healthCheck(timeoutMs = 1000) {
       const page = await ctx.newPage();
       await page.goto('data:text/html,<h1>ok</h1>', { timeout: timeoutMs });
       return true;
-    } catch {
+    } catch (err) {
+      logger.warn(`Health check failed: ${err.message}`);
       return false;
     } finally {
-      if (ctx) await ctx.close().catch(() => {});
+      if (ctx) await ctx.close().catch(err => logger.debug(`Health check: context close failed: ${err.message}`));
     }
   })();
 
@@ -141,13 +145,13 @@ export function releaseBrowser(acquisitionId) {
   }
   browserRefCount--;
   if (browserRefCount < 0) {
-    console.error('[BrowserPool] BUG: releaseBrowser() called more times than acquireBrowser() — resetting to 0');
+    logger.error('BUG: releaseBrowser() called more times than acquireBrowser() — resetting to 0');
     browserRefCount = 0;
   }
   if (browserRefCount === 0) {
     browserCloseTimer = setTimeout(async () => {
       if (browserRefCount === 0 && sharedBrowser) {
-        await sharedBrowser.close().catch(() => {});
+        await sharedBrowser.close().catch(err => logger.warn(`Idle close failed: ${err.message}`));
         sharedBrowser = null;
       }
     }, 30000);

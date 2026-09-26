@@ -1,0 +1,6 @@
+check = "CH001-absolute_paths"
+
+[[locations]]
+path = "backend/routes/admin.js"
+justification = "Detector matched the Express route pattern '/users/:id/role' (PUT, mounted under /api/admin) as a filesystem path; it is a URL route, not a path on disk."
+classification = "gourmand_bug"

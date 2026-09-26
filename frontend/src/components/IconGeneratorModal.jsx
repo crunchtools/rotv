@@ -68,12 +68,12 @@ function IconGeneratorModal({ onClose, onSave }) {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to generate icon');
+        const failure = await response.json();
+        throw new Error(failure.error || 'Failed to generate icon');
       }
 
-      const data = await response.json();
-      setGeneratedSvg(data.svg_content);
+      const generated = await response.json();
+      setGeneratedSvg(generated.svg_content);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -111,8 +111,8 @@ function IconGeneratorModal({ onClose, onSave }) {
       });
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to save icon');
+        const failure = await response.json();
+        throw new Error(failure.error || 'Failed to save icon');
       }
 
       const savedIcon = await response.json();

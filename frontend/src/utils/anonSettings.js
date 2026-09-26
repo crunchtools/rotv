@@ -15,7 +15,8 @@ const KEY_VISITED = 'rotv-visited';
 function safeRead(key) {
   try {
     return localStorage.getItem(key);
-  } catch {
+  } catch (err) {
+    console.warn(`[anonSettings] localStorage read of ${key} failed:`, err);
     return null;
   }
 }
@@ -54,12 +55,13 @@ export function readTrips() {
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (err) {
+    console.warn('[anonSettings] saved trips are not valid JSON; ignoring them:', err);
     return [];
   }
 }
 
-export function writeTrips(trips) {
+function writeTrips(trips) {
   safeWrite(KEY_SAVED_TRIPS, JSON.stringify(trips));
 }
 
@@ -87,7 +89,8 @@ export function createPoiIdListStore(key) {
     try {
       const parsed = JSON.parse(raw);
       return Array.isArray(parsed) ? parsed.filter(n => Number.isInteger(n)) : [];
-    } catch {
+    } catch (err) {
+      console.warn(`[anonSettings] ${key} is not valid JSON; ignoring it:`, err);
       return [];
     }
   };
@@ -102,13 +105,11 @@ export function createPoiIdListStore(key) {
 
 const favoritesStore = createPoiIdListStore(KEY_FAVORITES);
 export const readFavorites = favoritesStore.read;
-export const writeFavorites = favoritesStore.write;
 export const addFavorite = favoritesStore.add;
 export const removeFavorite = favoritesStore.remove;
 
 const visitedStore = createPoiIdListStore(KEY_VISITED);
 export const readVisited = visitedStore.read;
-export const writeVisited = visitedStore.write;
 export const addVisited = visitedStore.add;
 export const removeVisited = visitedStore.remove;
 

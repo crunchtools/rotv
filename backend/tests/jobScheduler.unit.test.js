@@ -71,7 +71,7 @@ describe('withJitter', () => {
   });
 
   it('should log the jitter delay', async () => {
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const consoleSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
     const handler = vi.fn().mockResolvedValue(undefined);
     const wrapped = withJitter(handler, 'my-job');
 

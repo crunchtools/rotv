@@ -1,0 +1,21 @@
+check = "EV004-redundant_error_handling"
+
+[[locations]]
+path = "frontend/src/components/MyValley.jsx"
+justification = "Anonymous-favorites enrichment is optional: load() calls setFavoriteList(baseRows) with names before the /api/pois/summary fetch, and the catch only runs if that enrichment fetch fails, leaving the already-rendered name-only rows in place (the recovery) and logging the cause at warn. No error state exists or is warranted for a cosmetic enrichment; rethrowing would abort load() for anonymous users."
+classification = "by_design"
+
+[[locations]]
+path = "frontend/src/App.jsx"
+justification = "The one log-only catch is refreshModerationCount (App.jsx ~675): a background poll of /api/admin/moderation/queue/count run every 5s by setInterval and on focus. On failure the badge keeps its last count and the next tick retries; there is no error surface for a header badge, and rethrowing would only produce unhandled rejections from the interval callback."
+classification = "by_design"
+
+[[locations]]
+path = "frontend/src/components/NotificationBell.jsx"
+justification = "Three best-effort catches, each logging with console.warn: writeLocalSet (localStorage.setItem can throw in private mode / quota), the server read-state merge on mount, and the 60s feed poll (loadFeed). The bell has no error UI; each failure leaves the last known state in place and the next poll or click retries."
+classification = "by_design"
+
+[[locations]]
+path = "frontend/src/contexts/TripContext.jsx"
+justification = "The debounced persist of the in-progress trip draft to localStorage (TripContext.jsx ~63) warns and continues when setItem throws (private mode / quota). The trip stays in React state; losing only the reload-survival copy is the intended degradation."
+classification = "by_design"

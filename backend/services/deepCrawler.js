@@ -6,6 +6,9 @@
 
 import { renderPage } from './renderPage.js';
 import { calculateSimilarity, contentMatchesItem } from './textUtils.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Render');
 
 /**
  * Check if a URL looks like a generic/index page rather than a specific article.
@@ -13,26 +16,21 @@ import { calculateSimilarity, contentMatchesItem } from './textUtils.js';
  * @returns {boolean}
  */
 export function isGenericUrl(url) {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname.replace(/\/+$/, '');
+  if (!url || !URL.canParse(url)) return false;
+  const path = new URL(url).pathname.replace(/\/+$/, '');
 
-    if (!path || path === '') return true;
+  if (!path || path === '') return true;
 
-    const genericPaths = [
-      '/news', '/events', '/blog', '/press', '/about',
-      '/articles', '/stories', '/updates', '/calendar',
-      '/programs', '/activities', '/happenings'
-    ];
-    if (genericPaths.includes(path.toLowerCase())) return true;
+  const genericPaths = [
+    '/news', '/events', '/blog', '/press', '/about',
+    '/articles', '/stories', '/updates', '/calendar',
+    '/programs', '/activities', '/happenings'
+  ];
+  if (genericPaths.includes(path.toLowerCase())) return true;
 
-    if (/\/(index|default|home)\.(html?|php|aspx?)$/i.test(path)) return true;
+  if (/\/(index|default|home)\.(html?|php|aspx?)$/i.test(path)) return true;
 
-    return false;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 /**
@@ -82,7 +80,7 @@ export async function deepCrawlForArticle(pool, sourceUrl, item, options = {}) {
       visited.add(url);
 
       pagesChecked++;
-      console.log(`[Render] Rendering (depth=${depth}, page=${pagesChecked}/${maxPages}): ${url}`);
+      logger.info(`Rendering (depth=${depth}, page=${pagesChecked}/${maxPages}): ${url}`);
 
       const extracted = await extractor(url, {
         timeout: 15000,
@@ -93,7 +91,7 @@ export async function deepCrawlForArticle(pool, sourceUrl, item, options = {}) {
       if (!extracted.reachable || !extracted.markdown) continue;
 
       if (contentMatchesItem(extracted.markdown, item)) {
-        console.log(`[Render] Match found at depth ${depth}: ${url}`);
+        logger.info(`Match found at depth ${depth}: ${url}`);
         return { foundUrl: url, foundContent: extracted.markdown };
       }
 
@@ -123,7 +121,7 @@ export async function deepCrawlForArticle(pool, sourceUrl, item, options = {}) {
   if (prefetched && prefetched.markdown) {
     visited.add(sourceUrl);
     if (contentMatchesItem(prefetched.markdown, item)) {
-      console.log(`[Render] Match found at depth 0 (prefetched): ${sourceUrl}`);
+      logger.info(`Match found at depth 0 (prefetched): ${sourceUrl}`);
       return { foundUrl: sourceUrl, foundContent: prefetched.markdown, pagesChecked: 0 };
     }
     const candidateLinks = [];
@@ -168,6 +166,6 @@ export async function deepCrawlForArticle(pool, sourceUrl, item, options = {}) {
     currentCandidates = levelResult.candidateLinks || [];
   }
 
-  console.log(`[Render] No match found after checking ${pagesChecked} pages`);
+  logger.info(`No match found after checking ${pagesChecked} pages`);
   return { foundUrl: null, foundContent: null, pagesChecked };
 }

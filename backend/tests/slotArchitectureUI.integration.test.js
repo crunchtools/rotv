@@ -13,6 +13,12 @@ import { chromium } from 'playwright';
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:8080';
 const TEST_TIMEOUT = 60000; // 60 seconds for UI tests
 
+/** Playwright probe error handler: logs why the probe failed and resolves to `fallback`. */
+const probeFallback = (fallback) => (err) => {
+  console.debug(`[slotArchitectureUI] probe failed, using ${fallback}: ${err.message}`);
+  return fallback;
+};
+
 describe('Slot Architecture UI Tests - News/Events', () => {
   let browser;
   let page;
@@ -55,7 +61,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('text=News & Events Collection'));
 
       // If widget exists, it should not be visible or should indicate no active job
-      const isVisible = await progressWidget.isVisible().catch(() => false);
+      const isVisible = await progressWidget.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Widget might be visible but showing "No active job" or similar
@@ -72,7 +78,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('button:has-text("Start Collection")'))
         .or(page.locator('[data-testid="collect-news-button"]'));
 
-      const isVisible = await collectButton.isVisible().catch(() => false);
+      const isVisible = await collectButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         const isEnabled = await collectButton.isEnabled();
@@ -85,7 +91,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('button:has-text("Collect Status")'))
         .or(page.locator('[data-testid="collect-trail-status-button"]'));
 
-      const isVisible = await trailButton.isVisible().catch(() => false);
+      const isVisible = await trailButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         const isEnabled = await trailButton.isEnabled();
@@ -99,7 +105,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
       const collectButton = page.locator('button:has-text("Collect News")')
         .or(page.locator('button:has-text("Start Collection")'));
 
-      const isVisible = await collectButton.isVisible().catch(() => false);
+      const isVisible = await collectButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Click button
@@ -113,12 +119,12 @@ describe('Slot Architecture UI Tests - News/Events', () => {
           .or(page.locator('text=Searching'))
           .or(page.locator('text=Processing'))
           .isVisible()
-          .catch(() => false);
+          .catch(probeFallback(false));
 
         // If no duplicate job error, should see progress
         const hasError = await page.locator('text=already running')
           .isVisible()
-          .catch(() => false);
+          .catch(probeFallback(false));
 
         // Either show progress or show "already running" error
         expect(hasProgress || hasError).toBe(true);
@@ -147,7 +153,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
     it('should prevent starting duplicate job (button disabled)', async () => {
       const collectButton = page.locator('button:has-text("Collect News")');
 
-      const isVisible = await collectButton.isVisible().catch(() => false);
+      const isVisible = await collectButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Click to start job
@@ -155,12 +161,12 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         await page.waitForTimeout(2000);
 
         // Check if button is now disabled
-        const isEnabled = await collectButton.isEnabled().catch(() => true);
+        const isEnabled = await collectButton.isEnabled().catch(probeFallback(true));
 
         // OR check for error message
         const hasError = await page.locator('text=already running')
           .isVisible()
-          .catch(() => false);
+          .catch(probeFallback(false));
 
         // Button should be disabled OR error should be shown
         expect(!isEnabled || hasError).toBe(true);
@@ -197,7 +203,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('.phase-icon'))
         .or(page.locator('[data-testid^="phase-"]'))
         .isVisible()
-        .catch(() => false);
+        .catch(probeFallback(false));
 
       // Phase icons might not be visible if no job is running
       // This test passes if we can detect any phase indicators
@@ -212,7 +218,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('.provider-badge'))
         .or(page.locator('[data-testid^="provider-"]'))
         .isVisible()
-        .catch(() => false);
+        .catch(probeFallback(false));
 
       expect(typeof hasProvider).toBe('boolean');
     }, TEST_TIMEOUT);
@@ -252,7 +258,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('[data-testid="llm-usage"]'))
         .or(page.locator('.ai-usage-badge:has-text("OpenRouter")'));
 
-      const isVisible = await llmUsage.isVisible().catch(() => false);
+      const isVisible = await llmUsage.isVisible().catch(probeFallback(false));
 
       // Badge might not be visible if no OpenRouter calls made yet
       expect(typeof isVisible).toBe('boolean');
@@ -265,7 +271,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('[data-testid="llm-usage"]'))
         .or(page.locator('.ai-usage-badge:has-text("OpenRouter")'));
 
-      const isVisible = await llmUsage.isVisible().catch(() => false);
+      const isVisible = await llmUsage.isVisible().catch(probeFallback(false));
 
       expect(typeof isVisible).toBe('boolean');
     }, TEST_TIMEOUT);
@@ -314,7 +320,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('[data-testid="cancel-button"]'))
         .or(page.locator('button:has-text("Stop")'));
 
-      const isVisible = await cancelButton.isVisible().catch(() => false);
+      const isVisible = await cancelButton.isVisible().catch(probeFallback(false));
 
       // Cancel button might not be visible if no job is running
       expect(typeof isVisible).toBe('boolean');
@@ -322,7 +328,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
 
     it('should keep slots visible with current progress after cancel', async () => {
       const cancelButton = page.locator('button:has-text("Cancel")');
-      const isVisible = await cancelButton.isVisible().catch(() => false);
+      const isVisible = await cancelButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Record active slots before cancel
@@ -348,7 +354,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
 
     it('should NOT clear badges after cancel', async () => {
       const cancelButton = page.locator('button:has-text("Cancel")');
-      const isVisible = await cancelButton.isVisible().catch(() => false);
+      const isVisible = await cancelButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Check if badges exist before cancel
@@ -382,7 +388,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('text=Done'))
         .or(page.locator('[data-testid="job-complete"]'));
 
-      const isVisible = await completedIndicator.isVisible().catch(() => false);
+      const isVisible = await completedIndicator.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Check that slots are still present (not cleared)
@@ -399,14 +405,14 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         .or(page.locator('[data-testid="close-button"]'))
         .or(page.locator('button[aria-label="Close"]'));
 
-      const isVisible = await closeButton.isVisible().catch(() => false);
+      const isVisible = await closeButton.isVisible().catch(probeFallback(false));
 
       expect(typeof isVisible).toBe('boolean');
     }, TEST_TIMEOUT);
 
     it('should clear widget when × clicked', async () => {
       const closeButton = page.locator('button:has-text("×")');
-      const isVisible = await closeButton.isVisible().catch(() => false);
+      const isVisible = await closeButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Click close
@@ -417,7 +423,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         const widgetVisible = await page.locator('[data-testid="news-progress-widget"]')
           .or(page.locator('.news-collection-progress'))
           .isVisible()
-          .catch(() => false);
+          .catch(probeFallback(false));
 
         expect(widgetVisible).toBe(false);
       }
@@ -437,7 +443,7 @@ describe('Slot Architecture UI Tests - News/Events', () => {
 
     it('should NOT allow two jobs to start simultaneously', async () => {
       const collectButton = page.locator('button:has-text("Collect News")');
-      const isVisible = await collectButton.isVisible().catch(() => false);
+      const isVisible = await collectButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         // Double-click rapidly
@@ -449,9 +455,9 @@ describe('Slot Architecture UI Tests - News/Events', () => {
         // Should show error or button should be disabled
         const hasError = await page.locator('text=already running')
           .isVisible()
-          .catch(() => false);
+          .catch(probeFallback(false));
 
-        const isEnabled = await collectButton.isEnabled().catch(() => false);
+        const isEnabled = await collectButton.isEnabled().catch(probeFallback(false));
 
         // Either show error or disable button
         expect(hasError || !isEnabled).toBe(true);
@@ -504,14 +510,14 @@ describe('Slot Architecture UI Tests - Trail Status', () => {
       const trailButton = page.locator('button:has-text("Trail Status")')
         .or(page.locator('button:has-text("Collect Status")'));
 
-      const isVisible = await trailButton.isVisible().catch(() => false);
+      const isVisible = await trailButton.isVisible().catch(probeFallback(false));
 
       expect(typeof isVisible).toBe('boolean');
     }, TEST_TIMEOUT);
 
     it('should display progress widget after clicking collect', async () => {
       const trailButton = page.locator('button:has-text("Trail Status")');
-      const isVisible = await trailButton.isVisible().catch(() => false);
+      const isVisible = await trailButton.isVisible().catch(probeFallback(false));
 
       if (isVisible) {
         await trailButton.click();
@@ -520,11 +526,11 @@ describe('Slot Architecture UI Tests - Trail Status', () => {
         const hasProgress = await page.locator('text=Collecting')
           .or(page.locator('text=Searching'))
           .isVisible()
-          .catch(() => false);
+          .catch(probeFallback(false));
 
         const hasError = await page.locator('text=already running')
           .isVisible()
-          .catch(() => false);
+          .catch(probeFallback(false));
 
         expect(hasProgress || hasError).toBe(true);
       }
@@ -548,7 +554,7 @@ describe('Slot Architecture UI Tests - Trail Status', () => {
       // Trail status has phases: starting, rendering, ai_search, saving, complete
       const hasPhase = await page.locator('text=/Starting|Rendering|Searching|Saving|Complete/')
         .isVisible()
-        .catch(() => false);
+        .catch(probeFallback(false));
 
       expect(typeof hasPhase).toBe('boolean');
     }, TEST_TIMEOUT);

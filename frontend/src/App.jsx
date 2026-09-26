@@ -18,6 +18,7 @@ import AISettings from './components/AISettings';
 import GeneralSettings from './components/GeneralSettings';
 import ThemesSettings from './components/ThemesSettings';
 import ActivitiesSettings from './components/ActivitiesSettings';
+import { generateSlug } from './components/sidebar/helpers';
 import ErasSettings from './components/ErasSettings';
 import SurfacesSettings from './components/SurfacesSettings';
 import IconsSettings from './components/IconsSettings';
@@ -30,8 +31,6 @@ import UsersSettings from './components/UsersSettings';
 import UserSettings from './components/UserSettings';
 import NewsletterSettings from './components/NewsletterSettings';
 import ResultsTab from './components/ResultsTab';
-import NewsPermalink from './components/NewsPermalink';
-import EventPermalink from './components/EventPermalink';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
@@ -47,16 +46,6 @@ const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb
 // carries the organization role. Boundaries are deliberately excluded — org
 // boundaries render as destinations (#412).
 const ROUTE_ROLES = ['trail', 'river', 'water_taxi', 'railroad'];
-
-function generateSlug(name) {
-  if (!name) return '';
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9\s-]/g, '') // Remove special characters
-    .replace(/\s+/g, '-')          // Replace spaces with hyphens
-    .replace(/-+/g, '-')           // Replace multiple hyphens with single
-    .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
-}
 
 const DEFAULT_PARK_BOUNDS = [
   [41.13, -81.85],  // Southwest corner (expanded west to include Reagan-Huffman at -81.832)
@@ -222,7 +211,7 @@ function AppContent() {
 
   const [boundsToFit, setBoundsToFit] = useState(null);
   // Bumped on every explicit user-driven fit so BoundsFitter re-zooms even when the
-  // target bounds are identical to the previous fit (e.g. re-enabling the same
+  // target bounds match the previous fit (e.g. re-enabling the same
   // boundary). (#396 follow-up)
   const [fitNonce, setFitNonce] = useState(0);
 
@@ -367,7 +356,7 @@ function AppContent() {
     const slug = location.pathname.split('/')[2];
     if (!slug) return;
     loadTripFromSlug(slug)
-      .catch(() => {})
+      .catch(err => console.warn(`[App] Could not load shared trip ${slug}:`, err))
       .finally(() => navigate('/', { replace: true }));
   }, [location.pathname, loadTripFromSlug, navigate]);
 
@@ -684,13 +673,11 @@ function AppContent() {
   }, [activeTab]);
 
   const refreshModerationCount = useCallback(async () => {
-    console.log('[App] Refreshing moderation count...');
     try {
       const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include', cache: 'no-store' });
       if (response.ok) {
-        const data = await response.json();
-        console.log('[App] New moderation count:', data.count);
-        setModerationCount(data.count);
+        const { count } = await response.json();
+        setModerationCount(count);
       }
     } catch (err) {
       console.error('[App] Failed to refresh moderation count:', err);
@@ -703,7 +690,6 @@ function AppContent() {
     const interval = setInterval(refreshModerationCount, 5000);
 
     const handleCountChanged = () => {
-      console.log('[App] Received moderation-count-changed event');
       refreshModerationCount();
     };
     window.addEventListener('moderation-count-changed', handleCountChanged);
@@ -802,15 +788,15 @@ function AppContent() {
       const poi = findPoiBySlug(initialPoiSlug);
       if (poi) {
         if (poi.poi_roles?.includes('railroad')) {
-          fetch('/api/train/position').then(r => r.json()).then(data => {
-            const pos = data?.cvsr;
+          fetch('/api/train/position').then(r => r.json()).then(positions => {
+            const pos = positions?.cvsr;
             if (pos) {
               const pad = 0.005;
               setBoundsToFit([[pos.latitude - pad, pos.longitude - pad],
                               [pos.latitude + pad, pos.longitude + pad]]);
               setFitNonce(n => n + 1);
             }
-          }).catch(() => {});
+          }).catch(err => console.warn('[App] Could not fetch train position to center the map:', err));
         }
         setSelectedPoi(poi);
         document.title = `${poi.name} | Roots of The Valley`;

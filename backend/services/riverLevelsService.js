@@ -159,9 +159,10 @@ export async function runRiverLevelsCollection(pool, options = {}) {
 /* ---------- Read helpers (serve the frontend) ---------- */
 
 /**
- * All enabled gauges with their latest reading — powers the map markers.
+ * Enabled gauges with their latest reading. Given a river POI id, returns that
+ * river's gauges; otherwise every gauge with coordinates (the map markers).
  */
-export async function getAllGaugesWithLatest(pool) {
+async function queryGaugesWithLatest(pool, riverPoiId = null) {
   const { rows } = await pool.query(`
     SELECT g.id, g.usgs_site_id, COALESCE(g.display_name, g.name) AS name, g.river_poi_id, g.latitude, g.longitude,
            p.name AS river_name,
@@ -176,31 +177,27 @@ export async function getAllGaugesWithLatest(pool) {
       LIMIT 1
     ) r ON TRUE
     WHERE g.enabled = TRUE
-      AND g.latitude IS NOT NULL AND g.longitude IS NOT NULL
+      AND ($1::int IS NULL OR g.river_poi_id = $1::int)
+      AND ($1::int IS NOT NULL OR (g.latitude IS NOT NULL AND g.longitude IS NOT NULL))
     ORDER BY g.usgs_site_id
-  `);
+  `, [riverPoiId]);
   return rows.map(formatGaugeWithLatest);
+}
+
+/**
+ * All enabled gauges with their latest reading — powers the map markers.
+ */
+export async function getAllGaugesWithLatest(pool) {
+  return queryGaugesWithLatest(pool);
 }
 
 /**
  * Gauges associated with a given river POI, each with its latest reading.
  */
 export async function getGaugesForPoi(pool, poiId) {
-  const { rows } = await pool.query(`
-    SELECT g.id, g.usgs_site_id, COALESCE(g.display_name, g.name) AS name, g.river_poi_id, g.latitude, g.longitude,
-           r.reading_time, r.gage_height_ft, r.discharge_cfs
-    FROM river_gauges g
-    LEFT JOIN LATERAL (
-      SELECT reading_time, gage_height_ft, discharge_cfs
-      FROM river_gauge_readings
-      WHERE gauge_id = g.id
-      ORDER BY reading_time DESC
-      LIMIT 1
-    ) r ON TRUE
-    WHERE g.river_poi_id = $1 AND g.enabled = TRUE
-    ORDER BY g.usgs_site_id
-  `, [poiId]);
-  return rows.map(formatGaugeWithLatest);
+  // A null id would mean "every gauge" to the shared query — never what a POI lookup wants.
+  if (poiId == null) return [];
+  return queryGaugesWithLatest(pool, poiId);
 }
 
 /**

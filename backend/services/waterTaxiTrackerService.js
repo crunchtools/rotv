@@ -15,6 +15,9 @@
  */
 
 import io from 'socket.io-client';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('WaterTaxiTracker');
 
 const SOCKET_URL = 'https://socket.trackmyshuttle.com/';
 const TRACKER_PAGE = 'https://trackmyshuttle.com/a/5799';
@@ -62,9 +65,9 @@ async function seedFromPage() {
     const status = ACTIVE_EVENTS.has(eventReason) ? 'active' : 'docked';
 
     position = { latitude: lat, longitude: lng, heading, status, updated_at: new Date().toISOString() };
-    console.log(`[WaterTaxiTracker] Seeded from page: ${lat.toFixed(4)}, ${lng.toFixed(4)} (${status})`);
+    logger.info(`Seeded from page: ${lat.toFixed(4)}, ${lng.toFixed(4)} (${status})`);
   } catch (err) {
-    console.log(`[WaterTaxiTracker] Could not seed from page: ${err.message}`);
+    logger.info(`Could not seed from page: ${err.message}`);
   }
 }
 
@@ -101,7 +104,7 @@ function connect() {
   });
 
   socket.on('connect', () => {
-    console.log('[WaterTaxiTracker] Connected to TrackMyShuttle');
+    logger.info('Connected to TrackMyShuttle');
   });
 
   socket.on(SERIAL_NUMBER, (message) => {
@@ -110,11 +113,11 @@ function connect() {
   });
 
   socket.on('disconnect', (reason) => {
-    console.log(`[WaterTaxiTracker] Disconnected: ${reason}`);
+    logger.info(`Disconnected: ${reason}`);
   });
 
   socket.on('reconnect', (attempts) => {
-    console.log(`[WaterTaxiTracker] Reconnected after ${attempts} attempt(s)`);
+    logger.info(`Reconnected after ${attempts} attempt(s)`);
   });
 }
 
@@ -125,13 +128,13 @@ async function checkSettingAndConnect() {
       `SELECT value FROM admin_settings WHERE key = 'live_boat_tracker_enabled'`
     );
     if (setting.rows[0]?.value === 'false') {
-      console.log('[WaterTaxiTracker] Disabled via admin setting — not connecting');
+      logger.info('Disabled via admin setting — not connecting');
       return;
     }
     await seedFromPage();
     connect();
   } catch (err) {
-    console.error('[WaterTaxiTracker] Failed to check admin setting:', err.message);
+    logger.error('Failed to check admin setting:', err.message);
   }
 }
 
@@ -146,7 +149,7 @@ export function stopTracker() {
     socket.close();
     socket = null;
   }
-  console.log('[WaterTaxiTracker] Stopped');
+  logger.info('Stopped');
 }
 
 export function getBoatPositions() {
