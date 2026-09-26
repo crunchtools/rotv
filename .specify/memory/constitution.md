@@ -1,6 +1,6 @@
 # rotv Constitution
 
-> **Version:** 2.1.1
+> **Version:** 2.1.2
 > **Ratified:** 2026-03-10
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.17.0
@@ -123,7 +123,7 @@ Nagios monitoring:
 
 1. Build — Containerfile builds successfully
 2. Application health test — HTTP 200 from Node.js backend
-3. Push — Image pushed to Quay.io
+3. Push — Image pushed to Quay.io on every run that holds registry credentials (default branch, tags, same-repo PRs). Dependabot PR runs build without pushing: push credentials are deliberately not shared with them
 
 ## Code Review Regression Prevention
 
