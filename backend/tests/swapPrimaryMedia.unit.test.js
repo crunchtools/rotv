@@ -78,6 +78,16 @@ describe('swapPrimaryMedia', () => {
     expect(keywords()).toEqual(['BEGIN', 'DELETE', 'ROLLBACK', 'release']);
   });
 
+  it('rolls back, releases and rethrows without running DELETE or INSERT when BEGIN fails', async () => {
+    const beginError = new Error('cannot begin');
+    const { pool, client, keywords } = fakePool({ failOn: { BEGIN: beginError } });
+
+    await expect(swapPrimaryMedia(pool, 42, 'asset-9', 3)).rejects.toBe(beginError);
+
+    expect(keywords()).toEqual(['BEGIN', 'ROLLBACK', 'release']);
+    expect(client.release).toHaveBeenCalledTimes(1);
+  });
+
   it('rolls back when COMMIT itself fails', async () => {
     const commitError = new Error('serialization failure');
     const { pool, keywords } = fakePool({ failOn: { COMMIT: commitError } });
