@@ -9,12 +9,16 @@ jobs:
   test:
     name: Application Tests
     runs-on: ubuntu-latest
+    # Fix: Dependabot runs only see the (empty) Dependabot secret store; the base image is public, so skip login there
+    env:
+      HAS_QUAY: ${{ secrets.QUAY_USERNAME != '' }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Login to Quay.io
+        if: env.HAS_QUAY == 'true'
         uses: docker/login-action@v3
         with:
           registry: quay.io

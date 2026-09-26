@@ -26,6 +26,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    # Fix: Dependabot runs only see the (empty) Dependabot secret store; build without login/push there
+    env:
+      HAS_QUAY: ${{ secrets.QUAY_USERNAME != '' }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      pushed: ${{ steps.quay.outputs.pushed }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -33,7 +39,12 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Record whether this run can push
+        id: quay
+        run: echo "pushed=$HAS_QUAY" >> "$GITHUB_OUTPUT"
+
       - name: Log in to Quay.io
+        if: env.HAS_QUAY == 'true'
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
@@ -53,11 +64,12 @@ jobs:
             type=sha,prefix=
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v5
         with:
           context: .
           file: Containerfile
-          push: true
+          push: ${{ env.HAS_QUAY == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
@@ -78,6 +90,43 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
+
+  # Separate from the constitution-mandated report-only Trivy step above:
+  # this job needs security-events: write for SARIF, which build-and-push-quay
+  # must not hold. Gates PRs; on push it only reports, since the image is already published.
+  trivy-scan:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    needs: build-and-push-quay
+    # No registry digest to scan when the quay job built without pushing (Dependabot runs)
+    if: needs.build-and-push-quay.outputs.pushed == 'true'
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Scan pushed image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push-quay.outputs.digest }}
+          scanners: vuln
+          severity: "CRITICAL,HIGH"
+          ignore-unfixed: true
+          trivyignores: .trivyignore
+          format: sarif
+          output: trivy.sarif
+          # Without this, trivy-action drops the severity filter for SARIF and gates on every severity
+          limit-severities-for-sarif: true
+          exit-code: ${{ github.event_name == 'pull_request' && '1' || '0' }}
+
+      - name: Upload SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-rotv
 
   build-and-push-ghcr:
     runs-on: ubuntu-latest
