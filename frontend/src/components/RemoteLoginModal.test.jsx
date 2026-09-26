@@ -91,6 +91,19 @@ describe('RemoteLoginModal', () => {
     expect(inputs).toEqual([{ type: 'type', text: 'abc' }]);
   });
 
+  // Fix: a real click's React event loses currentTarget after dispatch, so the point must be read synchronously
+  it('reads the click position synchronously and relays it in viewport pixels', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const img = screen.getByAltText('Facebook login screen');
+    const rect = vi.spyOn(img, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: VIEWPORT.width / 2, height: VIEWPORT.height / 2 });
+    fireEvent.click(img, { clientX: VIEWPORT.width / 4, clientY: VIEWPORT.height / 4 });
+    expect(rect).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    const inputs = calls('/input').map(([, init]) => JSON.parse(init.body));
+    expect(inputs).toEqual([{ type: 'click', x: VIEWPORT.width / 2, y: VIEWPORT.height / 2 }]);
+  });
+
   it('cancels the remote session on unmount when not saved', async () => {
     const { unmount } = render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
