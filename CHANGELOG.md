@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Facebook trail status no longer uses Apify**: Reagan-Huffman (medinaTRAILS) status now comes
+  from Facebook's public Page Plugin rendered in the shared Playwright pool (`facebookService.js`),
+  with per-post dates from `[data-utime]`. The 30-minute cadence had exhausted Apify's free tier
+  (403 on every fetch since 2026-09-25); the new path is free and needs no credentials.
+
+### Removed
+- `apifyService.js`, the Apify API token card in Settings > Data Collection, and
+  `POST /api/admin/settings/apify-api-token/test`.
+
 ## [1.38.4] - 2026-09-20
 
 ### Fixed

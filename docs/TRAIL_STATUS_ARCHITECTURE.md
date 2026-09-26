@@ -60,14 +60,14 @@ Different trail status sources require different extraction methods:
 | Source Type | Method | Service | Example |
 |-------------|--------|---------|---------|
 | Twitter/X | Playwright + cookies | contentExtractor.js | @CVNPmtb (East Rim) |
-| Facebook | Apify cloud scraper | apifyService.js | medinaTRAILS (Reagan-Huffman) |
+| Facebook | Page Plugin via Playwright | facebookService.js | medinaTRAILS (Reagan-Huffman) |
 | Bluesky | Public Bluesky API | blueskyService.js | Summit Metro Parks (Hampton Hills) |
 | Park websites | Playwright | contentExtractor.js | Cleveland Metroparks |
 
 **URL Routing in trailStatusService.js:**
 
 ```
-if Facebook URL → apifyService.fetchFacebookPosts → text
+if Facebook URL → facebookService.fetchFacebookPosts → text
 else if Bluesky URL → blueskyService.fetchBlueskyPosts → text
 else → contentExtractor.extractPageContent (with cookies for Twitter) → markdown
 ```
@@ -89,14 +89,14 @@ Twitter/X pages require authenticated access to load tweet content:
 - **Cookies expire after 30-90 days and must be refreshed periodically** via Settings > Data Collection
 - Twitter gets an extended `dynamicContentWait` (8s vs 3s) for SPA rendering
 
-**Apify Cloud Scraper (Facebook)**
+**Facebook Page Plugin (Facebook)**
 
-Facebook pages cannot be scraped with Playwright because the SPA doesn't yield extractable content. The system uses Apify's first-party Facebook scraper (`apify/facebook-posts-scraper`) via `apifyService.js`:
-- API token stored in `admin_settings` table with key `apify_api_token`
-- Calls the Apify sync API: `POST /v2/acts/{actorId}/run-sync-get-dataset-items`
-- Returns post text concatenated with timestamps, same format as contentExtractor output
-- Configurable via Settings > Data Collection in the admin UI
-- Estimated usage: ~1,440 requests/month (1 trail × 48/day × 30 days), within Apify's free tier
+`facebook.com/<page>` is login-walled for anonymous visitors (logged-out `www.`, `m.` and `mbasic.` all return 400), so the page itself can't be rendered. Facebook's official embeddable [Page Plugin](https://developers.facebook.com/docs/plugins/page-plugin) serves any public, non-age/country-restricted Page's recent timeline to logged-out visitors, which is what `facebookService.js` uses:
+- Renders `https://www.facebook.com/plugins/page.php?href=<page>&tabs=timeline&...` in the shared Chromium pool (`browserPool.js`); the timeline is client-rendered, so plain HTTP only gets the shell
+- Anchors on `[data-utime]` (epoch seconds per post) and reads `[data-testid="post_message"]` from each post root, avoiding obfuscated class names
+- Emits `[YYYY-MM-DD] text` blocks joined by `---`, the same format as the Bluesky path
+- Falls back to the plugin's full `innerText` whenever no post text can be formatted (no timestamps, or the `post_message` selector misses), so the classifier still sees content
+- No credentials and no per-call cost, so the 30-minute cadence is free. If Facebook ever locks the plugin, the fallback is an admin session cookie, the same way `twitter_cookies` works
 
 **Public Bluesky API (Bluesky)**
 
@@ -162,7 +162,6 @@ The system uses pg-boss for reliable background job processing:
 │  - Status badge + Source link in Info tab badges row            │
 │  - Trail Status section (conditions, weather, updated)          │
 │  - Refresh button (admin edit mode)                             │
-│  - Apify API token config in Settings > Data Collection         │
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -184,7 +183,7 @@ The system uses pg-boss for reliable background job processing:
 │  1. collectTrailStatus(pool, poi)                               │
 │     ├─ Skip if no status_url configured                        │
 │     ├─ Route by URL type:                                      │
-│     │   ├─ Facebook → apifyService.fetchFacebookPosts          │
+│     │   ├─ Facebook → facebookService.fetchFacebookPosts       │
 │     │   └─ All others → contentExtractor (+ cookies for X)     │
 │     ├─ Extract status via Gemini Flash (no search grounding)   │
 │     ├─ Override source_url with configured status_url          │
@@ -205,16 +204,16 @@ The system uses pg-boss for reliable background job processing:
                     ┌─────────┴─────────┐
                     ▼                   ▼
 ┌────────────────────────────┐ ┌────────────────────────────────┐
-│   contentExtractor.js      │ │   apifyService.js              │
+│   contentExtractor.js      │ │   facebookService.js           │
 │                            │ │                                │
-│  Playwright + Readability  │ │  Apify Cloud Scraper           │
+│  Playwright + Readability  │ │  Playwright + FB Page Plugin   │
 │  + Turndown → markdown     │ │  (Facebook only)               │
 │                            │ │                                │
 │  Used for:                 │ │  Used for:                     │
 │  - Twitter/X (+ cookies)   │ │  - Facebook pages              │
 │  - Bluesky                 │ │                                │
-│  - Park websites           │ │  Actor: apify/facebook-posts-  │
-│  - Any other URL           │ │         scraper                │
+│  - Park websites           │ │  /plugins/page.php?tabs=       │
+│  - Any other URL           │ │         timeline               │
 └────────────────────────────┘ └────────────────────────────────┘
                     │                   │
                     └─────────┬─────────┘
@@ -739,6 +738,11 @@ psql -U postgres -d rotv -f backend/migrations/001_add_trail_status_support.sql
 ---
 
 ## Changelog
+
+**Version 4.0.0 (2026-09-26)**
+- Replaced the Apify Facebook scraper with `facebookService.js`, which renders Facebook's public Page Plugin in the shared Playwright pool
+- Why: at the 30-min cadence Apify billed ~14k posts/month against a ~500-post free tier; the account hit its $5 cap on 2026-09-25 and every fetch 403'd
+- Removed `apifyService.js`, the `apify_api_token` setting UI, and `/api/admin/settings/apify-api-token/test`
 
 **Version 3.0.0 (2026-03-31)**
 - Added Apify integration for Facebook trail status (Reagan-Huffman via medinaTRAILS page)
