@@ -1,0 +1,11 @@
+check = "unsafe_sql_construction"
+
+[[locations]]
+path = "backend/services/newsService.js"
+justification = "Four sites, all interpolating only code constants: filterKnownPages uses table = contentType === 'event' ? 'poi_events' : 'poi_news' with URLs bound as $1/$2; saveNewsItems and saveEventItems interpolate the module constant SQL_NORMALIZE_TITLE (a fixed TRIM/LOWER/REGEXP_REPLACE expression) with all values bound as $1..$4; getPoisForPipeline joins hard-coded clause fragments ('AND id != ALL($n)', 'AND events_url IS NOT NULL ...', 'AND history_dry_runs < $n') and a hard-coded ORDER BY ternary, with every value pushed to params. No request, LLM or row data reaches the SQL text."
+classification = "by_design"
+
+[[locations]]
+path = "backend/scripts/backfill-news-images.js"
+justification = "processTable(table) interpolates the table name only; its sole callers are main()'s literal processTable('poi_news') and processTable('poi_events'). image_url and id are bound as $1/$2. Operator CLI, not reachable from requests."
+classification = "by_design"

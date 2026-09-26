@@ -43,7 +43,7 @@ async function runActorSync(actorId, input, token) {
   });
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => 'unknown error');
+    const errorText = await response.text().catch(err => `unreadable error body: ${err.message}`);
     throw new Error(`Apify API error ${response.status}: ${errorText}`);
   }
 

@@ -50,9 +50,7 @@ export function extractContentFromEmail(html, text) {
       ];
 
       for (const selector of removeSelectors) {
-        try {
-          doc.querySelectorAll(selector).forEach(el => el.remove());
-        } catch { /* expected */ }
+        doc.querySelectorAll(selector).forEach(el => el.remove());
       }
 
       const markdown = turndown.turndown(doc.body.innerHTML);

@@ -16,26 +16,21 @@ const logger = createLogger('Render');
  * @returns {boolean}
  */
 export function isGenericUrl(url) {
-  if (!url) return false;
-  try {
-    const parsed = new URL(url);
-    const path = parsed.pathname.replace(/\/+$/, '');
+  if (!url || !URL.canParse(url)) return false;
+  const path = new URL(url).pathname.replace(/\/+$/, '');
 
-    if (!path || path === '') return true;
+  if (!path || path === '') return true;
 
-    const genericPaths = [
-      '/news', '/events', '/blog', '/press', '/about',
-      '/articles', '/stories', '/updates', '/calendar',
-      '/programs', '/activities', '/happenings'
-    ];
-    if (genericPaths.includes(path.toLowerCase())) return true;
+  const genericPaths = [
+    '/news', '/events', '/blog', '/press', '/about',
+    '/articles', '/stories', '/updates', '/calendar',
+    '/programs', '/activities', '/happenings'
+  ];
+  if (genericPaths.includes(path.toLowerCase())) return true;
 
-    if (/\/(index|default|home)\.(html?|php|aspx?)$/i.test(path)) return true;
+  if (/\/(index|default|home)\.(html?|php|aspx?)$/i.test(path)) return true;
 
-    return false;
-  } catch {
-    return false;
-  }
+  return false;
 }
 
 /**

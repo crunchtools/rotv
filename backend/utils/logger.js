@@ -3,12 +3,9 @@
 // LOG_LEVEL (debug | info | warn | error, default info) filters it.
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
 
-function threshold() {
-  return LEVELS[(process.env.LOG_LEVEL || 'info').toLowerCase()] ?? LEVELS.info;
-}
-
 function emit(sink, level, tag, args) {
-  if (LEVELS[level] < threshold()) return;
+  const threshold = LEVELS[(process.env.LOG_LEVEL || 'info').toLowerCase()] ?? LEVELS.info;
+  if (LEVELS[level] < threshold) return;
   if (typeof args[0] === 'string') {
     sink(`[${tag}] ${args[0]}`, ...args.slice(1));
   } else {

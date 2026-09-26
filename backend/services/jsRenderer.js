@@ -150,6 +150,14 @@ async function loginToTwitter(page, credentials = {}) {
   }
 }
 
+// The hard-timeout timer, the render's own error path and its success path can all
+// try to hand the browser back; release the acquisition exactly once.
+function releaseAcquisition(contextRef) {
+  if (contextRef.released || contextRef.acquisitionId == null) return;
+  contextRef.released = true;
+  releaseBrowser(contextRef.acquisitionId);
+}
+
 export async function renderJavaScriptPage(url, options = {}) {
   const {
     timeout = 15000,
@@ -165,7 +173,7 @@ export async function renderJavaScriptPage(url, options = {}) {
   logger.info(`Acquiring browser context for: ${url}`);
 
   // Only the BrowserContext gets closed on hard timeout — the shared browser process stays alive
-  let contextRef = { context: null, acquisitionId: null };
+  let contextRef = { context: null, acquisitionId: null, released: false };
   let hardTimeoutId;
   let isTimedOut = false;
 
@@ -177,7 +185,7 @@ export async function renderJavaScriptPage(url, options = {}) {
       if (contextRef.context) {
         try {
           await contextRef.context.close();
-          releaseBrowser(contextRef.acquisitionId);
+          releaseAcquisition(contextRef);
           logger.info(`✓ Context force-closed after hard timeout`);
         } catch (closeError) {
           logger.error(`Failed to force-close context: ${closeError.message}`);
@@ -215,12 +223,9 @@ export async function renderJavaScriptPage(url, options = {}) {
     clearTimeout(hardTimeoutId);
 
     if (isTimedOut && contextRef.context) {
-      try {
-        await contextRef.context.close();
-        releaseBrowser(contextRef.acquisitionId);
-      } catch (e) {
-        // ignore
-      }
+      await contextRef.context.close()
+        .catch(err => logger.warn(`Context close after timeout failed for ${url}: ${err.message}`));
+      releaseAcquisition(contextRef);
     }
   }
 }
@@ -325,8 +330,8 @@ async function renderJavaScriptPageInternal(url, options) {
 
     if (waitForSelector) {
       logger.info(`Waiting for selector: ${waitForSelector}`);
-      await page.waitForSelector(waitForSelector, { timeout: 10000 }).catch(() => {
-        logger.info(`Selector ${waitForSelector} not found, continuing anyway`);
+      await page.waitForSelector(waitForSelector, { timeout: 10000 }).catch(err => {
+        logger.info(`Selector ${waitForSelector} not found, continuing anyway: ${err.message}`);
       });
     }
 
@@ -445,7 +450,7 @@ async function renderJavaScriptPageInternal(url, options) {
     logger.info(`  Found ${content.links.length} links on page`);
 
     await context.close();
-    releaseBrowser(contextRef.acquisitionId);
+    releaseAcquisition(contextRef);
 
     return {
       ...content,
@@ -456,9 +461,9 @@ async function renderJavaScriptPageInternal(url, options) {
     logger.error(`❌ Error rendering ${url}:`, error.message);
 
     if (context) {
-      await context.close().catch(() => {});
-      releaseBrowser(contextRef.acquisitionId);
+      await context.close().catch(err => logger.warn(`Context close failed for ${url}: ${err.message}`));
     }
+    releaseAcquisition(contextRef);
 
     return {
       text: '',
@@ -473,6 +478,8 @@ async function renderJavaScriptPageInternal(url, options) {
 
 export function extractEventContent(text) {
   const lines = text.split('\n');
+  const thisYear = new Date().getFullYear();
+  const nearbyYears = [thisYear - 1, thisYear, thisYear + 1].map(String);
 
   const eventLines = lines.filter(line => {
     const lower = line.toLowerCase().trim();
@@ -487,7 +494,7 @@ export function extractEventContent(text) {
       'hike', 'walk', 'festival', 'concert', 'volunteer',
       'january', 'february', 'march', 'april', 'may', 'june',
       'july', 'august', 'september', 'october', 'november', 'december',
-      '2026', '2025', 'upcoming', 'register', 'rsvp'
+      ...nearbyYears, 'upcoming', 'register', 'rsvp'
     ];
 
     return eventKeywords.some(kw => lower.includes(kw));

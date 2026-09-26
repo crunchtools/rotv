@@ -101,22 +101,6 @@ export async function ensureDriveFolders(drive, pool) {
   return { rootFolderId, iconsFolderId, imagesFolderId, geospatialFolderId };
 }
 
-export async function moveFileToFolder(drive, fileId, folderId) {
-  const file = await drive.files.get({
-    fileId,
-    fields: 'parents'
-  });
-
-  const previousParents = file.data.parents?.join(',') || '';
-
-  await drive.files.update({
-    fileId,
-    addParents: folderId,
-    removeParents: previousParents,
-    fields: 'id,parents'
-  });
-}
-
 export async function uploadIconToDrive(drive, pool, iconName, svgContent) {
   const { iconsFolderId } = await ensureDriveFolders(drive, pool);
 
@@ -196,62 +180,16 @@ export async function uploadImageToDrive(drive, pool, filename, buffer, mimeType
   return fileId;
 }
 
-export async function uploadGeoJSONToDrive(drive, pool, filename, geojsonData) {
-  const { geospatialFolderId } = await ensureDriveFolders(drive, pool);
-
-  if (!filename.endsWith('.geojson')) {
-    filename = `${filename}.geojson`;
-  }
-
-  const content = typeof geojsonData === 'string' ? geojsonData : JSON.stringify(geojsonData, null, 2);
-
-  const existingFileId = await findFileInFolder(drive, geospatialFolderId, filename);
-
-  let fileId;
-  if (existingFileId) {
-    await drive.files.update({
-      fileId: existingFileId,
-      media: {
-        mimeType: 'application/geo+json',
-        body: Readable.from([content])
-      }
-    });
-    fileId = existingFileId;
-  } else {
-    const response = await drive.files.create({
-      requestBody: {
-        name: filename,
-        mimeType: 'application/geo+json',
-        parents: [geospatialFolderId]
-      },
-      media: {
-        mimeType: 'application/geo+json',
-        body: Readable.from([content])
-      },
-      fields: 'id'
-    });
-    fileId = response.data.id;
-  }
-
-  return fileId;
-}
-
-export async function downloadGeoJSONFromDrive(drive, fileId) {
-  const buffer = await downloadFileFromDrive(drive, fileId);
-  if (!buffer) return null;
-
-  try {
-    return JSON.parse(buffer.toString('utf-8'));
-  } catch (error) {
-    logger.error('Failed to parse GeoJSON from Drive:', error.message);
-    return null;
-  }
+// Drive query string literals are single-quoted; backslash-escape \ and ' so a
+// filename containing a quote cannot break (or alter) the query.
+function escapeDriveQueryValue(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 async function findFileInFolder(drive, folderId, filename) {
   try {
     const response = await drive.files.list({
-      q: `'${folderId}' in parents and name = '${filename}' and trashed = false`,
+      q: `'${escapeDriveQueryValue(folderId)}' in parents and name = '${escapeDriveQueryValue(filename)}' and trashed = false`,
       fields: 'files(id)',
       pageSize: 1
     });
@@ -262,25 +200,6 @@ async function findFileInFolder(drive, folderId, filename) {
   }
 }
 
-export async function downloadFileFromDrive(drive, fileId) {
-  try {
-    const response = await drive.files.get({
-      fileId,
-      alt: 'media'
-    }, {
-      responseType: 'arraybuffer'
-    });
-
-    return Buffer.from(response.data);
-  } catch (error) {
-    if (error.code === 404) {
-      logger.warn(`File ${fileId} not found in Drive`);
-      return null;
-    }
-    throw error;
-  }
-}
-
 export async function deleteFileFromDrive(drive, fileId) {
   try {
     await drive.files.delete({ fileId });
@@ -288,21 +207,6 @@ export async function deleteFileFromDrive(drive, fileId) {
   } catch (error) {
     if (error.code === 404) {
       return true;
-    }
-    throw error;
-  }
-}
-
-export async function getFileMetadata(drive, fileId) {
-  try {
-    const response = await drive.files.get({
-      fileId,
-      fields: 'id,name,mimeType,size,createdTime,modifiedTime,webViewLink'
-    });
-    return response.data;
-  } catch (error) {
-    if (error.code === 404) {
-      return null;
     }
     throw error;
   }
@@ -414,19 +318,4 @@ export function createDriveService(credentials) {
 export async function createDriveServiceWithRefresh(credentials, pool, userId) {
   const oauth2Client = await createOAuth2Client(credentials, pool, userId);
   return google.drive({ version: 'v3', auth: oauth2Client });
-}
-
-export async function isFileTrashed(drive, fileId) {
-  try {
-    const response = await drive.files.get({
-      fileId,
-      fields: 'trashed'
-    });
-    return response.data.trashed === true;
-  } catch (error) {
-    if (error.code === 404) {
-      return null;
-    }
-    throw error;
-  }
 }

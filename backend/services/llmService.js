@@ -541,7 +541,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     logger.error('Failed to parse Pass 1 response:', pass1Text);
     logError(runId, 'research', null, destination.name, `Research v2 Pass 1 failed: ${destination.name}`, { error_stack: pass1Text.slice(0, 500) });
     await flushJobLogs();
-    throw new Error('AI returned invalid format in Pass 1. Please try again.');
+    throw new Error('AI returned invalid format in Pass 1. Please try again.', { cause: e });
   }
 
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1 complete: ${destination.name}`, { fields: Object.keys(pass1Data) });
@@ -565,7 +565,7 @@ export async function researchLocationMultiPass(pool, destination, availableActi
     logger.error('Failed to parse Pass 2 response:', pass2Text);
     logError(runId, 'research', null, destination.name, `Research v2 Pass 2 failed: ${destination.name}`, { error_stack: pass2Text.slice(0, 500) });
     await flushJobLogs();
-    throw new Error('AI returned invalid format in Pass 2. Please try again.');
+    throw new Error('AI returned invalid format in Pass 2. Please try again.', { cause: e });
   }
 
   let eraId = null;

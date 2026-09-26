@@ -103,13 +103,9 @@ export const DENY_LISTS = [
     reason: 'Rejected: source domain is on the URL blocklist',
     contentTypes: ['news', 'event'],
     matches: (row, prefixes) => {
-      let norm;
-      try {
-        const u = new URL(row.source_url);
-        norm = (u.hostname.toLowerCase().replace(/^www\./, '') + u.pathname).toLowerCase().replace(/\/+$/, '');
-      } catch {
-        return false;
-      }
+      if (!URL.canParse(row.source_url)) return false;
+      const u = new URL(row.source_url);
+      const norm = (u.hostname.toLowerCase().replace(/^www\./, '') + u.pathname).toLowerCase().replace(/\/+$/, '');
       return prefixes.some(p => typeof p === 'string' && p.trim() && norm.startsWith(normalizeBlocklistPrefix(p)));
     },
     sweepFragment: (prefixes) => {

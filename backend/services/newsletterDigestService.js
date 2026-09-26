@@ -162,7 +162,7 @@ export function digestEventLocation(event) {
   return `${venue} · ${poiName}`;
 }
 
-export function upcomingFridayISO(tz = 'America/New_York') {
+function upcomingFridayISO(tz = 'America/New_York') {
   const now = new Date();
   const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now);
   const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -171,7 +171,7 @@ export function upcomingFridayISO(tz = 'America/New_York') {
   return new Date(now.getTime() + daysAhead * 86400000).toISOString();
 }
 
-export async function generateDigest(pool, tz = 'America/New_York', asOfDate = null) {
+async function generateDigest(pool, tz = 'America/New_York', asOfDate = null) {
   const [{ events, news }, greeting] = await Promise.all([
     fetchDigestContent(pool, tz, asOfDate),
     fetchDigestGreeting(pool)

@@ -22,7 +22,7 @@ export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
     });
 
     if (!response.ok) {
-      const errorText = await response.text().catch(() => 'unknown error');
+      const errorText = await response.text().catch(err => `unreadable error body: ${err.message}`);
       throw new Error(`Bluesky API error ${response.status}: ${errorText}`);
     }
 
