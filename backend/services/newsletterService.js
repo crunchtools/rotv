@@ -14,6 +14,10 @@ import nodemailer from 'nodemailer';
 import { collectPoi, saveNewsItems, saveEventItems } from './newsService.js';
 import { queueNewsletterJob } from './jobScheduler.js';
 import { logInfo, flush as flushJobLogs } from './jobLogger.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Newsletter');
+const smtpLogger = createLogger('SMTP');
 
 const turndown = new TurndownService({
   headingStyle: 'atx',
@@ -54,7 +58,7 @@ export function extractContentFromEmail(html, text) {
       const markdown = turndown.turndown(doc.body.innerHTML);
       return markdown.replace(/\n{3,}/g, '\n\n').trim();
     } catch (error) {
-      console.error('[Newsletter] HTML parsing failed, falling back to text:', error.message);
+      logger.error('HTML parsing failed, falling back to text:', error.message);
     }
   }
 
@@ -114,7 +118,7 @@ export async function processNewsletterById(pool, emailId) {
   );
 
   if (emailRow.rows.length === 0) {
-    console.error(`[Newsletter] Email #${emailId} not found`);
+    logger.error(`Email #${emailId} not found`);
     return;
   }
 
@@ -145,7 +149,7 @@ export async function processNewsletterById(pool, emailId) {
        WHERE id = $1`,
       [emailId]
     );
-    console.log(`[Newsletter] New source discovered: "${from}" — awaiting admin triage`);
+    logger.info(`New source discovered: "${from}" — awaiting admin triage`);
     return;
   }
 
@@ -158,7 +162,7 @@ export async function processNewsletterById(pool, emailId) {
        WHERE id = $1`,
       [emailId]
     );
-    console.log(`[Newsletter] Skipped #${emailId} — source "${from}" is blocked`);
+    logger.info(`Skipped #${emailId} — source "${from}" is blocked`);
     return;
   }
 
@@ -235,7 +239,7 @@ export async function processNewsletterById(pool, emailId) {
        WHERE id = $2`,
       [err.message, emailId]
     );
-    console.error(`[Newsletter] Processing failed for #${emailId}:`, err.message);
+    logger.error(`Processing failed for #${emailId}:`, err.message);
   }
 }
 
@@ -289,7 +293,7 @@ export function startSmtpServer(pool) {
               text: `--- Forwarded from ${originalFrom} ---\n\n${parsed.text || ''}`,
               html: parsed.html ? `<p><em>Forwarded from ${originalFrom}</em></p><hr>${parsed.html}` : undefined
             });
-            console.log(`[SMTP] Forwarded admin email to scott.mccarty@gmail.com: "${parsed.subject}" from ${originalFrom}`);
+            smtpLogger.info(`Forwarded admin email to scott.mccarty@gmail.com: "${parsed.subject}" from ${originalFrom}`);
             callback();
             return;
           }
@@ -309,10 +313,10 @@ export function startSmtpServer(pool) {
           const emailId = emailInsert.rows[0].id;
 
           await queueNewsletterJob(emailId);
-          console.log(`[SMTP] Queued email #${emailId}: "${subject}" from ${from}`);
+          smtpLogger.info(`Queued email #${emailId}: "${subject}" from ${from}`);
           callback();
         } catch (err) {
-          console.error('[SMTP] Failed to accept email:', err);
+          smtpLogger.error('Failed to accept email:', err);
           const error = new Error('Failed to accept message');
           error.responseCode = 451;
           callback(error);
@@ -322,11 +326,11 @@ export function startSmtpServer(pool) {
   });
 
   server.on('error', err => {
-    console.error('[SMTP] Server error:', err);
+    smtpLogger.error('Server error:', err);
   });
 
   server.listen(25, '::', () => {
-    console.log('[SMTP] Mail receiver listening on port 25');
+    smtpLogger.info('Mail receiver listening on port 25');
   });
 
   return server;

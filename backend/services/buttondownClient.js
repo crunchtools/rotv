@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ButtondownClient');
 
 const BUTTONDOWN_API_BASE = 'https://api.buttondown.email';
 
@@ -28,15 +31,15 @@ async function getApiKey(pool) {
         apiKeyCache = rawKey.replace(/[^\x20-\x7E]/g, '').trim();
 
         if (!/^[a-zA-Z0-9_-]+$/.test(apiKeyCache)) {
-          console.error('API key contains invalid characters. Key length:', apiKeyCache.length);
-          console.error('First 10 chars:', apiKeyCache.substring(0, 10));
+          logger.error('API key contains invalid characters. Key length:', apiKeyCache.length);
+          logger.error('First 10 chars:', apiKeyCache.substring(0, 10));
           throw new Error('Invalid API key format in database');
         }
 
         return apiKeyCache;
       }
     } catch (err) {
-      console.error('Error fetching Buttondown API key from database:', err);
+      logger.error('Error fetching Buttondown API key from database:', err);
     }
   }
 
@@ -45,7 +48,7 @@ async function getApiKey(pool) {
     apiKeyCache = rawKey.replace(/[^\x20-\x7E]/g, '').trim();
 
     if (!/^[a-zA-Z0-9_-]+$/.test(apiKeyCache)) {
-      console.error('Environment API key contains invalid characters');
+      logger.error('Environment API key contains invalid characters');
       throw new Error('Invalid API key format in environment');
     }
 
@@ -78,7 +81,7 @@ async function retryRequest(requestFn, maxRetries = 3) {
       return await requestFn();
     } catch (error) {
       lastError = error;
-      console.error(`Buttondown API attempt ${attempt}/${maxRetries} failed:`, error.message);
+      logger.error(`Buttondown API attempt ${attempt}/${maxRetries} failed:`, error.message);
 
       if (attempt < maxRetries) {
         const delay = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
@@ -92,7 +95,7 @@ async function retryRequest(requestFn, maxRetries = 3) {
 
 export async function addSubscriber(email, pool = null) {
   if (!isSendEnabled()) {
-    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping addSubscriber');
+    logger.info('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping addSubscriber');
     return { email, status: 'send_disabled', skipped: true };
   }
 
@@ -107,7 +110,7 @@ export async function addSubscriber(email, pool = null) {
       });
       return response.data;
     } catch (error) {
-      console.error('Buttondown addSubscriber error:', {
+      logger.error('Buttondown addSubscriber error:', {
         status: error.response?.status,
         statusText: error.response?.statusText,
         data: error.response?.data,
@@ -121,7 +124,7 @@ export async function addSubscriber(email, pool = null) {
         errorCode === 'email_already_exists' ||
         (errorDetail && typeof errorDetail === 'string' && errorDetail.includes('already subscribed'))
       )) {
-        console.log(`Subscriber ${email} already exists (confirmed or pending confirmation)`);
+        logger.info(`Subscriber ${email} already exists (confirmed or pending confirmation)`);
         return {
           email,
           status: 'already_subscribed',
@@ -130,7 +133,7 @@ export async function addSubscriber(email, pool = null) {
       }
 
       if (error.response?.status === 400 && Array.isArray(errorDetail) && errorDetail[0]?.msg?.includes('already exists')) {
-        console.log(`Subscriber ${email} already exists (array format), ignoring duplicate`);
+        logger.info(`Subscriber ${email} already exists (array format), ignoring duplicate`);
         return { email, status: 'already_subscribed' };
       }
 
@@ -156,7 +159,7 @@ export async function getSubscriberCount(pool = null) {
 
 export async function sendEmail(subject, htmlBody, pool = null, { existingEmailId, onDraftCreated } = {}) {
   if (!isSendEnabled()) {
-    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping sendEmail');
+    logger.info('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping sendEmail');
     return { skipped: true, reason: 'send_disabled' };
   }
 
@@ -166,9 +169,9 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
 
   if (existingEmailId) {
     emailId = existingEmailId;
-    console.log(`Resuming with existing draft: ${emailId}`);
+    logger.info(`Resuming with existing draft: ${emailId}`);
   } else {
-    console.log(`Creating draft email: "${subject}"`);
+    logger.info(`Creating draft email: "${subject}"`);
 
     let createResponse;
     try {
@@ -179,12 +182,12 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
         email_type: 'public'
       });
     } catch (error) {
-      console.error(`Draft creation failed:`, error.response?.status, error.response?.data);
+      logger.error(`Draft creation failed:`, error.response?.status, error.response?.data);
       throw error;
     }
 
     emailId = createResponse.data.id;
-    console.log(`Created email draft: ${emailId}`);
+    logger.info(`Created email draft: ${emailId}`);
 
     if (onDraftCreated) {
       await onDraftCreated(emailId);
@@ -199,13 +202,13 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
       status: 'scheduled'
     };
 
-    console.log(`Scheduling email ${emailId} with payload:`, JSON.stringify(payload));
+    logger.info(`Scheduling email ${emailId} with payload:`, JSON.stringify(payload));
 
     try {
       const scheduleClient = createClient(apiKey);
       const sendResponse = await scheduleClient.patch(`/v1/emails/${emailId}`, payload);
 
-      console.log(`Scheduled email for sending: ${emailId} (status: ${sendResponse.data.status})`);
+      logger.info(`Scheduled email for sending: ${emailId} (status: ${sendResponse.data.status})`);
       return sendResponse.data;
     } catch (error) {
       // Scrub the API token from the error so it never lands in logs or the
@@ -222,7 +225,7 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
         requestPayload: payload
       };
 
-      console.error(`Buttondown PATCH failed:`, JSON.stringify(errorDetails, null, 2));
+      logger.error(`Buttondown PATCH failed:`, JSON.stringify(errorDetails, null, 2));
 
       error.buttondownDetails = errorDetails;
       throw error;
@@ -232,7 +235,7 @@ export async function sendEmail(subject, htmlBody, pool = null, { existingEmailI
 
 export async function sendDraftToRecipients(subject, htmlBody, recipients, pool = null) {
   if (!isSendEnabled()) {
-    console.log('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping sendDraftToRecipients');
+    logger.info('Newsletter send disabled (NEWSLETTER_SEND_ENABLED is not "true"), skipping sendDraftToRecipients');
     return { emailId: null, skipped: true, reason: 'send_disabled' };
   }
 

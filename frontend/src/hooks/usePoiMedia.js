@@ -48,7 +48,6 @@ export default function usePoiMedia(poi, onPoiUpdate) {
 
     const handleMediaUpdateEvent = (event) => {
       if (event.detail.poiId === poiId) {
-        console.log('[Sidebar] POI media updated for', poiId, '- refreshing...');
         fetch(`/api/pois/${poiId}/media`, { credentials: 'include' })
           .then(res => res.json())
           .then(mediaResponse => {

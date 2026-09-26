@@ -1,4 +1,7 @@
 import { logInfo, logError } from '../jobLogger.js';
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('BatchRunner');
 
 export async function runBatch({
   pool,
@@ -35,7 +38,7 @@ export async function runBatch({
       const shouldCancel = await checkCancelled();
       if (shouldCancel) {
         cancelled = true;
-        console.log(`[${label} Job ${jobId}] Cancellation detected, stopping new item processing`);
+        logger.info(`[${label} Job ${jobId}] Cancellation detected, stopping new item processing`);
         if (inFlight === 0) resolveAll();
         return;
       }
@@ -52,7 +55,7 @@ export async function runBatch({
 
     const slotId = tracker.findFirstAvailableSlot(jobId);
     if (slotId === null) {
-      console.warn(`[${label} Job ${jobId}] No available display slot for item ${index} — all ${maxConcurrency} slots occupied`);
+      logger.warn(`[${label} Job ${jobId}] No available display slot for item ${index} — all ${maxConcurrency} slots occupied`);
     }
     const context = { slotId, jobId, index, total: items.length };
 
@@ -60,7 +63,7 @@ export async function runBatch({
       try {
         await onItemStart(item, context);
       } catch (err) {
-        console.error(`[${label} Job ${jobId}] onItemStart error for item ${index}:`, err.message);
+        logger.error(`[${label} Job ${jobId}] onItemStart error for item ${index}:`, err.message);
       }
     }
 
@@ -71,19 +74,19 @@ export async function runBatch({
       try {
         await checkpointFn(item, collected, error);
       } catch (checkpointError) {
-        console.error(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Checkpoint failed: ${checkpointError.message}`);
+        logger.error(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Checkpoint failed: ${checkpointError.message}`);
       }
     };
 
     try {
-      console.log(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Starting (Slot ${slotId}, ${inFlight} in flight)`);
+      logger.info(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Starting (Slot ${slotId}, ${inFlight} in flight)`);
 
       const collected = await collectFn(item, context);
       results.push({ item, result: collected, success: true });
 
       await safeCheckpoint(collected, null);
     } catch (error) {
-      console.error(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Error: ${error.message}`);
+      logger.error(`[${label} Job ${jobId}] [${index + 1}/${items.length}] Error: ${error.message}`);
       results.push({ item, result: null, success: false, error: error.message });
 
       await safeCheckpoint(null, error);

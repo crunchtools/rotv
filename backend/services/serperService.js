@@ -16,6 +16,9 @@
 import fetch from 'node-fetch';
 import { getContainingBoundaries } from './geoService.js';
 import { serperRequestFor } from './newsPipelines.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Serper');
 
 
 /**
@@ -70,7 +73,7 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news', pipeline
     : serperRequestFor(pipeline, poi.name, context, queryIndex);
   const { query } = request;
   const endpoints = [request.endpoint];
-  console.log(`[Serper] Query: "${query}" (grounded: ${!!context}, endpoint: ${request.endpoint}${request.extraBody.tbs ? `, tbs=${request.extraBody.tbs}` : ''})`);
+  logger.info(`Query: "${query}" (grounded: ${!!context}, endpoint: ${request.endpoint}${request.extraBody.tbs ? `, tbs=${request.extraBody.tbs}` : ''})`);
 
   const perEndpoint = await Promise.all(endpoints.map(async endpoint => {
     const response = await fetch(`https://google.serper.dev/${endpoint}`, {
@@ -108,7 +111,7 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news', pipeline
     }
   }
 
-  console.log(`[Serper] Found ${urls.length} external ${contentType} URLs (${urls.filter(u => u.date).length} with dates) from ${endpoints.join('+')}`);
+  logger.info(`Found ${urls.length} external ${contentType} URLs (${urls.filter(u => u.date).length} with dates) from ${endpoints.join('+')}`);
 
   return {
     query,
@@ -151,7 +154,7 @@ export async function testSerperApiKey(pool) {
 
     return response.ok;
   } catch (err) {
-    console.error('[Serper] API key test failed:', err.message);
+    logger.error('API key test failed:', err.message);
     return false;
   }
 }

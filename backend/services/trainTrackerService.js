@@ -1,3 +1,7 @@
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('TrainTracker');
+
 /**
  * CVSR Train Tracker Service (#038)
  *
@@ -51,7 +55,7 @@ async function getSharingToken(dbPool = pool) {
     );
     return (rows[0]?.value || '').trim() || envToken;
   } catch (err) {
-    console.warn(`[TrainTracker] Could not read usft_sharing_token, using env fallback: ${err.message}`);
+    logger.warn(`Could not read usft_sharing_token, using env fallback: ${err.message}`);
     return envToken;
   }
 }
@@ -95,7 +99,7 @@ export async function onSharingTokenChanged(dbPool = pool) {
       [LVGPS_VIEW_BASE + token, LVGPS_VIEW_BASE + '%']
     );
   } catch (err) {
-    console.warn(`[TrainTracker] Could not sync live_tracker_url after token change: ${err.message}`);
+    logger.warn(`Could not sync live_tracker_url after token change: ${err.message}`);
   }
 }
 
@@ -116,7 +120,7 @@ async function authenticate() {
 
   const authResponse = await res.json();
   jwt = authResponse.token;
-  console.log('[TrainTracker] Authenticated with USFT');
+  logger.info('Authenticated with USFT');
 }
 
 // One poll cycle. Authenticates lazily, fetches the device, updates position.
@@ -134,7 +138,7 @@ export async function pollOnce() {
     });
 
     if (res.status === 400 || res.status === 401) {
-      console.log(`[TrainTracker] Auth rejected (${res.status}), re-authenticating`);
+      logger.info(`Auth rejected (${res.status}), re-authenticating`);
       jwt = null;
       await authenticate();
       return;
@@ -142,7 +146,7 @@ export async function pollOnce() {
 
     if (!res.ok) {
       lastError = `poll failed: ${res.status}`;
-      console.warn(`[TrainTracker] Poll failed: ${res.status}`);
+      logger.warn(`Poll failed: ${res.status}`);
       return;
     }
 
@@ -185,7 +189,7 @@ export async function pollOnce() {
     // it); the next cycle retries. Do not rethrow — that would stop nothing here
     // but keeps the invariant that the loop is the only thing that can fail.
     lastError = err.message;
-    console.warn(`[TrainTracker] Poll error: ${err.message}`);
+    logger.warn(`Poll error: ${err.message}`);
   }
 }
 
@@ -198,16 +202,16 @@ export async function startTrainTracker(dbPool) {
       `SELECT value FROM admin_settings WHERE key = 'live_train_tracker_enabled'`
     );
     if (setting.rows[0]?.value === 'false') {
-      console.log('[TrainTracker] Disabled via admin setting — not starting');
+      logger.info('Disabled via admin setting — not starting');
       return;
     }
   } catch (err) {
     // A DB hiccup at boot must not prevent the tracker from starting.
-    console.warn(`[TrainTracker] Could not read admin setting, proceeding: ${err.message}`);
+    logger.warn(`Could not read admin setting, proceeding: ${err.message}`);
   }
 
   if (!(await getSharingToken())) {
-    console.log('[TrainTracker] No USFT sharing token configured (admin setting or env) — not starting');
+    logger.info('No USFT sharing token configured (admin setting or env) — not starting');
     return;
   }
 
@@ -222,10 +226,10 @@ export async function startTrainTracker(dbPool) {
   // Proactively refresh the JWT so we rarely hit a mid-poll 401.
   if (jwtTimer) clearInterval(jwtTimer);
   jwtTimer = setInterval(() => {
-    authenticate().catch(err => console.warn(`[TrainTracker] JWT refresh failed: ${err.message}`));
+    authenticate().catch(err => logger.warn(`JWT refresh failed: ${err.message}`));
   }, JWT_REFRESH_MS);
 
-  console.log('[TrainTracker] Started (self-healing poll loop)');
+  logger.info('Started (self-healing poll loop)');
 }
 
 export function stopTrainTracker() {
@@ -236,7 +240,7 @@ export function stopTrainTracker() {
   lastPollOkAt = 0;
   lastError = null;
   enabled = false;
-  console.log('[TrainTracker] Stopped');
+  logger.info('Stopped');
 }
 
 function isStale() {

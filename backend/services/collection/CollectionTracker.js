@@ -1,3 +1,7 @@
+import { createLogger } from '../../utils/logger.js';
+
+const logger = createLogger('CollectionTracker');
+
 export class CollectionTracker {
   constructor(label) {
     this.label = label;
@@ -68,7 +72,7 @@ export class CollectionTracker {
       status: null
     }));
     this.jobDisplaySlots.set(jobId, slots);
-    console.log(`[${this.label} Job ${jobId}] Initialized ${count} display slots`);
+    logger.info(`[${this.label} Job ${jobId}] Initialized ${count} display slots`);
   }
 
   findFirstAvailableSlot(jobId) {
@@ -96,7 +100,7 @@ export class CollectionTracker {
       status: 'active'
     };
 
-    console.log(`[${this.label} Job ${jobId}] Assigned POI ${poiId} (${poiName}) to Slot ${slotId}`);
+    logger.info(`[${this.label} Job ${jobId}] Assigned POI ${poiId} (${poiName}) to Slot ${slotId}`);
   }
 
   _updateSlotFromProgress(jobId, slotId, progress) {
@@ -138,7 +142,7 @@ export class CollectionTracker {
 
   clearDisplaySlots(jobId) {
     this.jobDisplaySlots.delete(jobId);
-    console.log(`[${this.label} Job ${jobId}] Cleared display slots`);
+    logger.info(`[${this.label} Job ${jobId}] Cleared display slots`);
   }
 
   requestCancellation(poiId) {
@@ -148,7 +152,7 @@ export class CollectionTracker {
         cancellationRequested: true,
         message: 'Cancellation requested...'
       });
-      console.log(`[${this.label}] Cancellation requested for POI ${poiId}`);
+      logger.info(`[${this.label}] Cancellation requested for POI ${poiId}`);
       return true;
     }
     return false;

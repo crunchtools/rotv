@@ -1,5 +1,8 @@
 import { Readable } from 'stream';
 import { google } from 'googleapis';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('DriveImage');
 
 const ROOT_FOLDER_NAME = 'Roots of The Valley';
 const ICONS_FOLDER_NAME = 'Icons';
@@ -69,28 +72,28 @@ async function createFolder(drive, name, parentId = null) {
 export async function ensureDriveFolders(drive, pool) {
   let rootFolderId = await getDriveSetting(pool, 'root_folder_id');
   if (!rootFolderId || !(await folderExists(drive, rootFolderId))) {
-    console.log('Creating Roots of The Valley folder...');
+    logger.info('Creating Roots of The Valley folder...');
     rootFolderId = await createFolder(drive, ROOT_FOLDER_NAME);
     await setDriveSetting(pool, 'root_folder_id', rootFolderId);
   }
 
   let iconsFolderId = await getDriveSetting(pool, 'icons_folder_id');
   if (!iconsFolderId || !(await folderExists(drive, iconsFolderId))) {
-    console.log('Creating Icons folder...');
+    logger.info('Creating Icons folder...');
     iconsFolderId = await createFolder(drive, ICONS_FOLDER_NAME, rootFolderId);
     await setDriveSetting(pool, 'icons_folder_id', iconsFolderId);
   }
 
   let imagesFolderId = await getDriveSetting(pool, 'images_folder_id');
   if (!imagesFolderId || !(await folderExists(drive, imagesFolderId))) {
-    console.log('Creating Images folder...');
+    logger.info('Creating Images folder...');
     imagesFolderId = await createFolder(drive, IMAGES_FOLDER_NAME, rootFolderId);
     await setDriveSetting(pool, 'images_folder_id', imagesFolderId);
   }
 
   let geospatialFolderId = await getDriveSetting(pool, 'geospatial_folder_id');
   if (!geospatialFolderId || !(await folderExists(drive, geospatialFolderId))) {
-    console.log('Creating Geospatial folder...');
+    logger.info('Creating Geospatial folder...');
     geospatialFolderId = await createFolder(drive, GEOSPATIAL_FOLDER_NAME, rootFolderId);
     await setDriveSetting(pool, 'geospatial_folder_id', geospatialFolderId);
   }
@@ -186,7 +189,7 @@ export async function uploadImageToDrive(drive, pool, filename, buffer, mimeType
         }
       });
     } catch (permError) {
-      console.warn(`Failed to set public permission (non-fatal):`, permError.message);
+      logger.warn(`Failed to set public permission (non-fatal):`, permError.message);
     }
   }
 
@@ -240,7 +243,7 @@ export async function downloadGeoJSONFromDrive(drive, fileId) {
   try {
     return JSON.parse(buffer.toString('utf-8'));
   } catch (error) {
-    console.error('Failed to parse GeoJSON from Drive:', error.message);
+    logger.error('Failed to parse GeoJSON from Drive:', error.message);
     return null;
   }
 }
@@ -254,7 +257,7 @@ async function findFileInFolder(drive, folderId, filename) {
     });
     return response.data.files?.[0]?.id || null;
   } catch (error) {
-    console.error('Error finding file in folder:', error.message);
+    logger.error('Error finding file in folder:', error.message);
     return null;
   }
 }
@@ -271,7 +274,7 @@ export async function downloadFileFromDrive(drive, fileId) {
     return Buffer.from(response.data);
   } catch (error) {
     if (error.code === 404) {
-      console.warn(`File ${fileId} not found in Drive`);
+      logger.warn(`File ${fileId} not found in Drive`);
       return null;
     }
     throw error;
@@ -335,7 +338,7 @@ export async function countDriveFiles(drive, pool) {
       });
       iconsCount = response.data.files?.length || 0;
     } catch (error) {
-      console.error('Error counting icons:', error.message);
+      logger.error('Error counting icons:', error.message);
     }
   }
 
@@ -348,7 +351,7 @@ export async function countDriveFiles(drive, pool) {
       });
       imagesCount = response.data.files?.length || 0;
     } catch (error) {
-      console.error('Error counting images:', error.message);
+      logger.error('Error counting images:', error.message);
     }
   }
 
@@ -361,7 +364,7 @@ export async function countDriveFiles(drive, pool) {
       });
       geospatialCount = response.data.files?.length || 0;
     } catch (error) {
-      console.error('Error counting geospatial files:', error.message);
+      logger.error('Error counting geospatial files:', error.message);
     }
   }
 
@@ -392,7 +395,7 @@ async function createOAuth2Client(credentials, pool, userId) {
         );
       }
     } catch (refreshError) {
-      console.warn('Token refresh failed:', refreshError.message);
+      logger.warn('Token refresh failed:', refreshError.message);
     }
   }
 

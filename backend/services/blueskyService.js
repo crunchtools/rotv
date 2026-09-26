@@ -1,14 +1,18 @@
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Bluesky');
+
 const BLUESKY_API_BASE = 'https://public.api.bsky.app/xrpc';
 
 export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
   const handleMatch = statusUrl.match(/bsky\.app\/profile\/([^/?#]+)/);
   if (!handleMatch) {
-    console.log(`[Bluesky] Could not extract handle from: ${statusUrl}`);
+    logger.info(`Could not extract handle from: ${statusUrl}`);
     return { markdown: null, reachable: false, reason: 'invalid Bluesky URL' };
   }
   const handle = handleMatch[1];
 
-  console.log(`[Bluesky] Fetching posts for @${handle} (max ${maxItems})...`);
+  logger.info(`Fetching posts for @${handle} (max ${maxItems})...`);
 
   try {
     const apiUrl = `${BLUESKY_API_BASE}/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=${maxItems}&filter=posts_no_replies`;
@@ -26,7 +30,7 @@ export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
     const feed = authorFeed.feed || [];
 
     if (feed.length === 0) {
-      console.log(`[Bluesky] No posts found for @${handle}`);
+      logger.info(`No posts found for @${handle}`);
       return { markdown: null, reachable: true, reason: 'no posts found' };
     }
 
@@ -37,7 +41,7 @@ export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
       .filter(item => (item.post?.record?.text || '').trim().length > 0)
       .filter(item => {
         if (!item.post.record.createdAt) {
-          console.warn(`[Bluesky] Skipping post without createdAt for @${handle}`);
+          logger.warn(`Skipping post without createdAt for @${handle}`);
           return false;
         }
         return true;
@@ -45,16 +49,16 @@ export async function fetchBlueskyPosts(statusUrl, maxItems = 15) {
       .map(item => `[${item.post.record.createdAt}] ${item.post.record.text}`);
 
     if (posts.length === 0) {
-      console.log(`[Bluesky] Posts returned but no text content for @${handle}`);
+      logger.info(`Posts returned but no text content for @${handle}`);
       return { markdown: null, reachable: true, reason: 'posts found but no text content' };
     }
 
     const markdown = posts.join('\n\n---\n\n');
-    console.log(`[Bluesky] Got ${posts.length} posts for @${handle} (${markdown.length} chars)`);
+    logger.info(`Got ${posts.length} posts for @${handle} (${markdown.length} chars)`);
 
     return { markdown, reachable: true };
   } catch (err) {
-    console.error(`[Bluesky] Fetch error for @${handle}:`, err.message);
+    logger.error(`Fetch error for @${handle}:`, err.message);
     return { markdown: null, reachable: false, reason: `Bluesky error: ${err.message}` };
   }
 }

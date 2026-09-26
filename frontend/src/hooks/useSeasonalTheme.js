@@ -53,7 +53,6 @@ export default function useSeasonalTheme() {
 
       const now = new Date();
       const theme = calculateActiveTheme(config, now);
-      console.log('[Theme Debug] Hour:', now.getHours(), 'Active theme:', theme.activeTheme, 'Night mode:', theme.isNightMode);
       setActiveTheme(theme.activeTheme);
       setIsNightMode(theme.isNightMode);
     };
@@ -112,5 +111,3 @@ function calculateActiveTheme(config, now) {
     isNightMode: false
   };
 }
-
-

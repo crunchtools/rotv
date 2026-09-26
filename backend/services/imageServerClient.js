@@ -1,3 +1,7 @@
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('ImageServer');
+
 class ImageServerClient {
   constructor() {
     this.serverUrl = null;
@@ -10,9 +14,9 @@ class ImageServerClient {
     this.initialized = !!this.serverUrl;
 
     if (this.initialized) {
-      console.log(`[ImageServer] Initialized with server: ${this.serverUrl}`);
+      logger.info(`Initialized with server: ${this.serverUrl}`);
     } else {
-      console.warn('[ImageServer] Not configured - set IMAGE_SERVER_URL');
+      logger.warn('Not configured - set IMAGE_SERVER_URL');
     }
 
     return this.initialized;
@@ -65,11 +69,11 @@ class ImageServerClient {
       }
 
       const asset = await response.json();
-      console.log(`[ImageServer] Uploaded ${role} image for POI ${poiId}: asset ${asset.id}`);
+      logger.info(`Uploaded ${role} image for POI ${poiId}: asset ${asset.id}`);
 
       return { success: true, assetId: asset.id, asset };
     } catch (error) {
-      console.error(`[ImageServer] Failed to upload image:`, error);
+      logger.error(`Failed to upload image:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -97,11 +101,11 @@ class ImageServerClient {
       }
 
       const asset = await response.json();
-      console.log(`[ImageServer] Uploaded video for POI ${poiId}: asset ${asset.id}`);
+      logger.info(`Uploaded video for POI ${poiId}: asset ${asset.id}`);
 
       return { success: true, assetId: asset.id, asset };
     } catch (error) {
-      console.error(`[ImageServer] Failed to upload video:`, error);
+      logger.error(`Failed to upload video:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -131,7 +135,7 @@ class ImageServerClient {
         contentType
       };
     } catch (error) {
-      console.error(`[ImageServer] Failed to fetch asset data:`, error);
+      logger.error(`Failed to fetch asset data:`, error);
       return {
         success: false,
         error: error.message,
@@ -166,7 +170,7 @@ class ImageServerClient {
         contentType
       };
     } catch (error) {
-      console.error(`[ImageServer] Failed to fetch thumbnail:`, error);
+      logger.error(`Failed to fetch thumbnail:`, error);
       return {
         success: false,
         error: error.message,
@@ -189,10 +193,10 @@ class ImageServerClient {
         throw new Error(`Delete failed: ${response.status}`);
       }
 
-      console.log(`[ImageServer] Deleted asset: ${assetId}`);
+      logger.info(`Deleted asset: ${assetId}`);
       return { success: true };
     } catch (error) {
-      console.error(`[ImageServer] Failed to delete asset:`, error);
+      logger.error(`Failed to delete asset:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -216,7 +220,7 @@ class ImageServerClient {
 
       return await response.json();
     } catch (error) {
-      console.error(`[ImageServer] Failed to get POI assets:`, error);
+      logger.error(`Failed to get POI assets:`, error);
       return [];
     }
   }
@@ -256,7 +260,7 @@ class ImageServerClient {
       const asset = await response.json();
       return { success: true, asset };
     } catch (error) {
-      console.error(`[ImageServer] Failed to update asset:`, error);
+      logger.error(`Failed to update asset:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -278,7 +282,7 @@ class ImageServerClient {
       const asset = await response.json();
       return { success: true, asset };
     } catch (error) {
-      console.error(`[ImageServer] Failed to caption asset:`, error);
+      logger.error(`Failed to caption asset:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -306,7 +310,7 @@ class ImageServerClient {
 
       return await response.json();
     } catch (error) {
-      console.error(`[ImageServer] Search failed:`, error);
+      logger.error(`Search failed:`, error);
       return [];
     }
   }
@@ -340,7 +344,7 @@ class ImageServerClient {
         contentType
       };
     } catch (error) {
-      console.error(`[ImageServer] Failed to fetch theme video:`, error);
+      logger.error(`Failed to fetch theme video:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -405,7 +409,7 @@ class ImageServerClient {
 
       return await response.json();
     } catch (error) {
-      console.error(`[ImageServer] Failed to list all assets:`, error);
+      logger.error(`Failed to list all assets:`, error);
       return [];
     }
   }
@@ -428,7 +432,7 @@ class ImageServerClient {
 
       return await response.json();
     } catch (error) {
-      console.error(`[ImageServer] Bulk caption failed:`, error);
+      logger.error(`Bulk caption failed:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -447,7 +451,7 @@ class ImageServerClient {
       const buffer = await response.arrayBuffer();
       return { success: true, data: Buffer.from(buffer) };
     } catch (error) {
-      console.error('[ImageServer] Failed to fetch DB dump:', error);
+      logger.error('Failed to fetch DB dump:', error);
       return { success: false, error: error.message };
     }
   }
@@ -475,7 +479,7 @@ class ImageServerClient {
       const restoreResponse = await response.json();
       return { success: true, output: restoreResponse.output };
     } catch (error) {
-      console.error('[ImageServer] Failed to restore DB:', error);
+      logger.error('Failed to restore DB:', error);
       return { success: false, error: error.message };
     }
   }
@@ -513,7 +517,7 @@ class ImageServerClient {
 
       return { success: true, data: Buffer.from(buffer), contentType };
     } catch (error) {
-      console.error(`[ImageServer] Failed to fetch media ${subdir}/${filename}:`, error);
+      logger.error(`Failed to fetch media ${subdir}/${filename}:`, error);
       return { success: false, error: error.message };
     }
   }
@@ -540,7 +544,7 @@ class ImageServerClient {
 
       return { success: true };
     } catch (error) {
-      console.error(`[ImageServer] Failed to upload media ${subdir}/${filename}:`, error);
+      logger.error(`Failed to upload media ${subdir}/${filename}:`, error);
       return { success: false, error: error.message };
     }
   }

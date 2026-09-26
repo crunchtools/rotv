@@ -3,6 +3,9 @@ import { isAdmin } from '../middleware/auth.js';
 import { addSubscriber, getSubscriberCount, testApiKey } from '../services/buttondownClient.js';
 import { triggerDigestManually, triggerPreviewManually, queueNewsletterJob } from '../services/jobScheduler.js';
 import { sendDigestPreviewTo } from '../services/newsletterDigestService.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Newsletter');
 
 const router = express.Router();
 
@@ -44,8 +47,8 @@ export function createNewsletterRouter(pool) {
 
       res.json({ success: true, message: 'Check your email to confirm subscription' });
     } catch (error) {
-      console.error('Newsletter subscription error:', error.message);
-      console.error('Full error:', error);
+      logger.error('Newsletter subscription error:', error.message);
+      logger.error('Full error:', error);
 
       if (error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
         return res.status(503).json({
@@ -54,7 +57,7 @@ export function createNewsletterRouter(pool) {
       }
 
       const errorMsg = error.response?.data?.detail || error.message || 'Failed to subscribe. Please try again.';
-      console.error('Buttondown API response:', error.response?.data);
+      logger.error('Buttondown API response:', error.response?.data);
 
       res.status(500).json({ error: errorMsg });
     }
@@ -76,7 +79,7 @@ export function createNewsletterRouter(pool) {
         source: 'buttondown'
       });
     } catch (error) {
-      console.error('Newsletter stats error:', error);
+      logger.error('Newsletter stats error:', error);
       res.status(500).json({ error: 'Failed to fetch stats' });
     }
   });
@@ -90,7 +93,7 @@ export function createNewsletterRouter(pool) {
         jobId
       });
     } catch (error) {
-      console.error('Newsletter trigger error:', error);
+      logger.error('Newsletter trigger error:', error);
       res.status(500).json({ error: 'Failed to queue digest' });
     }
   });
@@ -100,7 +103,7 @@ export function createNewsletterRouter(pool) {
       const jobId = await triggerPreviewManually();
       res.json({ success: true, message: 'Newsletter preview queued', jobId });
     } catch (error) {
-      console.error('Newsletter preview trigger error:', error);
+      logger.error('Newsletter preview trigger error:', error);
       res.status(500).json({ error: 'Failed to queue preview' });
     }
   });
@@ -114,7 +117,7 @@ export function createNewsletterRouter(pool) {
       const previewSend = await sendDigestPreviewTo(pool, email);
       res.json(previewSend);
     } catch (error) {
-      console.error('Newsletter preview send error:', error);
+      logger.error('Newsletter preview send error:', error);
       const detail = error.response?.data?.detail || error.message;
       res.status(500).json({ error: detail || 'Failed to send preview' });
     }
@@ -123,14 +126,14 @@ export function createNewsletterRouter(pool) {
   router.post('/test-api-key', isAdmin, async (req, res) => {
     try {
       const apiKeyTestResult = await testApiKey(pool);
-      console.log(`Admin ${req.user.email} tested Buttondown API key - success`);
+      logger.info(`Admin ${req.user.email} tested Buttondown API key - success`);
       res.json({
         success: true,
         message: apiKeyTestResult.message,
         subscriberCount: apiKeyTestResult.subscriberCount
       });
     } catch (error) {
-      console.error('Buttondown API key test failed:', error);
+      logger.error('Buttondown API key test failed:', error);
       res.status(400).json({
         success: false,
         error: error.message || 'API key validation failed'
@@ -158,7 +161,7 @@ export function createNewsletterRouter(pool) {
       );
       res.json(rows.rows);
     } catch (error) {
-      console.error('Newsletter sources list error:', error);
+      logger.error('Newsletter sources list error:', error);
       res.status(500).json({ error: 'Failed to list newsletter sources' });
     }
   });
@@ -203,7 +206,7 @@ export function createNewsletterRouter(pool) {
         res.json({ success: true, message: 'Source updated' });
       }
     } catch (error) {
-      console.error('Newsletter source update error:', error);
+      logger.error('Newsletter source update error:', error);
       res.status(500).json({ error: 'Failed to update source' });
     }
   });
@@ -222,7 +225,7 @@ export function createNewsletterRouter(pool) {
       );
       res.json(rows.rows);
     } catch (error) {
-      console.error('Newsletter source emails error:', error);
+      logger.error('Newsletter source emails error:', error);
       res.status(500).json({ error: 'Failed to list emails for source' });
     }
   });
@@ -244,7 +247,7 @@ export function createNewsletterRouter(pool) {
       );
       res.json(rows.rows);
     } catch (error) {
-      console.error('Newsletter source discover error:', error);
+      logger.error('Newsletter source discover error:', error);
       res.status(500).json({ error: 'Failed to discover sources' });
     }
   });
@@ -261,7 +264,7 @@ export function createNewsletterRouter(pool) {
       );
       res.json({ success: true, message: `Source "${from_pattern}" added` });
     } catch (error) {
-      console.error('Newsletter source create error:', error);
+      logger.error('Newsletter source create error:', error);
       res.status(500).json({ error: 'Failed to create source' });
     }
   });
@@ -281,7 +284,7 @@ export function createNewsletterRouter(pool) {
 
       res.json({ success: true, message: `Deleted source and ${emails.rows.length} email(s)` });
     } catch (error) {
-      console.error('Newsletter source delete error:', error);
+      logger.error('Newsletter source delete error:', error);
       res.status(500).json({ error: 'Failed to delete source' });
     }
   });
@@ -302,7 +305,7 @@ export function createNewsletterRouter(pool) {
         res.send(email.body_text || '(empty)');
       }
     } catch (error) {
-      console.error('Newsletter email view error:', error);
+      logger.error('Newsletter email view error:', error);
       res.status(500).send('Failed to load email');
     }
   });
@@ -314,7 +317,7 @@ export function createNewsletterRouter(pool) {
       await queueNewsletterJob(id);
       res.json({ success: true, message: `Email #${id} queued for reprocessing` });
     } catch (error) {
-      console.error('Inbound newsletter reprocess error:', error);
+      logger.error('Inbound newsletter reprocess error:', error);
       res.status(500).json({ error: 'Failed to reprocess' });
     }
   });

@@ -1,4 +1,8 @@
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('Moderation');
+const filterListsLogger = createLogger('filterLists');
 
 // Unified handling for the admin-managed filter lists (mirrors the frontend's
 // single News & Events Filters section). One place to load a list setting, and
@@ -16,7 +20,7 @@ export async function loadListSetting(pool, key) {
     const parsed = JSON.parse(res.rows[0].value);
     return Array.isArray(parsed) ? parsed : [];
   } catch (e) {
-    console.error(`[filterLists] Failed to parse ${key}:`, e.message);
+    filterListsLogger.error(`Failed to parse ${key}:`, e.message);
     return [];
   }
 }
@@ -158,7 +162,7 @@ export async function sweepDenyLists(pool, { runId, logInfo } = {}) {
     }
   }
   if ((events + news) > 0) {
-    console.log(`[Moderation] Deny-list sweep rejected ${events} events, ${news} news`);
+    logger.info(`Deny-list sweep rejected ${events} events, ${news} news`);
     if (runId != null && logInfo) {
       logInfo(runId, 'moderation', null, null, `Deny-list sweep: rejected ${events} events, ${news} news`);
     }

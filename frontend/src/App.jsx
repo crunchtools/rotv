@@ -684,12 +684,10 @@ function AppContent() {
   }, [activeTab]);
 
   const refreshModerationCount = useCallback(async () => {
-    console.log('[App] Refreshing moderation count...');
     try {
       const response = await fetch('/api/admin/moderation/queue/count', { credentials: 'include', cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
-        console.log('[App] New moderation count:', data.count);
         setModerationCount(data.count);
       }
     } catch (err) {
@@ -703,7 +701,6 @@ function AppContent() {
     const interval = setInterval(refreshModerationCount, 5000);
 
     const handleCountChanged = () => {
-      console.log('[App] Received moderation-count-changed event');
       refreshModerationCount();
     };
     window.addEventListener('moderation-count-changed', handleCountChanged);

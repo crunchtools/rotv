@@ -165,6 +165,10 @@ import { classifyPoiType } from '../utils/poiClassify.js';
 import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
 import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, PIPELINE_DEFAULTS } from './newsPipelines.js';
 import fs from 'fs';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('News');
+const searchLogger = createLogger('Search');
 
 function debugLog(message) {
   const timestamp = new Date().toISOString();
@@ -174,7 +178,7 @@ function debugLog(message) {
   } catch {
     // The debug file is best-effort; the console line below always logs
   }
-  console.error(message);
+  logger.error(message);
 }
 
 const DISPATCH_INTERVAL_MS = 1500;
@@ -1181,14 +1185,14 @@ async function resolveRedirectUrl(url) {
     const finalUrl = response.url;
 
     if (finalUrl && finalUrl !== url) {
-      console.log(`[Search] ✓ Resolved: ${url.substring(0, 50)}... → ${finalUrl}`);
+      searchLogger.info(`✓ Resolved: ${url.substring(0, 50)}... → ${finalUrl}`);
       return finalUrl;
     }
 
-    console.log(`[Search] ✗ No redirect found for: ${url.substring(0, 60)}...`);
+    searchLogger.info(`✗ No redirect found for: ${url.substring(0, 60)}...`);
     return null; // Don't save broken redirects
   } catch (error) {
-    console.log(`[Search] ✗ Failed to resolve: ${url.substring(0, 50)}... (${error.message})`);
+    searchLogger.info(`✗ Failed to resolve: ${url.substring(0, 50)}... (${error.message})`);
     return null; // Don't save broken redirects
   }
 }
@@ -1344,7 +1348,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
       if (log) log(`[Save] Saved (pending, ${pipeline}): "${item.title}" (${item.published_date || 'no date'}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
       if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
-      console.error(`Error saving news item for POI ${poiId}:`, error.message);
+      logger.error(`Error saving news item for POI ${poiId}:`, error.message);
     }
   }
 
@@ -1469,7 +1473,7 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
       if (log) log(`[Save] Saved event (pending): "${item.title}" (${item.start_date}, score=${dateScore}) → ${resolvedUrl}`);
     } catch (error) {
       if (log) log(`[Save] Error: "${item.title}" — ${error.message}`);
-      console.error(`Error saving event for POI ${poiId}:`, error.message);
+      logger.error(`Error saving event for POI ${poiId}:`, error.message);
     }
   }
 
@@ -1500,14 +1504,14 @@ async function processPoiBatch(pool, pois, sheets, dispatchInterval = DISPATCH_I
     inFlight++;
 
     try {
-      console.log(`[${index + 1}/${pois.length}] Starting: ${poi.name} (${inFlight} in flight)`);
+      logger.info(`[${index + 1}/${pois.length}] Starting: ${poi.name} (${inFlight} in flight)`);
       const { news, events, metadata } = await collectPoi(pool, poi, sheets, timezone);
       const savedNews = await saveNewsItems(pool, poi.id, news, { uriOwnershipMap });
       const savedEvents = await saveEventItems(pool, poi.id, events, { uriOwnershipMap });
-      console.log(`[${index + 1}/${pois.length}] ✓ ${poi.name}: ${savedNews} news, ${savedEvents} events`);
+      logger.info(`[${index + 1}/${pois.length}] ✓ ${poi.name}: ${savedNews} news, ${savedEvents} events`);
       results.push({ newsFound: savedNews, eventsFound: savedEvents, success: true, poiName: poi.name });
     } catch (error) {
-      console.error(`[${index + 1}/${pois.length}] ✗ ${poi.name}: ${error.message}`);
+      logger.error(`[${index + 1}/${pois.length}] ✗ ${poi.name}: ${error.message}`);
       results.push({ newsFound: 0, eventsFound: 0, success: false, poiName: poi.name });
     }
 

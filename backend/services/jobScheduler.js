@@ -1,4 +1,9 @@
 import { PgBoss } from 'pg-boss';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('JobScheduler');
+const pgBossLogger = createLogger('pg-boss');
+const jitterLogger = createLogger('Jitter');
 
 let boss = null;
 
@@ -31,10 +36,10 @@ export async function initJobScheduler(connectionString) {
 
   boss = new PgBoss(connectionString);
 
-  boss.on('error', error => console.error('pg-boss error:', error));
+  boss.on('error', error => logger.error('pg-boss error:', error));
 
   await boss.start();
-  console.log('Job scheduler started');
+  logger.info('Job scheduler started');
 
   return boss;
 }
@@ -53,7 +58,7 @@ export async function scheduleNewsCollection(cronExpression = '0 6 * * *') {
     tz: 'America/New_York'
   });
 
-  console.log(`News collection scheduled with cron: ${cronExpression}`);
+  logger.info(`News collection scheduled with cron: ${cronExpression}`);
 }
 
 // Current News, Historical News, and Events replace the three tier jobs (spec 044).
@@ -74,7 +79,7 @@ export async function schedulePipelineCollection(pipeline, cronExpression) {
   if (!jobName) throw new Error(`Invalid pipeline: ${pipeline}`);
   const scheduler = getJobScheduler();
   await scheduler.schedule(jobName, cronExpression, { pipeline }, { tz: 'America/New_York' });
-  console.log(`${pipeline} collection scheduled with cron: ${cronExpression}`);
+  logger.info(`${pipeline} collection scheduled with cron: ${cronExpression}`);
 }
 
 export async function registerPipelineCollectionHandler(pipeline, handler) {
@@ -84,20 +89,20 @@ export async function registerPipelineCollectionHandler(pipeline, handler) {
 
   try {
     await scheduler.createQueue(jobName);
-    console.log(`Queue '${jobName}' created`);
+    logger.info(`Queue '${jobName}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${jobName}' may already exist`);
+      logger.info(`Queue '${jobName}' may already exist`);
     }
   }
 
   await scheduler.work(jobName, async (job) => {
-    console.log(`Starting ${pipeline} collection job:`, job.id);
+    logger.info(`Starting ${pipeline} collection job:`, job.id);
     try {
       await handler(job.data);
-      console.log(`${pipeline} collection job completed:`, job.id);
+      logger.info(`${pipeline} collection job completed:`, job.id);
     } catch (error) {
-      console.error(`${pipeline} collection job failed:`, error);
+      logger.error(`${pipeline} collection job failed:`, error);
       throw error;
     }
   });
@@ -113,20 +118,20 @@ export async function registerNewsCollectionHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.NEWS_COLLECTION);
-    console.log(`Queue '${JOB_NAMES.NEWS_COLLECTION}' created`);
+    logger.info(`Queue '${JOB_NAMES.NEWS_COLLECTION}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.NEWS_COLLECTION}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.NEWS_COLLECTION}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.NEWS_COLLECTION, async (job) => {
-    console.log('Starting news collection job:', job.id);
+    logger.info('Starting news collection job:', job.id);
     try {
       await handler(job.data);
-      console.log('News collection job completed:', job.id);
+      logger.info('News collection job completed:', job.id);
     } catch (error) {
-      console.error('News collection job failed:', error);
+      logger.error('News collection job failed:', error);
       throw error;
     }
   });
@@ -142,7 +147,7 @@ export async function registerPoiNewsHandler(handler) {
     try {
       await handler(job.data);
     } catch (error) {
-      console.error(`News collection failed for POI ${job.data.poiId}:`, error);
+      logger.error(`News collection failed for POI ${job.data.poiId}:`, error);
       throw error;
     }
   });
@@ -156,7 +161,7 @@ export async function triggerNewsCollection() {
     triggeredAt: new Date().toISOString()
   });
 
-  console.log('Manual news collection triggered, job ID:', jobId);
+  logger.info('Manual news collection triggered, job ID:', jobId);
   return jobId;
 }
 
@@ -180,10 +185,10 @@ export async function registerBatchNewsHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.NEWS_BATCH);
-    console.log(`Queue '${JOB_NAMES.NEWS_BATCH}' created`);
+    logger.info(`Queue '${JOB_NAMES.NEWS_BATCH}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.NEWS_BATCH}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.NEWS_BATCH}' may already exist`);
     }
   }
 
@@ -192,12 +197,12 @@ export async function registerBatchNewsHandler(handler) {
   }, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs];
     for (const job of jobList) {
-      console.log(`[pg-boss] Starting batch news collection job: ${job.id}`);
+      pgBossLogger.info(`Starting batch news collection job: ${job.id}`);
       try {
         await handler(job.id, job.data);
-        console.log(`[pg-boss] Batch news collection job completed: ${job.id}`);
+        pgBossLogger.info(`Batch news collection job completed: ${job.id}`);
       } catch (error) {
-        console.error(`[pg-boss] Batch news collection job failed:`, error);
+        pgBossLogger.error(`Batch news collection job failed:`, error);
         throw error;
       }
     }
@@ -218,7 +223,7 @@ export async function submitBatchNewsJob(options = {}) {
     expireInMinutes: 60
   });
 
-  console.log(`[pg-boss] Batch news collection job submitted: ${pgBossJobId}`);
+  pgBossLogger.info(`Batch news collection job submitted: ${pgBossJobId}`);
   return pgBossJobId;
 }
 
@@ -234,7 +239,7 @@ export async function scheduleTrailStatusCollection(cronExpression = '*/30 * * *
     tz: 'America/New_York'
   });
 
-  console.log(`Trail status collection scheduled with cron: ${cronExpression}`);
+  logger.info(`Trail status collection scheduled with cron: ${cronExpression}`);
 }
 
 export async function registerTrailStatusHandler(handler) {
@@ -242,20 +247,20 @@ export async function registerTrailStatusHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.TRAIL_STATUS_COLLECTION);
-    console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_COLLECTION}' created`);
+    logger.info(`Queue '${JOB_NAMES.TRAIL_STATUS_COLLECTION}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_COLLECTION}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.TRAIL_STATUS_COLLECTION}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.TRAIL_STATUS_COLLECTION, async (job) => {
-    console.log('Starting trail status collection job:', job.id);
+    logger.info('Starting trail status collection job:', job.id);
     try {
       await handler(job.data);
-      console.log('Trail status collection job completed:', job.id);
+      logger.info('Trail status collection job completed:', job.id);
     } catch (error) {
-      console.error('Trail status collection job failed:', error);
+      logger.error('Trail status collection job failed:', error);
       throw error;
     }
   });
@@ -266,10 +271,10 @@ export async function registerBatchTrailStatusHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.TRAIL_STATUS_BATCH);
-    console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_BATCH}' created`);
+    logger.info(`Queue '${JOB_NAMES.TRAIL_STATUS_BATCH}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.TRAIL_STATUS_BATCH}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.TRAIL_STATUS_BATCH}' may already exist`);
     }
   }
 
@@ -278,12 +283,12 @@ export async function registerBatchTrailStatusHandler(handler) {
   }, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs];
     for (const job of jobList) {
-      console.log(`[pg-boss] Starting batch trail status collection job: ${job.id}`);
+      pgBossLogger.info(`Starting batch trail status collection job: ${job.id}`);
       try {
         await handler(job.data.jobId, job.data.poiIds);
-        console.log(`[pg-boss] Batch trail status collection job completed: ${job.id}`);
+        pgBossLogger.info(`Batch trail status collection job completed: ${job.id}`);
       } catch (error) {
-        console.error(`[pg-boss] Batch trail status collection job failed:`, error);
+        pgBossLogger.error(`Batch trail status collection job failed:`, error);
         throw error;
       }
     }
@@ -297,7 +302,7 @@ export async function scheduleRiverLevelsCollection(cronExpression = '0 * * * *'
     tz: 'America/New_York'
   });
 
-  console.log(`River levels collection scheduled with cron: ${cronExpression}`);
+  logger.info(`River levels collection scheduled with cron: ${cronExpression}`);
 }
 
 export async function registerRiverLevelsHandler(handler) {
@@ -305,20 +310,20 @@ export async function registerRiverLevelsHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.RIVER_LEVELS_COLLECTION);
-    console.log(`Queue '${JOB_NAMES.RIVER_LEVELS_COLLECTION}' created`);
+    logger.info(`Queue '${JOB_NAMES.RIVER_LEVELS_COLLECTION}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.RIVER_LEVELS_COLLECTION}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.RIVER_LEVELS_COLLECTION}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.RIVER_LEVELS_COLLECTION, async (job) => {
-    console.log('Starting river levels collection job:', job.id);
+    logger.info('Starting river levels collection job:', job.id);
     try {
       await handler(job.data);
-      console.log('River levels collection job completed:', job.id);
+      logger.info('River levels collection job completed:', job.id);
     } catch (error) {
-      console.error('River levels collection job failed:', error);
+      logger.error('River levels collection job failed:', error);
       throw error;
     }
   });
@@ -332,7 +337,7 @@ export async function triggerRiverLevelsCollection() {
     triggeredAt: new Date().toISOString()
   });
 
-  console.log('Manual river levels collection triggered, job ID:', jobId);
+  logger.info('Manual river levels collection triggered, job ID:', jobId);
   return jobId;
 }
 
@@ -343,7 +348,7 @@ export async function scheduleModerationSweep(cronExpression = '0 7 * * *') {
     tz: 'America/New_York'
   });
 
-  console.log(`Moderation sweep scheduled with cron: ${cronExpression}`);
+  logger.info(`Moderation sweep scheduled with cron: ${cronExpression}`);
 }
 
 export async function registerModerationSweepHandler(handler) {
@@ -351,20 +356,20 @@ export async function registerModerationSweepHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.CONTENT_MODERATION_SWEEP);
-    console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' created`);
+    logger.info(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.CONTENT_MODERATION_SWEEP}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.CONTENT_MODERATION_SWEEP, async (job) => {
-    console.log('Starting moderation sweep job:', job.id);
+    logger.info('Starting moderation sweep job:', job.id);
     try {
       await handler();
-      console.log('Moderation sweep job completed:', job.id);
+      logger.info('Moderation sweep job completed:', job.id);
     } catch (error) {
-      console.error('Moderation sweep job failed:', error);
+      logger.error('Moderation sweep job failed:', error);
       throw error;
     }
   });
@@ -375,10 +380,10 @@ export async function registerNewsletterHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.NEWSLETTER_PROCESS);
-    console.log(`Queue '${JOB_NAMES.NEWSLETTER_PROCESS}' created`);
+    logger.info(`Queue '${JOB_NAMES.NEWSLETTER_PROCESS}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.NEWSLETTER_PROCESS}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.NEWSLETTER_PROCESS}' may already exist`);
     }
   }
 
@@ -388,7 +393,7 @@ export async function registerNewsletterHandler(handler) {
       try {
         await handler(job.data.emailId);
       } catch (error) {
-        console.error(`[pg-boss] Newsletter processing failed for email #${job.data.emailId}:`, error.message);
+        pgBossLogger.error(`Newsletter processing failed for email #${job.data.emailId}:`, error.message);
         throw error;
       }
     }
@@ -415,7 +420,7 @@ export async function scheduleImageBackup(cronExpression = '0 2 * * *') {
     tz: 'America/New_York'
   });
 
-  console.log(`Image backup scheduled with cron: ${cronExpression}`);
+  logger.info(`Image backup scheduled with cron: ${cronExpression}`);
 }
 
 export async function registerImageBackupHandler(handler) {
@@ -423,20 +428,20 @@ export async function registerImageBackupHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.IMAGE_BACKUP);
-    console.log(`Queue '${JOB_NAMES.IMAGE_BACKUP}' created`);
+    logger.info(`Queue '${JOB_NAMES.IMAGE_BACKUP}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.IMAGE_BACKUP}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.IMAGE_BACKUP}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.IMAGE_BACKUP, async (job) => {
-    console.log('Starting image backup job:', job.id);
+    logger.info('Starting image backup job:', job.id);
     try {
       await handler(job.data);
-      console.log('Image backup job completed:', job.id);
+      logger.info('Image backup job completed:', job.id);
     } catch (error) {
-      console.error('Image backup job failed:', error);
+      logger.error('Image backup job failed:', error);
       throw error;
     }
   });
@@ -454,7 +459,7 @@ export async function submitImageBackupJob() {
     expireInMinutes: 120
   });
 
-  console.log(`[pg-boss] Image backup job submitted: ${jobId}`);
+  pgBossLogger.info(`Image backup job submitted: ${jobId}`);
   return jobId;
 }
 
@@ -465,7 +470,7 @@ export async function scheduleDatabaseBackup(cronExpression = '0 3 * * *') {
     tz: 'America/New_York'
   });
 
-  console.log(`Database backup scheduled with cron: ${cronExpression}`);
+  logger.info(`Database backup scheduled with cron: ${cronExpression}`);
 }
 
 export async function registerDatabaseBackupHandler(handler) {
@@ -473,20 +478,20 @@ export async function registerDatabaseBackupHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.DATABASE_BACKUP);
-    console.log(`Queue '${JOB_NAMES.DATABASE_BACKUP}' created`);
+    logger.info(`Queue '${JOB_NAMES.DATABASE_BACKUP}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.DATABASE_BACKUP}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.DATABASE_BACKUP}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.DATABASE_BACKUP, async (job) => {
-    console.log('Starting database backup job:', job.id);
+    logger.info('Starting database backup job:', job.id);
     try {
       await handler(job.data);
-      console.log('Database backup job completed:', job.id);
+      logger.info('Database backup job completed:', job.id);
     } catch (error) {
-      console.error('Database backup job failed:', error);
+      logger.error('Database backup job failed:', error);
       throw error;
     }
   });
@@ -495,7 +500,7 @@ export async function registerDatabaseBackupHandler(handler) {
 export async function updateSchedule(jobName, cronExpression) {
   const scheduler = getJobScheduler();
   await scheduler.schedule(jobName, cronExpression, {}, { tz: 'America/New_York' });
-  console.log(`Schedule updated: ${jobName} → ${cronExpression}`);
+  logger.info(`Schedule updated: ${jobName} → ${cronExpression}`);
 }
 
 export async function registerDigestHandler(handler) {
@@ -503,22 +508,22 @@ export async function registerDigestHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.NEWSLETTER_DIGEST);
-    console.log(`Queue '${JOB_NAMES.NEWSLETTER_DIGEST}' created`);
+    logger.info(`Queue '${JOB_NAMES.NEWSLETTER_DIGEST}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.NEWSLETTER_DIGEST}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.NEWSLETTER_DIGEST}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.NEWSLETTER_DIGEST, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs];
     for (const job of jobList) {
-      console.log('Starting newsletter digest job:', job.id);
+      logger.info('Starting newsletter digest job:', job.id);
       try {
         await handler(job.id, job.data);
-        console.log('Newsletter digest sent successfully:', job.id);
+        logger.info('Newsletter digest sent successfully:', job.id);
       } catch (error) {
-        console.error('Newsletter digest job failed:', error);
+        logger.error('Newsletter digest job failed:', error);
         throw error;
       }
     }
@@ -532,7 +537,7 @@ export async function scheduleDigest(cronExpression = '0 8 * * 5') {
     tz: 'America/New_York'
   });
 
-  console.log(`Newsletter digest scheduled with cron: ${cronExpression}`);
+  logger.info(`Newsletter digest scheduled with cron: ${cronExpression}`);
 }
 
 export async function registerPreviewHandler(handler) {
@@ -540,22 +545,22 @@ export async function registerPreviewHandler(handler) {
 
   try {
     await scheduler.createQueue(JOB_NAMES.NEWSLETTER_PREVIEW);
-    console.log(`Queue '${JOB_NAMES.NEWSLETTER_PREVIEW}' created`);
+    logger.info(`Queue '${JOB_NAMES.NEWSLETTER_PREVIEW}' created`);
   } catch (error) {
     if (!error.message?.includes('already exists')) {
-      console.log(`Queue '${JOB_NAMES.NEWSLETTER_PREVIEW}' may already exist`);
+      logger.info(`Queue '${JOB_NAMES.NEWSLETTER_PREVIEW}' may already exist`);
     }
   }
 
   await scheduler.work(JOB_NAMES.NEWSLETTER_PREVIEW, async (jobs) => {
     const jobList = Array.isArray(jobs) ? jobs : [jobs];
     for (const job of jobList) {
-      console.log('Starting newsletter preview job:', job.id);
+      logger.info('Starting newsletter preview job:', job.id);
       try {
         await handler(job.id, job.data);
-        console.log('Newsletter preview sent successfully:', job.id);
+        logger.info('Newsletter preview sent successfully:', job.id);
       } catch (error) {
-        console.error('Newsletter preview job failed:', error);
+        logger.error('Newsletter preview job failed:', error);
         throw error;
       }
     }
@@ -569,7 +574,7 @@ export async function schedulePreview(cronExpression = '0 8 * * 4') {
     tz: 'America/New_York'
   });
 
-  console.log(`Newsletter preview scheduled with cron: ${cronExpression}`);
+  logger.info(`Newsletter preview scheduled with cron: ${cronExpression}`);
 }
 
 export async function triggerDigestManually() {
@@ -580,7 +585,7 @@ export async function triggerDigestManually() {
     triggeredAt: new Date().toISOString()
   });
 
-  console.log('Manual digest send triggered, job ID:', jobId);
+  logger.info('Manual digest send triggered, job ID:', jobId);
   return jobId;
 }
 
@@ -592,7 +597,7 @@ export async function triggerPreviewManually() {
     triggeredAt: new Date().toISOString()
   });
 
-  console.log('Manual preview send triggered, job ID:', jobId);
+  logger.info('Manual preview send triggered, job ID:', jobId);
   return jobId;
 }
 
@@ -600,14 +605,14 @@ export async function stopJobScheduler() {
   if (boss) {
     await boss.stop();
     boss = null;
-    console.log('Job scheduler stopped');
+    logger.info('Job scheduler stopped');
   }
 }
 
 export function withJitter(handler, jobName, minSeconds = 1, maxSeconds = 60) {
   return async (...args) => {
     const delay = Math.floor(Math.random() * (maxSeconds - minSeconds + 1)) + minSeconds;
-    console.log(`[Jitter] ${jobName} delayed by ${delay}s`);
+    jitterLogger.info(`${jobName} delayed by ${delay}s`);
     await new Promise(resolve => setTimeout(resolve, delay * 1000));
     return handler(...args);
   };

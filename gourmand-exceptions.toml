@@ -156,3 +156,31 @@ check = "verbose_comments"
 path = "frontend/src/utils/trainConsist.js"
 justification = "An 11-line comment (max 8) documenting the physical consist order and why the GPS-tracked unit is not the lead engine (a real-world fact that broke #573 when assumed otherwise) -- a good comment that happens to exceed the line count, not filler"
 classification = "gourmand_bug"
+
+# ============================================================================
+# console_log_production — hand-run CLI tools (issue #612)
+#
+# backend/migrations/*.js and backend/scripts/*.js are one-off operator tools
+# run as `node /app/migrations/<name>.js` (see docs/RIVER_LEVELS_ARCHITECTURE.md).
+# Verified: rotv-init.sh only executes migrations/[0-9]*.sql, and no server
+# module imports either directory. Their stdout progress report IS the
+# interface; the server code uses backend/utils/logger.js instead.
+# ============================================================================
+
+[[exceptions]]
+check = "console_log_production"
+path = "backend/migrations/*.js"
+justification = "Hand-run operator CLI tools (node /app/migrations/<name>.js); rotv-init.sh runs only *.sql and no server module imports them — printing progress to stdout is their interface"
+classification = "by_design"
+
+[[exceptions]]
+check = "console_log_production"
+path = "backend/scripts/*.js"
+justification = "Hand-run operator CLI tools (backfills, cleanup with --dry-run); not imported by the server — printing progress to stdout is their interface"
+classification = "by_design"
+
+[[exceptions]]
+check = "console_log_bracket_tag_prefix"
+path = "backend/migrations/*.js"
+justification = "Same hand-run CLI tools as the console_log_production entry above; the bracket tag labels the phase in a one-shot terminal report, not a stand-in for a server logger"
+classification = "by_design"

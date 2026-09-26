@@ -1,4 +1,7 @@
 import { acquireBrowser, releaseBrowser } from './browserPool.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('JS Renderer');
 
 function withHardTimeout(promise, ms, operationName = 'Operation') {
   let timeoutId;
@@ -62,7 +65,7 @@ export async function isJavaScriptHeavySite(url, options = {}) {
         const xWixRequestId = response.headers.get('x-wix-request-id');
 
         if (server.toLowerCase().includes('pepyaka') || xWixRequestId) {
-          console.log(`[JS Renderer] Detected Wix site via headers: ${url}`);
+          logger.info(`Detected Wix site via headers: ${url}`);
           return true;
         }
 
@@ -81,18 +84,18 @@ export async function isJavaScriptHeavySite(url, options = {}) {
         ];
 
         if (signatures.some(sig => htmlLower.includes(sig))) {
-          console.log(`[JS Renderer] Detected JS-heavy framework in HTML: ${url}`);
+          logger.info(`Detected JS-heavy framework in HTML: ${url}`);
           return true;
         }
       } catch (fetchError) {
-        console.log(`[JS Renderer] Fetch failed for ${url}, will try rendering: ${fetchError.message}`);
+        logger.info(`Fetch failed for ${url}, will try rendering: ${fetchError.message}`);
         return true;
       }
     }
 
     return false;
   } catch (error) {
-    console.error(`[JS Renderer] Error checking site ${url}:`, error.message);
+    logger.error(`Error checking site ${url}:`, error.message);
     return false;
   }
 }
@@ -100,15 +103,15 @@ export async function isJavaScriptHeavySite(url, options = {}) {
 async function loginToTwitter(page, credentials = {}) {
   const { username, password } = credentials;
 
-  console.log('[JS Renderer] Twitter login check - Username:', username ? 'SET' : 'NOT SET', 'Password:', password ? 'SET' : 'NOT SET');
+  logger.info('Twitter login check - Username:', username ? 'SET' : 'NOT SET', 'Password:', password ? 'SET' : 'NOT SET');
 
   if (!username || !password) {
-    console.log('[JS Renderer] ⚠️ Twitter credentials not configured, skipping login');
+    logger.info('⚠️ Twitter credentials not configured, skipping login');
     return false;
   }
 
   try {
-    console.log('[JS Renderer] 🔐 Attempting Twitter login...');
+    logger.info('🔐 Attempting Twitter login...');
 
     await page.goto('https://x.com/i/flow/login', { waitUntil: 'domcontentloaded', timeout: 15000 });
     await page.waitForTimeout(2000);
@@ -135,14 +138,14 @@ async function loginToTwitter(page, credentials = {}) {
     });
 
     if (isLoggedIn) {
-      console.log('[JS Renderer] ✓ Twitter login successful');
+      logger.info('✓ Twitter login successful');
       return true;
     } else {
-      console.log('[JS Renderer] ⚠️ Twitter login may have failed - checking...');
+      logger.info('⚠️ Twitter login may have failed - checking...');
       return false;
     }
   } catch (error) {
-    console.error('[JS Renderer] ❌ Twitter login failed:', error.message);
+    logger.error('❌ Twitter login failed:', error.message);
     return false;
   }
 }
@@ -159,7 +162,7 @@ export async function renderJavaScriptPage(url, options = {}) {
     twitterCredentials = null
   } = options;
 
-  console.log(`[JS Renderer] Acquiring browser context for: ${url}`);
+  logger.info(`Acquiring browser context for: ${url}`);
 
   // Only the BrowserContext gets closed on hard timeout — the shared browser process stays alive
   let contextRef = { context: null, acquisitionId: null };
@@ -169,15 +172,15 @@ export async function renderJavaScriptPage(url, options = {}) {
   const hardTimeoutPromise = new Promise((_, reject) => {
     hardTimeoutId = setTimeout(async () => {
       isTimedOut = true;
-      console.error(`[JS Renderer] ⏰ Hard timeout (${hardTimeout}ms) reached for ${url}, forcing cleanup...`);
+      logger.error(`⏰ Hard timeout (${hardTimeout}ms) reached for ${url}, forcing cleanup...`);
 
       if (contextRef.context) {
         try {
           await contextRef.context.close();
           releaseBrowser(contextRef.acquisitionId);
-          console.log(`[JS Renderer] ✓ Context force-closed after hard timeout`);
+          logger.info(`✓ Context force-closed after hard timeout`);
         } catch (closeError) {
-          console.error(`[JS Renderer] Failed to force-close context: ${closeError.message}`);
+          logger.error(`Failed to force-close context: ${closeError.message}`);
         }
       }
 
@@ -199,7 +202,7 @@ export async function renderJavaScriptPage(url, options = {}) {
 
     return renderedPage;
   } catch (error) {
-    console.error(`[JS Renderer] ❌ Error for ${url}:`, error.message);
+    logger.error(`❌ Error for ${url}:`, error.message);
     return {
       text: '',
       html: '',
@@ -291,18 +294,18 @@ async function renderJavaScriptPageInternal(url, options) {
           }).filter(c => c !== null);
 
           await context.addCookies(sanitizedCookies);
-          console.log('[JS Renderer] ✓ Loaded', sanitizedCookies.length, 'saved Twitter cookies');
+          logger.info('✓ Loaded', sanitizedCookies.length, 'saved Twitter cookies');
         } else {
-          console.log('[JS Renderer] ⚠️ No saved Twitter cookies found, trying public access');
+          logger.info('⚠️ No saved Twitter cookies found, trying public access');
         }
       } catch (err) {
-        console.error('[JS Renderer] ❌ Error loading Twitter cookies:', err.message);
+        logger.error('❌ Error loading Twitter cookies:', err.message);
       }
     }
 
     const page = await context.newPage();
 
-    console.log(`[JS Renderer] Navigating to ${url}...`);
+    logger.info(`Navigating to ${url}...`);
     try {
       await page.goto(url, {
         waitUntil: 'networkidle',
@@ -310,7 +313,7 @@ async function renderJavaScriptPageInternal(url, options) {
       });
     } catch (navError) {
       if (navError.message.includes('Timeout') || navError.message.includes('timeout')) {
-        console.log(`[JS Renderer] Network idle timeout, retrying with domcontentloaded...`);
+        logger.info(`Network idle timeout, retrying with domcontentloaded...`);
         await page.goto(url, {
           waitUntil: 'domcontentloaded',
           timeout: Math.min(timeout, 10000)
@@ -321,28 +324,28 @@ async function renderJavaScriptPageInternal(url, options) {
     }
 
     if (waitForSelector) {
-      console.log(`[JS Renderer] Waiting for selector: ${waitForSelector}`);
+      logger.info(`Waiting for selector: ${waitForSelector}`);
       await page.waitForSelector(waitForSelector, { timeout: 10000 }).catch(() => {
-        console.log(`[JS Renderer] Selector ${waitForSelector} not found, continuing anyway`);
+        logger.info(`Selector ${waitForSelector} not found, continuing anyway`);
       });
     }
 
-    console.log(`[JS Renderer] Waiting ${waitTime}ms for dynamic content...`);
+    logger.info(`Waiting ${waitTime}ms for dynamic content...`);
     await page.waitForTimeout(waitTime);
 
     if (url.includes('x.com') || url.includes('twitter.com')) {
-      console.log('[JS Renderer] Waiting for Twitter tweets to load...');
+      logger.info('Waiting for Twitter tweets to load...');
 
       try {
         await page.waitForSelector('article[data-testid="tweet"]', { timeout: 10000 });
-        console.log('[JS Renderer] ✓ Tweets loaded');
+        logger.info('✓ Tweets loaded');
       } catch (e) {
-        console.log('[JS Renderer] ⚠️ Tweets not found via selector, trying scroll');
+        logger.info('⚠️ Tweets not found via selector, trying scroll');
       }
 
       await page.waitForTimeout(2000);
 
-      console.log('[JS Renderer] Scrolling Twitter page to load more content...');
+      logger.info('Scrolling Twitter page to load more content...');
       await page.evaluate(async () => {
         // Aggressive scroll triggers Twitter's lazy-loading for tweets below the fold
         for (let i = 0; i < 5; i++) {
@@ -437,9 +440,9 @@ async function renderJavaScriptPageInternal(url, options) {
       };
     }, extractSelectors);
 
-    console.log(`[JS Renderer] ✓ Extracted ${content.text.length} characters from ${url}`);
-    console.log(`[JS Renderer]   Title: ${content.title}`);
-    console.log(`[JS Renderer]   Found ${content.links.length} links on page`);
+    logger.info(`✓ Extracted ${content.text.length} characters from ${url}`);
+    logger.info(`  Title: ${content.title}`);
+    logger.info(`  Found ${content.links.length} links on page`);
 
     await context.close();
     releaseBrowser(contextRef.acquisitionId);
@@ -450,7 +453,7 @@ async function renderJavaScriptPageInternal(url, options) {
     };
 
   } catch (error) {
-    console.error(`[JS Renderer] ❌ Error rendering ${url}:`, error.message);
+    logger.error(`❌ Error rendering ${url}:`, error.message);
 
     if (context) {
       await context.close().catch(() => {});

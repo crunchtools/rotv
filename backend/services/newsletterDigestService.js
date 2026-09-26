@@ -1,4 +1,7 @@
 import { sendEmail, sendDraftToRecipients } from './buttondownClient.js';
+import { createLogger } from '../utils/logger.js';
+
+const logger = createLogger('NewsletterDigest');
 
 const DIGEST_EVENT_LIMIT = 15;
 const DIGEST_NEWS_LIMIT = 5;
@@ -184,7 +187,7 @@ async function fetchDigestGreeting(pool) {
     const val = greetingQuery.rows[0]?.value?.trim();
     return val || null;
   } catch (err) {
-    console.error('Failed to fetch digest greeting:', err.message);
+    logger.error('Failed to fetch digest greeting:', err.message);
     return null;
   }
 }
@@ -436,7 +439,7 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
   );
 
   if (alreadySentCheck.rows.length > 0) {
-    console.log(`Digest already sent today (${today}), skipping duplicate send`);
+    logger.info(`Digest already sent today (${today}), skipping duplicate send`);
 
     if (jobId > 0) {
       await pool.query(
@@ -460,7 +463,7 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
     const digestHtml = await generateDigest(pool);
 
     if (!digestHtml) {
-      console.log('No content for digest this week, skipping send');
+      logger.info('No content for digest this week, skipping send');
 
       if (jobId > 0) {
         await pool.query(
@@ -501,7 +504,7 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
     );
     if (draftCheck.rows.length > 0 && draftCheck.rows[0].email_id) {
       existingEmailId = draftCheck.rows[0].email_id;
-      console.log(`Found existing draft from earlier attempt: ${existingEmailId}`);
+      logger.info(`Found existing draft from earlier attempt: ${existingEmailId}`);
     }
 
     await sendEmail(subject, digestHtml, pool, {
@@ -518,7 +521,7 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
       }
     });
 
-    console.log('Weekly digest sent successfully');
+    logger.info('Weekly digest sent successfully');
 
     if (jobId > 0) {
       await pool.query(
@@ -530,7 +533,7 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
 
     return { success: true, skipped: false };
   } catch (error) {
-    console.error('Failed to send weekly digest:', error);
+    logger.error('Failed to send weekly digest:', error);
 
     if (jobId > 0) {
       const errorDetails = {
@@ -550,7 +553,7 @@ export async function sendWeeklyDigest(pool, pgBossJobId = null) {
     }
 
     if (error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
-      console.log('Buttondown not configured, skipping digest send');
+      logger.info('Buttondown not configured, skipping digest send');
       return { success: true, skipped: true, reason: 'Buttondown not configured' };
     }
 
@@ -595,7 +598,7 @@ export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York', 
       [jobType, `Preview sent to ${email}`, today]
     );
     if (alreadySent.rows.length > 0) {
-      console.log(`Preview already sent to ${email} today, skipping duplicate`);
+      logger.info(`Preview already sent to ${email} today, skipping duplicate`);
       return { success: true, skipped: true, reason: 'already_sent_today', recipient: email };
     }
   }
@@ -756,14 +759,14 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
       await sendDraftToRecipients(subject, html, [user.email], pool);
       sent++;
     } catch (error) {
-      console.error(`Personalized digest failed for user ${user.id}:`, error.message);
+      logger.error(`Personalized digest failed for user ${user.id}:`, error.message);
       if (error.message === 'BUTTONDOWN_NOT_CONFIGURED') {
         break;
       }
     }
   }
 
-  console.log(`Personalized digests: ${sent} sent, ${skipped} skipped (no content)`);
+  logger.info(`Personalized digests: ${sent} sent, ${skipped} skipped (no content)`);
   if (jobId > 0) {
     await pool.query(
       `INSERT INTO job_logs (job_id, job_type, level, message, details)
