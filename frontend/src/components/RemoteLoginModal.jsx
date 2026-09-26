@@ -109,7 +109,7 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   const relayedText = useRef('');
   const typeTimer = useRef(null);
   const sendQueue = useRef(Promise.resolve());
-  const pendingScroll = useRef(0);
+  const openScroll = useRef(null); // queued scroll not yet sent, still accepting wheel deltas
   const refreshNow = useRef(null);
 
   // Start the remote session once; cancel it on unmount unless it was saved.
@@ -212,7 +212,9 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   }, [base]);
 
   // Every relay goes through one queue so backspaces, text, keys and clicks arrive in order.
+  // Anything else queued closes the open scroll slot, so later wheel deltas can't jump ahead of it.
   const enqueue = useCallback((task) => {
+    openScroll.current = null;
     sendQueue.current = sendQueue.current.then(task);
     return sendQueue.current;
   }, []);
@@ -286,13 +288,12 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   // Fix: scroll joins the ordered queue, and wheel deltas that arrive while a scroll is queued
   // merge into it so a flick can't pile up requests ahead of the next click (PR #671 review)
   const handleWheel = (e) => {
-    const alreadyQueued = pendingScroll.current !== 0;
-    pendingScroll.current += e.deltaY;
-    if (alreadyQueued) return;
-    enqueue(() => {
-      const dy = pendingScroll.current;
-      pendingScroll.current = 0;
-      return dy ? sendInput({ type: 'scroll', dy }) : undefined;
+    if (openScroll.current) { openScroll.current.dy += e.deltaY; return; }
+    const slot = { dy: e.deltaY };
+    openScroll.current = slot;
+    sendQueue.current = sendQueue.current.then(() => {
+      if (openScroll.current === slot) openScroll.current = null; // sealed once it starts sending
+      return slot.dy ? sendInput({ type: 'scroll', dy: slot.dy }) : undefined;
     });
   };
 

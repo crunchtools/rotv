@@ -204,6 +204,41 @@ describe('RemoteLoginModal', () => {
     expect(relayed()).toEqual([{ type: 'scroll', dy: 250 }]);
   });
 
+  it('never lets a wheel delta jump ahead of a queued key', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const surface = screen.getByRole('application');
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    fireEvent.wheel(surface, { deltaY: 100 });
+    fireEvent.keyDown(mirror, { key: 'Enter' });
+    fireEvent.wheel(surface, { deltaY: 40 });
+    await settle();
+    expect(relayed()).toEqual([
+      { type: 'scroll', dy: 100 },
+      { type: 'key', key: 'Enter' },
+      { type: 'scroll', dy: 40 }
+    ]);
+  });
+
+  it('keeps at most one scroll pending behind one in flight', async () => {
+    const releases = [];
+    fetchMock.mockImplementation((url, init) => {
+      if (url.endsWith('/start')) return Promise.resolve(fetchResponse({ success: true, viewport: VIEWPORT }));
+      if (url.endsWith('/input')) return new Promise(resolve => releases.push(() => resolve(fetchResponse({ success: true }))));
+      return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['jpeg'])), headers: { get: () => 'false' } });
+    });
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const surface = screen.getByRole('application');
+    fireEvent.wheel(surface, { deltaY: 100 });
+    await flush(); // first scroll is now in flight
+    for (const deltaY of [10, 20, 30]) fireEvent.wheel(surface, { deltaY });
+    await flush();
+    expect(relayed()).toEqual([{ type: 'scroll', dy: 100 }]);
+    await act(async () => { releases.shift()(); await vi.advanceTimersByTimeAsync(0); });
+    expect(relayed()).toEqual([{ type: 'scroll', dy: 100 }, { type: 'scroll', dy: 60 }]);
+  });
+
   it('presses Backspace on the remote page when the mirror is already empty', async () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
