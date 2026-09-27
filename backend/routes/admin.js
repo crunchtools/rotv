@@ -3503,26 +3503,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       acquisitionId = acquired.acquisitionId;
       context = await acquired.browser.newContext({ userAgent: chromeUserAgent(acquired.browser) });
 
-      // Playwright requires Strict/Lax/None for sameSite and 'expires' (not 'expirationDate')
-      const sanitizedCookies = cookies.map(cookie => {
-        const sanitized = { ...cookie };
-
-        if (sanitized.sameSite && !['Strict', 'Lax', 'None'].includes(sanitized.sameSite)) {
-          sanitized.sameSite = 'Lax';
-        }
-
-        if (!sanitized.name || !sanitized.value) {
-          return null;
-        }
-
-        if (sanitized.expirationDate && !sanitized.expires) {
-          sanitized.expires = sanitized.expirationDate;
-        }
-
-        return sanitized;
-      }).filter(c => c !== null);
-
-      await context.addCookies(sanitizedCookies);
+      // Same conversion as the scraper: exporters write null/no_restriction sameSite, which addCookies rejects
+      const { toPlaywrightCookies } = await import('../services/contentExtractor.js');
+      await context.addCookies(toPlaywrightCookies(cookies));
 
       const page = await context.newPage();
 

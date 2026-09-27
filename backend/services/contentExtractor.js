@@ -31,6 +31,43 @@ const STEALTH_INIT_SCRIPT = `
   window.chrome = { runtime: {} };
 `;
 
+/**
+ * Convert saved browser-extension cookies (Twitter/X session) to Playwright's
+ * shape. Exporters write sameSite as 'no_restriction', 'unspecified', 'lax'
+ * or null; Playwright accepts only Strict, Lax or None. Expiry comes from
+ * `expires` or the extension's `expirationDate` (epoch seconds); without
+ * either the cookie is a session cookie. Entries without a name or value
+ * (or null) are dropped.
+ * @param {Array<object>} cookies - as stored in admin_settings
+ * @returns {Array<object>} cookies for context.addCookies
+ */
+export function toPlaywrightCookies(cookies) {
+  const normalizeSameSite = (val) => {
+    const lower = String(val ?? '').toLowerCase();
+    if (lower === 'strict') return 'Strict';
+    if (lower === 'lax') return 'Lax';
+    return 'None';
+  };
+  // Fix: drop malformed entries here so every caller gets it (PR #677 review)
+  return cookies.filter(c => c?.name && c?.value).map(c => {
+    const expires = Number(c.expires ?? c.expirationDate);
+    const secure = c.secure !== false;
+    const sameSite = normalizeSameSite(c.sameSite);
+    return {
+      name: c.name,
+      value: c.value,
+      domain: c.domain,
+      path: c.path || '/',
+      secure,
+      httpOnly: c.httpOnly || false,
+      // Fix: Chromium drops SameSite=None cookies that aren't Secure; fall back to Lax (PR #677 review)
+      sameSite: sameSite === 'None' && !secure ? 'Lax' : sameSite,
+      // Fix: keep expiry so expired cookies aren't sent as session cookies (PR #677 review)
+      ...(expires > 0 ? { expires } : {})
+    };
+  });
+}
+
 export async function extractPageContent(url, options = {}) {
   const {
     timeout = 15000,
@@ -69,23 +106,7 @@ export async function extractPageContent(url, options = {}) {
       await context.addInitScript(STEALTH_INIT_SCRIPT);
 
       if (cookies && Array.isArray(cookies) && cookies.length > 0) {
-        const normalizeSameSite = (val) => {
-          if (!val || val === 'no_restriction' || val === 'unspecified') return 'None';
-          const lower = String(val).toLowerCase();
-          if (lower === 'strict') return 'Strict';
-          if (lower === 'lax') return 'Lax';
-          return 'None';
-        };
-        const playwrightCookies = cookies.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain,
-          path: c.path || '/',
-          secure: c.secure !== false,
-          httpOnly: c.httpOnly || false,
-          sameSite: normalizeSameSite(c.sameSite)
-        }));
-        await context.addCookies(playwrightCookies);
+        await context.addCookies(toPlaywrightCookies(cookies));
       }
 
       const page = await context.newPage();
