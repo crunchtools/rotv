@@ -251,6 +251,28 @@ describe('RemoteLoginModal', () => {
     expect(relayed()).toEqual([{ type: 'type', text: 'Scott' }]);
   });
 
+  it('relays an ordinary Backspace through the mirror value change', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    typeInto(mirror, 'abc');
+    await settle();
+    fireEvent.keyDown(mirror, { key: 'Backspace' }); // not prevented: the browser edits the value
+    typeInto(mirror, 'ab');
+    await settle();
+    expect(relayed()).toEqual([{ type: 'type', text: 'abc' }, { type: 'key', key: 'Backspace' }]);
+  });
+
+  it('swallows modified navigation so the mirror caret stays put', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    const notPrevented = fireEvent.keyDown(mirror, { key: 'ArrowLeft', shiftKey: true });
+    await settle();
+    expect(notPrevented).toBe(false);
+    expect(relayed()).toEqual([]);
+  });
+
   it('presses Backspace on the remote page when the mirror is already empty', async () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();

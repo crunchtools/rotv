@@ -260,6 +260,9 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
    * @param {React.KeyboardEvent<HTMLInputElement>} e
    */
   const handleMirrorKeyDown = (e) => {
+    const modified = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
+    // Fix: modified navigation (Shift+Arrow, Ctrl+Home…) isn't relayed, so it must not move the mirror's caret either (PR #671 review)
+    if (modified && PASSTHROUGH_KEYS.has(e.key) && e.key !== 'Enter' && e.key !== 'Tab') { e.preventDefault(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return; // leave paste shortcuts to the input event
     const emptyBackspace = e.key === 'Backspace' && !e.currentTarget.value;
     if (!PASSTHROUGH_KEYS.has(e.key) && !emptyBackspace) return;
