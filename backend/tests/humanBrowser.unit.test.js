@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 let geoResponse;
-const probeStub = {
-  request: { get: vi.fn(async () => ({ json: async () => geoResponse() })) },
-  close: vi.fn(async () => {})
+let geoStatus;
+const probePage = {
+  goto: vi.fn(async () => ({ ok: () => geoStatus === 200, status: () => geoStatus, json: async () => geoResponse() }))
 };
+const probeStub = { newPage: vi.fn(async () => probePage), close: vi.fn(async () => {}) };
 const makeBrowser = () => ({ newContext: vi.fn(async () => probeStub), version: () => '145.0.7632.6' });
 
 vi.mock('playwright', () => ({ chromium: { launch: vi.fn(async () => makeBrowser()) } }));
@@ -13,10 +14,11 @@ vi.mock('node:fs', () => ({ existsSync: vi.fn(() => false) }));
 const { chromium } = await import('playwright');
 const { existsSync } = await import('node:fs');
 const {
-  hasDisplay, launchHumanBrowser, egressTimezone, humanContextOptions,
+  hasDisplay, launchHumanBrowser, humanContextOptions,
   resetHumanBrowserState, FALLBACK_TIMEZONE
 } = await import('../services/humanBrowser.js');
 const { chromeUserAgent } = await import('../services/browserPool.js');
+const egressTimezone = async browser => (await humanContextOptions(browser)).timezoneId;
 
 const savedEnv = { DISPLAY: process.env.DISPLAY, PLAYWRIGHT_PROXY: process.env.PLAYWRIGHT_PROXY };
 
@@ -24,6 +26,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   resetHumanBrowserState();
   geoResponse = () => ({ timezone: 'America/Chicago' });
+  geoStatus = 200;
   existsSync.mockReturnValue(false);
   delete process.env.DISPLAY;
   delete process.env.PLAYWRIGHT_PROXY;
@@ -91,13 +94,14 @@ describe('launchHumanBrowser', () => {
   });
 });
 
-describe('egressTimezone', () => {
+describe('egress timezone lookup', () => {
   it('looks up the zone through the browser and caches it', async () => {
     const browser = makeBrowser();
     expect(await egressTimezone(browser)).toBe('America/Chicago');
     expect(await egressTimezone(browser)).toBe('America/Chicago');
-    expect(probeStub.request.get).toHaveBeenCalledTimes(1);
-    expect(probeStub.request.get).toHaveBeenCalledWith('https://ipinfo.io/json', { timeout: 10000 });
+    expect(probePage.goto).toHaveBeenCalledTimes(1);
+    expect(probePage.goto).toHaveBeenCalledWith('https://ipinfo.io/json', { timeout: 10000 });
+    expect(probeStub.newPage).toHaveBeenCalledTimes(1);
     expect(probeStub.close).toHaveBeenCalledTimes(1);
   });
 
@@ -111,7 +115,7 @@ describe('egressTimezone', () => {
       expect(await egressTimezone(browser)).toBe('America/Chicago');
       now.mockReturnValue(1_000_000 + 60 * 60 * 1000);
       expect(await egressTimezone(browser)).toBe('America/Denver');
-      expect(probeStub.request.get).toHaveBeenCalledTimes(2);
+      expect(probePage.goto).toHaveBeenCalledTimes(2);
     } finally {
       now.mockRestore();
     }
@@ -123,11 +127,14 @@ describe('egressTimezone', () => {
     expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
     geoResponse = () => ({});
     expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
-    probeStub.request.get.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+    geoStatus = 429;
+    expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
+    geoStatus = 200;
+    probePage.goto.mockRejectedValueOnce(new Error('ETIMEDOUT'));
     expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
     geoResponse = () => ({ timezone: 'America/Chicago' });
     expect(await egressTimezone(browser)).toBe('America/Chicago');
-    expect(probeStub.close).toHaveBeenCalledTimes(4);
+    expect(probeStub.close).toHaveBeenCalledTimes(5);
   });
 });
 
