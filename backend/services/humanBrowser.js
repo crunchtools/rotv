@@ -22,10 +22,15 @@ const logger = createLogger('HumanBrowser');
 const GEO_URL = 'https://ipinfo.io/json';
 const GEO_TIMEOUT_MS = 10000;
 const GEO_CACHE_MS = 60 * 60 * 1000;
+// Fixed by the X11 protocol, not configurable: where display :N's socket lives.
+const X11_SOCKET_DIR = '/tmp/.X11-unix';
+const DISPLAY_WAIT_MS = 15000;
+const DISPLAY_POLL_MS = 250;
 export const FALLBACK_TIMEZONE = 'America/New_York';
 
 let timezoneCache = null; // { timezone, at }
 const headedBrowsers = new WeakSet();
+let displayTimedOut = false; // DISPLAY set but never came up (dev builds without weston): wait once, not per launch
 
 /**
  * @param {string|undefined} display - e.g. ":0" or ":1.0"
@@ -33,31 +38,41 @@ const headedBrowsers = new WeakSet();
  */
 export function hasDisplay(display = process.env.DISPLAY) {
   const match = /^:(\d+)(\.\d+)?$/.exec(display || '');
-  return Boolean(match) && existsSync(`/tmp/.X11-unix/X${match[1]}`);
+  return Boolean(match) && existsSync(`${X11_SOCKET_DIR}/X${match[1]}`);
+}
+
+// Fix: wait for Weston's socket when DISPLAY is configured, so a scrape during container boot doesn't go headless (PR #673 review)
+async function waitForDisplay() {
+  if (hasDisplay()) return true;
+  if (!process.env.DISPLAY || displayTimedOut) return false;
+  const deadline = Date.now() + DISPLAY_WAIT_MS;
+  while (!hasDisplay()) {
+    if (Date.now() >= deadline) {
+      displayTimedOut = true;
+      return false;
+    }
+    await new Promise(resolve => setTimeout(resolve, DISPLAY_POLL_MS));
+  }
+  return true;
 }
 
 /**
  * @param {unknown} tz
- * @returns {boolean} true for an IANA zone this runtime (and so Chromium) accepts
+ * @returns {boolean} true for a canonical IANA zone known to this runtime
  */
 export function isValidTimezone(tz) {
-  if (typeof tz !== 'string' || !tz) return false;
-  try {
-    new Intl.DateTimeFormat('en-US', { timeZone: tz });
-    return true;
-  } catch {
-    return false;
-  }
+  return typeof tz === 'string' && Intl.supportedValuesOf('timeZone').includes(tz);
 }
 
 /**
- * Launch the fingerprint-consistent browser: headed when a display exists,
+ * Launch the fingerprint-consistent browser: headed when a display exists
+ * (waiting up to 15s for it if DISPLAY is set but the socket isn't up yet),
  * proxied through PLAYWRIGHT_PROXY when set.
  * @returns {Promise<import('playwright').Browser>}
  */
 export async function launchHumanBrowser() {
-  const headed = hasDisplay();
-  if (!headed) logger.warn('No X display; launching headless (expected only in dev/CI)');
+  const headed = await waitForDisplay();
+  if (!headed) logger.warn(`No X display (DISPLAY=${process.env.DISPLAY || 'unset'}); launching headless (expected only in dev/CI)`);
   const opts = { ...LAUNCH_OPTIONS, headless: !headed };
   if (process.env.PLAYWRIGHT_PROXY) opts.proxy = { server: process.env.PLAYWRIGHT_PROXY };
   const browser = await chromium.launch(opts);
@@ -91,9 +106,10 @@ export async function egressTimezone(browser) {
   }
 }
 
-/** Test hook: forget the cached egress timezone. */
-export function resetTimezoneCache() {
+/** Test hook: forget the cached egress timezone and display timeout. */
+export function resetHumanBrowserState() {
   timezoneCache = null;
+  displayTimedOut = false;
 }
 
 /**

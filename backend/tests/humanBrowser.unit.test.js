@@ -14,7 +14,7 @@ const { chromium } = await import('playwright');
 const { existsSync } = await import('node:fs');
 const {
   hasDisplay, isValidTimezone, launchHumanBrowser, egressTimezone, humanContextOptions,
-  resetTimezoneCache, FALLBACK_TIMEZONE
+  resetHumanBrowserState, FALLBACK_TIMEZONE
 } = await import('../services/humanBrowser.js');
 const { chromeUserAgent } = await import('../services/browserPool.js');
 
@@ -22,7 +22,7 @@ const savedEnv = { DISPLAY: process.env.DISPLAY, PLAYWRIGHT_PROXY: process.env.P
 
 beforeEach(() => {
   vi.clearAllMocks();
-  resetTimezoneCache();
+  resetHumanBrowserState();
   geoResponse = () => ({ timezone: 'America/Chicago' });
   existsSync.mockReturnValue(false);
   delete process.env.DISPLAY;
@@ -70,6 +70,28 @@ describe('launchHumanBrowser', () => {
     expect(opts.args).toContain('--disable-blink-features=AutomationControlled');
   });
 
+  it('waits for a configured display that is still starting', async () => {
+    process.env.DISPLAY = ':0';
+    existsSync.mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValue(true);
+    await launchHumanBrowser();
+    expect(chromium.launch.mock.calls[0][0].headless).toBe(false);
+  });
+
+  it('gives up on a display that never appears, and only waits once', async () => {
+    vi.useFakeTimers();
+    try {
+      process.env.DISPLAY = ':0';
+      const first = launchHumanBrowser();
+      await vi.advanceTimersByTimeAsync(16000);
+      await first;
+      expect(chromium.launch.mock.calls[0][0].headless).toBe(true);
+      await launchHumanBrowser(); // resolves without timers advancing
+      expect(chromium.launch.mock.calls[1][0].headless).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('falls back to headless, unproxied when neither is configured', async () => {
     await launchHumanBrowser();
     const opts = chromium.launch.mock.calls[0][0];
@@ -84,7 +106,24 @@ describe('egressTimezone', () => {
     expect(await egressTimezone(browser)).toBe('America/Chicago');
     expect(await egressTimezone(browser)).toBe('America/Chicago');
     expect(probeStub.request.get).toHaveBeenCalledTimes(1);
+    expect(probeStub.request.get).toHaveBeenCalledWith('https://ipinfo.io/json', { timeout: 10000 });
     expect(probeStub.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('looks the zone up again once the hour-long cache expires', async () => {
+    const browser = makeBrowser();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      await egressTimezone(browser);
+      now.mockReturnValue(1_000_000 + 60 * 60 * 1000 - 1);
+      geoResponse = () => ({ timezone: 'America/Denver' });
+      expect(await egressTimezone(browser)).toBe('America/Chicago');
+      now.mockReturnValue(1_000_000 + 60 * 60 * 1000);
+      expect(await egressTimezone(browser)).toBe('America/Denver');
+      expect(probeStub.request.get).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('falls back without caching on a bad or failed lookup', async () => {
