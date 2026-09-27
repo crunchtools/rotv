@@ -49,6 +49,16 @@ describe('openPoiViaPermalink', () => {
     expect(await openPoiViaPermalink(page, 'http://app')).toBeNull();
   });
 
+  it('stops after 15 candidates', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => Array.from({ length: 16 }, (_, i) => ({ name: `POI ${i + 1}` }))
+    })));
+    const page = mockPage(Array.from({ length: 15 }, timeout));
+    expect(await openPoiViaPermalink(page, 'http://app')).toBeNull();
+    expect(page.goto).toHaveBeenCalledTimes(15);
+    expect(page.goto).not.toHaveBeenCalledWith('http://app/poi-16', expect.anything());
+  });
+
   it('only tries candidates that pass the filter', async () => {
     const page = mockPage([]);
     const poi = await openPoiViaPermalink(page, 'http://app', { filter: d => d.name.startsWith('Boston') });
