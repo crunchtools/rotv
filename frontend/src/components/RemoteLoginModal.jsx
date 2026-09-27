@@ -95,8 +95,9 @@ export function diffTyping(before, after) {
  * @param {string} props.label - Display name, e.g. 'Facebook'.
  * @param {() => void} props.onClose - Called when the modal closes (session is cancelled unless saved).
  * @param {(result: {cookiesCount: number, expires: string|null}) => void} props.onSaved - Called after the session is saved.
+ * @param {string} [props.deviceCookie] - Optional device-trust cookie value (Facebook: datr) seeded into the remote browser at start.
  */
-function RemoteLoginModal({ provider, label, onClose, onSaved }) {
+function RemoteLoginModal({ provider, label, onClose, onSaved, deviceCookie }) {
   const base = `/api/admin/remote-login/${provider}`;
   const [viewport, setViewport] = useState(null);
   const [frameUrl, setFrameUrl] = useState(null);
@@ -111,13 +112,21 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   const sendQueue = useRef(Promise.resolve());
   const openScroll = useRef(null); // queued scroll not yet sent, still accepting wheel deltas
   const refreshNow = useRef(null);
+  // Read once: the session starts with whatever device cookie was entered when the modal opened.
+  const startDeviceCookie = useRef(deviceCookie);
 
   // Start the remote session once; cancel it on unmount unless it was saved.
   useEffect(() => {
     let cancelled = false;
     const cancelRemote = () => fetch(`${base}/cancel`, { method: 'POST', credentials: 'include' })
       .catch(err => console.warn('Remote login cancel failed:', err.message));
-    fetch(`${base}/start`, { method: 'POST', credentials: 'include' })
+    const seed = startDeviceCookie.current?.trim();
+    fetch(`${base}/start`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(seed ? { deviceCookie: seed } : {})
+    })
       .then(r => r.json())
       .then(outcome => {
         // Unmounted before start finished: our earlier cancel may have beaten it to the server.

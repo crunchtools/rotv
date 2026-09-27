@@ -85,8 +85,17 @@ describe('RemoteLoginModal', () => {
     await flush();
     await flush();
     expect(calls('/api/admin/remote-login/facebook/start')).toHaveLength(1);
+    expect(JSON.parse(calls('/api/admin/remote-login/facebook/start')[0][1].body)).toEqual({});
     expect(screen.getByAltText('Facebook login screen')).toBeTruthy();
     expect(screen.getByText('Save session').closest('button').disabled).toBe(true);
+  });
+
+  it('sends a trimmed device cookie with the start request', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" deviceCookie="  AbCdEfGhIjKlMnOpQrStUvWx " onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const [, init] = calls('/api/admin/remote-login/facebook/start')[0];
+    expect(init.headers['Content-Type']).toBe('application/json');
+    expect(JSON.parse(init.body)).toEqual({ deviceCookie: 'AbCdEfGhIjKlMnOpQrStUvWx' });
   });
 
   const relayed = () => calls('/input').map(([, init]) => JSON.parse(init.body));

@@ -3648,7 +3648,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
   router.post('/remote-login/:provider/start', isAdmin, async (req, res) => {
     try {
       const { startLogin, VIEWPORT } = await import('../services/remoteLoginSession.js');
-      await startLogin(req.params.provider, req.user.id);
+      await startLogin(req.params.provider, req.user.id, { deviceCookie: req.body?.deviceCookie });
       res.json({ success: true, viewport: VIEWPORT });
     } catch (error) {
       remoteLoginError(res, error);

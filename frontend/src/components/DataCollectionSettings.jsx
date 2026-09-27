@@ -158,6 +158,7 @@ function DataCollectionSettings() {
 
   const [facebookStatus, setFacebookStatus] = useState(null);
   const [showFacebookLogin, setShowFacebookLogin] = useState(false);
+  const [facebookDeviceCookie, setFacebookDeviceCookie] = useState('');
   const [facebookDisconnecting, setFacebookDisconnecting] = useState(false);
 
   const [playwrightStatus, setPlaywrightStatus] = useState(null);
@@ -989,6 +990,16 @@ function DataCollectionSettings() {
             <strong>Session may be stale.</strong> Facebook trail status has failed {facebookStatus.consecutive_failures} times in a row. Reconnect below.
           </div>
         )}
+        <div className="config-row">
+          <label htmlFor="facebook-device-cookie">Device cookie (optional):</label>
+          <input id="facebook-device-cookie" type="password" autoComplete="off" spellCheck={false}
+            placeholder="datr value" value={facebookDeviceCookie}
+            onChange={e => setFacebookDeviceCookie(e.target.value)} />
+        </div>
+        <p className="settings-description" style={{ fontSize: '0.85rem' }}>
+          If Facebook bounces the login back after the CAPTCHA, it doesn&apos;t trust the new device. Paste the <code>datr</code> cookie
+          from a browser where you&apos;re already logged in (DevTools › Application › Cookies › facebook.com) so it sees that device.
+        </p>
         <div style={{ display: 'flex', gap: '10px', marginTop: '0.5rem' }}>
           <button className="action-btn primary" onClick={() => setShowFacebookLogin(true)}>
             {facebookStatus?.connected ? 'Reconnect Facebook' : 'Connect Facebook'}
@@ -1002,7 +1013,7 @@ function DataCollectionSettings() {
       </div>
 
       {showFacebookLogin && (
-        <RemoteLoginModal provider="facebook" label="Facebook"
+        <RemoteLoginModal provider="facebook" label="Facebook" deviceCookie={facebookDeviceCookie}
           onClose={() => setShowFacebookLogin(false)} onSaved={handleFacebookSaved} />
       )}
 
