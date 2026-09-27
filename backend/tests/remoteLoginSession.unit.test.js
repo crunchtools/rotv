@@ -13,6 +13,7 @@ const pageStub = {
 };
 const contextStub = {
   on: vi.fn(),
+  addCookies: vi.fn(async () => {}),
   newPage: vi.fn(async () => pageStub),
   cookies: vi.fn(async () => cookieJar),
   storageState: vi.fn(async () => ({ cookies: cookieJar }))
@@ -58,6 +59,32 @@ describe('startLogin', () => {
     expect(chromium.launch).toHaveBeenCalledTimes(1);
     expect(browserStub.newContext.mock.calls[0][0]).toMatchObject({ viewport: VIEWPORT, timezoneId: 'America/New_York' });
     expect(pageStub.goto.mock.calls[0][0]).toBe('https://www.facebook.com/login/');
+  });
+
+  it('seeds a valid device cookie before loading the login page, without logging it', async () => {
+    await cancelLogin('facebook', ADMIN);
+    vi.clearAllMocks();
+    await startLogin('facebook', ADMIN, { deviceCookie: 'AbCdEfGhIjKlMnOpQrStUvWx' });
+    expect(contextStub.addCookies).toHaveBeenCalledWith([expect.objectContaining({
+      name: 'datr', value: 'AbCdEfGhIjKlMnOpQrStUvWx', domain: '.facebook.com', path: '/', secure: true, httpOnly: true
+    })]);
+    expect(contextStub.addCookies.mock.invocationCallOrder[0]).toBeLessThan(pageStub.goto.mock.invocationCallOrder[0]);
+    expect(JSON.stringify(loggerStub.info.mock.calls)).not.toContain('AbCdEfGhIjKlMnOpQrStUvWx');
+  });
+
+  it('does not seed when no device cookie is given', () => {
+    expect(contextStub.addCookies).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed device cookie before launching anything', async () => {
+    await cancelLogin('facebook', ADMIN);
+    vi.clearAllMocks();
+    for (const bad of ['short', 'datr=AbCdEfGhIjKlMnOpQrStUvWx', 'AbCdEfGh IjKlMnOpQrStUvWx', 42]) {
+      await expect(startLogin('facebook', ADMIN, { deviceCookie: bad })).rejects.toMatchObject({ status: 400 });
+    }
+    expect(chromium.launch).not.toHaveBeenCalled();
+    await startLogin('facebook', ADMIN, { deviceCookie: '' });
+    expect(contextStub.addCookies).not.toHaveBeenCalled();
   });
 
   it('rejects unknown providers and a second admin', async () => {

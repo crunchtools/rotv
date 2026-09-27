@@ -27,12 +27,17 @@ export const PROVIDERS = {
     cookieDomain: 'facebook.com',
     sessionCookie: 'c_user',
     expiryCookie: 'xs',
+    // Device-trust cookie: Facebook refuses logins from a never-seen device on
+    // a VPN IP, so the admin may seed the one from a browser it already trusts.
+    deviceCookie: 'datr',
     settingsKey: 'facebook_cookies',
     failuresKey: 'facebook_consecutive_failures'
   }
 };
 
 export const VIEWPORT = { width: 800, height: 900 };
+const DEVICE_COOKIE_RE = /^[A-Za-z0-9_-]{16,64}$/;
+const DEVICE_COOKIE_LIFETIME_S = 2 * 365 * 24 * 60 * 60;
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_SESSION_MS = 30 * 60 * 1000;
 const MAX_TYPE_LENGTH = 256;
@@ -139,13 +144,21 @@ async function hasSessionCookie(context, provider) {
  * session; refuses if another admin has one open.
  * @param {string} providerName - key of PROVIDERS
  * @param {number} userId
+ * @param {object} [options]
+ * @param {string} [options.deviceCookie] - the provider's device-trust cookie value
+ *   (Facebook: datr) taken from a browser where the admin is already logged in;
+ *   seeded before the login page loads. Never logged.
  * @returns {Promise<void>} resolves once the provider's login page has loaded
- * @throws {LoginSessionError} 404 unknown provider; 409 another admin's session is
+ * @throws {LoginSessionError} 400 malformed device cookie; 404 unknown provider; 409 another admin's session is
  *   open, a start is already in progress, or the caller cancelled during startup
  * @throws {Error} browser launch/navigation failures (the browser is closed first)
  */
-export async function startLogin(providerName, userId) {
+export async function startLogin(providerName, userId, { deviceCookie } = {}) {
   const provider = getProvider(providerName);
+  if (deviceCookie !== undefined && deviceCookie !== '' &&
+      (!provider.deviceCookie || typeof deviceCookie !== 'string' || !DEVICE_COOKIE_RE.test(deviceCookie))) {
+    throw new LoginSessionError('Device cookie should be the value only: 16-64 letters, digits, - or _');
+  }
   if (session && session.userId !== userId) {
     throw new LoginSessionError('Another admin owns the running login session', 409);
   }
@@ -172,6 +185,19 @@ export async function startLogin(providerName, userId) {
     session = { provider: providerName, userId, browser, context, page, idleTimer: null, maxTimer: null };
     session.maxTimer = setTimeout(() => closeSession('max session length'), MAX_SESSION_MS);
     touch();
+    if (deviceCookie) {
+      await context.addCookies([{
+        name: provider.deviceCookie,
+        value: deviceCookie,
+        domain: `.${provider.cookieDomain}`,
+        path: '/',
+        secure: true,
+        httpOnly: true,
+        sameSite: 'None',
+        expires: Math.floor(Date.now() / 1000) + DEVICE_COOKIE_LIFETIME_S
+      }]);
+      logger.info(`Seeded ${provider.label} device cookie (${provider.deviceCookie})`);
+    }
     await page.goto(provider.loginUrl, { waitUntil: 'domcontentloaded', timeout: 45000 });
   } catch (err) {
     if (session?.browser === browser) await closeSession('start failed');

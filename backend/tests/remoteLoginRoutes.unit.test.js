@@ -46,8 +46,13 @@ describe('remote-login routes', () => {
 
   it('start passes the provider and admin id and returns the viewport', async () => {
     const res = await request(admin).post('/api/admin/remote-login/facebook/start').expect(200);
-    expect(session.startLogin).toHaveBeenCalledWith('facebook', 7);
+    expect(session.startLogin).toHaveBeenCalledWith('facebook', 7, { deviceCookie: undefined });
     expect(res.body).toEqual({ success: true, viewport: session.VIEWPORT });
+  });
+
+  it('start passes a device cookie from the body', async () => {
+    await request(admin).post('/api/admin/remote-login/facebook/start').send({ deviceCookie: 'AbCdEfGhIjKlMnOpQrStUvWx' }).expect(200);
+    expect(session.startLogin).toHaveBeenCalledWith('facebook', 7, { deviceCookie: 'AbCdEfGhIjKlMnOpQrStUvWx' });
   });
 
   it('frame returns a no-store JPEG with login state headers', async () => {

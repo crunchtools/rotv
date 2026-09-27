@@ -97,6 +97,7 @@ Twitter/X pages require authenticated access to load tweet content:
 - Login-wall detection (`/login` redirect or login-form text with no posts) returns `reachable:false` with "Facebook login required" and never feeds login text to the classifier. `facebook_consecutive_failures` drives the settings "session may be stale" banner, same as Twitter.
 - Anchors on `[data-utime]` (epoch seconds per post) and reads `[data-testid="post_message"]`, emitting `[YYYY-MM-DD] text` blocks joined by `---`
 - Login and scraper each launch their browser through `humanBrowser.js` with identical configuration, so Facebook sees the same client that created the session: headed Chromium on the container's virtual display (`rotv-display.service`, headless Weston + Xwayland, since RHEL 10 has no Xvfb), egress through the ExpressVPN proxy pinned to `usa-new-york`, native UA and client hints, timezone matched to the exit IP. Without a display (dev/CI) it runs headless with a version-matched UA
+- Facebook refuses logins from a never-seen device on a VPN IP (password and CAPTCHA accepted, then back to `/` with no `c_user`). The Connect panel takes an optional `datr` device cookie taken from a browser where the admin is logged in; it's seeded before the login page loads and saved with the session. The login trace logs each page's host+path and the cookie names
 - `remoteLoginSession.js` is provider-generic (`PROVIDERS` map). Moving Twitter/X from cookie-paste to the remote login is a config entry plus a button
 
 **Public Bluesky API (Bluesky)**
