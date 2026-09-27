@@ -42,8 +42,8 @@ export async function showCarouselViaSwipe(page) {
 // opened sidebar. Returns the POI, or null if none resolve.
 export async function openPoiViaPermalink(page, baseUrl, { filter = () => true, accept = async () => true } = {}) {
   const res = await fetch(`${baseUrl}/api/destinations`);
-  const body = await res.json();
-  const list = (Array.isArray(body) ? body : (body.destinations || body.pois || [])).filter(filter);
+  // Fix: /api/destinations redirects to /api/pois, which always returns an array (PR #678 review)
+  const list = (await res.json()).filter(filter);
   for (const poi of list.slice(0, 15)) {
     // Slug must match frontend/src/App.jsx generateSlug so the permalink resolves.
     const slug = (poi.name || '').toLowerCase()
