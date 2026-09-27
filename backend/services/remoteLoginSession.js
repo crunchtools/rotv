@@ -103,6 +103,18 @@ async function closeSession(reason) {
 }
 
 /**
+ * Log-safe form of a URL: host and path only, since query strings and
+ * fragments can carry login tokens.
+ * @param {string} url
+ * @returns {string}
+ */
+export function redactUrl(url) {
+  if (!URL.canParse(url)) return '(unparseable URL)';
+  const { host, pathname } = new URL(url);
+  return `${host}${pathname}`;
+}
+
+/**
  * Whether a cookie belongs to the provider: exact domain or a dot-delimited
  * subdomain, never a lookalike such as "evilfacebook.com".
  * @param {{domain?: string}} cookie - Playwright cookie (leading dot allowed)
@@ -144,6 +156,16 @@ export async function startLogin(providerName, userId) {
     browser = await launchHumanBrowser();
     const context = await browser.newContext(await humanContextOptions(browser, { viewport: VIEWPORT }));
     const page = await context.newPage();
+    // Trace the login flow (where Facebook sends the admin, which cookies it
+    // sets) so a failed login can be diagnosed from the logs. Paths and cookie
+    // names only, never query strings or cookie values.
+    page.on('framenavigated', frame => {
+      if (frame !== page.mainFrame()) return;
+      context.cookies(provider.cookieUrl)
+        .then(cookies => logger.info(`Login nav: ${redactUrl(frame.url())} cookies=[${cookies.map(c => c.name).sort().join(',')}]`))
+        .catch(err => logger.debug(`Login nav cookie read failed: ${err.message}`));
+    });
+    context.on('page', popup => logger.info(`Login flow opened a new tab: ${redactUrl(popup.url())}`));
     session = { provider: providerName, userId, browser, context, page, idleTimer: null, maxTimer: null };
     session.maxTimer = setTimeout(() => closeSession('max session length'), MAX_SESSION_MS);
     touch();

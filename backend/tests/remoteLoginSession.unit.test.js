@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 let cookieJar = [];
+const mainFrame = { url: () => 'https://www.facebook.com/checkpoint/?token=secret' };
 const pageStub = {
+  on: vi.fn(),
+  mainFrame: vi.fn(() => mainFrame),
   goto: vi.fn(async () => {}),
   url: vi.fn(() => 'https://www.facebook.com/login/'),
   screenshot: vi.fn(async () => Buffer.from('jpeg')),
@@ -9,6 +12,7 @@ const pageStub = {
   keyboard: { type: vi.fn(async () => {}), press: vi.fn(async () => {}) }
 };
 const contextStub = {
+  on: vi.fn(),
   newPage: vi.fn(async () => pageStub),
   cookies: vi.fn(async () => cookieJar),
   storageState: vi.fn(async () => ({ cookies: cookieJar }))
@@ -23,7 +27,7 @@ vi.mock('../services/humanBrowser.js', () => ({
 const { launchHumanBrowser } = await import('../services/humanBrowser.js');
 const chromium = { launch: launchHumanBrowser };
 const {
-  startLogin, getFrame, sendInput, saveLogin, cancelLogin, VIEWPORT, isProviderCookie, PROVIDERS
+  startLogin, getFrame, sendInput, saveLogin, cancelLogin, VIEWPORT, isProviderCookie, PROVIDERS, redactUrl
 } = await import('../services/remoteLoginSession.js');
 
 const ADMIN = 1;
@@ -58,6 +62,24 @@ describe('startLogin', () => {
     await expect(startLogin('constructor', ADMIN)).rejects.toMatchObject({ status: 404 });
     await expect(startLogin('__proto__', ADMIN)).rejects.toMatchObject({ status: 404 });
     await expect(startLogin('facebook', OTHER_ADMIN)).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe('redactUrl', () => {
+  it('keeps host and path, drops query and fragment', () => {
+    expect(redactUrl('https://www.facebook.com/checkpoint/?next=abc&token=secret#x')).toBe('www.facebook.com/checkpoint/');
+    expect(redactUrl('not a url')).toBe('(unparseable URL)');
+  });
+});
+
+describe('login flow tracing', () => {
+  it('logs cookie state on main-frame navigations only', async () => {
+    const onNav = pageStub.on.mock.calls.find(([evt]) => evt === 'framenavigated')[1];
+    contextStub.cookies.mockClear();
+    onNav({ url: () => 'https://www.facebook.com/plugins/iframe' });
+    expect(contextStub.cookies).not.toHaveBeenCalled();
+    onNav(mainFrame);
+    expect(contextStub.cookies).toHaveBeenCalledWith('https://www.facebook.com');
   });
 });
 
