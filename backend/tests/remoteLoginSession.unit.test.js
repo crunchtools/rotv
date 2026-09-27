@@ -1,7 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 let cookieJar = [];
+const mainFrame = { url: () => 'https://www.facebook.com/checkpoint/?token=secret' };
 const pageStub = {
+  on: vi.fn(),
+  mainFrame: vi.fn(() => mainFrame),
   goto: vi.fn(async () => {}),
   url: vi.fn(() => 'https://www.facebook.com/login/'),
   screenshot: vi.fn(async () => Buffer.from('jpeg')),
@@ -9,11 +12,15 @@ const pageStub = {
   keyboard: { type: vi.fn(async () => {}), press: vi.fn(async () => {}) }
 };
 const contextStub = {
+  on: vi.fn(),
   newPage: vi.fn(async () => pageStub),
   cookies: vi.fn(async () => cookieJar),
   storageState: vi.fn(async () => ({ cookies: cookieJar }))
 };
 const browserStub = { newContext: vi.fn(async () => contextStub), close: vi.fn(async () => {}) };
+
+const loggerStub = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+vi.mock('../utils/logger.js', () => ({ createLogger: () => loggerStub }));
 
 vi.mock('../services/humanBrowser.js', () => ({
   launchHumanBrowser: vi.fn(async () => browserStub),
@@ -23,7 +30,7 @@ vi.mock('../services/humanBrowser.js', () => ({
 const { launchHumanBrowser } = await import('../services/humanBrowser.js');
 const chromium = { launch: launchHumanBrowser };
 const {
-  startLogin, getFrame, sendInput, saveLogin, cancelLogin, VIEWPORT, isProviderCookie, PROVIDERS
+  startLogin, getFrame, sendInput, saveLogin, cancelLogin, VIEWPORT, isProviderCookie, PROVIDERS, redactUrl
 } = await import('../services/remoteLoginSession.js');
 
 const ADMIN = 1;
@@ -58,6 +65,46 @@ describe('startLogin', () => {
     await expect(startLogin('constructor', ADMIN)).rejects.toMatchObject({ status: 404 });
     await expect(startLogin('__proto__', ADMIN)).rejects.toMatchObject({ status: 404 });
     await expect(startLogin('facebook', OTHER_ADMIN)).rejects.toMatchObject({ status: 409 });
+  });
+});
+
+describe('redactUrl', () => {
+  it('keeps host and path, drops query and fragment', () => {
+    expect(redactUrl('https://www.facebook.com/checkpoint/?next=abc&token=secret#x')).toBe('www.facebook.com/checkpoint/');
+    expect(redactUrl('not a url')).toBe('(unparseable URL)');
+    expect(redactUrl('https://www.facebook.com/checkpoint/1501092823525282/two_step')).toBe('www.facebook.com/checkpoint/:id/two_step');
+    expect(redactUrl('https://www.facebook.com/r.php/aB3xYz9QwErT/')).toBe('www.facebook.com/r.php/:id/');
+  });
+});
+
+describe('login flow tracing', () => {
+  it('logs cookie state on main-frame navigations only', async () => {
+    const onNav = pageStub.on.mock.calls.find(([evt]) => evt === 'framenavigated')[1];
+    contextStub.cookies.mockClear();
+    onNav({ url: () => 'https://www.facebook.com/plugins/iframe' });
+    expect(contextStub.cookies).not.toHaveBeenCalled();
+    cookieJar = [{ name: 'xs', value: 'SECRETXS', domain: '.facebook.com' }, { name: 'datr', value: 'SECRETDATR', domain: '.facebook.com' }];
+    onNav(mainFrame);
+    expect(contextStub.cookies).toHaveBeenCalledWith('https://www.facebook.com');
+    await vi.waitFor(() => expect(loggerStub.info).toHaveBeenCalledWith(
+      'Login nav: www.facebook.com/checkpoint/ cookies=[datr,xs]'
+    ));
+    expect(JSON.stringify(loggerStub.info.mock.calls)).not.toMatch(/SECRET|token=/);
+  });
+
+  it('survives a failed cookie read without an info log', async () => {
+    const onNav = pageStub.on.mock.calls.find(([evt]) => evt === 'framenavigated')[1];
+    loggerStub.info.mockClear();
+    contextStub.cookies.mockRejectedValueOnce(new Error('context closed'));
+    onNav(mainFrame);
+    await vi.waitFor(() => expect(loggerStub.debug).toHaveBeenCalledWith('Login nav cookie read failed: context closed'));
+    expect(loggerStub.info).not.toHaveBeenCalled();
+  });
+
+  it('logs a new tab by host and path only', () => {
+    const onPage = contextStub.on.mock.calls.find(([evt]) => evt === 'page')[1];
+    onPage({ url: () => 'https://www.facebook.com/two_step/?code=123456#frag' });
+    expect(loggerStub.info).toHaveBeenCalledWith('Login flow opened a new tab: www.facebook.com/two_step/');
   });
 });
 
