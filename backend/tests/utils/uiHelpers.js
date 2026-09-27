@@ -51,7 +51,11 @@ export async function openPoiViaPermalink(page, baseUrl, { filter = () => true, 
     await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
     try {
       await page.waitForSelector('.sidebar.open', { timeout: 5000 });
-    } catch { continue; }
+    } catch (err) {
+      // Fix: only a selector timeout means this slug missed; surface anything else (PR #678 review)
+      if (err.name === 'TimeoutError') continue;
+      throw err;
+    }
     if (await accept(page)) return poi;
   }
   return null;
