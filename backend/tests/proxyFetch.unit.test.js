@@ -40,10 +40,4 @@ describe('proxyFetch', () => {
     expect(undiciFetch.mock.calls[1][1].dispatcher).toBe(init.dispatcher);
     expect(globalFetch).not.toHaveBeenCalled();
   });
-
-  it('builds a new agent when the proxy setting changes', async () => {
-    process.env.PLAYWRIGHT_PROXY = 'http://other.example:3128';
-    await proxyFetch('https://example.org/');
-    expect(ProxyAgent).toHaveBeenCalledWith({ uri: 'http://other.example:3128', proxyTunnel: false });
-  });
 });

@@ -1,7 +1,8 @@
 import { ProxyAgent, fetch as undiciFetch } from 'undici';
 
+// One agent for the process: PLAYWRIGHT_PROXY comes from the service's
+// environment file and doesn't change while the backend runs.
 let agent = null;
-let agentProxy = null;
 
 /**
  * fetch() that egresses through the scraper proxy (PLAYWRIGHT_PROXY, the
@@ -16,12 +17,10 @@ let agentProxy = null;
 export function proxyFetch(url, init = {}) {
   const proxy = process.env.PLAYWRIGHT_PROXY;
   if (!proxy) return fetch(url, init);
-  if (agentProxy !== proxy) {
-    // proxyTunnel:false sends http:// as a plain forward-proxy request: tinyproxy
-    // only allows CONNECT to 443/563, so tunnelling port 80 gets a 403.
-    // https:// is still tunnelled with CONNECT.
-    agent = new ProxyAgent({ uri: proxy, proxyTunnel: false });
-    agentProxy = proxy;
-  }
+  // Fix: create once instead of swapping agents (and leaking the old one's pool) on a proxy change (PR #676 review)
+  // proxyTunnel:false sends http:// as a plain forward-proxy request: tinyproxy
+  // only allows CONNECT to 443/563, so tunnelling port 80 gets a 403.
+  // https:// is still tunnelled with CONNECT.
+  agent ??= new ProxyAgent({ uri: proxy, proxyTunnel: false });
   return undiciFetch(url, { ...init, dispatcher: agent });
 }
