@@ -87,6 +87,25 @@ describe('startLogin', () => {
     expect(contextStub.addCookies).not.toHaveBeenCalled();
   });
 
+  it('accepts 16-64 characters and rejects 15 or 65', async () => {
+    for (const [value, ok] of [['a'.repeat(16), true], ['a'.repeat(64), true], ['a'.repeat(15), false], ['a'.repeat(65), false]]) {
+      await cancelLogin('facebook', ADMIN);
+      const attempt = startLogin('facebook', ADMIN, { deviceCookie: value });
+      if (ok) await expect(attempt).resolves.toBeUndefined();
+      else await expect(attempt).rejects.toMatchObject({ status: 400 });
+    }
+  });
+
+  it('cleans up and allows a retry when seeding the cookie fails', async () => {
+    await cancelLogin('facebook', ADMIN);
+    vi.clearAllMocks();
+    contextStub.addCookies.mockRejectedValueOnce(new Error('bad cookie'));
+    await expect(startLogin('facebook', ADMIN, { deviceCookie: 'AbCdEfGhIjKlMnOpQrStUvWx' })).rejects.toThrow('bad cookie');
+    expect(browserStub.close).toHaveBeenCalled();
+    expect(pageStub.goto).not.toHaveBeenCalled();
+    await expect(startLogin('facebook', ADMIN, { deviceCookie: 'AbCdEfGhIjKlMnOpQrStUvWx' })).resolves.toBeUndefined();
+  });
+
   it('rejects unknown providers and a second admin', async () => {
     await expect(startLogin('myspace', ADMIN)).rejects.toMatchObject({ status: 404 });
     await expect(startLogin('constructor', ADMIN)).rejects.toMatchObject({ status: 404 });
