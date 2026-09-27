@@ -8,10 +8,13 @@ const FRAME_RETRY_MS = 2000;
 const SESSION_ENDED_STATUSES = new Set([401, 403, 404, 409]);
 const TYPE_FLUSH_MS = 120;
 const MAX_TEXT_CHUNK = 256; // server-side limit per 'type' event
-const SPECIAL_KEYS = new Set([
-  'Enter', 'Backspace', 'Tab', 'Escape', 'Delete',
+// Pressed on the remote page directly; they must not edit or move the caret in the local mirror field.
+const PASSTHROUGH_KEYS = new Set([
+  'Enter', 'Tab', 'Escape', 'Delete',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'
 ]);
+// Keys that move the remote caret to another field, so the mirror starts over.
+const FIELD_CHANGE_KEYS = new Set(['Enter', 'Tab']);
 
 /**
  * Map a click on the scaled screenshot to remote-viewport pixels.
@@ -49,18 +52,37 @@ export function chunkText(text, size = MAX_TEXT_CHUNK) {
   return chunks;
 }
 
+// Fix: count what one Backspace deletes (a grapheme), not code points, so a ZWJ emoji can't eat preceding text (PR #671 review)
+const GRAPHEME_SEGMENTER = typeof Intl !== 'undefined' && Intl.Segmenter
+  ? new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  : null;
+
 /**
- * Decide how a keydown is relayed: printable characters are batched as text,
- * navigation/editing keys are pressed individually, shortcuts are ignored.
- * @param {{key: string, ctrlKey?: boolean, metaKey?: boolean, altKey?: boolean}} evt - a React/DOM
- *   KeyboardEvent (only these fields are read)
- * @returns {'text'|'key'|null}
+ * Split text into user-perceived characters (grapheme clusters).
+ * @param {string} text
+ * @returns {string[]} one entry per grapheme; code points where Intl.Segmenter is unavailable
  */
-export function classifyKey(evt) {
-  if (evt.ctrlKey || evt.metaKey || evt.altKey) return null;
-  if (evt.key.length === 1) return 'text';
-  if (SPECIAL_KEYS.has(evt.key)) return 'key';
-  return null;
+function graphemes(text) {
+  return GRAPHEME_SEGMENTER ? Array.from(GRAPHEME_SEGMENTER.segment(text), s => s.segment) : [...text];
+}
+
+/**
+ * Edits that turn the remote field's text from `before` into `after`: backspaces
+ * past the common prefix, then the new tail. Mobile keyboards (Gboard) rewrite
+ * text through composition and autocorrect rather than per-key events, so the
+ * mirror field is diffed instead of relaying keydowns. Works on grapheme
+ * clusters, matching what one Backspace deletes, so a ZWJ emoji or accented
+ * letter is one Backspace (code points on engines without Intl.Segmenter).
+ * @param {string} before - text already relayed
+ * @param {string} after - current mirror value
+ * @returns {{backspaces: number, text: string}}
+ */
+export function diffTyping(before, after) {
+  const a = graphemes(before);
+  const b = graphemes(after);
+  let common = 0;
+  while (common < a.length && common < b.length && a[common] === b[common]) common += 1;
+  return { backspaces: a.length - common, text: b.slice(common).join('') };
 }
 
 /**
@@ -82,8 +104,12 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const savedRef = useRef(false);
-  const typeBuffer = useRef('');
+  // Hidden input that holds keyboard focus: a real text field is what opens a phone's keyboard.
+  const mirrorRef = useRef(null);
+  const relayedText = useRef('');
   const typeTimer = useRef(null);
+  const sendQueue = useRef(Promise.resolve());
+  const openScroll = useRef(null); // queued scroll not yet sent, still accepting wheel deltas
   const refreshNow = useRef(null);
 
   // Start the remote session once; cancel it on unmount unless it was saved.
@@ -185,49 +211,95 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     return accepted;
   }, [base]);
 
-  const flushTyping = useCallback(async () => {
+  // Every relay goes through one queue so backspaces, text, keys and clicks arrive in order.
+  // Anything else queued closes the open scroll slot, so later wheel deltas can't jump ahead of it.
+  const enqueue = useCallback((task) => {
+    openScroll.current = null;
+    // Fix: sendInput already reports its own failures; the catch keeps any unexpected throw from wedging the queue (PR #671 review)
+    sendQueue.current = sendQueue.current.then(task).catch(err => setError(err.message));
+    return sendQueue.current;
+  }, []);
+
+  // Relay whatever the mirror gained or lost since the last flush. The diff is taken now,
+  // synchronously, so a click or key queued right after lands after this text.
+  const flushTyping = useCallback(() => {
     clearTimeout(typeTimer.current);
-    const text = typeBuffer.current;
-    typeBuffer.current = '';
-    for (const chunk of chunkText(text)) {
-      if (!(await sendInput({ type: 'type', text: chunk }))) break;
-    }
-  }, [sendInput]);
+    const current = mirrorRef.current ? mirrorRef.current.value : relayedText.current;
+    const { backspaces, text } = diffTyping(relayedText.current, current);
+    relayedText.current = current;
+    if (!backspaces && !text) return sendQueue.current;
+    return enqueue(async () => {
+      for (let i = 0; i < backspaces; i += 1) {
+        if (!(await sendInput({ type: 'key', key: 'Backspace' }))) return;
+      }
+      // Stop at the first rejected chunk so the field never gets partial, out-of-order text.
+      for (const chunk of chunkText(text)) {
+        if (!(await sendInput({ type: 'type', text: chunk }))) return;
+      }
+    });
+  }, [enqueue, sendInput]);
 
-  const handleKeyDown = async (e) => {
-    const kind = classifyKey(e);
-    if (!kind) return;
-    e.preventDefault();
-    if (kind === 'text') {
-      typeBuffer.current += e.key;
-      clearTimeout(typeTimer.current);
-      typeTimer.current = setTimeout(flushTyping, TYPE_FLUSH_MS);
-      return;
-    }
-    await flushTyping();
-    await sendInput({ type: 'key', key: e.key });
+  /** Clear the mirror and the relayed-text record, e.g. when the remote caret moves to another field. */
+  const resetMirror = () => {
+    if (mirrorRef.current) mirrorRef.current.value = '';
+    relayedText.current = '';
   };
 
-  // Paste is how password-manager users get credentials in — autofill can't reach the remote browser.
-  const handlePaste = async (e) => {
-    const text = e.clipboardData.getData('text');
-    if (!text) return;
-    e.preventDefault();
-    await flushTyping();
-    // Stop at the first rejected chunk so the field never gets partial, out-of-order text.
-    for (const chunk of chunkText(text)) {
-      if (!(await sendInput({ type: 'type', text: chunk }))) break;
-    }
+  /**
+   * Debounce mirror value changes into one flush. Typing, autocorrect and paste
+   * (including a password manager's) all land here.
+   */
+  const handleMirrorInput = () => {
+    clearTimeout(typeTimer.current);
+    typeTimer.current = setTimeout(flushTyping, TYPE_FLUSH_MS);
   };
 
-  const handleClick = async (e) => {
+  /**
+   * Press navigation/editing keys on the remote page. Printable keys are left to the
+   * mirror's input event on purpose: that is the only path phone keyboards use.
+   * @param {React.KeyboardEvent<HTMLInputElement>} e
+   */
+  const handleMirrorKeyDown = (e) => {
+    const modified = e.ctrlKey || e.metaKey || e.altKey || e.shiftKey;
+    // Fix: modified navigation (Shift+Arrow, Ctrl+Home…) isn't relayed, so it must not move the mirror's caret either (PR #671 review)
+    if (modified && PASSTHROUGH_KEYS.has(e.key) && e.key !== 'Enter' && e.key !== 'Tab') { e.preventDefault(); return; }
+    if (e.ctrlKey || e.metaKey || e.altKey) return; // leave paste shortcuts to the input event
+    const emptyBackspace = e.key === 'Backspace' && !e.currentTarget.value;
+    if (!PASSTHROUGH_KEYS.has(e.key) && !emptyBackspace) return;
+    e.preventDefault();
+    const { key } = e;
+    flushTyping();
+    if (FIELD_CHANGE_KEYS.has(key)) resetMirror();
+    enqueue(() => sendInput({ type: 'key', key }));
+  };
+
+  /**
+   * Relay a click at the mapped remote point and focus the mirror within the gesture.
+   * @param {React.MouseEvent<HTMLImageElement>} e
+   */
+  const handleClick = (e) => {
     // Fix: map the point before awaiting; React nulls e.currentTarget once dispatch ends, so every real click threw
     const point = toViewportPoint(e, e.currentTarget.getBoundingClientRect(), viewport);
-    await flushTyping();
-    await sendInput({ type: 'click', ...point });
+    // Focus inside the tap itself: mobile browsers only open the keyboard for a focus made during a user gesture.
+    if (mirrorRef.current) mirrorRef.current.focus({ preventScroll: true });
+    flushTyping();
+    resetMirror(); // a click may pick a different remote field
+    enqueue(() => sendInput({ type: 'click', ...point }));
   };
 
-  const handleWheel = (e) => { sendInput({ type: 'scroll', dy: e.deltaY }); };
+  useEffect(() => () => clearTimeout(typeTimer.current), []);
+
+  // Fix: scroll joins the ordered queue, and wheel deltas that arrive while a scroll is queued
+  // merge into it so a flick can't pile up requests ahead of the next click (PR #671 review)
+  const handleWheel = (e) => {
+    if (openScroll.current) { openScroll.current.dy += e.deltaY; return; }
+    const slot = { dy: e.deltaY };
+    openScroll.current = slot;
+    sendQueue.current = sendQueue.current.then(() => {
+      if (openScroll.current === slot) openScroll.current = null; // sealed once it starts sending
+      return slot.dy ? sendInput({ type: 'scroll', dy: slot.dy }) : undefined;
+    }).catch(err => setError(err.message));
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -253,14 +325,19 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
         </div>
         <div className="modal-body" style={{ overflow: 'auto' }}>
           <p className="settings-description" style={{ fontSize: '0.85rem' }}>
-            This is a browser running on the ROTV server. Click into it and log in as usual,
-            including any security check. Paste works for passwords.
+            This is a browser running on the ROTV server. Tap or click a field and type as usual
+            (your keyboard opens on phones), including any security check. Paste works for passwords.
           </p>
           {error && <div className="sync-error">{error}</div>}
-          {/* The frame is a live remote screen, so it needs raw keyboard focus rather than a form control. */}
-          <div tabIndex={0} role="application" aria-label={`${label} login browser`}
-            onKeyDown={handleKeyDown} onPaste={handlePaste} onWheel={handleWheel}
-            style={{ outline: '2px solid #1877f2', borderRadius: '4px', lineHeight: 0 }}>
+          <div role="application" aria-label={`${label} login browser`} onWheel={handleWheel}
+            style={{ position: 'relative', outline: '2px solid #1877f2', borderRadius: '4px', lineHeight: 0 }}>
+            {/* Invisible but focusable (not display:none) so phones open their keyboard; type=password keeps
+                keyboards from suggesting or learning what's typed. 16px avoids iOS zoom-on-focus. */}
+            <input ref={mirrorRef} type="password" aria-label={`${label} keyboard input`}
+              autoComplete="off" autoCapitalize="off" autoCorrect="off" spellCheck={false}
+              onInput={handleMirrorInput} onKeyDown={handleMirrorKeyDown}
+              style={{ position: 'absolute', top: 0, left: 0, width: '1px', height: '1px', opacity: 0,
+                border: 0, padding: 0, fontSize: '16px', pointerEvents: 'none' }} />
             {frameUrl
               ? <img src={frameUrl} alt={`${label} login screen`} onClick={handleClick}
                   style={{ width: '100%', height: 'auto', cursor: 'pointer', userSelect: 'none' }} draggable={false} />

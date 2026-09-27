@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, act, screen, fireEvent, cleanup } from '@testing-library/react';
-import RemoteLoginModal, { toViewportPoint, classifyKey, chunkText } from './RemoteLoginModal';
+import RemoteLoginModal, { toViewportPoint, diffTyping, chunkText } from './RemoteLoginModal';
 import { fetchResponse } from '../test/fetchResponse';
 
 const VIEWPORT = { width: 800, height: 900 };
@@ -32,14 +32,22 @@ describe('chunkText', () => {
   });
 });
 
-describe('classifyKey', () => {
-  it('batches printable characters, presses special keys, ignores shortcuts', () => {
-    expect(classifyKey({ key: 'a' })).toBe('text');
-    expect(classifyKey({ key: '@' })).toBe('text');
-    expect(classifyKey({ key: 'Enter' })).toBe('key');
-    expect(classifyKey({ key: 'Backspace' })).toBe('key');
-    expect(classifyKey({ key: 'v', ctrlKey: true })).toBeNull();
-    expect(classifyKey({ key: 'F5' })).toBeNull();
+describe('diffTyping', () => {
+  it('appends new text', () => {
+    expect(diffTyping('ab', 'abc')).toEqual({ backspaces: 0, text: 'c' });
+  });
+  it('turns an autocorrect rewrite into backspaces plus the new tail', () => {
+    expect(diffTyping('teh', 'the ')).toEqual({ backspaces: 2, text: 'he ' });
+  });
+  it('deletes whole code points, so an emoji is one backspace', () => {
+    expect(diffTyping('a😀', 'a')).toEqual({ backspaces: 1, text: '' });
+  });
+  it('deletes a ZWJ emoji or combined accent as one grapheme', () => {
+    expect(diffTyping('a👩‍💻', 'a')).toEqual({ backspaces: 1, text: '' });
+    expect(diffTyping('xe\u0301', 'x')).toEqual({ backspaces: 1, text: '' });
+  });
+  it('is a no-op when nothing changed', () => {
+    expect(diffTyping('same', 'same')).toEqual({ backspaces: 0, text: '' });
   });
 });
 
@@ -81,14 +89,198 @@ describe('RemoteLoginModal', () => {
     expect(screen.getByText('Save session').closest('button').disabled).toBe(true);
   });
 
+  const relayed = () => calls('/input').map(([, init]) => JSON.parse(init.body));
+  const typeInto = (mirror, value) => { mirror.value = value; fireEvent.input(mirror); };
+  const settle = () => act(async () => { await vi.advanceTimersByTimeAsync(200); });
+
   it('batches typed characters into one type event', async () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    for (const value of ['a', 'ab', 'abc']) typeInto(mirror, value);
+    await settle();
+    expect(relayed()).toEqual([{ type: 'type', text: 'abc' }]);
+  });
+
+  // Fix: Android keyboards never opened on the old keydown-only surface and send composition, not keys (PR #669 review)
+  it('focuses a real text input during the tap so phones open their keyboard', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    expect(mirror.tagName).toBe('INPUT');
+    fireEvent.click(screen.getByAltText('Facebook login screen'), { clientX: 0, clientY: 0 });
+    expect(document.activeElement).toBe(mirror);
+  });
+
+  it('relays an autocorrect rewrite as backspaces then the corrected text', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    typeInto(mirror, 'teh');
+    await settle();
+    typeInto(mirror, 'the ');
+    await settle();
+    expect(relayed()).toEqual([
+      { type: 'type', text: 'teh' },
+      { type: 'key', key: 'Backspace' },
+      { type: 'key', key: 'Backspace' },
+      { type: 'type', text: 'he ' }
+    ]);
+  });
+
+  it('flushes pending text before Enter and starts the next field fresh', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    typeInto(mirror, 'me@x.org');
+    fireEvent.keyDown(mirror, { key: 'Enter' });
+    await settle();
+    expect(mirror.value).toBe('');
+    typeInto(mirror, 'pw');
+    await settle();
+    expect(relayed()).toEqual([
+      { type: 'type', text: 'me@x.org' },
+      { type: 'key', key: 'Enter' },
+      { type: 'type', text: 'pw' }
+    ]);
+  });
+
+  it.each(['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'Escape', 'Delete'])(
+    'relays %s without touching the mirror', async (key) => {
+      render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+      await flush();
+      const mirror = screen.getByLabelText('Facebook keyboard input');
+      typeInto(mirror, 'ab');
+      fireEvent.keyDown(mirror, { key });
+      await settle();
+      expect(mirror.value).toBe('ab');
+      expect(relayed()).toEqual([{ type: 'type', text: 'ab' }, { type: 'key', key }]);
+    });
+
+  it('treats Tab like Enter: flush, relay, and start the next field fresh', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    typeInto(mirror, 'me');
+    fireEvent.keyDown(mirror, { key: 'Tab' });
+    await settle();
+    expect(mirror.value).toBe('');
+    expect(relayed()).toEqual([{ type: 'type', text: 'me' }, { type: 'key', key: 'Tab' }]);
+  });
+
+  it.each([{ key: 'v', ctrlKey: true }, { key: 'a', metaKey: true }, { key: 'F5' }, { key: 'Shift' }])(
+    'ignores %o (shortcuts and unsupported keys)', async (evt) => {
+      render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+      await flush();
+      fireEvent.keyDown(screen.getByLabelText('Facebook keyboard input'), evt);
+      await settle();
+      expect(relayed()).toEqual([]);
+    });
+
+  it('sends pending text to the old field before a click, then starts fresh', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    const img = screen.getByAltText('Facebook login screen');
+    vi.spyOn(img, 'getBoundingClientRect').mockReturnValue({ left: 0, top: 0, width: VIEWPORT.width, height: VIEWPORT.height });
+    typeInto(mirror, 'me');
+    fireEvent.click(img, { clientX: 400, clientY: 410 });
+    expect(mirror.value).toBe('');
+    typeInto(mirror, 'pw');
+    await settle();
+    expect(relayed()).toEqual([
+      { type: 'type', text: 'me' },
+      { type: 'click', x: 400, y: 410 },
+      { type: 'type', text: 'pw' }
+    ]);
+  });
+
+  it('merges wheel deltas that arrive while a scroll is queued', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
     const surface = screen.getByRole('application');
-    for (const key of 'abc') fireEvent.keyDown(surface, { key });
-    await act(async () => { await vi.advanceTimersByTimeAsync(200); });
-    const inputs = calls('/input').map(([, init]) => JSON.parse(init.body));
-    expect(inputs).toEqual([{ type: 'type', text: 'abc' }]);
+    for (const deltaY of [100, 100, 50]) fireEvent.wheel(surface, { deltaY });
+    await settle();
+    expect(relayed()).toEqual([{ type: 'scroll', dy: 250 }]);
+  });
+
+  it('never lets a wheel delta jump ahead of a queued key', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const surface = screen.getByRole('application');
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    fireEvent.wheel(surface, { deltaY: 100 });
+    fireEvent.keyDown(mirror, { key: 'Enter' });
+    fireEvent.wheel(surface, { deltaY: 40 });
+    await settle();
+    expect(relayed()).toEqual([
+      { type: 'scroll', dy: 100 },
+      { type: 'key', key: 'Enter' },
+      { type: 'scroll', dy: 40 }
+    ]);
+  });
+
+  it('keeps at most one scroll pending behind one in flight', async () => {
+    const releases = [];
+    fetchMock.mockImplementation((url, init) => {
+      if (url.endsWith('/start')) return Promise.resolve(fetchResponse({ success: true, viewport: VIEWPORT }));
+      if (url.endsWith('/input')) return new Promise(resolve => releases.push(() => resolve(fetchResponse({ success: true }))));
+      return Promise.resolve({ ok: true, blob: () => Promise.resolve(new Blob(['jpeg'])), headers: { get: () => 'false' } });
+    });
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const surface = screen.getByRole('application');
+    fireEvent.wheel(surface, { deltaY: 100 });
+    await flush(); // first scroll is now in flight
+    for (const deltaY of [10, 20, 30]) fireEvent.wheel(surface, { deltaY });
+    await flush();
+    expect(relayed()).toEqual([{ type: 'scroll', dy: 100 }]);
+    await act(async () => { releases.shift()(); await vi.advanceTimersByTimeAsync(0); });
+    expect(relayed()).toEqual([{ type: 'scroll', dy: 100 }, { type: 'scroll', dy: 60 }]);
+  });
+
+  it('relays a Gboard-style composition once it settles, including a mid-word rewrite', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    fireEvent.compositionStart(mirror);
+    for (const value of ['s', 'sc', 'sco', 'scot']) typeInto(mirror, value);
+    fireEvent.compositionEnd(mirror);
+    typeInto(mirror, 'Scott'); // keyboard capitalizes on commit
+    await settle();
+    expect(relayed()).toEqual([{ type: 'type', text: 'Scott' }]);
+  });
+
+  it('relays an ordinary Backspace through the mirror value change', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    typeInto(mirror, 'abc');
+    await settle();
+    fireEvent.keyDown(mirror, { key: 'Backspace' }); // not prevented: the browser edits the value
+    typeInto(mirror, 'ab');
+    await settle();
+    expect(relayed()).toEqual([{ type: 'type', text: 'abc' }, { type: 'key', key: 'Backspace' }]);
+  });
+
+  it('swallows modified navigation so the mirror caret stays put', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    const notPrevented = fireEvent.keyDown(mirror, { key: 'ArrowLeft', shiftKey: true });
+    await settle();
+    expect(notPrevented).toBe(false);
+    expect(relayed()).toEqual([]);
+  });
+
+  it('presses Backspace on the remote page when the mirror is already empty', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    fireEvent.keyDown(mirror, { key: 'Backspace' });
+    await settle();
+    expect(relayed()).toEqual([{ type: 'key', key: 'Backspace' }]);
+    expect(mirror.value).toBe('');
   });
 
   // Fix: a real click's React event loses currentTarget after dispatch, so the point must be read synchronously
@@ -192,10 +384,8 @@ describe('RemoteLoginModal', () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
     const long = 'x'.repeat(300);
-    await act(async () => {
-      fireEvent.paste(screen.getByRole('application'), { clipboardData: { getData: () => long } });
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    typeInto(screen.getByLabelText('Facebook keyboard input'), long);
+    await settle();
     const typed = calls('/input').map(([, init]) => JSON.parse(init.body).text).join('');
     expect(typed).toBe(long);
   });
@@ -228,10 +418,8 @@ describe('RemoteLoginModal', () => {
     });
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
-    await act(async () => {
-      fireEvent.paste(screen.getByRole('application'), { clipboardData: { getData: () => 'x'.repeat(600) } });
-      await vi.advanceTimersByTimeAsync(0);
-    });
+    typeInto(screen.getByLabelText('Facebook keyboard input'), 'x'.repeat(600));
+    await settle();
     expect(inputCalls).toBe(1);
   });
 
@@ -251,9 +439,9 @@ describe('RemoteLoginModal', () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();
     expect(frameCalls).toBe(1);
-    const surface = screen.getByRole('application');
+    const mirror = screen.getByLabelText('Facebook keyboard input');
     await act(async () => {
-      for (const key of ['Enter', 'Tab', 'Enter']) fireEvent.keyDown(surface, { key });
+      for (const key of ['Enter', 'Tab', 'Enter']) fireEvent.keyDown(mirror, { key });
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(frameCalls).toBe(1);
