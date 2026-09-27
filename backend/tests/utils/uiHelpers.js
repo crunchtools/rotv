@@ -33,3 +33,37 @@ export async function showCarouselViaSwipe(page) {
   }
   return (await page.locator('.thumbnail-carousel').count()) > 0;
 }
+
+/**
+ * Open a POI's sidebar via its bare-path permalink (/<slug>). Clicking a map
+ * marker is unreliable: the first marker may be a cluster, or the map may still
+ * be fitting bounds when the click lands, so the sidebar never opens. A given
+ * slug may not resolve (e.g. POI not in the loaded set), so try up to 15
+ * candidates until the sidebar opens.
+ * @param {import('playwright').Page} page
+ * @param {string} baseUrl - app origin, e.g. http://localhost:8080
+ * @param {object} [opts]
+ * @param {(poi: object) => boolean} [opts.filter] - narrows the candidate POIs
+ * @param {(page: import('playwright').Page) => Promise<boolean>} [opts.accept] - checks the opened sidebar
+ * @returns {Promise<object|null>} the opened POI, or null if none resolve
+ */
+export async function openPoiViaPermalink(page, baseUrl, { filter = () => true, accept = async () => true } = {}) {
+  const res = await fetch(`${baseUrl}/api/destinations`);
+  // Fix: /api/destinations redirects to /api/pois, which always returns an array (PR #678 review)
+  const list = (await res.json()).filter(filter);
+  for (const poi of list.slice(0, 15)) {
+    // Slug must match frontend/src/App.jsx generateSlug so the permalink resolves.
+    const slug = (poi.name || '').toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
+    try {
+      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+    } catch (err) {
+      // Fix: only a selector timeout means this slug missed; surface anything else (PR #678 review)
+      if (err.name === 'TimeoutError') continue;
+      throw err;
+    }
+    if (await accept(page)) return poi;
+  }
+  return null;
+}
