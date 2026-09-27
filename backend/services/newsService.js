@@ -1149,6 +1149,15 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 }
 
 
+/**
+ * Resolve a news link that points at a redirector (search-grounding redirects,
+ * Constant Contact rs6.net trackers, ...) to its final URL. The HEAD request
+ * goes through the scraper proxy, since following it lands on the news site.
+ * @param {string} url - source URL from a news/event item
+ * @returns {Promise<string|null>} the URL itself when it isn't a redirect; the
+ *   final URL when the redirect resolves; null for 'N/A'/empty, a redirect that
+ *   goes nowhere, or a failed request (broken redirects aren't saved)
+ */
 export async function resolveRedirectUrl(url) {
   if (!url || url === 'N/A') return null;
 
