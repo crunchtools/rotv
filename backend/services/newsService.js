@@ -12,6 +12,7 @@ import { classifyPoiType } from '../utils/poiClassify.js';
 import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
 import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, PIPELINE_DEFAULTS } from './newsPipelines.js';
 import { createLogger } from '../utils/logger.js';
+import { proxyFetch } from '../utils/proxyFetch.js';
 
 const logger = createLogger('News');
 const searchLogger = createLogger('Search');
@@ -1161,7 +1162,8 @@ async function resolveRedirectUrl(url) {
   }
 
   try {
-    const response = await fetch(url, {
+    // Through the scraper proxy: following the redirect lands on the news site.
+    const response = await proxyFetch(url, {
       method: 'HEAD',
       redirect: 'follow',
       signal: AbortSignal.timeout(5000) // 5 second timeout

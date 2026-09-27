@@ -1,4 +1,5 @@
 import { acquireBrowser, releaseBrowser, chromeUserAgent } from './browserPool.js';
+import { proxyFetch } from '../utils/proxyFetch.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('JS Renderer');
@@ -53,10 +54,11 @@ export async function isJavaScriptHeavySite(url, options = {}) {
 
     if (checkContent) {
       try {
-        const response = await fetch(url, {
+        // Through the scraper proxy: this GET hits the scrape target itself.
+        const response = await proxyFetch(url, {
           method: 'GET',
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
           },
           signal: AbortSignal.timeout(5000)
         });

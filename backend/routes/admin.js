@@ -3480,9 +3480,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
    * Test if saved Twitter cookies still work
    */
   router.post('/twitter/test-cookies', isAdmin, async (req, res) => {
+    let acquisitionId = null;
+    let context = null;
     try {
-      const { chromium } = await import('playwright');
-
       const cookiesRow = await pool.query(
         "SELECT value FROM admin_settings WHERE key = 'twitter_cookies'"
       );
@@ -3497,18 +3497,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const cookies = JSON.parse(cookiesRow.rows[0].value);
       twitterAuthLogger.info('Testing', cookies.length, 'saved cookies...');
 
-      const browser = await chromium.launch({
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage'
-        ]
-      });
-
-      const context = await browser.newContext({
-        userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      });
+      // The scraper pool: same VPN egress and fingerprint X sees from the Twitter scraper (contentExtractor).
+      const { acquireBrowser, chromeUserAgent } = await import('../services/browserPool.js');
+      const acquired = await acquireBrowser();
+      acquisitionId = acquired.acquisitionId;
+      context = await acquired.browser.newContext({ userAgent: chromeUserAgent(acquired.browser) });
 
       // Playwright requires Strict/Lax/None for sameSite and 'expires' (not 'expirationDate')
       const sanitizedCookies = cookies.map(cookie => {
@@ -3545,8 +3538,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const isLoggedIn = currentUrl.includes('/home') && !currentUrl.includes('/login');
 
-      await browser.close();
-
       if (isLoggedIn) {
         res.json({
           success: true,
@@ -3567,6 +3558,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         success: false,
         error: error.message
       });
+    } finally {
+      if (context) await context.close().catch(err => twitterAuthLogger.warn('Context close failed:', err.message));
+      if (acquisitionId !== null) {
+        const { releaseBrowser } = await import('../services/browserPool.js');
+        releaseBrowser(acquisitionId);
+      }
     }
   });
 
