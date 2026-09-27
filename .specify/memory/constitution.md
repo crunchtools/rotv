@@ -1,6 +1,6 @@
 # rotv Constitution
 
-> **Version:** 2.1.2
+> **Version:** 2.1.3
 > **Ratified:** 2026-03-10
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.17.0
@@ -111,6 +111,7 @@ Nagios monitoring:
 - HTTP check for Node.js backend on port 8080
 - TCP port check for PostgreSQL on port 5432
 - `pg_isready` health check for database connectivity
+- Process check for `weston` (rotv-display.service, the virtual display for the headed Facebook browser)
 
 ## Testing
 
