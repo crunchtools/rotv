@@ -104,14 +104,17 @@ async function closeSession(reason) {
 
 /**
  * Log-safe form of a URL: host and path only, since query strings and
- * fragments can carry login tokens.
+ * fragments can carry login tokens, with any path segment that looks like an
+ * ID or token (8+ characters containing a digit) masked as ":id".
  * @param {string} url
  * @returns {string}
  */
 export function redactUrl(url) {
   if (!URL.canParse(url)) return '(unparseable URL)';
   const { host, pathname } = new URL(url);
-  return `${host}${pathname}`;
+  // Fix: mask token-like path segments too, not just the query (PR #674 review)
+  const path = pathname.split('/').map(seg => (seg.length >= 8 && /\d/.test(seg) ? ':id' : seg)).join('/');
+  return `${host}${path}`;
 }
 
 /**

@@ -72,6 +72,8 @@ describe('redactUrl', () => {
   it('keeps host and path, drops query and fragment', () => {
     expect(redactUrl('https://www.facebook.com/checkpoint/?next=abc&token=secret#x')).toBe('www.facebook.com/checkpoint/');
     expect(redactUrl('not a url')).toBe('(unparseable URL)');
+    expect(redactUrl('https://www.facebook.com/checkpoint/1501092823525282/two_step')).toBe('www.facebook.com/checkpoint/:id/two_step');
+    expect(redactUrl('https://www.facebook.com/r.php/aB3xYz9QwErT/')).toBe('www.facebook.com/r.php/:id/');
   });
 });
 
@@ -88,6 +90,15 @@ describe('login flow tracing', () => {
       'Login nav: www.facebook.com/checkpoint/ cookies=[datr,xs]'
     ));
     expect(JSON.stringify(loggerStub.info.mock.calls)).not.toMatch(/SECRET|token=/);
+  });
+
+  it('survives a failed cookie read without an info log', async () => {
+    const onNav = pageStub.on.mock.calls.find(([evt]) => evt === 'framenavigated')[1];
+    loggerStub.info.mockClear();
+    contextStub.cookies.mockRejectedValueOnce(new Error('context closed'));
+    onNav(mainFrame);
+    await vi.waitFor(() => expect(loggerStub.debug).toHaveBeenCalledWith('Login nav cookie read failed: context closed'));
+    expect(loggerStub.info).not.toHaveBeenCalled();
   });
 
   it('logs a new tab by host and path only', () => {
