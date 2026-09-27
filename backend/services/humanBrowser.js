@@ -93,11 +93,10 @@ export async function humanContextOptions(browser, extra = {}) {
       // Fix: a page navigation, not probe.request, so the lookup surely goes through the launch proxy (PR #673 review)
       const res = await page.goto(GEO_URL, { timeout: GEO_TIMEOUT_MS });
       if (!res?.ok()) throw new Error(`geo lookup HTTP ${res?.status()}`);
-      const { timezone } = await res.json();
-      // A canonical IANA zone Chromium will accept; anything else falls back.
-      if (typeof timezone !== 'string' || !Intl.supportedValuesOf('timeZone').includes(timezone)) {
-        throw new Error(`no usable timezone in geo response (${timezone})`);
-      }
+      const { timezone: reported } = await res.json();
+      if (typeof reported !== 'string' || !reported) throw new Error(`no timezone in geo response (${reported})`);
+      // Fix: accept aliases (Asia/Calcutta, Etc/UTC) — DateTimeFormat throws RangeError on unknown zones, caught below (PR #673 review)
+      const timezone = new Intl.DateTimeFormat('en-US', { timeZone: reported }).resolvedOptions().timeZone;
       timezoneCache = { timezone, at: Date.now() };
       timezoneId = timezone;
       logger.info(`Egress timezone: ${timezone}`);

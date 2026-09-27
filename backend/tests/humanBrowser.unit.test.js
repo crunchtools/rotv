@@ -121,6 +121,11 @@ describe('egress timezone lookup', () => {
     }
   });
 
+  it('accepts timezone aliases', async () => {
+    geoResponse = () => ({ timezone: 'Asia/Calcutta' });
+    expect(await egressTimezone(makeBrowser())).toMatch(/^Asia\/(Calcutta|Kolkata)$/);
+  });
+
   it('falls back without caching on a bad or failed lookup', async () => {
     const browser = makeBrowser();
     geoResponse = () => ({ timezone: 'Nowhere/Land' });
