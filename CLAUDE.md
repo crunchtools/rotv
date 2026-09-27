@@ -111,7 +111,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 - `backend/server.js` — Express app setup, route mounting, MCP server startup
 - `backend/routes/` — API route handlers (admin, auth, pois, news, events, media, etc.)
 - `backend/services/` — business logic (collection, moderation, newsletter, geocoding, MCP)
-- `backend/services/mcpServer.js` — MCP admin server on port 3001 (30 tools)
+- `backend/services/mcpServer.js` — MCP admin server, mounted on the main app at `/mcp` (30 tools)
 - `backend/services/moderationService.js` — AI moderation with LLM scoring
 - `backend/services/newsService.js` — News/events web crawling pipeline
 
