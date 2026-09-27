@@ -19,6 +19,9 @@ const contextStub = {
 };
 const browserStub = { newContext: vi.fn(async () => contextStub), close: vi.fn(async () => {}) };
 
+const loggerStub = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+vi.mock('../utils/logger.js', () => ({ createLogger: () => loggerStub }));
+
 vi.mock('../services/humanBrowser.js', () => ({
   launchHumanBrowser: vi.fn(async () => browserStub),
   humanContextOptions: vi.fn(async (_browser, extra) => ({ locale: 'en-US', timezoneId: 'America/New_York', ...extra }))
@@ -78,8 +81,19 @@ describe('login flow tracing', () => {
     contextStub.cookies.mockClear();
     onNav({ url: () => 'https://www.facebook.com/plugins/iframe' });
     expect(contextStub.cookies).not.toHaveBeenCalled();
+    cookieJar = [{ name: 'xs', value: 'SECRETXS', domain: '.facebook.com' }, { name: 'datr', value: 'SECRETDATR', domain: '.facebook.com' }];
     onNav(mainFrame);
     expect(contextStub.cookies).toHaveBeenCalledWith('https://www.facebook.com');
+    await vi.waitFor(() => expect(loggerStub.info).toHaveBeenCalledWith(
+      'Login nav: www.facebook.com/checkpoint/ cookies=[datr,xs]'
+    ));
+    expect(JSON.stringify(loggerStub.info.mock.calls)).not.toMatch(/SECRET|token=/);
+  });
+
+  it('logs a new tab by host and path only', () => {
+    const onPage = contextStub.on.mock.calls.find(([evt]) => evt === 'page')[1];
+    onPage({ url: () => 'https://www.facebook.com/two_step/?code=123456#frag' });
+    expect(loggerStub.info).toHaveBeenCalledWith('Login flow opened a new tab: www.facebook.com/two_step/');
   });
 });
 

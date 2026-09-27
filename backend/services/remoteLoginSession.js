@@ -157,8 +157,8 @@ export async function startLogin(providerName, userId) {
     const context = await browser.newContext(await humanContextOptions(browser, { viewport: VIEWPORT }));
     const page = await context.newPage();
     // Trace the login flow (where Facebook sends the admin, which cookies it
-    // sets) so a failed login can be diagnosed from the logs. Paths and cookie
-    // names only, never query strings or cookie values.
+    // sets) so a failed login can be diagnosed from the logs. Host, path and
+    // cookie names only, never query strings or cookie values.
     page.on('framenavigated', frame => {
       if (frame !== page.mainFrame()) return;
       context.cookies(provider.cookieUrl)
