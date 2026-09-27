@@ -3505,7 +3505,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       // Same conversion as the scraper: exporters write null/no_restriction sameSite, which addCookies rejects
       const { toPlaywrightCookies } = await import('../services/contentExtractor.js');
-      await context.addCookies(toPlaywrightCookies(cookies.filter(c => c?.name && c?.value)));
+      await context.addCookies(toPlaywrightCookies(cookies));
 
       const page = await context.newPage();
 

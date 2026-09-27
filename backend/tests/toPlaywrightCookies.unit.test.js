@@ -19,6 +19,10 @@ describe('toPlaywrightCookies', () => {
       .toMatchObject({ path: '/i', secure: false, httpOnly: true });
   });
 
+  it('drops null and nameless or valueless entries', () => {
+    expect(toPlaywrightCookies([null, { ...base, name: '' }, { ...base, value: '' }, base]).map(c => c.name)).toEqual(['n']);
+  });
+
   it('keeps expiry from expires or the extension expirationDate', () => {
     expect(toPlaywrightCookies([{ ...base, expires: 1790000000 }])[0].expires).toBe(1790000000);
     expect(toPlaywrightCookies([{ ...base, expirationDate: 1790000000.5 }])[0].expires).toBe(1790000000.5);

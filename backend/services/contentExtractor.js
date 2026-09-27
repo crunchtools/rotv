@@ -36,7 +36,8 @@ const STEALTH_INIT_SCRIPT = `
  * shape. Exporters write sameSite as 'no_restriction', 'unspecified', 'lax'
  * or null; Playwright accepts only Strict, Lax or None. Expiry comes from
  * `expires` or the extension's `expirationDate` (epoch seconds); without
- * either the cookie is a session cookie.
+ * either the cookie is a session cookie. Entries without a name or value
+ * (or null) are dropped.
  * @param {Array<object>} cookies - as stored in admin_settings
  * @returns {Array<object>} cookies for context.addCookies
  */
@@ -47,7 +48,8 @@ export function toPlaywrightCookies(cookies) {
     if (lower === 'lax') return 'Lax';
     return 'None';
   };
-  return cookies.map(c => {
+  // Fix: drop malformed entries here so every caller gets it (PR #677 review)
+  return cookies.filter(c => c?.name && c?.value).map(c => {
     const expires = Number(c.expires ?? c.expirationDate);
     return {
       name: c.name,
