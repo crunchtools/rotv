@@ -12,6 +12,7 @@ import { classifyPoiType } from '../utils/poiClassify.js';
 import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
 import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, PIPELINE_DEFAULTS } from './newsPipelines.js';
 import { createLogger } from '../utils/logger.js';
+import { proxyFetch } from '../utils/proxyFetch.js';
 
 const logger = createLogger('News');
 const searchLogger = createLogger('Search');
@@ -1148,7 +1149,16 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 }
 
 
-async function resolveRedirectUrl(url) {
+/**
+ * Resolve a news link that points at a redirector (search-grounding redirects,
+ * Constant Contact rs6.net trackers, ...) to its final URL. The HEAD request
+ * goes through the scraper proxy, since following it lands on the news site.
+ * @param {string} url - source URL from a news/event item
+ * @returns {Promise<string|null>} the URL itself when it isn't a redirect; the
+ *   final URL when the redirect resolves; null for 'N/A'/empty, a redirect that
+ *   goes nowhere, or a failed request (broken redirects aren't saved)
+ */
+export async function resolveRedirectUrl(url) {
   if (!url || url === 'N/A') return null;
 
   const isRedirect = url.includes('grounding-api-redirect') ||
@@ -1161,7 +1171,8 @@ async function resolveRedirectUrl(url) {
   }
 
   try {
-    const response = await fetch(url, {
+    // Through the scraper proxy: following the redirect lands on the news site.
+    const response = await proxyFetch(url, {
       method: 'HEAD',
       redirect: 'follow',
       signal: AbortSignal.timeout(5000) // 5 second timeout

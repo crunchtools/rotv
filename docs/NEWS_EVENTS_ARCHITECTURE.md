@@ -105,6 +105,15 @@ The Friday digest (`newsletterDigestService.js`) is built from live data at send
 | `moderation_date_floor_year` | 2010 | Earliest plausible date |
 | `news_collection_excluded_pois` / `_types` | — | POIs and amenity types never collected |
 
+## Egress
+
+Everything that touches a site ROTV scrapes leaves through the ExpressVPN proxy (`PLAYWRIGHT_PROXY`, pinned to `usa-chicago` on lotor):
+- the Playwright pool (`browserPool.js`)
+- the Facebook browser (`humanBrowser.js`)
+- plain HTTP requests through `utils/proxyFetch.js`: the Wix probe in `jsRenderer.js`, redirect resolution in `newsService.js`
+
+Official APIs (Serper, OpenRouter, USGS, Bluesky's API, the trackers, Buttondown, GitHub, Wayback) use the global `fetch` directly.
+
 ## Key Files
 
 | File | Purpose |
