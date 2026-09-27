@@ -239,6 +239,18 @@ describe('RemoteLoginModal', () => {
     expect(relayed()).toEqual([{ type: 'scroll', dy: 100 }, { type: 'scroll', dy: 60 }]);
   });
 
+  it('relays a Gboard-style composition once it settles, including a mid-word rewrite', async () => {
+    render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
+    await flush();
+    const mirror = screen.getByLabelText('Facebook keyboard input');
+    fireEvent.compositionStart(mirror);
+    for (const value of ['s', 'sc', 'sco', 'scot']) typeInto(mirror, value);
+    fireEvent.compositionEnd(mirror);
+    typeInto(mirror, 'Scott'); // keyboard capitalizes on commit
+    await settle();
+    expect(relayed()).toEqual([{ type: 'type', text: 'Scott' }]);
+  });
+
   it('presses Backspace on the remote page when the mirror is already empty', async () => {
     render(<RemoteLoginModal provider="facebook" label="Facebook" onClose={() => {}} onSaved={() => {}} />);
     await flush();

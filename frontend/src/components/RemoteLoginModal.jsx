@@ -72,7 +72,7 @@ function graphemes(text) {
  * text through composition and autocorrect rather than per-key events, so the
  * mirror field is diffed instead of relaying keydowns. Works on grapheme
  * clusters, matching what one Backspace deletes, so a ZWJ emoji or accented
- * letter is one Backspace.
+ * letter is one Backspace (code points on engines without Intl.Segmenter).
  * @param {string} before - text already relayed
  * @param {string} after - current mirror value
  * @returns {{backspaces: number, text: string}}
@@ -215,7 +215,8 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
   // Anything else queued closes the open scroll slot, so later wheel deltas can't jump ahead of it.
   const enqueue = useCallback((task) => {
     openScroll.current = null;
-    sendQueue.current = sendQueue.current.then(task);
+    // Fix: sendInput already reports its own failures; the catch keeps any unexpected throw from wedging the queue (PR #671 review)
+    sendQueue.current = sendQueue.current.then(task).catch(err => setError(err.message));
     return sendQueue.current;
   }, []);
 
@@ -294,7 +295,7 @@ function RemoteLoginModal({ provider, label, onClose, onSaved }) {
     sendQueue.current = sendQueue.current.then(() => {
       if (openScroll.current === slot) openScroll.current = null; // sealed once it starts sending
       return slot.dy ? sendInput({ type: 'scroll', dy: slot.dy }) : undefined;
-    });
+    }).catch(err => setError(err.message));
   };
 
   const handleSave = async () => {
