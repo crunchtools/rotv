@@ -34,12 +34,19 @@ export async function showCarouselViaSwipe(page) {
   return (await page.locator('.thumbnail-carousel').count()) > 0;
 }
 
-// Open a POI's sidebar via its bare-path permalink (/<slug>). Clicking a map
-// marker is unreliable: the first marker may be a cluster, or the map may still
-// be fitting bounds when the click lands, so the sidebar never opens. A given
-// slug may not resolve (e.g. POI not in the loaded set), so try candidates until
-// the sidebar opens. `filter` narrows the candidate POIs; `accept` checks the
-// opened sidebar. Returns the POI, or null if none resolve.
+/**
+ * Open a POI's sidebar via its bare-path permalink (/<slug>). Clicking a map
+ * marker is unreliable: the first marker may be a cluster, or the map may still
+ * be fitting bounds when the click lands, so the sidebar never opens. A given
+ * slug may not resolve (e.g. POI not in the loaded set), so try up to 15
+ * candidates until the sidebar opens.
+ * @param {import('playwright').Page} page
+ * @param {string} baseUrl - app origin, e.g. http://localhost:8080
+ * @param {object} [opts]
+ * @param {(poi: object) => boolean} [opts.filter] - narrows the candidate POIs
+ * @param {(page: import('playwright').Page) => Promise<boolean>} [opts.accept] - checks the opened sidebar
+ * @returns {Promise<object|null>} the opened POI, or null if none resolve
+ */
 export async function openPoiViaPermalink(page, baseUrl, { filter = () => true, accept = async () => true } = {}) {
   const res = await fetch(`${baseUrl}/api/destinations`);
   // Fix: /api/destinations redirects to /api/pois, which always returns an array (PR #678 review)
