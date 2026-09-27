@@ -2,7 +2,7 @@ import { Readability } from '@mozilla/readability';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import { EXPIRING_HOST } from '../utils/sourceImage.js';
-import { acquireBrowser, releaseBrowser } from './browserPool.js';
+import { acquireBrowser, releaseBrowser, chromeUserAgent } from './browserPool.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('ContentExtractor');
@@ -16,7 +16,6 @@ const turndown = new TurndownService({
 turndown.remove(['img', 'iframe', 'video', 'audio', 'svg', 'canvas', 'figure']);
 
 const STEALTH_CONTEXT = {
-  userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
   locale: 'en-US',
   timezoneId: 'America/New_York'
 };
@@ -64,6 +63,7 @@ export async function extractPageContent(url, options = {}) {
 
       context = await browser.newContext({
         ...STEALTH_CONTEXT,
+        userAgent: chromeUserAgent(browser),
         ignoreHTTPSErrors: true
       });
       await context.addInitScript(STEALTH_INIT_SCRIPT);

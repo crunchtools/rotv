@@ -1,6 +1,5 @@
-import { chromium } from 'playwright';
-import { LAUNCH_OPTIONS } from './browserPool.js';
-import { CONTEXT_OPTIONS as LOGIN_CONTEXT_OPTIONS, PROVIDERS } from './remoteLoginSession.js';
+import { launchHumanBrowser, humanContextOptions } from './humanBrowser.js';
+import { PROVIDERS } from './remoteLoginSession.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Facebook');
@@ -18,8 +17,8 @@ const logger = createLogger('Facebook');
  * Facebook only serves the plugin logged-out to residential IPs; from lotor
  * (and every ExpressVPN exit) it redirects to /login. So the fetch reuses the
  * session an admin creates via the remote-browser login (remoteLoginSession.js),
- * in a dedicated non-proxied browser so it egresses from the same IP the session
- * was created on.
+ * in the same headed, VPN-proxied browser (humanBrowser.js) the session was
+ * created in.
  *
  * Replaces the paid Apify scraper (free tier exhausted by the 30-min cadence).
  */
@@ -27,7 +26,7 @@ const PLUGIN_BASE_URL = 'https://www.facebook.com/plugins/page.php';
 const SOCIAL_MAX_POSTS = 10;
 const NAV_TIMEOUT_MS = 45000;
 
-const CONTEXT_OPTIONS = { ...LOGIN_CONTEXT_OPTIONS, viewport: { width: 520, height: 3000 } };
+const VIEWPORT = { width: 520, height: 3000 };
 const LOGIN_REQUIRED_REASON = 'Facebook login required — connect Facebook in Settings › Data Collection';
 
 // Throws on DB/JSON errors so they surface as themselves, not as a login wall.
@@ -163,8 +162,8 @@ export async function fetchFacebookPosts(pool, statusUrl, maxItems = SOCIAL_MAX_
   let cookies = [];
   try {
     cookies = await loadSessionCookies(pool);
-    browser = await chromium.launch(LAUNCH_OPTIONS);
-    const context = await browser.newContext(CONTEXT_OPTIONS);
+    browser = await launchHumanBrowser();
+    const context = await browser.newContext(await humanContextOptions(browser, { viewport: VIEWPORT }));
     if (cookies.length > 0) await context.addCookies(cookies);
     const page = await context.newPage();
     await page.goto(buildPagePluginUrl(target), { waitUntil: 'networkidle', timeout: NAV_TIMEOUT_MS });

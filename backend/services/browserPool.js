@@ -36,7 +36,7 @@ const WATCHDOG_TIMEOUT_MS = 90_000;
 const watchdogTimers = new Map(); // acquisitionId → timeoutId
 let nextAcquisitionId = 0;
 
-// Exported for callers that need a dedicated, non-proxied browser (Facebook login/scrape).
+// Exported for callers that launch their own browser (humanBrowser.js).
 export const LAUNCH_OPTIONS = {
   headless: true,
   args: [
@@ -56,6 +56,18 @@ export const LAUNCH_OPTIONS = {
     '--disable-blink-features=AutomationControlled'
   ]
 };
+
+/**
+ * Desktop-Linux Chrome UA for the Chromium actually running, so the UA's
+ * version agrees with the client hints (Sec-CH-UA) the browser sends itself.
+ * Uses the reduced form Chrome ships (MAJOR.0.0.0).
+ * @param {import('playwright').Browser} browser
+ * @returns {string}
+ */
+export function chromeUserAgent(browser) {
+  const major = String(browser.version()).split('.')[0];
+  return `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
+}
 
 /**
  * Force-kill the shared browser, clearing all watchdog timers and resetting state.

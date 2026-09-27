@@ -1,0 +1,17 @@
+[Unit]
+Description=Virtual display for the headed Facebook browser (headless Weston + Xwayland on :0)
+# Local builds without an RHSM entitlement don't get weston; humanBrowser.js then runs headless.
+ConditionPathExists=/usr/bin/weston
+
+[Service]
+Type=simple
+RuntimeDirectory=rotv-display
+RuntimeDirectoryMode=0700
+Environment=XDG_RUNTIME_DIR=/run/rotv-display
+ExecStartPre=/usr/bin/mkdir -p -m 1777 /tmp/.X11-unix
+ExecStart=/usr/bin/weston --backend=headless --xwayland --socket=wayland-rotv --width=1280 --height=1024
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

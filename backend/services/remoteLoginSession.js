@@ -1,5 +1,4 @@
-import { chromium } from 'playwright';
-import { LAUNCH_OPTIONS } from './browserPool.js';
+import { launchHumanBrowser, humanContextOptions } from './humanBrowser.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('RemoteLogin');
@@ -12,9 +11,10 @@ const logger = createLogger('RemoteLogin');
  * UI polls JPEG frames and relays clicks/keys back. On save, the context's
  * cookies for the provider's domain go into admin_settings for the scrapers.
  *
- * Deliberately a dedicated, non-proxied browser — not browserPool: the pool's
- * 90s watchdog would kill a multi-minute login, and the session must be created
- * from the same egress IP (lotor's own) that the scraper uses.
+ * A dedicated browser, not browserPool: the pool's 90s watchdog would kill a
+ * multi-minute login. It comes from humanBrowser.js, the same headed,
+ * VPN-proxied browser the scraper uses, so the session is created from the
+ * same exit and fingerprint it's later replayed from.
  *
  * Providers are config: adding one (e.g. X, if it ever walls the cookie paste)
  * is an entry here plus a button in the settings UI.
@@ -40,12 +40,6 @@ const ALLOWED_KEYS = new Set([
   'Enter', 'Backspace', 'Tab', 'Escape', 'Delete',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End'
 ]);
-
-export const CONTEXT_OPTIONS = {
-  userAgent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-  locale: 'en-US',
-  timezoneId: 'America/New_York'
-};
 
 // One interactive login at a time across all providers — it's a full Chromium.
 let session = null; // { provider, userId, browser, context, page, idleTimer, maxTimer }
@@ -147,8 +141,8 @@ export async function startLogin(providerName, userId) {
   let browser = null;
   try {
     await closeSession('restart');
-    browser = await chromium.launch(LAUNCH_OPTIONS);
-    const context = await browser.newContext({ ...CONTEXT_OPTIONS, viewport: VIEWPORT });
+    browser = await launchHumanBrowser();
+    const context = await browser.newContext(await humanContextOptions(browser, { viewport: VIEWPORT }));
     const page = await context.newPage();
     session = { provider: providerName, userId, browser, context, page, idleTimer: null, maxTimer: null };
     session.maxTimer = setTimeout(() => closeSession('max session length'), MAX_SESSION_MS);
