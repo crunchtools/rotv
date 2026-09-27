@@ -37,4 +37,12 @@ describe('proxyFetch through a real forward proxy', () => {
     expect(await res.text()).toBe('origin saw /status');
     expect(proxied).toEqual([{ method: 'GET', url: `http://trails.example.test:${process.env.ORIGIN_PORT}/status` }]);
   });
+
+  it('still tunnels https:// with CONNECT', async () => {
+    const { proxyFetch } = await import('../utils/proxyFetch.js');
+    proxied.length = 0;
+    // The test proxy refuses the tunnel, so the fetch fails; what matters is how it asked.
+    await expect(proxyFetch('https://trails.example.test/status')).rejects.toThrow();
+    expect(proxied).toEqual([{ method: 'CONNECT', url: 'trails.example.test:443' }]);
+  });
 });
