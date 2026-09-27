@@ -41,29 +41,6 @@ export function hasDisplay(display = process.env.DISPLAY) {
   return Boolean(match) && existsSync(`${X11_SOCKET_DIR}/X${match[1]}`);
 }
 
-// Fix: wait for Weston's socket when DISPLAY is configured, so a scrape during container boot doesn't go headless (PR #673 review)
-async function waitForDisplay() {
-  if (hasDisplay()) return true;
-  if (!process.env.DISPLAY || displayTimedOut) return false;
-  const deadline = Date.now() + DISPLAY_WAIT_MS;
-  while (!hasDisplay()) {
-    if (Date.now() >= deadline) {
-      displayTimedOut = true;
-      return false;
-    }
-    await new Promise(resolve => setTimeout(resolve, DISPLAY_POLL_MS));
-  }
-  return true;
-}
-
-/**
- * @param {unknown} tz
- * @returns {boolean} true for a canonical IANA zone known to this runtime
- */
-export function isValidTimezone(tz) {
-  return typeof tz === 'string' && Intl.supportedValuesOf('timeZone').includes(tz);
-}
-
 /**
  * Launch the fingerprint-consistent browser: headed when a display exists
  * (waiting up to 15s for it if DISPLAY is set but the socket isn't up yet),
@@ -71,7 +48,16 @@ export function isValidTimezone(tz) {
  * @returns {Promise<import('playwright').Browser>}
  */
 export async function launchHumanBrowser() {
-  const headed = await waitForDisplay();
+  // Fix: wait for Weston's socket when DISPLAY is configured, so a scrape during container boot doesn't go headless (PR #673 review)
+  let headed = hasDisplay();
+  if (!headed && process.env.DISPLAY && !displayTimedOut) {
+    const deadline = Date.now() + DISPLAY_WAIT_MS;
+    while (!headed && Date.now() < deadline) {
+      await new Promise(resolve => setTimeout(resolve, DISPLAY_POLL_MS));
+      headed = hasDisplay();
+    }
+    displayTimedOut = !headed;
+  }
   if (!headed) logger.warn(`No X display (DISPLAY=${process.env.DISPLAY || 'unset'}); launching headless (expected only in dev/CI)`);
   const opts = { ...LAUNCH_OPTIONS, headless: !headed };
   if (process.env.PLAYWRIGHT_PROXY) opts.proxy = { server: process.env.PLAYWRIGHT_PROXY };
@@ -94,7 +80,8 @@ export async function egressTimezone(browser) {
     probe = await browser.newContext();
     const res = await probe.request.get(GEO_URL, { timeout: GEO_TIMEOUT_MS });
     const { timezone } = await res.json();
-    if (!isValidTimezone(timezone)) throw new Error(`no usable timezone in geo response (${timezone})`);
+    // A canonical IANA zone Chromium will accept; anything else falls back below.
+    if (typeof timezone !== 'string' || !Intl.supportedValuesOf('timeZone').includes(timezone)) throw new Error(`no usable timezone in geo response (${timezone})`);
     timezoneCache = { timezone, at: Date.now() };
     logger.info(`Egress timezone: ${timezone}`);
     return timezone;

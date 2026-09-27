@@ -13,7 +13,7 @@ vi.mock('node:fs', () => ({ existsSync: vi.fn(() => false) }));
 const { chromium } = await import('playwright');
 const { existsSync } = await import('node:fs');
 const {
-  hasDisplay, isValidTimezone, launchHumanBrowser, egressTimezone, humanContextOptions,
+  hasDisplay, launchHumanBrowser, egressTimezone, humanContextOptions,
   resetHumanBrowserState, FALLBACK_TIMEZONE
 } = await import('../services/humanBrowser.js');
 const { chromeUserAgent } = await import('../services/browserPool.js');
@@ -46,15 +46,6 @@ describe('hasDisplay', () => {
     expect(existsSync).toHaveBeenLastCalledWith('/tmp/.X11-unix/X0');
     expect(hasDisplay(':1.0')).toBe(true);
     expect(existsSync).toHaveBeenLastCalledWith('/tmp/.X11-unix/X1');
-  });
-});
-
-describe('isValidTimezone', () => {
-  it('accepts IANA zones only', () => {
-    expect(isValidTimezone('America/New_York')).toBe(true);
-    expect(isValidTimezone('Mars/Olympus')).toBe(false);
-    expect(isValidTimezone('')).toBe(false);
-    expect(isValidTimezone(undefined)).toBe(false);
   });
 });
 
@@ -130,11 +121,13 @@ describe('egressTimezone', () => {
     const browser = makeBrowser();
     geoResponse = () => ({ timezone: 'Nowhere/Land' });
     expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
+    geoResponse = () => ({});
+    expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
     probeStub.request.get.mockRejectedValueOnce(new Error('ETIMEDOUT'));
     expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
     geoResponse = () => ({ timezone: 'America/Chicago' });
     expect(await egressTimezone(browser)).toBe('America/Chicago');
-    expect(probeStub.close).toHaveBeenCalledTimes(3);
+    expect(probeStub.close).toHaveBeenCalledTimes(4);
   });
 });
 
