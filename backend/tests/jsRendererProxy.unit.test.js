@@ -10,7 +10,8 @@ const response = ({ headers = {}, body = '' } = {}) => ({
   text: async () => body
 });
 
-beforeEach(() => proxyFetch.mockReset());
+// Block body: a function returned from beforeEach is run as its cleanup.
+beforeEach(() => { proxyFetch.mockReset(); });
 
 describe('isJavaScriptHeavySite content probe', () => {
   it('fetches the target through the scraper proxy and detects Wix by header', async () => {
