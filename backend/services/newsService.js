@@ -1149,7 +1149,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 }
 
 
-async function resolveRedirectUrl(url) {
+export async function resolveRedirectUrl(url) {
   if (!url || url === 'N/A') return null;
 
   const isRedirect = url.includes('grounding-api-redirect') ||
