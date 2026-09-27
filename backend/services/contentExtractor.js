@@ -51,14 +51,17 @@ export function toPlaywrightCookies(cookies) {
   // Fix: drop malformed entries here so every caller gets it (PR #677 review)
   return cookies.filter(c => c?.name && c?.value).map(c => {
     const expires = Number(c.expires ?? c.expirationDate);
+    const secure = c.secure !== false;
+    const sameSite = normalizeSameSite(c.sameSite);
     return {
       name: c.name,
       value: c.value,
       domain: c.domain,
       path: c.path || '/',
-      secure: c.secure !== false,
+      secure,
       httpOnly: c.httpOnly || false,
-      sameSite: normalizeSameSite(c.sameSite),
+      // Fix: Chromium drops SameSite=None cookies that aren't Secure; fall back to Lax (PR #677 review)
+      sameSite: sameSite === 'None' && !secure ? 'Lax' : sameSite,
       // Fix: keep expiry so expired cookies aren't sent as session cookies (PR #677 review)
       ...(expires > 0 ? { expires } : {})
     };

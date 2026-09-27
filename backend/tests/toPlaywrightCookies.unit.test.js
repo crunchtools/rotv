@@ -19,6 +19,11 @@ describe('toPlaywrightCookies', () => {
       .toMatchObject({ path: '/i', secure: false, httpOnly: true });
   });
 
+  it('uses Lax instead of None for a non-Secure cookie', () => {
+    expect(toPlaywrightCookies([{ ...base, secure: false, sameSite: 'no_restriction' }])[0].sameSite).toBe('Lax');
+    expect(toPlaywrightCookies([{ ...base, secure: false, sameSite: 'strict' }])[0].sameSite).toBe('Strict');
+  });
+
   it('drops null and nameless or valueless entries', () => {
     expect(toPlaywrightCookies([null, { ...base, name: '' }, { ...base, value: '' }, base]).map(c => c.name)).toEqual(['n']);
   });
