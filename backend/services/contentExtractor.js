@@ -31,6 +31,31 @@ const STEALTH_INIT_SCRIPT = `
   window.chrome = { runtime: {} };
 `;
 
+/**
+ * Convert saved browser-extension cookies (Twitter/X session) to Playwright's
+ * shape. Exporters write sameSite as 'no_restriction', 'unspecified', 'lax'
+ * or null; Playwright accepts only Strict, Lax or None.
+ * @param {Array<object>} cookies - as stored in admin_settings
+ * @returns {Array<object>} cookies for context.addCookies
+ */
+export function toPlaywrightCookies(cookies) {
+  const normalizeSameSite = (val) => {
+    const lower = String(val ?? '').toLowerCase();
+    if (lower === 'strict') return 'Strict';
+    if (lower === 'lax') return 'Lax';
+    return 'None';
+  };
+  return cookies.map(c => ({
+    name: c.name,
+    value: c.value,
+    domain: c.domain,
+    path: c.path || '/',
+    secure: c.secure !== false,
+    httpOnly: c.httpOnly || false,
+    sameSite: normalizeSameSite(c.sameSite)
+  }));
+}
+
 export async function extractPageContent(url, options = {}) {
   const {
     timeout = 15000,
@@ -69,23 +94,7 @@ export async function extractPageContent(url, options = {}) {
       await context.addInitScript(STEALTH_INIT_SCRIPT);
 
       if (cookies && Array.isArray(cookies) && cookies.length > 0) {
-        const normalizeSameSite = (val) => {
-          if (!val || val === 'no_restriction' || val === 'unspecified') return 'None';
-          const lower = String(val).toLowerCase();
-          if (lower === 'strict') return 'Strict';
-          if (lower === 'lax') return 'Lax';
-          return 'None';
-        };
-        const playwrightCookies = cookies.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain,
-          path: c.path || '/',
-          secure: c.secure !== false,
-          httpOnly: c.httpOnly || false,
-          sameSite: normalizeSameSite(c.sameSite)
-        }));
-        await context.addCookies(playwrightCookies);
+        await context.addCookies(toPlaywrightCookies(cookies));
       }
 
       const page = await context.newPage();

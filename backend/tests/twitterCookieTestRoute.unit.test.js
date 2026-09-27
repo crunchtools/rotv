@@ -25,7 +25,11 @@ vi.mock('../services/browserPool.js', async (importOriginal) => ({
 const browserPool = await import('../services/browserPool.js');
 const { createAdminRouter } = await import('../routes/admin.js');
 
-const SAVED = [{ name: 'auth_token', value: 't', domain: '.x.com', path: '/', sameSite: 'no_restriction' }];
+const SAVED = [
+  { name: 'auth_token', value: 't', domain: '.x.com', path: '/', sameSite: 'no_restriction' },
+  { name: 'kdt', value: 'k', domain: '.x.com', path: '/', sameSite: null },
+  { name: 'ct0', value: 'c', domain: '.x.com', path: '/', sameSite: 'lax' }
+];
 const pool = { query: vi.fn(async () => ({ rows: [{ value: JSON.stringify(SAVED) }] })) };
 
 const app = express();
@@ -48,7 +52,7 @@ describe('POST /twitter/test-cookies', () => {
     expect(res.body.logged_in).toBe(true);
     expect(browserPool.acquireBrowser).toHaveBeenCalledTimes(1);
     expect(browserStub.newContext).toHaveBeenCalledWith({ userAgent: expect.stringContaining('Chrome/145.0.0.0') });
-    expect(contextStub.addCookies.mock.calls[0][0][0].sameSite).toBe('Lax');
+    expect(contextStub.addCookies.mock.calls[0][0].map(c => c.sameSite)).toEqual(['None', 'None', 'Lax']);
     expect(contextStub.close).toHaveBeenCalledTimes(1);
     expect(browserPool.releaseBrowser).toHaveBeenCalledWith(42);
   });
