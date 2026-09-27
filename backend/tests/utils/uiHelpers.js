@@ -33,3 +33,26 @@ export async function showCarouselViaSwipe(page) {
   }
   return (await page.locator('.thumbnail-carousel').count()) > 0;
 }
+
+// Open a POI's sidebar via its bare-path permalink (/<slug>). Clicking a map
+// marker is unreliable: the first marker may be a cluster, or the map may still
+// be fitting bounds when the click lands, so the sidebar never opens. A given
+// slug may not resolve (e.g. POI not in the loaded set), so try candidates until
+// the sidebar opens. `filter` narrows the candidate POIs; `accept` checks the
+// opened sidebar. Returns the POI, or null if none resolve.
+export async function openPoiViaPermalink(page, baseUrl, { filter = () => true, accept = async () => true } = {}) {
+  const res = await fetch(`${baseUrl}/api/destinations`);
+  const body = await res.json();
+  const list = (Array.isArray(body) ? body : (body.destinations || body.pois || [])).filter(filter);
+  for (const poi of list.slice(0, 15)) {
+    // Slug must match frontend/src/App.jsx generateSlug so the permalink resolves.
+    const slug = (poi.name || '').toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
+    try {
+      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
+    } catch { continue; }
+    if (await accept(page)) return poi;
+  }
+  return null;
+}

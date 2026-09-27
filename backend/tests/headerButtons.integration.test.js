@@ -64,6 +64,8 @@ describe('Header Button Visibility Tests', () => {
 
     it('should have enabled and clickable Login button', async () => {
       const loginButton = page.locator('button.tab-login-dot').first();
+      // Wait for React to render the header before measuring
+      await loginButton.waitFor({ state: 'visible', timeout: 10000 });
 
       const isEnabled = await loginButton.isEnabled();
       expect(isEnabled).toBe(true);
@@ -99,6 +101,8 @@ describe('Header Button Visibility Tests', () => {
 
     it('should have enabled and clickable Login button on mobile', async () => {
       const loginButton = page.locator('button.tab-login-dot').first();
+      // Wait for React to render the header before measuring
+      await loginButton.waitFor({ state: 'visible', timeout: 10000 });
 
       const isEnabled = await loginButton.isEnabled();
       expect(isEnabled).toBe(true);
@@ -118,6 +122,8 @@ describe('Header Button Visibility Tests', () => {
 
     it('should display Login button on tablet', async () => {
       const loginButton = page.locator('button.tab-login-dot').first();
+      // Wait for React to render the header before measuring
+      await loginButton.waitFor({ state: 'visible', timeout: 10000 });
 
       const isVisible = await loginButton.isVisible();
       expect(isVisible).toBe(true);

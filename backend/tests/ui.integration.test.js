@@ -1,30 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
-import { showCarouselViaSwipe } from './utils/uiHelpers.js';
+import { showCarouselViaSwipe, openPoiViaPermalink } from './utils/uiHelpers.js';
 
-// Open a POI that has a More Info link via its bare-path permalink (/<slug>),
-// which reliably opens the sidebar on both mobile and desktop. .more-info-link
-// only renders when more_info_link is set, so clicking an arbitrary marker is
-// non-deterministic now that amenity POIs without links exist. A given slug may
-// not resolve (e.g. POI not in the loaded set), so try candidates until the
-// sidebar opens with the link. Returns the POI, or null if none resolve.
-async function openPoiWithMoreInfo(page, baseUrl) {
-  const res = await fetch(`${baseUrl}/api/destinations`);
-  const body = await res.json();
-  const list = (Array.isArray(body) ? body : (body.destinations || body.pois || []))
-    .filter(d => /^https?:\/\//i.test(d.more_info_link || ''));
-  for (const poi of list.slice(0, 15)) {
-    // Slug must match frontend/src/App.jsx generateSlug so the permalink resolves.
-    const slug = (poi.name || '').toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-    await page.goto(`${baseUrl}/${slug}`, { waitUntil: 'networkidle' });
-    try {
-      await page.waitForSelector('.sidebar.open', { timeout: 5000 });
-    } catch { continue; }
-    if (await page.locator('.more-info-link').count() > 0) return poi;
-  }
-  return null;
-}
+// .more-info-link only renders when more_info_link is set, so open a POI that has one.
+const openPoiWithMoreInfo = (page, baseUrl) => openPoiViaPermalink(page, baseUrl, {
+  filter: d => /^https?:\/\//i.test(d.more_info_link || ''),
+  accept: async p => await p.locator('.more-info-link').count() > 0
+});
 
 describe('UI Integration Tests', () => {
   let browser;
@@ -350,21 +332,8 @@ describe('UI Integration Tests', () => {
       // Set viewport to mobile size
       await page.setViewportSize({ width: 375, height: 667 });
 
-      // Load page normally (URL parameter test too flaky in CI)
-      await page.goto(baseUrl, { waitUntil: 'networkidle' });
-
-      // Wait for map markers to load
-      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-
-      // Click a marker to open sidebar
-      const firstMarker = await page.locator('.leaflet-marker-icon').first();
-      await firstMarker.click();
-
-      // Wait for sidebar to open
-      await page.waitForSelector('.sidebar.open', {
-        timeout: 10000,
-        state: 'visible'
-      });
+      // Permalink, not a marker click: the click can miss while the map settles
+      expect(await openPoiViaPermalink(page, baseUrl)).not.toBeNull();
 
       // Carousel renders only after the first POI navigation — trigger a swipe.
       await showCarouselViaSwipe(page);
@@ -660,16 +629,8 @@ describe('UI Integration Tests', () => {
       // Set viewport to mobile size
       await page.setViewportSize({ width: 375, height: 667 });
 
-      // Load page
-      await page.goto(baseUrl, { waitUntil: 'networkidle' });
-
-      // Wait for map markers and click one to open sidebar
-      await page.waitForSelector('.leaflet-marker-icon', { timeout: 10000 });
-      await page.waitForTimeout(1000);
-      await page.locator('.leaflet-marker-icon').first().click();
-
-      // Wait for sidebar, then trigger navigation so the carousel renders
-      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      // Permalink, not a marker click: the click can miss while the map settles
+      expect(await openPoiViaPermalink(page, baseUrl)).not.toBeNull();
       await showCarouselViaSwipe(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
