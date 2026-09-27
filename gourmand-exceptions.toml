@@ -184,3 +184,9 @@ check = "AI006-console_log_bracket_tag_prefix"
 path = "backend/migrations/*.js"
 justification = "Same hand-run CLI tools as the console_log_production entry above; the bracket tag labels the phase in a one-shot terminal report, not a stand-in for a server logger"
 classification = "by_design"
+
+[[exceptions]]
+check = "CH001-absolute_paths"
+path = "backend/services/humanBrowser.js"
+justification = "The X11 socket directory is fixed by the X11 protocol, not a deployment choice"
+classification = "by_design"

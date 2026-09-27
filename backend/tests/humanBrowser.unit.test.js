@@ -1,0 +1,169 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+let geoResponse;
+let geoStatus;
+const probePage = {
+  goto: vi.fn(async () => ({ ok: () => geoStatus === 200, status: () => geoStatus, json: async () => geoResponse() }))
+};
+const probeStub = { newPage: vi.fn(async () => probePage), close: vi.fn(async () => {}) };
+const makeBrowser = () => ({ newContext: vi.fn(async () => probeStub), version: () => '145.0.7632.6' });
+
+vi.mock('playwright', () => ({ chromium: { launch: vi.fn(async () => makeBrowser()) } }));
+vi.mock('node:fs', () => ({ existsSync: vi.fn(() => false) }));
+
+const { chromium } = await import('playwright');
+const { existsSync } = await import('node:fs');
+const {
+  hasDisplay, launchHumanBrowser, humanContextOptions,
+  resetHumanBrowserState, FALLBACK_TIMEZONE
+} = await import('../services/humanBrowser.js');
+const { chromeUserAgent } = await import('../services/browserPool.js');
+const egressTimezone = async browser => (await humanContextOptions(browser)).timezoneId;
+
+const savedEnv = { DISPLAY: process.env.DISPLAY, PLAYWRIGHT_PROXY: process.env.PLAYWRIGHT_PROXY };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  resetHumanBrowserState();
+  geoResponse = () => ({ timezone: 'America/Chicago' });
+  geoStatus = 200;
+  existsSync.mockReturnValue(false);
+  delete process.env.DISPLAY;
+  delete process.env.PLAYWRIGHT_PROXY;
+});
+
+afterEach(() => {
+  for (const [key, value] of Object.entries(savedEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+});
+
+describe('hasDisplay', () => {
+  it('needs both a well-formed DISPLAY and its X socket', () => {
+    expect(hasDisplay(undefined)).toBe(false);
+    expect(hasDisplay('remote:0')).toBe(false);
+    expect(hasDisplay(':0')).toBe(false);
+    existsSync.mockReturnValue(true);
+    expect(hasDisplay(':0')).toBe(true);
+    expect(existsSync).toHaveBeenLastCalledWith('/tmp/.X11-unix/X0');
+    expect(hasDisplay(':1.0')).toBe(true);
+    expect(existsSync).toHaveBeenLastCalledWith('/tmp/.X11-unix/X1');
+  });
+});
+
+describe('launchHumanBrowser', () => {
+  it('launches headed through the proxy when the display exists', async () => {
+    process.env.DISPLAY = ':0';
+    process.env.PLAYWRIGHT_PROXY = 'http://expressvpn.example:8888';
+    existsSync.mockReturnValue(true);
+    await launchHumanBrowser();
+    const opts = chromium.launch.mock.calls[0][0];
+    expect(opts.headless).toBe(false);
+    expect(opts.proxy).toEqual({ server: 'http://expressvpn.example:8888' });
+    expect(opts.args).toContain('--disable-blink-features=AutomationControlled');
+  });
+
+  it('waits for a configured display that is still starting', async () => {
+    process.env.DISPLAY = ':0';
+    existsSync.mockReturnValueOnce(false).mockReturnValueOnce(false).mockReturnValue(true);
+    await launchHumanBrowser();
+    expect(chromium.launch.mock.calls[0][0].headless).toBe(false);
+  });
+
+  it('gives up on a display that never appears, and only waits once', async () => {
+    vi.useFakeTimers();
+    try {
+      process.env.DISPLAY = ':0';
+      const first = launchHumanBrowser();
+      await vi.advanceTimersByTimeAsync(16000);
+      await first;
+      expect(chromium.launch.mock.calls[0][0].headless).toBe(true);
+      await launchHumanBrowser(); // resolves without timers advancing
+      expect(chromium.launch.mock.calls[1][0].headless).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('falls back to headless, unproxied when neither is configured', async () => {
+    await launchHumanBrowser();
+    const opts = chromium.launch.mock.calls[0][0];
+    expect(opts.headless).toBe(true);
+    expect(opts.proxy).toBeUndefined();
+  });
+});
+
+describe('egress timezone lookup', () => {
+  it('looks up the zone through the browser and caches it', async () => {
+    const browser = makeBrowser();
+    expect(await egressTimezone(browser)).toBe('America/Chicago');
+    expect(await egressTimezone(browser)).toBe('America/Chicago');
+    expect(probePage.goto).toHaveBeenCalledTimes(1);
+    expect(probePage.goto).toHaveBeenCalledWith('https://ipinfo.io/json', { timeout: 10000 });
+    expect(probeStub.newPage).toHaveBeenCalledTimes(1);
+    expect(probeStub.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('looks the zone up again once the hour-long cache expires', async () => {
+    const browser = makeBrowser();
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    try {
+      await egressTimezone(browser);
+      now.mockReturnValue(1_000_000 + 60 * 60 * 1000 - 1);
+      geoResponse = () => ({ timezone: 'America/Denver' });
+      expect(await egressTimezone(browser)).toBe('America/Chicago');
+      now.mockReturnValue(1_000_000 + 60 * 60 * 1000);
+      expect(await egressTimezone(browser)).toBe('America/Denver');
+      expect(probePage.goto).toHaveBeenCalledTimes(2);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('accepts timezone aliases', async () => {
+    geoResponse = () => ({ timezone: 'Asia/Calcutta' });
+    expect(await egressTimezone(makeBrowser())).toMatch(/^Asia\/(Calcutta|Kolkata)$/);
+  });
+
+  it('falls back without caching on a bad or failed lookup', async () => {
+    const browser = makeBrowser();
+    geoResponse = () => ({ timezone: 'Nowhere/Land' });
+    expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
+    geoResponse = () => ({});
+    expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
+    geoStatus = 429;
+    expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
+    geoStatus = 200;
+    probePage.goto.mockRejectedValueOnce(new Error('ETIMEDOUT'));
+    expect(await egressTimezone(browser)).toBe(FALLBACK_TIMEZONE);
+    geoResponse = () => ({ timezone: 'America/Chicago' });
+    expect(await egressTimezone(browser)).toBe('America/Chicago');
+    expect(probeStub.close).toHaveBeenCalledTimes(5);
+  });
+});
+
+describe('humanContextOptions', () => {
+  it('leaves the UA native on a headed browser', async () => {
+    process.env.DISPLAY = ':0';
+    existsSync.mockReturnValue(true);
+    const browser = await launchHumanBrowser();
+    const opts = await humanContextOptions(browser, { viewport: { width: 800, height: 900 } });
+    expect(opts).toEqual({ locale: 'en-US', timezoneId: 'America/Chicago', viewport: { width: 800, height: 900 } });
+  });
+
+  it('sets a version-matched UA on a headless browser', async () => {
+    const browser = await launchHumanBrowser();
+    const opts = await humanContextOptions(browser);
+    expect(opts.userAgent).toContain('Chrome/145.0.0.0');
+    expect(opts.userAgent).not.toContain('Headless');
+  });
+});
+
+describe('chromeUserAgent', () => {
+  it('uses the running Chromium major version', () => {
+    expect(chromeUserAgent({ version: () => '145.0.7632.6' })).toBe(
+      'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36'
+    );
+  });
+});

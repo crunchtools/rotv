@@ -1,6 +1,7 @@
 [Unit]
 Description=Roots of The Valley Backend API Server
-After=postgresql.service
+After=postgresql.service rotv-display.service
+Wants=rotv-display.service
 Requires=postgresql.service
 
 [Service]
@@ -14,6 +15,8 @@ Environment=PGPORT=5432
 Environment=PGDATABASE=rotv
 Environment=PGUSER=postgres
 Environment=PGPASSWORD=rotv
+# X display from rotv-display.service, for the headed browser in humanBrowser.js
+Environment=DISPLAY=:0
 EnvironmentFile=-/etc/rotv/environment
 
 ExecStart=/usr/bin/node /app/server.js

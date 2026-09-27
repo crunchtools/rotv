@@ -15,9 +15,13 @@ const contextStub = {
 };
 const browserStub = { newContext: vi.fn(async () => contextStub), close: vi.fn(async () => {}) };
 
-vi.mock('playwright', () => ({ chromium: { launch: vi.fn(async () => browserStub) } }));
+vi.mock('../services/humanBrowser.js', () => ({
+  launchHumanBrowser: vi.fn(async () => browserStub),
+  humanContextOptions: vi.fn(async (_browser, extra) => ({ locale: 'en-US', timezoneId: 'America/New_York', ...extra }))
+}));
 
-const { chromium } = await import('playwright');
+const { launchHumanBrowser } = await import('../services/humanBrowser.js');
+const chromium = { launch: launchHumanBrowser };
 const {
   startLogin, getFrame, sendInput, saveLogin, cancelLogin, VIEWPORT, isProviderCookie, PROVIDERS
 } = await import('../services/remoteLoginSession.js');
@@ -43,9 +47,9 @@ afterEach(async () => {
 });
 
 describe('startLogin', () => {
-  it('launches a dedicated, non-proxied browser on the login page', () => {
-    expect(chromium.launch.mock.calls[0][0].proxy).toBeUndefined();
-    expect(browserStub.newContext.mock.calls[0][0].viewport).toEqual(VIEWPORT);
+  it('launches the shared human browser on the login page', () => {
+    expect(chromium.launch).toHaveBeenCalledTimes(1);
+    expect(browserStub.newContext.mock.calls[0][0]).toMatchObject({ viewport: VIEWPORT, timezoneId: 'America/New_York' });
     expect(pageStub.goto.mock.calls[0][0]).toBe('https://www.facebook.com/login/');
   });
 

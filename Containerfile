@@ -24,6 +24,10 @@ RUN npm install -g playwright@1.58.1 && npx playwright install chromium
 # Add PostgreSQL 17 + PostGIS from official pgdg repository
 # RHSM registration provides RHEL BaseOS/AppStream (required for boost-serialization → SFCGAL → postgis35_17)
 # EPEL provides additional PostGIS dependencies (hdf5, xerces-c)
+# The same entitlement provides the virtual display for the headed Facebook
+# browser: RHEL 10 has no Xvfb, so headless Weston (EPEL, needs CRB's turbojpeg)
+# runs Xwayland (AppStream). See rootfs/etc/systemd/system/rotv-display.service.
+# `exit 1` because the trailing `|| true` would otherwise swallow a failed install.
 RUN --mount=type=secret,id=activation_key \
     --mount=type=secret,id=org_id \
     if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
@@ -34,6 +38,11 @@ RUN --mount=type=secret,id=activation_key \
     dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
     dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
     dnf install -y postgresql17-server postgresql17 postgis35_17 && \
+    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
+        dnf install -y --setopt=install_weak_deps=False \
+            --enablerepo=codeready-builder-for-rhel-10-x86_64-rpms \
+            weston xorg-x11-server-Xwayland || exit 1; \
+    fi && \
     subscription-manager unregister 2>/dev/null || true && \
     dnf clean all
 
@@ -95,7 +104,7 @@ COPY rootfs/ /
 # The package must be installed above too: local dev builds default to
 # ubi10-core, which does not ship rsyslog, so enabling alone broke ./run.sh build.
 RUN chmod +x /usr/local/bin/rotv-init.sh && \
-    systemctl enable postgresql rotv-init rotv-backend rsyslog
+    systemctl enable postgresql rotv-init rotv-backend rotv-display rsyslog
 
 # Create directory for environment file
 RUN mkdir -p /etc/rotv

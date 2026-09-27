@@ -1,4 +1,4 @@
-import { acquireBrowser, releaseBrowser } from './browserPool.js';
+import { acquireBrowser, releaseBrowser, chromeUserAgent } from './browserPool.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('JS Renderer');
@@ -239,7 +239,7 @@ async function renderJavaScriptPageInternal(url, options) {
     contextRef.acquisitionId = acquisitionId;
 
     context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      userAgent: chromeUserAgent(browser),
       ignoreHTTPSErrors: true
     });
 

@@ -4,9 +4,13 @@ const pageStub = { goto: vi.fn(), evaluate: vi.fn(), url: vi.fn() };
 const contextStub = { newPage: vi.fn(async () => pageStub), addCookies: vi.fn(async () => {}) };
 const browserStub = { newContext: vi.fn(async () => contextStub), close: vi.fn(async () => {}) };
 
-vi.mock('playwright', () => ({ chromium: { launch: vi.fn(async () => browserStub) } }));
+vi.mock('../services/humanBrowser.js', () => ({
+  launchHumanBrowser: vi.fn(async () => browserStub),
+  humanContextOptions: vi.fn(async (_browser, extra) => ({ locale: 'en-US', timezoneId: 'America/New_York', ...extra }))
+}));
 
-const { chromium } = await import('playwright');
+const { launchHumanBrowser } = await import('../services/humanBrowser.js');
+const chromium = { launch: launchHumanBrowser };
 const {
   isFacebookUrl, extractFacebookPageUrl, buildPagePluginUrl, formatPosts, fetchFacebookPosts,
   scrapePluginPosts, isLoginWall
@@ -80,7 +84,8 @@ describe('fetchFacebookPosts', () => {
     expect(r).toEqual({ markdown: '[2026-09-23] 9/23 Open!', reachable: true, reason: null });
     expect(pageStub.goto.mock.calls[0][0]).toMatch(PLUGIN_URL_RE);
     expect(contextStub.addCookies).toHaveBeenCalledWith(SESSION_COOKIES);
-    expect(chromium.launch.mock.calls[0][0].proxy).toBeUndefined();
+    expect(chromium.launch).toHaveBeenCalledTimes(1);
+    expect(browserStub.newContext.mock.calls[0][0]).toMatchObject({ viewport: { width: 520, height: 3000 }, timezoneId: 'America/New_York' });
     expect(browserStub.close).toHaveBeenCalled();
   });
 
