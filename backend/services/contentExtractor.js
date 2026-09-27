@@ -34,7 +34,9 @@ const STEALTH_INIT_SCRIPT = `
 /**
  * Convert saved browser-extension cookies (Twitter/X session) to Playwright's
  * shape. Exporters write sameSite as 'no_restriction', 'unspecified', 'lax'
- * or null; Playwright accepts only Strict, Lax or None.
+ * or null; Playwright accepts only Strict, Lax or None. Expiry comes from
+ * `expires` or the extension's `expirationDate` (epoch seconds); without
+ * either the cookie is a session cookie.
  * @param {Array<object>} cookies - as stored in admin_settings
  * @returns {Array<object>} cookies for context.addCookies
  */
@@ -45,15 +47,20 @@ export function toPlaywrightCookies(cookies) {
     if (lower === 'lax') return 'Lax';
     return 'None';
   };
-  return cookies.map(c => ({
-    name: c.name,
-    value: c.value,
-    domain: c.domain,
-    path: c.path || '/',
-    secure: c.secure !== false,
-    httpOnly: c.httpOnly || false,
-    sameSite: normalizeSameSite(c.sameSite)
-  }));
+  return cookies.map(c => {
+    const expires = Number(c.expires ?? c.expirationDate);
+    return {
+      name: c.name,
+      value: c.value,
+      domain: c.domain,
+      path: c.path || '/',
+      secure: c.secure !== false,
+      httpOnly: c.httpOnly || false,
+      sameSite: normalizeSameSite(c.sameSite),
+      // Fix: keep expiry so expired cookies aren't sent as session cookies (PR #677 review)
+      ...(expires > 0 ? { expires } : {})
+    };
+  });
 }
 
 export async function extractPageContent(url, options = {}) {
