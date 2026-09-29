@@ -35,7 +35,7 @@ jobs:
         dir: [., backend, frontend]
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       # Fix: gate against the base branch's baseline unless a maintainer labels the PR (PR #653 review)
       - name: Use base branch baseline
