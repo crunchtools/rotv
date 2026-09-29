@@ -1,4 +1,5 @@
 import React from 'react';
+import { track } from '../utils/analytics';
 
 function isValidStop(s) {
   if (!s || typeof s !== 'object') return false;
@@ -32,6 +33,7 @@ export default function NavigateButton({ stops, label = 'Navigate', className = 
 
   const handleClick = (e) => {
     e.stopPropagation();
+    track('directions_click', { stops: stops.length });
     window.open(url, '_blank', 'noopener,noreferrer');
   };
 

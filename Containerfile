@@ -104,7 +104,7 @@ COPY rootfs/ /
 # The package must be installed above too: local dev builds default to
 # ubi10-core, which does not ship rsyslog, so enabling alone broke ./run.sh build.
 RUN chmod +x /usr/local/bin/rotv-init.sh && \
-    systemctl enable postgresql rotv-init rotv-backend rotv-display rsyslog
+    systemctl enable postgresql rotv-init rotv-backend rotv-display rsyslog umami
 
 # Create directory for environment file
 RUN mkdir -p /etc/rotv

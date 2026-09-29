@@ -80,7 +80,7 @@ The init service creates the database if not present, imports seed data from `/t
 
 ## Containerfile Conventions
 
-- Single-stage build on `ubi10-core`
+- Single-stage app `Containerfile` on `ubi10-core`. `Containerfile.base` and `Containerfile.images` may add build stages (e.g. Umami, pgvector) whose output alone is copied into a final `ubi10-core` stage, so toolchains never ship
 - Frontend built in-image: `npm run build` creates `/app/public/`
 - `rootfs/` directory provides systemd units and init script
 - PostgreSQL 17 + PostGIS installed from pgdg RPM repo

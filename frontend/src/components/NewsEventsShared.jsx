@@ -1,6 +1,7 @@
 import React from 'react';
 import ShareButton from './ShareButton';
 import { generateSlug } from './sidebar/helpers';
+import { track } from '../utils/analytics';
 
 export function formatDate(dateString) {
   if (!dateString) return '';
@@ -177,7 +178,9 @@ export function NewsCardBody({ item, onSelectPoi, children, className, id }) {
         </div>
       )}
       {summary && <p className="park-news-summary">{summary}</p>}
-      <div className="park-news-meta">
+      <div className="park-news-meta" onClick={(e) => {
+        if (e.target.closest('a.news-link')) track('news_open', { news_id: item.id, poi: item.poi_name });
+      }}>
         {item.source_name && <span className="news-source">{item.source_name}</span>}
         {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
           <span className="news-sources-group">
@@ -268,7 +271,10 @@ export function EventCardBody({ item, onSelectPoi, calendarButtons, children, cl
         </div>
       )}
 
-      <div className="park-event-actions">
+      <div className="park-event-actions" onClick={(e) => {
+        if (e.target.closest('a.event-link')) track('event_open', { event_id: item.id, poi: item.poi_name });
+        else if (e.target.closest('.add-calendar-btn')) track('event_calendar_add', { event_id: item.id });
+      }}>
         {calendarButtons}
         {item.source_url && item.additional_urls && item.additional_urls.length > 0 ? (
           <span className="event-sources-group">

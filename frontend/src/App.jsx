@@ -37,7 +37,9 @@ import AboutPage from './components/AboutPage';
 import GuidedTour, { TRIP_TOUR_STEPS } from './components/GuidedTour';
 import TourPrompt from './components/TourPrompt';
 import McpSettings from './components/McpSettings';
+import StatsSettings from './components/StatsSettings';
 import { handleRovingKeyDown } from './utils/a11yUtils';
+import { initAnalytics, excludeThisDevice, track, trackerVehicle } from './utils/analytics';
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
 
@@ -133,6 +135,22 @@ function AppContent() {
   const selectedKind = selection.kind;
   const selectedDestination = selection.kind === 'destination' ? selection.poi : null;
   const selectedLinearFeature = selection.kind === 'linear' ? selection.poi : null;
+
+  // Analytics (#637): whoever changes the selection says where it came from,
+  // and one effect reports the view so no selection path is missed.
+  const viewSourceRef = useRef(null);
+  useEffect(() => { initAnalytics(); }, []);
+  // Admin browsing isn't visitor traffic; this device stays excluded after logout
+  useEffect(() => { if (isAdmin) excludeThisDevice(); }, [isAdmin]);
+  useEffect(() => {
+    const poi = selection.poi;
+    const source = viewSourceRef.current || 'other';
+    viewSourceRef.current = null;
+    if (!poi?.id) return;
+    track('poi_view', { poi_id: poi.id, name: poi.name, kind: selection.kind, source });
+    const vehicle = trackerVehicle(poi);
+    if (vehicle) track('tracker_route_open', { vehicle, source });
+  }, [selection.poi?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const setSelectedDestination = useCallback((value) => {
     setSelection((prev) => {
       const next = typeof value === 'function'
@@ -379,6 +397,7 @@ function AppContent() {
   const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
 
   const startTour = useCallback(() => {
+    track('tour_start', { variant: 'default' });
     setShowTourPrompt(false);
     setTourStep(0);
     setTourVariant('default');
@@ -392,6 +411,7 @@ function AppContent() {
   }, [navigate]);
 
   const startTripTour = useCallback(() => {
+    track('tour_start', { variant: 'trips' });
     setShowTourPrompt(false);
     setTourStep(0);
     setTourVariant('trips');
@@ -415,7 +435,12 @@ function AppContent() {
     navigate('/');
   }, [navigate, tripClear, tripAddStop, tripSetShowBuilder]);
 
+  useEffect(() => {
+    if (tourActive) track('tour_step', { variant: tourVariant, step: tourStep });
+  }, [tourActive, tourVariant, tourStep]);
+
   const endTour = useCallback(() => {
+    track('tour_end', { variant: tourVariant, last_step: tourStep });
     setTourActive(false);
     setTourStep(0);
     setActiveTab('view');
@@ -427,7 +452,7 @@ function AppContent() {
     setTourVariant('default');
     isProgrammaticNavigationRef.current = true;
     navigate('/');
-  }, [navigate, tourVariant, tripClear]);
+  }, [navigate, tourVariant, tourStep, tripClear]);
 
   const handleTourStepAction = useCallback((action) => {
     switch (action) {
@@ -549,6 +574,7 @@ function AppContent() {
   const handleTabChange = useCallback((newTab) => {
     const previousActiveTab = activeTab;
     setActiveTab(newTab);
+    if (newTab !== previousActiveTab) track('tab_view', { tab: newTab });
 
     if (newTab === 'results' && previousActiveTab !== 'results') {
       if (location.pathname.startsWith('/mtb-trail-status')) {
@@ -787,6 +813,7 @@ function AppContent() {
 
       const poi = findPoiBySlug(initialPoiSlug);
       if (poi) {
+        viewSourceRef.current = 'link';
         if (poi.poi_roles?.includes('railroad')) {
           fetch('/api/train/position').then(r => r.json()).then(positions => {
             const pos = positions?.cvsr;
@@ -861,7 +888,7 @@ function AppContent() {
       return;
     }
 
-    const settingsSubTabs = ['general', 'newsletter', 'rss', 'mcp', 'users', 'themes', 'activities', 'eras', 'surfaces', 'icons', 'moderation', 'jobs', 'dataCollection', 'google'];
+    const settingsSubTabs = ['general', 'newsletter', 'rss', 'mcp', 'users', 'themes', 'activities', 'eras', 'surfaces', 'icons', 'moderation', 'jobs', 'dataCollection', 'google', 'stats'];
     if (pathParts.length === 2 && pathParts[0] === 'settings' && settingsSubTabs.includes(pathParts[1])) {
       setActiveTab('settings');
       setSettingsTab(pathParts[1]);
@@ -1426,6 +1453,27 @@ function AppContent() {
     setFilteredDestinations(filtered);
   }, [activeFilters, destinations]);
 
+  // Search filters as you type, so report a search once typing settles (#637).
+  // A data refresh re-runs the filter; don't report the same search twice.
+  // The full query text is recorded by product decision (Scott, #637): it is
+  // the best signal for places we're missing. It's disclosed in the privacy
+  // policy, admin-only, and search here is place names, not personal data.
+  const lastSearchRef = useRef(null);
+  useEffect(() => {
+    const query = activeFilters.search?.trim();
+    if (!query) { lastSearchRef.current = null; return undefined; }
+    if (query === lastSearchRef.current) return undefined;
+    const timer = setTimeout(() => {
+      lastSearchRef.current = query;
+      const q = query.toLowerCase();
+      const resultCount = filteredDestinations.length
+        + linearFeatures.filter(f => f.name?.toLowerCase().includes(q)).length;
+      track('search', { query, result_count: resultCount });
+      if (resultCount === 0) track('search_no_results', { query });
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [activeFilters.search, filteredDestinations, linearFeatures]);
+
   const handleFilterChange = (filterType, value) => {
     setActiveFilters(prev => ({
       ...prev,
@@ -1536,8 +1584,18 @@ function AppContent() {
     }
   }, [handleSelectDestination, handleSelectLinearFeature]);
 
+  const handleMapSelectPoi = useCallback((poi) => {
+    viewSourceRef.current = 'map';
+    handleSelectPoi(poi);
+  }, [handleSelectPoi]);
+  const handleSidebarSelectPoi = useCallback((poi) => {
+    viewSourceRef.current = 'sidebar';
+    handleSelectPoi(poi);
+  }, [handleSelectPoi]);
+
   const handleNavigatePoi = useCallback((direction) => {
     if (poiNavigationList.length === 0) return;
+    viewSourceRef.current = 'nav';
 
     let newIndex;
 
@@ -1581,6 +1639,7 @@ function AppContent() {
   }, [poiNavigationList, currentPoiIndex, updateUrlWithPoi, isInMtbMode, isInOrganizationsMode, navigate]);
 
   const handleResultsSelectDestination = useCallback((poi, mtbContext) => {
+    viewSourceRef.current = 'results';
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
 
@@ -1659,6 +1718,7 @@ function AppContent() {
   }, [handleSelectDestination, isInMtbMode, isInOrganizationsMode, navigate, poiNavigationList, iconConfig]);
 
   const handleResultsSelectLinearFeature = useCallback((poi, mtbContext) => {
+    viewSourceRef.current = 'results';
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
 
@@ -2246,6 +2306,7 @@ function AppContent() {
           onSelectPoi={(poiId) => {
             const poi = destinations.find(d => d.id === poiId);
             if (poi) {
+              viewSourceRef.current = 'news';
               setSelectedDestination(poi);
               setActiveTab('view');
             }
@@ -2277,6 +2338,7 @@ function AppContent() {
           onSelectPoi={(poiId) => {
             const poi = destinations.find(d => d.id === poiId);
             if (poi) {
+              viewSourceRef.current = 'events';
               setSelectedDestination(poi);
               setActiveTab('view');
             }
@@ -2418,6 +2480,13 @@ function AppContent() {
               >
                 Google
               </button>
+              <button
+                className={`settings-tab-btn ${settingsTab === 'stats' ? 'active' : ''}`}
+                onClick={() => handleSettingsTabChange('stats')}
+                tabIndex={settingsTab === 'stats' ? 0 : -1}
+              >
+                Stats
+              </button>
             </nav>
             </div>
 
@@ -2429,6 +2498,7 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
+              {settingsTab === 'stats' && <StatsSettings />}
               {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} focusItemId={moderationFocusId} focusItemTitle={moderationFocusTitle} onSelectPoi={(poiId) => {
                 const poi = destinations.find(d => d.id === poiId);
                 if (poi) {
@@ -2487,7 +2557,7 @@ function AppContent() {
           destinations={filteredDestinations}
           selectedPoi={selectedPoi}
           selectedIsLinear={selectedKind === 'linear'}
-          onSelectPoi={handleSelectPoi}
+          onSelectPoi={handleMapSelectPoi}
           isAdmin={isAdmin}
           onDestinationUpdate={handleDestinationUpdate}
           onDestinationCreate={handleDestinationCreate}
@@ -2647,7 +2717,7 @@ function AppContent() {
           allDestinations={destinations}
           allLinearFeatures={linearFeatures}
           allVirtualPois={virtualPois}
-          onSelectPoi={handleSelectPoi}
+          onSelectPoi={handleSidebarSelectPoi}
           onAssociationsChanged={refreshAllData}
           onStartDrawingAssociations={handleStartDrawingAssociations}
           permalinkInfo={permalinkInfo}

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import MediaUploadModal from './MediaUploadModal';
 import './Lightbox.css';
+import { track } from '../utils/analytics';
 
 /**
  * Lightbox Component
@@ -14,6 +15,10 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [settingPrimary, setSettingPrimary] = useState(false);
+
+  useEffect(() => {
+    track('media_view', { poi_id: poiId, count: media?.length });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePrevious = useCallback(() => {
     setCurrentIndex((prev) => (prev > 0 ? prev - 1 : media.length - 1));

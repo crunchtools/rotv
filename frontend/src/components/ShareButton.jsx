@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { track } from '../utils/analytics';
 
 export default function ShareButton({ title, text, url, compact = false, label = null }) {
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
     const shareUrl = url.startsWith('http') ? url : `${window.location.origin}${url}`;
+    track('share_link_click', { url, method: navigator.share ? 'native' : 'copy' });
 
     if (navigator.share) {
       try {

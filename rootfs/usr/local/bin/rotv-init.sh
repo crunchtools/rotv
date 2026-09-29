@@ -17,6 +17,8 @@ done
 echo "Creating database..."
 cd /app
 psql -h localhost -U postgres -d postgres -c "CREATE DATABASE rotv;" 2>/dev/null || echo "Database already exists"
+# Umami analytics (#637) keeps its own database; its Prisma migrations own the schema
+psql -h localhost -U postgres -d postgres -c "CREATE DATABASE umami;" 2>/dev/null || echo "Umami database already exists"
 
 if [ -f /tmp/seed-data.sql ]; then
   echo "Importing seed data (schema + data)..."

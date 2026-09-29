@@ -1,0 +1,32 @@
+[Unit]
+Description=Umami analytics (served first-party at /stats, #637)
+After=postgresql.service rotv-init.service
+Requires=postgresql.service rotv-init.service
+# Local builds from ubi10-core have no Umami; the site runs fine without it
+ConditionPathExists=/opt/umami/server.js
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/umami
+Environment=NODE_ENV=production
+Environment=HOSTNAME=127.0.0.1
+Environment=PORT=3000
+Environment=BASE_PATH=/stats
+Environment=DISABLE_TELEMETRY=1
+Environment=NEXT_TELEMETRY_DISABLED=1
+Environment=PATH=/opt/umami/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
+Environment=PGHOST=localhost
+Environment=PGPORT=5432
+Environment=PGUSER=postgres
+# PG* (database), APP_SECRET, UMAMI_ADMIN_PASSWORD
+EnvironmentFile=-/etc/rotv/environment
+
+ExecStart=/usr/local/bin/umami-start.sh
+ExecStartPost=/usr/bin/node /usr/local/bin/umami-setup.mjs
+# Setup waits up to 180s for the first boot's migrations and server start
+TimeoutStartSec=240
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

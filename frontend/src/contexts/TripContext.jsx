@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { addTrip as addLocalTrip } from '../utils/anonSettings';
+import { track } from '../utils/analytics';
 
 export const TripContext = createContext(null);
 
@@ -140,11 +141,13 @@ export function TripProvider({ children }) {
     const res = await fetch(`/api/trips/${encodeURIComponent(slug)}`, { credentials: 'include' });
     if (!res.ok) throw new Error(res.status === 404 ? 'Trip not found' : 'Failed to load trip');
     const loaded = await res.json();
+    track('trip_view', { slug });
     loadTrip(loaded);
     return loaded;
   }, [loadTrip]);
 
   const saveTrip = useCallback(async () => {
+    track('trip_save', { new_trip: !trip.id && !trip.slug, stops: trip.stops.length, signed_in: isAuthenticated });
     const payload = {
       name: trip.name || 'Untitled Trip',
       description: trip.description || null,

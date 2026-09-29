@@ -15,6 +15,7 @@ import ContentDetail from './sidebar/ContentDetail';
 import PoiEvents from './sidebar/PoiEvents';
 import AssociationsTabContent from './sidebar/AssociationsTabContent';
 import RiverLevels from './sidebar/RiverLevels';
+import { track, trackerVehicle } from '../utils/analytics';
 
 const SIDEBAR_TAB_LABELS = {
   view: 'Info',
@@ -254,6 +255,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
   const handleSidebarTabChange = useCallback((tab) => {
     setSidebarTab(tab);
+    track('sidebar_tab_view', { tab, poi_id: displayItem?.id, vehicle: trackerVehicle(displayItem) || undefined });
     if (onSidebarTabChange) onSidebarTabChange(tab);
     if (permalinkInfo && onClearPermalink) onClearPermalink();
     const poiSlug = generateSlug(displayItem?.name);
@@ -772,6 +774,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 stops={linearFeature.stops}
                 onSelectStop={(poiId) => {
                   const d = allDestinations?.find(dest => dest.id === poiId);
+                  track('tracker_stop_click', { vehicle: trackerVehicle(linearFeature), stop: d?.name });
                   if (d) onSelectPoi(d);
                 }}
               />
@@ -1028,6 +1031,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
               servingTaxis={servingTaxis}
               onSelectServingTaxi={(taxiId) => {
                 const f = allLinearFeatures?.find(feat => feat.id === taxiId);
+                track('tracker_served_by_click', { vehicle: 'water_taxi', from_poi: destination?.name });
                 if (f) onSelectPoi(f);
               }}
             />

@@ -5703,6 +5703,33 @@ body {
   text-decoration: underline;
 }
 
+/* Admin Stats tab: embedded Umami share dashboard (#637) */
+.stats-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.stats-settings-header p {
+  margin: 0 0 0.5rem;
+  color: #555;
+}
+
+.stats-settings-links {
+  display: flex;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+
+.stats-settings-frame {
+  width: 100%;
+  height: calc(100vh - 220px);
+  min-height: 600px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fff;
+}
+
 .google-integration-tab {
   display: flex;
   flex-direction: column;

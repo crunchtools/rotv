@@ -6,6 +6,7 @@ import VirtualPoiCreator from './VirtualPoiCreator';
 import { getDestinationIconTypeFromConfig, poiMatchesActivityForTypes, trailPassesActivityFilter, matchesWholeWord } from '../utils/iconUtils';
 import { getBoatStatus } from '../utils/boatStatus';
 import { getTrainStatus } from '../utils/trainStatus';
+import { track } from '../utils/analytics';
 import useAnimatedTrackerPosition from '../hooks/useAnimatedTrackerPosition';
 import { lineCumulativeDistances } from '../utils/trackInterpolation';
 import { buildConsist, MIN_CONSIST_ZOOM } from '../utils/trainConsist';
@@ -1421,6 +1422,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   const handleToggleType = (typeId) => {
     if (!onVisibleTypesChange) return;
     const willEnable = !visibleTypes.has(typeId);
+    track('layer_toggle', { layer: typeId, on: willEnable });
     onVisibleTypesChange(prev => {
       const newSet = new Set(prev);
       if (newSet.has(typeId)) newSet.delete(typeId); else newSet.add(typeId);
@@ -1457,6 +1459,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
 
   // Toggling the Water Taxis layer on zooms to its routes, matching POI-type behavior.
   const handleToggleWaterTaxis = (next) => {
+    track('layer_toggle', { layer: 'water-taxis', on: next });
     onToggleWaterTaxis(next);
     if (next) fitToWaterTaxis();
   };
@@ -1589,6 +1592,12 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
     if (onSelectLinearFeature) {
       onSelectLinearFeature(feature);
     }
+  };
+
+  // Clicking the moving train or boat itself, as opposed to its route line (#637)
+  const handleTrackerClick = (vehicle, feature, status) => {
+    track('tracker_click', { vehicle, status });
+    handleLinearFeatureClick(feature);
   };
 
   // The live boat and its route are the same POI: find the Harbor Hopper linear
@@ -2026,7 +2035,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             icon={boatIconRef.current}
             zIndexOffset={TRACKER_Z_INDEX}
             keyboard={false}
-            eventHandlers={{ click: () => handleLinearFeatureClick(boatFeature) }}
+            eventHandlers={{ click: () => handleTrackerClick('water_taxi', boatFeature, boatStatusLabel) }}
           >
             {selectedLinearFeature?.id !== boatFeature.id && (
               <Tooltip direction="top" offset={[0, -14]} className="destination-tooltip">
@@ -2058,7 +2067,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             icon={unit.kind === 'zephyr' ? zephyrIconRef.current : trainIconRef.current}
             zIndexOffset={TRACKER_Z_INDEX - 1 - i}
             keyboard={false}
-            eventHandlers={{ click: () => handleLinearFeatureClick(trainFeature) }}
+            eventHandlers={{ click: () => handleTrackerClick('train', trainFeature, trainStatusLabel) }}
           />
         ))}
 
@@ -2069,7 +2078,7 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
             icon={trainIconRef.current}
             zIndexOffset={TRACKER_Z_INDEX}
             keyboard={false}
-            eventHandlers={{ click: () => handleLinearFeatureClick(trainFeature) }}
+            eventHandlers={{ click: () => handleTrackerClick('train', trainFeature, trainStatusLabel) }}
           >
             {selectedLinearFeature?.id !== trainFeature.id && (
               <Tooltip direction="top" offset={[0, -14]} className="destination-tooltip">
