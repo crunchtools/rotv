@@ -1,5 +1,5 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { isAuthenticated, optionalAuth } from '../middleware/auth.js';
 import { slugifyWithSuffix } from '../utils/slug.js';
 import { createLogger } from '../utils/logger.js';
@@ -14,7 +14,7 @@ const tripWriteLimiter = rateLimit({
   message: { error: 'Too many trip changes. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip)
+  keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : ipKeyGenerator(req.ip))
 });
 
 function isFiniteNumber(v) {
