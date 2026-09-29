@@ -43,7 +43,7 @@ See [CLAUDE.md](CLAUDE.md) for development guidelines and [CONTRIBUTING.md](CONT
 | Container | Podman, Fedora |
 | Database | PostgreSQL 17 |
 | Backend | Node.js 22, Express |
-| Frontend | React 18, Vite 8 |
+| Frontend | React 19, Vite 8 |
 | Maps | Leaflet, React-Leaflet |
 | Testing | Vitest, Playwright, Supertest |
 
