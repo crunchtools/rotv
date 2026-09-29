@@ -129,7 +129,13 @@ describe('Umami API client for the MCP tools', () => {
 
 describe('website id', () => {
   it('matches the id umami-setup creates', () => {
-    const setup = fs.readFileSync(path.resolve(import.meta.dirname, '../../rootfs/usr/local/bin/umami-setup.mjs'), 'utf-8');
+    // In the repo it sits under rootfs/; the test image installs rootfs/ at the filesystem root
+    const script = 'usr/local/bin/umami-setup.mjs';
+    const found = [
+      path.resolve(import.meta.dirname, '../../rootfs', script),
+      path.join(path.parse(process.cwd()).root, script),
+    ].find(fs.existsSync);
+    const setup = fs.readFileSync(found, 'utf-8');
     expect(setup).toContain(`const WEBSITE_ID = '${UMAMI_WEBSITE_ID}';`);
   });
 });
