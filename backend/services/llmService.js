@@ -347,7 +347,7 @@ export async function researchLocation(pool, destination, availableActivities = 
     logger.error('Raw response:', text);
     logError(runId, 'research', null, destination.name, `Research failed: invalid AI response for ${destination.name}`, { completed: true, error_stack: text.slice(0, 500) });
     await flushJobLogs();
-    throw new Error('AI returned invalid format. Please try again.');
+    throw new Error('AI returned invalid format. Please try again.', { cause: e });
   }
 }
 

@@ -4,7 +4,7 @@ export function firstGeometryPoint(geometry) {
   const { type, coordinates } = geometry;
   if (!Array.isArray(coordinates) || coordinates.length === 0) return null;
 
-  let firstCoord = null;
+  let firstCoord;
   if (type === 'LineString') {
     firstCoord = coordinates[0];
   } else if (type === 'MultiLineString') {

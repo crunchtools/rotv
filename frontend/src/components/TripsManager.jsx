@@ -150,7 +150,7 @@ export default function TripsManager({ active = true, onClosed }) {
 
   const handleCopyLink = async (trip) => {
     const url = `${window.location.origin}/trip/${trip.slug}`;
-    let ok = false;
+    let ok;
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(url);

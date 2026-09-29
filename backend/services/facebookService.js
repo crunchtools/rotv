@@ -159,7 +159,7 @@ export async function fetchFacebookPosts(pool, statusUrl, maxItems = SOCIAL_MAX_
   logger.info(`Fetching Facebook posts for ${target} via page plugin (max ${maxItems})...`);
 
   let browser = null;
-  let cookies = [];
+  let cookies;
   try {
     cookies = await loadSessionCookies(pool);
     browser = await launchHumanBrowser();

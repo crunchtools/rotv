@@ -787,7 +787,6 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   if (publish) {
     setClauses.push(`moderation_status = 'published'`, `moderated_by = $${idx}`, `moderated_at = CURRENT_TIMESTAMP`);
     values.push(adminUserId);
-    idx++;
   }
 
   if (setClauses.length === 0) return;
@@ -1152,7 +1151,7 @@ export async function addItemUrl(pool, contentType, contentId, url, sourceName) 
     }
   } catch (e) {
     if (e.message.includes('protocol')) throw e;
-    throw new Error('Invalid URL format');
+    throw new Error('Invalid URL format', { cause: e });
   }
 
   const table = contentType === 'news' ? 'poi_news' : 'poi_events';
