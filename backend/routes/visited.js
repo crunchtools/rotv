@@ -1,5 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { userOrIpKey } from '../utils/rateLimitKeys.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { parsePositiveId } from '../utils/requestParams.js';
 import { createLogger } from '../utils/logger.js';
@@ -12,7 +13,7 @@ const visitedWriteLimiter = rateLimit({
   message: { error: 'Too many visited changes. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip)
+  keyGenerator: userOrIpKey
 });
 
 export function createVisitedRouter(pool) {

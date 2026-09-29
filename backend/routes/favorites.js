@@ -1,5 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
+import { userOrIpKey } from '../utils/rateLimitKeys.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { parsePositiveId, resolveTimezone } from '../utils/requestParams.js';
 import { createLogger } from '../utils/logger.js';
@@ -12,7 +13,7 @@ const favoriteWriteLimiter = rateLimit({
   message: { error: 'Too many favorite changes. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => (req.user && req.user.id ? `user:${req.user.id}` : req.ip)
+  keyGenerator: userOrIpKey
 });
 
 export function createFavoritesRouter(pool) {
