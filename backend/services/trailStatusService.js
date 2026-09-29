@@ -724,16 +724,43 @@ export async function getJobStatus(pool, jobId) {
   };
 }
 
-export async function cancelJob(pool, jobId) {
+/**
+ * Cancel a queued or running trail status job.
+ * @param {import('pg').Pool} pool
+ * @param {number|string} jobId
+ * @param {string|null} [cancelledBy] - admin email, stored in error_message as "Cancelled by <email>"
+ * @returns {Promise<boolean>} true if a queued/running job was cancelled
+ */
+export async function cancelJob(pool, jobId, cancelledBy = null) {
   const cancelUpdate = await pool.query(`
     UPDATE trail_status_job_status
     SET status = 'cancelled',
-        completed_at = NOW()
+        completed_at = NOW(),
+        error_message = $2
     WHERE id = $1 AND status IN ('queued', 'running')
     RETURNING id
-  `, [jobId]);
+  `, [jobId, cancelledBy ? `Cancelled by ${cancelledBy}` : 'Cancelled']);
 
   return cancelUpdate.rowCount > 0;
+}
+
+/**
+ * Close trail status jobs left 'queued' or 'running' by a restart. Trail jobs are
+ * never resumed, so without this they stay open forever (#586). The one-hour
+ * floor leaves room for pg-boss to redeliver a job that was only just queued.
+ * Call at startup only; one app per container and database, so nothing else owns these rows.
+ * @returns {Promise<number[]>} ids of the jobs marked failed
+ */
+export async function failAbandonedJobs(pool) {
+  const abandoned = await pool.query(`
+    UPDATE trail_status_job_status
+    SET status = 'failed', completed_at = NOW(),
+        error_message = 'Interrupted: server restarted while the job was running'
+    WHERE status IN ('queued', 'running')
+    AND created_at <= NOW() - INTERVAL '1 hour'
+    RETURNING id
+  `);
+  return abandoned.rows.map(row => row.id);
 }
 
 export async function getLatestTrailStatus(pool, poiId) {
