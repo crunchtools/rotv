@@ -2948,10 +2948,10 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       const cancelledJob = await pool.query(`
         UPDATE news_job_status
-        SET status = 'cancelled', completed_at = NOW(), ai_usage = $2
+        SET status = 'cancelled', completed_at = NOW(), ai_usage = $2, error_message = $3
         WHERE id = $1 AND status = 'running'
         RETURNING *
-      `, [jobId, JSON.stringify(currentUsage)]);
+      `, [jobId, JSON.stringify(currentUsage), `Cancelled by ${req.user.email}`]);
 
       if (cancelledJob.rows.length > 0) {
         const active = getAllActiveProgress();
@@ -3304,7 +3304,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       logger.info(`Admin ${req.user.email} requested cancellation of trail status job ${jobId}`);
 
-      const cancelled = await cancelTrailJob(pool, jobId);
+      const cancelled = await cancelTrailJob(pool, jobId, req.user.email);
 
       if (!cancelled) {
         return res.status(400).json({ error: 'Job not found or not running' });

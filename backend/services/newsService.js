@@ -237,6 +237,27 @@ export async function findIncompleteJobs(pool) {
   return incompleteJobs.rows;
 }
 
+/**
+ * Close news jobs a restart orphaned too long ago to resume. findIncompleteJobs
+ * only resumes the last hour, so anything older would otherwise sit in
+ * 'running' forever (#586: job 452 was frozen by a host hang and left open).
+ * Call at startup only, before any job can be running in this process. Safe
+ * because each ROTV container runs one app against its own embedded PostgreSQL,
+ * so no other instance can own these rows.
+ * @returns {Promise<number[]>} ids of the jobs marked failed
+ */
+export async function failAbandonedJobs(pool) {
+  const abandoned = await pool.query(`
+    UPDATE news_job_status
+    SET status = 'failed', completed_at = NOW(),
+        error_message = 'Interrupted: server restarted while the job was running and it was too old to resume'
+    WHERE status IN ('queued', 'running')
+    AND created_at <= NOW() - INTERVAL '1 hour'
+    RETURNING id
+  `);
+  return abandoned.rows.map(row => row.id);
+}
+
 const CALENDAR_VIEW_SUFFIXES = ['/list/', '/list', '/month/', '/month', '/today/', '/today',
   '/week/', '/week', '/day/', '/day', '/map/', '/map', '/photo/', '/photo',
   '/summary/', '/summary', '/calendar/', '/calendar'];

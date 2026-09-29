@@ -61,11 +61,13 @@ import {
   PIPELINE_LABELS,
   processNewsCollectionJob,
   ensureNewsJobCheckpointColumns,
-  findIncompleteJobs
+  findIncompleteJobs,
+  failAbandonedJobs as failAbandonedNewsJobs
 } from './services/newsService.js';
 import {
   getLatestTrailStatus,
-  processTrailStatusCollectionJob
+  processTrailStatusCollectionJob,
+  failAbandonedJobs as failAbandonedTrailJobs
 } from './services/trailStatusService.js';
 import {
   runRiverLevelsCollection,
@@ -2913,6 +2915,17 @@ async function start() {
   imageServerClient.initialize();
 
   await ensureNewsJobCheckpointColumns(pool);
+
+  // Before the scheduler starts: nothing in this process is running a job yet (#586)
+  try {
+    const abandonedNews = await failAbandonedNewsJobs(pool);
+    const abandonedTrail = await failAbandonedTrailJobs(pool);
+    if (abandonedNews.length || abandonedTrail.length) {
+      logger.warn(`Marked abandoned jobs failed — news: [${abandonedNews.join(', ')}], trail status: [${abandonedTrail.join(', ')}]`);
+    }
+  } catch (err) {
+    logger.error('Failed to close abandoned jobs:', err.message);
+  }
 
   await setupAiSearchDefaults();
 
