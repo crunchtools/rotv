@@ -80,6 +80,7 @@ import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
 import { mcpMiddleware } from './services/mcpServer.js';
+import { statsProxy, analyticsWebsiteId } from './services/analyticsService.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from './services/waterTaxiTrackerService.js';
 import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
@@ -183,18 +184,19 @@ app.use(cors({
   credentials: true
 }));
 
-// MCP routes must be mounted before the JSON body parser so the MCP SDK
-// can read the raw request stream for its own JSON-RPC parsing.
-app.all('/mcp/:token', (req, res, next) => { req._mcpRoute = true; next(); });
-app.all('/mcp', (req, res, next) => { req._mcpRoute = true; next(); });
+// MCP and the Umami proxy (#637) read the raw request stream themselves, so
+// they skip the body parsers below.
+app.all('/mcp/:token', (req, res, next) => { req._rawBody = true; next(); });
+app.all('/mcp', (req, res, next) => { req._rawBody = true; next(); });
+app.use('/stats', (req, res, next) => { req._rawBody = true; next(); });
 
 // Large GeoJSON geometry in linear features can exceed the default 100kb limit
 app.use((req, res, next) => {
-  if (req._mcpRoute) return next();
+  if (req._rawBody) return next();
   express.json({ limit: '50mb' })(req, res, next);
 });
 app.use((req, res, next) => {
-  if (req._mcpRoute) return next();
+  if (req._rawBody) return next();
   express.urlencoded({ limit: '50mb', extended: true })(req, res, next);
 });
 
@@ -219,6 +221,10 @@ app.use(session({
 configurePassport(pool);
 app.use(passport.initialize());
 app.use(passport.session());
+
+// Umami analytics (#637): public tracker + collector, admin-only dashboard
+app.use('/stats', statsProxy);
+app.get('/api/analytics/config', async (req, res) => res.json({ websiteId: await analyticsWebsiteId() }));
 
 app.use('/auth', createAuthRouter(pool));
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));

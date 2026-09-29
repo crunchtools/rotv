@@ -49,6 +49,36 @@ async function ensureBackupsFolder(drive, pool) {
   return backupsFolderId;
 }
 
+/**
+ * Stream pg_dump of one database straight into a new Drive file, so a large
+ * dump is never held in memory. A failed dump deletes the partial upload.
+ * @returns {Promise<string>} the Drive file id
+ */
+async function streamDumpToDrive(drive, folderId, name, { pgHost, pgPort, pgUser, database }) {
+  const proc = spawn('pg_dump', ['-h', pgHost, '-p', pgPort, '-U', pgUser, database], {
+    env: { ...process.env },
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  proc.stderr.on('data', (chunk) => logger.warn('pg_dump stderr:', chunk.toString()));
+  const exited = new Promise((resolve, reject) => {
+    proc.on('close', resolve);
+    proc.on('error', reject);
+  });
+  const [response, code] = await Promise.all([
+    drive.files.create({
+      requestBody: { name, mimeType: 'application/sql', parents: [folderId] },
+      media: { mimeType: 'application/sql', body: proc.stdout },
+      fields: 'id'
+    }),
+    exited
+  ]);
+  if (code !== 0) {
+    await drive.files.delete({ fileId: response.data.id });
+    throw new Error(`pg_dump ${database} exited with code ${code}`);
+  }
+  return response.data.id;
+}
+
 export async function triggerBackup(pool, drive) {
   const runId = Math.floor(Date.now() / 1000);
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').slice(0, 19);
@@ -61,39 +91,24 @@ export async function triggerBackup(pool, drive) {
   const pgDatabase = process.env.PGDATABASE || 'rotv';
   const pgUser = process.env.PGUSER || 'rotv';
 
-  const sqlDump = await new Promise((resolve, reject) => {
-    const chunks = [];
-    const proc = spawn('pg_dump', ['-h', pgHost, '-p', pgPort, '-U', pgUser, pgDatabase], {
-      env: { ...process.env },
-      stdio: ['ignore', 'pipe', 'pipe']
-    });
-    proc.stdout.on('data', (chunk) => chunks.push(chunk));
-    proc.stderr.on('data', (chunk) => logger.warn('pg_dump stderr:', chunk.toString()));
-    proc.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`pg_dump exited with code ${code}`));
-      resolve(Buffer.concat(chunks).toString('utf-8'));
-    });
-    proc.on('error', reject);
-  });
-
-  logInfo(runId, 'database_backup', null, null, `pg_dump complete, uploading ${filename} to Drive`);
-
   const backupsFolderId = await ensureBackupsFolder(drive, pool);
+  const conn = { pgHost, pgPort, pgUser };
 
-  const response = await drive.files.create({
-    requestBody: {
-      name: filename,
-      mimeType: 'application/sql',
-      parents: [backupsFolderId]
-    },
-    media: {
-      mimeType: 'application/sql',
-      body: Readable.from([sqlDump])
-    },
-    fields: 'id'
-  });
+  logInfo(runId, 'database_backup', null, null, `Streaming pg_dump to Drive as ${filename}`);
+  const driveFileId = await streamDumpToDrive(drive, backupsFolderId, filename, { ...conn, database: pgDatabase });
 
-  const driveFileId = response.data.id;
+  // Umami analytics (#637) lives in its own database and is kept forever, so it
+  // rides along with every ROTV backup. It is not restorable from the admin UI:
+  // listBackups only offers rotv-backup-* files.
+  const analyticsName = `umami-backup-${timestamp}.sql`;
+  try {
+    await streamDumpToDrive(drive, backupsFolderId, analyticsName, { ...conn, database: 'umami' });
+    logInfo(runId, 'database_backup', null, null, `Analytics database uploaded as ${analyticsName}`);
+  } catch (error) {
+    // Local builds have no umami database; never fail the ROTV backup over it
+    logger.warn('Analytics database backup skipped:', error.message);
+  }
+
   const now = new Date().toISOString();
 
   await pool.query(`
@@ -122,7 +137,7 @@ export async function listBackups(drive, pool) {
 
   try {
     const response = await drive.files.list({
-      q: `'${backupsFolderId}' in parents and trashed = false`,
+      q: `'${backupsFolderId}' in parents and name contains 'rotv-backup-' and trashed = false`,
       fields: 'files(id,name,size,createdTime)',
       orderBy: 'createdTime desc',
       pageSize: 20

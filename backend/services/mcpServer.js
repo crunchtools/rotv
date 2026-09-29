@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
 import { isSecretSetting } from '../utils/settingsRedaction.js';
 import { createLogger } from '../utils/logger.js';
+import { getStatsSummary, getStatsTop } from './analyticsService.js';
 
 import {
   getQueue,
@@ -763,6 +764,40 @@ function registerTools(server, pool, boss, mcpUserId) {
           }, null, 2)
         }]
       };
+    }
+  );
+
+  server.tool(
+    'stats_summary',
+    'Site usage from Umami (#637): visitors, visits, pageviews, bounces, a daily series, and train/water-taxi tracker use',
+    { days: z.number().int().min(1).max(3650).default(7).describe('Look-back window in days') },
+    async ({ days }) => {
+      try {
+        const summary = await getStatsSummary(days);
+        return { content: [{ type: 'text', text: JSON.stringify(summary, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Analytics unavailable: ${err.message}` }], isError: true };
+      }
+    }
+  );
+
+  server.tool(
+    'stats_top',
+    'Top values from Umami (#637). metric=event|path|referrer|country|device|browser|os, or metric=property with event+property (e.g. poi_view/name, search/query, search_no_results/query, tracker_click/status)',
+    {
+      metric: z.enum(['event', 'path', 'referrer', 'country', 'device', 'browser', 'os', 'property']),
+      days: z.number().int().min(1).max(3650).default(7),
+      limit: z.number().int().min(1).max(500).default(20),
+      event: z.string().optional().describe('Event name, for metric=property'),
+      property: z.string().optional().describe('Event property, for metric=property'),
+    },
+    async (args) => {
+      try {
+        const rows = await getStatsTop(args);
+        return { content: [{ type: 'text', text: JSON.stringify(rows, null, 2) }] };
+      } catch (err) {
+        return { content: [{ type: 'text', text: `Analytics unavailable: ${err.message}` }], isError: true };
+      }
     }
   );
 

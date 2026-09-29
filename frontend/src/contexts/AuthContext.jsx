@@ -8,6 +8,7 @@ import {
   addVisited as addAnonVisited,
   removeVisited as removeAnonVisited
 } from '../utils/anonSettings';
+import { track } from '../utils/analytics';
 
 export const AuthContext = createContext(null);
 
@@ -84,10 +85,12 @@ export function AuthProvider({ children }) {
   };
 
   const loginWithGoogle = () => {
+    track('login', { provider: 'google' });
     window.location.href = '/auth/google';
   };
 
   const loginWithFacebook = () => {
+    track('login', { provider: 'facebook' });
     window.location.href = '/auth/facebook';
   };
 

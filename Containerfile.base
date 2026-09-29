@@ -1,12 +1,45 @@
 # Base infrastructure layer for Roots of The Valley
-# Contains: PostgreSQL 17, Node.js, Playwright/Chromium
+# Contains: PostgreSQL 17, Node.js, Playwright/Chromium, Umami analytics
 # This image rarely changes and is cached on quay.io/fatherlinux/rotv-base
+
+# Umami (#637): self-hosted, cookieless analytics served first-party at /stats.
+# Built here, on the same glibc userland as the runtime, so normal app builds
+# never pay for a Next.js build. Mirrors upstream's Dockerfile (builder +
+# runner stages) at the pinned tag. BASE_PATH is baked in at build time.
+FROM quay.io/crunchtools/ubi10-core:latest AS umami
+ARG UMAMI_VERSION=3.4.0
+ARG PNPM_VERSION=12.3.4
+ARG PRISMA_VERSION=7.10.0
+RUN dnf install -y nodejs npm tar gzip && dnf clean all && \
+    npm install -g pnpm@${PNPM_VERSION}
+WORKDIR /build
+RUN curl -fsSL "https://github.com/umami-software/umami/archive/refs/tags/v${UMAMI_VERSION}.tar.gz" \
+      | tar xz --strip-components=1 && \
+    printf 'strictDepBuilds: false\n' >> pnpm-workspace.yaml && \
+    pnpm install --frozen-lockfile && \
+    cp docker/proxy.ts src/
+ENV BASE_PATH=/stats \
+    NEXT_TELEMETRY_DISABLED=1 \
+    DATABASE_URL=postgresql://user:pass@localhost:5432/dummy
+RUN pnpm build:docker
+# Runtime layout: prisma CLI + client for check-db's `prisma migrate deploy`,
+# then the standalone server layered on top (same order as upstream's runner).
+WORKDIR /opt/umami
+RUN echo {} > package.json && \
+    printf "allowBuilds:\n  '@prisma/engines': true\n  prisma: false\nverifyDepsBeforeRun: false\n" > pnpm-workspace.yaml && \
+    pnpm add npm-run-all dotenv chalk semver \
+      prisma@${PRISMA_VERSION} @prisma/client@${PRISMA_VERSION} @prisma/adapter-pg@${PRISMA_VERSION} && \
+    cp -a /build/public /build/prisma /build/prisma.config.ts /build/scripts /build/generated /build/geo ./ && \
+    cp -a /build/.next/standalone/. ./ && \
+    mkdir -p .next && cp -a /build/.next/static .next/static
 
 FROM quay.io/crunchtools/ubi10-core:latest
 
 LABEL maintainer="fatherlinux"
-LABEL description="ROTV Base - PostgreSQL 17, Node.js, Playwright infrastructure"
-LABEL version="1.0.0"
+LABEL description="ROTV Base - PostgreSQL 17, Node.js, Playwright infrastructure, Umami"
+LABEL version="1.1.0"
+
+COPY --from=umami /opt/umami /opt/umami
 
 # Install systemd, Node.js, and Chromium dependencies for Playwright
 RUN dnf install -y nodejs npm procps-ng \

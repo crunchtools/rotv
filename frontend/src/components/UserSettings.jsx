@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import GeneralSettings from './GeneralSettings';
 import McpSettings from './McpSettings';
 import { readEmail, writeEmail, writeSubscribed } from '../utils/anonSettings';
+import { track } from '../utils/analytics';
 
 function UserSettings({ user, initialTab }) {
   const [activeTab, setActiveTab] = useState(initialTab || 'general');
@@ -43,6 +44,7 @@ function UserSettings({ user, initialTab }) {
       const subscribeResponse = await res.json();
 
       if (res.ok) {
+        track('newsletter_subscribe', { signed_in: Boolean(user?.email) });
         setStatus('success');
         setMessage(subscribeResponse.message);
         if (!user?.email) {
