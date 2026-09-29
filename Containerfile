@@ -19,7 +19,7 @@ RUN dnf install -y nodejs npm rsyslog \
     && dnf clean all
 
 # Install Playwright globally with Chromium (pinned to match backend/package.json)
-RUN npm install -g playwright@1.58.1 && npx playwright install chromium
+RUN npm install -g playwright@1.63.0 && npx playwright install chromium
 
 # Add PostgreSQL 17 + PostGIS from official pgdg repository
 # RHSM registration provides RHEL BaseOS/AppStream (required for boost-serialization → SFCGAL → postgis35_17)
