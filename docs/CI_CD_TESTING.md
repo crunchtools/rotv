@@ -317,7 +317,7 @@ CVE Lite uses OSV rather than the npm registry. npm audit misses advisories on p
 Each scanned directory has a committed `.cve-lite/baseline.json` of accepted debt. A PR fails only on a finding that isn't in it, meaning a new package, a new version, or a new advisory ID. After fixing debt, shrink the baseline:
 
 ```bash
-podman run --rm -v "$PWD":/src:Z -w /src/backend docker.io/library/node:20 \
+podman run --rm -v "$PWD":/src:Z -w /src/backend docker.io/library/node:22 \
   npx -y cve-lite-cli@1.37.0 . --ratchet
 git add backend/.cve-lite/baseline.json
 ```

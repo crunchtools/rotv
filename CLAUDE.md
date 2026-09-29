@@ -30,8 +30,8 @@ Before making any changes, read these documents in order:
 |-------|------------|
 | Container | Podman, Fedora |
 | Database | PostgreSQL 17 |
-| Backend | Node.js 20 + Express |
-| Frontend | React 18 + Vite 5 |
+| Backend | Node.js 22 + Express |
+| Frontend | React 18 + Vite 8 |
 | Maps | Leaflet + React-Leaflet |
 | Testing | Vitest + Playwright + Supertest |
 | AI | OpenRouter (`backend/services/llmService.js`) |
@@ -99,7 +99,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 
 ## Architecture Map
 
-### Frontend (React 18 + Vite 5)
+### Frontend (React 18 + Vite 8)
 - `frontend/src/App.jsx` — main app component, routing, state management (~2500 lines)
 - `frontend/src/App.css` — all styles including media queries (mobile breakpoint: 768px)
 - `frontend/src/components/Map.jsx` — Leaflet map with marker clusters
@@ -107,7 +107,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 - `frontend/src/components/BackButton.jsx` — shared back navigation
 - `frontend/src/utils/anonSettings.js` — localStorage helpers for anonymous user state
 
-### Backend (Node.js 20 + Express)
+### Backend (Node.js 22 + Express)
 - `backend/server.js` — Express app setup, route mounting, MCP server startup
 - `backend/routes/` — API route handlers (admin, auth, pois, news, events, media, etc.)
 - `backend/services/` — business logic (collection, moderation, newsletter, geocoding, MCP)
