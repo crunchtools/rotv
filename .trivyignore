@@ -4,3 +4,14 @@
 #
 # # Not reachable: we never call X. Accepted by @fatherlinux, review 2026-12-31
 # CVE-2026-00000
+
+# Umami 3.4.0 (#637) bundles these through the Prisma CLI, not through code that serves requests.
+# Drop both when an Umami release ships deepmerge-ts >= 8.0.0 and mysql2 >= 3.22.0.
+#
+# Not reachable: deepmerge-ts is used only by @prisma/config to merge Prisma's own config
+# when migrations run at startup. No visitor data goes through it. Accepted by Josui (CTO)
+# 2026-09-29, review 2026-12-31.
+CVE-2026-40345
+# Not reachable: mysql2's auth-plugin downgrade needs a MySQL server, and Umami here runs
+# on the container's local PostgreSQL. Accepted by Josui (CTO) 2026-09-29, review 2026-12-31.
+GHSA-3f6p-5ww8-9rcr
