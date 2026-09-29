@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
 import { PassThrough } from 'stream';
 
-// pg_dump exit code per database, set by each test
+// pg_dump exit code per database, set by each test; 'spawn-error' emits error, 'hang' never exits
 const exitCodes = {};
+const spawned = [];
 
 vi.mock('child_process', () => ({
   spawn: vi.fn((cmd, args) => {
@@ -11,7 +12,14 @@ vi.mock('child_process', () => ({
     proc.stdout = new PassThrough();
     proc.stderr = new PassThrough();
     const database = args.at(-1);
+    proc.kill = vi.fn(() => setImmediate(() => proc.emit('close', null)));
+    spawned.push(proc);
+    if (exitCodes[database] === 'hang') return proc;
     setImmediate(() => {
+      if (exitCodes[database] === 'spawn-error') {
+        proc.emit('error', new Error('spawn pg_dump ENOENT'));
+        return;
+      }
       proc.stdout.end(`-- dump of ${database}\n`);
       proc.emit('close', exitCodes[database] ?? 0);
     });
@@ -48,7 +56,10 @@ function fakeDrive() {
 const pool = { query: vi.fn(async () => ({ rows: [] })) };
 
 describe('database backup with analytics (#637)', () => {
-  beforeEach(() => { for (const k of Object.keys(exitCodes)) delete exitCodes[k]; });
+  beforeEach(() => {
+    for (const k of Object.keys(exitCodes)) delete exitCodes[k];
+    spawned.length = 0;
+  });
 
   it('streams the ROTV and umami dumps to Drive', async () => {
     const drive = fakeDrive();
@@ -71,6 +82,19 @@ describe('database backup with analytics (#637)', () => {
   it('fails the backup when the ROTV dump fails', async () => {
     exitCodes[process.env.PGDATABASE || 'rotv'] = 1;
     await expect(triggerBackup(pool, fakeDrive())).rejects.toThrow('exited with code 1');
+  });
+
+  it('fails the backup when pg_dump cannot start', async () => {
+    exitCodes[process.env.PGDATABASE || 'rotv'] = 'spawn-error';
+    await expect(triggerBackup(pool, fakeDrive())).rejects.toThrow('ENOENT');
+  });
+
+  it('kills pg_dump when the Drive upload fails', async () => {
+    exitCodes[process.env.PGDATABASE || 'rotv'] = 'hang';
+    const drive = fakeDrive();
+    drive.files.create = vi.fn(async () => { throw new Error('Drive quota exceeded'); });
+    await expect(triggerBackup(pool, drive)).rejects.toThrow('Drive quota exceeded');
+    expect(spawned[0].kill).toHaveBeenCalled();
   });
 
   it('offers only ROTV backups for restore', async () => {

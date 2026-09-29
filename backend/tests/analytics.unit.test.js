@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { PUBLIC_STATS_PATHS, analyticsWebsiteId, statsProxy, UMAMI_WEBSITE_ID, getStatsSummary, getStatsTop } from '../services/analyticsService.js';
 import { track, trackerVehicle } from '../../frontend/src/utils/analytics.js';
 
@@ -122,6 +124,76 @@ describe('Umami API client for the MCP tools', () => {
     umami({ '/metrics': () => json({}, 401) });
     vi.stubEnv('UMAMI_ADMIN_PASSWORD', '');
     await expect(getStatsTop({ metric: 'os', days: 1, limit: 5 })).rejects.toThrow('UMAMI_ADMIN_PASSWORD is not set');
+  });
+});
+
+describe('website id', () => {
+  it('matches the id umami-setup creates', () => {
+    const setup = fs.readFileSync(path.resolve(import.meta.dirname, '../../rootfs/usr/local/bin/umami-setup.mjs'), 'utf-8');
+    expect(setup).toContain(`const WEBSITE_ID = '${UMAMI_WEBSITE_ID}';`);
+  });
+});
+
+describe('frontend initAnalytics()', () => {
+  let appended;
+
+  beforeEach(() => {
+    vi.resetModules();
+    appended = [];
+    globalThis.window = {};
+    globalThis.document = {
+      createElement: () => ({ dataset: {} }),
+      head: { appendChild: (el) => appended.push(el) },
+    };
+  });
+  afterEach(() => {
+    delete globalThis.window;
+    delete globalThis.document;
+    vi.unstubAllGlobals();
+  });
+
+  const load = () => import('../../frontend/src/utils/analytics.js');
+
+  it('loads nothing when analytics is off', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ websiteId: null }) })));
+    const { initAnalytics } = await load();
+    await initAnalytics();
+    expect(appended).toEqual([]);
+  });
+
+  it('loads nothing when the config request fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('offline'); }));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { initAnalytics } = await load();
+    await initAnalytics();
+    expect(appended).toEqual([]);
+  });
+
+  it('injects the tracker once and flushes events queued before it loaded', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ websiteId: 'site-1' }) })));
+    const { initAnalytics, track } = await load();
+    track('poi_view', { poi_id: 7 });
+    await initAnalytics();
+    await initAnalytics();
+    expect(appended).toHaveLength(1);
+    expect(appended[0].src).toBe('/stats/script.js');
+    expect(appended[0].dataset.websiteId).toBe('site-1');
+    const umamiTrack = vi.fn();
+    window.umami = { track: umamiTrack };
+    appended[0].onload();
+    expect(umamiTrack).toHaveBeenCalledWith('poi_view', { poi_id: 7 });
+  });
+
+  it('drops queued events if the tracker is blocked', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => ({ websiteId: 'site-1' }) })));
+    const { initAnalytics, track } = await load();
+    track('search', { query: 'x' });
+    await initAnalytics();
+    appended[0].onerror();
+    const umamiTrack = vi.fn();
+    window.umami = { track: umamiTrack };
+    appended[0].onload();
+    expect(umamiTrack).not.toHaveBeenCalled();
   });
 });
 

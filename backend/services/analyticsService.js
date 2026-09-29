@@ -21,7 +21,10 @@ const REPORT_TIMEZONE = 'America/New_York';
 // Exact matches only: anything else under /stats is the dashboard
 export const PUBLIC_STATS_PATHS = new Set(['/stats/script.js', '/stats/api/send']);
 
-const PROBE_TTL_MS = 60 * 1000;
+// A healthy Umami is trusted for a minute; a failed probe is retried soon, so a
+// restart doesn't leave new visitors untracked for long.
+const PROBE_UP_TTL_MS = 60 * 1000;
+const PROBE_DOWN_TTL_MS = 5 * 1000;
 let probe = { at: 0, up: false };
 
 /**
@@ -33,7 +36,7 @@ let probe = { at: 0, up: false };
 export async function analyticsWebsiteId() {
   if (process.env.UMAMI_ENABLED === 'false') return null;
   if (process.env.UMAMI_ENABLED !== 'true' && process.env.NODE_ENV === 'test') return null;
-  if (Date.now() - probe.at >= PROBE_TTL_MS) {
+  if (Date.now() - probe.at >= (probe.up ? PROBE_UP_TTL_MS : PROBE_DOWN_TTL_MS)) {
     let up = false;
     try {
       up = (await fetch(`${UMAMI_BASE}/api/heartbeat`, { signal: AbortSignal.timeout(2000) })).ok;
@@ -68,8 +71,17 @@ function forward(req, res) {
 }
 
 /**
+ * Express middleware for /stats. The tracker script and collector are
+ * forwarded for anyone; every other path needs a ROTV admin session, and a
+ * non-admin gets isAdmin's 401/403 JSON. Forwarded requests stream to Umami
+ * without the ROTV cookie, and a down Umami answers 503. Terminal: never
+ * calls next().
+ *
  * Mount on /stats after the session/passport middleware, and exempt /stats
  * from the body parsers so the request stream reaches Umami untouched.
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @returns {void}
  */
 export function statsProxy(req, res) {
   if (PUBLIC_STATS_PATHS.has(req.originalUrl.split('?')[0])) return forward(req, res);
@@ -79,17 +91,21 @@ export function statsProxy(req, res) {
 // --- Umami API client for the admin MCP tools ---
 
 let cachedToken = null;
+// One login shared by concurrent calls (getStatsSummary fires four at once)
+let pendingLogin = null;
 
 async function umamiGet(path, params, retried = false) {
   if (!cachedToken) {
     if (!process.env.UMAMI_ADMIN_PASSWORD) throw new Error('UMAMI_ADMIN_PASSWORD is not set');
-    const login = await fetch(`${UMAMI_BASE}/api/auth/login`, {
+    pendingLogin ??= fetch(`${UMAMI_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: 'admin', password: process.env.UMAMI_ADMIN_PASSWORD }),
-    });
-    if (!login.ok) throw new Error(`Umami login failed (${login.status})`);
-    cachedToken = (await login.json()).token;
+    }).then(async (login) => {
+      if (!login.ok) throw new Error(`Umami login failed (${login.status})`);
+      return (await login.json()).token;
+    }).finally(() => { pendingLogin = null; });
+    cachedToken = await pendingLogin;
   }
   const url = `${UMAMI_BASE}/api/websites/${UMAMI_WEBSITE_ID}${path}?${new URLSearchParams(params)}`;
   const res = await fetch(url, { headers: { Authorization: `Bearer ${cachedToken}` } });

@@ -64,14 +64,22 @@ async function streamDumpToDrive(drive, folderId, name, { pgHost, pgPort, pgUser
     proc.on('close', resolve);
     proc.on('error', reject);
   });
-  const [response, code] = await Promise.all([
-    drive.files.create({
-      requestBody: { name, mimeType: 'application/sql', parents: [folderId] },
-      media: { mimeType: 'application/sql', body: proc.stdout },
-      fields: 'id'
-    }),
-    exited
-  ]);
+  let response, code;
+  try {
+    [response, code] = await Promise.all([
+      drive.files.create({
+        requestBody: { name, mimeType: 'application/sql', parents: [folderId] },
+        media: { mimeType: 'application/sql', body: proc.stdout },
+        fields: 'id'
+      }),
+      exited
+    ]);
+  } catch (error) {
+    // A failed upload leaves pg_dump blocked on a full pipe; don't leak it
+    proc.kill();
+    await exited.catch((exitError) => logger.warn('pg_dump exit after failed upload:', exitError.message));
+    throw error;
+  }
   if (code !== 0) {
     await drive.files.delete({ fileId: response.data.id });
     throw new Error(`pg_dump ${database} exited with code ${code}`);
