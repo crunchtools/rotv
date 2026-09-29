@@ -5,6 +5,10 @@ import React from 'react';
 // event property drill-down) needs its own admin login.
 const SHARE_URL = '/stats/share/rotv';
 
+/**
+ * Admin Settings > Stats tab: the embedded Umami dashboard plus links out.
+ * Takes no props.
+ */
 function StatsSettings() {
   return (
     <div className="stats-settings">

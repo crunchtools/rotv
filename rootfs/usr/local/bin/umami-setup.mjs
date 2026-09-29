@@ -14,6 +14,8 @@ import { execFileSync } from 'child_process';
 const BASE = 'http://127.0.0.1:3000/stats';
 const WEBSITE_ID = '804a81bc-5731-4028-bd22-2aa2f2b159c2';
 const SHARE_SLUG = 'rotv';
+// Umami's first-boot login. It is never a deployed credential: setup rotates
+// it on first start, and stops Umami if it can't.
 const DEFAULT_PASSWORD = 'umami';
 const configuredPassword = process.env.UMAMI_ADMIN_PASSWORD;
 
@@ -105,4 +107,4 @@ async function main() {
     : `umami-setup: website create failed (${created.status}): ${JSON.stringify(created.data)}`);
 }
 
-main().catch(err => console.error('umami-setup:', err.message));
+main().catch(err => console.error('umami-setup: bootstrap failed', err));
