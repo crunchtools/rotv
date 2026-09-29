@@ -21,6 +21,7 @@ const REPORT_TIMEZONE = 'America/New_York';
 // Exact matches only: anything else under /stats is the dashboard
 export const PUBLIC_STATS_PATHS = new Set(['/stats/script.js', '/stats/api/send']);
 
+// Fix: retry a failed heartbeat after 5s, not 60s (PR #690 review)
 // A healthy Umami is trusted for a minute; a failed probe is retried soon, so a
 // restart doesn't leave new visitors untracked for long.
 const PROBE_UP_TTL_MS = 60 * 1000;
@@ -91,7 +92,7 @@ export function statsProxy(req, res) {
 // --- Umami API client for the admin MCP tools ---
 
 let cachedToken = null;
-// One login shared by concurrent calls (getStatsSummary fires four at once)
+// Fix: one login shared by concurrent calls; getStatsSummary fires four at once (PR #690 review)
 let pendingLogin = null;
 
 async function umamiGet(path, params, retried = false) {

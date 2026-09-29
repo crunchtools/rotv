@@ -75,7 +75,7 @@ async function streamDumpToDrive(drive, folderId, name, { pgHost, pgPort, pgUser
       exited
     ]);
   } catch (error) {
-    // A failed upload leaves pg_dump blocked on a full pipe; don't leak it
+    // Fix: a failed upload leaves pg_dump blocked on a full pipe; kill it (PR #690 review)
     proc.kill();
     await exited.catch((exitError) => logger.warn('pg_dump exit after failed upload:', exitError.message));
     throw error;
