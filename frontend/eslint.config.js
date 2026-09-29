@@ -38,7 +38,8 @@ export default [
       'react-hooks/immutability': 'warn',
       'react-hooks/purity': 'warn',
       'react-hooks/preserve-manual-memoization': 'warn',
-      'react/react-in-jsx-scope': 'off', // Not needed since React 17's JSX transform
+      // Fix: version-neutral wording (PR #686 review)
+      'react/react-in-jsx-scope': 'off', // The automatic JSX runtime imports React itself
       'react/prop-types': 'warn',
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': ['warn', { allow: ['error', 'warn'] }], // Allow error/warn, disallow log/debug
