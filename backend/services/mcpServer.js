@@ -682,7 +682,7 @@ function registerTools(server, pool, boss, mcpUserId) {
 
       if (news_url !== undefined) { setClauses.push(`news_url = $${idx}`); values.push(news_url); idx++; }
       if (events_url !== undefined) { setClauses.push(`events_url = $${idx}`); values.push(events_url); idx++; }
-      if (status_url !== undefined) { setClauses.push(`status_url = $${idx}`); values.push(status_url); idx++; }
+      if (status_url !== undefined) { setClauses.push(`status_url = $${idx}`); values.push(status_url); }
 
       if (setClauses.length === 0) {
         return { content: [{ type: 'text', text: 'No URLs provided to update' }], isError: true };

@@ -24,7 +24,8 @@ const POLLING_INTERVAL = 2000; // 2 seconds between polls
 const MAX_POLL_ATTEMPTS = 60; // Max 2 minutes to wait for job completion
 
 describe('End-to-End Slot Architecture Tests', () => {
-  let authCookie;
+  // These suites never log in; every request runs unauthenticated.
+  const authCookie = undefined;
 
   // Helper to wait for job completion
   async function waitForJobCompletion(endpoint, jobId, maxAttempts = MAX_POLL_ATTEMPTS) {

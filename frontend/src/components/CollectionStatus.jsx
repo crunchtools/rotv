@@ -145,7 +145,7 @@ function CollectionStatus({ poiId, isCollecting, onComplete, onClose, onCancel, 
   const isComplete = displayProgress.completed;
 
   const collectionType = displayProgress.collectionType || 'both';
-  let allPhases = [];
+  let allPhases;
 
   if (collectionType === 'news') {
     allPhases = ['rendering_news', 'ai_search', 'matching_links', 'google_news'];

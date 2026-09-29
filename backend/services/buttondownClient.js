@@ -291,11 +291,11 @@ export async function testApiKey(pool = null) {
     };
   } catch (error) {
     if (error.response?.status === 401) {
-      throw new Error('Invalid API key - authentication failed');
+      throw new Error('Invalid API key - authentication failed', { cause: error });
     } else if (error.response?.status === 403) {
-      throw new Error('API key lacks required permissions');
+      throw new Error('API key lacks required permissions', { cause: error });
     } else {
-      throw new Error(`Buttondown API error: ${error.message}`);
+      throw new Error(`Buttondown API error: ${error.message}`, { cause: error });
     }
   }
 }
