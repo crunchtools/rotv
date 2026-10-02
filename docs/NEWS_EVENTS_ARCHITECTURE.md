@@ -85,7 +85,7 @@ Everything else stays `pending` for a human. **Fix Date** (`fixDate`) rescores f
 
 ## Newsletter
 
-The Friday digest (`newsletterDigestService.js`) is built from live data at send time. The Thursday preview uses the same query as of Friday.
+The Friday digest (`newsletterDigestService.js`) is built from live data at send time. The Thursday preview uses the same query as of Friday. News comes first, then events; the greeting block is omitted when `digest_greeting` is empty.
 
 - **Events** — Friday through Sunday (Eastern), published, deduplicated by POI + title + day. Each shows `venue · organizer` from `location_details` and the POI name.
 - **News** — Current News only, collected in the 7 days before the send, excluding social and aggregator hosts, deduplicated two ways: same POI with mostly overlapping title and summary vocabulary, and the same outlet covering one story twice within 48 hours (headlines sharing at least 4 significant words), regardless of POI. The fuller summary wins.
