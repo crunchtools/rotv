@@ -96,6 +96,13 @@ function titleTokens(item) {
   );
 }
 
+// Headline vocabulary without the POI's own name, so two unrelated stories
+// about "Akron Zoo" don't match on the name alone.
+function headlineTokens(item) {
+  const poiTokens = titleTokens({ title: item.poi_name });
+  return new Set([...titleTokens(item)].filter(t => !poiTokens.has(t)));
+}
+
 const SAME_OUTLET_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 function newsTimestamp(item) {
@@ -126,21 +133,41 @@ function isSameOutletRepeat(a, b) {
 
 const summaryLength = (item) => (item.summary || '').length;
 
-// Two stories about the same POI count as one story when their significant
-// vocabulary (title + summary, minus stopwords and the POI's own name) mostly
-// overlaps. Catches the same announcement collected from two outlets, which
-// URL- and title-based dedup at save time cannot (different source, different
-// headline). Input is sorted most-recent-first, so the freshest copy wins,
-// except for same-outlet repeats, where the fuller summary wins (the story,
-// not the gallery caption).
+// Two stories about the same POI count as one when their significant vocabulary
+// (title + summary, minus stopwords and the POI's name) mostly overlaps. Two
+// outlets' long summaries of one event can diverge past that ratio, so a strong
+// headline match also counts, but only with some summary overlap behind it;
+// templated headlines ("opens a new exhibit" vs "event") share no story. Input
+// is sorted most-recent-first, so the freshest copy wins, except for same-outlet
+// repeats, where the fuller summary wins.
 export function dedupeDigestNews(news) {
   const kept = [];
+  const tokenCache = new Map();
+  const tokensFor = (item) => {
+    if (!tokenCache.has(item)) {
+      tokenCache.set(item, { text: newsTokens(item), headline: headlineTokens(item) });
+    }
+    return tokenCache.get(item);
+  };
   for (const item of news) {
-    const tokens = newsTokens(item);
-    const samePoiDup = kept.some(other =>
-      other.poi_id === item.poi_id && sharesEnough(tokens, newsTokens(other), 4, 0.4)
-    );
-    if (samePoiDup) continue;
+    const mine = tokensFor(item);
+    const samePoiIndex = kept.findIndex(other => {
+      if (other.poi_id !== item.poi_id) return false;
+      const theirs = tokensFor(other);
+      // Fix: headline matches need summary corroboration, and tokens are computed once per item (PR #694 review)
+      return sharesEnough(mine.text, theirs.text, 4, 0.4) || (
+        sharesEnough(mine.headline, theirs.headline, 3, 0.6) &&
+        sharesEnough(mine.text, theirs.text, 4, 0.2)
+      );
+    });
+    if (samePoiIndex !== -1) {
+      // Fix: a same-outlet repeat keeps the fuller summary on this path too (PR #694 review)
+      const other = kept[samePoiIndex];
+      if (isSameOutletRepeat(other, item) && summaryLength(item) > summaryLength(other)) {
+        kept[samePoiIndex] = item;
+      }
+      continue;
+    }
     const outletDupIndex = kept.findIndex(other => isSameOutletRepeat(other, item));
     if (outletDupIndex === -1) {
       kept.push(item);

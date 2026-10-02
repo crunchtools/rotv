@@ -163,6 +163,56 @@ describe('dedupeDigestNews', () => {
     };
     expect(dedupeDigestNews([familyOuting, sturgeon])).toHaveLength(2);
   });
+
+  // Oct 2 2026 preview: two outlets, near-identical headlines, long summaries
+  // that diverge enough to fall under the title + summary vocabulary ratio.
+  const booIdeastream = {
+    id: 7382, poi_id: 5753, poi_name: 'Akron Zoo',
+    title: "Akron Zoo's Boo at the Zoo Returns with New Día de los Muertos Area",
+    summary: 'Boo at the Zoo returns to the Akron Zoo starting October 10, running Saturdays and Sundays through October 25, with a new Día de los Muertos area featuring an ofrenda altar where visitors can leave photos of deceased pets. The event also brings back trick-or-treating in an expanded Enchanted Candy Forest, potion making, and a Monster Dance show, plus a sensory-friendly hour on October 24 for guests with different abilities.',
+    source_url: 'https://www.ideastream.org/arts-culture/2026-09-29/boo-at-the-zoo-is-back-at-akron-zoo-with-new-dia-de-los-muertos-area'
+  };
+  const booSpectrum = {
+    id: 7381, poi_id: 5753, poi_name: 'Akron Zoo',
+    title: 'Boo at the Akron Zoo Returns with New Día de los Muertos Area',
+    summary: 'Boo at the Akron Zoo returns on weekends in October with non-scary Halloween fun, including themed areas, trick-or-treating, and character meet-and-greets. A new Día de los Muertos area has been added, and the zoo offers a sensory-friendly ZoothingBoo event on Oct. 24. Visitors are encouraged to wear costumes, but adults cannot cover their faces, and tickets range from $13 to $20.',
+    source_url: 'https://spectrumnews1.com/oh/columbus/news/2026/09/29/boo-at-the-akron-zoo-returns-with-for-family-friendly-scares'
+  };
+
+  it('collapses same-POI stories whose headlines match even when summaries diverge', () => {
+    expect(dedupeDigestNews([booIdeastream, booSpectrum]).map(n => n.id)).toEqual([7382]);
+  });
+
+  it('keeps the fuller summary when one outlet repeats a story on the same POI', () => {
+    const shortRepeat = {
+      ...booIdeastream, id: 7390,
+      summary: 'Boo at the Zoo returns October 10 with a new Día de los Muertos area, trick-or-treating, and a sensory-friendly hour.',
+      publication_date: '2026-09-30T16:00:00Z'
+    };
+    const fuller = { ...booIdeastream, publication_date: '2026-09-29T16:00:00Z' };
+    expect(dedupeDigestNews([shortRepeat, fuller]).map(n => n.id)).toEqual([7382]);
+  });
+
+  it('keeps same-POI stories whose headlines share only the POI name', () => {
+    const giraffe = {
+      id: 30, poi_id: 5753, poi_name: 'Akron Zoo',
+      title: 'Akron Zoo welcomes a baby giraffe',
+      summary: 'A giraffe calf was born overnight.'
+    };
+    expect(dedupeDigestNews([booIdeastream, giraffe])).toHaveLength(2);
+  });
+
+  it('keeps same-POI headlines that differ only in the key noun', () => {
+    const exhibit = { id: 31, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo opens a new exhibit this summer', summary: 'A new habitat opens.' };
+    const event = { id: 32, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo opens a new event this summer', summary: 'Evening hours return.' };
+    expect(dedupeDigestNews([exhibit, event])).toHaveLength(2);
+  });
+
+  it('keeps templated same-POI headlines whose summaries are unrelated', () => {
+    const exhibit = { id: 33, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo announces a new exhibit opening this summer', summary: 'Snow leopards move into a rebuilt mountain habitat near the main gate.' };
+    const event = { id: 34, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo announces a new event opening this summer', summary: 'Friday evening concerts with food trucks run through August on the lawn.' };
+    expect(dedupeDigestNews([exhibit, event])).toHaveLength(2);
+  });
 });
 
 /**
