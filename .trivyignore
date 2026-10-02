@@ -15,3 +15,7 @@ CVE-2026-40345
 # Not reachable: mysql2's auth-plugin downgrade needs a MySQL server, and Umami here runs
 # on the container's local PostgreSQL. Accepted by Josui (CTO) 2026-09-29, review 2026-12-31.
 GHSA-3f6p-5ww8-9rcr
+# Not reachable: Umami 3.4.0 bundles next 16.3.4, but nothing in Umami's source imports
+# next/og or ImageResponse, which is the only affected path. Drop when an Umami release
+# ships next >= 16.3.6. Accepted by Josui (CTO) 2026-10-02, review 2026-12-31.
+GHSA-vcvr-r3jv-pc5j
