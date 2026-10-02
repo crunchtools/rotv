@@ -68,8 +68,15 @@ afterAll(async () => {
 describe('migration 091 + deleteUserAccount', () => {
   it('without the migration, a contribution reference blocks deletion and nothing changes', async () => {
     await expect(deleteUserAccount(probePool, 1)).rejects.toThrow(/foreign key/);
-    const users = await inProbe('SELECT count(*)::int AS n FROM users');
-    expect(users.rows[0].n).toBe(2);
+    // The newsletter and session deletes ran before the failing user delete,
+    // so this proves the whole transaction rolled back.
+    const counts = await inProbe(`
+      SELECT
+        (SELECT count(*)::int FROM users) AS users,
+        (SELECT count(*)::int FROM user_poi_favorites) AS favorites,
+        (SELECT count(*)::int FROM newsletter_subscriptions) AS newsletter,
+        (SELECT count(*)::int FROM sessions) AS sessions`);
+    expect(counts.rows[0]).toEqual({ users: 2, favorites: 2, newsletter: 2, sessions: 2 });
   });
 
   it('converts contribution references to SET NULL and is a no-op on rerun', async () => {
