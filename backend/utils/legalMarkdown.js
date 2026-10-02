@@ -15,6 +15,10 @@ function renderInline(text) {
     .replace(/\*([^*]+)\*/g, '<em>$1</em>');
 }
 
+/**
+ * @param {string} md - Markdown source of a legal page.
+ * @returns {string} HTML fragment (block elements joined by newlines).
+ */
 export function renderLegalMarkdown(md) {
   const out = [];
   let list = null;

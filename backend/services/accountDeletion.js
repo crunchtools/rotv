@@ -18,8 +18,12 @@ import { createLogger } from '../utils/logger.js';
 const logger = createLogger('AccountDeletion');
 
 /**
- * Delete a user account. Returns false if the user did not exist.
- * Throws (after rolling back) on any failure, leaving the account intact.
+ * Delete a user account and its personal data in one transaction.
+ *
+ * @param {import('pg').Pool} pool - pg pool; a dedicated client is checked out for the transaction.
+ * @param {number|string} userId - users.id of the account to delete.
+ * @returns {Promise<boolean>} true when the account was deleted, false if no such user exists.
+ * @throws Rethrows any database error after rolling back, leaving the account intact.
  */
 export async function deleteUserAccount(pool, userId) {
   const client = await pool.connect();
