@@ -96,6 +96,13 @@ function titleTokens(item) {
   );
 }
 
+// Headline vocabulary without the POI's own name, so two unrelated stories
+// about "Akron Zoo" don't match on the name alone.
+function headlineTokens(item) {
+  const poiTokens = titleTokens({ title: item.poi_name });
+  return new Set([...titleTokens(item)].filter(t => !poiTokens.has(t)));
+}
+
 const SAME_OUTLET_WINDOW_MS = 48 * 60 * 60 * 1000;
 
 function newsTimestamp(item) {
@@ -126,19 +133,22 @@ function isSameOutletRepeat(a, b) {
 
 const summaryLength = (item) => (item.summary || '').length;
 
-// Two stories about the same POI count as one story when their significant
-// vocabulary (title + summary, minus stopwords and the POI's own name) mostly
-// overlaps. Catches the same announcement collected from two outlets, which
-// URL- and title-based dedup at save time cannot (different source, different
-// headline). Input is sorted most-recent-first, so the freshest copy wins,
-// except for same-outlet repeats, where the fuller summary wins (the story,
-// not the gallery caption).
+// Two stories about the same POI count as one when their significant vocabulary
+// (title + summary, minus stopwords and the POI's name) mostly overlaps, or when
+// their headlines do, since two outlets' long summaries can diverge past the
+// ratio. Save-time URL and title dedup can't catch these (different source,
+// different headline). Input is sorted most-recent-first, so the freshest copy
+// wins, except for same-outlet repeats, where the fuller summary wins.
 export function dedupeDigestNews(news) {
   const kept = [];
   for (const item of news) {
     const tokens = newsTokens(item);
+    const headline = headlineTokens(item);
     const samePoiDup = kept.some(other =>
-      other.poi_id === item.poi_id && sharesEnough(tokens, newsTokens(other), 4, 0.4)
+      other.poi_id === item.poi_id && (
+        sharesEnough(tokens, newsTokens(other), 4, 0.4) ||
+        sharesEnough(headline, headlineTokens(other), 3, 0.6)
+      )
     );
     if (samePoiDup) continue;
     const outletDupIndex = kept.findIndex(other => isSameOutletRepeat(other, item));
