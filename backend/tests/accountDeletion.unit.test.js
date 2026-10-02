@@ -93,8 +93,13 @@ describe('auth routes for #700', () => {
 
     process.env.FACEBOOK_APP_ID = 'f';
     process.env.FACEBOOK_APP_SECRET = 'fs';
-    const res2 = await request(appAs(null)).get('/auth/providers').expect(200);
-    expect(res2.body).toEqual({ google: true, facebook: true });
+    delete process.env.FACEBOOK_LOGIN_LIVE;
+    const staged = await request(appAs(null)).get('/auth/providers').expect(200);
+    expect(staged.body).toEqual({ google: true, facebook: false });
+
+    process.env.FACEBOOK_LOGIN_LIVE = 'true';
+    const live = await request(appAs(null)).get('/auth/providers').expect(200);
+    expect(live.body).toEqual({ google: true, facebook: true });
   });
 
   it('DELETE /auth/account requires sign-in', async () => {
