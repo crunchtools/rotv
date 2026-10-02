@@ -97,8 +97,11 @@
 | GET | `/auth/google` | Initiate Google OAuth |
 | GET | `/auth/google/callback` | OAuth callback |
 | GET | `/auth/facebook` | Initiate Facebook OAuth |
+| GET | `/auth/facebook/callback` | OAuth callback |
+| GET | `/auth/providers` | Which sign-in providers are configured |
 | GET | `/auth/user` | Get current user |
 | POST | `/auth/logout` | End session |
+| DELETE | `/auth/account` | Delete own account (non-admin); see `/data-deletion` |
 
 ### Admin Endpoints (Authenticated)
 | Method | Path | Description |

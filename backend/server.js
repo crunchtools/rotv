@@ -18,6 +18,8 @@ import { createNewsletterRouter } from './routes/newsletter.js';
 import { createFeedbackRouter } from './routes/feedback.js';
 import { createTripsRouter } from './routes/trips.js';
 import { createUserSettingsRouter } from './routes/userSettings.js';
+import { renderLegalMarkdown } from './utils/legalMarkdown.js';
+import { escapeHtml } from './utils/html.js';
 import { createFavoritesRouter } from './routes/favorites.js';
 import { createVisitedRouter } from './routes/visited.js';
 import { createNotificationsRouter } from './routes/notifications.js';
@@ -940,7 +942,7 @@ async function initDatabase() {
 app.get('/api/about-content', async (req, res) => {
   try {
     const aboutSettings = await pool.query(
-      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_trip_tutorial_md', 'about_privacy_md')`
+      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_trip_tutorial_md', 'about_privacy_md', 'about_data_deletion_md')`
     );
     const content = {};
     for (const row of aboutSettings.rows) {
@@ -2585,12 +2587,6 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');
 }
 
-function escapeHtml(str) {
-  if (!str) return '';
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
-}
-
 async function findItemBySlugs(type, poiSlug, titleSlug) {
   const poisQuery = await pool.query(
     `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
@@ -2670,10 +2666,42 @@ async function resolvePoiOgImage(poiId, baseUrl) {
   return url;
 }
 
+// Server-rendered fallback for the legal pages (#700). Meta's crawler checks
+// the Privacy Policy and Data Deletion URLs without running JavaScript, so the
+// SPA shell alone reads as an empty page. The rendered markdown goes in a
+// <noscript> block: crawlers see it, browsers ignore it and render the app.
+const LEGAL_PAGES = {
+  '/privacy': { key: 'about_privacy_md', title: 'Privacy Policy' },
+  '/data-deletion': { key: 'about_data_deletion_md', title: 'Deleting Your Data' }
+};
+
+app.use(async (req, res, next) => {
+  const page = LEGAL_PAGES[req.path.replace(/\/$/, '') || req.path];
+  if (!page || req.method !== 'GET') return next();
+  try {
+    const setting = await pool.query('SELECT value FROM admin_settings WHERE key = $1', [page.key]);
+    if (!setting.rows[0]?.value) return next();
+    let html = await fs.readFile(path.join(staticPath, 'index.html'), 'utf-8');
+    const safeTitle = escapeHtml(`${page.title} | Roots of The Valley`);
+    html = html.replace(/<title>.*?<\/title>/, `<title>${safeTitle}</title>`);
+    const fallback = renderLegalMarkdown(setting.rows[0].value);
+    // Function replacer: admin-edited markdown may contain `$` sequences.
+    html = html.replace(
+      '<div id="root"></div>',
+      () => `<div id="root"></div>\n    <noscript><main>${fallback}</main></noscript>`
+    );
+    res.setHeader('Content-Type', 'text/html');
+    return res.send(html);
+  } catch (error) {
+    logger.error('Error rendering legal page:', error);
+    return next();
+  }
+});
+
 // OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
 // permalink — the form share buttons produce). MUST be mounted before
 // express.static so it can intercept the request before index.html is served.
-const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status']);
+const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion']);
 app.use(async (req, res, next) => {
   let poiSlug = null;
   let canonicalPath = null;

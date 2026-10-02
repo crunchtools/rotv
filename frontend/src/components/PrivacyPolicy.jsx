@@ -4,7 +4,9 @@ import MarkdownRenderer from './MarkdownRenderer';
 import BackButton from './BackButton';
 import MarkdownContentEditor from './MarkdownContentEditor';
 
-function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
+// Renders an admin-editable legal page from admin_settings. Defaults to the
+// privacy policy; /data-deletion passes contentKey="about_data_deletion_md".
+function PrivacyPolicy({ inline = false, content, isAdmin, editMode, contentKey = 'about_privacy_md' }) {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [localContent, setLocalContent] = useState(content);
@@ -16,20 +18,23 @@ function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
   }, [content]);
 
   useEffect(() => {
-    if (!inline && !content) {
-      fetch('/api/about-content')
-        .then(res => res.ok ? res.json() : {})
-        .then(aboutContent => {
-          if (aboutContent.about_privacy_md) {
-            setStandaloneContent(aboutContent.about_privacy_md);
-          }
-        })
-        .catch(err => {
-          console.error('Error loading privacy policy:', err);
-          setLoadError('Could not load the privacy policy. Please try again later.');
-        });
-    }
-  }, [inline, content]);
+    if (inline || content) return undefined;
+    // Ignore a response that lands after navigating to the other legal page.
+    let current = true;
+    setStandaloneContent(null);
+    fetch('/api/about-content')
+      .then(res => res.ok ? res.json() : {})
+      .then(aboutContent => {
+        if (current && aboutContent[contentKey]) {
+          setStandaloneContent(aboutContent[contentKey]);
+        }
+      })
+      .catch(err => {
+        console.error('Error loading legal page:', err);
+        if (current) setLoadError('Could not load this page. Please try again later.');
+      });
+    return () => { current = false; };
+  }, [inline, content, contentKey]);
 
   const displayContent = localContent || standaloneContent;
 
@@ -51,7 +56,7 @@ function PrivacyPolicy({ inline = false, content, isAdmin, editMode }) {
 
         {editing ? (
           <MarkdownContentEditor
-            contentKey="about_privacy_md"
+            contentKey={contentKey}
             content={displayContent}
             onSaved={handleSave}
             onCancel={() => setEditing(false)}

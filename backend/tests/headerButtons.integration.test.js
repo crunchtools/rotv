@@ -139,6 +139,9 @@ describe('Header Button Visibility Tests', () => {
     it('should NOT have overflow:hidden on header that clips buttons', async () => {
       await page.setViewportSize({ width: 360, height: 800 });
       await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30000 });
+      // Fix: wait for React to render the header like the other tests here;
+      // networkidle alone races the first render (#700)
+      await page.waitForSelector('.header', { timeout: 10000 });
 
       const headerOverflow = await page.evaluate(() => {
         const header = document.querySelector('.header');

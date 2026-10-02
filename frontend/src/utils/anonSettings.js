@@ -37,6 +37,15 @@ function safeRemove(key) {
   }
 }
 
+/**
+ * Remove every ROTV key this module manages. Used after account deletion so
+ * nothing personal is left behind on the device either.
+ */
+export function clearAnonSettings() {
+  [KEY_TIMEZONE, KEY_NEWSLETTER_EMAIL, KEY_NEWSLETTER_SUBSCRIBED, KEY_SAVED_TRIPS, KEY_FAVORITES, KEY_VISITED]
+    .forEach(safeRemove);
+}
+
 export function readEmail() {
   return safeRead(KEY_NEWSLETTER_EMAIL) || '';
 }

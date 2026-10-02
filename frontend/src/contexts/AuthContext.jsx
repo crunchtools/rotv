@@ -6,7 +6,8 @@ import {
   removeFavorite as removeAnonFavorite,
   readVisited,
   addVisited as addAnonVisited,
-  removeVisited as removeAnonVisited
+  removeVisited as removeAnonVisited,
+  clearAnonSettings
 } from '../utils/anonSettings';
 import { track } from '../utils/analytics';
 
@@ -18,6 +19,16 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null);
   const [favorites, setFavorites] = useState(() => readFavorites());
   const [visited, setVisited] = useState(() => readVisited());
+  // Google is the long-standing default; Facebook only appears once the
+  // backend confirms it is configured, so no one clicks into a 501.
+  const [providers, setProviders] = useState({ google: true, facebook: false });
+
+  useEffect(() => {
+    fetch('/auth/providers')
+      .then(res => (res.ok ? res.json() : null))
+      .then(configured => { if (configured) setProviders(configured); })
+      .catch(err => console.warn('Failed to load sign-in providers:', err));
+  }, []);
 
   const fetchUser = useCallback(async () => {
     try {
@@ -82,6 +93,25 @@ export function AuthProvider({ children }) {
       console.error('Logout failed:', err);
       setError(err.message);
     }
+  };
+
+  const deleteAccount = async () => {
+    const response = await fetch('/auth/account', {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    const body = await response.json().catch((parseErr) => {
+      console.warn('Account deletion returned a non-JSON response:', parseErr);
+      return {};
+    });
+    if (!response.ok) {
+      throw new Error(body.error || 'Account deletion failed');
+    }
+    track('account_deleted');
+    clearAnonSettings();
+    setUser(null);
+    setFavorites([]);
+    setVisited([]);
   };
 
   const loginWithGoogle = () => {
@@ -170,6 +200,8 @@ export function AuthProvider({ children }) {
     logout,
     loginWithGoogle,
     loginWithFacebook,
+    providers,
+    deleteAccount,
     refreshUser: fetchUser
   };
 

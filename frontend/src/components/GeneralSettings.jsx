@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 const TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern Time (EST/EDT)', icon: '🗽' },
@@ -10,6 +11,67 @@ const TIMEZONES = [
   { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST)', icon: '🌺' },
   { value: 'UTC', label: 'UTC (Universal Time)', icon: '🌍' }
 ];
+
+// Self-service account deletion (#700). Two-step inline confirm rather than a
+// browser dialog. Admins don't see it; the backend refuses them as well.
+function DeleteAccountSection() {
+  const navigate = useNavigate();
+  const { user, isAdmin, deleteAccount } = useAuth();
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState(null);
+
+  if (!user || isAdmin) return null;
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount();
+      navigate('/');
+    } catch (err) {
+      setDeleteError(err.message);
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <>
+      <div className="settings-divider"></div>
+      <div className="settings-section">
+        <h3>Your Account</h3>
+        <p>Signed in as {user.email || user.name}.</p>
+        <div className="danger-zone">
+          <h4>Delete my account</h4>
+          <p className="danger-warning">
+            Permanently deletes your account, favorites, visited places, saved trips and preferences,
+            and signs you out everywhere. This cannot be undone.
+          </p>
+          {confirming ? (
+            <>
+              <button className="sync-btn danger-btn" onClick={handleDelete} disabled={deleting}>
+                {deleting ? 'Deleting…' : 'Yes, delete everything'}
+              </button>{' '}
+              <button className="sync-btn" onClick={() => setConfirming(false)} disabled={deleting}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button className="sync-btn danger-btn" onClick={() => setConfirming(true)}>
+              Delete my account
+            </button>
+          )}
+          {deleteError && <p className="auth-error" role="alert">{deleteError}</p>}
+          <p className="danger-hint">
+            <a href="/data-deletion" onClick={(e) => { e.preventDefault(); navigate('/data-deletion'); }}>
+              What gets deleted and what stays
+            </a>
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
 
 function GeneralSettings() {
   const navigate = useNavigate();
@@ -111,7 +173,17 @@ function GeneralSettings() {
         >
           Privacy Policy
         </a>
+        <br />
+        <a
+          href="/data-deletion"
+          className="settings-link"
+          onClick={(e) => { e.preventDefault(); navigate('/data-deletion'); }}
+        >
+          Deleting Your Data
+        </a>
       </div>
+
+      <DeleteAccountSection />
     </div>
   );
 }
