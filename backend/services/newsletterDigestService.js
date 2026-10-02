@@ -134,23 +134,32 @@ function isSameOutletRepeat(a, b) {
 const summaryLength = (item) => (item.summary || '').length;
 
 // Two stories about the same POI count as one when their significant vocabulary
-// (title + summary, minus stopwords and the POI's name) mostly overlaps, or when
-// their headlines do, since two outlets' long summaries can diverge past the
-// ratio. Save-time URL and title dedup can't catch these (different source,
-// different headline). Input is sorted most-recent-first, so the freshest copy
-// wins, except for same-outlet repeats, where the fuller summary wins.
+// (title + summary, minus stopwords and the POI's name) mostly overlaps. Two
+// outlets' long summaries of one event can diverge past that ratio, so a strong
+// headline match also counts, but only with some summary overlap behind it;
+// templated headlines ("opens a new exhibit" vs "event") share no story. Input
+// is sorted most-recent-first, so the freshest copy wins, except for same-outlet
+// repeats, where the fuller summary wins.
 export function dedupeDigestNews(news) {
   const kept = [];
+  const tokenCache = new Map();
+  const tokensFor = (item) => {
+    if (!tokenCache.has(item)) {
+      tokenCache.set(item, { text: newsTokens(item), headline: headlineTokens(item) });
+    }
+    return tokenCache.get(item);
+  };
   for (const item of news) {
-    const tokens = newsTokens(item);
-    const headline = headlineTokens(item);
-    const samePoiDup = kept.some(other =>
-      other.poi_id === item.poi_id && (
-        sharesEnough(tokens, newsTokens(other), 4, 0.4) ||
-        // Fix: require 4 shared headline terms at 80% so near-template headlines stay distinct (PR #694 review)
-        sharesEnough(headline, headlineTokens(other), 4, 0.8)
-      )
-    );
+    const mine = tokensFor(item);
+    const samePoiDup = kept.some(other => {
+      if (other.poi_id !== item.poi_id) return false;
+      const theirs = tokensFor(other);
+      // Fix: headline matches need summary corroboration, and tokens are computed once per item (PR #694 review)
+      return sharesEnough(mine.text, theirs.text, 4, 0.4) || (
+        sharesEnough(mine.headline, theirs.headline, 3, 0.6) &&
+        sharesEnough(mine.text, theirs.text, 4, 0.2)
+      );
+    });
     if (samePoiDup) continue;
     const outletDupIndex = kept.findIndex(other => isSameOutletRepeat(other, item));
     if (outletDupIndex === -1) {

@@ -197,6 +197,12 @@ describe('dedupeDigestNews', () => {
     const event = { id: 32, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo opens a new event this summer', summary: 'Evening hours return.' };
     expect(dedupeDigestNews([exhibit, event])).toHaveLength(2);
   });
+
+  it('keeps templated same-POI headlines whose summaries are unrelated', () => {
+    const exhibit = { id: 33, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo announces a new exhibit opening this summer', summary: 'Snow leopards move into a rebuilt mountain habitat near the main gate.' };
+    const event = { id: 34, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo announces a new event opening this summer', summary: 'Friday evening concerts with food trucks run through August on the lawn.' };
+    expect(dedupeDigestNews([exhibit, event])).toHaveLength(2);
+  });
 });
 
 /**
