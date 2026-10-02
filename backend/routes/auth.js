@@ -83,12 +83,16 @@ export function createAuthRouter(pool) {
     });
   }
 
-  // Which sign-in providers are configured, so the UI never offers a button
-  // that would land on the 501 below.
+  // Which sign-in providers the UI should offer, so it never shows a button
+  // that would land on the 501 below. Facebook also waits for
+  // FACEBOOK_LOGIN_LIVE=true: while the Meta app is unpublished, only accounts
+  // with a role on it can sign in, so /auth/facebook works for testing and
+  // App Review but the public button stays hidden.
   router.get('/providers', (req, res) => {
     res.json({
       google: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-      facebook: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET)
+      facebook: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) &&
+        process.env.FACEBOOK_LOGIN_LIVE === 'true'
     });
   });
 
