@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`remoteLoginSession.js`), ready for X if cookie-paste stops working there.
 
 ### Changed
+- Constitution is now a v1.18.0 manifest: fleet and profile rules apply by
+  reference, and the file keeps only what is specific to this repo.
+- Constitution validation is pinned to the inherited release via
+  `.github/workflows/constitution.yml`.
+- Dependabot auto-merges GitHub Actions minor and patch updates.
 - Facebook trail status uses a dedicated non-proxied browser with the saved session, and reports
   "Facebook login required" instead of passing login-page text to the classifier.
 - **Facebook trail status no longer uses Apify**: Reagan-Huffman (medinaTRAILS) status now comes

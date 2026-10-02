@@ -1,135 +1,119 @@
 # rotv Constitution
 
-> **Version:** 2.1.3
+> **Version:** 2.2.0
 > **Ratified:** 2026-03-10
+> **Amended:** 2026-10-02
 > **Status:** Active
-> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.17.0
+> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.18.0
 > **Profile:** Web Application
 
-Roots of The Valley — interactive map exploring Cuyahoga Valley National Park history. Node.js + Express backend with React frontend, PostgreSQL 17 database, built on ubi10-core.
+Roots of The Valley: an interactive map exploring Cuyahoga Valley National
+Park history. Node.js + Express backend, React frontend, PostgreSQL 17.
 
----
-
-## License
-
-AGPL-3.0-or-later
-
-## Versioning
-
-Follow Semantic Versioning 2.0.0. MAJOR/MINOR/PATCH.
+This file holds what is specific to rotv. The fleet rules and the Web
+Application profile apply at the inherited version and are checked against
+this repo's files by `constitution.yml`. They are not restated here.
 
 ## User Data: Local-First with Login Sync
 
-Every user-specific experience (saved places, visited lists, trips, preferences,
-and anything personal added in the future) MUST work for **anonymous visitors**
-without requiring sign-in. State is persisted in `localStorage` first, and MUST
-**sync to the user's account on first sign-in** so it follows them across devices.
+Every user-specific experience (saved places, visited lists, trips,
+preferences, and anything personal added later) MUST work for **anonymous
+visitors** without sign-in. State is persisted in `localStorage` first and
+MUST **sync to the user's account on first sign-in** so it follows them
+across devices.
 
-- **Anonymous path:** persist to `localStorage` via the helpers in
-  `frontend/src/utils/anonSettings.js`. For "list of POI ids" collections, use the
-  shared `createPoiIdListStore(key)` factory rather than re-implementing read/write.
-- **Sync path:** the freshly-signed-in client flushes accumulated state to
-  `POST /api/user/settings/sync`, which MUST be **server-wins, idempotent, and
-  re-runnable** (`ON CONFLICT DO NOTHING`, fill-gaps only — never clobber account
-  data). POI-id collections use the shared `syncPoiIdList()` helper against a
-  whitelisted `user_*` table.
-- **Hydration:** the signed-in client loads its server state from `/auth/user`
-  and tracks it in `AuthContext`.
+- **Anonymous path:** persist to `localStorage` through the helpers in
+  `frontend/src/utils/anonSettings.js`. For "list of POI ids" collections use
+  the shared `createPoiIdListStore(key)` factory rather than re-implementing
+  read/write.
+- **Sync path:** the freshly signed-in client flushes accumulated state to
+  `POST /api/user/settings/sync`, which MUST be **server-wins, idempotent and
+  re-runnable** (`ON CONFLICT DO NOTHING`, fill gaps only, never clobber
+  account data). POI-id collections use the shared `syncPoiIdList()` helper
+  against a whitelisted `user_*` table.
+- **Hydration:** the signed-in client loads its server state from
+  `/auth/user` and tracks it in `AuthContext`.
 
-New user features extend this framework instead of inventing a parallel storage
-or sync mechanism. The end-to-end recipe is documented in
-`docs/USER_DATA_FRAMEWORK.md`.
+New user features extend this framework instead of inventing a parallel
+storage or sync mechanism. The recipe is in `docs/USER_DATA_FRAMEWORK.md`.
 
-## Base Image
+## Image Chain
 
-`quay.io/crunchtools/ubi10-core:latest` — inherits systemd hardening and troubleshooting tools from the crunchtools image tree.
+- **Parent image for cascade:** `quay.io/crunchtools/ubi10-core`.
+- `Containerfile.base` builds `quay.io/crunchtools/rotv-base` (infrastructure
+  layers, including an Umami build stage); `Containerfile.images` builds
+  `quay.io/crunchtools/images-rotv` (pgvector and Python build stages). Build
+  stages compile on UBI and only their output is copied into a final
+  `ubi10-core` stage, so toolchains never ship.
+- `Containerfile` builds `quay.io/crunchtools/rotv`. CI passes
+  `BASE_IMAGE=quay.io/crunchtools/rotv-base:latest` for fast builds; the
+  default, `ubi10-core`, builds everything from scratch for local dev. The app
+  build listens for `parent-image-updated` and `rotv-base-updated`.
+- The frontend is built in the image (`npm run build` into `/app/public/`).
+- PostgreSQL 17 + PostGIS come from the pgdg RPM repo. PostGIS's SFCGAL
+  dependency needs boost-serialization, so the build registers with RHSM
+  through `--mount=type=secret`; CI passes `activation_key` and `org_id`, and
+  local builds skip registration.
+- Playwright with Chromium is installed globally for testing.
 
-**Parent image for cascade rebuild:** `quay.io/crunchtools/ubi10-core`
+## Services
 
-## Application Runtime
+Entry point `/sbin/init` (systemd); units come from `rootfs/`.
 
-- **Language:** Node.js with Express (backend), React + Vite (frontend)
-- **Dependencies:** `package.json` for both backend and frontend, installed with `npm install`
-- **Database:** PostgreSQL 17 (from pgdg repository, no RHSM needed)
-- **Testing tools:** Playwright with Chromium (installed globally via npm)
-- **Services:**
-  - `postgresql.service` — PostgreSQL 17 database server
-  - `rotv-init.service` — Database initialization (Type=oneshot, After=postgresql, Before=rotv-backend)
-  - `rotv-backend.service` — Node.js Express API server on port 8080
-- **Entry point:** `/sbin/init` (systemd)
+- `postgresql.service`: PostgreSQL 17.
+- `rotv-init.service`: Type=oneshot, After=postgresql, Before=rotv-backend.
+  Creates the database if absent, imports seed data from
+  `/tmp/seed-data.sql`, runs migrations from `/app/migrations/`.
+- `rotv-backend.service`: the Express API on port 8080.
+- `rotv-display.service`: `weston`, the virtual display for the headed
+  Facebook browser.
+- `umami.service`: Umami analytics.
 
-## Host Directory Convention
+## Host Layout and Storage
 
-Host data lives under `/srv/rotv/`:
+Under `/srv/rotv/`:
 
-- `code/` — backend source and built frontend assets bind-mounted `:ro,Z`
-- `config/` — environment file (`/etc/rotv/environment`) bind-mounted `:ro,Z`
-- `data/` — PostgreSQL data directory (`/data/pgdata`), seed data bind-mounted `:Z`
+- `code/`: backend source and built frontend assets, bind-mounted `:ro,Z`.
+- `config/`: the environment file, mounted as `/etc/rotv/environment` `:ro,Z`
+  and loaded with systemd `EnvironmentFile=`. PostgreSQL connection uses the
+  standard `PG*` variables.
+- `data/`: the PostgreSQL data directory (`/data/pgdata`) and seed data,
+  bind-mounted `:Z`. PostgreSQL holds all application data.
 
-## Data Persistence
+**Exception:** `.env.test` may carry hardcoded credentials, for local testing
+against ephemeral tmpfs-backed databases only.
 
-PostgreSQL 17 stores all application data. Database initialization uses a oneshot systemd service pattern:
+## Monitoring Coverage
 
-```
-rotv-init.service (Type=oneshot)
-  After=postgresql.service
-  Before=rotv-backend.service
-```
+Nagios: HTTP check of the backend on 8080, TCP check of PostgreSQL on 5432,
+`pg_isready`, and a process check for `weston` (`rotv-display.service`).
 
-The init service creates the database if not present, imports seed data from `/tmp/seed-data.sql`, and runs schema migrations from `/app/migrations/`. PostgreSQL data directory at `/data/pgdata` is a persistent volume.
+## Smoke Tests
 
-## Containerfile Conventions
-
-- Single-stage app `Containerfile` on `ubi10-core`. `Containerfile.base` and `Containerfile.images` may add build stages (e.g. Umami, pgvector) whose output alone is copied into a final `ubi10-core` stage, so toolchains never ship
-- Frontend built in-image: `npm run build` creates `/app/public/`
-- `rootfs/` directory provides systemd units and init script
-- PostgreSQL 17 + PostGIS installed from pgdg RPM repo
-- RHSM registration required at build time for boost-serialization (SFCGAL dep for PostGIS)
-  — uses `--mount=type=secret` pattern per crunchtools container-image profile Section II
-  — CI passes `activation_key` and `org_id` secrets; local builds skip registration gracefully
-- Playwright + Chromium installed globally for testing
-- Required LABELs: `maintainer`, `description`
-
-## Runtime Configuration
-
-- Environment file: `/etc/rotv/environment` loaded via systemd `EnvironmentFile=`
-- PostgreSQL connection via standard `PG*` environment variables
-- No hardcoded credentials in production deployments
-- **Test environments:** `.env.test` may contain hardcoded credentials for local testing only (ephemeral databases with tmpfs storage)
-
-## Registry
-
-Published to `quay.io/crunchtools/rotv`.
-
-## Cascade Rebuild
-
-Workflow includes `repository_dispatch` listener for `parent-image-updated` events. When `ubi10-core` is updated, rotv rebuilds automatically.
-
-## Monitoring
-
-Nagios monitoring:
-- HTTP check for Node.js backend on port 8080
-- TCP port check for PostgreSQL on port 5432
-- `pg_isready` health check for database connectivity
-- Process check for `weston` (rotv-display.service, the virtual display for the headed Facebook browser)
-
-## Testing
-
-- **Build test**: CI builds the Containerfile on every push to main
-- **Health check**: Node.js server responds with HTTP 200
-- **Database connectivity**: PostgreSQL accepts connections and rotv database exists
-- **Smoke test**: Playwright end-to-end tests verify core map functionality
-
-## Quality Gates
-
-1. Build — Containerfile builds successfully
-2. Application health test — HTTP 200 from Node.js backend
-3. Push — Image pushed to Quay.io on every run that holds registry credentials (default branch, tags, same-repo PRs). Dependabot PR runs build without pushing: push credentials are deliberately not shared with them
+The backend answers HTTP 200, PostgreSQL accepts connections and the `rotv`
+database exists, and Playwright end-to-end tests exercise the core map.
+Dependabot PR runs build without pushing: registry credentials are
+deliberately not shared with them.
 
 ## Code Review Regression Prevention
 
-Gemini Code Assist reviews every PR. To prevent later PRs from undoing reviewed fixes:
+Gemini Code Assist reviews every PR. To keep later PRs from undoing reviewed
+fixes:
 
-1. **Check before modifying**: When substantially modifying a file, check recent PRs for unresolved Gemini feedback on that file (`gh api repos/crunchtools/rotv/pulls/{N}/comments`). Address or preserve those fixes.
-2. **Mark reviewed fixes**: When fixing a bug caught by code review, add an inline comment: `// Fix: <description> (PR #NNN review)`. This makes the fix visible to anyone refactoring the area later.
-3. **Don't silently revert**: If a reviewed fix must be changed, explain why in the PR description.
+1. **Check before modifying:** when substantially modifying a file, check
+   recent PRs for unresolved review feedback on it
+   (`gh api repos/crunchtools/rotv/pulls/{N}/comments`) and address or
+   preserve those fixes.
+2. **Mark reviewed fixes:** a fix for a bug caught in review carries an inline
+   comment `// Fix: <description> (PR #NNN review)`.
+3. **Don't silently revert:** if a reviewed fix must change, say why in the PR
+   description.
+
+## History
+
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.2.0 | 2026-10-02 | Manifest under constitution v1.18.0: fleet and profile restatement removed; image chain and service list updated to match the Containerfiles and `rootfs/` |
+
+Earlier versions, from ratification on 2026-03-10 through 2.1.3, are in git
+history.
