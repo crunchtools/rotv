@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Relicensed from GPL-3.0 to AGPL-3.0-or-later, matching Constitution I and
+  what this repo's constitution already declared.
+
 ### Added
 - **Connect Facebook (remote-browser login)** in Settings › Data Collection. Facebook only serves its
   Page Plugin logged-out to residential IPs, and walls lotor and every VPN exit. An admin now logs in
