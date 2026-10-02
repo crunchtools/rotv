@@ -36,7 +36,7 @@
     "pg-boss": "^12.5.4",
     "playwright": "1.63.0",
     "smtp-server": "^3.19.13",
-    "socket.io-client": "^2.5.0",
+    "socket.io-client": "^4.8.4",
     "turndown": "^7.2.2",
     "undici": "^7.30.0",
     "zod": "^4.3.6"
