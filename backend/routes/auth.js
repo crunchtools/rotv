@@ -1,6 +1,8 @@
 import express from 'express';
 import passport from 'passport';
 import { createLogger } from '../utils/logger.js';
+import { isAuthenticated } from '../middleware/auth.js';
+import { deleteUserAccount } from '../services/accountDeletion.js';
 
 const logger = createLogger('Auth');
 
@@ -80,6 +82,40 @@ export function createAuthRouter(pool) {
       res.status(501).json({ error: 'Facebook OAuth not configured. Contact administrator.' });
     });
   }
+
+  // Which sign-in providers are configured, so the UI never offers a button
+  // that would land on the 501 below.
+  router.get('/providers', (req, res) => {
+    res.json({
+      google: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+      facebook: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET)
+    });
+  });
+
+  // Self-service account deletion (#700). Admins are refused: the admin
+  // account is re-created with admin rights on the next sign-in anyway, and
+  // losing it by accident would orphan the site's settings audit trail.
+  router.delete('/account', isAuthenticated, async (req, res) => {
+    if (req.user.is_admin || req.user.role === 'admin') {
+      return res.status(403).json({ error: 'Admin accounts cannot be deleted from the interface.' });
+    }
+    try {
+      await deleteUserAccount(pool, req.user.id);
+    } catch (err) {
+      logger.error(`Account deletion failed for user ${req.user.id}:`, err);
+      return res.status(500).json({ error: 'Account deletion failed. Nothing was deleted; please try again.' });
+    }
+    // The account is already gone, so cleanup failures are logged but still
+    // reported as success: the stale session no longer resolves to a user.
+    req.logout((logoutErr) => {
+      if (logoutErr) logger.error(`Logout after deleting user ${req.user?.id} failed:`, logoutErr);
+      req.session.destroy((destroyErr) => {
+        if (destroyErr) logger.error('Session destroy after account deletion failed:', destroyErr);
+        res.clearCookie('connect.sid');
+        res.json({ success: true });
+      });
+    });
+  });
 
   router.get('/user', async (req, res) => {
     if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {

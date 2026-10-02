@@ -715,6 +715,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'about_story_md',
       'about_tutorial_md',
       'about_privacy_md',
+      'about_data_deletion_md',
       'digest_greeting'
     ];
     if (!allowedKeys.includes(key)) {
