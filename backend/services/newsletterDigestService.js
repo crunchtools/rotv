@@ -151,7 +151,7 @@ export function dedupeDigestNews(news) {
   };
   for (const item of news) {
     const mine = tokensFor(item);
-    const samePoiDup = kept.some(other => {
+    const samePoiIndex = kept.findIndex(other => {
       if (other.poi_id !== item.poi_id) return false;
       const theirs = tokensFor(other);
       // Fix: headline matches need summary corroboration, and tokens are computed once per item (PR #694 review)
@@ -160,7 +160,14 @@ export function dedupeDigestNews(news) {
         sharesEnough(mine.text, theirs.text, 4, 0.2)
       );
     });
-    if (samePoiDup) continue;
+    if (samePoiIndex !== -1) {
+      // Fix: a same-outlet repeat keeps the fuller summary on this path too (PR #694 review)
+      const other = kept[samePoiIndex];
+      if (isSameOutletRepeat(other, item) && summaryLength(item) > summaryLength(other)) {
+        kept[samePoiIndex] = item;
+      }
+      continue;
+    }
     const outletDupIndex = kept.findIndex(other => isSameOutletRepeat(other, item));
     if (outletDupIndex === -1) {
       kept.push(item);

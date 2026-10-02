@@ -183,6 +183,16 @@ describe('dedupeDigestNews', () => {
     expect(dedupeDigestNews([booIdeastream, booSpectrum]).map(n => n.id)).toEqual([7382]);
   });
 
+  it('keeps the fuller summary when one outlet repeats a story on the same POI', () => {
+    const shortRepeat = {
+      ...booIdeastream, id: 7390,
+      summary: 'Boo at the Zoo returns October 10 with a new Día de los Muertos area, trick-or-treating, and a sensory-friendly hour.',
+      publication_date: '2026-09-30T16:00:00Z'
+    };
+    const fuller = { ...booIdeastream, publication_date: '2026-09-29T16:00:00Z' };
+    expect(dedupeDigestNews([shortRepeat, fuller]).map(n => n.id)).toEqual([7382]);
+  });
+
   it('keeps same-POI stories whose headlines share only the POI name', () => {
     const giraffe = {
       id: 30, poi_id: 5753, poi_name: 'Akron Zoo',
