@@ -344,6 +344,26 @@ ${greeting ? `
 
   const linkStyle = 'color: #2d5016 !important; text-decoration: underline; font-weight: 500;';
 
+  if (news.length > 0) {
+    html += `
+    <h2>📰 Recent News</h2>
+`;
+    news.forEach(item => {
+      html += `
+    <div class="news-item">
+      <h3 class="news-title">${escapeHtml(item.title)}</h3>
+      <p class="poi-name">📍 ${escapeHtml(item.poi_name)}</p>
+`;
+      if (item.summary) {
+        html += `      <p class="summary">${escapeHtml(item.summary)}</p>\n`;
+      }
+      if (item.source_url) {
+        html += `      <p><a href="${escapeHtml(item.source_url)}" style="${linkStyle}">Read full article →</a></p>\n`;
+      }
+      html += `    </div>\n`;
+    });
+  }
+
   if (events.length > 0) {
     html += `
     <h2>🎉 Events This Weekend</h2>
@@ -369,26 +389,6 @@ ${greeting ? `
       }
       if (event.source_url) {
         html += `      <p><a href="${escapeHtml(event.source_url)}" style="${linkStyle}">Learn more →</a></p>\n`;
-      }
-      html += `    </div>\n`;
-    });
-  }
-
-  if (news.length > 0) {
-    html += `
-    <h2>📰 Recent News</h2>
-`;
-    news.forEach(item => {
-      html += `
-    <div class="news-item">
-      <h3 class="news-title">${escapeHtml(item.title)}</h3>
-      <p class="poi-name">📍 ${escapeHtml(item.poi_name)}</p>
-`;
-      if (item.summary) {
-        html += `      <p class="summary">${escapeHtml(item.summary)}</p>\n`;
-      }
-      if (item.source_url) {
-        html += `      <p><a href="${escapeHtml(item.source_url)}" style="${linkStyle}">Read full article →</a></p>\n`;
       }
       html += `    </div>\n`;
     });
