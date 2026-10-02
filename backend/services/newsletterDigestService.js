@@ -147,7 +147,8 @@ export function dedupeDigestNews(news) {
     const samePoiDup = kept.some(other =>
       other.poi_id === item.poi_id && (
         sharesEnough(tokens, newsTokens(other), 4, 0.4) ||
-        sharesEnough(headline, headlineTokens(other), 3, 0.6)
+        // Fix: require 4 shared headline terms at 80% so near-template headlines stay distinct (PR #694 review)
+        sharesEnough(headline, headlineTokens(other), 4, 0.8)
       )
     );
     if (samePoiDup) continue;
