@@ -2,7 +2,8 @@
  * Passwordless email sign-in (spec 045).
  *
  * A request emails one message carrying both a link token (32 random bytes)
- * and a 6-digit code. Either signs the person in once, within 15 minutes.
+ * and a 6-digit code. Either signs the person in once, within the admin-set
+ * lifetime (admin_settings.email_login_ttl_minutes, default 30).
  * Only digests are stored: SHA-256 for tokens, a keyed HMAC for codes.
  * Wrong codes count against the request; after
  * MAX_CODE_ATTEMPTS the request's code stops working (the link still does,
@@ -12,7 +13,9 @@
 import crypto from 'crypto';
 import { escapeHtml } from '../utils/html.js';
 
-const TOKEN_TTL_MINUTES = 15;
+const TTL_DEFAULT_MINUTES = 30;
+export const TTL_MIN_MINUTES = 5;
+export const TTL_MAX_MINUTES = 60;
 export const MAX_CODE_ATTEMPTS = 5;
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -45,7 +48,7 @@ export function normalizeEmail(raw) {
   return email.length <= 254 && EMAIL_PATTERN.test(email) ? email : null;
 }
 
-function renderEmail({ link, code }) {
+function renderEmail({ link, code, ttlMinutes }) {
   const text = [
     'Sign in to Roots of the Valley',
     '',
@@ -53,7 +56,7 @@ function renderEmail({ link, code }) {
     '',
     `Or enter this code: ${code}`,
     '',
-    `The link and code work once and expire in ${TOKEN_TTL_MINUTES} minutes.`,
+    `The link and code work once and expire in ${ttlMinutes} minutes.`,
     "If you didn't ask to sign in, ignore this email. Nobody can sign in without it."
   ].join('\n');
   const safeLink = escapeHtml(link);
@@ -62,9 +65,21 @@ function renderEmail({ link, code }) {
 <p><a href="${safeLink}" style="display:inline-block;background:#2d6a4f;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold">Sign in</a></p>
 <p>Or enter this code:</p>
 <p style="font-size:28px;letter-spacing:6px;font-weight:bold;margin:8px 0 16px">${code}</p>
-<p style="color:#525252;font-size:13px">The link and code work once and expire in ${TOKEN_TTL_MINUTES} minutes. If you didn't ask to sign in, ignore this email. Nobody can sign in without it.</p>
+<p style="color:#525252;font-size:13px">The link and code work once and expire in ${ttlMinutes} minutes. If you didn't ask to sign in, ignore this email. Nobody can sign in without it.</p>
 </body></html>`;
   return { text, html };
+}
+
+/**
+ * Link/code lifetime from admin_settings, clamped to the allowed range.
+ * @param {import('pg').Pool} pool
+ * @returns {Promise<number>} minutes
+ */
+async function loginTtlMinutes(pool) {
+  const setting = await pool.query(`SELECT value FROM admin_settings WHERE key = 'email_login_ttl_minutes'`);
+  const minutes = parseInt(setting.rows[0]?.value, 10);
+  if (!Number.isFinite(minutes)) return TTL_DEFAULT_MINUTES;
+  return Math.min(TTL_MAX_MINUTES, Math.max(TTL_MIN_MINUTES, minutes));
 }
 
 /**
@@ -79,17 +94,18 @@ export async function requestLogin(pool, mailer, email, baseUrl) {
   const token = crypto.randomBytes(32).toString('base64url');
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 
+  const ttlMinutes = await loginTtlMinutes(pool);
   await pool.query(`DELETE FROM email_login_tokens WHERE expires_at < NOW() - INTERVAL '1 day'`);
   await pool.query(
     `INSERT INTO email_login_tokens (email, token_hash, code_hash, expires_at)
      VALUES ($1, $2, $3, NOW() + make_interval(mins => $4))`,
-    [email, hashToken(token), hashCode(email, code), TOKEN_TTL_MINUTES]
+    [email, hashToken(token), hashCode(email, code), ttlMinutes]
   );
 
   // Fragment, not query: browsers never send it to the server, so the token
   // stays out of proxy access logs and analytics.
   const link = `${baseUrl}/signin#token=${encodeURIComponent(token)}`;
-  await mailer.send({ to: email, subject: `Your Roots of the Valley sign-in code: ${code}`, ...renderEmail({ link, code }) });
+  await mailer.send({ to: email, subject: `Your Roots of the Valley sign-in code: ${code}`, ...renderEmail({ link, code, ttlMinutes }) });
 }
 
 /**

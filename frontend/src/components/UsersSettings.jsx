@@ -10,6 +10,77 @@ const ROLE_LABELS = {
   admin: 'Admin'
 };
 
+// Mirrors TTL_MIN/MAX/DEFAULT in backend/services/emailLogin.js; the API enforces the range.
+const TTL_MIN = 5;
+const TTL_MAX = 60;
+const TTL_DEFAULT = 30;
+
+// Lifetime of emailed sign-in links and codes (spec 045).
+function EmailSignInSettings() {
+  const [minutes, setMinutes] = useState(TTL_DEFAULT);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/admin/settings', { credentials: 'include' })
+      .then(res => (res.ok ? res.json() : {}))
+      .then(settings => {
+        const stored = parseInt(settings.email_login_ttl_minutes?.value, 10);
+        if (Number.isFinite(stored)) setMinutes(stored);
+      })
+      .catch(err => setStatus({ type: 'error', message: `Failed to load settings: ${err.message}` }));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setStatus(null);
+    try {
+      const res = await fetch('/api/admin/settings/email_login_ttl_minutes', {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: String(minutes) })
+      });
+      const body = await res.json().catch((parseErr) => {
+        console.warn('Settings save returned a non-JSON response:', parseErr);
+        return {};
+      });
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      setStatus({ type: 'success', message: 'Saved. New sign-in emails use this lifetime.' });
+    } catch (err) {
+      setStatus({ type: 'error', message: err.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="settings-section">
+      <h4>Email sign-in</h4>
+      <label htmlFor="email-login-ttl" className="settings-description">
+        How long an emailed sign-in link and code stay valid ({TTL_MIN}–{TTL_MAX} minutes)
+      </label>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
+        <input
+          id="email-login-ttl"
+          type="number"
+          min={TTL_MIN}
+          max={TTL_MAX}
+          step="1"
+          value={minutes}
+          onChange={(e) => setMinutes(e.target.value === '' ? '' : Number(e.target.value))}
+          style={{ width: '90px' }}
+        />
+        <span>minutes</span>
+        <button className="sync-btn" onClick={handleSave} disabled={saving}>
+          {saving ? 'Saving…' : 'Save'}
+        </button>
+      </div>
+      {status && <p role="status" style={{ color: status.type === 'success' ? '#2e7d32' : '#c62828', fontSize: '0.85rem' }}>{status.message}</p>}
+    </div>
+  );
+}
+
 function UsersSettings() {
   const { user } = useAuth();
   const [users, setUsers] = useState([]);
@@ -150,6 +221,8 @@ function UsersSettings() {
       </div>
 
       {users.length === 0 && <p style={{ color: '#666', fontStyle: 'italic' }}>No users found.</p>}
+
+      <EmailSignInSettings />
     </div>
   );
 }

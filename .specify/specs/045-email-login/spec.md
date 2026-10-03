@@ -12,7 +12,7 @@ Facebook Login needs Meta business verification, which waits on a registered ROT
 - `POST /auth/email/start {email}` answers the same for every valid address, so it never reveals whether an account exists. It returns 501 when mail is not configured and 502 if the relay rejects the message.
 - `POST /auth/email/verify {token}` or `{email, code}` signs in with `req.login` (the session is regenerated).
 - The link is `/signin#token=…`. The token is in the fragment, so it never reaches the server, proxy logs or analytics, and the page strips it from the address bar. Signing in takes a click, because mail scanners prefetch links and would otherwise consume the token.
-- Links and codes are single-use and expire after 15 minutes. Only the newest request's code is accepted, with 5 wrong guesses per request.
+- Links and codes are single-use and expire after `email_login_ttl_minutes` (admin Settings › Users, default 30, allowed 5–60). Only the newest request's code is accepted, with 5 wrong guesses per request.
 - Rate limits: start is 5/hour per IP, 3 per 15 minutes and 10/day per address; verify is 30 per 15 minutes per IP.
 - Only digests are stored (`email_login_tokens`, migration 092): SHA-256 for link tokens, HMAC keyed from SESSION_SECRET for codes, so a database copy alone cannot recover live codes.
 - New accounts use provider `email` with the normalized address. Existing accounts link by email through `findOrCreateUser`.

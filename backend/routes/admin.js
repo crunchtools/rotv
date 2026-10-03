@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { isAdmin, isAuthenticated } from '../middleware/auth.js';
 import { isSecretSetting } from '../utils/settingsRedaction.js';
 import { consolidateFeatures } from '../utils/geojson.js';
+import { TTL_MIN_MINUTES, TTL_MAX_MINUTES } from '../services/emailLogin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -716,10 +717,17 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'about_tutorial_md',
       'about_privacy_md',
       'about_data_deletion_md',
+      'email_login_ttl_minutes',
       'digest_greeting'
     ];
     if (!allowedKeys.includes(key)) {
       return res.status(400).json({ error: 'Invalid setting key' });
+    }
+    if (key === 'email_login_ttl_minutes') {
+      const minutes = Number(value);
+      if (!Number.isInteger(minutes) || minutes < TTL_MIN_MINUTES || minutes > TTL_MAX_MINUTES) {
+        return res.status(400).json({ error: `Sign-in link lifetime must be a whole number of minutes from ${TTL_MIN_MINUTES} to ${TTL_MAX_MINUTES}` });
+      }
     }
 
     try {
