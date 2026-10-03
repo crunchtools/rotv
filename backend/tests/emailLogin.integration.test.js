@@ -133,9 +133,9 @@ describe('email sign-in', () => {
     expect(results.map((r) => r.status).sort()).toEqual([200, 400, 400]);
   });
 
-  it('uses the admin-set lifetime, defaults to 30 minutes, and clamps out-of-range values', async () => {
+  it('uses the admin-set lifetime, defaults to 30 minutes for missing or malformed values, and clamps out-of-range ones', async () => {
     const lifetimes = [];
-    for (const setting of [null, '45', '500']) {
+    for (const setting of [null, 'soon', '45', '1', '500']) {
       await pool.query('DELETE FROM admin_settings');
       if (setting) await pool.query(`INSERT INTO admin_settings (key, value) VALUES ('email_login_ttl_minutes', $1)`, [setting]);
       const app = makeApp();
@@ -146,7 +146,7 @@ describe('email sign-in', () => {
       lifetimes.push(row.rows[0].minutes);
       expect(mailer.sent[0].text).toContain(`expire in ${row.rows[0].minutes} minutes`);
     }
-    expect(lifetimes).toEqual([30, 45, 60]);
+    expect(lifetimes).toEqual([30, 30, 45, 5, 60]);
   });
 
   it('rejects an expired link', async () => {
