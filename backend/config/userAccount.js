@@ -16,6 +16,11 @@
  * provider created the account. They are no longer the lookup key, but the
  * admin user list still reports them as the account's origin.
  */
+/** The account that is made admin on sign-in (ADMIN_EMAIL, defaulting to the maintainer). */
+export function adminEmail() {
+  return process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
+}
+
 export async function findOrCreateUser(pool, adminEmail, provider, profile, credentials) {
   const email = profile.emails?.[0]?.value || null;
   const name = profile.displayName || null;

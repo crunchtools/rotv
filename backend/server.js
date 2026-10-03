@@ -2701,7 +2701,7 @@ app.use(async (req, res, next) => {
 // OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
 // permalink — the form share buttons produce). MUST be mounted before
 // express.static so it can intercept the request before index.html is served.
-const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion']);
+const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion', 'signin']);
 app.use(async (req, res, next) => {
   let poiSlug = null;
   let canonicalPath = null;

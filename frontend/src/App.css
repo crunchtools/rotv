@@ -253,6 +253,78 @@ body {
   color: #333;
 }
 
+.email-signin {
+  border-top: 1px solid #eee;
+  margin-top: 0.25rem;
+  padding-top: 0.6rem;
+}
+
+.email-signin-label {
+  display: block;
+  font-size: 0.8rem;
+  color: #525252;
+  margin-bottom: 0.35rem;
+}
+
+.email-signin-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.email-signin-code {
+  font-size: 1.2rem;
+  letter-spacing: 0.3em;
+  text-align: center;
+}
+
+.oauth-btn-inline.email-btn {
+  justify-content: center;
+  background: #2d6a4f;
+  border-color: #2d6a4f;
+  color: white;
+  font-weight: 600;
+}
+
+.oauth-btn-inline.email-btn:hover:not(:disabled) {
+  background: #1b4332;
+}
+
+.oauth-btn-inline.email-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.email-signin-sent {
+  font-size: 0.8rem;
+  color: #2d6a4f;
+  margin: 0 0 0.5rem;
+}
+
+.email-signin-restart {
+  background: none;
+  border: none;
+  color: #2d6a4f;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.signin-confirm h1 {
+  margin-bottom: 1.25rem;
+}
+
+.signin-confirm .auth-error {
+  margin: 0 0 1rem;
+  padding: 0;
+  text-align: left;
+}
+
 .oauth-btn-inline:last-child {
   margin-bottom: 0;
 }

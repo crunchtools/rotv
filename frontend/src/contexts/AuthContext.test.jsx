@@ -15,8 +15,9 @@ function Probe() {
   return <span data-testid="user">{ctx.user ? ctx.user.email : 'none'}</span>;
 }
 
-function mockFetch(deleteResponse) {
+function mockFetch(deleteResponse, emailResponses = {}) {
   const fetchMock = vi.fn(async (url) => {
+    if (emailResponses[url]) return emailResponses[url];
     if (url === '/auth/user') return fetchResponse(SIGNED_IN);
     if (url === '/auth/providers') return fetchResponse({ google: true, facebook: true });
     if (url === '/auth/account') return deleteResponse;
@@ -75,5 +76,38 @@ describe('AuthContext', () => {
     mockFetch({ ok: false, status: 502, json: () => Promise.reject(new SyntaxError('Unexpected token <')) });
     await renderSignedIn();
     await act(() => expect(captured.current.deleteAccount()).rejects.toThrow('Account deletion failed'));
+  });
+
+  it('startEmailLogin posts the address and returns the server message', async () => {
+    const fetchMock = mockFetch(undefined, {
+      '/auth/email/start': fetchResponse({ success: true, message: 'On the way.' })
+    });
+    await renderSignedIn();
+    let message;
+    await act(async () => { message = await captured.current.startEmailLogin('a@example.com'); });
+    expect(message).toBe('On the way.');
+    expect(fetchMock).toHaveBeenCalledWith('/auth/email/start', expect.objectContaining({
+      method: 'POST', credentials: 'include', body: JSON.stringify({ email: 'a@example.com' })
+    }));
+  });
+
+  it('verifyEmailLogin surfaces the server error, and on success refreshes the user and syncs device data', async () => {
+    const fetchMock = mockFetch(undefined, {
+      '/auth/email/verify': fetchResponse({ error: 'That link or code is invalid or has expired.' }, { status: 400 })
+    });
+    await renderSignedIn();
+    await act(() => expect(captured.current.verifyEmailLogin({ email: 'a@example.com', code: '000000' }))
+      .rejects.toThrow('invalid or has expired'));
+
+    fetchMock.mockImplementation(async (url) => {
+      if (url === '/auth/email/verify') return fetchResponse({ success: true });
+      if (url === '/auth/user') return fetchResponse(SIGNED_IN);
+      return fetchResponse({});
+    });
+    const userCallsBefore = fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length;
+    await act(() => captured.current.verifyEmailLogin({ token: 't' }));
+    const userCallsAfter = fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length;
+    expect(userCallsAfter - userCallsBefore).toBe(2);
+    expect(fetchMock).toHaveBeenCalledWith('/auth/email/verify', expect.objectContaining({ body: JSON.stringify({ token: 't' }) }));
   });
 });

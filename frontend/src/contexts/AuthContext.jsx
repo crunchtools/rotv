@@ -21,7 +21,7 @@ export function AuthProvider({ children }) {
   const [visited, setVisited] = useState(() => readVisited());
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
-  const [providers, setProviders] = useState({ google: true, facebook: false });
+  const [providers, setProviders] = useState({ google: true, facebook: false, email: false });
 
   useEffect(() => {
     fetch('/auth/providers')
@@ -38,7 +38,8 @@ export function AuthProvider({ children }) {
       if (response.ok) {
         const userData = await response.json();
         if (userData) {
-          setUser(userData);
+          // Email sign-ins arrive without a name; show the address's local part.
+          setUser({ ...userData, name: userData.name || userData.email?.split('@')[0] || null });
           setFavorites(userData.favorites || []);
           setVisited(userData.visited || []);
         } else {
@@ -112,6 +113,38 @@ export function AuthProvider({ children }) {
     setUser(null);
     setFavorites([]);
     setVisited([]);
+  };
+
+  // Shared by both email sign-in calls: POST JSON, throw the server's message on failure.
+  const postAuthJson = async (url, payload) => {
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const body = await response.json().catch((parseErr) => {
+      console.warn(`${url} returned a non-JSON response:`, parseErr);
+      return {};
+    });
+    if (!response.ok) {
+      throw new Error(body.error || 'Something went wrong. Please try again.');
+    }
+    return body;
+  };
+
+  const startEmailLogin = async (email) => {
+    const body = await postAuthJson('/auth/email/start', { email });
+    track('login', { provider: 'email' });
+    return body.message;
+  };
+
+  // Accepts { token } from the emailed link or { email, code } from the code box.
+  const verifyEmailLogin = async (credentials) => {
+    await postAuthJson('/auth/email/verify', credentials);
+    await fetchUser();
+    await syncAnonSettings();
+    await fetchUser();
   };
 
   const loginWithGoogle = () => {
@@ -201,6 +234,8 @@ export function AuthProvider({ children }) {
     loginWithGoogle,
     loginWithFacebook,
     providers,
+    startEmailLogin,
+    verifyEmailLogin,
     deleteAccount,
     refreshUser: fetchUser
   };
