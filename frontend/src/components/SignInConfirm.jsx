@@ -37,14 +37,20 @@ function SignInConfirm() {
       <div className="privacy-policy-content signin-confirm">
         <h1>Sign in to Roots of the Valley</h1>
         {token && !confirmError && (
-          <button className="sync-btn" onClick={handleConfirm} disabled={busy}>
-            {busy ? 'Signing in…' : 'Sign in'}
-          </button>
+          <>
+            <p className="signin-confirm-hint">
+              Tap the button to finish signing in. This extra step stops email security scanners from using your
+              one-time link before you do.
+            </p>
+            <button className="signin-confirm-btn" onClick={handleConfirm} disabled={busy}>
+              {busy ? 'Signing in…' : 'Finish signing in'}
+            </button>
+          </>
         )}
         {confirmError && (
           <>
             <p className="auth-error" role="alert">{confirmError}</p>
-            <button className="sync-btn" onClick={() => navigate('/')}>
+            <button className="signin-confirm-btn secondary" onClick={() => navigate('/')}>
               Back to the map to request a new link
             </button>
           </>
