@@ -3,13 +3,43 @@ import passport from 'passport';
 import { createLogger } from '../utils/logger.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { deleteUserAccount } from '../services/accountDeletion.js';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { findOrCreateUser, adminEmail } from '../config/userAccount.js';
+import { createMailer } from '../services/mailer.js';
+import { normalizeEmail, requestLogin, verifyToken, verifyCode } from '../services/emailLogin.js';
 
 const logger = createLogger('Auth');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 
-export function createAuthRouter(pool) {
+function limiter(windowMs, max, keyGenerator) {
+  return rateLimit({
+    windowMs,
+    max,
+    keyGenerator,
+    message: { error: 'Too many sign-in attempts. Please wait a few minutes and try again.' },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+}
+
+// Per-address limits key on the normalized email so case or spacing can't dodge them.
+const emailKey = (req) => `email:${normalizeEmail(req.body?.email) || 'invalid'}`;
+const ipKey = (req) => ipKeyGenerator(req.ip);
+
+const EMAIL_START_SENT = 'If that address can receive mail, a sign-in link and code are on the way.';
+const EMAIL_VERIFY_FAILED = 'That link or code is invalid or has expired. Request a new one to try again.';
+
+/**
+ * Build the /auth router: Google, Facebook and email sign-in, session status,
+ * logout and account deletion.
+ * @param {import('pg').Pool} pool
+ * @param {{mailer?: {enabled: boolean, send: (msg: {to: string, subject: string, text: string, html: string}) => Promise<string>}}} [options]
+ *   mailer override for tests; defaults to createMailer() from the environment
+ * @returns {import('express').Router}
+ */
+export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
   const router = express.Router();
 
   if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
@@ -92,7 +122,8 @@ export function createAuthRouter(pool) {
     res.json({
       google: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
       facebook: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) &&
-        process.env.FACEBOOK_LOGIN_LIVE === 'true'
+        process.env.FACEBOOK_LOGIN_LIVE === 'true',
+      email: Boolean(mailer.enabled)
     });
   });
 
@@ -120,6 +151,67 @@ export function createAuthRouter(pool) {
       });
     });
   });
+
+  // Passwordless email sign-in (spec 045). start always answers the same way so
+  // it never reveals whether an address has an account.
+  router.post('/email/start',
+    express.json(),
+    limiter(60 * 60 * 1000, 5, ipKey),
+    limiter(15 * 60 * 1000, 3, emailKey),
+    limiter(24 * 60 * 60 * 1000, 10, emailKey),
+    async (req, res) => {
+      if (!mailer.enabled) {
+        return res.status(501).json({ error: 'Email sign-in is not available.' });
+      }
+      const email = normalizeEmail(req.body?.email);
+      if (!email) {
+        return res.status(400).json({ error: 'Enter a valid email address.' });
+      }
+      try {
+        // Fix: never build the link from the Host header, or a forged Host could
+        // send a victim's token to an attacker's site (PR review). FRONTEND_URL is
+        // the configured origin the OAuth redirects already use.
+        await requestLogin(pool, mailer, email, FRONTEND_URL);
+      } catch (err) {
+        // Error text (SMTP replies, constraint details) can quote the address,
+        // so the email sign-in handlers log only error codes.
+        logger.error(`Email sign-in request failed: ${err.code || err.name} ${err.responseCode || ''} ${err.command || ''}`.trim());
+        return res.status(502).json({ error: "We couldn't send the email. Please try again in a few minutes." });
+      }
+      res.json({ success: true, message: EMAIL_START_SENT });
+    });
+
+  router.post('/email/verify',
+    express.json(),
+    limiter(15 * 60 * 1000, 30, ipKey),
+    async (req, res) => {
+      const { token, code } = req.body || {};
+      let email;
+      try {
+        email = token
+          ? await verifyToken(pool, String(token))
+          : await verifyCode(pool, normalizeEmail(req.body?.email), String(code || ''));
+      } catch (err) {
+        logger.error(`Email sign-in verification failed: ${err.code || err.name}`);
+        return res.status(500).json({ error: 'Sign-in failed. Please try again.' });
+      }
+      if (!email) {
+        return res.status(400).json({ error: EMAIL_VERIFY_FAILED });
+      }
+      try {
+        const user = await findOrCreateUser(pool, adminEmail(), 'email', { id: email, emails: [{ value: email }] }, null);
+        req.login(user, (loginErr) => {
+          if (loginErr) {
+            logger.error(`Session login after email verification failed: ${loginErr.code || loginErr.name}`);
+            return res.status(500).json({ error: 'Sign-in failed. Please try again.' });
+          }
+          res.json({ success: true });
+        });
+      } catch (err) {
+        logger.error(`Account lookup after email verification failed: ${err.code || err.name}`);
+        res.status(500).json({ error: 'Sign-in failed. Please try again.' });
+      }
+    });
 
   router.get('/user', async (req, res) => {
     if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {

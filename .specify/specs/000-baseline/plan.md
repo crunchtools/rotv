@@ -99,6 +99,8 @@
 | GET | `/auth/facebook` | Initiate Facebook OAuth |
 | GET | `/auth/facebook/callback` | OAuth callback |
 | GET | `/auth/providers` | Which sign-in providers are configured |
+| POST | `/auth/email/start` | Email a sign-in link + code (spec 045) |
+| POST | `/auth/email/verify` | Sign in with `{token}` or `{email, code}` |
 | GET | `/auth/user` | Get current user |
 | POST | `/auth/logout` | End session |
 | DELETE | `/auth/account` | Delete own account (non-admin); see `/data-deletion` |

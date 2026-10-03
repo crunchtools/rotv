@@ -1,13 +1,13 @@
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as FacebookStrategy } from 'passport-facebook';
-import { findOrCreateUser as resolveUserAccount } from './userAccount.js';
+import { findOrCreateUser as resolveUserAccount, adminEmail } from './userAccount.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Passport');
 
 export function configurePassport(pool) {
-  const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
+  const ADMIN_EMAIL = adminEmail();
 
   passport.serializeUser((user, done) => {
     done(null, user.id);

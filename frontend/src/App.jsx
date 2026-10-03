@@ -32,6 +32,8 @@ import UserSettings from './components/UserSettings';
 import NewsletterSettings from './components/NewsletterSettings';
 import ResultsTab from './components/ResultsTab';
 import PrivacyPolicy from './components/PrivacyPolicy';
+import EmailSignIn from './components/EmailSignIn';
+import SignInConfirm from './components/SignInConfirm';
 import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
 import GuidedTour, { TRIP_TOUR_STEPS } from './components/GuidedTour';
@@ -1984,6 +1986,19 @@ function AppContent() {
     }
   };
 
+  // Standalone pages don't use the map data, so they render without waiting for it.
+  if (location.pathname === '/privacy') {
+    return <PrivacyPolicy />;
+  }
+
+  if (location.pathname === '/data-deletion') {
+    return <PrivacyPolicy contentKey="about_data_deletion_md" />;
+  }
+
+  if (location.pathname === '/signin') {
+    return <SignInConfirm />;
+  }
+
   if (loading) {
     return (
       <div className="loading">
@@ -2003,13 +2018,6 @@ function AppContent() {
     );
   }
 
-  if (location.pathname === '/privacy') {
-    return <PrivacyPolicy />;
-  }
-
-  if (location.pathname === '/data-deletion') {
-    return <PrivacyPolicy contentKey="about_data_deletion_md" />;
-  }
 
 
 
@@ -2253,6 +2261,9 @@ function AppContent() {
                         </svg>
                         Continue with Facebook
                       </button>
+                    )}
+                    {providers.email && (
+                      <EmailSignIn onSignedIn={() => setShowLoginDropdown(false)} />
                     )}
                   </div>
                 </>
