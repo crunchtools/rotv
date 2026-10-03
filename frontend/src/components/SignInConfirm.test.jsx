@@ -26,7 +26,7 @@ describe('SignInConfirm', () => {
     render(<SignInConfirm />);
     expect(auth.verifyEmailLogin).not.toHaveBeenCalled();
     expect(window.location.hash).toBe('');
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finish signing in' }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(auth.verifyEmailLogin).toHaveBeenCalledWith({ token: 'abc123' });
   });
@@ -35,14 +35,14 @@ describe('SignInConfirm', () => {
     at('');
     render(<SignInConfirm />);
     expect(screen.getByRole('alert').textContent).toMatch(/incomplete/);
-    expect(screen.queryByRole('button', { name: 'Sign in' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Finish signing in' })).toBeNull();
   });
 
   it('shows an expired-link error with a way back', async () => {
     auth.verifyEmailLogin.mockRejectedValueOnce(new Error('That link or code is invalid or has expired.'));
     at('#token=old');
     render(<SignInConfirm />);
-    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finish signing in' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/expired/);
     fireEvent.click(screen.getByRole('button', { name: /request a new link/ }));
     expect(navigate).toHaveBeenCalledWith('/');
