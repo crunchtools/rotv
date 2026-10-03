@@ -23,7 +23,10 @@ function EmailSignInSettings() {
 
   useEffect(() => {
     fetch('/api/admin/settings', { credentials: 'include' })
-      .then(res => (res.ok ? res.json() : {}))
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
       .then(settings => {
         const stored = parseInt(settings.email_login_ttl_minutes?.value, 10);
         if (Number.isFinite(stored)) setMinutes(stored);
