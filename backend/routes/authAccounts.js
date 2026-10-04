@@ -215,12 +215,16 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
           `SELECT 1 FROM users WHERE LOWER(email) = $1 AND is_admin IS NOT TRUE AND role IS DISTINCT FROM 'admin'`,
           [email]
         );
-        // Fix: never build the link from the Host header (spec 045 review);
-        // frontendUrl is the configured origin.
-        if (account.rows.length) await sendAccountEmail(pool, mailer, email, frontendUrl, 'reset');
+        // Fix: links use the configured origin, never the Host header (PR #704 review).
+        // Fix: the send isn't awaited, so response time doesn't reveal whether
+        // the address has an account (PR #716 review).
+        if (account.rows.length) {
+          sendAccountEmail(pool, mailer, email, frontendUrl, 'reset').catch((err) =>
+            // SMTP replies can quote the address, so only error codes are logged.
+            logger.error(`Password reset email failed: ${err.code || err.name} ${err.responseCode || ''}`.trim()));
+        }
       } catch (err) {
-        // SMTP replies can quote the address, so only error codes are logged.
-        logger.error(`Password reset email failed: ${err.code || err.name} ${err.responseCode || ''}`.trim());
+        logger.error(`Password reset lookup failed: ${err.code || err.name}`);
       }
       res.json({ success: true, message: RESET_SENT });
     });

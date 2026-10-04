@@ -37,6 +37,12 @@ function makeApp() {
   return app;
 }
 
+// "Forgot password?" answers before the email is handed off (so timing reveals
+// nothing); wait for the fake mailer to catch up.
+async function mailCount(n) {
+  await vi.waitFor(() => expect(mailer.sent).toHaveLength(n));
+}
+
 function resetToken(message) {
   const match = message.text.match(/\/reset-password#token=([A-Za-z0-9_-]+)/);
   expect(match, message.text).not.toBeNull();
@@ -91,6 +97,7 @@ describe('forgot password', () => {
     const agent = request.agent(makeApp());
     const forgot = await agent.post('/auth/password/forgot').send({ email: '  Hiker@Example.COM ' }).expect(200);
     expect(forgot.body.message).toMatch(/If there's an account/);
+    await mailCount(1);
     expect(mailer.sent).toHaveLength(1);
     const [message] = mailer.sent;
     expect(message.subject).toBe('Reset your Roots of the Valley password');
@@ -109,6 +116,7 @@ describe('forgot password', () => {
     await addAccount('hiker@example.com');
     const app = makeApp();
     await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    await mailCount(1);
     const token = resetToken(mailer.sent[0]);
 
     // A rejected password doesn't use up the link.
@@ -126,7 +134,9 @@ describe('forgot password', () => {
     );
     const app = makeApp();
     await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    await mailCount(1);
     await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    await mailCount(2);
     const [older, newer] = mailer.sent.map(resetToken);
 
     await request(app).post('/auth/password/reset').send({ token: newer, password: NEW }).expect(200);
@@ -140,6 +150,7 @@ describe('forgot password', () => {
     const unknown = await request(app).post('/auth/password/forgot').send({ email: 'nobody@example.com' }).expect(200);
     const admin = await request(app).post('/auth/password/forgot').send({ email: 'boss@example.com' }).expect(200);
     expect(admin.body).toEqual(unknown.body);
+    await new Promise((resolve) => { setTimeout(resolve, 300); });
     expect(mailer.sent).toHaveLength(0);
   });
 
@@ -147,22 +158,48 @@ describe('forgot password', () => {
     await addAccount('hiker@example.com');
     const app = makeApp();
     await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    await mailCount(1);
     await pool.query(`UPDATE email_login_tokens SET expires_at = NOW() - INTERVAL '1 minute'`);
     await request(app).post('/auth/password/reset').send({ token: resetToken(mailer.sent[0]), password: NEW }).expect(400);
 
     // A reset token can't confirm an email either: each link only does its own job.
     await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    await mailCount(2);
     await request(app).post('/auth/email/verify').send({ token: resetToken(mailer.sent[1]) }).expect(400);
   });
 
-  it('uses the admin-set link lifetime', async () => {
+  it('uses the admin-set link lifetime, defaulting to 30 and clamping to 5-60', async () => {
     await addAccount('hiker@example.com');
-    await pool.query(`INSERT INTO admin_settings (key, value) VALUES ('email_login_ttl_minutes', '45')`);
+    for (const [setting, expected] of [[null, 30], ['soon', 30], ['45', 45], ['1', 5], ['500', 60]]) {
+      await pool.query('DELETE FROM admin_settings');
+      await pool.query('DELETE FROM email_login_tokens');
+      if (setting) await pool.query(`INSERT INTO admin_settings (key, value) VALUES ('email_login_ttl_minutes', $1)`, [setting]);
+      await request(makeApp()).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+      await mailCount(1);
+      const row = await pool.query(
+        `SELECT round(extract(epoch FROM expires_at - created_at) / 60)::int AS minutes FROM email_login_tokens`);
+      expect(row.rows[0].minutes).toBe(expected);
+      expect(mailer.sent[0].text).toContain(`expires in ${expected} minutes`);
+    }
+  });
+
+  it('stores only a digest of the emailed link', async () => {
+    await addAccount('hiker@example.com');
     await request(makeApp()).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
-    const row = await pool.query(
-      `SELECT round(extract(epoch FROM expires_at - created_at) / 60)::int AS minutes FROM email_login_tokens`);
-    expect(row.rows[0].minutes).toBe(45);
-    expect(mailer.sent[0].text).toContain('expires in 45 minutes');
+    await mailCount(1);
+    const token = resetToken(mailer.sent[0]);
+    const row = (await pool.query('SELECT token_hash, code_hash FROM email_login_tokens')).rows[0];
+    expect(row.token_hash).toMatch(/^[0-9a-f]{64}$/);
+    expect(row.token_hash).not.toBe(token);
+    expect(row.code_hash).toBeNull();
+  });
+
+  it('rate-limits one client across many addresses', async () => {
+    const app = makeApp();
+    for (let i = 0; i < 5; i += 1) {
+      await request(app).post('/auth/password/forgot').send({ email: `person${i}@example.com` }).expect(200);
+    }
+    await request(app).post('/auth/password/forgot').send({ email: 'person5@example.com' }).expect(429);
   });
 
   it('rate-limits requests for one address regardless of spelling', async () => {
@@ -172,7 +209,7 @@ describe('forgot password', () => {
       await request(app).post('/auth/password/forgot').send({ email: spelling }).expect(200);
     }
     await request(app).post('/auth/password/forgot').send({ email: 'a@example.com' }).expect(429);
-    expect(mailer.sent).toHaveLength(3);
+    await mailCount(3);
   });
 
   it('still answers the same when the email cannot be sent, and rejects malformed addresses', async () => {

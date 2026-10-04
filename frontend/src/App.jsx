@@ -1989,8 +1989,8 @@ function AppContent() {
     }
   };
 
-  // Accounts made outside the sign-up form (a first Google sign-in or emailed
-  // code) finish sign-up on /welcome before using the map (spec 046).
+  // Accounts made outside the sign-up form (a first Google sign-in) finish
+  // sign-up on /welcome before using the map (spec 046).
   const finishSignupFirst = Boolean(user?.needsSignupCompletion) &&
     !['/welcome', '/terms', '/privacy', '/signin', '/reset-password', '/data-deletion'].includes(location.pathname);
   useEffect(() => {

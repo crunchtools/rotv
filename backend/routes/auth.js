@@ -5,7 +5,7 @@ import { isAuthenticated } from '../middleware/auth.js';
 import { deleteUserAccount } from '../services/accountDeletion.js';
 import { findOrCreateUser, adminEmail } from '../config/userAccount.js';
 import { createMailer } from '../services/mailer.js';
-import { consumeToken } from '../services/emailLogin.js';
+import { consumeToken, usedTokenEmail } from '../services/emailLogin.js';
 import { limiter, ipKey, completeLogin, stampLogin } from '../utils/authSession.js';
 import { addAccountRoutes } from './authAccounts.js';
 import { displayNameOf } from '../services/accountProfile.js';
@@ -157,7 +157,16 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
     limiter(15 * 60 * 1000, 30, ipKey),
     async (req, res) => {
       try {
-        const email = await consumeToken(pool, String(req.body?.token || ''), 'confirm');
+        const token = String(req.body?.token || '');
+        const email = await consumeToken(pool, token, 'confirm');
+        if (!email) {
+          // Fix: a mail scanner may have opened the link first and confirmed the
+          // address; say so instead of showing an error (PR #716 review).
+          const usedFor = await usedTokenEmail(pool, token, 'confirm');
+          const confirmed = usedFor && await pool.query(
+            'SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NOT NULL', [usedFor]);
+          if (confirmed?.rows.length) return res.json({ success: true, alreadyConfirmed: true });
+        }
         const account = email
           ? await pool.query('SELECT 1 FROM users WHERE LOWER(email) = LOWER($1)', [email])
           : { rows: [] };

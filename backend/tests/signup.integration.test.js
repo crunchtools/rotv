@@ -134,6 +134,11 @@ describe('sign-up with a password', () => {
     // Read the token before makeApp() swaps in a fresh mailer.
     const token = linkToken(mailer.sent[0]);
     await request(makeApp()).post('/auth/email/verify').send({ token }).expect(200);
+    // Opened again (or first by a mail scanner): still "confirmed", without signing in.
+    const again = request.agent(makeApp());
+    expect((await again.post('/auth/email/verify').send({ token }).expect(200)).body.alreadyConfirmed).toBe(true);
+    expect((await again.get('/auth/user')).body).toBeNull();
+    expect(addSubscriber).toHaveBeenCalledTimes(1);
 
     const user = await pool.query('SELECT email_verified_at, newsletter_opt_in FROM users');
     expect(user.rows[0].email_verified_at).not.toBeNull();
@@ -341,6 +346,7 @@ describe('changing sign-in methods', () => {
     await request(app).post('/auth/password/login').send({ email: 'boss@example.com', password: STRONG }).expect(401);
     // Nor does "Forgot password?" email an admin.
     await request(app).post('/auth/password/forgot').send({ email: 'boss@example.com' }).expect(200);
+    await new Promise((resolve) => { setTimeout(resolve, 300); });
     expect(mailer.sent.filter((m) => m.subject.includes('Reset'))).toHaveLength(0);
   });
 });
@@ -440,15 +446,19 @@ describe('account protection and cleanup', () => {
 
     const owner = request.agent(makeApp());
     await owner.post('/auth/password/forgot').send({ email: 'owner@example.com' }).expect(200);
+    await vi.waitFor(() => expect(mailer.sent.some((m) => m.subject.includes('Reset'))).toBe(true));
     const reset = mailer.sent.find((m) => m.subject.includes('Reset'));
     await owner.post('/auth/password/reset').send({ token: linkToken(reset), password: 'the real owner passphrase' }).expect(200);
 
     expect((await owner.get('/auth/user')).body.emailVerified).toBe(true);
     expect((await pool.query('SELECT 1 FROM user_passkeys')).rows).toHaveLength(0);
     expect((await pool.query('SELECT newsletter_opt_in FROM users')).rows[0].newsletter_opt_in).toBe(false);
-    // The squatter's password and confirmation link no longer work.
+    // The squatter's password no longer works, and their confirmation link can't sign anyone in.
     await request(makeApp()).post('/auth/password/login').send({ email: 'owner@example.com', password: STRONG }).expect(401);
-    await request(makeApp()).post('/auth/email/verify').send({ token: confirmToken }).expect(400);
+    const stale = request.agent(makeApp());
+    const late = await stale.post('/auth/email/verify').send({ token: confirmToken }).expect(200);
+    expect(late.body.alreadyConfirmed).toBe(true);
+    expect((await stale.get('/auth/user')).body).toBeNull();
     await request(makeApp()).post('/auth/password/login')
       .send({ email: 'owner@example.com', password: 'the real owner passphrase' }).expect(200);
   });
@@ -457,6 +467,7 @@ describe('account protection and cleanup', () => {
     await findOrCreateUser(pool, 'nobody@example.com', 'google', { id: 'g-walker', displayName: 'Walker', emails: [{ value: 'walker@example.com' }] }, null);
     const agent = request.agent(makeApp());
     await agent.post('/auth/password/forgot').send({ email: 'walker@example.com' }).expect(200);
+    await vi.waitFor(() => expect(mailer.sent).toHaveLength(1));
     const reset = await agent.post('/auth/password/reset')
       .send({ token: linkToken(mailer.sent[0]), password: 'walker long passphrase' }).expect(200);
     expect(reset.body.needsSignupCompletion).toBe(true);

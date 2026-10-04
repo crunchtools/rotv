@@ -89,6 +89,24 @@ export async function sendAccountEmail(pool, mailer, email, baseUrl, kind) {
 }
 
 /**
+ * The address a link was sent to, if that link has already been used.
+ * Lets a confirmation page that a mail scanner opened first still tell the
+ * person their email is confirmed.
+ * @param {import('pg').Pool} pool
+ * @param {string} token
+ * @param {'confirm'|'reset'} kind
+ * @returns {Promise<string|null>}
+ */
+export async function usedTokenEmail(pool, token, kind) {
+  if (!token) return null;
+  const used = await pool.query(
+    'SELECT email FROM email_login_tokens WHERE token_hash = $1 AND purpose = $2 AND consumed_at IS NOT NULL',
+    [hashToken(token), kind]
+  );
+  return used.rows[0]?.email ?? null;
+}
+
+/**
  * Use up a link token of the given kind.
  * @param {import('pg').Pool} pool
  * @param {string} token
