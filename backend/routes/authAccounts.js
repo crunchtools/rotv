@@ -252,6 +252,14 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
            ON CONFLICT (user_id) DO UPDATE SET hash = EXCLUDED.hash, updated_at = NOW()`,
           [user.id, await hashPassword(req.body.password)]
         );
+        // Fix: a reset ends every other session and voids any other reset
+        // links, so whoever prompted it loses access (PR #716 review).
+        await pool.query(`DELETE FROM sessions WHERE sess -> 'passport' ->> 'user' = $1`, [String(user.id)]);
+        await pool.query(
+          `UPDATE email_login_tokens SET consumed_at = NOW()
+           WHERE LOWER(email) = LOWER($1) AND purpose = 'reset' AND consumed_at IS NULL`,
+          [email]
+        );
         await completeLogin(req, user);
         res.json({ success: true, needsSignupCompletion: !user.signup_completed_at });
       } catch (err) {

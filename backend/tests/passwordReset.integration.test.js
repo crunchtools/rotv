@@ -118,6 +118,22 @@ describe('forgot password', () => {
     await request(app).post('/auth/password/reset').send({ token, password: 'yet another passphrase' }).expect(400);
   });
 
+  it('voids the other reset links and ends the account\'s other sessions', async () => {
+    const id = await addAccount('hiker@example.com');
+    await pool.query(
+      `INSERT INTO sessions (sid, sess, expire) VALUES ('stolen', $1, NOW() + INTERVAL '1 day')`,
+      [JSON.stringify({ passport: { user: id } })]
+    );
+    const app = makeApp();
+    await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    const [older, newer] = mailer.sent.map(resetToken);
+
+    await request(app).post('/auth/password/reset').send({ token: newer, password: NEW }).expect(200);
+    await request(app).post('/auth/password/reset').send({ token: older, password: 'someone else passphrase' }).expect(400);
+    expect((await pool.query(`SELECT 1 FROM sessions WHERE sid = 'stolen'`)).rows).toHaveLength(0);
+  });
+
   it('gives the same answer for unknown and admin addresses, and emails neither', async () => {
     await addAccount('boss@example.com', { admin: true });
     const app = makeApp();
