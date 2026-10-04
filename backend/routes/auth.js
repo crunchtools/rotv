@@ -3,10 +3,9 @@ import passport from 'passport';
 import { createLogger } from '../utils/logger.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { deleteUserAccount } from '../services/accountDeletion.js';
-import { findOrCreateUser, adminEmail } from '../config/userAccount.js';
 import { createMailer } from '../services/mailer.js';
 import { consumeToken, usedTokenEmail } from '../services/emailLogin.js';
-import { limiter, ipKey, completeLogin, stampLogin } from '../utils/authSession.js';
+import { limiter, ipKey, stampLogin } from '../utils/authSession.js';
 import { addAccountRoutes } from './authAccounts.js';
 import { displayNameOf } from '../services/accountProfile.js';
 import { releaseNewsletterOptIn } from '../services/signupNewsletter.js';
@@ -22,7 +21,7 @@ function afterOAuth(user) {
   return user.signup_completed_at ? `${FRONTEND_URL}?auth=success` : `${FRONTEND_URL}/welcome?auth=success`;
 }
 
-const CONFIRM_FAILED = 'That confirmation link has expired or was already used. Sign in and choose “Resend confirmation email” in Settings.';
+const CONFIRM_FAILED = 'That confirmation link has expired. Sign in and choose “Resend confirmation email” in Settings.';
 
 /**
  * Build the /auth router: Google and Facebook sign-in, email confirmation, session status,
@@ -149,9 +148,10 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
     });
   });
 
-  // The link in a sign-up's confirmation email (spec 046): confirms the
-  // address and signs the person in. The account's own password or passkey is
-  // kept; the account must still exist (it may have been deleted meanwhile).
+  // The link in a sign-up's confirmation email (spec 046). It only confirms
+  // the address; it never signs anyone in, so a mail scanner that opens it
+  // first gets nothing but a confirmed address. The account's own password or
+  // passkey is kept, and the account must still exist.
   router.post('/email/verify',
     express.json(),
     limiter(15 * 60 * 1000, 30, ipKey),
@@ -160,23 +160,22 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         const token = String(req.body?.token || '');
         const email = await consumeToken(pool, token, 'confirm');
         if (!email) {
-          // Fix: a mail scanner may have opened the link first and confirmed the
-          // address; say so instead of showing an error (PR #716 review).
+          // Fix: a link opened before (often by a mail scanner) on an account
+          // that is now confirmed says so instead of erroring (PR #716 review).
           const usedFor = await usedTokenEmail(pool, token, 'confirm');
           const confirmed = usedFor && await pool.query(
             'SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NOT NULL', [usedFor]);
-          if (confirmed?.rows.length) return res.json({ success: true, alreadyConfirmed: true });
-        }
-        const account = email
-          ? await pool.query('SELECT 1 FROM users WHERE LOWER(email) = LOWER($1)', [email])
-          : { rows: [] };
-        if (!account.rows.length) {
+          if (confirmed?.rows.length) return res.json({ success: true });
           return res.status(400).json({ error: CONFIRM_FAILED });
         }
-        const user = await findOrCreateUser(pool, adminEmail(), 'email', { id: email, emails: [{ value: email }] }, null, { confirmsSignup: true });
-        await completeLogin(req, user);
-        await releaseNewsletterOptIn(pool, user);
-        res.json({ success: true, needsSignupCompletion: !user.signup_completed_at });
+        const updated = await pool.query(
+          `UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW()
+           WHERE LOWER(email) = LOWER($1) RETURNING *`,
+          [email]
+        );
+        if (!updated.rows.length) return res.status(400).json({ error: CONFIRM_FAILED });
+        await releaseNewsletterOptIn(pool, updated.rows[0]);
+        res.json({ success: true });
       } catch (err) {
         logger.error(`Email confirmation failed: ${err.code || err.name}`);
         res.status(500).json({ error: 'Something went wrong. Please try again.' });

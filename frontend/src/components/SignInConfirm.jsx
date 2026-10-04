@@ -6,7 +6,8 @@ const CONTINUE_DELAY_MS = 2000;
 
 /**
  * Landing page for the link in a sign-up's confirmation email (spec 046).
- * Confirms as soon as it opens, signs the person in, and continues to the map.
+ * Confirms as soon as it opens. The link never signs anyone in: a device that
+ * is already signed in continues to the map, any other is offered Sign in.
  */
 function SignInConfirm() {
   const navigate = useNavigate();
@@ -20,7 +21,6 @@ function SignInConfirm() {
   });
   const [status, setStatus] = useState(token ? 'working' : 'failed');
   const [failure, setFailure] = useState(token ? null : 'This link is incomplete.');
-  const [next, setNext] = useState('/');
   // React's development double-run of effects must not spend the link twice.
   const started = useRef(false);
 
@@ -28,18 +28,15 @@ function SignInConfirm() {
     if (!token || started.current) return;
     started.current = true;
     confirmEmail(token)
-      .then((result) => {
-        // Fix: a link used earlier (often by a mail scanner) confirms but
-        // doesn't sign in, so offer sign-in if needed (PR #716 review).
-        if (result?.alreadyConfirmed) setNext(isAuthenticated ? '/' : '/login');
-        else setNext(result?.needsSignupCompletion ? '/welcome' : '/');
-        setStatus('done');
-      })
+      .then(() => setStatus('done'))
       .catch((err) => {
         setFailure(err.message);
         setStatus('failed');
       });
-  }, [token, confirmEmail, isAuthenticated]);
+  }, [token, confirmEmail]);
+
+  // Signed-in devices go back to the map; others are offered sign-in.
+  const next = isAuthenticated ? '/' : '/login';
 
   useEffect(() => {
     if (status !== 'done') return undefined;

@@ -118,13 +118,13 @@ describe('AuthContext', () => {
     }));
   });
 
-  it('confirmEmail sends the link token and signs in', async () => {
-    const fetchMock = mockFetch(undefined, {
-      '/auth/email/verify': fetchResponse({ success: true, needsSignupCompletion: false })
-    });
+  it('confirmEmail sends the link token, then refreshes the account', async () => {
+    const fetchMock = mockFetch(undefined, { '/auth/email/verify': fetchResponse({ success: true }) });
     await renderSignedIn();
-    expect(await act(() => captured.current.confirmEmail('c'))).toEqual({ success: true, needsSignupCompletion: false });
+    const userCallsBefore = fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length;
+    await act(() => captured.current.confirmEmail('c'));
     expect(fetchMock).toHaveBeenCalledWith('/auth/email/verify', expect.objectContaining({ body: JSON.stringify({ token: 'c' }) }));
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length).toBe(userCallsBefore + 1);
   });
 
   describe('sign-up and sign-in (spec 046)', () => {

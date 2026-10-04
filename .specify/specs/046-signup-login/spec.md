@@ -5,7 +5,7 @@ Accounts were created silently on the first Google or emailed-code sign-in, and 
 
 ## User stories
 - As a visitor, I choose **Sign up**, then Google or email. With email I enter my full name, an optional username, how I want to appear (name or username), my email, and a password or a passkey, tick "13 or older" and the Terms/Privacy box, and optionally the newsletter. I can use the account immediately.
-- As a new account holder, I get a confirmation email with one button (valid 7 days). Tapping it confirms right away. Until I confirm, my favorites, visits, trips and settings work and nothing goes out (no newsletter); there's no banner, just a quiet "Resend confirmation email" in Settings.
+- As a new account holder, I get a confirmation email with one button (valid 7 days). Tapping it confirms right away; the device I signed up on just carries on, any other offers Sign in. Until I confirm, my favorites, visits, trips and settings work and nothing goes out (no newsletter); there's no banner, just a quiet "Resend confirmation email" in Settings.
 - As a returning visitor, I choose **Sign in**, then Google or email: a password or a passkey (also offered in the email field's autofill). **Forgot password?** emails a link to a page where I must choose a new password; saving it signs me in. Email never signs anyone in by itself.
 - As someone whose first sign-in came through Google, I finish sign-up once on `/welcome` (name, username, show-as, consents).
 - In Settings › Your Account I edit my profile, see whether my email is confirmed, add/rename/remove passkeys, and set/change/remove my password.
@@ -45,7 +45,7 @@ All bodies are JSON. Errors are `{error}` with a message for the person; rate li
 | `DELETE /auth/passkeys/:id` | fresh | — | `{success}` | 403 `{reauth: true}`; 404 not yours |
 | `PUT /auth/profile` | signed in | `name, username?, displayPreference` | `{success}` | 400 invalid; 409 username taken |
 | `POST /auth/complete-signup` | signed in | `name, username?, displayPreference, ageConfirmed, termsAccepted, newsletter` | `{success}` | 400 invalid or consent missing; 409 username taken |
-| `POST /auth/email/verify` | — | `token` (a confirmation link's) | `{success, needsSignupCompletion}`, confirmed and signed in. A link that was already used, for an account that is now confirmed (for example a mail scanner opened it first), answers `{success, alreadyConfirmed: true}` without signing in | 400 invalid, expired, not a confirmation token, or used for an account that isn't confirmed |
+| `POST /auth/email/verify` | — | `token` (a confirmation link's) | `{success}`, the address is confirmed; it never signs anyone in, so a mail scanner opening it first gets no session. A link already used on an account that is now confirmed also answers `{success}` | 400 invalid, expired, not a confirmation token, or used on an account that isn't confirmed |
 | `POST /auth/password/forgot` | — | `email` | `{success, message}`, the same for every address; only non-admin accounts are emailed | 400 malformed address; 501 mail off |
 | `POST /auth/password/reset` | — | `token, password` | `{success, needsSignupCompletion}`, password saved and signed in | 400 password policy (the link stays usable), or invalid/used/expired link |
 | `POST /auth/confirm-email/resend` | signed in | — | `{success, message}` | 400 already confirmed; 501 mail off; 502 send failed |

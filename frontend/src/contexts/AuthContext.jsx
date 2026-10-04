@@ -167,13 +167,11 @@ export function AuthProvider({ children }) {
     await fetchUser();
   };
 
-  // The link in a sign-up's confirmation email. The first use confirms and
-  // signs the person in, resolving to { needsSignupCompletion }; a link used
-  // before resolves to { alreadyConfirmed } and signs no one in.
+  // The link in a sign-up's confirmation email: confirms the address only
+  // (never signs in), then refreshes the account if this device is signed in.
   const confirmEmail = async (token) => {
-    const body = await postAuthJson('/auth/email/verify', { token });
-    if (!body.alreadyConfirmed) await finishSignIn();
-    return body;
+    await postAuthJson('/auth/email/verify', { token });
+    await fetchUser();
   };
 
   // "Forgot password?": resolves to the message to show (the same whether or

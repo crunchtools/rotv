@@ -21,9 +21,9 @@
  * someone who doesn't own the address, waiting for the owner to sign in with
  * Google and land in it (account pre-hijacking). So when a verified sign-in
  * reaches an unconfirmed account, the verified owner takes it over: passwords,
- * passkeys and sessions added before confirmation are removed. The one
- * exception is the account's own confirmation link, which the creator follows
- * from their inbox to confirm their own sign-up.
+ * passkeys and sessions added before confirmation are removed. (The account's
+ * own confirmation link doesn't come through here: it only marks the address
+ * confirmed and keeps the creator's sign-in methods.)
  */
 /** The account that is made admin on sign-in (ADMIN_EMAIL, defaulting to the maintainer). */
 export function adminEmail() {
@@ -60,12 +60,10 @@ async function revokeUnverifiedAccess(pool, userId, email) {
  * @param {string} provider - 'google' | 'facebook' | 'email'
  * @param {object} profile - passport-style profile: id, displayName, emails, photos
  * @param {object|null} credentials - Google Drive tokens for the admin upgrade flow
- * @param {{confirmsSignup?: boolean}} [options] - true for a sign-up's own
- *   confirmation link, which confirms the account without revoking its credentials
  * @returns {Promise<object>} the users row; `credentialsReset` is true when
  *   credentials added before confirmation were removed
  */
-export async function findOrCreateUser(pool, adminEmail, provider, profile, credentials, { confirmsSignup = false } = {}) {
+export async function findOrCreateUser(pool, adminEmail, provider, profile, credentials) {
   const email = profile.emails?.[0]?.value || null;
   const name = profile.displayName || null;
   const pictureUrl = profile.photos?.[0]?.value || null;
@@ -86,7 +84,7 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
     );
     userId = byEmail.rows[0]?.id ?? null;
 
-    if (userId && !byEmail.rows[0].email_verified_at && !confirmsSignup) {
+    if (userId && !byEmail.rows[0].email_verified_at) {
       await revokeUnverifiedAccess(pool, userId, email);
       credentialsReset = true;
     }

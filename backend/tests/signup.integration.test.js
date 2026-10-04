@@ -133,11 +133,12 @@ describe('sign-up with a password', () => {
     await agent.post('/auth/signup').send(signupBody()).expect(201);
     // Read the token before makeApp() swaps in a fresh mailer.
     const token = linkToken(mailer.sent[0]);
+    // Confirming never signs in, so whoever opens the link (even a mail scanner) gets no session.
+    const opener = request.agent(makeApp());
+    await opener.post('/auth/email/verify').send({ token }).expect(200);
+    expect((await opener.get('/auth/user')).body).toBeNull();
+    // Opened again: still "confirmed", and the newsletter is released only once.
     await request(makeApp()).post('/auth/email/verify').send({ token }).expect(200);
-    // Opened again (or first by a mail scanner): still "confirmed", without signing in.
-    const again = request.agent(makeApp());
-    expect((await again.post('/auth/email/verify').send({ token }).expect(200)).body.alreadyConfirmed).toBe(true);
-    expect((await again.get('/auth/user')).body).toBeNull();
     expect(addSubscriber).toHaveBeenCalledTimes(1);
 
     const user = await pool.query('SELECT email_verified_at, newsletter_opt_in FROM users');
@@ -473,8 +474,7 @@ describe('account protection and cleanup', () => {
     // The squatter's password no longer works, and their confirmation link can't sign anyone in.
     await request(makeApp()).post('/auth/password/login').send({ email: 'owner@example.com', password: STRONG }).expect(401);
     const stale = request.agent(makeApp());
-    const late = await stale.post('/auth/email/verify').send({ token: confirmToken }).expect(200);
-    expect(late.body.alreadyConfirmed).toBe(true);
+    await stale.post('/auth/email/verify').send({ token: confirmToken }).expect(200);
     expect((await stale.get('/auth/user')).body).toBeNull();
     await request(makeApp()).post('/auth/password/login')
       .send({ email: 'owner@example.com', password: 'the real owner passphrase' }).expect(200);
