@@ -353,10 +353,342 @@ body {
   color: #1b4332;
 }
 
+.signin-confirm .signin-reject {
+  display: block;
+  margin-top: 1rem;
+}
+
 .signin-confirm .auth-error {
   margin: 0 0 1rem;
   padding: 0;
   text-align: left;
+}
+
+/* Sign-up, sign-in and finish-sign-up pages (spec 046) */
+.auth-card {
+  max-width: 460px;
+}
+
+.auth-card h1 {
+  margin-bottom: 1.25rem;
+}
+
+.auth-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.auth-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.85rem 1rem;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  background: white;
+  color: #1b4332;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-choice:hover:not(:disabled) {
+  background: #f1f7f3;
+  border-color: #2d6a4f;
+}
+
+.auth-choice:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.auth-fieldset {
+  border: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0.5rem 0 0.3rem;
+}
+
+.auth-optional {
+  font-weight: normal;
+  color: #6b6b6b;
+}
+
+.auth-input {
+  width: 100%;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #bbb;
+  border-radius: 6px;
+  font-size: 1rem;
+}
+
+.auth-input:focus {
+  outline: 2px solid #2d6a4f;
+  outline-offset: 1px;
+}
+
+.auth-hint {
+  font-size: 0.8rem;
+  color: #5c5c5c;
+  margin: 0.3rem 0 0;
+  line-height: 1.4;
+}
+
+.auth-hint-error {
+  color: #b3261e;
+}
+
+.auth-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-top: 0.4rem;
+}
+
+.auth-radio,
+.auth-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  color: #333;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.auth-radio input,
+.auth-check input {
+  margin-top: 0.15rem;
+  accent-color: #2d6a4f;
+}
+
+.auth-radio-disabled {
+  color: #9a9a9a;
+  cursor: default;
+}
+
+.auth-consents {
+  gap: 0.55rem;
+  margin-top: 0.25rem;
+}
+
+.auth-passkey-note {
+  margin: 0.6rem 0 0;
+  padding: 0.75rem;
+  border-radius: 6px;
+  background: #f1f7f3;
+  color: #1b4332;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.auth-link-btn {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  padding: 0;
+  margin-top: 0.4rem;
+  color: #2d6a4f;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.auth-link-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.auth-link-btn.danger-link {
+  color: #b3261e;
+}
+
+.auth-submit {
+  max-width: none;
+}
+
+.auth-alt-links {
+  margin: 0;
+}
+
+.auth-footer {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e5e5;
+  font-size: 0.9rem;
+}
+
+.auth-footer a {
+  color: #2d6a4f;
+  font-weight: 600;
+}
+
+.auth-status {
+  font-size: 0.85rem;
+  margin: 0.5rem 0;
+}
+
+.auth-status.success {
+  color: #2e7d32;
+}
+
+.auth-status.error {
+  color: #b3261e;
+}
+
+/* Settings › Your Account */
+.account-email {
+  margin-bottom: 0.5rem;
+}
+
+.email-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.email-badge.confirmed {
+  background: #e3f1e7;
+  color: #1b4332;
+}
+
+.email-badge.unconfirmed {
+  background: #fff1d6;
+  color: #7a4b00;
+}
+
+.signin-methods {
+  margin: 1.25rem 0;
+}
+
+.signin-method {
+  padding: 0.75rem 0;
+  border-top: 1px solid #e5e5e5;
+}
+
+.signin-method-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.passkey-list {
+  list-style: none;
+  margin-top: 0.5rem;
+}
+
+.passkey-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding: 0.4rem 0;
+}
+
+.passkey-name {
+  font-weight: 600;
+}
+
+.passkey-meta {
+  font-size: 0.8rem;
+  color: #5c5c5c;
+}
+
+.passkey-actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.passkey-actions .auth-link-btn {
+  margin-top: 0;
+}
+
+.signin-password-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  max-width: 360px;
+  margin-top: 0.5rem;
+}
+
+/* Account messages over the map: welcome, confirm your email */
+.account-banner {
+  position: fixed;
+  top: calc(var(--header-height) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 560px;
+  z-index: 1100;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 8px;
+  background: #fffaf0;
+  border: 1px solid #e8c77a;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+  font-size: 0.875rem;
+  color: #3d2f00;
+}
+
+.account-banner-text {
+  flex: 1;
+}
+
+.account-banner-text p + p {
+  margin-top: 0.35rem;
+}
+
+.account-banner .auth-link-btn {
+  margin-top: 0;
+  white-space: nowrap;
+}
+
+.account-banner-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: #5c4a00;
+  cursor: pointer;
+}
+
+.oauth-btn-inline.signup-btn {
+  justify-content: center;
+  background: #2d6a4f;
+  border-color: #2d6a4f;
+  color: white;
+  font-weight: 600;
+}
+
+.oauth-btn-inline.signup-btn:hover {
+  background: #1b4332;
+}
+
+.oauth-btn-inline.signin-btn {
+  justify-content: center;
+  font-weight: 600;
 }
 
 .oauth-btn-inline:last-child {

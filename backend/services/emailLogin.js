@@ -3,7 +3,8 @@
  *
  * A request emails one message carrying both a link token (32 random bytes)
  * and a 6-digit code. Either signs the person in once, within the admin-set
- * lifetime (admin_settings.email_login_ttl_minutes, default 30).
+ * lifetime (admin_settings.email_login_ttl_minutes, default 30). Sign-up's
+ * email-confirmation messages (purpose 'confirm') last 7 days instead.
  * Only digests are stored: SHA-256 for tokens, a keyed HMAC for codes.
  * Wrong codes count against the request; after
  * MAX_CODE_ATTEMPTS the request's code stops working (the link still does,
@@ -48,24 +49,47 @@ export function normalizeEmail(raw) {
   return email.length <= 254 && EMAIL_PATTERN.test(email) ? email : null;
 }
 
-function renderEmail({ link, code, ttlMinutes }) {
+const CONFIRM_TTL_MINUTES = 7 * 24 * 60;
+
+const COPY = {
+  login: {
+    heading: 'Sign in to Roots of the Valley',
+    linkIntro: 'Open this link to sign in:',
+    button: 'Sign in',
+    ignore: "If you didn't ask to sign in, ignore this email. Nobody can sign in without it."
+  },
+  confirm: {
+    heading: 'Confirm your email for Roots of the Valley',
+    linkIntro: 'Open this link to confirm your email address:',
+    button: 'Confirm my email',
+    ignore: "If you didn't create this account, open the link and choose \u201cI didn't create this account\u201d to remove it, or ignore this email and it is removed after 30 days."
+  }
+};
+
+function lifetimeText(minutes) {
+  return minutes % (24 * 60) === 0 ? `${minutes / (24 * 60)} days` : `${minutes} minutes`;
+}
+
+function renderEmail({ link, code, ttlMinutes, purpose }) {
+  const copy = COPY[purpose];
+  const lifetime = lifetimeText(ttlMinutes);
   const text = [
-    'Sign in to Roots of the Valley',
+    copy.heading,
     '',
-    `Open this link to sign in:\n${link}`,
+    `${copy.linkIntro}\n${link}`,
     '',
     `Or enter this code: ${code}`,
     '',
-    `The link and code work once and expire in ${ttlMinutes} minutes.`,
-    "If you didn't ask to sign in, ignore this email. Nobody can sign in without it."
+    `The link and code work once and expire in ${lifetime}.`,
+    copy.ignore
   ].join('\n');
   const safeLink = escapeHtml(link);
   const html = `<!doctype html><html><body style="font-family:Arial,sans-serif;color:#1b4332;max-width:480px;margin:0 auto;padding:24px">
-<h2 style="margin:0 0 16px">Sign in to Roots of the Valley</h2>
-<p><a href="${safeLink}" style="display:inline-block;background:#2d6a4f;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold">Sign in</a></p>
+<h2 style="margin:0 0 16px">${copy.heading}</h2>
+<p><a href="${safeLink}" style="display:inline-block;background:#2d6a4f;color:#fff;padding:12px 20px;border-radius:6px;text-decoration:none;font-weight:bold">${copy.button}</a></p>
 <p>Or enter this code:</p>
 <p style="font-size:28px;letter-spacing:6px;font-weight:bold;margin:8px 0 16px">${code}</p>
-<p style="color:#525252;font-size:13px">The link and code work once and expire in ${ttlMinutes} minutes. If you didn't ask to sign in, ignore this email. Nobody can sign in without it.</p>
+<p style="color:#525252;font-size:13px">The link and code work once and expire in ${lifetime}. ${copy.ignore}</p>
 </body></html>`;
   return { text, html };
 }
@@ -88,49 +112,55 @@ async function loginTtlMinutes(pool) {
  * @param {{send: Function}} mailer - from createMailer()
  * @param {string} email - already normalized
  * @param {string} baseUrl - site origin for the link, e.g. https://rootsofthevalley.org
+ * @param {{purpose?: 'login'|'confirm'}} [options] - 'confirm' sends the
+ *   7-day email-confirmation message for a new account instead of a sign-in link
  * @returns {Promise<void>} rejects if the row can't be stored or the mail can't be handed off
  */
-export async function requestLogin(pool, mailer, email, baseUrl) {
+export async function requestLogin(pool, mailer, email, baseUrl, { purpose = 'login' } = {}) {
   const token = crypto.randomBytes(32).toString('base64url');
   const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
 
-  const ttlMinutes = await loginTtlMinutes(pool);
+  const ttlMinutes = purpose === 'confirm' ? CONFIRM_TTL_MINUTES : await loginTtlMinutes(pool);
   await pool.query(`DELETE FROM email_login_tokens WHERE expires_at < NOW() - INTERVAL '1 day'`);
   await pool.query(
-    `INSERT INTO email_login_tokens (email, token_hash, code_hash, expires_at)
-     VALUES ($1, $2, $3, NOW() + make_interval(mins => $4))`,
-    [email, hashToken(token), hashCode(email, code), ttlMinutes]
+    `INSERT INTO email_login_tokens (email, token_hash, code_hash, expires_at, purpose)
+     VALUES ($1, $2, $3, NOW() + make_interval(mins => $4), $5)`,
+    [email, hashToken(token), hashCode(email, code), ttlMinutes, purpose]
   );
 
   // Fragment, not query: browsers never send it to the server, so the token
   // stays out of proxy access logs and analytics.
-  const link = `${baseUrl}/signin#token=${encodeURIComponent(token)}`;
-  await mailer.send({ to: email, subject: `Your Roots of the Valley sign-in code: ${code}`, ...renderEmail({ link, code, ttlMinutes }) });
+  const link = `${baseUrl}/signin#token=${encodeURIComponent(token)}${purpose === 'confirm' ? '&confirm=1' : ''}`;
+  const subject = purpose === 'confirm'
+    ? `Confirm your Roots of the Valley email: ${code}`
+    : `Your Roots of the Valley sign-in code: ${code}`;
+  await mailer.send({ to: email, subject, ...renderEmail({ link, code, ttlMinutes, purpose }) });
 }
 
 /**
- * Consume a link token. Returns the email it was issued to, or null.
+ * Consume a link token.
  * @param {import('pg').Pool} pool
  * @param {string} token
+ * @returns {Promise<{email: string, purpose: 'login'|'confirm'}|null>}
  */
 export async function verifyToken(pool, token) {
   if (!token) return null;
   const consumed = await pool.query(
     `UPDATE email_login_tokens SET consumed_at = NOW()
      WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > NOW()
-     RETURNING email`,
+     RETURNING email, purpose`,
     [hashToken(token)]
   );
-  return consumed.rows[0]?.email ?? null;
+  return consumed.rows[0] ?? null;
 }
 
 /**
  * Consume a 6-digit code for an email. Only the newest live request for that
  * address is eligible, so an older email can't be brute-forced in parallel.
- * Returns the email on success, or null.
  * @param {import('pg').Pool} pool
  * @param {string} email - already normalized
  * @param {string} code
+ * @returns {Promise<{email: string, purpose: 'login'|'confirm'}|null>}
  */
 export async function verifyCode(pool, email, code) {
   if (!email || !/^\d{6}$/.test(String(code || ''))) return null;
@@ -146,10 +176,10 @@ export async function verifyCode(pool, email, code) {
      )
      AND consumed_at IS NULL AND expires_at > NOW()
      AND code_hash = $2 AND attempts < $3
-     RETURNING email`,
+     RETURNING email, purpose`,
     [email, hashCode(email, code), MAX_CODE_ATTEMPTS]
   );
-  if (consumed.rows[0]) return consumed.rows[0].email;
+  if (consumed.rows[0]) return consumed.rows[0];
 
   await pool.query(
     `UPDATE email_login_tokens SET attempts = attempts + 1

@@ -14,3 +14,13 @@ classification = "gourmand_bug"
 path = "frontend/src/components/NotificationBell.jsx"
 justification = "timeAgo (relative/future time label, used in the item list JSX) and normalize (maps the news+events feed payload into one sorted item list, used by loadFeed) are pure module-level functions. Keeping them outside the component keeps the render body and the useCallback readable and avoids redefining them each render."
 classification = "by_design"
+
+[[locations]]
+path = "backend/services/passwords.js"
+justification = "hashPassword is imported by backend/routes/authAccounts.js and called at three sites there (sign-up, set password, rehash on login), plus the unit tests. The detector does not count cross-file imports. Upstream: gitlab.com/mattdm/gourmand#24."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "backend/utils/authSession.js"
+justification = "stampLogin is imported by backend/routes/auth.js and called from the Google and Facebook OAuth callbacks, where passport has already run req.login, as well as from completeLogin. The detector does not count cross-file imports. Upstream: gitlab.com/mattdm/gourmand#24."
+classification = "gourmand_bug"
