@@ -25,8 +25,19 @@ export function limiter(windowMs, max, keyGenerator) {
   });
 }
 
-// Per-address limits key on the normalized email so case or spacing can't dodge them.
+/**
+ * Rate-limit key for per-address limits: the normalized email from the body,
+ * so case or spacing can't dodge them.
+ * @param {import('express').Request} req
+ * @returns {string} `email:<address>`, or `email:invalid`
+ */
 export const emailKey = (req) => `email:${normalizeEmail(req.body?.email) || 'invalid'}`;
+
+/**
+ * Rate-limit key for per-client limits (IPv6 grouped by /56, per express-rate-limit).
+ * @param {import('express').Request} req
+ * @returns {string}
+ */
 export const ipKey = (req) => ipKeyGenerator(req.ip);
 
 /**

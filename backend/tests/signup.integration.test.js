@@ -282,6 +282,7 @@ describe('account protection and cleanup', () => {
   it('lets the verified owner take over an unconfirmed sign-up made with their address', async () => {
     const squatter = request.agent(makeApp());
     await squatter.post('/auth/signup').send(signupBody({ email: 'owner@example.com' })).expect(201);
+    const confirmToken = linkToken(mailer.sent[0]);
 
     const owner = request.agent(makeApp());
     await owner.post('/auth/email/start').send({ email: 'owner@example.com' }).expect(200);
@@ -293,8 +294,9 @@ describe('account protection and cleanup', () => {
     expect(me.notice).toBe('credentials_reset');
     expect((await pool.query('SELECT 1 FROM user_passwords')).rows).toHaveLength(0);
     expect((await pool.query('SELECT newsletter_opt_in FROM users')).rows[0].newsletter_opt_in).toBe(false);
-    // The squatter's password no longer works.
+    // The squatter's password no longer works, nor does the sign-up's confirmation link.
     await request(makeApp()).post('/auth/password/login').send({ email: 'owner@example.com', password: STRONG }).expect(401);
+    await request(makeApp()).post('/auth/email/verify').send({ token: confirmToken }).expect(400);
   });
 
   it('sends accounts made outside the form to finish sign-up', async () => {

@@ -71,8 +71,13 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
       const username = String(req.query.username || '').trim();
       const problem = usernameProblem(username);
       if (problem) return res.json({ available: false, error: problem });
-      const available = await usernameAvailable(pool, username, req.user?.id ?? null);
-      res.json({ available, error: available ? null : 'That username is taken.' });
+      try {
+        const available = await usernameAvailable(pool, username, req.user?.id ?? null);
+        res.json({ available, error: available ? null : 'That username is taken.' });
+      } catch (err) {
+        logger.error(`Username availability check failed: ${err.code || err.name}`);
+        res.status(500).json({ error: 'Could not check that username right now.' });
+      }
     });
 
   router.post('/signup',

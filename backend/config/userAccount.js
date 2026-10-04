@@ -35,13 +35,21 @@ export function adminEmail() {
  * confirmed, and end its sessions.
  * @param {import('pg').Pool} pool
  * @param {number} userId
+ * @param {string} email - the account's address, whose pending confirmation links are voided
  */
-async function revokeUnverifiedAccess(pool, userId) {
+async function revokeUnverifiedAccess(pool, userId, email) {
   await pool.query('DELETE FROM user_passwords WHERE user_id = $1', [userId]);
   await pool.query('DELETE FROM user_passkeys WHERE user_id = $1', [userId]);
   await pool.query(`DELETE FROM sessions WHERE sess -> 'passport' ->> 'user' = $1`, [String(userId)]);
   // A newsletter opt-in from before confirmation isn't the owner's consent.
   await pool.query('UPDATE users SET newsletter_opt_in = FALSE WHERE id = $1', [userId]);
+  // Fix: void the sign-up's pending confirmation links, which would otherwise
+  // still sign their holder in without revoking anything (PR #714 review).
+  await pool.query(
+    `UPDATE email_login_tokens SET consumed_at = NOW()
+     WHERE LOWER(email) = LOWER($1) AND purpose = 'confirm' AND consumed_at IS NULL`,
+    [email]
+  );
 }
 
 /**
@@ -79,7 +87,7 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
     userId = byEmail.rows[0]?.id ?? null;
 
     if (userId && !byEmail.rows[0].email_verified_at && !confirmsSignup) {
-      await revokeUnverifiedAccess(pool, userId);
+      await revokeUnverifiedAccess(pool, userId, email);
       credentialsReset = true;
     }
 

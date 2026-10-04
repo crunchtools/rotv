@@ -47,6 +47,11 @@ function makeFakePool({ users = [], identities = [], passwords = [], passkeys = 
       return { rows: [] };
     }
 
+    if (s.startsWith('UPDATE email_login_tokens SET consumed_at')) {
+      state.voidedConfirmationsFor = params[0];
+      return { rows: [] };
+    }
+
     if (s.startsWith('SELECT * FROM users WHERE id')) {
       const [id] = params;
       const hit = state.users.find((u) => u.id === id);
@@ -263,6 +268,7 @@ describe('findOrCreateUser', () => {
     expect(pool.passwords).toEqual([]);
     expect(pool.passkeys).toEqual([]);
     expect(pool.revokedSessionsFor).toEqual(['7']);
+    expect(pool.voidedConfirmationsFor).toBe('owner@example.com');
   });
 
   it("keeps a sign-up's own credentials when it is confirmed through its confirmation link", async () => {
