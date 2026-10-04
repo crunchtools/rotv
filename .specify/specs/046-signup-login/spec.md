@@ -20,7 +20,7 @@ Accounts were created silently on the first Google or emailed-code sign-in, and 
 - Sign-up reveals that an address already has an account (409), because the account is usable at once and can't be hidden the way email sign-in hides it.
 
 ## Unconfirmed accounts
-- Account pre-hijacking guard: Google, Facebook and emailed-code sign-ins link by email to an existing account. If that account is unconfirmed, the verified owner takes it over: passwords, passkeys, sessions and the newsletter opt-in added before confirmation are removed, and the person sees a one-time notice. The account's own confirmation link (purpose `confirm`) confirms without removing anything.
+- Account pre-hijacking guard: Google, Facebook and emailed-code sign-ins link by email to an existing account. If that account is unconfirmed, the verified owner takes it over: passwords, passkeys, sessions and the newsletter opt-in added before confirmation are removed, and the person sees a one-time notice. The account's own confirmation link (purpose `confirm`) confirms without removing anything, because the creator often confirms on another device. The confirmation page also offers **I didn't create this account** (`POST /auth/email/reject {token}`), which deletes the unconfirmed account with its password and passkeys; the confirmation email points to it.
 - The newsletter opt-in is held until confirmation, then sent to Buttondown (which runs its own double opt-in).
 - A daily job (`unconfirmed-account-cleanup`, 04:15 ET) deletes accounts unconfirmed for 30 days, through the same path as self-service deletion.
 - Accounts that existed before this spec were marked confirmed and finished (migration 093).

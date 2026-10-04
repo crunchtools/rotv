@@ -179,6 +179,31 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
       res.json({ success: true, message: EMAIL_START_SENT });
     });
 
+  // "I didn't create this account" on a sign-up confirmation link (spec 046):
+  // the address owner removes an unconfirmed account someone else made with
+  // their email, along with any password or passkey on it.
+  router.post('/email/reject',
+    express.json(),
+    limiter(15 * 60 * 1000, 30, ipKey),
+    async (req, res) => {
+      try {
+        const verified = await verifyToken(pool, String(req.body?.token || ''));
+        if (!verified || verified.purpose !== 'confirm') {
+          return res.status(400).json({ error: EMAIL_VERIFY_FAILED });
+        }
+        const unconfirmed = await pool.query(
+          'SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NULL',
+          [verified.email]
+        );
+        // Rechecked under the row lock: an account confirmed meanwhile is kept.
+        for (const { id } of unconfirmed.rows) await deleteUserAccount(pool, id, { unconfirmedForDays: 0 });
+        res.json({ success: true });
+      } catch (err) {
+        logger.error(`Rejecting a sign-up failed: ${err.code || err.name}`);
+        res.status(500).json({ error: 'Something went wrong. Please try again.' });
+      }
+    });
+
   router.post('/email/verify',
     express.json(),
     limiter(15 * 60 * 1000, 30, ipKey),
@@ -204,7 +229,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         if (confirmsSignup) await releaseNewsletterOptIn(pool, user);
         res.json({ success: true, confirmed: confirmsSignup, needsSignupCompletion: !user.signup_completed_at });
       } catch (err) {
-        logger.error(`Account lookup after email verification failed: ${err.code || err.name}`);
+        logger.error(`Account lookup or session login after email verification failed: ${err.code || err.name}`);
         res.status(500).json({ error: 'Sign-in failed. Please try again.' });
       }
     });

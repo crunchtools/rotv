@@ -62,7 +62,7 @@ const COPY = {
     heading: 'Confirm your email for Roots of the Valley',
     linkIntro: 'Open this link to confirm your email address:',
     button: 'Confirm my email',
-    ignore: "If you didn't create an account, ignore this email. The account is removed after 30 days unless the address is confirmed."
+    ignore: "If you didn't create this account, open the link and choose \u201cI didn't create this account\u201d to remove it, or ignore this email and it is removed after 30 days."
   }
 };
 

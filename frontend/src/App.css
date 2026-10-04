@@ -353,6 +353,11 @@ body {
   color: #1b4332;
 }
 
+.signin-confirm .signin-reject {
+  display: block;
+  margin-top: 1rem;
+}
+
 .signin-confirm .auth-error {
   margin: 0 0 1rem;
   padding: 0;

@@ -184,6 +184,9 @@ export function AuthProvider({ children }) {
     return body;
   };
 
+  // "I didn't create this account" from a sign-up confirmation link.
+  const rejectSignup = (token) => postAuthJson('/auth/email/reject', { token });
+
   const registerPasskey = async (name = defaultPasskeyName()) => {
     const optionsJSON = await postAuthJson('/auth/passkey/register/options');
     const response = await startRegistration({ optionsJSON });
@@ -330,6 +333,7 @@ export function AuthProvider({ children }) {
     providers,
     startEmailLogin,
     verifyEmailLogin,
+    rejectSignup,
     signUp,
     loginWithPassword,
     loginWithPasskey,

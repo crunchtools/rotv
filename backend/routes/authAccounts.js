@@ -251,7 +251,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
     try {
       res.json(await registrationOptions(pool, req.session, req.user, frontendUrl));
     } catch (err) {
-      logger.error(`Passkey registration options failed: ${err.message}`);
+      logger.error(`Passkey registration options failed: ${err.code || err.name}`);
       res.status(500).json({ error: 'Could not start passkey setup. Please try again.' });
     }
   });
@@ -262,7 +262,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
       if (!passkey) return res.status(400).json({ error: "The passkey couldn't be saved. Please try again." });
       res.status(201).json({ success: true, passkey });
     } catch (err) {
-      logger.error(`Passkey registration failed: ${err.message}`);
+      logger.error(`Passkey registration failed: ${err.code || err.name}`);
       res.status(500).json({ error: "The passkey couldn't be saved. Please try again." });
     }
   });
@@ -271,7 +271,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
     try {
       res.json(await authenticationOptions(req.session, frontendUrl));
     } catch (err) {
-      logger.error(`Passkey sign-in options failed: ${err.message}`);
+      logger.error(`Passkey sign-in options failed: ${err.code || err.name}`);
       res.status(500).json({ error: SIGNIN_FAILED });
     }
   });
@@ -290,7 +290,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         await completeLogin(req, found.rows[0]);
         res.json({ success: true });
       } catch (err) {
-        logger.error(`Passkey sign-in failed: ${err.message}`);
+        logger.error(`Passkey sign-in failed: ${err.code || err.name}`);
         res.status(500).json({ error: SIGNIN_FAILED });
       }
     });

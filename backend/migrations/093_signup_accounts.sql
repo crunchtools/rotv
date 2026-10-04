@@ -49,6 +49,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(usern
 -- sign-in matching an arbitrary account.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
 
+-- Revoking an account's sessions (takeover, deletion) filters on the
+-- passport user inside the session JSON. The sessions table is created by
+-- connect-pg-simple on first start, so it may not exist yet on a fresh boot.
+DO $$
+BEGIN
+  IF to_regclass('sessions') IS NOT NULL THEN
+    CREATE INDEX IF NOT EXISTS idx_sessions_passport_user ON sessions ((sess -> 'passport' ->> 'user'));
+  END IF;
+END $$;
+
 -- Finds accounts left unconfirmed for the 30-day cleanup job.
 CREATE INDEX IF NOT EXISTS idx_users_unconfirmed
   ON users (created_at) WHERE email_verified_at IS NULL;

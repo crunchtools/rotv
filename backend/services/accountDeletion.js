@@ -23,8 +23,9 @@ const logger = createLogger('AccountDeletion');
  * @param {import('pg').Pool} pool - pg pool; a dedicated client is checked out for the transaction.
  * @param {number|string} userId - users.id of the account to delete.
  * @param {{unconfirmedForDays?: number}} [options] - when set, delete only if the
- *   account is still unconfirmed and older than this, checked under the row
- *   lock, so an account confirmed meanwhile is kept (spec 046 cleanup).
+ *   account is still unconfirmed and older than this many days (0: any age),
+ *   checked under the row lock, so an account confirmed meanwhile is kept
+ *   (spec 046 cleanup and "I didn't create this account").
  * @returns {Promise<boolean>} true when the account was deleted, false if no such
  *   user exists or it no longer matches the condition.
  * @throws Rethrows any database error after rolling back, leaving the account intact.

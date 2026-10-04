@@ -312,6 +312,19 @@ describe('account protection and cleanup', () => {
     await request(makeApp()).post('/auth/email/verify').send({ token: confirmToken }).expect(400);
   });
 
+  it("lets the address owner remove a sign-up they didn't make from its confirmation link", async () => {
+    await request(makeApp()).post('/auth/signup').send(signupBody({ email: 'victim@example.com' })).expect(201);
+    const token = linkToken(mailer.sent[0]);
+    const app = makeApp();
+    await request(app).post('/auth/email/reject').send({ token }).expect(200);
+
+    expect((await pool.query('SELECT 1 FROM users')).rows).toHaveLength(0);
+    expect((await pool.query('SELECT 1 FROM user_passwords')).rows).toHaveLength(0);
+    await request(app).post('/auth/password/login').send({ email: 'victim@example.com', password: STRONG }).expect(401);
+    // Used up, and a sign-in link can't be used to reject anything.
+    await request(app).post('/auth/email/reject').send({ token }).expect(400);
+  });
+
   it('sends accounts made outside the form to finish sign-up', async () => {
     const agent = request.agent(makeApp());
     await agent.post('/auth/email/start').send({ email: 'walker@example.com' }).expect(200);

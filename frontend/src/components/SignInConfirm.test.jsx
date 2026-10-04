@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/re
 const navigate = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 
-const auth = { verifyEmailLogin: vi.fn() };
+const auth = { verifyEmailLogin: vi.fn(), rejectSignup: vi.fn() };
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
 
 const { default: SignInConfirm } = await import('./SignInConfirm');
@@ -56,6 +56,16 @@ describe('SignInConfirm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm my email' }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(auth.verifyEmailLogin).toHaveBeenCalledWith({ token: 'conf' });
+  });
+
+  it("lets the address owner remove a sign-up they didn't make", async () => {
+    auth.rejectSignup = vi.fn().mockResolvedValue({ success: true });
+    at('#token=squat&confirm=1');
+    render(<SignInConfirm />);
+    fireEvent.click(screen.getByRole('button', { name: "I didn't create this account" }));
+    expect(await screen.findByRole('heading', { name: 'Account removed' })).toBeTruthy();
+    expect(auth.rejectSignup).toHaveBeenCalledWith('squat');
+    expect(auth.verifyEmailLogin).not.toHaveBeenCalled();
   });
 
   it('sends a new account made from the link to finish sign-up', async () => {
