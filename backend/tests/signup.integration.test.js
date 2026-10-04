@@ -17,6 +17,7 @@ import { findOrCreateUser } from '../config/userAccount.js';
 import { deleteStaleUnconfirmedAccounts } from '../services/unconfirmedCleanup.js';
 import { deleteUserAccount } from '../services/accountDeletion.js';
 import { addSubscriber } from '../services/buttondownClient.js';
+import { releaseNewsletterOptIn } from '../services/signupNewsletter.js';
 import { createSoftAuthenticator } from './helpers/softAuthenticator.js';
 
 vi.mock('../services/buttondownClient.js', () => ({ addSubscriber: vi.fn(async () => ({ status: 'subscribed' })) }));
@@ -255,7 +256,67 @@ describe('passkeys', () => {
   });
 });
 
+describe('passkey rejections and management', () => {
+  async function signedUpWithPasskey() {
+    const authenticator = createSoftAuthenticator();
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody({ method: 'passkey', password: undefined })).expect(201);
+    const options = (await agent.post('/auth/passkey/register/options')).body;
+    const { passkey } = (await agent.post('/auth/passkey/register/verify')
+      .send({ response: authenticator.register(options, ORIGIN.origin), name: 'Laptop' }).expect(201)).body;
+    return { authenticator, agent, passkey };
+  }
+
+  it('stores nothing for a registration from the wrong origin or without a challenge', async () => {
+    const authenticator = createSoftAuthenticator();
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody({ method: 'passkey', password: undefined })).expect(201);
+
+    const options = (await agent.post('/auth/passkey/register/options')).body;
+    await agent.post('/auth/passkey/register/verify')
+      .send({ response: authenticator.register(options, 'https://evil.example') }).expect(400);
+    // The challenge was used up by the failed attempt.
+    await agent.post('/auth/passkey/register/verify')
+      .send({ response: authenticator.register(options, ORIGIN.origin) }).expect(400);
+    expect((await pool.query('SELECT 1 FROM user_passkeys')).rows).toHaveLength(0);
+  });
+
+  it("doesn't sign in from the wrong origin or with a used challenge", async () => {
+    const { authenticator } = await signedUpWithPasskey();
+    const fresh = request.agent(makeApp());
+    const options = (await fresh.post('/auth/passkey/login/options')).body;
+    await fresh.post('/auth/passkey/login/verify')
+      .send({ response: authenticator.authenticate(options, 'https://evil.example', ORIGIN.hostname) }).expect(401);
+    await fresh.post('/auth/passkey/login/verify')
+      .send({ response: authenticator.authenticate(options, ORIGIN.origin, ORIGIN.hostname) }).expect(401);
+    expect((await fresh.get('/auth/user')).body).toBeNull();
+  });
+
+  it('renames and removes only the owner\'s passkeys', async () => {
+    const { agent, passkey } = await signedUpWithPasskey();
+    await agent.patch(`/auth/passkeys/${passkey.id}`).send({ name: 'Work laptop' }).expect(200);
+    expect((await agent.get('/auth/methods')).body.passkeys[0].name).toBe('Work laptop');
+
+    const stranger = request.agent(makeApp());
+    await stranger.post('/auth/signup').send(signupBody({ email: 's@example.com', username: 'stranger' })).expect(201);
+    await stranger.patch(`/auth/passkeys/${passkey.id}`).send({ name: 'mine now' }).expect(404);
+    await stranger.delete(`/auth/passkeys/${passkey.id}`).expect(404);
+    await agent.delete('/auth/passkeys/999999').expect(404);
+
+    await agent.delete(`/auth/passkeys/${passkey.id}`).expect(200);
+    expect((await agent.get('/auth/methods')).body.passkeys).toEqual([]);
+  });
+});
+
 describe('changing sign-in methods', () => {
+  it('removes the password', async () => {
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody()).expect(201);
+    await agent.delete('/auth/password').expect(200);
+    expect((await agent.get('/auth/methods')).body.hasPassword).toBe(false);
+    await request(makeApp()).post('/auth/password/login').send({ email: 'jane@example.com', password: STRONG }).expect(401);
+  });
+
   it('needs a sign-in within the last 15 minutes', async () => {
     const agent = request.agent(makeApp());
     await agent.post('/auth/signup').send(signupBody()).expect(201);
@@ -288,6 +349,31 @@ describe('changing sign-in methods', () => {
     } finally {
       delete process.env.ADMIN_EMAIL;
     }
+  });
+});
+
+describe('confirmation and the newsletter', () => {
+  it('confirms by code too, keeping the password and releasing the opt-in', async () => {
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody()).expect(201);
+    const code = mailer.sent[0].text.match(/code: (\d{6})/)[1];
+    const verify = await request(makeApp()).post('/auth/email/verify')
+      .send({ email: 'jane@example.com', code }).expect(200);
+    expect(verify.body.confirmed).toBe(true);
+    expect((await pool.query('SELECT 1 FROM user_passwords')).rows).toHaveLength(1);
+    expect(addSubscriber).toHaveBeenCalledWith('jane@example.com', pool);
+  });
+
+  it('keeps the opt-in for a later retry when Buttondown fails', async () => {
+    await request(makeApp()).post('/auth/signup').send(signupBody()).expect(201);
+    await pool.query('UPDATE users SET email_verified_at = NOW()');
+    const user = (await pool.query('SELECT * FROM users')).rows[0];
+    vi.mocked(addSubscriber).mockRejectedValueOnce(new Error('Buttondown 503'));
+
+    expect(await releaseNewsletterOptIn(pool, user)).toBe(false);
+    expect((await pool.query('SELECT newsletter_opt_in FROM users')).rows[0].newsletter_opt_in).toBe(true);
+    expect(await releaseNewsletterOptIn(pool, user)).toBe(true);
+    expect((await pool.query('SELECT newsletter_opt_in FROM users')).rows[0].newsletter_opt_in).toBe(false);
   });
 });
 

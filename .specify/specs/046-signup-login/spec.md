@@ -46,4 +46,4 @@ All bodies are JSON. Errors are `{error}` with a message for the person; rate li
 | `POST /auth/complete-signup` | signed in | `name, username?, displayPreference, ageConfirmed, termsAccepted, newsletter` | `{success}` | 400 invalid or consent missing; 409 username taken |
 | `POST /auth/confirm-email/resend` | signed in | — | `{success, message}` | 400 already confirmed; 501 mail off; 502 send failed |
 
-"fresh" means signed in within the last 15 minutes. `POST /auth/email/verify` now also returns `{confirmed, needsSignupCompletion}`. `/auth/user` adds `username`, `displayName`, `displayPreference`, `emailVerified`, `needsSignupCompletion` and a one-time `notice` (`credentials_reset`).
+`GET /auth/providers` adds `password: true` and `passkey: true` alongside `google`, `facebook` and `email`. "fresh" means signed in within the last 15 minutes. `POST /auth/email/verify` now also returns `{confirmed, needsSignupCompletion}`. `/auth/user` adds `username`, `displayName`, `displayPreference`, `emailVerified`, `needsSignupCompletion` and a one-time `notice` (`credentials_reset`).

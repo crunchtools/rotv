@@ -97,8 +97,13 @@ function SignInMethods() {
                 <span className="passkey-name">{passkey.name}</span>
                 <span className="passkey-meta">Added {formatDate(passkey.createdAt)} · last used {formatDate(passkey.lastUsedAt)}</span>
                 <span className="passkey-actions">
-                  <button className="auth-link-btn" onClick={() => rename(passkey)} disabled={busy}>Rename</button>
-                  <button className="auth-link-btn danger-link" onClick={run(() => removePasskey(passkey.id), 'Passkey removed.')} disabled={busy}>
+                  <button className="auth-link-btn" onClick={() => rename(passkey)} disabled={busy} aria-label={`Rename ${passkey.name}`}>Rename</button>
+                  <button
+                    className="auth-link-btn danger-link"
+                    onClick={run(() => removePasskey(passkey.id), 'Passkey removed.')}
+                    disabled={busy}
+                    aria-label={`Remove ${passkey.name}`}
+                  >
                     Remove
                   </button>
                 </span>
