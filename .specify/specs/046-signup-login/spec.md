@@ -36,7 +36,7 @@ All bodies are JSON. Errors are `{error}` with a message for the person; rate li
 | `PUT /auth/password` | fresh | `password` | `{success}` | 400 policy; 403 admin or `{reauth: true}` |
 | `DELETE /auth/password` | fresh | — | `{success}` | 403 `{reauth: true}` |
 | `POST /auth/passkey/register/options` | fresh | — | WebAuthn creation options | 403 `{reauth: true}` |
-| `POST /auth/passkey/register/verify` | signed in | `response, name?` | 201 `{success, passkey: {id, name}}` | 400 verification failed or challenge expired |
+| `POST /auth/passkey/register/verify` | fresh | `response, name?` | 201 `{success, passkey: {id, name}}` | 400 verification failed or challenge expired |
 | `POST /auth/passkey/login/options` | — | — | WebAuthn request options | — |
 | `POST /auth/passkey/login/verify` | — | `response` | `{success}`, signed in | 401 unknown passkey, bad signature, or replay |
 | `GET /auth/methods` | signed in | — | `{hasPassword, passwordAllowed, passkeys: [{id, name, createdAt, lastUsedAt}]}` | — |
@@ -44,6 +44,7 @@ All bodies are JSON. Errors are `{error}` with a message for the person; rate li
 | `DELETE /auth/passkeys/:id` | fresh | — | `{success}` | 403 `{reauth: true}`; 404 not yours |
 | `PUT /auth/profile` | signed in | `name, username?, displayPreference` | `{success}` | 400 invalid; 409 username taken |
 | `POST /auth/complete-signup` | signed in | `name, username?, displayPreference, ageConfirmed, termsAccepted, newsletter` | `{success}` | 400 invalid or consent missing; 409 username taken |
+| `POST /auth/email/reject` | — | `token` (a sign-up confirmation link's) | `{success}`, the unconfirmed account and its credentials are deleted | 400 invalid, used, or a sign-in (not confirmation) token; 409 the account is already confirmed, so it was kept |
 | `POST /auth/confirm-email/resend` | signed in | — | `{success, message}` | 400 already confirmed; 501 mail off; 502 send failed |
 
 `GET /auth/providers` adds `password: true` and `passkey: true` alongside `google`, `facebook` and `email`. "fresh" means signed in within the last 15 minutes. `POST /auth/email/verify` now also returns `{confirmed, needsSignupCompletion}`. `/auth/user` adds `username`, `displayName`, `displayPreference`, `emailVerified`, `needsSignupCompletion` and a one-time `notice` (`credentials_reset`).

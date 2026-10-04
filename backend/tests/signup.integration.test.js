@@ -352,6 +352,76 @@ describe('changing sign-in methods', () => {
   });
 });
 
+describe('profile, resend and challenge expiry', () => {
+  it('updates the profile, keeping your own username and refusing someone else\'s', async () => {
+    await request(makeApp()).post('/auth/signup').send(signupBody({ email: 'other@example.com', username: 'taken' })).expect(201);
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody()).expect(201);
+
+    await agent.put('/auth/profile').send({ name: 'Jane Q', username: 'trailjane', displayPreference: 'name' }).expect(200);
+    expect((await agent.get('/auth/user')).body).toMatchObject({ name: 'Jane Q', displayName: 'Jane Q' });
+    await agent.put('/auth/profile').send({ name: 'Jane Q', username: 'TAKEN', displayPreference: 'name' }).expect(409);
+    await agent.put('/auth/profile').send({ name: '', username: 'trailjane' }).expect(400);
+    expect((await agent.get('/auth/user')).body.username).toBe('trailjane');
+  });
+
+  it('resends confirmation until confirmed, three times an hour', async () => {
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody()).expect(201);
+    await agent.post('/auth/confirm-email/resend').expect(200);
+    await agent.post('/auth/confirm-email/resend').expect(200);
+    await agent.post('/auth/confirm-email/resend').expect(200);
+    await agent.post('/auth/confirm-email/resend').expect(429);
+    expect(mailer.sent).toHaveLength(4);
+
+    const confirmed = request.agent(makeApp());
+    await confirmed.post('/auth/signup').send(signupBody({ email: 'c@example.com', username: 'cee' })).expect(201);
+    await pool.query(`UPDATE users SET email_verified_at = NOW() WHERE email = 'c@example.com'`);
+    await confirmed.post('/auth/confirm-email/resend').expect(400);
+  });
+
+  it('rejects a passkey response after the challenge expires', async () => {
+    const authenticator = createSoftAuthenticator();
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody({ method: 'passkey', password: undefined })).expect(201);
+    const options = (await agent.post('/auth/passkey/register/options')).body;
+    // Six minutes later the sign-in is still fresh (15) but the challenge (5) is not.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 6 * 60 * 1000);
+    await agent.post('/auth/passkey/register/verify').send({ response: authenticator.register(options, ORIGIN.origin) }).expect(400);
+    vi.restoreAllMocks();
+    expect((await pool.query('SELECT 1 FROM user_passkeys')).rows).toHaveLength(0);
+  });
+});
+
+describe('migration 093 on an existing database', () => {
+  it('confirms accounts that existed before it, once, and never later ones', async () => {
+    await adminPool.query('DROP SCHEMA IF EXISTS signup_mig_probe CASCADE');
+    await adminPool.query('CREATE SCHEMA signup_mig_probe');
+    const migPool = new pg.Pool({ options: '-c search_path=signup_mig_probe,public' });
+    try {
+      await migPool.query(`
+        CREATE TABLE users (id serial PRIMARY KEY, email varchar(255) UNIQUE, name varchar(255),
+          oauth_provider varchar(50) NOT NULL, oauth_provider_id varchar(255) NOT NULL,
+          is_admin boolean DEFAULT false, created_at timestamp DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE admin_settings (key text PRIMARY KEY, value text);
+        INSERT INTO users (email, oauth_provider, oauth_provider_id) VALUES ('early@example.com', 'google', 'g1');
+      `);
+      for (const sql of migrations) await migPool.query(sql);
+      await migPool.query(`INSERT INTO users (email, oauth_provider, oauth_provider_id) VALUES ('later@example.com', 'password', 'later@example.com')`);
+      for (const sql of migrations) await migPool.query(sql);
+
+      const rows = (await migPool.query('SELECT email, email_verified_at, signup_completed_at FROM users ORDER BY id')).rows;
+      expect(rows[0].email_verified_at).not.toBeNull();
+      expect(rows[0].signup_completed_at).not.toBeNull();
+      expect(rows[1].email_verified_at).toBeNull();
+      expect(rows[1].signup_completed_at).toBeNull();
+    } finally {
+      await migPool.end();
+      await adminPool.query('DROP SCHEMA IF EXISTS signup_mig_probe CASCADE');
+    }
+  });
+});
+
 describe('confirmation and the newsletter', () => {
   it('confirms by code too, keeping the password and releasing the opt-in', async () => {
     const agent = request.agent(makeApp());
@@ -409,6 +479,18 @@ describe('account protection and cleanup', () => {
     await request(app).post('/auth/password/login').send({ email: 'victim@example.com', password: STRONG }).expect(401);
     // Used up, and a sign-in link can't be used to reject anything.
     await request(app).post('/auth/email/reject').send({ token }).expect(400);
+  });
+
+  it('says so instead of claiming a removal when the account is already confirmed', async () => {
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody()).expect(201);
+    await agent.post('/auth/confirm-email/resend').expect(200);
+    const [first, second] = mailer.sent.map(linkToken);
+    await request(makeApp()).post('/auth/email/verify').send({ token: first }).expect(200);
+
+    const res = await request(makeApp()).post('/auth/email/reject').send({ token: second }).expect(409);
+    expect(res.body.error).toMatch(/already confirmed/);
+    expect((await pool.query('SELECT 1 FROM users')).rows).toHaveLength(1);
   });
 
   it('sends accounts made outside the form to finish sign-up', async () => {

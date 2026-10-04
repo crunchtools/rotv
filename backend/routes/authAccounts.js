@@ -256,7 +256,8 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
     }
   });
 
-  router.post('/passkey/register/verify', isAuthenticated, express.json(), async (req, res) => {
+  // Fix: freshness is checked again when the passkey is stored (PR #714 review).
+  router.post('/passkey/register/verify', isAuthenticated, requireFreshLogin, express.json(), async (req, res) => {
     try {
       const passkey = await finishRegistration(pool, req.session, req.user, req.body?.response, req.body?.name, frontendUrl);
       if (!passkey) return res.status(400).json({ error: "The passkey couldn't be saved. Please try again." });

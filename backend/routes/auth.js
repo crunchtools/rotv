@@ -196,7 +196,16 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
           [verified.email]
         );
         // Rechecked under the row lock: an account confirmed meanwhile is kept.
-        for (const { id } of unconfirmed.rows) await deleteUserAccount(pool, id, { unconfirmedForDays: 0 });
+        let removed = 0;
+        for (const { id } of unconfirmed.rows) {
+          if (await deleteUserAccount(pool, id, { unconfirmedForDays: 0 })) removed += 1;
+        }
+        if (!removed) {
+          // Fix: don't claim a removal that didn't happen (PR #714 review).
+          return res.status(409).json({
+            error: 'This account was already confirmed, so it was not removed. If you didn’t create it, sign in with an emailed code: that removes any password or passkey someone else set.'
+          });
+        }
         res.json({ success: true });
       } catch (err) {
         logger.error(`Rejecting a sign-up failed: ${err.code || err.name}`);
