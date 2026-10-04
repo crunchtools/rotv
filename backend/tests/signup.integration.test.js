@@ -503,6 +503,24 @@ describe('account protection and cleanup', () => {
       .send({ response: authenticator.authenticate(loginOptions, ORIGIN.origin, ORIGIN.hostname) }).expect(401);
   });
 
+  it('removes passkeys added after confirmation too: recovery starts clean', async () => {
+    const authenticator = createSoftAuthenticator();
+    const agent = request.agent(makeApp());
+    // This app's outbox; makeApp() below swaps the global one.
+    const outbox = mailer;
+    await agent.post('/auth/signup').send(signupBody()).expect(201);
+    const confirmToken = linkToken(outbox.sent[0]);
+    await request(makeApp()).post('/auth/email/verify').send({ token: confirmToken }).expect(200);
+    const options = (await agent.post('/auth/passkey/register/options')).body;
+    await agent.post('/auth/passkey/register/verify').send({ response: authenticator.register(options, ORIGIN.origin) }).expect(201);
+
+    await agent.post('/auth/password/forgot').send({ email: 'jane@example.com' }).expect(200);
+    await vi.waitFor(() => expect(outbox.sent.some((m) => m.subject.includes('Reset'))).toBe(true));
+    await agent.post('/auth/password/reset')
+      .send({ token: linkToken(outbox.sent.find((m) => m.subject.includes('Reset'))), password: 'another long passphrase' }).expect(200);
+    expect((await pool.query('SELECT 1 FROM user_passkeys')).rows).toHaveLength(0);
+  });
+
   it('sends accounts made outside the form to finish sign-up', async () => {
     await findOrCreateUser(pool, 'nobody@example.com', 'google', { id: 'g-walker', displayName: 'Walker', emails: [{ value: 'walker@example.com' }] }, null);
     const agent = request.agent(makeApp());
