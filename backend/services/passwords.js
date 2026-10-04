@@ -23,8 +23,8 @@ const PASSWORD_MIN = 12;
 const PASSWORD_MAX = 128;
 
 // Of OWASP's equivalent scrypt settings, the 32 MiB one: scrypt runs on the
-// libuv thread pool (4 threads), so at most ~128 MiB is in use at once however
-// many sign-ins arrive together.
+// libuv thread pool (UV_THREADPOOL_SIZE, 4 unless configured; ROTV doesn't),
+// so with the default at most ~128 MiB is in use however many sign-ins arrive.
 const COST = { N: 2 ** 15, r: 8, p: 3 };
 const KEY_LENGTH = 32;
 const PWNED_RANGE_URL = 'https://api.pwnedpasswords.com/range/';

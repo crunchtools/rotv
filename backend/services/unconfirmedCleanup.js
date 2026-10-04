@@ -39,7 +39,9 @@ export async function deleteStaleUnconfirmedAccounts(pool) {
   let deleted = 0;
   for (const { id } of stale.rows) {
     try {
-      if (await deleteUserAccount(pool, id)) deleted += 1;
+      // Fix: rechecked under the row lock, so an account confirmed after the
+      // SELECT above is kept (PR #714 review).
+      if (await deleteUserAccount(pool, id, { unconfirmedForDays: UNCONFIRMED_DAYS })) deleted += 1;
     } catch (err) {
       logger.error(`Could not delete unconfirmed account ${id}: ${err.message}`);
     }

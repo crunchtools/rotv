@@ -194,6 +194,19 @@ describe('sign-up with a password', () => {
     expect(reserved.body.error).toMatch(/reserved/);
   });
 
+  it('leaves no account behind when storing the password fails', async () => {
+    // Any password row is rejected, so the insert after the account row fails.
+    await pool.query('ALTER TABLE user_passwords ADD CONSTRAINT refuse_all CHECK (false) NOT VALID');
+    try {
+      await request(makeApp()).post('/auth/signup').send(signupBody()).expect(500);
+      expect((await pool.query('SELECT 1 FROM users')).rows).toHaveLength(0);
+    } finally {
+      await pool.query('ALTER TABLE user_passwords DROP CONSTRAINT refuse_all');
+    }
+    // The connection went back to the pool and a retry succeeds.
+    await request(makeApp()).post('/auth/signup').send(signupBody()).expect(201);
+  });
+
   it('refuses a second account for the same email', async () => {
     await request(makeApp()).post('/auth/signup').send(signupBody()).expect(201);
     const res = await request(makeApp()).post('/auth/signup')
@@ -319,6 +332,11 @@ describe('account protection and cleanup', () => {
     await pool.query(`UPDATE users SET created_at = NOW() - INTERVAL '31 days' WHERE email = 'old@example.com'`);
 
     expect(await deleteStaleUnconfirmedAccounts(pool)).toBe(1);
+    // An account confirmed after being selected is kept.
+    await pool.query(`UPDATE users SET created_at = NOW() - INTERVAL '31 days', email_verified_at = NOW() WHERE email = 'new@example.com'`);
+    const { id: confirmedId } = (await pool.query(`SELECT id FROM users WHERE email = 'new@example.com'`)).rows[0];
+    expect(await deleteUserAccount(pool, confirmedId, { unconfirmedForDays: 30 })).toBe(false);
+    await pool.query(`UPDATE users SET created_at = NOW(), email_verified_at = NULL WHERE email = 'new@example.com'`);
     const left = await pool.query('SELECT email FROM users');
     expect(left.rows.map((r) => r.email)).toEqual(['new@example.com']);
     expect((await pool.query('SELECT 1 FROM user_passwords')).rows).toHaveLength(1);

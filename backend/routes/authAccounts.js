@@ -102,23 +102,23 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         const problem = await passwordProblem(body.password);
         if (problem) return res.status(400).json({ error: problem });
       }
-      if (profile.username && !(await usernameAvailable(pool, profile.username))) {
-        return res.status(409).json({ error: 'That username is taken.' });
-      }
-
-      // users.email is unique ignoring case, but older OAuth rows may differ in
-      // case from the normalized address, so check before inserting.
-      const existing = await pool.query('SELECT 1 FROM users WHERE LOWER(email) = $1', [email]);
-      if (existing.rows.length) {
-        return res.status(409).json({ error: ACCOUNT_EXISTS });
-      }
-
       let user;
-      const passwordHash = method === 'password' ? await hashPassword(body.password) : null;
-      // Fix: the account and its password are created together or not at all
-      // (PR #714 review).
-      const client = await pool.connect();
+      let client = null;
       try {
+        if (profile.username && !(await usernameAvailable(pool, profile.username))) {
+          return res.status(409).json({ error: 'That username is taken.' });
+        }
+        // users.email is unique ignoring case, but older OAuth rows may differ in
+        // case from the normalized address, so check before inserting.
+        const existing = await pool.query('SELECT 1 FROM users WHERE LOWER(email) = $1', [email]);
+        if (existing.rows.length) {
+          return res.status(409).json({ error: ACCOUNT_EXISTS });
+        }
+
+        const passwordHash = method === 'password' ? await hashPassword(body.password) : null;
+        // Fix: the account and its password are created together or not at all
+        // (PR #714 review).
+        client = await pool.connect();
         await client.query('BEGIN');
         const created = await client.query(
           `INSERT INTO users (email, name, username, display_preference, oauth_provider, oauth_provider_id,
@@ -134,7 +134,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         }
         await client.query('COMMIT');
       } catch (err) {
-        await client.query('ROLLBACK').catch((rollbackErr) =>
+        await client?.query('ROLLBACK').catch((rollbackErr) =>
           logger.error(`Sign-up rollback failed: ${rollbackErr.code || rollbackErr.name}`));
         if (err.code === '23505') {
           // The email (or username) already belongs to an account. Sign-ups are
@@ -144,7 +144,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         logger.error(`Sign-up failed: ${err.code || err.name}`);
         return res.status(500).json({ error: 'Sign-up failed. Please try again.' });
       } finally {
-        client.release();
+        client?.release();
       }
 
       try {
