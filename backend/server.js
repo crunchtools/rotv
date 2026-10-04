@@ -53,6 +53,8 @@ import {
   scheduleImageBackup,
   registerDatabaseBackupHandler,
   scheduleDatabaseBackup,
+  registerUnconfirmedCleanupHandler,
+  scheduleUnconfirmedCleanup,
   stopJobScheduler,
   withJitter
 } from './services/jobScheduler.js';
@@ -942,7 +944,7 @@ async function initDatabase() {
 app.get('/api/about-content', async (req, res) => {
   try {
     const aboutSettings = await pool.query(
-      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_trip_tutorial_md', 'about_privacy_md', 'about_data_deletion_md')`
+      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_trip_tutorial_md', 'about_privacy_md', 'about_data_deletion_md', 'about_terms_md')`
     );
     const content = {};
     for (const row of aboutSettings.rows) {
@@ -2672,7 +2674,8 @@ async function resolvePoiOgImage(poiId, baseUrl) {
 // <noscript> block: crawlers see it, browsers ignore it and render the app.
 const LEGAL_PAGES = {
   '/privacy': { key: 'about_privacy_md', title: 'Privacy Policy' },
-  '/data-deletion': { key: 'about_data_deletion_md', title: 'Deleting Your Data' }
+  '/data-deletion': { key: 'about_data_deletion_md', title: 'Deleting Your Data' },
+  '/terms': { key: 'about_terms_md', title: 'Terms of Use' }
 };
 
 app.use(async (req, res, next) => {
@@ -2701,7 +2704,7 @@ app.use(async (req, res, next) => {
 // OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
 // permalink — the form share buttons produce). MUST be mounted before
 // express.static so it can intercept the request before index.html is served.
-const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion', 'signin']);
+const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion', 'terms', 'signin', 'signup', 'login', 'welcome']);
 app.use(async (req, res, next) => {
   let poiSlug = null;
   let canonicalPath = null;
@@ -3115,6 +3118,12 @@ async function start() {
     }, 'database-backup'));
 
     await scheduleDatabaseBackup('0 3 * * *');
+
+    await registerUnconfirmedCleanupHandler(async () => {
+      const { deleteStaleUnconfirmedAccounts } = await import('./services/unconfirmedCleanup.js');
+      await deleteStaleUnconfirmedAccounts(pool);
+    });
+    await scheduleUnconfirmedCleanup();
 
     app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));
 

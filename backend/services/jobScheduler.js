@@ -26,7 +26,8 @@ const JOB_NAMES = {
   NEWSLETTER_DIGEST: 'newsletter-digest',
   NEWSLETTER_PREVIEW: 'newsletter-preview',
   IMAGE_BACKUP: 'image-backup',
-  DATABASE_BACKUP: 'database-backup'
+  DATABASE_BACKUP: 'database-backup',
+  UNCONFIRMED_CLEANUP: 'unconfirmed-account-cleanup'
 };
 
 export async function initJobScheduler(connectionString) {
@@ -231,6 +232,24 @@ export async function scheduleDatabaseBackup(cronExpression = '0 3 * * *') {
 
 export async function registerDatabaseBackupHandler(handler) {
   await registerWorker(JOB_NAMES.DATABASE_BACKUP, 'database backup', job => handler(job.data));
+}
+
+/**
+ * Schedule the daily removal of accounts never confirmed (spec 046).
+ * @param {string} [cronExpression='15 4 * * *'] - America/New_York; 04:15 daily by default
+ * @returns {Promise<void>}
+ */
+export async function scheduleUnconfirmedCleanup(cronExpression = '15 4 * * *') {
+  await scheduleCron(JOB_NAMES.UNCONFIRMED_CLEANUP, cronExpression, 'Unconfirmed account cleanup');
+}
+
+/**
+ * Attach the worker for the unconfirmed-account cleanup job.
+ * @param {(data: object) => Promise<void>} handler - called with the job's data; a throw lets pg-boss retry
+ * @returns {Promise<void>} once the worker is registered
+ */
+export async function registerUnconfirmedCleanupHandler(handler) {
+  await registerWorker(JOB_NAMES.UNCONFIRMED_CLEANUP, 'unconfirmed account cleanup', job => handler(job.data));
 }
 
 export async function updateSchedule(jobName, cronExpression) {

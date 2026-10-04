@@ -7,10 +7,13 @@ const ADMIN_EMAIL = 'scott.mccarty@gmail.com';
  * In-memory stand-in for the pg pool, matching only the queries userAccount.js
  * issues. Keeps the linking logic testable without a live PostgreSQL.
  */
-function makeFakePool({ users = [], identities = [] } = {}) {
+function makeFakePool({ users = [], identities = [], passwords = [], passkeys = [] } = {}) {
   const state = {
-    users: users.map((u) => ({ is_admin: false, role: 'viewer', oauth_credentials: null, ...u })),
-    identities: [...identities]
+    users: users.map((u) => ({ is_admin: false, role: 'viewer', oauth_credentials: null, email_verified_at: '2026-01-01', ...u })),
+    identities: [...identities],
+    passwords: [...passwords],
+    passkeys: [...passkeys],
+    revokedSessionsFor: []
   };
   let nextUserId = Math.max(0, ...state.users.map((u) => u.id)) + 1;
 
@@ -23,10 +26,30 @@ function makeFakePool({ users = [], identities = [] } = {}) {
       return { rows: hit ? [{ user_id: hit.user_id }] : [] };
     }
 
-    if (s.startsWith('SELECT id FROM users WHERE LOWER(email)')) {
+    if (s.startsWith('SELECT id, email_verified_at FROM users WHERE LOWER(email)')) {
       const [email] = params;
       const hit = state.users.find((u) => u.email && u.email.toLowerCase() === String(email).toLowerCase());
-      return { rows: hit ? [{ id: hit.id }] : [] };
+      return { rows: hit ? [{ id: hit.id, email_verified_at: hit.email_verified_at }] : [] };
+    }
+
+    if (s.startsWith('DELETE FROM user_passwords')) {
+      state.passwords = state.passwords.filter((p) => p.user_id !== params[0]);
+      return { rows: [] };
+    }
+
+    if (s.startsWith('DELETE FROM user_passkeys')) {
+      state.passkeys = state.passkeys.filter((p) => p.user_id !== params[0]);
+      return { rows: [] };
+    }
+
+    if (s.startsWith('DELETE FROM sessions')) {
+      state.revokedSessionsFor.push(params[0]);
+      return { rows: [] };
+    }
+
+    if (s.startsWith('UPDATE email_login_tokens SET consumed_at')) {
+      state.voidedConfirmationsFor = params[0];
+      return { rows: [] };
     }
 
     if (s.startsWith('SELECT * FROM users WHERE id')) {
@@ -56,7 +79,8 @@ function makeFakePool({ users = [], identities = [] } = {}) {
         oauth_provider_id: providerId,
         is_admin: isAdmin,
         role,
-        oauth_credentials: credentials
+        oauth_credentials: credentials,
+        email_verified_at: email ? 'now' : null
       };
       state.users.push(row);
       return { rows: [{ ...row }] };
@@ -69,6 +93,7 @@ function makeFakePool({ users = [], identities = [] } = {}) {
       for (const [, column, index] of columns) {
         row[column] = params[Number(index) - 1];
       }
+      if (s.includes('email_verified_at = COALESCE')) row.email_verified_at ||= 'now';
       return { rows: [] };
     }
 
@@ -212,5 +237,64 @@ describe('findOrCreateUser', () => {
 
     expect(created.is_admin).toBe(false);
     expect(created.role).toBe('viewer');
+  });
+
+  it('keeps the name a person chose when a provider later supplies another', async () => {
+    const pool = makeFakePool({
+      users: [{ id: 1, email: 'hiker@example.com', name: 'Trail Jane', oauth_provider: 'password', oauth_provider_id: 'hiker@example.com' }]
+    });
+    const google = { id: 'google-9', displayName: 'Jane Q. Public', emails: [{ value: 'hiker@example.com' }], photos: [] };
+
+    const linked = await findOrCreateUser(pool, ADMIN_EMAIL, 'google', google, null);
+
+    expect(linked.name).toBe('Trail Jane');
+  });
+
+  // Account pre-hijacking: someone signs up with another person's address and
+  // a password, then waits for the owner to arrive through Google.
+  it('revokes credentials added before confirmation when the verified owner signs in', async () => {
+    const pool = makeFakePool({
+      users: [{ id: 7, email: 'owner@example.com', name: 'Squatter', email_verified_at: null, oauth_provider: 'password', oauth_provider_id: 'owner@example.com' }],
+      passwords: [{ user_id: 7 }],
+      passkeys: [{ user_id: 7 }]
+    });
+    const google = { id: 'google-owner', displayName: 'Owner', emails: [{ value: 'owner@example.com' }], photos: [] };
+
+    const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'google', google, null);
+
+    expect(user.id).toBe(7);
+    expect(user.credentialsReset).toBe(true);
+    expect(user.email_verified_at).toBeTruthy();
+    expect(pool.passwords).toEqual([]);
+    expect(pool.passkeys).toEqual([]);
+    expect(pool.revokedSessionsFor).toEqual(['7']);
+    expect(pool.voidedConfirmationsFor).toBe('owner@example.com');
+  });
+
+  it("keeps a sign-up's own credentials when it is confirmed through its confirmation link", async () => {
+    const pool = makeFakePool({
+      users: [{ id: 8, email: 'new@example.com', name: 'New', email_verified_at: null, oauth_provider: 'password', oauth_provider_id: 'new@example.com' }],
+      passwords: [{ user_id: 8 }]
+    });
+    const emailProfile = { id: 'new@example.com', emails: [{ value: 'new@example.com' }] };
+
+    const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'email', emailProfile, null, { confirmsSignup: true });
+
+    expect(user.credentialsReset).toBe(false);
+    expect(user.email_verified_at).toBeTruthy();
+    expect(pool.passwords).toHaveLength(1);
+  });
+
+  it('leaves a confirmed account\'s credentials alone', async () => {
+    const pool = makeFakePool({
+      users: [{ id: 9, email: 'known@example.com', name: 'Known', oauth_provider: 'password', oauth_provider_id: 'known@example.com' }],
+      passwords: [{ user_id: 9 }]
+    });
+    const google = { id: 'google-known', displayName: 'Known', emails: [{ value: 'known@example.com' }], photos: [] };
+
+    const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'google', google, null);
+
+    expect(user.credentialsReset).toBe(false);
+    expect(pool.passwords).toHaveLength(1);
   });
 });

@@ -12,6 +12,7 @@
     "lint:fix": "eslint . --fix"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^14.0.0",
     "dompurify": "^3.4.16",
     "leaflet": "^1.9.4",
     "leaflet-draw": "^1.0.4",

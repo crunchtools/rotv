@@ -22,15 +22,27 @@ const logger = createLogger('AccountDeletion');
  *
  * @param {import('pg').Pool} pool - pg pool; a dedicated client is checked out for the transaction.
  * @param {number|string} userId - users.id of the account to delete.
- * @returns {Promise<boolean>} true when the account was deleted, false if no such user exists.
+ * @param {{unconfirmedForDays?: number}} [options] - when set, delete only if the
+ *   account is still unconfirmed and older than this many days (0: any age),
+ *   checked under the row lock, so an account confirmed meanwhile is kept
+ *   (spec 046 cleanup and "I didn't create this account").
+ * @returns {Promise<boolean>} true when the account was deleted, false if no such
+ *   user exists or it no longer matches the condition.
  * @throws Rethrows any database error after rolling back, leaving the account intact.
  */
-export async function deleteUserAccount(pool, userId) {
+export async function deleteUserAccount(pool, userId, { unconfirmedForDays = null } = {}) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const existing = await client.query('SELECT id, email FROM users WHERE id = $1 FOR UPDATE', [userId]);
+    const existing = unconfirmedForDays === null
+      ? await client.query('SELECT id, email FROM users WHERE id = $1 FOR UPDATE', [userId])
+      : await client.query(
+        `SELECT id, email FROM users
+         WHERE id = $1 AND email_verified_at IS NULL AND created_at < NOW() - make_interval(days => $2)
+         FOR UPDATE`,
+        [userId, unconfirmedForDays]
+      );
     if (existing.rows.length === 0) {
       await client.query('ROLLBACK');
       return false;

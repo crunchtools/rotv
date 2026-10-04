@@ -15,13 +15,57 @@
  * `users.oauth_provider` / `oauth_provider_id` are left pointing at whichever
  * provider created the account. They are no longer the lookup key, but the
  * admin user list still reports them as the account's origin.
+ *
+ * Accounts created with email and a password or passkey (spec 046) are usable
+ * before their address is confirmed. Such an account may have been created by
+ * someone who doesn't own the address, waiting for the owner to sign in with
+ * Google and land in it (account pre-hijacking). So when a verified sign-in
+ * reaches an unconfirmed account, the verified owner takes it over: passwords,
+ * passkeys and sessions added before confirmation are removed. The one
+ * exception is the account's own confirmation link, which the creator follows
+ * from their inbox to confirm their own sign-up.
  */
 /** The account that is made admin on sign-in (ADMIN_EMAIL, defaulting to the maintainer). */
 export function adminEmail() {
   return process.env.ADMIN_EMAIL || 'scott.mccarty@gmail.com';
 }
 
-export async function findOrCreateUser(pool, adminEmail, provider, profile, credentials) {
+/**
+ * Remove every way into an account that was added before its email was
+ * confirmed, and end its sessions.
+ * @param {import('pg').Pool} pool
+ * @param {number} userId
+ * @param {string} email - the account's address, whose pending confirmation links are voided
+ */
+async function revokeUnverifiedAccess(pool, userId, email) {
+  await pool.query('DELETE FROM user_passwords WHERE user_id = $1', [userId]);
+  await pool.query('DELETE FROM user_passkeys WHERE user_id = $1', [userId]);
+  await pool.query(`DELETE FROM sessions WHERE sess -> 'passport' ->> 'user' = $1`, [String(userId)]);
+  // A newsletter opt-in from before confirmation isn't the owner's consent.
+  await pool.query('UPDATE users SET newsletter_opt_in = FALSE WHERE id = $1', [userId]);
+  // Fix: void the sign-up's pending confirmation links, which would otherwise
+  // still sign their holder in without revoking anything (PR #714 review).
+  await pool.query(
+    `UPDATE email_login_tokens SET consumed_at = NOW()
+     WHERE LOWER(email) = LOWER($1) AND purpose = 'confirm' AND consumed_at IS NULL`,
+    [email]
+  );
+}
+
+/**
+ * Resolve a verified sign-in (Google, Facebook, or an emailed link/code) to an
+ * account, creating one when needed.
+ * @param {import('pg').Pool} pool
+ * @param {string} adminEmail
+ * @param {string} provider - 'google' | 'facebook' | 'email'
+ * @param {object} profile - passport-style profile: id, displayName, emails, photos
+ * @param {object|null} credentials - Google Drive tokens for the admin upgrade flow
+ * @param {{confirmsSignup?: boolean}} [options] - true for a sign-up's own
+ *   confirmation link, which confirms the account without revoking its credentials
+ * @returns {Promise<object>} the users row; `credentialsReset` is true when
+ *   credentials added before confirmation were removed
+ */
+export async function findOrCreateUser(pool, adminEmail, provider, profile, credentials, { confirmsSignup = false } = {}) {
   const email = profile.emails?.[0]?.value || null;
   const name = profile.displayName || null;
   const pictureUrl = profile.photos?.[0]?.value || null;
@@ -33,13 +77,19 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
     [provider, providerId]
   );
   let userId = identity.rows[0]?.user_id ?? null;
+  let credentialsReset = false;
 
   if (!userId && email) {
     const byEmail = await pool.query(
-      'SELECT id FROM users WHERE LOWER(email) = LOWER($1)',
+      'SELECT id, email_verified_at FROM users WHERE LOWER(email) = LOWER($1)',
       [email]
     );
     userId = byEmail.rows[0]?.id ?? null;
+
+    if (userId && !byEmail.rows[0].email_verified_at && !confirmsSignup) {
+      await revokeUnverifiedAccess(pool, userId, email);
+      credentialsReset = true;
+    }
 
     if (userId) {
       await pool.query(
@@ -54,10 +104,10 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
   if (!userId) {
     const role = isAdmin ? 'admin' : 'viewer';
     const created = await pool.query(
-      `INSERT INTO users (email, name, picture_url, oauth_provider, oauth_provider_id, is_admin, role, oauth_credentials, last_login_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+      `INSERT INTO users (email, name, picture_url, oauth_provider, oauth_provider_id, is_admin, role, oauth_credentials, last_login_at, email_verified_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, CASE WHEN $9 THEN NOW() END)
        RETURNING *`,
-      [email, name, pictureUrl, provider, providerId, isAdmin, role, isAdmin && credentials ? JSON.stringify(credentials) : null]
+      [email, name, pictureUrl, provider, providerId, isAdmin, role, isAdmin && credentials ? JSON.stringify(credentials) : null, Boolean(email)]
     );
 
     await pool.query(
@@ -73,21 +123,25 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
   const existing = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
   const current = existing.rows[0];
 
-  const updateFields = ['last_login_at = CURRENT_TIMESTAMP'];
+  // The provider just proved the address, so the account counts as confirmed.
+  const updateFields = ['last_login_at = CURRENT_TIMESTAMP', 'email_verified_at = COALESCE(email_verified_at, NOW())'];
   const updateValues = [];
 
-  // Only overwrite when this provider actually supplied a value, so signing in
-  // through a sparser profile cannot blank out a good name or avatar.
+  // Only fill in what this provider actually supplied, so signing in through a
+  // sparser profile cannot blank out a good avatar. The name is only filled
+  // when missing: people choose it at sign-up and in Settings.
   if (pictureUrl) {
     updateValues.push(pictureUrl);
     updateFields.push(`picture_url = $${updateValues.length}`);
   }
-  if (name) {
+  if (name && !current.name) {
     updateValues.push(name);
     updateFields.push(`name = $${updateValues.length}`);
   }
 
   if (isAdmin && !current.is_admin) {
+    // Admins don't keep passwords; one set before promotion is removed.
+    await pool.query('DELETE FROM user_passwords WHERE user_id = $1', [userId]);
     updateValues.push(true);
     updateFields.push(`is_admin = $${updateValues.length}`);
     updateValues.push('admin');
@@ -108,5 +162,5 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
   );
 
   const refreshed = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
-  return refreshed.rows[0];
+  return { ...refreshed.rows[0], credentialsReset };
 }
