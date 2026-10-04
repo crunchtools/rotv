@@ -39,7 +39,7 @@ export function AuthProvider({ children }) {
   const [visited, setVisited] = useState(() => readVisited());
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
-  const [providers, setProviders] = useState({ google: true, facebook: false, email: false, password: true, passkey: true });
+  const [providers, setProviders] = useState({ google: true, facebook: false, password: true, passkey: true, passwordReset: false });
 
   useEffect(() => {
     fetch('/auth/providers')
@@ -58,14 +58,11 @@ export function AuthProvider({ children }) {
         if (userData) {
           // `name` is what the header shows (username or name, per the
           // person's choice); `fullName` is the name they entered.
-          // The server hands out `notice` once; keep it for this account across
-          // the refetch that follows sign-in so the banner can show it.
-          setUser((previous) => ({
+          setUser({
             ...userData,
-            notice: userData.notice || (previous?.id === userData.id ? previous.notice : null),
             fullName: userData.name || '',
             name: userData.displayName || userData.name || userData.email?.split('@')[0] || null
-          }));
+          });
           setFavorites(userData.favorites || []);
           setVisited(userData.visited || []);
         } else {
@@ -170,22 +167,24 @@ export function AuthProvider({ children }) {
     await fetchUser();
   };
 
-  const startEmailLogin = async (email) => {
-    const body = await postAuthJson('/auth/email/start', { email });
-    track('login', { provider: 'email' });
-    return body.message;
+  // The link in a sign-up's confirmation email: confirms the address only
+  // (never signs in), then refreshes the account if this device is signed in.
+  const confirmEmail = async (token) => {
+    await postAuthJson('/auth/email/verify', { token });
+    await fetchUser();
   };
 
-  // Accepts { token } from the emailed link or { email, code } from the code box.
-  // Resolves to { confirmed, needsSignupCompletion }.
-  const verifyEmailLogin = async (credentials) => {
-    const body = await postAuthJson('/auth/email/verify', credentials);
+  // "Forgot password?": resolves to the message to show (the same whether or
+  // not the address has an account).
+  const requestPasswordReset = async (email) => (await postAuthJson('/auth/password/forgot', { email })).message;
+
+  // The page behind a reset link: sets the new password and signs in.
+  const resetPassword = async (token, password) => {
+    const body = await postAuthJson('/auth/password/reset', { token, password });
+    track('login', { provider: 'password_reset' });
     await finishSignIn();
     return body;
   };
-
-  // "I didn't create this account" from a sign-up confirmation link.
-  const rejectSignup = (token) => postAuthJson('/auth/email/reject', { token });
 
   const registerPasskey = async (name = defaultPasskeyName()) => {
     const optionsJSON = await postAuthJson('/auth/passkey/register/options');
@@ -331,9 +330,9 @@ export function AuthProvider({ children }) {
     loginWithGoogle,
     loginWithFacebook,
     providers,
-    startEmailLogin,
-    verifyEmailLogin,
-    rejectSignup,
+    confirmEmail,
+    requestPasswordReset,
+    resetPassword,
     signUp,
     loginWithPassword,
     loginWithPasskey,

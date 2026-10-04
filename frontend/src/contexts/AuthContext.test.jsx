@@ -84,37 +84,47 @@ describe('AuthContext', () => {
     await act(() => expect(captured.current.deleteAccount()).rejects.toThrow('Account deletion failed'));
   });
 
-  it('startEmailLogin posts the address and returns the server message', async () => {
+  it('requestPasswordReset posts the address and returns the server message', async () => {
     const fetchMock = mockFetch(undefined, {
-      '/auth/email/start': fetchResponse({ success: true, message: 'On the way.' })
+      '/auth/password/forgot': fetchResponse({ success: true, message: "If there's an account, a link is on the way." })
     });
     await renderSignedIn();
     let message;
-    await act(async () => { message = await captured.current.startEmailLogin('a@example.com'); });
-    expect(message).toBe('On the way.');
-    expect(fetchMock).toHaveBeenCalledWith('/auth/email/start', expect.objectContaining({
+    await act(async () => { message = await captured.current.requestPasswordReset('a@example.com'); });
+    expect(message).toMatch(/If there's an account/);
+    expect(fetchMock).toHaveBeenCalledWith('/auth/password/forgot', expect.objectContaining({
       method: 'POST', credentials: 'include', body: JSON.stringify({ email: 'a@example.com' })
     }));
   });
 
-  it('verifyEmailLogin surfaces the server error, and on success refreshes the user and syncs device data', async () => {
+  it('resetPassword surfaces the server error, and on success refreshes the user and syncs device data', async () => {
     const fetchMock = mockFetch(undefined, {
-      '/auth/email/verify': fetchResponse({ error: 'That link or code is invalid or has expired.' }, { status: 400 })
+      '/auth/password/reset': fetchResponse({ error: 'That reset link has expired or was already used.' }, { status: 400 })
     });
     await renderSignedIn();
-    await act(() => expect(captured.current.verifyEmailLogin({ email: 'a@example.com', code: '000000' }))
-      .rejects.toThrow('invalid or has expired'));
+    await act(() => expect(captured.current.resetPassword('old', 'a new long passphrase')).rejects.toThrow('expired'));
 
     fetchMock.mockImplementation(async (url) => {
-      if (url === '/auth/email/verify') return fetchResponse({ success: true });
+      if (url === '/auth/password/reset') return fetchResponse({ success: true });
       if (url === '/auth/user') return fetchResponse(SIGNED_IN);
       return fetchResponse({});
     });
     const userCallsBefore = fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length;
-    await act(() => captured.current.verifyEmailLogin({ token: 't' }));
+    await act(() => captured.current.resetPassword('t', 'a new long passphrase'));
     const userCallsAfter = fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length;
     expect(userCallsAfter - userCallsBefore).toBe(2);
-    expect(fetchMock).toHaveBeenCalledWith('/auth/email/verify', expect.objectContaining({ body: JSON.stringify({ token: 't' }) }));
+    expect(fetchMock).toHaveBeenCalledWith('/auth/password/reset', expect.objectContaining({
+      body: JSON.stringify({ token: 't', password: 'a new long passphrase' })
+    }));
+  });
+
+  it('confirmEmail sends the link token, then refreshes the account', async () => {
+    const fetchMock = mockFetch(undefined, { '/auth/email/verify': fetchResponse({ success: true }) });
+    await renderSignedIn();
+    const userCallsBefore = fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length;
+    await act(() => captured.current.confirmEmail('c'));
+    expect(fetchMock).toHaveBeenCalledWith('/auth/email/verify', expect.objectContaining({ body: JSON.stringify({ token: 'c' }) }));
+    expect(fetchMock.mock.calls.filter(([url]) => url === '/auth/user').length).toBe(userCallsBefore + 1);
   });
 
   describe('sign-up and sign-in (spec 046)', () => {

@@ -24,15 +24,15 @@ beforeEach(() => {
   Object.assign(auth, {
     user: null,
     loading: false,
-    providers: { google: true, email: true, password: true, passkey: true },
+    providers: { google: true, password: true, passkey: true, passwordReset: true },
     loginWithGoogle: vi.fn(),
     signUp: vi.fn().mockResolvedValue({ passkeySaved: true }),
     loginWithPassword: vi.fn().mockResolvedValue(),
     loginWithPasskey: vi.fn().mockResolvedValue(),
     completeSignup: vi.fn().mockResolvedValue(),
     checkUsername: vi.fn().mockResolvedValue({ available: true }),
-    startEmailLogin: vi.fn(),
-    verifyEmailLogin: vi.fn()
+    requestPasswordReset: vi.fn().mockResolvedValue("If there's an account for that address, we've emailed you a link to reset your password."),
+    resetPassword: vi.fn().mockResolvedValue({ needsSignupCompletion: false })
   });
 });
 
@@ -66,7 +66,7 @@ describe('SignupPage', () => {
     expect(submit.disabled).toBe(false);
     fireEvent.click(submit);
 
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/?welcome=1'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(auth.signUp).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Jane Hiker', email: 'jane@example.com', method: 'password',
       password: 'correct horse battery staple', ageConfirmed: true, termsAccepted: true, newsletter: false
@@ -74,24 +74,25 @@ describe('SignupPage', () => {
   });
 
   it('swaps the password for a passkey, and hides the option without WebAuthn', async () => {
-    auth.signUp.mockResolvedValueOnce({ passkeySaved: false });
     const { unmount } = render(<SignupPage />);
     fireEvent.click(screen.getByRole('button', { name: /Sign up with email/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Use a passkey instead' }));
+    expect(screen.getByText(/At least 12 characters/).textContent).toBe('At least 12 characters or use passkey instead.');
+    fireEvent.click(screen.getByRole('button', { name: 'use passkey instead' }));
     expect(screen.queryByLabelText('Password')).toBeNull();
     fill('Full name', 'Jane');
     fill('Email', 'jane@example.com');
     fireEvent.click(screen.getByLabelText("I'm 13 or older"));
     fireEvent.click(screen.getByLabelText(/I agree to the/));
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }));
-    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/?welcome=nopasskey'));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(auth.signUp.mock.calls[0][0]).toMatchObject({ method: 'passkey', password: undefined });
     unmount();
 
     webauthn.supported = false;
     render(<SignupPage />);
     fireEvent.click(screen.getByRole('button', { name: /Sign up with email/ }));
-    expect(screen.queryByRole('button', { name: 'Use a passkey instead' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'use passkey instead' })).toBeNull();
+    expect(screen.getByText(/At least 12 characters/).textContent).toBe('At least 12 characters.');
   });
 
   it('shows the server error and stays on the form', async () => {
@@ -133,11 +134,14 @@ describe('LoginPage', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
   });
 
-  it('offers an emailed code for a forgotten password', () => {
+  it('emails a reset link for a forgotten password, and offers nothing else by email', async () => {
     render(<LoginPage />);
     fireEvent.click(screen.getByRole('button', { name: /Continue with email/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Forgot password?' }));
-    expect(screen.getByLabelText('Sign in with email')).toBeTruthy();
+    fill('Email', 'jane@example.com');
+    fireEvent.click(screen.getByRole('button', { name: 'Email me a reset link' }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/If there's an account/);
+    expect(auth.requestPasswordReset).toHaveBeenCalledWith('jane@example.com');
   });
 });
 
@@ -162,5 +166,31 @@ describe('WelcomePage', () => {
     auth.user = { email: 'a@example.com', needsSignupCompletion: false };
     render(<WelcomePage />);
     expect(navigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+});
+
+describe('ResetPasswordPage', () => {
+  it('requires a new password and signs in with it', async () => {
+    const { default: ResetPasswordPage } = await import('./ResetPasswordPage');
+    window.history.replaceState({}, '', '/reset-password#token=rst');
+    render(<ResetPasswordPage />);
+    expect(window.location.hash).toBe('');
+    const save = screen.getByRole('button', { name: 'Save and sign in' });
+    expect(save.disabled).toBe(true);
+    fill('New password', 'a brand new passphrase');
+    fireEvent.click(save);
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
+    expect(auth.resetPassword).toHaveBeenCalledWith('rst', 'a brand new passphrase');
+  });
+
+  it('shows an expired link and stays put', async () => {
+    const { default: ResetPasswordPage } = await import('./ResetPasswordPage');
+    auth.resetPassword.mockRejectedValueOnce(new Error('That reset link has expired or was already used.'));
+    window.history.replaceState({}, '', '/reset-password#token=old');
+    render(<ResetPasswordPage />);
+    fill('New password', 'a brand new passphrase');
+    fireEvent.click(screen.getByRole('button', { name: 'Save and sign in' }));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/expired/);
+    expect(navigate).not.toHaveBeenCalled();
   });
 });

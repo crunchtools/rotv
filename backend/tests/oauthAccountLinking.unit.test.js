@@ -263,26 +263,11 @@ describe('findOrCreateUser', () => {
     const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'google', google, null);
 
     expect(user.id).toBe(7);
-    expect(user.credentialsReset).toBe(true);
     expect(user.email_verified_at).toBeTruthy();
     expect(pool.passwords).toEqual([]);
     expect(pool.passkeys).toEqual([]);
     expect(pool.revokedSessionsFor).toEqual(['7']);
     expect(pool.voidedConfirmationsFor).toBe('owner@example.com');
-  });
-
-  it("keeps a sign-up's own credentials when it is confirmed through its confirmation link", async () => {
-    const pool = makeFakePool({
-      users: [{ id: 8, email: 'new@example.com', name: 'New', email_verified_at: null, oauth_provider: 'password', oauth_provider_id: 'new@example.com' }],
-      passwords: [{ user_id: 8 }]
-    });
-    const emailProfile = { id: 'new@example.com', emails: [{ value: 'new@example.com' }] };
-
-    const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'email', emailProfile, null, { confirmsSignup: true });
-
-    expect(user.credentialsReset).toBe(false);
-    expect(user.email_verified_at).toBeTruthy();
-    expect(pool.passwords).toHaveLength(1);
   });
 
   it('leaves a confirmed account\'s credentials alone', async () => {
@@ -294,7 +279,6 @@ describe('findOrCreateUser', () => {
 
     const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'google', google, null);
 
-    expect(user.credentialsReset).toBe(false);
     expect(pool.passwords).toHaveLength(1);
   });
 });

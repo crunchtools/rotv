@@ -3,10 +3,9 @@ import passport from 'passport';
 import { createLogger } from '../utils/logger.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { deleteUserAccount } from '../services/accountDeletion.js';
-import { findOrCreateUser, adminEmail } from '../config/userAccount.js';
 import { createMailer } from '../services/mailer.js';
-import { normalizeEmail, requestLogin, verifyToken, verifyCode } from '../services/emailLogin.js';
-import { limiter, ipKey, emailKey, completeLogin, stampLogin } from '../utils/authSession.js';
+import { consumeToken, usedTokenEmail } from '../services/emailLogin.js';
+import { limiter, ipKey, stampLogin } from '../utils/authSession.js';
 import { addAccountRoutes } from './authAccounts.js';
 import { displayNameOf } from '../services/accountProfile.js';
 import { releaseNewsletterOptIn } from '../services/signupNewsletter.js';
@@ -22,11 +21,10 @@ function afterOAuth(user) {
   return user.signup_completed_at ? `${FRONTEND_URL}?auth=success` : `${FRONTEND_URL}/welcome?auth=success`;
 }
 
-const EMAIL_START_SENT = 'If that address can receive mail, a sign-in link and code are on the way.';
-const EMAIL_VERIFY_FAILED = 'That link or code is invalid or has expired. Request a new one to try again.';
+const CONFIRM_FAILED = 'That confirmation link has expired. Sign in and choose “Resend confirmation email” in Settings.';
 
 /**
- * Build the /auth router: Google, Facebook and email sign-in, session status,
+ * Build the /auth router: Google and Facebook sign-in, email confirmation, session status,
  * logout and account deletion.
  * @param {import('pg').Pool} pool
  * @param {{mailer?: {enabled: boolean, send: (msg: {to: string, subject: string, text: string, html: string}) => Promise<string>}}} [options]
@@ -52,7 +50,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
       passport.authenticate(strategy, {
         failureRedirect: `${FRONTEND_URL}?auth=failed`
       })(req, res, async () => {
-        stampLogin(req, req.user);
+        stampLogin(req);
         if (isUpgrade) {
           return res.redirect(`${FRONTEND_URL}/admin?auth=success&tab=sync`);
         }
@@ -96,7 +94,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
     router.get('/facebook/callback',
       passport.authenticate('facebook', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
       (req, res) => {
-        stampLogin(req, req.user);
+        stampLogin(req);
         res.redirect(afterOAuth(req.user));
       }
     );
@@ -119,9 +117,9 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
       google: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
       facebook: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) &&
         process.env.FACEBOOK_LOGIN_LIVE === 'true',
-      email: Boolean(mailer.enabled),
       password: true,
-      passkey: true
+      passkey: true,
+      passwordReset: Boolean(mailer.enabled)
     });
   });
 
@@ -150,96 +148,41 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
     });
   });
 
-  // Passwordless email sign-in (spec 045). start always answers the same way so
-  // it never reveals whether an address has an account.
-  router.post('/email/start',
-    express.json(),
-    limiter(60 * 60 * 1000, 5, ipKey),
-    limiter(15 * 60 * 1000, 3, emailKey),
-    limiter(24 * 60 * 60 * 1000, 10, emailKey),
-    async (req, res) => {
-      if (!mailer.enabled) {
-        return res.status(501).json({ error: 'Email sign-in is not available.' });
-      }
-      const email = normalizeEmail(req.body?.email);
-      if (!email) {
-        return res.status(400).json({ error: 'Enter a valid email address.' });
-      }
-      try {
-        // Fix: never build the link from the Host header, or a forged Host could
-        // send a victim's token to an attacker's site (PR review). FRONTEND_URL is
-        // the configured origin the OAuth redirects already use.
-        await requestLogin(pool, mailer, email, FRONTEND_URL);
-      } catch (err) {
-        // Error text (SMTP replies, constraint details) can quote the address,
-        // so the email sign-in handlers log only error codes.
-        logger.error(`Email sign-in request failed: ${err.code || err.name} ${err.responseCode || ''} ${err.command || ''}`.trim());
-        return res.status(502).json({ error: "We couldn't send the email. Please try again in a few minutes." });
-      }
-      res.json({ success: true, message: EMAIL_START_SENT });
-    });
-
-  // "I didn't create this account" on a sign-up confirmation link (spec 046):
-  // the address owner removes an unconfirmed account someone else made with
-  // their email, along with any password or passkey on it.
-  router.post('/email/reject',
-    express.json(),
-    limiter(15 * 60 * 1000, 30, ipKey),
-    async (req, res) => {
-      try {
-        const verified = await verifyToken(pool, String(req.body?.token || ''));
-        if (!verified || verified.purpose !== 'confirm') {
-          return res.status(400).json({ error: EMAIL_VERIFY_FAILED });
-        }
-        const unconfirmed = await pool.query(
-          'SELECT id FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NULL',
-          [verified.email]
-        );
-        // Rechecked under the row lock: an account confirmed meanwhile is kept.
-        let removed = 0;
-        for (const { id } of unconfirmed.rows) {
-          if (await deleteUserAccount(pool, id, { unconfirmedForDays: 0 })) removed += 1;
-        }
-        if (!removed) {
-          // Fix: don't claim a removal that didn't happen (PR #714 review).
-          return res.status(409).json({
-            error: 'This account was already confirmed, so it was not removed. If you didn’t create it, sign in with an emailed code: that removes any password or passkey someone else set.'
-          });
-        }
-        res.json({ success: true });
-      } catch (err) {
-        logger.error(`Rejecting a sign-up failed: ${err.code || err.name}`);
-        res.status(500).json({ error: 'Something went wrong. Please try again.' });
-      }
-    });
-
+  // The link in a sign-up's confirmation email (spec 046). It only confirms
+  // the address; it never signs anyone in, so a mail scanner that opens it
+  // first gets nothing but a confirmed address. The account's own password or
+  // passkey is kept, and the account must still exist.
   router.post('/email/verify',
     express.json(),
     limiter(15 * 60 * 1000, 30, ipKey),
     async (req, res) => {
-      const { token, code } = req.body || {};
-      let verified;
       try {
-        verified = token
-          ? await verifyToken(pool, String(token))
-          : await verifyCode(pool, normalizeEmail(req.body?.email), String(code || ''));
+        const token = String(req.body?.token || '');
+        const email = await consumeToken(pool, token, 'confirm');
+        if (!email) {
+          // Fix: a link opened before (often by a mail scanner) on an account
+          // that is now confirmed says so instead of erroring (PR #716 review).
+          const usedFor = await usedTokenEmail(pool, token, 'confirm');
+          const confirmed = usedFor && await pool.query(
+            'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NOT NULL', [usedFor]);
+          if (confirmed?.rows.length) {
+            // Retries a newsletter hand-off that failed the first time.
+            await releaseNewsletterOptIn(pool, confirmed.rows[0]);
+            return res.json({ success: true });
+          }
+          return res.status(400).json({ error: CONFIRM_FAILED });
+        }
+        const updated = await pool.query(
+          `UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW()
+           WHERE LOWER(email) = LOWER($1) RETURNING *`,
+          [email]
+        );
+        if (!updated.rows.length) return res.status(400).json({ error: CONFIRM_FAILED });
+        await releaseNewsletterOptIn(pool, updated.rows[0]);
+        res.json({ success: true });
       } catch (err) {
-        logger.error(`Email sign-in verification failed: ${err.code || err.name}`);
-        return res.status(500).json({ error: 'Sign-in failed. Please try again.' });
-      }
-      if (!verified) {
-        return res.status(400).json({ error: EMAIL_VERIFY_FAILED });
-      }
-      const { email, purpose } = verified;
-      try {
-        const confirmsSignup = purpose === 'confirm';
-        const user = await findOrCreateUser(pool, adminEmail(), 'email', { id: email, emails: [{ value: email }] }, null, { confirmsSignup });
-        await completeLogin(req, user);
-        if (confirmsSignup) await releaseNewsletterOptIn(pool, user);
-        res.json({ success: true, confirmed: confirmsSignup, needsSignupCompletion: !user.signup_completed_at });
-      } catch (err) {
-        logger.error(`Account lookup or session login after email verification failed: ${err.code || err.name}`);
-        res.status(500).json({ error: 'Sign-in failed. Please try again.' });
+        logger.error(`Email confirmation failed: ${err.code || err.name}`);
+        res.status(500).json({ error: 'Something went wrong. Please try again.' });
       }
     });
 
@@ -256,7 +199,6 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         displayName: 'Test Admin',
         emailVerified: true,
         needsSignupCompletion: false,
-        notice: null,
         pictureUrl: null,
         isAdmin: true,
         role: 'admin',
@@ -290,9 +232,6 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         logger.error('Failed to load visited for /auth/user, returning none:', err);
         visited = [];
       }
-      // Shown once: tells the person why their earlier sign-in methods are gone.
-      const notice = req.session.authNotice || null;
-      delete req.session.authNotice;
       res.json({
         id,
         email,
@@ -302,7 +241,6 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         displayName: displayNameOf(req.user),
         emailVerified: Boolean(req.user.email_verified_at),
         needsSignupCompletion: !req.user.signup_completed_at,
-        notice,
         pictureUrl: picture_url,
         isAdmin: is_admin,
         role: role || 'viewer',

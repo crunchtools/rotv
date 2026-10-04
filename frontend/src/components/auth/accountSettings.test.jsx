@@ -9,7 +9,7 @@ const auth = {};
 vi.mock('../../hooks/useAuth', () => ({ useAuth: () => auth }));
 
 const { default: SignInMethods } = await import('./SignInMethods');
-const { default: AccountBanner } = await import('./AccountBanner');
+const { default: AccountProfile } = await import('./AccountProfile');
 
 const reauthError = () => Object.assign(new Error('For your security, log in again before changing how you sign in.'), { reauth: true });
 
@@ -64,45 +64,19 @@ describe('SignInMethods', () => {
   });
 });
 
-describe('AccountBanner', () => {
-  it('reminds an unconfirmed account and resends the email', async () => {
-    auth.user = { ...auth.user, emailVerified: false };
-    render(<AccountBanner />);
-    expect(screen.getByText(/Confirm your email \(jane@example.com\)/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Resend' }));
-    expect(await screen.findByText(/We sent a new confirmation email/)).toBeTruthy();
-  });
-
-  it('welcomes a new account once and clears the query', () => {
-    window.history.replaceState({}, '', '/?welcome=nopasskey&poi=x');
-    render(<AccountBanner />);
-    expect(screen.getByText(/passkey wasn’t saved/)).toBeTruthy();
-    expect(window.location.search).toBe('?poi=x');
-  });
-
-  it('shows the credentials-reset notice and stays dismissed per account', () => {
-    auth.user = { ...auth.user, notice: 'credentials_reset' };
-    const { unmount } = render(<AccountBanner />);
-    expect(screen.getByText(/We removed a password or passkey/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
-    expect(screen.queryByText(/We removed a password or passkey/)).toBeNull();
+describe('AccountProfile', () => {
+  it('shows a quiet resend line only while the email is unconfirmed', async () => {
+    auth.checkUsername = vi.fn().mockResolvedValue({ available: true });
+    auth.updateProfile = vi.fn().mockResolvedValue();
+    auth.user = { ...auth.user, fullName: 'Jane', emailVerified: false };
+    const { unmount } = render(<AccountProfile />);
+    fireEvent.click(screen.getByRole('button', { name: 'Resend confirmation email' }));
+    expect((await screen.findByRole('status')).textContent).toMatch(/We sent a new confirmation email/);
     unmount();
 
-    render(<AccountBanner />);
-    expect(screen.queryByText(/We removed/)).toBeNull();
-    cleanup();
-    auth.user = { id: 2, email: 'other@example.com', emailVerified: false };
-    render(<AccountBanner />);
-    expect(screen.getByText(/Confirm your email \(other@example.com\)/)).toBeTruthy();
-  });
-
-  it('still works when sessionStorage is unavailable', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
-    auth.user = { ...auth.user, emailVerified: false };
-    render(<AccountBanner />);
-    expect(screen.getByText(/Confirm your email/)).toBeTruthy();
-    getItem.mockRestore();
-    warn.mockRestore();
+    auth.user = { ...auth.user, emailVerified: true };
+    render(<AccountProfile />);
+    expect(screen.queryByRole('button', { name: 'Resend confirmation email' })).toBeNull();
+    expect(screen.queryByText(/Not confirmed/)).toBeNull();
   });
 });

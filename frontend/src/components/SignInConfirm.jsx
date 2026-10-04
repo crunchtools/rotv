@@ -1,93 +1,67 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
+const CONTINUE_DELAY_MS = 2000;
+
 /**
- * Landing page for the link in a sign-in email (spec 045) or a sign-up's
- * confirmation email (spec 046, `&confirm=1`). Signing in takes a click rather
- * than happening on page load, because mail scanners prefetch links and would
- * otherwise use up the one-time token.
+ * Landing page for the link in a sign-up's confirmation email (spec 046).
+ * Confirms as soon as it opens. The link never signs anyone in: a device that
+ * is already signed in continues to the map, any other is offered Sign in.
  */
 function SignInConfirm() {
   const navigate = useNavigate();
-  const { verifyEmailLogin, rejectSignup } = useAuth();
+  const { confirmEmail, isAuthenticated } = useAuth();
   // The token arrives in the fragment (never sent to the server). Read it once,
   // then drop it from the address bar so it doesn't linger in history.
-  const [{ token, confirming }] = useState(() => {
-    const params = new URLSearchParams(window.location.hash.slice(1));
-    const value = params.get('token');
+  const [token] = useState(() => {
+    const value = new URLSearchParams(window.location.hash.slice(1)).get('token');
     if (value) window.history.replaceState(null, '', window.location.pathname);
-    return { token: value, confirming: params.get('confirm') === '1' };
+    return value;
   });
-  const [busy, setBusy] = useState(false);
-  const [rejected, setRejected] = useState(false);
-  const [confirmError, setConfirmError] = useState(token ? null : 'This link is incomplete.');
+  const [status, setStatus] = useState(token ? 'working' : 'failed');
+  const [failure, setFailure] = useState(token ? null : 'This link is incomplete.');
+  // React's development double-run of effects must not spend the link twice.
+  const started = useRef(false);
 
-  const handleConfirm = async () => {
-    setBusy(true);
-    setConfirmError(null);
-    try {
-      const result = await verifyEmailLogin({ token });
-      navigate(result?.needsSignupCompletion ? '/welcome' : '/');
-    } catch (err) {
-      setConfirmError(err.message);
-      setBusy(false);
-    }
-  };
+  useEffect(() => {
+    if (!token || started.current) return;
+    started.current = true;
+    confirmEmail(token)
+      .then(() => setStatus('done'))
+      .catch((err) => {
+        setFailure(err.message);
+        setStatus('failed');
+      });
+  }, [token, confirmEmail]);
 
-  // The address owner didn't make this account: remove it, credentials and all.
-  const handleReject = async () => {
-    setBusy(true);
-    setConfirmError(null);
-    try {
-      await rejectSignup(token);
-      setRejected(true);
-    } catch (err) {
-      setConfirmError(err.message);
-    }
-    setBusy(false);
-  };
+  // Signed-in devices go back to the map; others are offered sign-in.
+  const next = isAuthenticated ? '/' : '/login';
 
-  if (rejected) {
-    return (
-      <div className="privacy-policy-page">
-        <div className="privacy-policy-content signin-confirm">
-          <h1>Account removed</h1>
-          <p className="signin-confirm-hint">
-            We removed the account created with your email address, along with any password or passkey on it.
-            Thanks for letting us know.
-          </p>
-          <button className="signin-confirm-btn secondary" onClick={() => navigate('/')}>Go to the map</button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    if (status !== 'done') return undefined;
+    const timer = setTimeout(() => navigate(next), CONTINUE_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [status, next, navigate]);
 
   return (
     <div className="privacy-policy-page">
       <div className="privacy-policy-content signin-confirm">
-        <h1>{confirming ? 'Confirm your email' : 'Sign in to Roots of the Valley'}</h1>
-        {token && !confirmError && (
+        {status === 'working' && <h1>Confirming your email…</h1>}
+        {status === 'done' && (
           <>
-            <p className="signin-confirm-hint">
-              Tap the button to {confirming ? 'confirm your email address' : 'finish signing in'}. This extra step
-              stops email security scanners from using your one-time link before you do.
-            </p>
-            <button className="signin-confirm-btn" onClick={handleConfirm} disabled={busy}>
-              {busy ? 'One moment…' : confirming ? 'Confirm my email' : 'Finish signing in'}
+            <h1>Your email is confirmed</h1>
+            <button className="signin-confirm-btn" onClick={() => navigate(next)}>
+              {next === '/login' ? 'Sign in' : 'Go to the map'}
             </button>
-            {confirming && (
-              <button className="auth-link-btn signin-reject" onClick={handleReject} disabled={busy}>
-                I didn&apos;t create this account
-              </button>
-            )}
           </>
         )}
-        {confirmError && (
+        {status === 'failed' && (
           <>
-            <p className="auth-error" role="alert">{confirmError}</p>
-            <button className="signin-confirm-btn secondary" onClick={() => navigate(confirming ? '/settings' : '/login')}>
-              {confirming ? 'Send a new confirmation email' : 'Request a new sign-in link'}
+            <h1>Confirm your email</h1>
+            <p className="auth-error" role="alert">{failure}</p>
+            <button className="signin-confirm-btn secondary" onClick={() => navigate('/settings')}>
+              Send a new confirmation email
             </button>
           </>
         )}

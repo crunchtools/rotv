@@ -3,8 +3,8 @@ import { useAuth } from '../../hooks/useAuth';
 import ProfileFields from './ProfileFields';
 
 /**
- * Settings › Your Account (spec 046): profile fields and whether the email
- * address is confirmed, with a resend button when it isn't.
+ * Settings › Your Account (spec 046): profile fields, and a quiet
+ * "Resend confirmation email" while the address isn't confirmed.
  */
 function AccountProfile() {
   const { user, updateProfile, resendConfirmation } = useAuth();
@@ -39,16 +39,14 @@ function AccountProfile() {
   return (
     <div className="account-profile">
       <p className="account-email">
-        {user.email}{' '}
-        {user.emailVerified ? (
-          <span className="email-badge confirmed">Confirmed</span>
-        ) : (
-          <>
-            <span className="email-badge unconfirmed">Not confirmed</span>{' '}
-            <button className="auth-link-btn" onClick={() => act(resendConfirmation)} disabled={busy}>
+        {user.email}
+        {!user.emailVerified && (
+          <span className="account-email-note">
+            {' '}· Not confirmed ·{' '}
+            <button className="auth-inline-link" onClick={() => act(resendConfirmation)} disabled={busy}>
               Resend confirmation email
             </button>
-          </>
+          </span>
         )}
       </p>
       <form onSubmit={handleSave}>

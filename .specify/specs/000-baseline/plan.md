@@ -99,8 +99,9 @@
 | GET | `/auth/facebook` | Initiate Facebook OAuth |
 | GET | `/auth/facebook/callback` | OAuth callback |
 | GET | `/auth/providers` | Which sign-in providers are configured |
-| POST | `/auth/email/start` | Email a sign-in link + code (spec 045) |
-| POST | `/auth/email/verify` | Sign in with `{token}` or `{email, code}` |
+| POST | `/auth/email/verify` | Confirm a new account's email with the link token `{token}`; signs in |
+| POST | `/auth/password/forgot` | Email a password-reset link (same answer for any address) |
+| POST | `/auth/password/reset` | Set a new password with a reset link `{token, password}`; signs in |
 | POST | `/auth/signup` | Create an account with a password or passkey (spec 046) |
 | POST | `/auth/password/login` | Sign in with email and password |
 | PUT/DELETE | `/auth/password` | Set, change or remove the password (recent sign-in required) |

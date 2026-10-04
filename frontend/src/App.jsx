@@ -36,7 +36,7 @@ import SignInConfirm from './components/SignInConfirm';
 import SignupPage from './components/auth/SignupPage';
 import LoginPage from './components/auth/LoginPage';
 import WelcomePage from './components/auth/WelcomePage';
-import AccountBanner from './components/auth/AccountBanner';
+import ResetPasswordPage from './components/auth/ResetPasswordPage';
 import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
 import GuidedTour, { TRIP_TOUR_STEPS } from './components/GuidedTour';
@@ -1989,10 +1989,10 @@ function AppContent() {
     }
   };
 
-  // Accounts made outside the sign-up form (a first Google sign-in or emailed
-  // code) finish sign-up on /welcome before using the map (spec 046).
+  // Accounts made outside the sign-up form (a first Google sign-in) finish
+  // sign-up on /welcome before using the map (spec 046).
   const finishSignupFirst = Boolean(user?.needsSignupCompletion) &&
-    !['/welcome', '/terms', '/privacy', '/signin', '/data-deletion'].includes(location.pathname);
+    !['/welcome', '/terms', '/privacy', '/signin', '/reset-password', '/data-deletion'].includes(location.pathname);
   useEffect(() => {
     if (finishSignupFirst) navigate('/welcome', { replace: true });
   }, [finishSignupFirst, navigate]);
@@ -2020,6 +2020,10 @@ function AppContent() {
 
   if (location.pathname === '/login') {
     return <LoginPage />;
+  }
+
+  if (location.pathname === '/reset-password') {
+    return <ResetPasswordPage />;
   }
 
   if (location.pathname === '/welcome') {
@@ -2293,7 +2297,6 @@ function AppContent() {
           </nav>
         </div>
       </header>
-      <AccountBanner />
 
       {activeTab === 'results' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" role="tabpanel">
