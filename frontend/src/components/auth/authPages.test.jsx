@@ -155,7 +155,7 @@ describe('WelcomePage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Finish' }));
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(auth.completeSignup).toHaveBeenCalledWith(expect.objectContaining({
-      name: 'Walker', ageConfirmed: true, termsAccepted: true
+      name: 'Walker', ageConfirmed: true, termsAccepted: true, newsletter: true
     }));
   });
 
