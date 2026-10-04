@@ -69,7 +69,7 @@ describe('SignupPage', () => {
     await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
     expect(auth.signUp).toHaveBeenCalledWith(expect.objectContaining({
       name: 'Jane Hiker', email: 'jane@example.com', method: 'password',
-      password: 'correct horse battery staple', ageConfirmed: true, termsAccepted: true, newsletter: false
+      password: 'correct horse battery staple', ageConfirmed: true, termsAccepted: true, newsletter: true
     }));
   });
 

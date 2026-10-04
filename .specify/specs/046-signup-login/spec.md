@@ -4,7 +4,7 @@
 Accounts were created silently on the first Google or emailed-code sign-in, and returning meant another email every time. People expect the familiar pattern: Sign up / Sign in, then Google or email, with a password or a passkey. Modeled on Khan Academy.
 
 ## User stories
-- As a visitor, I choose **Sign up**, then Google or email. With email I enter my full name, an optional username, how I want to appear (name or username), my email, and a password or a passkey, tick "13 or older" and the Terms/Privacy box, and optionally the newsletter. I can use the account immediately.
+- As a visitor, I choose **Sign up**, then Google or email. With email I enter my full name, an optional username, how I want to appear (name or username), my email, and a password or a passkey, tick "13 or older" and the Terms/Privacy box, and the newsletter box, which starts checked. I can use the account immediately.
 - As a new account holder, I get a confirmation email with one button (valid 7 days). Tapping it confirms right away; the device I signed up on just carries on, any other offers Sign in. Until I confirm, my favorites, visits, trips and settings work and nothing goes out (no newsletter); there's no banner, just a quiet "Resend confirmation email" in Settings.
 - As a returning visitor, I choose **Sign in**, then Google or email: a password or a passkey (also offered in the email field's autofill). **Forgot password?** emails a link to a page where I must choose a new password; saving it signs me in. Email never signs anyone in by itself.
 - As someone whose first sign-in came through Google, I finish sign-up once on `/welcome` (name, username, show-as, consents).
