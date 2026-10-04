@@ -10,7 +10,7 @@ const CONTINUE_DELAY_MS = 2000;
  */
 function SignInConfirm() {
   const navigate = useNavigate();
-  const { confirmEmail } = useAuth();
+  const { confirmEmail, isAuthenticated } = useAuth();
   // The token arrives in the fragment (never sent to the server). Read it once,
   // then drop it from the address bar so it doesn't linger in history.
   const [token] = useState(() => {
@@ -29,14 +29,17 @@ function SignInConfirm() {
     started.current = true;
     confirmEmail(token)
       .then((result) => {
-        setNext(result?.needsSignupCompletion ? '/welcome' : '/');
+        // Fix: a link used earlier (often by a mail scanner) confirms but
+        // doesn't sign in, so offer sign-in if needed (PR #716 review).
+        if (result?.alreadyConfirmed) setNext(isAuthenticated ? '/' : '/login');
+        else setNext(result?.needsSignupCompletion ? '/welcome' : '/');
         setStatus('done');
       })
       .catch((err) => {
         setFailure(err.message);
         setStatus('failed');
       });
-  }, [token, confirmEmail]);
+  }, [token, confirmEmail, isAuthenticated]);
 
   useEffect(() => {
     if (status !== 'done') return undefined;
@@ -51,7 +54,9 @@ function SignInConfirm() {
         {status === 'done' && (
           <>
             <h1>Your email is confirmed</h1>
-            <button className="signin-confirm-btn" onClick={() => navigate(next)}>Go to the map</button>
+            <button className="signin-confirm-btn" onClick={() => navigate(next)}>
+              {next === '/login' ? 'Sign in' : 'Go to the map'}
+            </button>
           </>
         )}
         {status === 'failed' && (

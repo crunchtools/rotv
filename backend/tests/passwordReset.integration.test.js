@@ -144,6 +144,16 @@ describe('forgot password', () => {
     expect((await pool.query(`SELECT 1 FROM sessions WHERE sid = 'stolen'`)).rows).toHaveLength(0);
   });
 
+  it('refuses a reset link issued before the account became an admin', async () => {
+    await addAccount('hiker@example.com');
+    const app = makeApp();
+    await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    await mailCount(1);
+    await pool.query(`UPDATE users SET is_admin = TRUE, role = 'admin'`);
+    await request(app).post('/auth/password/reset').send({ token: resetToken(mailer.sent[0]), password: NEW }).expect(400);
+    await request(app).post('/auth/password/login').send({ email: 'hiker@example.com', password: NEW }).expect(401);
+  });
+
   it('gives the same answer for unknown and admin addresses, and emails neither', async () => {
     await addAccount('boss@example.com', { admin: true });
     const app = makeApp();
@@ -210,6 +220,17 @@ describe('forgot password', () => {
     }
     await request(app).post('/auth/password/forgot').send({ email: 'a@example.com' }).expect(429);
     await mailCount(3);
+  });
+
+  it('answers before the email is handed off, so timing reveals nothing', async () => {
+    await addAccount('hiker@example.com');
+    const app = makeApp();
+    let release;
+    mailer.send = () => new Promise((resolve) => { release = resolve; });
+    const res = await request(app).post('/auth/password/forgot').send({ email: 'hiker@example.com' }).expect(200);
+    expect(res.body.message).toMatch(/If there's an account/);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    release('<late@test>');
   });
 
   it('still answers the same when the email cannot be sent, and rejects malformed addresses', async () => {

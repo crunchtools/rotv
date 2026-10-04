@@ -436,6 +436,23 @@ describe('confirmation and the newsletter', () => {
 });
 
 describe('account protection and cleanup', () => {
+  it('refuses an already-used link while the account is still unconfirmed', async () => {
+    await request(makeApp()).post('/auth/signup').send(signupBody()).expect(201);
+    const token = linkToken(mailer.sent[0]);
+    await pool.query('UPDATE email_login_tokens SET consumed_at = NOW()');
+    await request(makeApp()).post('/auth/email/verify').send({ token }).expect(400);
+    expect((await pool.query('SELECT email_verified_at FROM users')).rows[0].email_verified_at).toBeNull();
+  });
+
+  it("doesn't recreate a deleted account from its confirmation link", async () => {
+    const agent = request.agent(makeApp());
+    await agent.post('/auth/signup').send(signupBody()).expect(201);
+    const token = linkToken(mailer.sent[0]);
+    await agent.delete('/auth/account').expect(200);
+    await request(makeApp()).post('/auth/email/verify').send({ token }).expect(400);
+    expect((await pool.query('SELECT 1 FROM users')).rows).toHaveLength(0);
+  });
+
   it('lets the address owner take over an unconfirmed sign-up through "Forgot password?"', async () => {
     const authenticator = createSoftAuthenticator();
     const squatter = request.agent(makeApp());

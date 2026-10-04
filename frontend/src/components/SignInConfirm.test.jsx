@@ -48,6 +48,15 @@ describe('SignInConfirm', () => {
     expect(navigate).toHaveBeenCalledWith('/settings');
   });
 
+  it('offers sign-in when the link was already used, e.g. by a mail scanner', async () => {
+    auth.confirmEmail.mockResolvedValueOnce({ success: true, alreadyConfirmed: true });
+    auth.isAuthenticated = false;
+    at('#token=used');
+    render(<SignInConfirm />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Sign in' }));
+    expect(navigate).toHaveBeenCalledWith('/login');
+  });
+
   it('sends an account that still needs its details to finish sign-up', async () => {
     auth.confirmEmail.mockResolvedValueOnce({ success: true, needsSignupCompletion: true });
     at('#token=first');

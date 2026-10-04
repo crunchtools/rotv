@@ -167,11 +167,12 @@ export function AuthProvider({ children }) {
     await fetchUser();
   };
 
-  // The link in a sign-up's confirmation email; signs the person in.
-  // Resolves to { needsSignupCompletion }.
+  // The link in a sign-up's confirmation email. The first use confirms and
+  // signs the person in, resolving to { needsSignupCompletion }; a link used
+  // before resolves to { alreadyConfirmed } and signs no one in.
   const confirmEmail = async (token) => {
     const body = await postAuthJson('/auth/email/verify', { token });
-    await finishSignIn();
+    if (!body.alreadyConfirmed) await finishSignIn();
     return body;
   };
 
