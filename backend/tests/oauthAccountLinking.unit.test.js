@@ -263,7 +263,6 @@ describe('findOrCreateUser', () => {
     const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'google', google, null);
 
     expect(user.id).toBe(7);
-    expect(user.credentialsReset).toBe(true);
     expect(user.email_verified_at).toBeTruthy();
     expect(pool.passwords).toEqual([]);
     expect(pool.passkeys).toEqual([]);
@@ -280,7 +279,6 @@ describe('findOrCreateUser', () => {
 
     const user = await findOrCreateUser(pool, ADMIN_EMAIL, 'google', google, null);
 
-    expect(user.credentialsReset).toBe(false);
     expect(pool.passwords).toHaveLength(1);
   });
 });

@@ -259,6 +259,13 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         // Fix: a reset ends every other session and voids any other reset
         // links, so whoever prompted it loses access (PR #716 review).
         await pool.query(`DELETE FROM sessions WHERE sess -> 'passport' ->> 'user' = $1`, [String(user.id)]);
+        // Fix: recovery also removes passkeys added before the address was
+        // confirmed, which whoever created the account may hold (PR #716 review).
+        await pool.query(
+          `DELETE FROM user_passkeys k USING users u
+           WHERE k.user_id = u.id AND u.id = $1 AND k.created_at <= u.email_verified_at`,
+          [user.id]
+        );
         await pool.query(
           `UPDATE email_login_tokens SET consumed_at = NOW()
            WHERE LOWER(email) = LOWER($1) AND purpose = 'reset' AND consumed_at IS NULL`,

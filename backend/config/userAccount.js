@@ -60,8 +60,7 @@ async function revokeUnverifiedAccess(pool, userId, email) {
  * @param {string} provider - 'google' | 'facebook' | 'email'
  * @param {object} profile - passport-style profile: id, displayName, emails, photos
  * @param {object|null} credentials - Google Drive tokens for the admin upgrade flow
- * @returns {Promise<object>} the users row; `credentialsReset` is true when
- *   credentials added before confirmation were removed
+ * @returns {Promise<object>} the users row
  */
 export async function findOrCreateUser(pool, adminEmail, provider, profile, credentials) {
   const email = profile.emails?.[0]?.value || null;
@@ -75,7 +74,6 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
     [provider, providerId]
   );
   let userId = identity.rows[0]?.user_id ?? null;
-  let credentialsReset = false;
 
   if (!userId && email) {
     const byEmail = await pool.query(
@@ -86,7 +84,6 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
 
     if (userId && !byEmail.rows[0].email_verified_at) {
       await revokeUnverifiedAccess(pool, userId, email);
-      credentialsReset = true;
     }
 
     if (userId) {
@@ -160,5 +157,5 @@ export async function findOrCreateUser(pool, adminEmail, provider, profile, cred
   );
 
   const refreshed = await pool.query('SELECT * FROM users WHERE id = $1', [userId]);
-  return { ...refreshed.rows[0], credentialsReset };
+  return refreshed.rows[0];
 }
