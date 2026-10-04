@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 
-const DISMISS_KEY = 'rotv-account-banner-dismissed';
+// Per account, so one person dismissing it doesn't hide another's messages.
+const dismissKey = (userId) => `rotv-account-banner-dismissed:${userId}`;
 
-function readDismissed() {
+function readDismissed(userId) {
   try {
-    return sessionStorage.getItem(DISMISS_KEY) === '1';
+    return sessionStorage.getItem(dismissKey(userId)) === '1';
   } catch (err) {
     console.warn('sessionStorage unavailable:', err);
     return false;
@@ -33,10 +34,10 @@ function takeWelcomeParam() {
 function AccountBanner() {
   const { user, resendConfirmation } = useAuth();
   const [welcome] = useState(takeWelcomeParam);
-  const [dismissed, setDismissed] = useState(readDismissed);
+  const [dismissedFor, setDismissedFor] = useState(null);
   const [sendStatus, setSendStatus] = useState(null);
 
-  if (!user || dismissed) return null;
+  if (!user || dismissedFor === user.id || readDismissed(user.id)) return null;
 
   const messages = [];
   if (welcome) {
@@ -54,9 +55,9 @@ function AccountBanner() {
   if (!messages.length) return null;
 
   const dismiss = () => {
-    setDismissed(true);
+    setDismissedFor(user.id);
     try {
-      sessionStorage.setItem(DISMISS_KEY, '1');
+      sessionStorage.setItem(dismissKey(user.id), '1');
     } catch (err) {
       console.warn('sessionStorage unavailable:', err);
     }

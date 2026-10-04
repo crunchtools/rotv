@@ -329,10 +329,10 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
   router.put('/profile', isAuthenticated, express.json(), async (req, res) => {
     const { profile, error } = parseProfile(req.body);
     if (error) return res.status(400).json({ error });
-    if (profile.username && !(await usernameAvailable(pool, profile.username, req.user.id))) {
-      return res.status(409).json({ error: 'That username is taken.' });
-    }
     try {
+      if (profile.username && !(await usernameAvailable(pool, profile.username, req.user.id))) {
+        return res.status(409).json({ error: 'That username is taken.' });
+      }
       await pool.query(
         'UPDATE users SET name = $1, username = $2, display_preference = $3, updated_at = NOW() WHERE id = $4',
         [profile.name, profile.username, profile.displayPreference, req.user.id]
@@ -354,10 +354,10 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
     if (!consents.ageConfirmed || !consents.termsAccepted) {
       return res.status(400).json({ error: CONSENT_REQUIRED });
     }
-    if (profile.username && !(await usernameAvailable(pool, profile.username, req.user.id))) {
-      return res.status(409).json({ error: 'That username is taken.' });
-    }
     try {
+      if (profile.username && !(await usernameAvailable(pool, profile.username, req.user.id))) {
+        return res.status(409).json({ error: 'That username is taken.' });
+      }
       const updated = await pool.query(
         `UPDATE users SET name = $1, username = $2, display_preference = $3,
            terms_accepted_at = NOW(), age_confirmed_at = NOW(), newsletter_opt_in = $4,
