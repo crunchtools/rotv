@@ -34,8 +34,8 @@ function EmailSignIn({ onSignedIn }) {
   });
 
   const handleVerify = runStep(async () => {
-    await verifyEmailLogin({ email, code });
-    onSignedIn?.();
+    const result = await verifyEmailLogin({ email, code });
+    onSignedIn?.(result);
   });
 
   const restart = () => {

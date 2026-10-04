@@ -6,6 +6,8 @@ vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 
 const auth = { user: null, isAdmin: false, deleteAccount: vi.fn() };
 vi.mock('../hooks/useAuth', () => ({ useAuth: () => auth }));
+vi.mock('./auth/AccountProfile', () => ({ default: () => <p>profile fields</p> }));
+vi.mock('./auth/SignInMethods', () => ({ default: () => <p>sign-in methods</p> }));
 
 const { default: GeneralSettings } = await import('./GeneralSettings');
 
@@ -18,8 +20,8 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-describe('GeneralSettings account deletion', () => {
-  it('is hidden when signed out and for admins', () => {
+describe('GeneralSettings account section', () => {
+  it('is hidden when signed out, and admins get no delete button', () => {
     auth.user = null;
     const { unmount } = render(<GeneralSettings />);
     expect(screen.queryByText('Your Account')).toBeNull();
@@ -28,7 +30,9 @@ describe('GeneralSettings account deletion', () => {
     auth.user = { id: 1, email: 'admin@example.com' };
     auth.isAdmin = true;
     render(<GeneralSettings />);
-    expect(screen.queryByText('Your Account')).toBeNull();
+    expect(screen.getByText('Your Account')).toBeTruthy();
+    expect(screen.getByText('sign-in methods')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Delete my account' })).toBeNull();
   });
 
   it('asks for confirmation and can be cancelled without deleting', () => {

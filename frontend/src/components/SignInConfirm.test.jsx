@@ -44,7 +44,25 @@ describe('SignInConfirm', () => {
     render(<SignInConfirm />);
     fireEvent.click(screen.getByRole('button', { name: 'Finish signing in' }));
     expect((await screen.findByRole('alert')).textContent).toMatch(/expired/);
-    fireEvent.click(screen.getByRole('button', { name: /request a new link/ }));
-    expect(navigate).toHaveBeenCalledWith('/');
+    fireEvent.click(screen.getByRole('button', { name: /Request a new sign-in link/ }));
+    expect(navigate).toHaveBeenCalledWith('/login');
+  });
+
+  it('words a sign-up confirmation link as confirming the email', async () => {
+    auth.verifyEmailLogin.mockResolvedValueOnce({ confirmed: true, needsSignupCompletion: false });
+    at('#token=conf&confirm=1');
+    render(<SignInConfirm />);
+    expect(screen.getByRole('heading').textContent).toBe('Confirm your email');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm my email' }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/'));
+    expect(auth.verifyEmailLogin).toHaveBeenCalledWith({ token: 'conf' });
+  });
+
+  it('sends a new account made from the link to finish sign-up', async () => {
+    auth.verifyEmailLogin.mockResolvedValueOnce({ confirmed: false, needsSignupCompletion: true });
+    at('#token=first');
+    render(<SignInConfirm />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish signing in' }));
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/welcome'));
   });
 });

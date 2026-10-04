@@ -19,7 +19,10 @@ import { MAX_CODE_ATTEMPTS } from '../services/emailLogin.js';
 const adminPool = new pg.Pool();
 const pool = new pg.Pool({ options: '-c search_path=email_login_probe,public' });
 
-const migrationSql = await readFile(new URL('../migrations/092_email_login_tokens.sql', import.meta.url), 'utf8');
+const migrations = await Promise.all(
+  ['092_email_login_tokens.sql', '093_signup_accounts.sql'].map((name) =>
+    readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8'))
+);
 
 function linkToken(message) {
   const match = message.text.match(/\/signin#token=([A-Za-z0-9_-]+)/);
@@ -58,7 +61,8 @@ beforeEach(async () => {
       id serial PRIMARY KEY, email varchar(255) UNIQUE, name text, picture_url text,
       oauth_provider varchar(50) NOT NULL, oauth_provider_id varchar(255) NOT NULL,
       is_admin boolean DEFAULT false, role text DEFAULT 'viewer', oauth_credentials jsonb,
-      preferences jsonb, last_login_at timestamptz,
+      preferences jsonb, last_login_at timestamptz, created_at timestamp DEFAULT CURRENT_TIMESTAMP,
+      updated_at timestamp DEFAULT CURRENT_TIMESTAMP,
       UNIQUE (oauth_provider, oauth_provider_id));
     CREATE TABLE user_identities (
       id serial PRIMARY KEY, user_id int NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -66,8 +70,9 @@ beforeEach(async () => {
     CREATE TABLE user_poi_favorites (user_id int, poi_id int, created_at timestamptz DEFAULT now());
     CREATE TABLE user_visits (user_id int, poi_id int, visited_at timestamptz DEFAULT now());
     CREATE TABLE admin_settings (key text PRIMARY KEY, value text);
+    CREATE TABLE sessions (sid varchar PRIMARY KEY, sess json NOT NULL, expire timestamp NOT NULL);
   `);
-  await pool.query(migrationSql);
+  for (const sql of migrations) await pool.query(sql);
 });
 
 afterAll(async () => {

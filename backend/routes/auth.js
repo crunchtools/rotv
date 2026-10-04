@@ -3,30 +3,24 @@ import passport from 'passport';
 import { createLogger } from '../utils/logger.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { deleteUserAccount } from '../services/accountDeletion.js';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { findOrCreateUser, adminEmail } from '../config/userAccount.js';
 import { createMailer } from '../services/mailer.js';
 import { normalizeEmail, requestLogin, verifyToken, verifyCode } from '../services/emailLogin.js';
+import { limiter, ipKey, emailKey, completeLogin, stampLogin } from '../utils/authSession.js';
+import { addAccountRoutes } from './authAccounts.js';
+import { displayNameOf } from '../services/accountProfile.js';
+import { releaseNewsletterOptIn } from '../services/signupNewsletter.js';
 
 const logger = createLogger('Auth');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:8080';
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || '';
 
-function limiter(windowMs, max, keyGenerator) {
-  return rateLimit({
-    windowMs,
-    max,
-    keyGenerator,
-    message: { error: 'Too many sign-in attempts. Please wait a few minutes and try again.' },
-    standardHeaders: true,
-    legacyHeaders: false
-  });
+// Where an OAuth sign-in lands: accounts made without the sign-up form finish
+// it on /welcome first (spec 046).
+function afterOAuth(user) {
+  return user.signup_completed_at ? `${FRONTEND_URL}?auth=success` : `${FRONTEND_URL}/welcome?auth=success`;
 }
-
-// Per-address limits key on the normalized email so case or spacing can't dodge them.
-const emailKey = (req) => `email:${normalizeEmail(req.body?.email) || 'invalid'}`;
-const ipKey = (req) => ipKeyGenerator(req.ip);
 
 const EMAIL_START_SENT = 'If that address can receive mail, a sign-in link and code are on the way.';
 const EMAIL_VERIFY_FAILED = 'That link or code is invalid or has expired. Request a new one to try again.';
@@ -58,6 +52,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
       passport.authenticate(strategy, {
         failureRedirect: `${FRONTEND_URL}?auth=failed`
       })(req, res, async () => {
+        stampLogin(req, req.user);
         if (isUpgrade) {
           return res.redirect(`${FRONTEND_URL}/admin?auth=success&tab=sync`);
         }
@@ -81,7 +76,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
           return res.redirect('/auth/google/upgrade');
         }
 
-        res.redirect(`${FRONTEND_URL}?auth=success`);
+        res.redirect(afterOAuth(req.user));
       });
     });
   } else {
@@ -101,7 +96,8 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
     router.get('/facebook/callback',
       passport.authenticate('facebook', { failureRedirect: `${FRONTEND_URL}?auth=failed` }),
       (req, res) => {
-        res.redirect(`${FRONTEND_URL}?auth=success`);
+        stampLogin(req, req.user);
+        res.redirect(afterOAuth(req.user));
       }
     );
   } else {
@@ -123,7 +119,9 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
       google: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
       facebook: Boolean(process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) &&
         process.env.FACEBOOK_LOGIN_LIVE === 'true',
-      email: Boolean(mailer.enabled)
+      email: Boolean(mailer.enabled),
+      password: true,
+      passkey: true
     });
   });
 
@@ -186,32 +184,32 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
     limiter(15 * 60 * 1000, 30, ipKey),
     async (req, res) => {
       const { token, code } = req.body || {};
-      let email;
+      let verified;
       try {
-        email = token
+        verified = token
           ? await verifyToken(pool, String(token))
           : await verifyCode(pool, normalizeEmail(req.body?.email), String(code || ''));
       } catch (err) {
         logger.error(`Email sign-in verification failed: ${err.code || err.name}`);
         return res.status(500).json({ error: 'Sign-in failed. Please try again.' });
       }
-      if (!email) {
+      if (!verified) {
         return res.status(400).json({ error: EMAIL_VERIFY_FAILED });
       }
+      const { email, purpose } = verified;
       try {
-        const user = await findOrCreateUser(pool, adminEmail(), 'email', { id: email, emails: [{ value: email }] }, null);
-        req.login(user, (loginErr) => {
-          if (loginErr) {
-            logger.error(`Session login after email verification failed: ${loginErr.code || loginErr.name}`);
-            return res.status(500).json({ error: 'Sign-in failed. Please try again.' });
-          }
-          res.json({ success: true });
-        });
+        const confirmsSignup = purpose === 'confirm';
+        const user = await findOrCreateUser(pool, adminEmail(), 'email', { id: email, emails: [{ value: email }] }, null, { confirmsSignup });
+        await completeLogin(req, user);
+        if (confirmsSignup) await releaseNewsletterOptIn(pool, user);
+        res.json({ success: true, confirmed: confirmsSignup, needsSignupCompletion: !user.signup_completed_at });
       } catch (err) {
         logger.error(`Account lookup after email verification failed: ${err.code || err.name}`);
         res.status(500).json({ error: 'Sign-in failed. Please try again.' });
       }
     });
+
+  addAccountRoutes(router, pool, { mailer, frontendUrl: FRONTEND_URL });
 
   router.get('/user', async (req, res) => {
     if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
@@ -219,6 +217,12 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         id: 999,
         email: 'test-admin@rotv.local',
         name: 'Test Admin',
+        username: null,
+        displayPreference: 'name',
+        displayName: 'Test Admin',
+        emailVerified: true,
+        needsSignupCompletion: false,
+        notice: null,
         pictureUrl: null,
         isAdmin: true,
         role: 'admin',
@@ -229,7 +233,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
     }
 
     if (req.isAuthenticated()) {
-      const { id, email, name, picture_url, is_admin, role, preferences } = req.user;
+      const { id, email, name, username, display_preference, picture_url, is_admin, role, preferences } = req.user;
       let favorites;
       try {
         const favResult = await pool.query(
@@ -252,10 +256,19 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         logger.error('Failed to load visited for /auth/user, returning none:', err);
         visited = [];
       }
+      // Shown once: tells the person why their earlier sign-in methods are gone.
+      const notice = req.session.authNotice || null;
+      delete req.session.authNotice;
       res.json({
         id,
         email,
         name,
+        username: username || null,
+        displayPreference: display_preference || 'name',
+        displayName: displayNameOf(req.user),
+        emailVerified: Boolean(req.user.email_verified_at),
+        needsSignupCompletion: !req.user.signup_completed_at,
+        notice,
         pictureUrl: picture_url,
         isAdmin: is_admin,
         role: role || 'viewer',

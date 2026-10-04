@@ -19,3 +19,8 @@ classification = "by_design"
 path = "frontend/src/contexts/TripContext.jsx"
 justification = "The debounced persist of the in-progress trip draft to localStorage (TripContext.jsx ~63) warns and continues when setItem throws (private mode / quota). The trip stays in React state; losing only the reload-survival copy is the intended degradation."
 classification = "by_design"
+
+[[locations]]
+path = "frontend/src/components/auth/AccountBanner.jsx"
+justification = "The log-only catches wrap sessionStorage access, which throws in private mode or with blocked site data. The banner's dismissed state is already set in React state before the write, so a failed write only means the banner reappears on the next page load; there is nothing to recover and no error surface for it."
+classification = "by_design"

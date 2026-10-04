@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import AccountProfile from './auth/AccountProfile';
+import SignInMethods from './auth/SignInMethods';
 
 const TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern Time (EST/EDT)', icon: '🗽' },
@@ -14,14 +16,12 @@ const TIMEZONES = [
 
 // Self-service account deletion (#700). Two-step inline confirm rather than a
 // browser dialog. Admins don't see it; the backend refuses them as well.
-function DeleteAccountSection() {
+function DeleteAccount() {
   const navigate = useNavigate();
-  const { user, isAdmin, deleteAccount } = useAuth();
+  const { deleteAccount } = useAuth();
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState(null);
-
-  if (!user || isAdmin) return null;
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -36,38 +36,50 @@ function DeleteAccountSection() {
   };
 
   return (
+    <div className="danger-zone">
+      <h4>Delete my account</h4>
+      <p className="danger-warning">
+        Permanently deletes your account, favorites, visited places, saved trips and preferences,
+        and signs you out everywhere. This cannot be undone.
+      </p>
+      {confirming ? (
+        <>
+          <button className="sync-btn danger-btn" onClick={handleDelete} disabled={deleting}>
+            {deleting ? 'Deleting…' : 'Yes, delete everything'}
+          </button>{' '}
+          <button className="sync-btn" onClick={() => setConfirming(false)} disabled={deleting}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button className="sync-btn danger-btn" onClick={() => setConfirming(true)}>
+          Delete my account
+        </button>
+      )}
+      {deleteError && <p className="auth-error" role="alert">{deleteError}</p>}
+      <p className="danger-hint">
+        <a href="/data-deletion" onClick={(e) => { e.preventDefault(); navigate('/data-deletion'); }}>
+          What gets deleted and what stays
+        </a>
+      </p>
+    </div>
+  );
+}
+
+// Settings › Your Account (#700, spec 046): profile, email confirmation,
+// sign-in methods, and account deletion.
+function AccountSection() {
+  const { user, isAdmin } = useAuth();
+  if (!user) return null;
+
+  return (
     <>
       <div className="settings-divider"></div>
       <div className="settings-section">
         <h3>Your Account</h3>
-        <p>Signed in as {user.email || user.name}.</p>
-        <div className="danger-zone">
-          <h4>Delete my account</h4>
-          <p className="danger-warning">
-            Permanently deletes your account, favorites, visited places, saved trips and preferences,
-            and signs you out everywhere. This cannot be undone.
-          </p>
-          {confirming ? (
-            <>
-              <button className="sync-btn danger-btn" onClick={handleDelete} disabled={deleting}>
-                {deleting ? 'Deleting…' : 'Yes, delete everything'}
-              </button>{' '}
-              <button className="sync-btn" onClick={() => setConfirming(false)} disabled={deleting}>
-                Cancel
-              </button>
-            </>
-          ) : (
-            <button className="sync-btn danger-btn" onClick={() => setConfirming(true)}>
-              Delete my account
-            </button>
-          )}
-          {deleteError && <p className="auth-error" role="alert">{deleteError}</p>}
-          <p className="danger-hint">
-            <a href="/data-deletion" onClick={(e) => { e.preventDefault(); navigate('/data-deletion'); }}>
-              What gets deleted and what stays
-            </a>
-          </p>
-        </div>
+        <AccountProfile />
+        <SignInMethods />
+        {!isAdmin && <DeleteAccount />}
       </div>
     </>
   );
@@ -183,7 +195,7 @@ function GeneralSettings() {
         </a>
       </div>
 
-      <DeleteAccountSection />
+      <AccountSection />
     </div>
   );
 }

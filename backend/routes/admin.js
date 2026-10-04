@@ -717,6 +717,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'about_tutorial_md',
       'about_privacy_md',
       'about_data_deletion_md',
+      'about_terms_md',
       'email_login_ttl_minutes',
       'digest_greeting'
     ];

@@ -101,6 +101,17 @@
 | GET | `/auth/providers` | Which sign-in providers are configured |
 | POST | `/auth/email/start` | Email a sign-in link + code (spec 045) |
 | POST | `/auth/email/verify` | Sign in with `{token}` or `{email, code}` |
+| POST | `/auth/signup` | Create an account with a password or passkey (spec 046) |
+| POST | `/auth/password/login` | Sign in with email and password |
+| PUT/DELETE | `/auth/password` | Set, change or remove the password (recent sign-in required) |
+| POST | `/auth/passkey/register/{options,verify}` | Add a passkey (recent sign-in required) |
+| POST | `/auth/passkey/login/{options,verify}` | Sign in with a passkey |
+| GET | `/auth/methods` | The account's password and passkeys |
+| PATCH/DELETE | `/auth/passkeys/:id` | Rename or remove a passkey |
+| PUT | `/auth/profile` | Name, username, show-as |
+| POST | `/auth/complete-signup` | Finish sign-up after a Google or emailed-code first sign-in |
+| POST | `/auth/confirm-email/resend` | Resend the confirmation email |
+| GET | `/auth/username-available` | Username format and availability |
 | GET | `/auth/user` | Get current user |
 | POST | `/auth/logout` | End session |
 | DELETE | `/auth/account` | Delete own account (non-admin); see `/data-deletion` |
