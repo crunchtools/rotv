@@ -94,7 +94,7 @@ INSERT INTO admin_settings (key, value) VALUES ('about_terms_md', '# Terms of Us
 
 Last updated: October 3, 2026
 
-Roots of the Valley is a free community map and guide to the Cuyahoga Valley in Ohio, run by Scott McCarty. By using the site, you agree to these terms of use. We wrote them in plain English, and kept them short and readable.
+Roots of the Valley is a free community map and guide to the Cuyahoga Valley in Ohio. By using the site, you agree to these terms of use. We wrote them in plain English, and kept them short and readable.
 
 ## What Roots of the Valley is
 
@@ -116,7 +116,7 @@ You can find all the details about what information we collect and how it gets u
 
 ## Content you contribute
 
-Some authorized users, such as site administrators and approved contributors, can submit content, including photos and other media. If you upload anything, you must have the legal right to share that material. By uploading content, you grant Roots of the Valley a license to display your contributions. If you delete your account, those materials stay online to preserve community history, but we detach them from your account.
+Some people, like site admins and approved contributors, can add photos, videos, news, and other things to the site. Make sure you only share photos and other things you took yourself or have permission to share. When you share something, you are giving Roots of the Valley permission to show it on the site. If you delete your account, the photos, news, and other things you shared stay on the site, but they are no longer connected to you.
 
 ## Using the site responsibly
 
@@ -132,7 +132,7 @@ We built this resource for everyone who loves the valley, so we expect visitors 
 
 All information on Roots of the Valley is provided as-is. Much of our data, including live train and water taxi trackers, trail conditions, river levels, schedules and events, comes from third parties. That data can be delayed or plain wrong, and river conditions or trail washouts can change much faster than website updates.
 
-Outdoor recreation carries real risks, and you head outdoors at your own risk. I think of this map as a handy digital helper in your pocket, but it is never a substitute for your own eyes and current trail reports. Always check official sources, such as the National Park Service, before heading out into the park or stepping onto the river.
+Outdoor recreation carries real risks, and you head outdoors at your own risk. This map is a handy digital helper in your pocket, but it is never a substitute for your own eyes and current trail reports. Always check official sources, such as the National Park Service, before heading out into the park or stepping onto the river.
 
 ## Newsletter
 
