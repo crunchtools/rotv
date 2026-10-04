@@ -21,7 +21,7 @@ Accounts were created silently on the first Google or emailed-code sign-in, and 
 
 ## Unconfirmed accounts
 - Account pre-hijacking guard: Google and Facebook sign-ins and password resets link by email to an existing account. If that account is unconfirmed, the verified owner takes it over: passwords, passkeys, sessions and the newsletter opt-in added before confirmation are removed. The account's own confirmation link (purpose `confirm`) confirms without removing anything, because the creator often confirms on another device.
-- A password reset also removes any passkey added before the address was confirmed, and ends the account's other sessions.
+- A password reset also removes all of the account's passkeys and ends its other sessions, so recovery always starts clean; the person can add a passkey again.
 - Accepted risk (product decision: use now, confirm later): a confirmation link proves the mailbox, not who set the password or passkey, so if an address owner confirms a sign-up someone else made with their email, that person's credentials survive. Binding confirmation to the creator's browser would wipe the credentials of everyone who signs up on one device and confirms on another (the common case). Mitigations: the address owner can take the account over with "Forgot password?", unconfirmed accounts are deleted after 30 days, and the account holds only personal map data (favorites, visits, trips). Scott, 2026-10-04: "It's not a bank app."
 - The newsletter opt-in is held until confirmation, then sent to Buttondown (which runs its own double opt-in).
 - A daily job (`unconfirmed-account-cleanup`, 04:15 ET) deletes accounts unconfirmed for 30 days, through the same path as self-service deletion.

@@ -164,8 +164,12 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
           // that is now confirmed says so instead of erroring (PR #716 review).
           const usedFor = await usedTokenEmail(pool, token, 'confirm');
           const confirmed = usedFor && await pool.query(
-            'SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NOT NULL', [usedFor]);
-          if (confirmed?.rows.length) return res.json({ success: true });
+            'SELECT * FROM users WHERE LOWER(email) = LOWER($1) AND email_verified_at IS NOT NULL', [usedFor]);
+          if (confirmed?.rows.length) {
+            // Retries a newsletter hand-off that failed the first time.
+            await releaseNewsletterOptIn(pool, confirmed.rows[0]);
+            return res.json({ success: true });
+          }
           return res.status(400).json({ error: CONFIRM_FAILED });
         }
         const updated = await pool.query(
