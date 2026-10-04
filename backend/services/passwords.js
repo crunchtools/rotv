@@ -1,8 +1,8 @@
 /**
  * Password storage and policy (spec 046).
  *
- * Hashes use Node's built-in scrypt with OWASP's recommended cost (N=2^16,
- * r=8, p=2) and a random 16-byte salt. The stored string carries its own
+ * Hashes use Node's built-in scrypt at one of OWASP's recommended costs
+ * (N=2^15, r=8, p=3: 32 MiB per hash) and a random 16-byte salt. The stored string carries its own
  * parameters (`scrypt$N$r$p$salt$hash`), so the cost can be raised later and
  * old hashes upgraded on the next successful login.
  *
@@ -22,7 +22,10 @@ const scrypt = promisify(crypto.scrypt);
 const PASSWORD_MIN = 12;
 const PASSWORD_MAX = 128;
 
-const COST = { N: 2 ** 16, r: 8, p: 2 };
+// Of OWASP's equivalent scrypt settings, the 32 MiB one: scrypt runs on the
+// libuv thread pool (4 threads), so at most ~128 MiB is in use at once however
+// many sign-ins arrive together.
+const COST = { N: 2 ** 15, r: 8, p: 3 };
 const KEY_LENGTH = 32;
 const PWNED_RANGE_URL = 'https://api.pwnedpasswords.com/range/';
 

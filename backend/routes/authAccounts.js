@@ -114,9 +114,13 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
       }
 
       let user;
+      const passwordHash = method === 'password' ? await hashPassword(body.password) : null;
+      // Fix: the account and its password are created together or not at all
+      // (PR #714 review).
+      const client = await pool.connect();
       try {
-        const passwordHash = method === 'password' ? await hashPassword(body.password) : null;
-        const created = await pool.query(
+        await client.query('BEGIN');
+        const created = await client.query(
           `INSERT INTO users (email, name, username, display_preference, oauth_provider, oauth_provider_id,
                               is_admin, role, terms_accepted_at, age_confirmed_at, newsletter_opt_in,
                               signup_completed_at, last_login_at)
@@ -126,9 +130,12 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         );
         user = created.rows[0];
         if (passwordHash) {
-          await pool.query('INSERT INTO user_passwords (user_id, hash) VALUES ($1, $2)', [user.id, passwordHash]);
+          await client.query('INSERT INTO user_passwords (user_id, hash) VALUES ($1, $2)', [user.id, passwordHash]);
         }
+        await client.query('COMMIT');
       } catch (err) {
+        await client.query('ROLLBACK').catch((rollbackErr) =>
+          logger.error(`Sign-up rollback failed: ${rollbackErr.code || rollbackErr.name}`));
         if (err.code === '23505') {
           // The email (or username) already belongs to an account. Sign-ups are
           // usable immediately, so this can't be hidden the way sign-in hides it.
@@ -136,6 +143,8 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         }
         logger.error(`Sign-up failed: ${err.code || err.name}`);
         return res.status(500).json({ error: 'Sign-up failed. Please try again.' });
+      } finally {
+        client.release();
       }
 
       try {
@@ -168,7 +177,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
         const { ok, needsRehash } = await verifyPassword(password, row?.password_hash || null);
         // Fix: admins never sign in by password, even if one predates their
         // promotion (PR review). Same answer as a wrong password.
-        if (!ok || row.is_admin || row.role === 'admin') return res.status(401).json({ error: LOGIN_FAILED });
+        if (!row || !ok || row.is_admin || row.role === 'admin') return res.status(401).json({ error: LOGIN_FAILED });
 
         if (needsRehash) {
           await pool.query('UPDATE user_passwords SET hash = $1, updated_at = NOW() WHERE user_id = $2',

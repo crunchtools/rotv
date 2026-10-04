@@ -58,11 +58,14 @@ export function AuthProvider({ children }) {
         if (userData) {
           // `name` is what the header shows (username or name, per the
           // person's choice); `fullName` is the name they entered.
-          setUser({
+          // The server hands out `notice` once; keep it for this account across
+          // the refetch that follows sign-in so the banner can show it.
+          setUser((previous) => ({
             ...userData,
+            notice: userData.notice || (previous?.id === userData.id ? previous.notice : null),
             fullName: userData.name || '',
             name: userData.displayName || userData.name || userData.email?.split('@')[0] || null
-          });
+          }));
           setFavorites(userData.favorites || []);
           setVisited(userData.visited || []);
         } else {

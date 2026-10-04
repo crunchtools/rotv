@@ -44,19 +44,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower ON users (LOWER(usern
 
 -- Sign-in and account linking look accounts up by LOWER(email), so emails are
 -- unique ignoring case. Production had no case-only duplicates when this was
--- written; if one ever exists, the boot logs a notice and keeps a plain index
--- rather than failing.
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname = current_schema() AND indexname = 'idx_users_email_lower') THEN
-    IF EXISTS (SELECT 1 FROM users WHERE email IS NOT NULL GROUP BY LOWER(email) HAVING COUNT(*) > 1) THEN
-      RAISE NOTICE 'users has emails that differ only by case; idx_users_email_lower created non-unique';
-      CREATE INDEX idx_users_email_lower ON users (LOWER(email));
-    ELSE
-      CREATE UNIQUE INDEX idx_users_email_lower ON users (LOWER(email));
-    END IF;
-  END IF;
-END $$;
+-- written (checked 2026-10-03), and every insert path checks LOWER(email)
+-- first. If duplicates ever existed this would fail loudly rather than leave
+-- sign-in matching an arbitrary account.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower ON users (LOWER(email));
 
 -- Finds accounts left unconfirmed for the 30-day cleanup job.
 CREATE INDEX IF NOT EXISTS idx_users_unconfirmed

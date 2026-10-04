@@ -33,7 +33,9 @@ export function usernameProblem(username) {
  * @param {{name?: string, username?: string, displayPreference?: string}} input
  * @returns {{profile?: {name: string, username: string|null, displayPreference: 'name'|'username'}, error?: string}}
  */
-export function parseProfile({ name, username, displayPreference } = {}) {
+export function parseProfile(input) {
+  // Fix: a JSON body of `null` is a validation error, not a crash (PR #714 review).
+  const { name, username, displayPreference } = input || {};
   const cleanName = String(name || '').trim().replace(/\s+/g, ' ');
   if (!cleanName) return { error: 'Enter your name.' };
   if (cleanName.length > NAME_MAX) return { error: `Names can be up to ${NAME_MAX} characters.` };

@@ -9,7 +9,7 @@ describe('password hashing', () => {
   it('round-trips, salts every hash, and rejects the wrong password', async () => {
     const first = await hashPassword('a long enough passphrase');
     const second = await hashPassword('a long enough passphrase');
-    expect(first).toMatch(/^scrypt\$65536\$8\$2\$/);
+    expect(first).toMatch(/^scrypt\$32768\$8\$3\$/);
     expect(first).not.toBe(second);
     expect(await verifyPassword('a long enough passphrase', first)).toEqual({ ok: true, needsRehash: false });
     expect((await verifyPassword('a long enough passphrasE', first)).ok).toBe(false);
@@ -61,6 +61,7 @@ describe('profile rules', () => {
 
   it('requires a name and a username when showing by username', () => {
     expect(parseProfile({ name: '  ' }).error).toMatch(/Enter your name/);
+    expect(parseProfile(null).error).toMatch(/Enter your name/);
     expect(parseProfile({ name: 'Jane', displayPreference: 'username' }).error).toMatch(/Choose a username/);
     expect(parseProfile({ name: ' Jane   Hiker ', username: '' }).profile)
       .toEqual({ name: 'Jane Hiker', username: null, displayPreference: 'name' });
