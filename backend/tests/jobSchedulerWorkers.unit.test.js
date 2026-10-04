@@ -25,7 +25,8 @@ const {
   registerNewsCollectionHandler, registerBatchNewsHandler, registerBatchTrailStatusHandler,
   registerNewsletterHandler, registerModerationSweepHandler, registerDigestHandler,
   registerPipelineCollectionHandler, submitBatchNewsJob, triggerDigestManually,
-  triggerPreviewManually, scheduleNewsCollection, schedulePipelineCollection, scheduleImageBackup
+  triggerPreviewManually, scheduleNewsCollection, schedulePipelineCollection, scheduleImageBackup,
+  scheduleUnconfirmedCleanup, registerUnconfirmedCleanupHandler
 } = await import('../services/jobScheduler.js');
 
 let infoSpy;
@@ -45,6 +46,18 @@ beforeEach(async () => {
 afterEach(async () => {
   await stopJobScheduler();
   vi.restoreAllMocks();
+});
+
+describe('unconfirmed-account cleanup (spec 046)', () => {
+  it('runs daily at 04:15 Eastern and hands job data to its handler', async () => {
+    await scheduleUnconfirmedCleanup();
+    expect(boss.schedule).toHaveBeenCalledWith(JOB_NAMES.UNCONFIRMED_CLEANUP, '15 4 * * *', {}, { tz: 'America/New_York' });
+
+    const handler = vi.fn().mockResolvedValue(undefined);
+    await registerUnconfirmedCleanupHandler(handler);
+    await boss.workers[JOB_NAMES.UNCONFIRMED_CLEANUP].callback({ id: 'c1', data: { from: 'cron' } });
+    expect(handler).toHaveBeenCalledWith({ from: 'cron' });
+  });
 });
 
 describe('registerWorker (via register*Handler exports)', () => {
