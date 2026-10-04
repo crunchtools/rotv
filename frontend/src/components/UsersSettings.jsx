@@ -15,8 +15,8 @@ const TTL_MIN = 5;
 const TTL_MAX = 60;
 const TTL_DEFAULT = 30;
 
-// Lifetime of emailed sign-in links and codes (spec 045).
-function EmailSignInSettings() {
+// Lifetime of emailed password-reset links (specs 045, 046).
+function PasswordResetSettings() {
   const [minutes, setMinutes] = useState(TTL_DEFAULT);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState(null);
@@ -49,7 +49,7 @@ function EmailSignInSettings() {
         return {};
       });
       if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
-      setStatus({ type: 'success', message: 'Saved. New sign-in emails use this lifetime.' });
+      setStatus({ type: 'success', message: 'Saved. New password-reset emails use this lifetime.' });
     } catch (err) {
       setStatus({ type: 'error', message: err.message });
     } finally {
@@ -59,9 +59,9 @@ function EmailSignInSettings() {
 
   return (
     <div className="settings-section">
-      <h4>Email sign-in</h4>
+      <h4>Password reset emails</h4>
       <label htmlFor="email-login-ttl" className="settings-description">
-        How long an emailed sign-in link and code stay valid ({TTL_MIN}–{TTL_MAX} minutes)
+        How long a password-reset link stays valid ({TTL_MIN}–{TTL_MAX} minutes)
       </label>
       <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginTop: '6px' }}>
         <input
@@ -225,7 +225,7 @@ function UsersSettings() {
 
       {users.length === 0 && <p style={{ color: '#666', fontStyle: 'italic' }}>No users found.</p>}
 
-      <EmailSignInSettings />
+      <PasswordResetSettings />
     </div>
   );
 }

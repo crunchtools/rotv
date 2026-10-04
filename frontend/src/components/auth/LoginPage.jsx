@@ -3,21 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { browserSupportsWebAuthn, browserSupportsWebAuthnAutofill } from '@simplewebauthn/browser';
 import { useAuth } from '../../hooks/useAuth';
 import { AuthShell, ProviderChoice, AuthLink } from './AuthShell';
-import EmailSignIn from '../EmailSignIn';
 
 /**
  * /login (spec 046): choose Google or email first. Email offers a password,
- * a passkey (also offered in the email field's autofill), or a one-time
- * code by email, which doubles as "forgot password".
+ * a passkey (also offered in the email field's autofill), and "Forgot
+ * password?", which emails a link to choose a new password.
  */
 function LoginPage() {
   const navigate = useNavigate();
-  const { providers, loginWithPassword, loginWithPasskey } = useAuth();
+  const { providers, loginWithPassword, loginWithPasskey, requestPasswordReset } = useAuth();
   const [mode, setMode] = useState('choose');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState(null);
+  const [resetMessage, setResetMessage] = useState(null);
   const passkeysSupported = browserSupportsWebAuthn();
 
   // Offer saved passkeys in the email field's autofill while the form is open.
@@ -35,20 +35,23 @@ function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
-  const run = (action) => async (e) => {
+  // Runs a form action with shared busy/error handling, then `after` (by
+  // default, back to the map).
+  const run = (action, after = () => navigate('/')) => async (e) => {
     e?.preventDefault();
     setBusy(true);
     setFormError(null);
     try {
       await action();
-      navigate('/');
+      after();
     } catch (err) {
       if (err?.name !== 'NotAllowedError') setFormError(err.message);
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   const handlePassword = run(() => loginWithPassword(email, password));
+  const handleForgot = run(async () => setResetMessage(await requestPasswordReset(email)), () => {});
   const handlePasskey = run(() => loginWithPasskey());
 
   return (
@@ -93,25 +96,44 @@ function LoginPage() {
             </button>
           )}
           {formError && <p className="auth-error" role="alert">{formError}</p>}
-          {providers.email && (
-            <p className="auth-alt-links">
-              <button type="button" className="auth-link-btn" onClick={() => setMode('code')}>Forgot password?</button>
-              <span aria-hidden="true"> · </span>
-              <button type="button" className="auth-link-btn" onClick={() => setMode('code')}>Email me a sign-in code</button>
-            </p>
+          {providers.passwordReset && (
+            <button type="button" className="auth-link-btn" onClick={() => { setFormError(null); setMode('forgot'); }}>
+              Forgot password?
+            </button>
           )}
           <button type="button" className="auth-link-btn" onClick={() => setMode('choose')}>Other ways to sign in</button>
         </form>
       )}
 
-      {mode === 'code' && (
-        <div className="auth-form">
-          <p className="auth-hint">
-            We&apos;ll email you a link and a code. If you forgot your password, sign in this way, then set a new one in Settings.
-          </p>
-          <EmailSignIn onSignedIn={(result) => navigate(result?.needsSignupCompletion ? '/welcome' : '/')} />
-          <button type="button" className="auth-link-btn" onClick={() => setMode('password')}>Back to password sign-in</button>
-        </div>
+      {mode === 'forgot' && (
+        <form className="auth-form" onSubmit={handleForgot}>
+          {resetMessage ? (
+            <p className="auth-hint" role="status">{resetMessage}</p>
+          ) : (
+            <>
+              <p className="auth-hint">Enter your email and we&apos;ll send you a link to choose a new password.</p>
+              <fieldset className="auth-fieldset">
+                <label className="auth-label" htmlFor="forgot-email">Email</label>
+                <input
+                  id="forgot-email"
+                  className="auth-input"
+                  type="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </fieldset>
+              <button className="signin-confirm-btn auth-submit" type="submit" disabled={busy || !email}>
+                {busy ? 'Sending…' : 'Email me a reset link'}
+              </button>
+            </>
+          )}
+          {formError && <p className="auth-error" role="alert">{formError}</p>}
+          <button type="button" className="auth-link-btn" onClick={() => { setResetMessage(null); setMode('password'); }}>
+            Back to sign in
+          </button>
+        </form>
       )}
     </AuthShell>
   );

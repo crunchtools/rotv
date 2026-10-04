@@ -34,14 +34,14 @@ function SignupPage() {
     setBusy(true);
     setFormError(null);
     try {
-      const { passkeySaved } = await signUp({
+      await signUp({
         ...profile,
         email,
         method,
         password: method === 'password' ? password : undefined,
         ...consents
       });
-      navigate(passkeySaved ? '/?welcome=1' : '/?welcome=nopasskey');
+      navigate('/');
     } catch (err) {
       setFormError(err.message);
       setBusy(false);
@@ -85,21 +85,18 @@ function SignupPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   required
                 />
-                <p className="auth-hint">At least {PASSWORD_MIN} characters. A few unrelated words works well.</p>
+                <p className="auth-hint">
+                  At least {PASSWORD_MIN} characters
+                  {passkeysSupported && (
+                    <> or <button type="button" className="auth-inline-link" onClick={() => setMethod('passkey')}>use passkey instead</button></>
+                  )}.
+                </p>
               </>
             ) : (
               <p className="auth-passkey-note">
-                You&apos;ll create a passkey with your fingerprint, face, or screen lock. Nothing to remember or type.
+                You&apos;ll create a passkey with your fingerprint, face, or screen lock, or{' '}
+                <button type="button" className="auth-inline-link" onClick={() => setMethod('password')}>use a password instead</button>.
               </p>
-            )}
-            {passkeysSupported && (
-              <button
-                type="button"
-                className="auth-link-btn"
-                onClick={() => setMethod(method === 'password' ? 'passkey' : 'password')}
-              >
-                {method === 'password' ? 'Use a passkey instead' : 'Use a password instead'}
-              </button>
             )}
           </fieldset>
 

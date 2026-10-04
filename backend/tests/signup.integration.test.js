@@ -28,7 +28,7 @@ const STRONG = 'correct horse battery staple';
 const adminPool = new pg.Pool();
 const pool = new pg.Pool({ options: '-c search_path=signup_probe,public' });
 const migrations = await Promise.all(
-  ['092_email_login_tokens.sql', '093_signup_accounts.sql'].map((name) =>
+  ['092_email_login_tokens.sql', '093_signup_accounts.sql', '094_email_link_only.sql'].map((name) =>
     readFile(new URL(`../migrations/${name}`, import.meta.url), 'utf8'))
 );
 
@@ -61,7 +61,7 @@ function signupBody(overrides = {}) {
 }
 
 function linkToken(message) {
-  return message.text.match(/\/signin#token=([A-Za-z0-9_-]+)/)[1];
+  return message.text.match(/#token=([A-Za-z0-9_-]+)/)[1];
 }
 
 // No breached passwords unless a test says otherwise.
@@ -117,8 +117,9 @@ describe('sign-up with a password', () => {
       displayName: 'trailjane', emailVerified: false, needsSignupCompletion: false
     });
     expect(mailer.sent).toHaveLength(1);
-    expect(mailer.sent[0].subject).toMatch(/Confirm your Roots of the Valley email/);
-    expect(mailer.sent[0].text).toContain('expire in 7 days');
+    expect(mailer.sent[0].subject).toBe('Confirm your email for Roots of the Valley');
+    expect(mailer.sent[0].text).toContain('expires in 7 days');
+    expect(mailer.sent[0].text).not.toMatch(/\b\d{6}\b/);
 
     const stored = await pool.query('SELECT hash FROM user_passwords');
     expect(stored.rows[0].hash).toMatch(/^scrypt\$/);
@@ -132,8 +133,7 @@ describe('sign-up with a password', () => {
     await agent.post('/auth/signup').send(signupBody()).expect(201);
     // Read the token before makeApp() swaps in a fresh mailer.
     const token = linkToken(mailer.sent[0]);
-    const verify = await request(makeApp()).post('/auth/email/verify').send({ token }).expect(200);
-    expect(verify.body.confirmed).toBe(true);
+    await request(makeApp()).post('/auth/email/verify').send({ token }).expect(200);
 
     const user = await pool.query('SELECT email_verified_at, newsletter_opt_in FROM users');
     expect(user.rows[0].email_verified_at).not.toBeNull();
@@ -330,25 +330,18 @@ describe('changing sign-in methods', () => {
     await agent.post('/auth/passkey/register/options').expect(403);
   });
 
-  it('never gives an admin account a password', async () => {
-    const admin = await findOrCreateUser(pool, 'boss@example.com', 'email', { id: 'boss@example.com', emails: [{ value: 'boss@example.com' }] }, null);
-    expect(admin.is_admin).toBe(true);
+  it('never gives an admin account a password, even one set before promotion', async () => {
     const app = makeApp();
     const agent = request.agent(app);
-    await agent.post('/auth/email/start').send({ email: 'boss@example.com' }).expect(200);
-    process.env.ADMIN_EMAIL = 'boss@example.com';
-    try {
-      await agent.post('/auth/email/verify').send({ token: linkToken(mailer.sent[0]) }).expect(200);
-      const res = await agent.put('/auth/password').send({ password: STRONG }).expect(403);
-      expect(res.body.error).toMatch(/Admin accounts/);
+    await agent.post('/auth/signup').send(signupBody({ email: 'boss@example.com' })).expect(201);
+    await pool.query(`UPDATE users SET is_admin = TRUE, role = 'admin' WHERE email = 'boss@example.com'`);
 
-      // A password that somehow exists (set before promotion) still can't sign an admin in.
-      const { hashPassword } = await import('../services/passwords.js');
-      await pool.query('INSERT INTO user_passwords (user_id, hash) VALUES ($1, $2)', [admin.id, await hashPassword(STRONG)]);
-      await request(app).post('/auth/password/login').send({ email: 'boss@example.com', password: STRONG }).expect(401);
-    } finally {
-      delete process.env.ADMIN_EMAIL;
-    }
+    const res = await agent.put('/auth/password').send({ password: 'another long passphrase' }).expect(403);
+    expect(res.body.error).toMatch(/Admin accounts/);
+    await request(app).post('/auth/password/login').send({ email: 'boss@example.com', password: STRONG }).expect(401);
+    // Nor does "Forgot password?" email an admin.
+    await request(app).post('/auth/password/forgot').send({ email: 'boss@example.com' }).expect(200);
+    expect(mailer.sent.filter((m) => m.subject.includes('Reset'))).toHaveLength(0);
   });
 });
 
@@ -423,17 +416,6 @@ describe('migration 093 on an existing database', () => {
 });
 
 describe('confirmation and the newsletter', () => {
-  it('confirms by code too, keeping the password and releasing the opt-in', async () => {
-    const agent = request.agent(makeApp());
-    await agent.post('/auth/signup').send(signupBody()).expect(201);
-    const code = mailer.sent[0].text.match(/code: (\d{6})/)[1];
-    const verify = await request(makeApp()).post('/auth/email/verify')
-      .send({ email: 'jane@example.com', code }).expect(200);
-    expect(verify.body.confirmed).toBe(true);
-    expect((await pool.query('SELECT 1 FROM user_passwords')).rows).toHaveLength(1);
-    expect(addSubscriber).toHaveBeenCalledWith('jane@example.com', pool);
-  });
-
   it('keeps the opt-in for a later retry when Buttondown fails', async () => {
     await request(makeApp()).post('/auth/signup').send(signupBody()).expect(201);
     await pool.query('UPDATE users SET email_verified_at = NOW()');
@@ -448,56 +430,36 @@ describe('confirmation and the newsletter', () => {
 });
 
 describe('account protection and cleanup', () => {
-  it('lets the verified owner take over an unconfirmed sign-up made with their address', async () => {
+  it('lets the address owner take over an unconfirmed sign-up through "Forgot password?"', async () => {
+    const authenticator = createSoftAuthenticator();
     const squatter = request.agent(makeApp());
     await squatter.post('/auth/signup').send(signupBody({ email: 'owner@example.com' })).expect(201);
     const confirmToken = linkToken(mailer.sent[0]);
+    const options = (await squatter.post('/auth/passkey/register/options')).body;
+    await squatter.post('/auth/passkey/register/verify').send({ response: authenticator.register(options, ORIGIN.origin) }).expect(201);
 
     const owner = request.agent(makeApp());
-    await owner.post('/auth/email/start').send({ email: 'owner@example.com' }).expect(200);
-    const signIn = mailer.sent.find((m) => m.subject.includes('sign-in code'));
-    await owner.post('/auth/email/verify').send({ token: linkToken(signIn) }).expect(200);
+    await owner.post('/auth/password/forgot').send({ email: 'owner@example.com' }).expect(200);
+    const reset = mailer.sent.find((m) => m.subject.includes('Reset'));
+    await owner.post('/auth/password/reset').send({ token: linkToken(reset), password: 'the real owner passphrase' }).expect(200);
 
-    const me = (await owner.get('/auth/user')).body;
-    expect(me.emailVerified).toBe(true);
-    expect(me.notice).toBe('credentials_reset');
-    expect((await pool.query('SELECT 1 FROM user_passwords')).rows).toHaveLength(0);
+    expect((await owner.get('/auth/user')).body.emailVerified).toBe(true);
+    expect((await pool.query('SELECT 1 FROM user_passkeys')).rows).toHaveLength(0);
     expect((await pool.query('SELECT newsletter_opt_in FROM users')).rows[0].newsletter_opt_in).toBe(false);
-    // The squatter's password no longer works, nor does the sign-up's confirmation link.
+    // The squatter's password and confirmation link no longer work.
     await request(makeApp()).post('/auth/password/login').send({ email: 'owner@example.com', password: STRONG }).expect(401);
     await request(makeApp()).post('/auth/email/verify').send({ token: confirmToken }).expect(400);
-  });
-
-  it("lets the address owner remove a sign-up they didn't make from its confirmation link", async () => {
-    await request(makeApp()).post('/auth/signup').send(signupBody({ email: 'victim@example.com' })).expect(201);
-    const token = linkToken(mailer.sent[0]);
-    const app = makeApp();
-    await request(app).post('/auth/email/reject').send({ token }).expect(200);
-
-    expect((await pool.query('SELECT 1 FROM users')).rows).toHaveLength(0);
-    expect((await pool.query('SELECT 1 FROM user_passwords')).rows).toHaveLength(0);
-    await request(app).post('/auth/password/login').send({ email: 'victim@example.com', password: STRONG }).expect(401);
-    // Used up, and a sign-in link can't be used to reject anything.
-    await request(app).post('/auth/email/reject').send({ token }).expect(400);
-  });
-
-  it('says so instead of claiming a removal when the account is already confirmed', async () => {
-    const agent = request.agent(makeApp());
-    await agent.post('/auth/signup').send(signupBody()).expect(201);
-    await agent.post('/auth/confirm-email/resend').expect(200);
-    const [first, second] = mailer.sent.map(linkToken);
-    await request(makeApp()).post('/auth/email/verify').send({ token: first }).expect(200);
-
-    const res = await request(makeApp()).post('/auth/email/reject').send({ token: second }).expect(409);
-    expect(res.body.error).toMatch(/already confirmed/);
-    expect((await pool.query('SELECT 1 FROM users')).rows).toHaveLength(1);
+    await request(makeApp()).post('/auth/password/login')
+      .send({ email: 'owner@example.com', password: 'the real owner passphrase' }).expect(200);
   });
 
   it('sends accounts made outside the form to finish sign-up', async () => {
+    await findOrCreateUser(pool, 'nobody@example.com', 'google', { id: 'g-walker', displayName: 'Walker', emails: [{ value: 'walker@example.com' }] }, null);
     const agent = request.agent(makeApp());
-    await agent.post('/auth/email/start').send({ email: 'walker@example.com' }).expect(200);
-    const verify = await agent.post('/auth/email/verify').send({ token: linkToken(mailer.sent[0]) }).expect(200);
-    expect(verify.body.needsSignupCompletion).toBe(true);
+    await agent.post('/auth/password/forgot').send({ email: 'walker@example.com' }).expect(200);
+    const reset = await agent.post('/auth/password/reset')
+      .send({ token: linkToken(mailer.sent[0]), password: 'walker long passphrase' }).expect(200);
+    expect(reset.body.needsSignupCompletion).toBe(true);
 
     await agent.post('/auth/complete-signup').send({ name: 'Walker', ageConfirmed: true }).expect(400);
     await agent.post('/auth/complete-signup')

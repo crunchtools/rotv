@@ -44,11 +44,9 @@ export const ipKey = (req) => ipKeyGenerator(req.ip);
  * Mark the current session as freshly signed in. Changing a password or
  * passkey requires a sign-in within FRESH_LOGIN_MS.
  * @param {import('express').Request} req
- * @param {{credentialsReset?: boolean}} user - from findOrCreateUser or a users row
  */
-export function stampLogin(req, user) {
+export function stampLogin(req) {
   req.session.authAt = Date.now();
-  if (user?.credentialsReset) req.session.authNotice = 'credentials_reset';
 }
 
 /**
@@ -61,7 +59,7 @@ export function completeLogin(req, user) {
   return new Promise((resolve, reject) => {
     req.login(user, (err) => {
       if (err) return reject(err);
-      stampLogin(req, user);
+      stampLogin(req);
       resolve();
     });
   });

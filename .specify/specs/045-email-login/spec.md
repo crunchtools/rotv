@@ -1,3 +1,5 @@
+> **Superseded in v1.52.0 (spec 046):** email no longer signs anyone in and has no codes. It confirms new accounts and resets passwords, one link each. The delivery setup below still applies.
+
 # Spec 045: Email sign-in
 
 ## Why

@@ -13,7 +13,8 @@ import express from 'express';
 import { createLogger } from '../utils/logger.js';
 import { isAuthenticated } from '../middleware/auth.js';
 import { limiter, ipKey, emailKey, completeLogin, requireFreshLogin } from '../utils/authSession.js';
-import { normalizeEmail, requestLogin } from '../services/emailLogin.js';
+import { normalizeEmail, sendAccountEmail, consumeToken } from '../services/emailLogin.js';
+import { findOrCreateUser, adminEmail } from '../config/userAccount.js';
 import { hashPassword, verifyPassword, passwordProblem } from '../services/passwords.js';
 import { parseProfile, usernameProblem, usernameAvailable } from '../services/accountProfile.js';
 import {
@@ -26,7 +27,9 @@ const logger = createLogger('AuthAccounts');
 const LOGIN_FAILED = 'Email or password is incorrect.';
 const PASSKEY_FAILED = "That passkey didn't work. Try again, or sign in another way.";
 const SIGNIN_FAILED = 'Sign-in failed. Please try again.';
-const ACCOUNT_EXISTS = 'An account with that email or username already exists. Sign in instead, or use “Email me a sign-in code”.';
+const RESET_SENT = "If there's an account for that address, we've emailed you a link to reset your password.";
+const RESET_FAILED = 'That reset link has expired or was already used. Request a new one from the sign-in page.';
+const ACCOUNT_EXISTS = 'An account with that email or username already exists. Sign in instead, or use “Forgot password?” on the sign-in page.';
 const CONSENT_REQUIRED = 'Please confirm you are 13 or older and agree to the Terms of Use and Privacy Policy.';
 
 const userKey = (req) => `user:${req.user?.id}`;
@@ -58,9 +61,9 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
   const sendConfirmation = async (email) => {
     if (!mailer.enabled) return;
     try {
-      await requestLogin(pool, mailer, email, frontendUrl, { purpose: 'confirm' });
+      await sendAccountEmail(pool, mailer, email, frontendUrl, 'confirm');
     } catch (err) {
-      // Sign-up still succeeds; the banner's "Resend" covers a failed send.
+      // Sign-up still succeeds; "Resend confirmation email" in Settings covers a failed send.
       logger.error(`Confirmation email failed: ${err.code || err.name} ${err.responseCode || ''}`.trim());
     }
   };
@@ -191,6 +194,69 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
       } catch (err) {
         logger.error(`Password sign-in failed: ${err.code || err.name}`);
         res.status(500).json({ error: SIGNIN_FAILED });
+      }
+    });
+
+  // Forgot password: always the same answer, so it never reveals whether an
+  // address has an account. Only non-admin accounts get an email (admins sign
+  // in with Google or a passkey). A failed send is logged, not reported, for
+  // the same reason.
+  router.post('/password/forgot',
+    express.json(),
+    limiter(60 * 60 * 1000, 5, ipKey),
+    limiter(15 * 60 * 1000, 3, emailKey),
+    limiter(24 * 60 * 60 * 1000, 10, emailKey),
+    async (req, res) => {
+      if (!mailer.enabled) return res.status(501).json({ error: 'Password reset is not available right now.' });
+      const email = normalizeEmail(req.body?.email);
+      if (!email) return res.status(400).json({ error: 'Enter a valid email address.' });
+      try {
+        const account = await pool.query(
+          `SELECT 1 FROM users WHERE LOWER(email) = $1 AND is_admin IS NOT TRUE AND role IS DISTINCT FROM 'admin'`,
+          [email]
+        );
+        // Fix: never build the link from the Host header (spec 045 review);
+        // frontendUrl is the configured origin.
+        if (account.rows.length) await sendAccountEmail(pool, mailer, email, frontendUrl, 'reset');
+      } catch (err) {
+        // SMTP replies can quote the address, so only error codes are logged.
+        logger.error(`Password reset email failed: ${err.code || err.name} ${err.responseCode || ''}`.trim());
+      }
+      res.json({ success: true, message: RESET_SENT });
+    });
+
+  // The page behind a reset link: the person must choose a new password; the
+  // link alone signs no one in. Following the link proves the address, so an
+  // unconfirmed account becomes confirmed and loses any passkey set before
+  // that (see findOrCreateUser).
+  router.post('/password/reset',
+    express.json(),
+    limiter(15 * 60 * 1000, 30, ipKey),
+    async (req, res) => {
+      // Checked before the link is used up, so a rejected password can be retried.
+      const problem = await passwordProblem(req.body?.password);
+      if (problem) return res.status(400).json({ error: problem });
+      try {
+        const email = await consumeToken(pool, String(req.body?.token || ''), 'reset');
+        const account = email
+          ? await pool.query(
+            `SELECT 1 FROM users WHERE LOWER(email) = LOWER($1) AND is_admin IS NOT TRUE AND role IS DISTINCT FROM 'admin'`,
+            [email]
+          )
+          : { rows: [] };
+        if (!account.rows.length) return res.status(400).json({ error: RESET_FAILED });
+
+        const user = await findOrCreateUser(pool, adminEmail(), 'email', { id: email, emails: [{ value: email }] }, null);
+        await pool.query(
+          `INSERT INTO user_passwords (user_id, hash) VALUES ($1, $2)
+           ON CONFLICT (user_id) DO UPDATE SET hash = EXCLUDED.hash, updated_at = NOW()`,
+          [user.id, await hashPassword(req.body.password)]
+        );
+        await completeLogin(req, user);
+        res.json({ success: true, needsSignupCompletion: !user.signup_completed_at });
+      } catch (err) {
+        logger.error(`Password reset failed: ${err.code || err.name}`);
+        res.status(500).json({ error: 'Could not reset your password. Please try again.' });
       }
     });
 
@@ -347,7 +413,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
   });
 
   // One-time step for accounts created without the sign-up form (a first
-  // Google sign-in, or a first emailed code).
+  // Google sign-in).
   router.post('/complete-signup', isAuthenticated, express.json(), async (req, res) => {
     const { profile, error } = parseProfile(req.body);
     if (error) return res.status(400).json({ error });
@@ -382,7 +448,7 @@ export function addAccountRoutes(router, pool, { mailer, frontendUrl }) {
       if (req.user.email_verified_at) return res.status(400).json({ error: 'Your email is already confirmed.' });
       if (!mailer.enabled) return res.status(501).json({ error: 'Email is not available right now.' });
       try {
-        await requestLogin(pool, mailer, req.user.email, frontendUrl, { purpose: 'confirm' });
+        await sendAccountEmail(pool, mailer, req.user.email, frontendUrl, 'confirm');
         res.json({ success: true, message: `We sent a new confirmation email to ${req.user.email}.` });
       } catch (err) {
         logger.error(`Confirmation resend failed: ${err.code || err.name}`);
