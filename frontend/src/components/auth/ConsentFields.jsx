@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * The sign-up checkboxes (spec 046): age and terms are required, the
- * newsletter is optional and unchecked by default.
+ * newsletter is optional and checked by default (Scott: encourage sign-ups).
  *
  * @param {{value: {ageConfirmed: boolean, termsAccepted: boolean, newsletter: boolean},
  *   onChange: (next: object) => void}} props

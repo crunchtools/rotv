@@ -14,7 +14,7 @@ function WelcomePage() {
   const navigate = useNavigate();
   const { user, loading, completeSignup } = useAuth();
   const [profile, setProfile] = useState({ name: '', username: '', displayPreference: 'name' });
-  const [consents, setConsents] = useState({ ageConfirmed: false, termsAccepted: false, newsletter: false });
+  const [consents, setConsents] = useState({ ageConfirmed: false, termsAccepted: false, newsletter: true });
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState(null);
 

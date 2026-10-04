@@ -21,7 +21,7 @@ function SignupPage() {
   const [email, setEmail] = useState('');
   const [method, setMethod] = useState('password');
   const [password, setPassword] = useState('');
-  const [consents, setConsents] = useState({ ageConfirmed: false, termsAccepted: false, newsletter: false });
+  const [consents, setConsents] = useState({ ageConfirmed: false, termsAccepted: false, newsletter: true });
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState(null);
   const passkeysSupported = browserSupportsWebAuthn();
