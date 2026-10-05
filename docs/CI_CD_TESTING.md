@@ -573,6 +573,7 @@ repos:
 
   # Python ruff (for scripts/get_google_token.py), in pre-commit's own environment
   - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.9
     hooks:
       - id: ruff-check
         args: [--fix]
