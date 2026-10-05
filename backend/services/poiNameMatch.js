@@ -86,21 +86,10 @@ export function findNamedPois({ title, description }, pois, { excludeIds = new S
 const POI_NAMES_TTL_MS = 60_000;
 let poiNamesCache = { rows: null, loadedAt: 0 };
 
-async function loadActivePoiNames(pool) {
-  if (poiNamesCache.rows && Date.now() - poiNamesCache.loadedAt < POI_NAMES_TTL_MS) {
-    return poiNamesCache.rows;
-  }
-  const poiRows = await pool.query(
-    `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE) AND name IS NOT NULL`
-  );
-  const rows = poiRows.rows.map(poi => ({ id: poi.id, name: poi.name, norm: normalizeName(poi.name) }));
-  poiNamesCache = { rows, loadedAt: Date.now() };
-  return rows;
-}
-
 /**
  * The active POIs an item names, best match first. The POI list is cached for a minute,
- * so a POI renamed or deleted mid-sweep is picked up on the next one.
+ * so a POI renamed or deleted mid-sweep is picked up on the next one. The app has one
+ * pool, so the cache isn't keyed by it.
  *
  * @param {Pool} pool - Database connection pool
  * @param {{title: string, description?: string}} item
@@ -108,5 +97,12 @@ async function loadActivePoiNames(pool) {
  * @returns {Promise<Array<{id: number, name: string}>>}
  */
 export async function getNamedPoiCandidates(pool, item, options = {}) {
-  return findNamedPois(item, await loadActivePoiNames(pool), options);
+  if (!poiNamesCache.rows || Date.now() - poiNamesCache.loadedAt >= POI_NAMES_TTL_MS) {
+    const poiRows = await pool.query(
+      `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE) AND name IS NOT NULL`
+    );
+    const rows = poiRows.rows.map(poi => ({ id: poi.id, name: poi.name, norm: normalizeName(poi.name) }));
+    poiNamesCache = { rows, loadedAt: Date.now() };
+  }
+  return findNamedPois(item, poiNamesCache.rows, options);
 }
