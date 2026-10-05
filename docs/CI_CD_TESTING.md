@@ -475,15 +475,11 @@ function MyComponent({ value, onUnusedCallback }) {
 
 **Running ESLint:**
 ```bash
-# Frontend
-cd frontend && npm run lint
-
-# Backend
-cd backend && npm run lint
+# Frontend and backend, in the base image (nothing is installed on the host)
+./run.sh lint
 
 # Fix auto-fixable issues
-cd frontend && npm run lint -- --fix
-cd backend && npm run lint -- --fix
+./run.sh lint --fix
 ```
 
 **Integration with Development:**
@@ -575,21 +571,22 @@ repos:
         language: system
         files: \.rs$
 
-  # Python ruff (for scripts/get_google_token.py)
-  - repo: local
+  # Python ruff (for scripts/get_google_token.py), in pre-commit's own environment
+  - repo: https://github.com/astral-sh/ruff-pre-commit
     hooks:
       - id: ruff-check
-        name: Ruff Python Linting
-        entry: ruff check --fix
-        language: system
-        files: \.py$
+        args: [--fix]
 ```
 
 **Install pre-commit hooks:**
 ```bash
-pip install pre-commit
 pre-commit install
 ```
+
+The host needs only git, podman, pre-commit and gh. ESLint, the frontend unit tests,
+Gourmand and Gatehouse all run in containers; never install npm, ruff or gatehouse on
+the host. Gatehouse reads its key from `~/.config/mcp-env/gatehouse.env`
+(`GEMINI_API_KEY=...`).
 
 ### ESLint Fix History (February 2026)
 
@@ -755,7 +752,7 @@ podman stop rootsofthevalley.org
 
 1. ✅ **Run tests locally:** `./run.sh test`
 2. ✅ **Build succeeds:** `./run.sh build`
-3. ✅ **ESLint passes:** `cd frontend && npm run lint` and `cd backend && npm run lint`
+3. ✅ **ESLint passes:** `./run.sh lint`
 4. ✅ **Manual verification:** Test the feature in browser
 5. ✅ **Update fixtures:** If schema changed, update test data
 6. ✅ **Add new tests:** Cover new functionality
@@ -798,12 +795,13 @@ podman stop rootsofthevalley.org
 ./run.sh stop
 
 # ESLint checks
-cd frontend && npm run lint
-cd backend && npm run lint
+./run.sh lint
 
 # Fix ESLint auto-fixable issues
-cd frontend && npm run lint -- --fix
-cd backend && npm run lint -- --fix
+./run.sh lint --fix
+
+# Frontend unit tests
+./run.sh test-frontend
 
 # Gourmand code quality check
 ./run.sh gourmand
