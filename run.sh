@@ -12,6 +12,8 @@ BASE_IMAGE_NAME="quay.io/crunchtools/rotv-base"
 IMAGE_NAME="quay.io/crunchtools/rotv"
 CONTAINER_NAME="${ROTV_CONTAINER:-rotv}"
 GOURMAND_IMAGE="quay.io/crunchtools/gourmand:latest"
+GATEHOUSE_IMAGE="quay.io/crunchtools/gatehouse:latest"
+GATEHOUSE_ENV_FILE="$HOME/.config/mcp-env/gatehouse.env"
 HOST_PORT="${ROTV_PORT:-8080}"
 
 # Development uses ephemeral storage (tmpfs) - data is thrown away on restart
@@ -22,6 +24,64 @@ SEED_DATA_FILE="$HOME/.rotv/seed-data.sql"
 PRODUCTION_HOST="${PRODUCTION_HOST:-lotor.dc3.crunchtools.com}"
 PRODUCTION_PORT="${PRODUCTION_PORT:-22422}"
 PRODUCTION_CONTAINER="${PRODUCTION_CONTAINER:-rootsofthevalley.org}"
+
+# Node tooling runs in the base image, never on the host (the host needs only git,
+# podman, pre-commit and gh). The package directory is mounted at /work/src and its
+# dependencies install into a named volume at /work/node_modules, one level up, where
+# Node's upward module lookup finds them without a node_modules in the checkout.
+# The image's entrypoint is systemd, so it is overridden.
+# Usage: run_node_tool <package dir> <volume name> <shell command run in /work/src> [ro|rw]
+run_node_tool() {
+    local pkg_dir="$1" volume="$2" tool_cmd="$3" mount_mode="${4:-ro}"
+    podman run --rm --security-opt label=disable \
+        -v "$PWD/$pkg_dir":/work/src:"$mount_mode" \
+        -v "$volume":/work/node_modules \
+        -e TOOL_CMD="$tool_cmd" \
+        --entrypoint bash "$BASE_IMAGE_NAME" -c '
+            set -e
+            cd /work
+            lock_sha=$(sha256sum src/package-lock.json | cut -d" " -f1)
+            if [ "$(cat node_modules/.lock-sha 2>/dev/null)" != "$lock_sha" ]; then
+                cp src/package.json src/package-lock.json .
+                npm ci --include=dev --no-audit --no-fund --loglevel=error
+                echo "$lock_sha" > node_modules/.lock-sha
+            fi
+            export PATH="/work/node_modules/.bin:$PATH"
+            cd /work/src
+            eval "$TOOL_CMD"
+        '
+}
+
+# ESLint over frontend and backend. Pass --fix to apply auto-fixes.
+run_eslint() {
+    local mount_mode=ro
+    [ "$1" = "--fix" ] && mount_mode=rw
+    run_node_tool . rotv-lint-node-modules \
+        "(cd frontend && eslint . $1) && (cd backend && eslint . $1)" "$mount_mode"
+}
+
+# Frontend unit tests (Vitest + jsdom).
+run_frontend_tests() {
+    run_node_tool frontend rotv-frontend-node-modules "vitest run"
+}
+
+# Gatehouse AI code review of this branch's diff against master, from its container
+# image (constitution XII). The key lives in $GATEHOUSE_ENV_FILE (GEMINI_API_KEY=...).
+run_gatehouse() {
+    if [ ! -f "$GATEHOUSE_ENV_FILE" ]; then
+        echo "❌ $GATEHOUSE_ENV_FILE not found (it holds GEMINI_API_KEY=...)"
+        return 1
+    fi
+    local base
+    base=$(git merge-base origin/master HEAD 2>/dev/null || echo master)
+    if git diff --quiet "$base"; then
+        echo "No changes against master, nothing to review"
+        return 0
+    fi
+    git diff "$base" | podman --events-backend=none run --rm --log-driver=none -i \
+        --env-file "$GATEHOUSE_ENV_FILE" --security-opt label=disable \
+        -v "$PWD":/src:ro -w /src "$GATEHOUSE_IMAGE" --stdin
+}
 
 # Build environment variable arguments for podman
 ENV_ARGS=""
@@ -344,38 +404,20 @@ ENVFILE
         podman run --rm -v "$PWD":/src:Z -w /src "$GOURMAND_IMAGE" \
             check --full --cache-dir /tmp/gourmand-cache . || GOURMAND_EXIT_CODE=$?
 
-        # Run ESLint on JavaScript/React code
         ESLINT_EXIT_CODE=0
         echo ""
         echo "Running ESLint on JavaScript/React code..."
-        if [ -d "node_modules" ]; then
-            npm run lint || ESLINT_EXIT_CODE=$?
-        else
-            echo "⚠ Node dependencies not installed (skipping ESLint)"
-            echo "  Install with: npm install"
-        fi
+        run_eslint || ESLINT_EXIT_CODE=$?
 
-        # Run frontend unit tests (Vitest + jsdom) on the host
         FRONTEND_TEST_EXIT_CODE=0
         echo ""
         echo "Running frontend unit tests..."
-        if [ -d "frontend/node_modules" ]; then
-            npm test --prefix frontend || FRONTEND_TEST_EXIT_CODE=$?
-        else
-            echo "⚠ Frontend dependencies not installed (skipping frontend unit tests)"
-            echo "  Install with: (cd frontend && npm install)"
-        fi
+        run_frontend_tests || FRONTEND_TEST_EXIT_CODE=$?
 
-        # Run Gatehouse AI code review
         GATEHOUSE_EXIT_CODE=0
         echo ""
         echo "Running Gatehouse AI code review..."
-        if command -v gatehouse &> /dev/null; then
-            gatehouse || GATEHOUSE_EXIT_CODE=$?
-        else
-            echo "⚠ Gatehouse not installed (skipping)"
-            echo "  Install with: uv tool install gatehouse"
-        fi
+        run_gatehouse || GATEHOUSE_EXIT_CODE=$?
 
         echo ""
         if [ $TEST_EXIT_CODE -eq 0 ] && [ $GOURMAND_EXIT_CODE -eq 0 ] && [ $ESLINT_EXIT_CODE -eq 0 ] && [ $FRONTEND_TEST_EXIT_CODE -eq 0 ] && [ $GATEHOUSE_EXIT_CODE -eq 0 ]; then
@@ -389,7 +431,7 @@ ENVFILE
             fi
             if [ $ESLINT_EXIT_CODE -ne 0 ]; then
                 echo "❌ ESLint found issues"
-                echo "   Try: npm run lint:fix"
+                echo "   Try: ./run.sh lint --fix"
             fi
             if [ $FRONTEND_TEST_EXIT_CODE -ne 0 ]; then
                 echo "❌ Frontend unit tests failed"
@@ -416,45 +458,29 @@ ENVFILE
 
     gatehouse)
         echo "Running Gatehouse AI code review..."
-        if command -v gatehouse &> /dev/null; then
-            gatehouse
-        else
-            echo "❌ Gatehouse not installed"
-            echo ""
-            echo "Install with:"
-            echo "  uv tool install gatehouse"
-            exit 1
-        fi
+        run_gatehouse
         ;;
 
     lint)
         echo "Running ESLint on JavaScript/React code..."
-        ESLINT_EXIT_CODE=0
-
-        # Check if node_modules exists
-        if [ ! -d "node_modules" ]; then
-            echo "❌ Dependencies not installed"
-            echo ""
-            echo "Install with:"
-            echo "  npm install"
+        if [ -n "$2" ] && [ "$2" != "--fix" ]; then
+            echo "Usage: ./run.sh lint [--fix]"
             exit 1
         fi
-
-        # Run ESLint
-        npm run lint
-        ESLINT_EXIT_CODE=$?
-
-        if [ $ESLINT_EXIT_CODE -eq 0 ]; then
+        if run_eslint "$2"; then
             echo ""
             echo "✓ ESLint checks passed"
         else
             echo ""
             echo "❌ ESLint found issues"
-            echo ""
-            echo "Try auto-fixing with:"
-            echo "  npm run lint:fix"
+            [ -z "$2" ] && echo "Try auto-fixing with: ./run.sh lint --fix"
             exit 1
         fi
+        ;;
+
+    test-frontend)
+        echo "Running frontend unit tests..."
+        run_frontend_tests
         ;;
 
     logs)
@@ -626,7 +652,8 @@ ENVFILE
         echo "TESTING COMMANDS"
         echo "  test           Run full test suite + Gourmand + ESLint + frontend unit tests + Gatehouse"
         echo "  gourmand       Run Gourmand AI slop detection only (fast iteration)"
-        echo "  lint           Run ESLint on JavaScript/React code (fast iteration)"
+        echo "  lint [--fix]   Run ESLint on JavaScript/React code, in a container"
+        echo "  test-frontend  Run frontend unit tests only, in a container"
         echo "  gatehouse      Run Gatehouse AI code review only (fast iteration)"
         echo ""
         echo "DEBUGGING COMMANDS"
