@@ -27,13 +27,14 @@ const inputStyle = {
 
 const GATE_VERDICT_COLOR = { pass: '#4caf50', review: '#ff9800', fail: '#f44336' };
 
-// Compact pass/review/fail pills for the three auto-moderation gates (spec 030).
+// Compact pass/review/fail pills for the auto-moderation gates (spec 030, 041).
 // Hover shows each gate's reason; a Tier-2 POI reassignment is called out inline.
 function GateBadges({ gates }) {
   if (!gates) return null;
   const items = [
     ['Date', gates.date],
     ['Relevance', gates.relevance],
+    ['Region', gates.region],
     ['POI', gates.poi]
   ].filter(([, g]) => g && g.verdict);
   if (items.length === 0) return null;

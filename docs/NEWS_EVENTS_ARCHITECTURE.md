@@ -79,7 +79,7 @@ A sweep (`processPendingItems`, `moderationService.js`) runs every 15 minutes an
    - **Date** (spec 030) — present, not in a future Eastern calendar day (news), year ≥ `moderation_date_floor_year`, consensus score ≥ threshold (4, or the POI's own threshold for items from its configured URL). Historical News skips this gate.
    - **Relevance** — 3 votes on title + summary with the pipeline's criteria (events use the shared criteria). 3/3 → pass, 0-1/3 → reject, 2/3 → review. For events, a vote counts if the item is relevant **or** about the POI; for news, only relevance counts.
    - **Region** (spec 041) — 3 votes on whether the subject is physically in Northeast Ohio. Unanimous out → reject.
-   - **POI** — about the assigned POI (Tier 1), or reassigned to its owner organization or containing boundary (Tier 2), else review.
+   - **POI** — about the assigned POI (Tier 1), or reassigned (Tier 2), else review. Collection files an item under whichever POI's search returned it, so the gate checks the title and summary for other POIs named outright (`poiNameMatch.js`). When another POI is named, the votes alone don't pass the item: a router call picks between the assigned POI, the named POIs, the owner organization, and the containing boundary.
 
 Everything else stays `pending` for a human. **Fix Date** (`fixDate`) rescores from the stored `date_signals` (events read the `start` signals), or re-renders the page if there are none, and never erases an existing date.
 
@@ -125,6 +125,7 @@ Official APIs (Serper, OpenRouter, USGS, Bluesky's API, the trackers, Buttondown
 | `backend/services/eventVenue.js` | JSON-LD event venues |
 | `backend/services/dateExtractor.js` | Date parsing and consensus scoring |
 | `backend/services/moderationService.js` | Moderation gates, sweep, queue, Fix Date |
+| `backend/services/poiNameMatch.js` | POIs named in a title or summary, for POI-gate reassignment |
 | `backend/services/newsletterDigestService.js` | Digest selection, dedup, rendering, send |
 | `backend/services/collection/registry.js` | Jobs tab registry |
 | `backend/migrations/089_news_pipelines.sql` | Pipeline columns, per-POI state, settings |

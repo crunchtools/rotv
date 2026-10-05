@@ -6,6 +6,7 @@ import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
 import { getReassignmentCandidates } from './geoService.js';
+import { getNamedPoiCandidates } from './poiNameMatch.js';
 import { newsRelevanceCriteria } from './newsPipelines.js';
 import { createLogger } from '../utils/logger.js';
 
@@ -97,7 +98,7 @@ async function runContentRelevanceVotes(pool, { title, description, poiName, con
 
 Title: "${title}"
 Summary: "${description || '(none)'}"
-Location: ${poiName || '(unknown)'}
+Filed under: ${poiName || '(unknown)'} (the place whose search found this — a guess, not a fact about the content)
 Type: ${contentType}
 
 ${criteria}
@@ -109,8 +110,11 @@ IMPORTANT: judge by SUBJECT, not venue. An off-topic event (a wedding, a politic
 rally) held at a park is still a reject.
 
 Also judge "about_poi": is this content specifically about "${poiName || '(unknown)'}"
-— either named directly or located there? Set about_poi false when the content is
-relevant to the region but is really about a different, broader, or neighboring place.
+— either named directly or located there? Go only by what the title and summary say;
+never assume the content happens there because it was filed there. Set about_poi false
+when the content is really about a different, broader, or neighboring place, including
+a similarly named one (a story about a monument is not about a house that shares the
+name), or about somewhere else entirely.
 
 Return ONLY valid JSON: {"relevant": true, "about_poi": true, "reasoning": "one sentence why"}`;
 
@@ -148,7 +152,7 @@ async function runRegionVotes(pool, { title, description, poiName }, numVotes = 
 
 Title: "${title}"
 Summary: "${description || '(none)'}"
-Location/POI: ${poiName || '(unknown)'}
+Filed under: ${poiName || '(unknown)'} (the place whose search found this — a guess, not evidence of where the content takes place)
 
 Is the SUBJECT of this content physically located IN that Northeast Ohio region?
 
@@ -157,6 +161,9 @@ organization. A national or multi-state organization's activity in another place
 OUT of region even when that organization also has a local presence — e.g. a Coast
 Guard change-of-command ceremony in Virginia, or a national park in another state,
 is out of region even though the Coast Guard or the Park Service also operates here.
+
+A title or summary that names another city, state, or area (e.g. "events in the
+Wilmington area") places the subject there: OUT of region, whatever it was filed under.
 
 When the location is genuinely unclear and there is no signal placing the subject
 outside the region, lean IN — regional collection already scoped the source.
@@ -185,21 +192,37 @@ Return ONLY valid JSON: {"in_region": true, "reasoning": "one sentence why"}`;
   return results.filter(Boolean);
 }
 
-// Tier-2 POI gate: when content is relevant but not about its assigned POI, ask which
-// candidate it actually belongs to — the assigned POI, its owner org, or its containing
-// boundary — or none. Single call, fired only on a Tier-1 miss.
-async function assignBestPoi(pool, { title, description, poiName }, candidates) {
-  const options = ['assigned'];
-  let optionText = `- "assigned": the content is about "${poiName || '(unknown)'}"`;
-  if (candidates.owner) {
-    options.push('owner');
-    optionText += `\n- "owner": the content is about "${candidates.owner.name}" (the organization that owns it)`;
-  }
-  if (candidates.boundary) {
-    options.push('boundary');
-    optionText += `\n- "boundary": the content is about "${candidates.boundary.name}" (the park/area it sits within)`;
-  }
-  optionText += `\n- "none": none of the above`;
+/**
+ * Reassignment options for the Tier-2 POI gate, in the order the router sees them: the
+ * POIs the content names outright (issue #713), then the assigned POI's owner org and
+ * containing boundary. A POI appears once, under its first role.
+ *
+ * @param {{owner: {id:number,name:string}|null, boundary: {id:number,name:string}|null}} candidates
+ * @param {Array<{id:number,name:string}>} [named] - POIs named in the content, best first
+ * @returns {Array<{key:string,id:number,name:string,label:string}>} key is the router's
+ *   answer for that option: "named_1", "named_2", ..., "owner", "boundary"
+ */
+export function buildPoiOptions(candidates, named = []) {
+  const options = [];
+  const add = (key, poi, label) => {
+    if (poi && !options.some(o => o.id === poi.id)) options.push({ key, id: poi.id, name: poi.name, label });
+  };
+  named.forEach((poi, i) => add(`named_${i + 1}`, poi, 'named in the content'));
+  add('owner', candidates.owner, 'the organization that owns the assigned place');
+  add('boundary', candidates.boundary, 'the park/area the assigned place sits within');
+  return options;
+}
+
+// Tier-2 POI gate: ask which place the content actually belongs to — the assigned POI,
+// one of the options, or none. Single call. A failed call is "none": the item goes to
+// manual review rather than passing on votes the gate has reason to doubt.
+async function assignBestPoi(pool, { title, description, poiName }, options) {
+  const keys = ['assigned', ...options.map(o => o.key), 'none'];
+  const optionText = [
+    `- "assigned": the content is about "${poiName || '(unknown)'}"`,
+    ...options.map(o => `- "${o.key}": the content is about "${o.name}" (${o.label})`),
+    `- "none": none of the above`
+  ].join('\n');
 
   const prompt = `You are routing a news/event item to the correct place for "Roots of The Valley."
 
@@ -209,14 +232,19 @@ Summary: "${description || '(none)'}"
 Which one is this content most about? Choose exactly one:
 ${optionText}
 
-Return ONLY valid JSON: {"choice": "assigned|owner|boundary|none"}`;
+Pick the most specific place the content is actually about. A place the title names
+beats a nearby, similarly named, or parent place it does not name. A place mentioned
+only in passing (the owner of the land, the city) is not the subject.
+
+Return ONLY valid JSON: {"choice": "${keys.join('|')}"}`;
 
   try {
     const r = await generateTextWithCustomPrompt(pool, prompt, { maxOutputTokens: 64, thinkingBudget: 0 });
     const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
     const choice = JSON.parse(raw).choice;
-    return options.includes(choice) ? choice : 'none';
-  } catch {
+    return keys.includes(choice) ? choice : 'none';
+  } catch (err) {
+    logger.warn(`POI routing failed: ${err.message}`);
     return 'none';
   }
 }
@@ -284,40 +312,48 @@ export function evaluateRegionGate(regionVotes) {
   return { verdict: 'review', reason: `Region split ${inCount}/${total} in` };
 }
 
-// POI gate (three tiers). Returns the verdict plus newPoiId when a Tier-2 reassignment
-// should be applied by the caller's write. Never rejects.
-//
-// deniedPoiIds (the POI deny list) is filtered out of the candidates so a reassignment
-// can never route an item onto a deny-listed POI — that would silently defeat the
-// hard-reject deny check, which runs once against the original poi_id earlier in the
-// pipeline. A would-be denied target drops the item to Tier 3 (manual review) instead.
+// POI gate (three tiers). Returns the verdict plus newPoiId for a Tier-2 reassignment,
+// applied by the caller's write. Never rejects.
+// Tier 1 trusts the about_poi votes only when the content names no other POI: the voters
+// wave through a similarly named neighbor (a John Brown Monument story filed under John
+// Brown House), so another named POI always goes to the router, even when the assigned
+// POI is named too. (issue #713)
+// deniedPoiIds never become a reassignment target; that would defeat the hard-reject
+// deny check, which ran once against the original poi_id. Such an item drops to Tier 3.
 async function evaluatePoiGate(pool, row, votes, deniedPoiIds = new Set()) {
+  const noChange = { reassigned_from: null, reassigned_to: null, newPoiId: null };
   const total = votes.length;
   const aboutCount = votes.filter(v => v.about_poi).length;
-  if (total > 0 && aboutCount * 2 >= total) {
-    return { verdict: 'pass', tier: 1, reason: `About assigned POI (${aboutCount}/${total} votes)`, reassigned_from: null, reassigned_to: null, newPoiId: null };
+  const majorityAbout = total > 0 && aboutCount * 2 >= total;
+
+  const item = { title: row.title, description: row.description };
+  const named = await getNamedPoiCandidates(pool, item, { excludeIds: new Set([...deniedPoiIds, row.poi_id]) });
+
+  if (majorityAbout && named.length === 0) {
+    return { verdict: 'pass', tier: 1, reason: `About assigned POI (${aboutCount}/${total} votes)`, ...noChange };
   }
 
   const candidates = await getReassignmentCandidates(pool, row.poi_id);
   if (candidates.owner && deniedPoiIds.has(candidates.owner.id)) candidates.owner = null;
   if (candidates.boundary && deniedPoiIds.has(candidates.boundary.id)) candidates.boundary = null;
-  if (!candidates.owner && !candidates.boundary) {
-    return { verdict: 'review', tier: 3, reason: 'Not about assigned POI; no eligible owner/boundary candidate', reassigned_from: null, reassigned_to: null, newPoiId: null };
+  const options = buildPoiOptions(candidates, named);
+  if (options.length === 0) {
+    return { verdict: 'review', tier: 3, reason: 'Not about assigned POI; no named, owner, or boundary candidate', ...noChange };
   }
 
-  const choice = await assignBestPoi(pool, { title: row.title, description: row.description, poiName: row.poi_name }, candidates);
+  const choice = await assignBestPoi(pool, { ...item, poiName: row.poi_name }, options);
   if (choice === 'assigned') {
-    return { verdict: 'pass', tier: 1, reason: 'Confirmed about assigned POI', reassigned_from: null, reassigned_to: null, newPoiId: null };
+    return { verdict: 'pass', tier: 1, reason: 'Confirmed about assigned POI', ...noChange };
   }
-  const target = choice === 'owner' ? candidates.owner : choice === 'boundary' ? candidates.boundary : null;
+  const target = options.find(o => o.key === choice);
   if (target) {
     return {
       verdict: 'pass', tier: 2,
-      reason: `Reassigned to ${target.name} (${choice})`,
+      reason: `Reassigned to ${target.name} (${target.label})`,
       reassigned_from: row.poi_id, reassigned_to: target.id, newPoiId: target.id
     };
   }
-  return { verdict: 'review', tier: 3, reason: 'Not confidently about assigned POI, owner, or boundary', reassigned_from: null, reassigned_to: null, newPoiId: null };
+  return { verdict: 'review', tier: 3, reason: 'Not confidently about the assigned POI or any candidate', ...noChange };
 }
 
 export async function processItem(pool, contentType, contentId, { forceStatus = null, runId = null } = {}) {
