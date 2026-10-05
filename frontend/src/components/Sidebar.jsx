@@ -740,6 +740,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           {sidebarTab === 'view' && (
             isEditing ? (
               <EditView
+                key={linearFeature?.id ?? 'new'}
                 destination={linearFeature}
                 editedData={editedData}
                 setEditedData={setEditedData}
@@ -996,6 +997,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         {sidebarTab === 'view' && (
           isEditing ? (
             <EditView
+              key={destination?.id ?? 'new'}
               destination={destination}
               editedData={editedData}
               setEditedData={setEditedData}

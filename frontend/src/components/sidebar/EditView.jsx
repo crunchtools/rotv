@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ImageUploader from '../ImageUploader';
 import RoleEditor from '../RoleEditor';
 import GeoJSONUploader from '../GeoJSONUploader';
@@ -13,6 +13,11 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   const [researchDraft, setResearchDraft] = useState(null);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [draftFieldStates, setDraftFieldStates] = useState({});
+
+  const currentPoiId = useRef(destination?.id ?? null);
+  useEffect(() => {
+    currentPoiId.current = destination?.id ?? null;
+  }, [destination?.id]);
 
   const [pendingImage, setPendingImage] = useState(null);
 
@@ -115,6 +120,8 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
   };
 
   const handleResearch = async () => {
+    const researchedPoiId = destination?.id ?? null;
+    const researchedPoiName = editedData.name || '';
     setResearching(true);
     setAiError(null);
 
@@ -136,7 +143,10 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
       const result = await response.json();
 
-      setResearchDraft(result.data);
+      // The editor moved to another POI while the request was in flight (#710)
+      if (currentPoiId.current !== researchedPoiId) return;
+
+      setResearchDraft({ ...result.data, poi_name: researchedPoiName });
       const fields = ['era_id', 'property_owner', 'primary_activities', 'surface', 'pets', 'brief_description', 'historical_description'];
       const initialStates = {};
       for (const field of fields) {
@@ -736,7 +746,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
         <div className="prompt-editor-overlay" onClick={() => { setShowDraftModal(false); setResearchDraft(null); }}>
           <div className="draft-approval-dialog" onClick={(e) => e.stopPropagation()}>
             <div className="prompt-editor-header">
-              <h3>Research Draft</h3>
+              <h3>Research Draft{researchDraft.poi_name ? ` — ${researchDraft.poi_name}` : ''}</h3>
               <button className="close-btn" onClick={() => { setShowDraftModal(false); setResearchDraft(null); }}>&times;</button>
             </div>
             <p className="prompt-editor-hint">Review AI research results. Toggle fields to accept or skip.</p>
