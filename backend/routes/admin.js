@@ -877,44 +877,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.post('/ai/research', isAdmin, async (req, res) => {
-    const { destination } = req.body;
-
-    if (!destination || !destination.name) {
-      return res.status(400).json({ error: 'Destination with name is required' });
-    }
-
-    try {
-      // Constrain AI output to existing standardized vocabularies
-      const activitiesResult = await pool.query(
-        'SELECT name FROM activities ORDER BY sort_order, name'
-      );
-      const availableActivities = activitiesResult.rows.map(row => row.name);
-
-      const erasResult = await pool.query(
-        'SELECT name FROM eras ORDER BY sort_order, name'
-      );
-      const availableEras = erasResult.rows.map(row => row.name);
-
-      const surfacesResult = await pool.query(
-        'SELECT name FROM surfaces ORDER BY sort_order, name'
-      );
-      const availableSurfaces = surfacesResult.rows.map(row => row.name);
-
-      const { researchLocation } = await import('../services/llmService.js');
-      const researchData = await researchLocation(pool, destination, availableActivities, availableEras, availableSurfaces);
-
-      logger.info(`Admin ${req.user.email} researched location: ${destination.name}`);
-      res.json(researchData);
-    } catch (error) {
-      logger.error('Error researching location:', error);
-      if (error.message?.includes('API key')) {
-        return res.status(400).json({ error: error.message });
-      }
-      res.status(500).json({ error: error.message || 'Failed to research location. Please try again.' });
-    }
-  });
-
   // Multi-pass research (Issue #102) — returns draft for approval
   router.post('/ai/research-v2', isAdmin, async (req, res) => {
     const { destination, adminContext } = req.body;

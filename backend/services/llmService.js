@@ -2,7 +2,7 @@
 // zero data retention, with a cross-vendor fallback model. Entry points are
 // complete() and the task helpers built on it (research, moderation, icons).
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { getContainingBoundaries } from './geoService.js';
+import { getContainingBoundaries, getReassignmentCandidates } from './geoService.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('LLM');
@@ -113,46 +113,6 @@ export function parseJsonResponse(text) {
 
   return JSON.parse(jsonText);
 }
-
-const RESEARCH_PROMPT_TEMPLATE = `You are a researcher for Cuyahoga Valley National Park. Search the web and find accurate information about this location.
-
-Location to research: {{name}}
-{{#if coordinates}}Coordinates: {{latitude}}, {{longitude}}{{/if}}
-
-Search for information from NPS.gov, Ohio History Connection, local historical societies, and reliable sources.
-
-Return a JSON object with these fields (use null if you cannot find reliable information):
-
-{
-  "era": "The primary historical era - MUST be one from the ALLOWED ERAS list below",
-  "property_owner": "Current owner/manager (e.g., 'Federal (NPS)', 'Cleveland Metroparks', 'Private')",
-  "primary_activities": "Comma-separated activities from the ALLOWED ACTIVITIES list ONLY",
-  "surface": "Trail/path surface type - MUST be one from the ALLOWED SURFACES list below",
-  "pets": "Pet policy: 'Yes', 'No', or 'Leashed'",
-  "brief_description": "2-3 sentences with specific facts about what makes this place notable. Include dates and names.",
-  "historical_description": "2-3 paragraphs of historical narrative with specific dates, people, and events. Written in warm local history style.",
-  "sources": ["url1", "url2"]
-}
-
-ALLOWED ERAS (era MUST be one of these exact names):
-{{eras_list}}
-
-ALLOWED ACTIVITIES (only use activities from this list):
-{{activities_list}}
-
-ALLOWED SURFACES (surface MUST be one of these exact names):
-{{surfaces_list}}
-
-IMPORTANT:
-- For era, you MUST select exactly one era from the ALLOWED ERAS list above based on when this place was most historically significant
-- For primary_activities, ONLY use activities from the ALLOWED ACTIVITIES list above
-- For surface, you MUST select exactly one surface from the ALLOWED SURFACES list above based on the trail/path surface type
-- Select activities that apply to this specific location based on what's actually available there
-- Only include facts you can verify from search results
-- Use null for fields where you have no reliable information
-- Avoid generic filler text - specific facts or nothing
-- The brief_description and historical_description should contain real, searchable facts
-- For sources, include MAXIMUM 5 unique URLs. No duplicate URLs.`;
 
 // Env var takes priority over DB so CI/tests can override without DB setup.
 // Throws when neither holds a key.
@@ -312,45 +272,6 @@ export async function generateTextWithCustomPrompt(pool, customPrompt, options =
   return complete(pool, customPrompt, options);
 }
 
-export async function researchLocation(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
-  let promptTemplate = RESEARCH_PROMPT_TEMPLATE;
-  const activitiesList = availableActivities.length > 0
-    ? availableActivities.join(', ')
-    : 'Hiking, Biking, Photography, Bird Watching, Fishing, Picnicking, Camping, Wildlife Viewing, Historical Tours';
-  promptTemplate = promptTemplate.replace('{{activities_list}}', activitiesList);
-
-  const erasList = availableEras.length > 0
-    ? availableEras.join(', ')
-    : 'Pre-Colonial, Early Settlement, Canal Era, Railroad Era, Industrial Era, Conservation Era, Modern Era';
-  promptTemplate = promptTemplate.replace('{{eras_list}}', erasList);
-
-  const surfacesList = availableSurfaces.length > 0
-    ? availableSurfaces.join(', ')
-    : 'Paved, Gravel, Boardwalk, Dirt, Grass, Sand, Rocky, Water, Rail, Mixed';
-  promptTemplate = promptTemplate.replace('{{surfaces_list}}', surfacesList);
-
-  const prompt = interpolatePrompt(promptTemplate, destination);
-
-  const runId = Math.floor(Date.now() / 1000);
-  logger.info(`Researching location: ${destination.name} (${availableActivities.length} activities, ${availableEras.length} eras, ${availableSurfaces.length} surfaces available)`);
-  logInfo(runId, 'research', null, destination.name, `Research: ${destination.name}`);
-
-  const text = await complete(pool, prompt, RESEARCH_OPTIONS);
-
-  try {
-    const researchData = parseJsonResponse(text);
-    logInfo(runId, 'research', null, destination.name, `Research complete: ${destination.name}`, { completed: true, fields: Object.keys(researchData) });
-    await flushJobLogs();
-    return researchData;
-  } catch (e) {
-    logger.error('Failed to parse research response as JSON:', e);
-    logger.error('Raw response:', text);
-    logError(runId, 'research', null, destination.name, `Research failed: invalid AI response for ${destination.name}`, { completed: true, error_stack: text.slice(0, 500) });
-    await flushJobLogs();
-    throw new Error('AI returned invalid format. Please try again.', { cause: e });
-  }
-}
-
 export async function testApiKey(pool) {
   return complete(pool, 'Respond with exactly: API key verified', { maxOutputTokens: 16, thinkingBudget: 0 });
 }
@@ -433,23 +354,32 @@ Generate ONLY the SVG code now, starting with <svg and ending with </svg>:`;
   return text;
 }
 
-const RESEARCH_PASS1_TEMPLATE = `You are a researcher for Cuyahoga Valley National Park. Search the web and find accurate information about this location.
+// Both passes share this framing. The model has no web access, so it is asked
+// for what it knows about the named place and for null otherwise: a write-up of
+// the parent park is the failure this guards against (#721).
+const RESEARCH_SUBJECT_RULES = `SUBJECT:
+- Write about {{name}} itself and nothing else.
+- The parent park, the owner and nearby places are given only so you can tell which {{name}} this is. They are not the subject: do not describe them in its place.
+- If what you know is about the parent park, a neighboring place, or a different place with a similar name, treat it as knowing nothing about {{name}}.
+- You cannot browse the web. Use only what you reliably know, and use null where you know nothing specific to {{name}}. A null is a correct answer; an invented or borrowed description is not.`;
 
-Location to research: {{name}}
-%%OPTIONAL_SECTIONS%%
+const RESEARCH_PASS1_TEMPLATE = `You are a researcher for "Roots of The Valley," a guide to the Cuyahoga Valley region of Northeast Ohio: Cuyahoga Valley National Park, Cleveland Metroparks, Summit Metro Parks and the parks, trails and towns around them.
 
-Search for information from NPS.gov, Ohio History Connection, local historical societies, and reliable sources.
+Place to research: {{name}}
+%%POI_CONTEXT%%
 
-Return a JSON object with these fields (use null if you cannot find reliable information):
+${RESEARCH_SUBJECT_RULES}
+
+Return a JSON object with these fields:
 
 {
-  "era": "The primary historical era - MUST be one from the ALLOWED ERAS list below",
+  "era": "The primary historical era of this place - MUST be one from the ALLOWED ERAS list below, or null",
   "property_owner": "Current owner/manager (e.g., 'Federal (NPS)', 'Cleveland Metroparks', 'Private')",
   "primary_activities": "Comma-separated activities from the ALLOWED ACTIVITIES list ONLY",
-  "surface": "Trail/path surface type - MUST be one from the ALLOWED SURFACES list below",
+  "surface": "Trail/path surface type - MUST be one from the ALLOWED SURFACES list below, or null",
   "pets": "Pet policy: 'Yes', 'No', or 'Leashed'",
-  "brief_description": "2-3 sentences with specific facts about what makes this place notable. Include dates and names. NO generic phrases like 'rich history', 'beloved destination'.",
-  "sources": ["url1", "url2"]
+  "brief_description": "2-3 sentences with specific facts about what makes this place notable. Include dates and names. NO generic phrases like 'rich history', 'beloved destination'. null if you know nothing specific to this place.",
+  "sources": ["URLs you are confident exist and are about this place; [] otherwise"]
 }
 
 ALLOWED ERAS (era MUST be one of these exact names):
@@ -462,52 +392,101 @@ ALLOWED SURFACES (surface MUST be one of these exact names):
 {{surfaces_list}}
 
 IMPORTANT:
-- For era, you MUST select exactly one era from the ALLOWED ERAS list above
+- For era, select exactly one era from the ALLOWED ERAS list above
 - For primary_activities, ONLY use activities from the ALLOWED ACTIVITIES list above
-- For surface, you MUST select exactly one surface from the ALLOWED SURFACES list above
-- Only include facts you can verify from search results
-- Use null for fields where you have no reliable information
-- Avoid generic filler text - specific facts or nothing
+- For surface, select exactly one surface from the ALLOWED SURFACES list above
+- Avoid generic filler text - specific facts or null
 - For sources, include MAXIMUM 5 unique URLs. No duplicate URLs.`;
 
-const RESEARCH_PASS2_TEMPLATE = `You are writing for Arcadia Publishing's "Images of America" series about Cuyahoga Valley.
+const RESEARCH_PASS2_TEMPLATE = `You are writing local history for "Roots of The Valley," a guide to the Cuyahoga Valley region of Northeast Ohio, in the style of Arcadia Publishing's "Images of America" series.
 
-Research and write 2-3 paragraphs about: {{name}}
-%%OPTIONAL_SECTIONS%%
+Write 2-3 paragraphs about: {{name}}
+%%POI_CONTEXT%%
 
 CONTEXT FROM INITIAL RESEARCH:
 - Era: {{pass1_era}}
 - Brief description: {{pass1_brief}}
 
+${RESEARCH_SUBJECT_RULES}
+
 Return a JSON object:
 
 {
-  "historical_description": "2-3 paragraphs of historical narrative with specific dates, people, and events. Written in warm local history style. Include specific dates, names of people, and historical events. Reference primary sources when possible. Describe what the place looked like historically vs today. Connect to broader Ohio & Erie Canal corridor history if relevant. NO filler phrases: avoid 'rich tapestry', 'testament to', 'bygone era'. If information is uncertain, say 'According to local accounts...' or 'Records suggest...'. If you cannot verify facts, acknowledge the gaps.",
-  "additional_sources": ["Array of additional source URLs or references used"]
+  "historical_description": "2-3 paragraphs of historical narrative about this place, with specific dates, people, and events. Written in warm local history style. Describe what the place looked like historically vs today. Connect to the history of its surroundings only where this place played a part in it. NO filler phrases: avoid 'rich tapestry', 'testament to', 'bygone era'. If information is uncertain, say 'According to local accounts...' or 'Records suggest...'. null if you have no history specific to this place.",
+  "additional_sources": ["URLs you are confident exist and are about this place; [] otherwise"]
 }`;
 
-export async function researchLocationMultiPass(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
-  const optionalSections = [];
-  if (destination.latitude && destination.longitude) {
-    optionalSections.push(`Coordinates: ${destination.latitude}, ${destination.longitude}`);
+const ROLE_LABELS = {
+  point: 'single place or site',
+  trail: 'trail',
+  mtb_trail: 'mountain bike trail',
+  boundary: 'park or bounded area',
+  river: 'river',
+  railroad: 'railroad',
+  organization: 'organization'
+};
+
+// The lines that tell the model which place this is: what kind of thing, who
+// owns it, and what it sits inside. Owner and parent come from the database
+// when the POI is saved, since the editor's copy may be stale or missing them.
+async function buildPoiContext(pool, destination) {
+  const context = [];
+  const roles = (destination.poi_roles || []).map(role => ROLE_LABELS[role] || role);
+  if (roles.length > 0) {
+    context.push(`Type: ${roles.join(', ')}`);
   }
+  if (destination.latitude && destination.longitude) {
+    context.push(`Coordinates: ${destination.latitude}, ${destination.longitude}`);
+  }
+
+  let ownerName = destination.property_owner;
+  if (destination.id) {
+    const { owner, boundary } = await getReassignmentCandidates(pool, destination.id);
+    if (owner) ownerName = owner.name;
+    if (boundary) {
+      context.push(`Parent park (context only, not the subject): ${boundary.name}`);
+    }
+    const wider = (await getContainingBoundaries(pool, destination.id))
+      .filter(name => name !== destination.name && name !== boundary?.name);
+    if (wider.length > 0) {
+      context.push(`Located in: ${wider.join(', ')}`);
+    }
+    researchV2Logger.info(`Geographic grounding for ${destination.name}: ${[boundary?.name, ...wider].filter(Boolean).join(', ') || 'none'}`);
+  }
+  if (ownerName) {
+    context.push(`Owner/manager: ${ownerName}`);
+  }
+
   if (destination.more_info_link) {
-    optionalSections.push(`PRIORITY SOURCE: Consult this URL first: ${destination.more_info_link}`);
+    context.push(`Reference page (may describe the parent park rather than this place): ${destination.more_info_link}`);
   }
   if (destination.research_context) {
-    optionalSections.push(`ADMIN CONTEXT (use this to guide your research): ${destination.research_context}`);
+    context.push(`ADMIN CONTEXT (use this to guide your research): ${destination.research_context}`);
   }
+  return context.join('\n');
+}
 
-  if (destination.id) {
-    const boundaries = await getContainingBoundaries(pool, destination.id);
-    if (boundaries.length > 0) {
-      optionalSections.push(`Geographic context: Located in ${boundaries.join(', ')}`);
-      researchV2Logger.info(`Geographic grounding for ${destination.name}: ${boundaries.join(', ')}`);
-    }
-  }
+/**
+ * Research one POI in two LLM calls: facts and a brief description, then a
+ * history built on that description. The history call is skipped when the
+ * first finds nothing specific to the place, leaving historical_description null.
+ * @param {import('pg').Pool} pool
+ * @param {object} destination the POI as the editor holds it: name is required;
+ *   id, poi_roles, latitude/longitude, property_owner, more_info_link and
+ *   research_context sharpen the prompt when present
+ * @param {string[]} [availableActivities] allowed activity names
+ * @param {string[]} [availableEras] allowed era names
+ * @param {string[]} [availableSurfaces] allowed surface names
+ * @returns {Promise<object>} era, era_id, property_owner, primary_activities,
+ *   surface, pets, brief_description, historical_description and sources; any
+ *   field the model had nothing for is null
+ * @throws when either reply is not parseable JSON, or complete() throws
+ */
+export async function researchLocationMultiPass(pool, destination, availableActivities = [], availableEras = [], availableSurfaces = []) {
+  const poiContext = await buildPoiContext(pool, destination);
 
   let pass1Template = RESEARCH_PASS1_TEMPLATE;
-  pass1Template = pass1Template.replace('%%OPTIONAL_SECTIONS%%', optionalSections.join('\n'));
+  pass1Template = pass1Template.replace('%%POI_CONTEXT%%', poiContext);
 
   const activitiesList = availableActivities.length > 0
     ? availableActivities.join(', ')
@@ -544,26 +523,31 @@ export async function researchLocationMultiPass(pool, destination, availableActi
 
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1 complete: ${destination.name}`, { fields: Object.keys(pass1Data) });
 
-  let pass2Template = RESEARCH_PASS2_TEMPLATE;
-  pass2Template = pass2Template.replace('%%OPTIONAL_SECTIONS%%', optionalSections.join('\n'));
-  pass2Template = pass2Template.replace('{{pass1_era}}', pass1Data.era || 'unknown');
-  pass2Template = pass2Template.replace('{{pass1_brief}}', pass1Data.brief_description || 'no description available');
+  // Pass 1 knew nothing specific to this place, so a history could only be
+  // invented or borrowed from the parent park
+  let pass2Data = { historical_description: null, additional_sources: [] };
+  if (pass1Data.brief_description) {
+    let pass2Template = RESEARCH_PASS2_TEMPLATE;
+    pass2Template = pass2Template.replace('%%POI_CONTEXT%%', poiContext);
+    pass2Template = pass2Template.replace('{{pass1_era}}', pass1Data.era || 'unknown');
+    pass2Template = pass2Template.replace('{{pass1_brief}}', pass1Data.brief_description);
 
-  const pass2Prompt = interpolatePrompt(pass2Template, destination);
+    const pass2Prompt = interpolatePrompt(pass2Template, destination);
 
-  researchV2Logger.info(`Pass 2 for: ${destination.name}`);
-  logInfo(runId, 'research', null, destination.name, `Research v2 Pass 2: ${destination.name}`);
+    researchV2Logger.info(`Pass 2 for: ${destination.name}`);
+    logInfo(runId, 'research', null, destination.name, `Research v2 Pass 2: ${destination.name}`);
 
-  const pass2Text = await complete(pool, pass2Prompt, RESEARCH_OPTIONS);
-  let pass2Data;
-
-  try {
-    pass2Data = parseJsonResponse(pass2Text);
-  } catch (e) {
-    logger.error('Failed to parse Pass 2 response:', pass2Text);
-    logError(runId, 'research', null, destination.name, `Research v2 Pass 2 failed: ${destination.name}`, { error_stack: pass2Text.slice(0, 500) });
-    await flushJobLogs();
-    throw new Error('AI returned invalid format in Pass 2. Please try again.', { cause: e });
+    const pass2Text = await complete(pool, pass2Prompt, RESEARCH_OPTIONS);
+    try {
+      pass2Data = parseJsonResponse(pass2Text);
+    } catch (e) {
+      logger.error('Failed to parse Pass 2 response:', pass2Text);
+      logError(runId, 'research', null, destination.name, `Research v2 Pass 2 failed: ${destination.name}`, { error_stack: pass2Text.slice(0, 500) });
+      await flushJobLogs();
+      throw new Error('AI returned invalid format in Pass 2. Please try again.', { cause: e });
+    }
+  } else {
+    researchV2Logger.info(`Pass 2 skipped for ${destination.name}: pass 1 found nothing specific`);
   }
 
   let eraId = null;

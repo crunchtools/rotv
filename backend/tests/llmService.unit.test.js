@@ -1,9 +1,17 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { getContainingBoundaries, getReassignmentCandidates } from '../services/geoService.js';
 import {
-  buildRequestBody, complete, getApiKey, LLM_MODEL, researchLocation, researchLocationMultiPass
+  buildRequestBody, complete, getApiKey, LLM_MODEL, researchLocationMultiPass
 } from '../services/llmService.js';
 
 vi.mock('../services/jobLogger.js', () => ({ logInfo: vi.fn(), logError: vi.fn(), flush: vi.fn() }));
+vi.mock('../services/geoService.js', () => ({
+  getContainingBoundaries: vi.fn().mockResolvedValue(['Garfield Park Reservation', 'Garfield Heights', 'Cuyahoga County']),
+  getReassignmentCandidates: vi.fn().mockResolvedValue({
+    owner: { id: 5658, name: 'Cleveland Metroparks' },
+    boundary: { id: 77, name: 'Garfield Park Reservation' }
+  })
+}));
 
 const keyPool = () => ({ query: vi.fn().mockResolvedValue({ rows: [{ value: 'sk-or-test' }] }) });
 
@@ -183,21 +191,16 @@ describe('complete', () => {
 
 describe('POI research', () => {
   const sentBodies = fetchMock => fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
-  const jsonReply = () => reply(200, { choices: [{ message: { content: '{"sources": []}' } }] });
+  const jsonReply = fields => reply(200, { choices: [{ message: { content: JSON.stringify(fields) } }] });
+  const trail = {
+    id: 1045,
+    name: 'Meadow Trail',
+    poi_roles: ['trail'],
+    more_info_link: 'https://www.clevelandmetroparks.com/parks/visit/parks/garfield-park-reservation'
+  };
 
-  it('bounds reasoning on single-pass research', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonReply());
-    vi.stubGlobal('fetch', fetchMock);
-
-    await researchLocation(keyPool(), { name: 'Brandywine Falls' });
-    const [body] = sentBodies(fetchMock);
-    expect(body.reasoning).toEqual({ max_tokens: 2048 });
-    expect(body.max_tokens).toBe(8192);
-    expect(body.temperature).toBe(0);
-  });
-
-  it('bounds reasoning on both multi-pass calls', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonReply());
+  it('bounds reasoning on both passes', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonReply({ brief_description: 'A falls on Brandywine Creek.' }));
     vi.stubGlobal('fetch', fetchMock);
 
     await researchLocationMultiPass(keyPool(), { name: 'Brandywine Falls' });
@@ -206,6 +209,59 @@ describe('POI research', () => {
     for (const body of bodies) {
       expect(body.reasoning).toEqual({ max_tokens: 2048 });
       expect(body.max_tokens).toBe(8192);
+      expect(body.temperature).toBe(0);
     }
+  });
+
+  it('frames both passes around the POI, with its parent park as context only (#721)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonReply({ brief_description: 'A loop through the meadow.' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await researchLocationMultiPass(keyPool(), trail);
+    const prompts = sentBodies(fetchMock).map(body => body.messages[0].content);
+    expect(prompts).toHaveLength(2);
+    for (const prompt of prompts) {
+      expect(prompt).toContain('Type: trail');
+      expect(prompt).toContain('Parent park (context only, not the subject): Garfield Park Reservation');
+      expect(prompt).toContain('Located in: Garfield Heights, Cuyahoga County');
+      expect(prompt).toContain('Owner/manager: Cleveland Metroparks');
+      expect(prompt).toContain('Write about Meadow Trail itself and nothing else.');
+      expect(prompt).toContain('Reference page (may describe the parent park rather than this place)');
+      expect(prompt).not.toContain('researcher for Cuyahoga Valley National Park');
+      expect(prompt).not.toContain('Search the web');
+      expect(prompt).not.toContain('%%');
+    }
+  });
+
+  it('falls back to the editor\'s owner and adds no parent for an unsaved or unplaced POI', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonReply({ brief_description: null }));
+    vi.stubGlobal('fetch', fetchMock);
+    const firstPrompt = () => sentBodies(fetchMock).at(-1).messages[0].content;
+    vi.clearAllMocks();
+
+    await researchLocationMultiPass(keyPool(), { name: 'New Overlook', property_owner: 'Private' });
+    expect(getReassignmentCandidates).not.toHaveBeenCalled();
+    expect(getContainingBoundaries).not.toHaveBeenCalled();
+    expect(firstPrompt()).toContain('Owner/manager: Private');
+    expect(firstPrompt()).not.toContain('Parent park');
+
+    getReassignmentCandidates.mockResolvedValueOnce({ owner: null, boundary: null });
+    getContainingBoundaries.mockResolvedValueOnce([]);
+    await researchLocationMultiPass(keyPool(), { id: 9, name: 'New Overlook', property_owner: 'Private' });
+    expect(firstPrompt()).toContain('Owner/manager: Private');
+    expect(firstPrompt()).not.toContain('Parent park');
+    expect(firstPrompt()).not.toContain('Located in');
+  });
+
+  it('skips the history pass when pass 1 knows nothing specific to the POI (#721)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonReply({ brief_description: null, pets: 'Leashed', sources: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const research = await researchLocationMultiPass(keyPool(), trail);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(research.brief_description).toBeNull();
+    expect(research.historical_description).toBeNull();
+    expect(research.pets).toBe('Leashed');
+    expect(research.sources).toEqual([]);
   });
 });

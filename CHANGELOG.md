@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **AI research describes the POI, not its parent park (#721)**: the research prompts framed every
+  POI as part of Cuyahoga Valley National Park and never said what kind of place it was, so trails
+  came back with their parent park's write-up. Both passes now name the POI's type, owner and parent
+  park as context only, and return null rather than borrow a description. The history pass is skipped
+  when the first pass knows nothing specific to the place.
+
+### Removed
+- The single-pass `POST /api/admin/ai/research` endpoint and its prompt, unused since the editor moved
+  to `research-v2`.
+
 ### Changed
 - Relicensed from GPL-3.0 to AGPL-3.0-or-later, matching Constitution I and
   what this repo's constitution already declared.
