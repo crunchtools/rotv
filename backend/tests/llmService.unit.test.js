@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { getContainingBoundaries, getReassignmentCandidates } from '../services/geoService.js';
 import {
   buildRequestBody, complete, getApiKey, LLM_MODEL, researchLocationMultiPass
 } from '../services/llmService.js';
@@ -230,6 +231,26 @@ describe('POI research', () => {
       expect(prompt).not.toContain('Search the web');
       expect(prompt).not.toContain('%%');
     }
+  });
+
+  it('falls back to the editor\'s owner and adds no parent for an unsaved or unplaced POI', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonReply({ brief_description: null }));
+    vi.stubGlobal('fetch', fetchMock);
+    const firstPrompt = () => sentBodies(fetchMock).at(-1).messages[0].content;
+    vi.clearAllMocks();
+
+    await researchLocationMultiPass(keyPool(), { name: 'New Overlook', property_owner: 'Private' });
+    expect(getReassignmentCandidates).not.toHaveBeenCalled();
+    expect(getContainingBoundaries).not.toHaveBeenCalled();
+    expect(firstPrompt()).toContain('Owner/manager: Private');
+    expect(firstPrompt()).not.toContain('Parent park');
+
+    getReassignmentCandidates.mockResolvedValueOnce({ owner: null, boundary: null });
+    getContainingBoundaries.mockResolvedValueOnce([]);
+    await researchLocationMultiPass(keyPool(), { id: 9, name: 'New Overlook', property_owner: 'Private' });
+    expect(firstPrompt()).toContain('Owner/manager: Private');
+    expect(firstPrompt()).not.toContain('Parent park');
+    expect(firstPrompt()).not.toContain('Located in');
   });
 
   it('skips the history pass when pass 1 knows nothing specific to the POI (#721)', async () => {
