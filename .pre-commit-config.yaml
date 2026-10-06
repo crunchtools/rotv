@@ -32,15 +32,6 @@ repos:
   # Local hooks
   - repo: local
     hooks:
-      # Rust linting with clippy (no Rust code, but Gourmand requires this hook)
-      - id: clippy
-        name: Clippy Rust Linting
-        entry: cargo clippy -- -D warnings
-        language: system
-        files: \.rs$
-        stages: [pre-commit, pre-merge-commit]
-        # Note: This project has no Rust code, but Gourmand requires clippy config
-
       # JavaScript/React linting with ESLint, in the base image (see run.sh)
       - id: eslint
         name: ESLint JavaScript Linting
