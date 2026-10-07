@@ -6,6 +6,9 @@
 # Built here, on the same glibc userland as the runtime, so normal app builds
 # never pay for a Next.js build. Mirrors upstream's Dockerfile (builder +
 # runner stages) at the pinned tag. BASE_PATH is baked in at build time.
+# sharp is floored at 0.35.5 (GHSA-wq5f-xc86-pv6w, librsvg RCE): Umami 3.4.0
+# locks 0.35.4, so the install can't be frozen while the override is in place.
+# Drop the override and restore --frozen-lockfile when Umami ships sharp >= 0.35.5.
 FROM quay.io/crunchtools/ubi10-core:latest AS umami
 ARG UMAMI_VERSION=3.4.0
 ARG PNPM_VERSION=12.3.4
@@ -16,7 +19,9 @@ WORKDIR /build
 RUN curl -fsSL "https://github.com/umami-software/umami/archive/refs/tags/v${UMAMI_VERSION}.tar.gz" \
       | tar xz --strip-components=1 && \
     printf 'strictDepBuilds: false\n' >> pnpm-workspace.yaml && \
-    pnpm install --frozen-lockfile && \
+    sed -i "/^overrides:/a\\  'sharp@<0.35.5': 0.35.5" pnpm-workspace.yaml && \
+    grep -q "sharp@<0.35.5" pnpm-workspace.yaml && \
+    pnpm install --no-frozen-lockfile && \
     cp docker/proxy.ts src/
 ENV BASE_PATH=/stats \
     NEXT_TELEMETRY_DISABLED=1 \
