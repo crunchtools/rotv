@@ -234,10 +234,14 @@ describe('Playwright Integration Tests', () => {
       expect(result).toBeDefined();
       expect(result).toHaveProperty('success');
 
-      // Should not fail specifically due to SSL errors
+      // Should not fail specifically due to SSL errors. The error quotes the URL,
+      // and "badssl" in the hostname must not count as one: when the site itself
+      // is down the failure is a connection reset, which is not what this checks.
+      // Fix: drop the hostname, keep the broad match (PR #726 review)
       if (!result.success) {
-        expect(result.error).not.toMatch(/certificate/i);
-        expect(result.error).not.toMatch(/SSL/i);
+        const error = result.error.replaceAll('self-signed.badssl.com', '');
+        expect(error).not.toMatch(/certificate/i);
+        expect(error).not.toMatch(/SSL/i);
       }
 
       console.log(`[Playwright Test] SSL handling: ${result.success ? 'rendered' : result.error}`);

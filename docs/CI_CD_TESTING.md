@@ -562,15 +562,6 @@ repos:
       - id: check-json
       - id: detect-private-key
 
-  # Rust clippy (required for Gourmand)
-  - repo: local
-    hooks:
-      - id: clippy
-        name: Clippy Rust Linting
-        entry: cargo clippy -- -D warnings
-        language: system
-        files: \.rs$
-
   # Python ruff (for scripts/get_google_token.py), in pre-commit's own environment
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.16.9

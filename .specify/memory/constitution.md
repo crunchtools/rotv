@@ -4,7 +4,7 @@
 > **Ratified:** 2026-03-10
 > **Amended:** 2026-10-02
 > **Status:** Active
-> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.18.0
+> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.20.0
 > **Profile:** Web Application
 
 Roots of The Valley: an interactive map exploring Cuyahoga Valley National
