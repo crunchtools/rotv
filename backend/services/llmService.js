@@ -24,39 +24,11 @@ const MAX_RETRY_AFTER_MS = 30000;
 // Caps one call's total wait during an outage so a collection job keeps moving
 const RETRY_DEADLINE_MS = 180000;
 const RETRYABLE_STATUSES = new Set([429, 502, 503]);
-// POI research is the one task where reasoning plausibly helps (weighing several
-// pages against each other), so it gets a bounded budget; max_tokens leaves room
-// for the JSON. Halved when research became extraction from fetched pages (#724).
-const RESEARCH_OPTIONS = { temperature: 0, thinkingBudget: 1024, maxOutputTokens: 4096 };
-
-const DEFAULT_PROMPTS = {
-  gemini_prompt_brief: `You are a local historian writing for the Cuyahoga Valley National Park visitor guide.
-
-Research and write a 2-3 sentence overview for: {{name}}
-
-REQUIREMENTS:
-- Include at least one specific date, name, or verifiable fact
-- Mention what visitors can actually see or do there TODAY
-- NO generic phrases like "rich history", "beloved destination", "step back in time"
-- If you cannot find specific facts, say "Historical details pending research"
-
-Location context: {{era}}, {{property_owner}}`,
-
-  gemini_prompt_historical: `You are writing for Arcadia Publishing's "Images of America" series about Cuyahoga Valley.
-
-Research and write 2-3 paragraphs about: {{name}}
-
-REQUIREMENTS:
-- Include specific dates, names of people, and historical events
-- Reference primary sources when possible (newspapers, deeds, oral histories)
-- Describe what the place looked like historically vs today
-- Connect to broader Ohio & Erie Canal corridor history if relevant
-- NO filler phrases: avoid "rich tapestry", "testament to", "bygone era"
-- If information is uncertain, say "According to local accounts..." or "Records suggest..."
-- If you cannot verify facts, acknowledge the gaps
-
-Location context: Era: {{era}}, Owner: {{property_owner}}`
-};
+// POI research extracts from fetched pages, which needs no reasoning. Measured in
+// prod on v1.53.0 (#727): with a 1024-token budget the model spent 1300-2800
+// reasoning tokens anyway, took 35-38s and returned an unparseable history twice
+// in a row; with reasoning off the same prompts took 10s and parsed both times.
+const RESEARCH_OPTIONS = { temperature: 0, thinkingBudget: 0, maxOutputTokens: 4096 };
 
 // Handles markdown code blocks, duplicated JSON, and responses truncated mid-array by token limit
 export function parseJsonResponse(text) {
@@ -228,7 +200,13 @@ export async function complete(pool, prompt, options = {}) {
       throw error;
     }
 
-    const completion = await response.json();
+    let completion;
+    try {
+      completion = await response.json();
+    } catch (err) {
+      // The attempt's timeout also aborts a body that is still streaming (#727)
+      throw new Error(`OpenRouter request failed: ${err.message}`, { cause: err });
+    }
     if (completion.error) {
       lastError = new Error(`OpenRouter upstream error: ${completion.error.message || JSON.stringify(completion.error)}`);
       if (!(await pause(response, attempt))) break;
@@ -250,7 +228,7 @@ export async function getPromptTemplate(pool, promptKey) {
     return templateQuery.rows[0].value;
   }
 
-  return DEFAULT_PROMPTS[promptKey] || '';
+  return '';
 }
 
 export function interpolatePrompt(template, destination) {
@@ -261,11 +239,6 @@ export function interpolatePrompt(template, destination) {
     }
     return String(value);
   });
-}
-
-export async function getInterpolatedPrompt(pool, promptKey, destination) {
-  const template = await getPromptTemplate(pool, promptKey);
-  return interpolatePrompt(template, destination);
 }
 
 export async function generateTextWithCustomPrompt(pool, customPrompt, options = {}) {

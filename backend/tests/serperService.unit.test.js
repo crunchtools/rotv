@@ -88,6 +88,21 @@ describe('Serper Service', () => {
       expect(result.urls.map(u => u.url)).toEqual(['https://example.com/ledges']);
     });
 
+    it('leaves a boundary POI\'s own name out of the context (#727)', async () => {
+      fetch.mockResolvedValue({ ok: true, json: async () => ({ organic: [], credits: 1 }) });
+      const pool = {
+        query: vi.fn()
+          .mockResolvedValueOnce({ rows: [{ value: 'test-api-key-123' }] })
+          .mockResolvedValueOnce({ rows: [] })
+          .mockResolvedValueOnce({ rows: [{ name: 'Cascade Locks Park' }, { name: 'Akron' }] })
+      };
+
+      const result = await searchNewsUrls(pool, { id: 5508, name: 'Cascade Locks Park' }, { pipeline: 'research' });
+
+      expect(result.query).toBe('"Cascade Locks Park" Akron');
+      expect(result.boundaries).toEqual(['Akron']);
+    });
+
     it('should dedupe a URL returned twice', async () => {
       fetch.mockResolvedValue({
         ok: true,

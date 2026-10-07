@@ -29,7 +29,9 @@ describe('Roving Tabindex - Header Tab Navigation', () => {
   beforeEach(async () => {
     context = await browser.newContext();
     page = await context.newPage();
-    await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+    // 'load', not 'networkidle': the app polls, so the network may never go
+    // idle and the hook times out (#729). The selector is the readiness check.
+    await page.goto(BASE_URL, { waitUntil: 'load' });
     await page.waitForSelector('.tab-btn.active', { timeout: 15000 });
   }, 30000);
 

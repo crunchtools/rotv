@@ -683,8 +683,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'openrouter_api_key',
       'serper_api_key',
       'usft_sharing_token',
-      'gemini_prompt_brief',
-      'gemini_prompt_historical',
       'ai_search_primary',
       'ai_search_fallback',
       'ai_search_primary_limit',
@@ -815,25 +813,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     } catch (error) {
       logger.error('Error testing GitHub token:', error);
       res.status(500).json({ success: false, message: 'Failed to test token', error: error.message });
-    }
-  });
-
-  router.post('/ai/prompt-preview', isAdmin, async (req, res) => {
-    const { destination, promptType } = req.body;
-
-    if (!destination || !destination.name) {
-      return res.status(400).json({ error: 'Destination data with name is required' });
-    }
-
-    const promptKey = promptType === 'historical' ? 'gemini_prompt_historical' : 'gemini_prompt_brief';
-
-    try {
-      const { getInterpolatedPrompt } = await import('../services/llmService.js');
-      const prompt = await getInterpolatedPrompt(pool, promptKey, destination);
-      res.json({ prompt });
-    } catch (error) {
-      logger.error('Error getting prompt preview:', error);
-      res.status(500).json({ error: 'Failed to load prompt template' });
     }
   });
 

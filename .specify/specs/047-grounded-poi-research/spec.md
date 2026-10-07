@@ -13,7 +13,7 @@
 - Pages read: `more_info_link` first (the editor's unsaved value counts), then the top 4 search results. Skipped: non-public addresses, PDFs, blocklisted URLs (`blocklist_urls`), Facebook, Instagram, X/Twitter and Grokipedia.
 - Each page contributes up to 8,000 characters of rendered text. Pages come from the render cache when it has them.
 - Both LLM calls get the numbered pages and may state only what a page says; anything else is null. They cite pages by number, and the response carries the URLs of those pages, so a draft cannot contain a URL that was not fetched.
-- The two calls run at the same time. If the first finds nothing specific to the place, the history from the second is dropped (#721).
+- The two calls run at the same time, without model reasoning: extraction does not need it, and with it the calls took 35-38s against 10s and the history often came back unparseable (#727). If the first finds nothing specific to the place, the history from the second is dropped (#721).
 - No page read: no LLM call, every field null, and a notice in the draft.
 - Serper key missing: the editor shows the error. Serper down: the reference page is read alone.
 - Search snippets are not source text; only fetched pages count.
@@ -30,5 +30,4 @@
 | `notice` | set when nothing was drafted, else null |
 
 ## Out of scope
-- The editable "POI Research" prompts in the Jobs tab (`gemini_prompt_brief`, `gemini_prompt_historical`) are not read by research; tracked separately.
 - Settings for the page count and text budget; they are constants in `researchSources.js`.

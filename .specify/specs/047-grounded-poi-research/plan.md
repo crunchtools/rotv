@@ -16,7 +16,7 @@ The route gathers pages, the LLM function extracts from them. `backend/services/
 | `backend/services/serperService.js` | Docs and log wording for the research request |
 | `backend/services/researchSources.js` | New: `gatherResearchSources`, skip rules, render, text budget |
 | `backend/services/moderationService.js` | `isSafePublicUrl` exported for the skip rules |
-| `backend/services/llmService.js` | Prompts take numbered sources and cite by number; `resolveCitedSources`; `researchLocationMultiPass` takes `gathered`, returns early with a notice on no sources, runs both passes concurrently, logs stage timings; smaller reasoning and output budgets |
+| `backend/services/llmService.js` | Prompts take numbered sources and cite by number; `resolveCitedSources`; `researchLocationMultiPass` takes `gathered`, returns early with a notice on no sources, runs both passes concurrently, logs stage timings; no reasoning, smaller output budget |
 | `backend/routes/admin.js` | `/ai/research-v2` gathers sources before the LLM call |
 | `frontend/src/components/sidebar/EditView.jsx`, `App.css` | Draft modal: notice, sources cited, pages read, could not read |
 | `backend/services/collection/registry.js` | Research job description |

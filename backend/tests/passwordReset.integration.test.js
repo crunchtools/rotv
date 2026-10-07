@@ -86,8 +86,10 @@ beforeEach(async () => {
 afterEach(() => vi.unstubAllGlobals());
 
 afterAll(async () => {
-  await adminPool.query('DROP SCHEMA IF EXISTS reset_probe CASCADE');
+  // End the app's pool first: it waits for queries the routes started after
+  // answering (mail handoff), which otherwise deadlock with the DROP (#729)
   await pool.end();
+  await adminPool.query('DROP SCHEMA IF EXISTS reset_probe CASCADE');
   await adminPool.end();
 });
 

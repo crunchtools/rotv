@@ -189,6 +189,18 @@ describe('complete', () => {
   });
 });
 
+describe('complete() body timeout', () => {
+  it('reports a timeout while reading the reply as a failed request (#727)', async () => {
+    const timeout = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      status: 200, ok: true, headers: new Headers(), json: async () => { throw timeout; }
+    }));
+
+    await expect(complete(keyPool(), 'x'))
+      .rejects.toThrow('OpenRouter request failed: The operation was aborted due to timeout');
+  });
+});
+
 describe('POI research', () => {
   const sentBodies = fetchMock => fetchMock.mock.calls.map(([, init]) => JSON.parse(init.body));
   const jsonReply = fields => reply(200, { choices: [{ message: { content: JSON.stringify(fields) } }] });
@@ -214,7 +226,7 @@ describe('POI research', () => {
     timings: { searchMs: 5, renderMs: 9 }
   };
 
-  it('bounds reasoning on both passes', async () => {
+  it('runs both passes without reasoning (#727)', async () => {
     const fetchMock = passReplies({ brief_description: 'A falls on Brandywine Creek.' });
     vi.stubGlobal('fetch', fetchMock);
 
@@ -222,7 +234,7 @@ describe('POI research', () => {
     const bodies = sentBodies(fetchMock);
     expect(bodies).toHaveLength(2);
     for (const body of bodies) {
-      expect(body.reasoning).toEqual({ max_tokens: 1024 });
+      expect(body.reasoning).toEqual({ effort: 'none' });
       expect(body.max_tokens).toBe(4096);
       expect(body.temperature).toBe(0);
     }
