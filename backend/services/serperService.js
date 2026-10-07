@@ -40,6 +40,8 @@ const logger = createLogger('Serper');
  * @param {object} poi - POI object with id, name, latitude, longitude, poi_roles
  * @param {object} [options] - Options
  * @param {string} [options.contentType='news'] - 'news' or 'events'
+ * @param {string} [options.pipeline='current'] - 'current', 'historical' or 'research' (see newsPipelines.js)
+ * @param {number} [options.queryIndex=0] - Which Historical News angle to ask
  * @returns {Promise<object>} - {query, grounded, groundingContext, urls[], credits}
  * @throws {Error} - If Serper API key not configured or API error
  */
@@ -111,7 +113,7 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news', pipeline
     }
   }
 
-  logger.info(`Found ${urls.length} external ${contentType} URLs (${urls.filter(u => u.date).length} with dates) from ${endpoints.join('+')}`);
+  logger.info(`Found ${urls.length} external ${pipeline === 'research' ? 'research' : contentType} URLs (${urls.filter(u => u.date).length} with dates) from ${endpoints.join('+')}`);
 
   return {
     query,

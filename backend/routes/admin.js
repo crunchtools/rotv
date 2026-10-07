@@ -897,10 +897,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const surfacesResult = await pool.query('SELECT name FROM surfaces ORDER BY sort_order, name');
       const availableSurfaces = surfacesResult.rows.map(row => row.name);
 
-      const { researchLocationMultiPass } = await import('../services/llmService.js');
-      const researchData = await researchLocationMultiPass(pool, destWithContext, availableActivities, availableEras, availableSurfaces);
+      // Research states only what these pages say (#724)
+      const { gatherResearchSources } = await import('../services/researchSources.js');
+      const gathered = await gatherResearchSources(pool, destWithContext);
 
-      logger.info(`Admin ${req.user.email} researched (v2) location: ${destination.name}`);
+      const { researchLocationMultiPass } = await import('../services/llmService.js');
+      const researchData = await researchLocationMultiPass(pool, destWithContext, availableActivities, availableEras, availableSurfaces, gathered);
+
+      logger.info(`Admin ${req.user.email} researched (v2) location: ${destination.name} (search: ${gathered.query || 'none'}, pages read: ${gathered.sources.length})`);
       res.json({ draft: true, data: researchData, destination_id: destination.id });
     } catch (error) {
       logger.error('Error in multi-pass research:', error);

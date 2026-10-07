@@ -121,6 +121,7 @@ Official APIs (Serper, OpenRouter, USGS, Bluesky's API, the trackers, Buttondown
 | `backend/services/newsPipelines.js` | Current vs Historical: labels, cadence, search requests, prompts, relevance criteria |
 | `backend/services/newsService.js` | `collectPoi`, `crawlPage`, `processPage`, dates, save, job orchestration, `getPoisForPipeline` |
 | `backend/services/serperService.js` | Serper search with PostGIS geographic grounding |
+| `backend/services/researchSources.js` | Pages POI research reads: reference page plus Serper results (spec 047) |
 | `backend/services/contentExtractor.js` / `renderPage.js` | Playwright extraction and the render cache |
 | `backend/services/eventVenue.js` | JSON-LD event venues |
 | `backend/services/dateExtractor.js` | Date parsing and consensus scoring |

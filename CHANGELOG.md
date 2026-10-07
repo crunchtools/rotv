@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **AI research reads the web before it writes (#724)**: research drafted from the model's memory,
+  so well-known places came back with unverified detail and URLs nobody had opened. It now runs one
+  Serper search, renders the POI's reference page and the top four results, and may state only what
+  those pages say. Sources are cited by number and resolved to the fetched URLs; the draft lists the
+  pages read and the ones that could not be read, and says so when nothing was drafted. Both passes
+  run concurrently.
+
 ### Fixed
 - **AI research describes the POI, not its parent park (#721)**: the research prompts framed every
   POI as part of Cuyahoga Valley National Park and never said what kind of place it was, so trails
