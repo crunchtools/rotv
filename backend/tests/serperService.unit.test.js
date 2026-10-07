@@ -75,6 +75,19 @@ describe('Serper Service', () => {
       expect(first.urls.map(u => u.url)).toEqual(['https://example.com/history']);
     });
 
+    it('POI research asks web search for the exact name with no date filter (#724)', async () => {
+      fetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ organic: [{ link: 'https://example.com/ledges', title: 'Ledges', snippet: 'S' }], credits: 1 })
+      });
+
+      const result = await searchNewsUrls(groundedPool(), mockPoi, { pipeline: 'research' });
+
+      expect(fetch.mock.calls[0][0]).toBe('https://google.serper.dev/search');
+      expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ q: '"Ledges Trail" Cuyahoga Valley National Park', num: 10 });
+      expect(result.urls.map(u => u.url)).toEqual(['https://example.com/ledges']);
+    });
+
     it('should dedupe a URL returned twice', async () => {
       fetch.mockResolvedValue({
         ok: true,

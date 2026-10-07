@@ -750,6 +750,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
               <button className="close-btn" onClick={() => { setShowDraftModal(false); setResearchDraft(null); }}>&times;</button>
             </div>
             <p className="prompt-editor-hint">Review AI research results. Toggle fields to accept or skip.</p>
+            {researchDraft.notice && <p className="draft-notice">{researchDraft.notice}</p>}
 
             <div className="draft-fields">
               {[
@@ -805,7 +806,7 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
 
             {researchDraft.sources && researchDraft.sources.length > 0 && (
               <div className="draft-sources">
-                <strong>Sources:</strong>
+                <strong>Sources cited:</strong>
                 <ul>
                   {researchDraft.sources.map((source, i) => (
                     <li key={i}>
@@ -816,6 +817,31 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
                   ))}
                 </ul>
               </div>
+            )}
+
+            {researchDraft.pages_read && researchDraft.pages_read.length > 0 && (
+              <details className="draft-sources">
+                <summary>Pages read ({researchDraft.pages_read.length})</summary>
+                <ul>
+                  {researchDraft.pages_read.map((page, i) => (
+                    <li key={i}>
+                      <a href={page.url} target="_blank" rel="noopener noreferrer">{page.title || page.url}</a>
+                      {page.origin === 'reference' ? ' (reference page)' : ''}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+
+            {researchDraft.unreachable && researchDraft.unreachable.length > 0 && (
+              <details className="draft-sources">
+                <summary>Could not read ({researchDraft.unreachable.length})</summary>
+                <ul>
+                  {researchDraft.unreachable.map((page, i) => (
+                    <li key={i}>{page.url} — {page.reason}</li>
+                  ))}
+                </ul>
+              </details>
             )}
           </div>
         </div>

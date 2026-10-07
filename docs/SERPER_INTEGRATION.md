@@ -2,16 +2,19 @@
 
 ## Overview
 
-Serper (a Google search API) supplies the external coverage behind Phase II of news collection. It serves two pipelines (spec 044), each calling one endpoint:
+Serper (a Google search API) supplies the external coverage behind Phase II of news collection and the pages POI research reads. It serves two news pipelines (spec 044) and research (spec 047), each calling one endpoint:
 
 | Pipeline | Endpoint | Date filter | Query | URLs crawled per POI |
 |----------|----------|-------------|-------|----------------------|
 | **Current News** | `/news` (Google News) | `tbs: qdr:m` (past month) | `"{POI}" {boundaries}` | `max_search_urls` |
 | **Historical News** | `/search` (web) | none | rotates: `history of {POI} {boundaries}`, `{POI} historic {boundaries}`, `{POI} {boundaries} archives photos` | `news_history_max_urls` (3) |
+| **POI research** | `/search` (web) | none | `"{POI}" {boundaries}` | top 4, plus the POI's `more_info_link` |
 
 Before spec 044, every news collection called both endpoints with `Latest news for {POI} in {boundaries}` and no date filter. Without `tbs`, `/news` for Brandywine Falls returned stories 3-11 months old; with `qdr:m` all results were from the past month.
 
-Results from either endpoint go through the same Playwright rendering → Gemini extraction pipeline as the POI's own pages (see `docs/NEWS_EVENTS_ARCHITECTURE.md`). A result that can't be rendered but carries a date is saved from its search snippet (`from_snippet`), and Current News snippet items wait for human review.
+Research (`backend/services/researchSources.js`) renders its pages the same way but saves nothing: the text goes into the research prompts, which may state only what those pages say. It skips PDFs, blocklisted URLs, social sites and Grokipedia, never uses a search snippet as source text, and drafts nothing when no page could be read. There is no model-side search tool anywhere in ROTV; it was removed in April in favor of this search, render, extract flow.
+
+News results from either endpoint go through the same Playwright rendering → Gemini extraction pipeline as the POI's own pages (see `docs/NEWS_EVENTS_ARCHITECTURE.md`). A result that can't be rendered but carries a date is saved from its search snippet (`from_snippet`), and Current News snippet items wait for human review.
 
 ---
 
@@ -539,4 +542,3 @@ const isValid = await testSerperApiKey(pool);
 - Phase 3: Integration with news collection
 - Phase 4: Admin Settings UI
 - Test results: 87% average relevance improvement
-

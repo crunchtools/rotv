@@ -66,6 +66,13 @@ describe('serperRequestFor', () => {
     ]);
     expect(queries[0].extraBody).toEqual({});
   });
+
+  it('POI research asks web search for the exact name, any date, the same way every run (#724)', () => {
+    const expected = { endpoint: 'search', query: '"Cascade Locks Park" Akron, Summit County', extraBody: {} };
+    expect(serperRequestFor('research', 'Cascade Locks Park', 'Akron, Summit County')).toEqual(expected);
+    expect(serperRequestFor('research', 'Cascade Locks Park', 'Akron, Summit County', 2)).toEqual(expected);
+    expect(serperRequestFor('research', 'New Overlook', '').query).toBe('"New Overlook"');
+  });
 });
 
 describe('prompts per pipeline', () => {

@@ -45,8 +45,13 @@ export function getDomainReputation(url, trustedSet = new Set(), blocklistSet = 
   }
 }
 
-// SSRF protection: reject internal IPs, localhost, cloud metadata endpoints, and non-http schemes
-function isSafePublicUrl(urlStr) {
+/**
+ * SSRF protection for URLs the server is about to fetch.
+ * @param {string} urlStr the URL to check
+ * @returns {boolean} false for anything unparseable, non-http(s), localhost,
+ *   a private or link-local IPv4 address, or a cloud metadata endpoint
+ */
+export function isSafePublicUrl(urlStr) {
   if (!URL.canParse(urlStr)) return false;
   const parsed = new URL(urlStr);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;

@@ -175,7 +175,7 @@ export const COLLECTION_TYPES = [
   {
     id: 'research',
     label: 'POI Research',
-    description: 'Multi-pass AI research for POI metadata, descriptions, and hero images',
+    description: 'POI metadata and descriptions drafted from a web search and the pages it finds',
     icon: '\u{1F50D}',
     promptKeys: [{
       key: 'gemini_prompt_brief',

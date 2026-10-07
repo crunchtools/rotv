@@ -44,7 +44,12 @@ const HISTORY_QUERY_TEMPLATES = [
 
 // Serper request per pipeline. Current News asks Google News for the past month only
 // (tbs=qdr:m); without it, /news for Brandywine Falls returned stories 3-11 months old.
+// POI research (#724) borrows this for its one web search: the place by its exact
+// name, any date, same query every run.
 export function serperRequestFor(pipeline, poiName, context, queryIndex = 0) {
+  if (pipeline === 'research') {
+    return { endpoint: 'search', query: `"${poiName}"${context ? ` ${context}` : ''}`, extraBody: {} };
+  }
   if (pipeline === 'historical') {
     const template = HISTORY_QUERY_TEMPLATES[queryIndex % HISTORY_QUERY_TEMPLATES.length];
     return { endpoint: 'search', query: template(poiName, context), extraBody: {} };
