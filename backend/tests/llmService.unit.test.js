@@ -367,6 +367,21 @@ describe('POI research', () => {
     expect(research.sources).toEqual(['https://example.org/meadow-trail']);
   });
 
+  it('reports a pass 1 failure while pass 2 is still running', async () => {
+    let finishPass2;
+    const fetchMock = vi.fn((url, init) => (
+      JSON.parse(init.body).messages[0].content.includes('"brief_description"')
+        ? Promise.resolve(reply(200, { choices: [{ message: { content: 'not json' } }] }))
+        : new Promise(resolve => { finishPass2 = () => resolve(jsonReply({ historical_description: 'Opened in 1987.' })); })
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(researchLocationMultiPass(keyPool(), trail, [], [], [], gathered))
+      .rejects.toThrow('AI returned invalid format in Pass 1. Please try again.');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    finishPass2();
+  });
+
   it('tells the model that page text is material to read, not instructions', async () => {
     const fetchMock = passReplies({ brief_description: 'A loop through the meadow.' });
     vi.stubGlobal('fetch', fetchMock);
