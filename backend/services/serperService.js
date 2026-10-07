@@ -63,7 +63,10 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news', pipeline
     ? Math.min(20, Math.max(1, parseInt(maxResultsRow.rows[0].value, 10) || 10))
     : 10;
 
-  const boundaries = await getContainingBoundaries(pool, poi.id);
+  // A POI that is itself a boundary contains itself; its name is already the query (#727)
+  const ownName = (poi.name || '').trim().toLowerCase();
+  const boundaries = (await getContainingBoundaries(pool, poi.id))
+    .filter(name => name.trim().toLowerCase() !== ownName);
 
   const context = boundaries.join(', ');
 

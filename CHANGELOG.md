@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run concurrently.
 
 ### Fixed
+- **AI research is three times faster and stops failing on the history pass (#727)**: measured in
+  prod, the research calls took 35-38s with model reasoning on and the history reply was unparseable
+  twice in a row; with reasoning off they take about 10s. A timeout while reading the model's reply
+  is now reported as a failed request instead of a raw TimeoutError, and a POI that is itself a
+  boundary no longer repeats its own name in the search query.
 - **AI research describes the POI, not its parent park (#721)**: the research prompts framed every
   POI as part of Cuyahoga Valley National Park and never said what kind of place it was, so trails
   came back with their parent park's write-up. Both passes now name the POI's type, owner and parent
@@ -23,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   when the first pass knows nothing specific to the place.
 
 ### Removed
+- The "POI Research" prompt settings in the Jobs tab and `POST /api/admin/ai/prompt-preview`: research
+  never read them (#728).
 - The single-pass `POST /api/admin/ai/research` endpoint and its prompt, unused since the editor moved
   to `research-v2`.
 
