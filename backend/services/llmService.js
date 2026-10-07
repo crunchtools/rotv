@@ -593,12 +593,13 @@ export async function researchLocationMultiPass(pool, destination, availableActi
   logInfo(runId, 'research', null, destination.name, `Research v2 Pass 1 and 2: ${destination.name}`);
 
   // Both passes read the same pages, so neither waits on the other
-  const [pass1Outcome, pass2Outcome] = await Promise.allSettled([
-    researchPass(pool, 'Pass 1', buildPrompt(RESEARCH_PASS1_TEMPLATE), runId, destination.name),
+  // Fix: a pass 1 failure is reported at once, not after pass 2 settles (PR #725 review)
+  const pass1Running = researchPass(pool, 'Pass 1', buildPrompt(RESEARCH_PASS1_TEMPLATE), runId, destination.name);
+  const pass2Settling = Promise.allSettled([
     researchPass(pool, 'Pass 2', buildPrompt(RESEARCH_PASS2_TEMPLATE), runId, destination.name)
   ]);
-  if (pass1Outcome.status === 'rejected') throw pass1Outcome.reason;
-  const pass1 = pass1Outcome.value;
+  const pass1 = await pass1Running;
+  const [pass2Outcome] = await pass2Settling;
   const pass1Data = pass1.data;
   let pass2Data;
 
