@@ -15097,8 +15097,10 @@ button.type-filter-chip {
     height: auto;
   }
 
-  /* Dragging the full card down collapses it; it must not also pull the page
-     into the browser's refresh gesture. */
+  /* Dragging the card down collapses it, then closes it; it must not also pull
+     the page into the browser's refresh gesture. */
+  html:has(.sidebar.peek),
+  html:has(.sidebar.peek) body,
   html:has(.sidebar.expanded),
   html:has(.sidebar.expanded) body {
     overscroll-behavior-y: none;
