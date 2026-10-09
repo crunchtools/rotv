@@ -49,6 +49,8 @@ import {
   queueNewsletterJob
 } from './jobScheduler.js';
 
+import { getDigestDraft, setDigestExcluded } from './newsletterDigestService.js';
+
 const logger = createLogger('MCP');
 
 // Columns poi_create may write. Tool arguments are client input, so the INSERT
@@ -620,6 +622,36 @@ function registerTools(server, pool, boss, mcpUserId) {
       );
       await queueNewsletterJob(id);
       return { content: [{ type: 'text', text: `Newsletter email #${id} queued for reprocessing` }] };
+    }
+  );
+
+  server.tool(
+    'digest_draft',
+    'What the next weekly digest will send: news and events in send order, plus the runners-up that backfill if an item is cut',
+    {
+      as_of: z.string().datetime({ offset: true }).optional().describe('Build the digest as of this instant (ISO 8601). Defaults to the upcoming Friday send.')
+    },
+    async ({ as_of }) => {
+      const draft = await getDigestDraft(pool, { asOf: as_of || null });
+      return { content: [{ type: 'text', text: JSON.stringify(draft, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'digest_exclude',
+    'Hold a published news item or event out of the weekly digest, or put it back. The item stays published on the site.',
+    {
+      content_type: z.enum(['news', 'event']).describe('Content type'),
+      id: z.number().describe('Content item ID'),
+      excluded: z.boolean().optional().default(true).describe('true to hold it out of the digest, false to put it back')
+    },
+    async ({ content_type, id, excluded }) => {
+      const item = await setDigestExcluded(pool, content_type, id, excluded);
+      if (!item) {
+        return { content: [{ type: 'text', text: `No ${content_type} #${id}` }], isError: true };
+      }
+      const outcome = excluded ? 'Excluded from digest' : 'Restored to digest';
+      return { content: [{ type: 'text', text: `${outcome}: ${content_type} #${id} "${item.title}"` }] };
     }
   );
 

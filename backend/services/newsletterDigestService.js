@@ -7,6 +7,10 @@ const DIGEST_EVENT_LIMIT = 15;
 const DIGEST_NEWS_LIMIT = 5;
 // Fetch headroom so host filtering and dedup still leave DIGEST_NEWS_LIMIT rows.
 const DIGEST_NEWS_FETCH_MULTIPLIER = 6;
+// Runners-up shown to the editor in the draft: what backfills when an item is cut.
+const DIGEST_NEWS_BENCH = 5;
+// Local hour of the Friday send (jobScheduler.scheduleDigest, '0 8 * * 5').
+const DIGEST_SEND_HOUR = 8;
 
 // Hosts that produce useful POI-page content but not newsletter-worthy news:
 // social posts, restaurant listings, and offshore aggregators that reprint
@@ -189,13 +193,42 @@ export function digestEventLocation(event) {
   return `${venue} · ${poiName}`;
 }
 
-function upcomingFridayISO(tz = 'America/New_York') {
-  const now = new Date();
-  const weekdayShort = new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' }).format(now);
+// Calendar fields of an instant as read on a wall clock in tz.
+function wallClockParts(instant, tz) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric',
+      hour: 'numeric', minute: 'numeric', hourCycle: 'h23'
+    }).formatToParts(instant).map(part => [part.type, part.value])
+  );
+  return {
+    weekday: parts.weekday,
+    year: Number(parts.year), month: Number(parts.month), day: Number(parts.day),
+    hour: Number(parts.hour), minute: Number(parts.minute)
+  };
+}
+
+/**
+ * The instant the next digest sends: the coming Friday (today, on a Friday) at
+ * the send hour in tz. Previews and the editor's draft are built as of this
+ * instant, not "now plus N days", so their 7-day news window is the one the
+ * real send will use whatever time of day they are generated. The live send
+ * does not call this; it uses the moment it runs.
+ *
+ * @param {string} [tz] IANA timezone of the send. Default America/New_York.
+ * @param {Date} [now] Reference instant. Default: the current time.
+ * @returns {string} ISO 8601 UTC timestamp of Friday 08:00 in tz
+ */
+export function upcomingSendISO(tz = 'America/New_York', now = new Date()) {
+  const today = wallClockParts(now, tz);
   const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
-  const today = dayMap[weekdayShort];
-  const daysAhead = today === 5 ? 0 : (5 - today + 7) % 7;
-  return new Date(now.getTime() + daysAhead * 86400000).toISOString();
+  const daysAhead = (5 - dayMap[today.weekday] + 7) % 7;
+  // The send's wall-clock time, read as if tz were UTC. Correct it by tz's
+  // offset at that moment, which is within hours of the real instant.
+  const asIfUtc = Date.UTC(today.year, today.month - 1, today.day + daysAhead, DIGEST_SEND_HOUR);
+  const there = wallClockParts(new Date(asIfUtc), tz);
+  const offsetMs = Date.UTC(there.year, there.month - 1, there.day, there.hour, there.minute) - asIfUtc;
+  return new Date(asIfUtc - offsetMs).toISOString();
 }
 
 async function generateDigest(pool, tz = 'America/New_York', asOfDate = null) {
@@ -228,6 +261,7 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     WHERE (e.start_date AT TIME ZONE $1)::date >= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date
       AND (e.start_date AT TIME ZONE $1)::date <= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date + 2
       AND e.moderation_status IN ('published', 'auto_approved')
+      AND NOT e.digest_excluded
     ORDER BY e.start_date ASC, e.id ASC
     LIMIT ${DIGEST_EVENT_LIMIT * 2}
   `;
@@ -242,6 +276,7 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
       AND n.pipeline = 'current'
+      AND NOT n.digest_excluded
       AND n.collection_date > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
       AND n.collection_date <= COALESCE($1::timestamptz, NOW())
       AND COALESCE(n.publication_date, n.collection_date) <= COALESCE($1::timestamptz, NOW())
@@ -254,11 +289,92 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     pool.query(newsQuery, [asOfDate])
   ]);
 
+  const events = dedupeDigestEvents(eventsResult.rows, tz);
+  const news = dedupeDigestNews(newsResult.rows.filter(n => isDigestNewsSource(n.source_url)));
   return {
-    events: dedupeDigestEvents(eventsResult.rows, tz).slice(0, DIGEST_EVENT_LIMIT),
-    news: dedupeDigestNews(newsResult.rows.filter(n => isDigestNewsSource(n.source_url)))
-      .slice(0, DIGEST_NEWS_LIMIT)
+    events: events.slice(0, DIGEST_EVENT_LIMIT),
+    news: news.slice(0, DIGEST_NEWS_LIMIT),
+    eventsOverflow: events.slice(DIGEST_EVENT_LIMIT),
+    newsBench: news.slice(DIGEST_NEWS_LIMIT, DIGEST_NEWS_LIMIT + DIGEST_NEWS_BENCH)
   };
+}
+
+const draftNewsItem = (n) => ({
+  id: n.id,
+  title: n.title,
+  summary: n.summary,
+  source_url: n.source_url,
+  source_host: sourceHost(n.source_url),
+  poi_id: n.poi_id,
+  poi_name: n.poi_name,
+  publication_date: n.publication_date,
+  collection_date: n.collection_date
+});
+
+const draftEventItem = (e) => ({
+  id: e.id,
+  title: e.title,
+  description: e.description,
+  start_date: e.start_date,
+  end_date: e.end_date,
+  location: digestEventLocation(e),
+  poi_id: e.poi_id,
+  poi_name: e.poi_name,
+  source_url: e.source_url
+});
+
+/**
+ * What the next broadcast digest will contain, as data instead of HTML, for an
+ * editor reviewing it before the send (spec 049). Built by fetchDigestContent,
+ * the same call the email is rendered from, so the two cannot drift.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {object} [options]
+ * @param {string} [options.tz] IANA timezone of the send. Default America/New_York.
+ * @param {string|null} [options.asOf] ISO 8601 instant to build the digest as of.
+ *   Default: the upcoming send (upcomingSendISO).
+ * @returns {Promise<{sends_at: string, timezone: string, greeting: string|null,
+ *   news: object[], news_bench: object[], events: object[], events_overflow: object[]}>}
+ *   news and events are what sends, in send order; news_bench and events_overflow
+ *   are the items past the caps. Item fields are listed in the spec.
+ */
+export async function getDigestDraft(pool, { tz = 'America/New_York', asOf = null } = {}) {
+  const sendsAt = asOf || upcomingSendISO(tz);
+  const [content, greeting] = await Promise.all([
+    fetchDigestContent(pool, tz, sendsAt),
+    fetchDigestGreeting(pool)
+  ]);
+  return {
+    sends_at: sendsAt,
+    timezone: tz,
+    greeting,
+    news: content.news.map(draftNewsItem),
+    news_bench: content.newsBench.map(draftNewsItem),
+    events: content.events.map(draftEventItem),
+    events_overflow: content.eventsOverflow.map(draftEventItem)
+  };
+}
+
+const DIGEST_EXCLUDE_SQL = {
+  news: 'UPDATE poi_news SET digest_excluded = $2 WHERE id = $1 RETURNING id, title',
+  event: 'UPDATE poi_events SET digest_excluded = $2 WHERE id = $1 RETURNING id, title'
+};
+
+/**
+ * Hold one item out of the digest, or put it back, without unpublishing it.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {'news'|'event'} contentType
+ * @param {number} id
+ * @param {boolean} excluded true to hold the item out, false to put it back
+ * @returns {Promise<{id: number, title: string}|null>} the item, or null when the id does not exist
+ * @throws {Error} when contentType is not 'news' or 'event'
+ */
+export async function setDigestExcluded(pool, contentType, id, excluded) {
+  const sql = DIGEST_EXCLUDE_SQL[contentType];
+  if (!sql) throw new Error(`Unsupported content type: ${contentType}`);
+  const updated = await pool.query(sql, [id, excluded]);
+  return updated.rows[0] || null;
 }
 
 function renderDigestHtml(events, news, tz = 'America/New_York', greeting = null) {
@@ -638,7 +754,7 @@ export async function sendDigestPreviewTo(pool, email, tz = 'America/New_York', 
   }
 
   try {
-    const asOf = upcomingFridayISO(tz);
+    const asOf = upcomingSendISO(tz);
     const html = await generateDigest(pool, tz, asOf);
 
     if (!html) {
@@ -725,6 +841,7 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
         WHERE n.poi_id = ANY($1::int[])
           AND n.moderation_status IN ('published', 'auto_approved')
           AND n.pipeline = 'current'
+          AND NOT n.digest_excluded
           AND n.collection_date > NOW() - INTERVAL '7 days'
           AND COALESCE(n.publication_date, n.collection_date) <= NOW()
         ORDER BY COALESCE(n.publication_date, n.collection_date) DESC`,
@@ -737,6 +854,7 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
          JOIN pois p ON p.id = e.poi_id
         WHERE e.poi_id = ANY($1::int[])
           AND e.moderation_status IN ('published', 'auto_approved')
+          AND NOT e.digest_excluded
           AND e.start_date >= NOW() - INTERVAL '1 day'
           AND e.start_date <= NOW() + INTERVAL '4 days'
         ORDER BY e.start_date ASC`,
@@ -753,7 +871,7 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
       timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'
     }).format(new Date(d));
 
-    const asOf = upcomingFridayISO(tz);
+    const asOf = upcomingSendISO(tz);
     const friday = dayInTz(asOf);
     const sunday = dayInTz(new Date(new Date(asOf).getTime() + 2 * 86400000));
 

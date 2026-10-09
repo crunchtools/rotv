@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is now collected for news and events, counted in visited totals, and drawn with a pin.
 - **Duplicate names are refused (#712)**: creating or renaming a POI onto a name another place
   already answers to returns 409. Case, apostrophe style and a trailing county are ignored.
+- **Editor's draft of the weekly digest (#734)**: two MCP tools for the Thursday edit. `digest_draft`
+  returns the news and events the next send will contain, in send order, with the runners-up that
+  backfill when an item is cut; it is built by the same call the email renders from.
+  `digest_exclude` holds a published item out of the digest without unpublishing it, through a new
+  `digest_excluded` flag on news and events (migration 096).
 
 ### Changed
 - **Three tabs: Map, Find, Happening (#712)**: the five icon tabs are now three with words on them,
@@ -43,6 +48,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Park name matching on the production database encoding (#712)**: `poi_name_key()` used
   `translate()`, which on a SQL_ASCII database turned one curly apostrophe into two straight ones,
   so "O’Neil Woods" never matched "O'Neil Woods". It now uses `replace()`.
+- **Digest previews use the real send window (#734)**: a preview was built as of "now plus N days"
+  at the current clock time, so one generated Thursday night covered a news window ending Friday
+  night instead of at the 08:00 send. Previews are now built as of Friday 08:00 Eastern.
 - **AI research is three times faster and stops failing on the history pass (#727)**: measured in
   prod, the research calls took 35-38s with model reasoning on and the history reply was unparseable
   twice in a row; with reasoning off they take about 10s. A timeout while reading the model's reply
