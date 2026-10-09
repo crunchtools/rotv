@@ -146,6 +146,30 @@ describe('Find a park on a phone and get to it (#712)', () => {
 
     await drag('.sidebar.open .sidebar-header h2', 40, 200);
     await page.waitForSelector('.sidebar.open.peek', { timeout: 5000 });
+
+    // A drag down on the content scrolls it back up first, and collapses the
+    // card only once that content is at the top. The fixture park's text is
+    // short, so a spacer makes its scroller long enough to scroll.
+    await drag('.sidebar.open .sidebar-tab-content', 700, 600);
+    await page.waitForSelector('.sidebar.open.expanded', { timeout: 5000 });
+    const scrolled = await page.evaluate(() => {
+      const scroller = document.querySelector('.sidebar.open .view-scroll');
+      const spacer = document.createElement('div');
+      spacer.id = 'drag-test-spacer';
+      spacer.style.height = '3000px';
+      scroller.appendChild(spacer);
+      scroller.scrollTop = 200;
+      return scroller.scrollTop;
+    });
+    expect(scrolled).toBe(200);
+
+    await drag('#drag-test-spacer', 300, 500);
+    expect(await page.locator('.sidebar.open.expanded').count()).toBe(1);
+
+    await page.evaluate(() => { document.querySelector('.sidebar.open .view-scroll').scrollTop = 0; });
+    await drag('#drag-test-spacer', 300, 500);
+    await page.waitForSelector('.sidebar.open.peek', { timeout: 5000 });
+    await page.evaluate(() => document.getElementById('drag-test-spacer').remove());
   }, 60000);
 
   it('keeps the search and the selection across tabs, showing the card only on the map', async () => {
