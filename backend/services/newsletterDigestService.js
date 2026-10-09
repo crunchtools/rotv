@@ -348,13 +348,25 @@ export async function getDigestDraft(pool, { tz = 'America/New_York', asOf = nul
   };
 }
 
-// Hold one item out of the digest (or put it back) without unpublishing it.
+const DIGEST_EXCLUDE_SQL = {
+  news: 'UPDATE poi_news SET digest_excluded = $2 WHERE id = $1 RETURNING id, title',
+  event: 'UPDATE poi_events SET digest_excluded = $2 WHERE id = $1 RETURNING id, title'
+};
+
+/**
+ * Hold one item out of the digest, or put it back, without unpublishing it.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {'news'|'event'} contentType
+ * @param {number} id
+ * @param {boolean} excluded true to hold the item out, false to put it back
+ * @returns {Promise<{id: number, title: string}|null>} the item, or null when the id does not exist
+ * @throws {Error} when contentType is not 'news' or 'event'
+ */
 export async function setDigestExcluded(pool, contentType, id, excluded) {
-  const table = contentType === 'news' ? 'poi_news' : 'poi_events';
-  const updated = await pool.query(
-    `UPDATE ${table} SET digest_excluded = $2 WHERE id = $1 RETURNING id, title`,
-    [id, excluded]
-  );
+  const sql = DIGEST_EXCLUDE_SQL[contentType];
+  if (!sql) throw new Error(`Unsupported content type: ${contentType}`);
+  const updated = await pool.query(sql, [id, excluded]);
   return updated.rows[0] || null;
 }
 
