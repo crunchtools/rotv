@@ -208,10 +208,17 @@ function wallClockParts(instant, tz) {
   };
 }
 
-// The instant the next digest sends: the coming Friday (today, on a Friday) at
-// the send hour in tz. Previews and the editor's draft are built as of this
-// instant, not "now plus N days", so their 7-day news window is the one the
-// real send will use whatever time of day they are generated.
+/**
+ * The instant the next digest sends: the coming Friday (today, on a Friday) at
+ * the send hour in tz. Previews and the editor's draft are built as of this
+ * instant, not "now plus N days", so their 7-day news window is the one the
+ * real send will use whatever time of day they are generated. The live send
+ * does not call this; it uses the moment it runs.
+ *
+ * @param {string} [tz] IANA timezone of the send. Default America/New_York.
+ * @param {Date} [now] Reference instant. Default: the current time.
+ * @returns {string} ISO 8601 UTC timestamp of Friday 08:00 in tz
+ */
 export function upcomingSendISO(tz = 'America/New_York', now = new Date()) {
   const today = wallClockParts(now, tz);
   const dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
