@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
-import { showCarouselViaSwipe, openPoiViaPermalink } from './utils/uiHelpers.js';
+import { showCarouselViaSwipe, openPoiViaPermalink, hasNeighborInView } from './utils/uiHelpers.js';
 
 // .more-info-link only renders when more_info_link is set, so open a POI that has one.
 const openPoiWithMoreInfo = (page, baseUrl) => openPoiViaPermalink(page, baseUrl, {
@@ -333,7 +333,7 @@ describe('UI Integration Tests', () => {
       await page.setViewportSize({ width: 375, height: 667 });
 
       // Permalink, not a marker click: the click can miss while the map settles
-      expect(await openPoiViaPermalink(page, baseUrl)).not.toBeNull();
+      expect(await openPoiViaPermalink(page, baseUrl, { accept: hasNeighborInView })).not.toBeNull();
 
       // Carousel renders only after the first POI navigation — trigger a swipe.
       await showCarouselViaSwipe(page);
@@ -630,7 +630,7 @@ describe('UI Integration Tests', () => {
       await page.setViewportSize({ width: 375, height: 667 });
 
       // Permalink, not a marker click: the click can miss while the map settles
-      expect(await openPoiViaPermalink(page, baseUrl)).not.toBeNull();
+      expect(await openPoiViaPermalink(page, baseUrl, { accept: hasNeighborInView })).not.toBeNull();
       await showCarouselViaSwipe(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 

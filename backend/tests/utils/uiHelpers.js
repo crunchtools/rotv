@@ -32,7 +32,35 @@ export async function showCarouselViaSwipe(page) {
     await page.waitForTimeout(500);
     if (await page.locator('.thumbnail-carousel').count() > 0) return true;
   }
+  // Say what the page looked like; "selector timed out" alone explains nothing.
+  const state = await page.evaluate(() => ({
+    sidebar: document.querySelector('.sidebar')?.className,
+    place: document.querySelector('.sidebar-header h2')?.textContent,
+    inView: document.querySelector('.map-poi-count')?.textContent,
+    width: window.innerWidth
+  }));
+  console.warn('[uiHelpers] No carousel after swiping:', JSON.stringify(state));
   return false;
+}
+
+/**
+ * For openPoiViaPermalink's `accept`: the opened place has at least one other
+ * place in view once the map settles. Swiping between places needs a neighbor;
+ * a place alone on screen has nowhere to swipe to.
+ * @param {import('playwright').Page} page
+ * @returns {Promise<boolean>}
+ */
+export async function hasNeighborInView(page) {
+  try {
+    await page.waitForFunction(() => {
+      const count = parseInt(document.querySelector('.map-poi-count')?.textContent, 10);
+      return count >= 2 && !document.querySelector('.leaflet-zoom-anim');
+    }, null, { timeout: 4000 });
+    return true;
+  } catch (err) {
+    if (err.name === 'TimeoutError') return false;
+    throw err;
+  }
 }
 
 /**
