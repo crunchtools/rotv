@@ -99,7 +99,9 @@ describe('Issue #63 Regression Tests', () => {
       expect(desktopCssVar).toBeTruthy();
     }, 30000);
 
-    it('should position sidebar flush with top on mobile', async () => {
+    // The card used to cover the whole phone screen, nav included. It now
+    // opens at half height above the tab bar and expands on demand (spec 048).
+    it('should open the place card at half height on mobile and expand on demand', async () => {
       await page.setViewportSize({ width: 375, height: 667 });
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
@@ -109,24 +111,26 @@ describe('Issue #63 Regression Tests', () => {
       await page.locator('.leaflet-marker-icon').first().click();
 
       // Wait for sidebar and transition to complete (0.3s CSS transition)
-      await page.waitForSelector('.sidebar.open', { timeout: 10000 });
+      await page.waitForSelector('.sidebar.open.peek', { timeout: 10000 });
       await page.waitForTimeout(500);
 
-      // Check sidebar positioning
-      const sidebarPosition = await page.evaluate(() => {
-        const sidebar = document.querySelector('.sidebar');
-        if (!sidebar) return null;
-
-        const style = getComputedStyle(sidebar);
-        return {
-          top: style.top,
-          topPx: parseInt(style.top, 10)
-        };
+      const measure = () => page.evaluate(() => {
+        const card = document.querySelector('.sidebar').getBoundingClientRect();
+        const nav = document.querySelector('.bottom-nav').getBoundingClientRect();
+        return { top: card.top, bottom: card.bottom, navTop: nav.top, viewport: window.innerHeight };
       });
 
-      expect(sidebarPosition).not.toBeNull();
-      // Should be flush with top (0px) - carousel fills the green header area
-      expect(sidebarPosition.topPx).toBe(0);
+      const peek = await measure();
+      expect(peek.top).toBeGreaterThan(peek.viewport * 0.4);
+      expect(Math.abs(peek.bottom - peek.navTop)).toBeLessThanOrEqual(1);
+
+      await page.click('.sidebar-expand-btn');
+      await page.waitForSelector('.sidebar.open.expanded', { timeout: 5000 });
+      await page.waitForTimeout(400);
+
+      const full = await measure();
+      expect(full.top).toBe(0);
+      expect(full.bottom).toBeLessThanOrEqual(full.navTop + 1);
 
       await page.setViewportSize({ width: 1280, height: 720 });
     }, 30000);

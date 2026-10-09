@@ -1,19 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
-import MapThumbnail from './MapThumbnail';
+import React, { useState, useEffect } from 'react';
+import FilterSheet, { FilterChip } from './FilterSheet';
 import { NewsCardBody } from './NewsEventsShared';
 import ContentFormModal from './ContentFormModal';
 import useModeration from '../hooks/useModeration';
 import ModerationExtras from './ModerationExtras';
 import useFetchedList from '../hooks/useFetchedList';
 
-const DEFAULT_PARK_BOUNDS = [
-  [41.13, -81.85],
-  [41.45, -81.50]
-];
-
-function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
+/**
+ * Recent news from every place, newest first; one side of the Happening tab.
+ * It is not tied to the map view (spec 048).
+ *
+ * @param {object} props
+ * @param {boolean} props.isAdmin
+ * @param {boolean} props.editMode Admins in edit mode get moderation controls and "+ New"
+ * @param {(poiId: number) => void} props.onSelectPoi Open the place a story is about
+ * @param {(id: number, title?: string) => void} props.onEditNewsItem Open a story in moderation
+ * @param {number} props.refreshTrigger Changes when the list should be fetched again
+ * @returns {JSX.Element}
+ */
+function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, refreshTrigger }) {
   const { items: news, loading, error, reload: fetchNews } = useFetchedList('/api/news/recent', 'Failed to load news');
-  const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -34,38 +40,8 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
     fetchNews();
   }, [refreshTrigger]);
 
-  let currentBounds;
-  if (bypassViewportFilter) {
-    currentBounds = DEFAULT_PARK_BOUNDS;
-  } else {
-    currentBounds = mapState?.bounds || DEFAULT_PARK_BOUNDS;
-  }
-
-  const boundsChanged = currentBounds &&
-    (!stableBoundsRef.current ||
-    currentBounds[0][0] !== stableBoundsRef.current[0][0] ||
-    currentBounds[0][1] !== stableBoundsRef.current[0][1] ||
-    currentBounds[1][0] !== stableBoundsRef.current[1][0] ||
-    currentBounds[1][1] !== stableBoundsRef.current[1][1]);
-
-  if (boundsChanged) {
-    stableBoundsRef.current = currentBounds;
-  }
-
-  const thumbnailBounds = stableBoundsRef.current;
-
   const filteredNews = React.useMemo(() => {
-    const hasDestinations = Array.isArray(filteredDestinations);
-    const hasLinearFeatures = Array.isArray(filteredLinearFeatures);
-    const hasVirtualPois = Array.isArray(filteredVirtualPois);
-
     let filtered = news;
-
-    if (hasDestinations && filteredDestinations.length === 0 &&
-        hasLinearFeatures && filteredLinearFeatures.length === 0 &&
-        hasVirtualPois && filteredVirtualPois.length === 0) {
-      filtered = [];
-    }
 
     if (searchText.trim()) {
       const search = searchText.toLowerCase();
@@ -79,7 +55,7 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
     filtered = filtered.filter(item => typeFilters[item.news_type || 'general'] !== false);
 
     return filtered;
-  }, [news, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
+  }, [news, searchText, typeFilters]);
 
   const totalPages = Math.ceil(filteredNews.length / PAGE_SIZE);
   const paginatedNews = filteredNews.slice(
@@ -135,24 +111,22 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
           value={searchText}
           onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
         />
-        <div className="results-type-filters">
-          {[
-            { key: 'general', icon: 'N', label: 'General' },
-            { key: 'alert', icon: '!', label: 'Alert' },
-            { key: 'wildlife', icon: 'W', label: 'Wildlife' },
-            { key: 'infrastructure', icon: 'I', label: 'Infrastructure' },
-            { key: 'community', icon: 'M', label: 'Community' },
-          ].map(f => (
-            <div
-              key={f.key}
-              className={`type-filter-chip ${f.key} ${typeFilters[f.key] ? 'active' : 'inactive'}`}
-              onClick={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}
-            >
-              <span className="type-filter-icon">{f.icon}</span>
-              {f.label}
-            </div>
-          ))}
-        </div>
+        <FilterSheet activeCount={Object.values(typeFilters).filter(on => !on).length}>
+          <div className="results-type-filters">
+            {[
+              { key: 'general', icon: 'N', label: 'General' },
+              { key: 'alert', icon: '!', label: 'Alert' },
+              { key: 'wildlife', icon: 'W', label: 'Wildlife' },
+              { key: 'infrastructure', icon: 'I', label: 'Infrastructure' },
+              { key: 'community', icon: 'M', label: 'Community' },
+            ].map(f => (
+              <FilterChip key={f.key} id={f.key} active={typeFilters[f.key]} onToggle={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}>
+                <span className="type-filter-icon">{f.icon}</span>
+                {f.label}
+              </FilterChip>
+            ))}
+          </div>
+        </FilterSheet>
         <div className="results-count">
           Showing {filteredNews.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, filteredNews.length)}`} of {filteredNews.length} news items
         </div>
@@ -163,7 +137,7 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
           {filteredNews.length === 0 ? (
             <p className="no-content">
               {news.length > 0
-                ? 'No news matches the current filters. Try adjusting the type filters above or the map view.'
+                ? 'No news matches the current filters. Try a different search, or open Filters.'
                 : 'No recent news available.'}
             </p>
           ) : (
@@ -245,17 +219,6 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, filteredDest
             </div>
           )}
         </div>
-        {mapState && (
-          <div className="map-thumbnail-sidebar">
-            <MapThumbnail
-              bounds={thumbnailBounds}
-              aspectRatio={mapState.aspectRatio || 1.5}
-              visibleDestinations={filteredDestinations}
-              onClick={onMapClick}
-              poiCount={visiblePoiCount}
-            />
-          </div>
-        )}
       </div>
       {editMode && isAdmin && mod.notification && (
         <div className={`result-message ${mod.notification.type}`} style={{ margin: '10px 1rem' }}>

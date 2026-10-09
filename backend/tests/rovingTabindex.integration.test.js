@@ -70,9 +70,9 @@ describe('Roving Tabindex - Header Tab Navigation', () => {
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(200);
 
-    // Check: focused element should be "Results" (or next tab)
+    // Check: focused element should be "Find" (or next tab)
     const focusedText = await page.evaluate(() => document.activeElement?.textContent?.trim());
-    expect(focusedText).toBe('Results');
+    expect(focusedText).toBe('Find');
 
     // Check: the focused tab should have kbd-focus class
     const hasKbdFocus = await page.evaluate(() => document.activeElement?.classList.contains('kbd-focus'));
@@ -224,17 +224,17 @@ describe('Roving Tabindex - Header Tab Navigation', () => {
     await page.locator('.tab-btn.active').focus();
     await page.waitForTimeout(100);
 
-    // Arrow to Results
+    // Arrow to Find
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(200);
 
-    // Press Enter to activate Results tab
+    // Press Enter to activate Find tab
     await page.keyboard.press('Enter');
     await page.waitForTimeout(500);
 
-    // Results should now be the active tab
+    // Find should now be the active tab
     const activeText = await page.$eval('.tab-btn.active', el => el.textContent.trim());
-    expect(activeText).toBe('Results');
+    expect(activeText).toBe('Find');
 
     // kbd-focus should be cleared (focus moved to main content)
     const kbdFocusCount = await page.$$eval('.tab-btn.kbd-focus', els => els.length);

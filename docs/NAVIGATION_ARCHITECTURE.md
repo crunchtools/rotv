@@ -59,3 +59,38 @@ The hand-run imports in `data/boundaries/insert_*.sql` update a park's outline i
 - Returning to the Map tab with something selected puts it in view. With nothing selected the map is left alone.
 
 Moves made by the app set `map._isProgrammaticMove` so the visible-POI list is not recomputed mid-animation.
+
+On a phone the place card covers the lower part of the map, so the selection is framed (or a point centered) in the part still showing: `cardCoverPx()` and `centerAboveCard()` in `Map.jsx`, `coveredBottom` in `frameBounds`.
+
+## Tabs and routes
+
+Three primary tabs, each a word and an icon (`NAV_TABS` in `frontend/src/App.jsx`):
+
+| Tab | id | URL | What it is |
+|---|---|---|---|
+| Map | `view` | `/`, `/<poi-slug>` | The map and the place card |
+| Find | `find` | `/find`, `/mtb-trail-status`, `/organizations` | A directory of every place (`FindTab.jsx`) |
+| Happening | `happening` | `/happening`, `/happening/events` | News and events (`HappeningTab.jsx`) |
+
+Settings and About are tabs too (`settings`, `about`) but are reached from the account menu. `/results`, `/news` and `/events` redirect in the browser to `/find`, `/happening` and `/happening/events`; `parseTabPath()` owns the mapping. The server keeps tab paths out of POI slugs with `OG_RESERVED_PATHS` in `backend/server.js`; a new top-level path must be added in both places.
+
+On a wide screen the tabs sit in the header. At 768px and below (`useIsMobile`, same breakpoint as the CSS) they render in a bar fixed to the bottom of the screen, and the header shrinks to one row. `--bottom-nav-height` offsets everything that reaches the bottom: the map, the full-page tabs, the legend, the trip builder.
+
+## Selection across tabs
+
+- The place card renders only on the Map tab. Away from it the selection stays in state and the card is hidden (`.main-content-behind`).
+- Picking a place anywhere (Find, a news or event card, My Valley, a permalink) switches to the Map tab, which frames it.
+- Leaving the Map tab hands the URL and page title to the tab. Coming back restores the selection's URL, including an MTB or organization path (`selectionPathRef`).
+- Closing the card is the only thing that clears the selection, apart from navigating to `/`.
+
+## Find
+
+- Lists every POI whatever the map shows. No query: alphabetical. With a query: `rankPois()` (`frontend/src/utils/poiRank.js`) puts an exact name first, then parks, destinations and organizations, trails and rivers, and amenities (restrooms, playgrounds, parking) last; a name that starts with the query beats one that contains it.
+- The search box is the same value as the map legend's search (`activeFilters.search`).
+- Each row names the park it is in. `buildParkIndex()` and `findContainingPark()` (`frontend/src/utils/parkContainment.js`) do point-in-polygon against the park outlines already loaded; a trail uses its first point and the smallest containing park wins. Nothing is stored and the API is unchanged.
+- The list picker switches between All places, MTB Trail Status and Organizations, from `/api/results-subtabs`. Seasonal lists (#711) will be more entries here.
+- Type chips sit behind a `Filters · n` button (`FilterSheet.jsx`), where n is the number of types hidden. News and Events use the same component.
+
+## The place card on a phone
+
+`Sidebar.jsx` adds `peek` or `expanded` on a phone. The card opens at `peek`: about 46% of the map area, above the tab bar, scrolling inside. The chevron in its header expands it to cover the header but never the tab bar. Editing, creating a POI, and links straight to an article or sub-tab open it expanded.

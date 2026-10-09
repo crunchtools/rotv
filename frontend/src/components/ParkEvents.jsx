@@ -1,16 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
-import MapThumbnail from './MapThumbnail';
+import React, { useState, useEffect } from 'react';
+import FilterSheet, { FilterChip } from './FilterSheet';
 import { EventCardBody } from './NewsEventsShared';
 import { handleRovingKeyDown } from '../utils/a11yUtils';
 import ContentFormModal from './ContentFormModal';
 import useModeration from '../hooks/useModeration';
 import ModerationExtras from './ModerationExtras';
 import useFetchedList from '../hooks/useFetchedList';
-
-const DEFAULT_PARK_BOUNDS = [
-  [41.13, -81.85],
-  [41.45, -81.50]
-];
 
 function formatDateForCalendar(dateString) {
   if (!dateString) return '';
@@ -32,8 +27,19 @@ async function fetchEventWindows() {
   return { today, weekend };
 }
 
-function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, mapState, onMapClick, refreshTrigger, bypassViewportFilter, visiblePoiCount }) {
-  const stableBoundsRef = useRef(DEFAULT_PARK_BOUNDS);
+/**
+ * Events from every place, by Today, This Weekend, Future and Past; one side
+ * of the Happening tab. It is not tied to the map view (spec 048).
+ *
+ * @param {object} props
+ * @param {boolean} props.isAdmin
+ * @param {boolean} props.editMode Admins in edit mode get moderation controls and "+ New"
+ * @param {(poiId: number) => void} props.onSelectPoi Open the place an event is at
+ * @param {(id: number, title?: string) => void} props.onEditEventItem Open an event in moderation
+ * @param {number} props.refreshTrigger Changes when the lists should be fetched again
+ * @returns {JSX.Element}
+ */
+function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, refreshTrigger }) {
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -160,42 +166,12 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     }
   };
 
-  let currentBounds;
-  if (bypassViewportFilter) {
-    currentBounds = DEFAULT_PARK_BOUNDS;
-  } else {
-    currentBounds = mapState?.bounds || DEFAULT_PARK_BOUNDS;
-  }
-
-  const boundsChanged = currentBounds &&
-    (!stableBoundsRef.current ||
-    currentBounds[0][0] !== stableBoundsRef.current[0][0] ||
-    currentBounds[0][1] !== stableBoundsRef.current[0][1] ||
-    currentBounds[1][0] !== stableBoundsRef.current[1][0] ||
-    currentBounds[1][1] !== stableBoundsRef.current[1][1]);
-
-  if (boundsChanged) {
-    stableBoundsRef.current = currentBounds;
-  }
-
-  const thumbnailBounds = stableBoundsRef.current;
-
   const sourceEvents =
     activeSubTab === 'past' ? pastEvents :
     activeSubTab === 'future' ? events :
     (windowData[activeSubTab]?.events || []);
   const filteredEvents = React.useMemo(() => {
-    const hasDestinations = Array.isArray(filteredDestinations);
-    const hasLinearFeatures = Array.isArray(filteredLinearFeatures);
-    const hasVirtualPois = Array.isArray(filteredVirtualPois);
-
     let filtered = sourceEvents;
-
-    if (hasDestinations && filteredDestinations.length === 0 &&
-        hasLinearFeatures && filteredLinearFeatures.length === 0 &&
-        hasVirtualPois && filteredVirtualPois.length === 0) {
-      filtered = [];
-    }
 
     if (searchText.trim()) {
       const search = searchText.toLowerCase();
@@ -210,7 +186,7 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, filteredD
     filtered = filtered.filter(item => typeFilters[item.event_type || 'program'] !== false);
 
     return filtered;
-  }, [sourceEvents, filteredDestinations, filteredLinearFeatures, filteredVirtualPois, searchText, typeFilters]);
+  }, [sourceEvents, searchText, typeFilters]);
 
   const totalPages = Math.ceil(filteredEvents.length / PAGE_SIZE);
   const paginatedEvents = filteredEvents.slice(
@@ -354,28 +330,26 @@ END:VCALENDAR`;
           value={searchText}
           onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
         />
-        <div className="results-type-filters">
-          {[
-            { key: 'hike', icon: 'H', label: 'Hike' },
-            { key: 'race', icon: 'R', label: 'Race' },
-            { key: 'concert', icon: 'C', label: 'Concert' },
-            { key: 'festival', icon: 'F', label: 'Festival' },
-            { key: 'program', icon: 'P', label: 'Program' },
-            { key: 'volunteer', icon: 'V', label: 'Volunteer' },
-            { key: 'arts', icon: 'A', label: 'Arts' },
-            { key: 'community', icon: 'M', label: 'Community' },
-            { key: 'alert', icon: '!', label: 'Alert' },
-          ].map(f => (
-            <div
-              key={f.key}
-              className={`type-filter-chip ${f.key} ${typeFilters[f.key] ? 'active' : 'inactive'}`}
-              onClick={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}
-            >
-              <span className="type-filter-icon">{f.icon}</span>
-              {f.label}
-            </div>
-          ))}
-        </div>
+        <FilterSheet activeCount={Object.values(typeFilters).filter(on => !on).length}>
+          <div className="results-type-filters">
+            {[
+              { key: 'hike', icon: 'H', label: 'Hike' },
+              { key: 'race', icon: 'R', label: 'Race' },
+              { key: 'concert', icon: 'C', label: 'Concert' },
+              { key: 'festival', icon: 'F', label: 'Festival' },
+              { key: 'program', icon: 'P', label: 'Program' },
+              { key: 'volunteer', icon: 'V', label: 'Volunteer' },
+              { key: 'arts', icon: 'A', label: 'Arts' },
+              { key: 'community', icon: 'M', label: 'Community' },
+              { key: 'alert', icon: '!', label: 'Alert' },
+            ].map(f => (
+              <FilterChip key={f.key} id={f.key} active={typeFilters[f.key]} onToggle={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}>
+                <span className="type-filter-icon">{f.icon}</span>
+                {f.label}
+              </FilterChip>
+            ))}
+          </div>
+        </FilterSheet>
         <div className="results-count">
           Showing {filteredEvents.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, filteredEvents.length)}`} of {filteredEvents.length} events
         </div>
@@ -386,7 +360,7 @@ END:VCALENDAR`;
           {filteredEvents.length === 0 ? (
             <p className="no-content">
               {sourceEvents.length > 0
-                ? 'No events match the current filters. Try adjusting the type filters above or the map view.'
+                ? 'No events match the current filters. Try a different search, or open Filters.'
                 : activeSubTab === 'today' ? 'Nothing happening today.'
                 : activeSubTab === 'weekend' ? 'Nothing happening this weekend.'
                 : activeSubTab === 'future' ? 'No upcoming events found.' : 'No past events found.'}
@@ -497,17 +471,6 @@ END:VCALENDAR`;
             </div>
           )}
         </div>
-        {mapState && (
-          <div className="map-thumbnail-sidebar">
-            <MapThumbnail
-              bounds={thumbnailBounds}
-              aspectRatio={mapState.aspectRatio || 1.5}
-              visibleDestinations={filteredDestinations}
-              onClick={onMapClick}
-              poiCount={visiblePoiCount}
-            />
-          </div>
-        )}
       </div>
       {editMode && isAdmin && mod.notification && (
         <div className={`result-message ${mod.notification.type}`} style={{ margin: '10px 1rem' }}>

@@ -73,8 +73,11 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [tabCounts, setTabCounts] = useState({ news_count: null, events_count: null });
   const [hasGauges, setHasGauges] = useState(null);
   const [servingTaxis, setServingTaxis] = useState([]);
-  const [isSidebarExpanded, setIsSidebarExpanded] = useState(() => window.innerWidth < 768);
+  // On a phone the card opens at half height so the map stays in view
+  // (spec 048); Details expands it, and editing always gets the full screen.
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [hasNavigatedPoi, setHasNavigatedPoi] = useState(false);
+  const mobileSheetClass = !isMobile ? '' : (isSidebarExpanded || isEditing || isNewPOI || isNewOrganization) ? 'expanded' : 'peek';
 
   useEffect(() => {
     const pointId = destination?.id;
@@ -269,11 +272,14 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       setEditedData({ ...displayItem });
       const shouldEnterEditMode = (isAdmin && editMode) || isNewPOI;
       setIsEditing(shouldEnterEditMode);
-      setIsSidebarExpanded(isMobile);
+      // A link straight to an article or a sub-tab opens the card in full;
+      // otherwise it stays as the visitor left it, half height to begin with.
+      if (isMobile && (permalinkInfo || initialSidebarTab)) setIsSidebarExpanded(true);
       // Respect a deep-linked subtab (e.g. /poi/river_levels) instead of forcing Info.
       if (!permalinkInfo && !initialSidebarTab) setSidebarTab('view');
     } else {
       setIsEditing(false);
+      setIsSidebarExpanded(false);
     }
   }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList, initialSidebarTab, permalinkInfo, isMobile]);
 
@@ -611,7 +617,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
     return (
       <div
-        className={`sidebar open ${isEditing ? 'editing' : ''} ${isMobile && isSidebarExpanded ? 'expanded' : ''}`}
+        className={`sidebar open ${isEditing ? 'editing' : ''} ${mobileSheetClass}`}
         onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
         onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
         onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
@@ -686,6 +692,19 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 title="Back to MTB Trails"
               >
                 ←
+              </button>
+            )}
+            {isMobile && !isEditing && (
+              <button
+                type="button"
+                className="sidebar-expand-btn"
+                aria-expanded={isSidebarExpanded}
+                aria-label={isSidebarExpanded ? 'Show the map' : 'Show full details'}
+                onClick={() => setIsSidebarExpanded(prev => !prev)}
+              >
+                <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                  <path fill="currentColor" d={isSidebarExpanded ? 'M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z' : 'M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z'} />
+                </svg>
               </button>
             )}
             <button className="close-btn" onClick={onClose}>&times;</button>
@@ -874,7 +893,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
   return (
     <div
-      className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''} ${isMobile && isSidebarExpanded ? 'expanded' : ''}`}
+      className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''} ${mobileSheetClass}`}
       onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
       onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
       onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
@@ -938,6 +957,19 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
                 ›
               </button>
             </>
+          )}
+          {isMobile && !isEditing && (
+            <button
+              type="button"
+              className="sidebar-expand-btn"
+              aria-expanded={isSidebarExpanded}
+              aria-label={isSidebarExpanded ? 'Show the map' : 'Show full details'}
+              onClick={() => setIsSidebarExpanded(prev => !prev)}
+            >
+              <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">
+                <path fill="currentColor" d={isSidebarExpanded ? 'M7.41 8.59 12 13.17l4.59-4.58L18 10l-6 6-6-6z' : 'M7.41 15.41 12 10.83l4.59 4.58L18 14l-6-6-6 6z'} />
+              </svg>
+            </button>
           )}
           <button className="close-btn" onClick={onClose}>&times;</button>
         </div>

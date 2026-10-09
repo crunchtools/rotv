@@ -24,7 +24,7 @@ const pool = new pg.Pool({
   port: process.env.PGPORT || 5432,
   database: process.env.PGDATABASE || 'rotv_test',
   user: process.env.PGUSER || 'rotv',
-  password: process.env.PGPASSWORD || 'rotv'
+  password: process.env.PGPASSWORD
 });
 
 const PARK = 999960;

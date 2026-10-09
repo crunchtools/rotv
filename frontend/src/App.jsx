@@ -22,15 +22,14 @@ import { generateSlug } from './components/sidebar/helpers';
 import ErasSettings from './components/ErasSettings';
 import SurfacesSettings from './components/SurfacesSettings';
 import IconsSettings from './components/IconsSettings';
-import ParkNews from './components/ParkNews';
-import ParkEvents from './components/ParkEvents';
+import HappeningTab from './components/HappeningTab';
 import DataCollectionSettings from './components/DataCollectionSettings';
 import ModerationInbox from './components/ModerationInbox';
 import JobsDashboard from './components/JobsDashboard';
 import UsersSettings from './components/UsersSettings';
 import UserSettings from './components/UserSettings';
 import NewsletterSettings from './components/NewsletterSettings';
-import ResultsTab from './components/ResultsTab';
+import FindTab from './components/FindTab';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import SignInConfirm from './components/SignInConfirm';
 import SignupPage from './components/auth/SignupPage';
@@ -39,9 +38,11 @@ import WelcomePage from './components/auth/WelcomePage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
 import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
-import GuidedTour, { TRIP_TOUR_STEPS } from './components/GuidedTour';
+import GuidedTour, { TOUR_STEPS, TRIP_TOUR_STEPS } from './components/GuidedTour';
 import TourPrompt from './components/TourPrompt';
 import McpSettings from './components/McpSettings';
+import useIsMobile from './hooks/useIsMobile';
+import { parseTabPath } from './utils/tabPaths';
 import StatsSettings from './components/StatsSettings';
 import { handleRovingKeyDown } from './utils/a11yUtils';
 import { initAnalytics, excludeThisDevice, track, trackerVehicle } from './utils/analytics';
@@ -97,6 +98,13 @@ function unionBounds(boundsList) {
   return [[minLat, minLng], [maxLat, maxLng]];
 }
 
+// Icon + label for each primary tab. 'view' is the map.
+const NAV_TABS = [
+  { id: 'view', nav: 'map', label: 'Map', icon: 'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z' },
+  { id: 'find', nav: 'find', label: 'Find', icon: 'M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z' },
+  { id: 'happening', nav: 'happening', label: 'Happening', icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z' }
+];
+
 // The legend's owner / era / pets / search filters, for anything drawn as a marker.
 function applyMarkerFilters(pois, activeFilters) {
   let filtered = pois;
@@ -129,6 +137,7 @@ function applyMarkerFilters(pois, activeFilters) {
 function AppContent() {
   const { isAuthenticated, isAdmin, role, logout, user } = useAuth();
   const { activeTheme, isNightMode, videoUrls } = useSeasonalTheme();
+  const isMobile = useIsMobile();
   const [destinations, setDestinations] = useState([]);
   const [filteredDestinations, setFilteredDestinations] = useState([]);
 
@@ -153,12 +162,6 @@ function AppContent() {
   const urlLayersRef = useRef(null);
   const defaultTypesRef = useRef(null);
   const defaultBoundaryIdsRef = useRef(null);
-
-  const [mapState, setMapState] = useState({
-    center: [41.26, -81.55],  // Park center default
-    zoom: 11,
-    bounds: null
-  });
 
   const [linearFeatures, setLinearFeatures] = useState([]);
 
@@ -300,6 +303,9 @@ function AppContent() {
 
   const [settingsTab, setSettingsTab] = useState('general');
   const [aboutTab, setAboutTab] = useState('story');
+  const [happeningView, setHappeningView] = useState('news');
+  // Where the selection's URL was when the map was last left with something selected
+  const selectionPathRef = useRef(null);
   const [jobsExpandTarget, setJobsExpandTarget] = useState(null);
 
   const [moderationCount, setModerationCount] = useState(0);
@@ -348,7 +354,6 @@ function AppContent() {
 
   const [isInOrganizationsMode, setIsInOrganizationsMode] = useState(false);
 
-  const [bypassViewportFilter, setBypassViewportFilter] = useState(false);
   const [isLegendExpanded, setIsLegendExpanded] = useState(false);
 
   useEffect(() => {
@@ -376,28 +381,23 @@ function AppContent() {
 
       setInitialShowMtbOnly(true);
       setIsInMtbMode(true);
-      setBypassViewportFilter(false);
 
       if (cachedMtbBoundsRef.current) {
         setBoundsToFit(cachedMtbBoundsRef.current);
       }
 
       if (!poiSlug) {
-        setActiveTab('results');
+        setActiveTab('find');
       }
     } else {
       setIsInMtbMode(false);
       setInitialShowMtbOnly(false);
 
+      // Leaving the MTB list for the map or the full directory puts the map
+      // back on the whole valley; the MTB view had zoomed it to the trailheads.
       const wasInMtbMode = prevPathnameRef.current.startsWith('/mtb-trail-status');
-      const isGoingToRoot = location.pathname === '/';
-
-
-      if (wasInMtbMode && isGoingToRoot) {
+      if (wasInMtbMode && (location.pathname === '/' || location.pathname === '/find')) {
         setBoundsToFit(DEFAULT_PARK_BOUNDS);
-        setBypassViewportFilter(true);
-      } else if (!isGoingToRoot) {
-        setBypassViewportFilter(false);
       }
     }
 
@@ -421,15 +421,12 @@ function AppContent() {
       setIsInOrganizationsMode(true);
 
       if (!orgSlug) {
-        setActiveTab('results');
+        setActiveTab('find');
       }
     } else {
       setIsInOrganizationsMode(false);
     }
   }, [location.pathname]);
-
-  const MAIN_TAB_PATHS = new Set(['results', 'news', 'events', 'settings', 'privacy']);
-  const SIDEBAR_SUB_TABS = new Set(['info', 'news', 'events', 'history', 'associations']);
 
   const startTour = useCallback(() => {
     track('tour_start', { variant: 'default' });
@@ -491,29 +488,17 @@ function AppContent() {
 
   const handleTourStepAction = useCallback((action) => {
     switch (action) {
-      case 'showResults': {
-        setActiveTab('results');
+      case 'showFind': {
+        setActiveTab('find');
         isProgrammaticNavigationRef.current = true;
-        navigate('/results');
+        navigate('/find');
         break;
       }
-      case 'showNews': {
-        setActiveTab('news');
+      case 'showHappening': {
+        setActiveTab('happening');
+        setHappeningView('news');
         isProgrammaticNavigationRef.current = true;
-        navigate('/news');
-        break;
-      }
-      case 'showEvents': {
-        setActiveTab('events');
-        isProgrammaticNavigationRef.current = true;
-        navigate('/events');
-        break;
-      }
-      case 'showAbout': {
-        setActiveTab('about');
-        setAboutTab('story');
-        isProgrammaticNavigationRef.current = true;
-        navigate('/about/story');
+        navigate('/happening');
         break;
       }
       case 'expandLegend': {
@@ -606,53 +591,47 @@ function AppContent() {
     }
   }, [destinations, isAuthenticated, isAdmin, navigate, tripAddStop, tripSetShowBuilder]);
 
+  // Switching tabs keeps whatever is selected (spec 048). The POI card shows
+  // only on the map, so away from it the URL and title belong to the tab, and
+  // coming back hands them to the selection again.
   const handleTabChange = useCallback((newTab) => {
     const previousActiveTab = activeTab;
     setActiveTab(newTab);
     if (newTab !== previousActiveTab) track('tab_view', { tab: newTab });
 
-    if (newTab === 'results' && previousActiveTab !== 'results') {
-      if (location.pathname.startsWith('/mtb-trail-status')) {
-        setSelectedDestination(null);
-        setSelectedLinearFeature(null);
-      }
-    }
+    const selected = selectedDestination || selectedLinearFeature;
+    isProgrammaticNavigationRef.current = true;
 
-    if (newTab !== 'results') {
-      setBypassViewportFilter(false);
-    }
-
-    if (newTab !== 'results' && newTab !== 'view') {
-      if (location.pathname.startsWith('/mtb-trail-status')) {
-        navigate('/');
-        setSelectedFromMtbList(false);
-        return;
-      } else if (location.pathname.startsWith('/organizations')) {
-        navigate('/');
-        return;
-      }
-    }
-
-    if (newTab !== 'view') {
-      if (selectedDestination || selectedLinearFeature) {
-        setSelectedDestination(null);
-        setSelectedLinearFeature(null);
-        setPermalinkInfo(null);
-        document.title = 'Roots of The Valley';
-      }
-      isProgrammaticNavigationRef.current = true;
-      if (newTab === 'settings') {
-        navigate(`/settings/${settingsTab}`);
-      } else if (newTab === 'about') {
-        navigate(`/about/${aboutTab}`);
+    if (newTab === 'view') {
+      if (selected) {
+        navigate(selectionPathRef.current || `/${generateSlug(selected.name)}`);
+        document.title = `${selected.name} | Roots of The Valley`;
       } else {
-        navigate(`/${newTab}`);
+        navigate('/');
       }
-    } else if (!selectedDestination && !selectedLinearFeature) {
-      isProgrammaticNavigationRef.current = true;
-      navigate('/');
+      return;
     }
-  }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature, settingsTab, aboutTab]);
+
+    if (previousActiveTab === 'view') {
+      selectionPathRef.current = selected ? location.pathname : null;
+    }
+    document.title = 'Roots of The Valley';
+    if (newTab === 'settings') {
+      navigate(`/settings/${settingsTab}`);
+    } else if (newTab === 'about') {
+      navigate(`/about/${aboutTab}`);
+    } else if (newTab === 'happening' && happeningView === 'events') {
+      navigate('/happening/events');
+    } else {
+      navigate(`/${newTab}`);
+    }
+  }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature, settingsTab, aboutTab, happeningView]);
+
+  const handleHappeningViewChange = useCallback((view) => {
+    setHappeningView(view);
+    isProgrammaticNavigationRef.current = true;
+    navigate(view === 'events' ? '/happening/events' : '/happening');
+  }, [navigate]);
 
   const handleSettingsTabChange = useCallback((tab) => {
     setSettingsTab(tab);
@@ -817,10 +796,14 @@ function AppContent() {
     let poiSlug = null;
     const pathParts = window.location.pathname.split('/').filter(Boolean);
 
-    const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
     const sidebarSubTabs = ['info', 'news', 'events', 'history', 'associations', 'river_levels'];
+    const tabPath = parseTabPath(pathParts);
 
-    if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
+    if (tabPath) {
+      setActiveTab(tabPath.tab);
+      if (tabPath.view) setHappeningView(tabPath.view);
+      if (tabPath.redirectTo) navigate(tabPath.redirectTo, { replace: true });
+    } else if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
       poiSlug = pathParts[0];
       setPermalinkInfo({ type: pathParts[1] === 'events' ? 'event' : 'news', poiSlug: pathParts[0], titleSlug: pathParts[2] });
     } else if (pathParts.length === 2 && sidebarSubTabs.includes(pathParts[1])) {
@@ -829,8 +812,6 @@ function AppContent() {
     } else if (pathParts.length === 2 && pathParts[0] === 'about' && ['story', 'tutorial', 'feedback', 'privacy'].includes(pathParts[1])) {
       setActiveTab('about');
       setAboutTab(pathParts[1]);
-    } else if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
-      setActiveTab(pathParts[0]);
     } else if (pathParts.length === 1 && pathParts[0] !== 'mtb-trail-status') {
       poiSlug = pathParts[0];
     } else {
@@ -885,7 +866,7 @@ function AppContent() {
       if (!isLoadingFromUrlRef.current && (selectedDestination || selectedLinearFeature)) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
-        setActiveTab('results');
+        setActiveTab('find');
         document.title = 'Roots of The Valley';
       }
       return; // MTB list handled, exit early
@@ -895,7 +876,7 @@ function AppContent() {
       if (!isLoadingFromUrlRef.current && (selectedDestination || selectedLinearFeature)) {
         setSelectedDestination(null);
         setSelectedLinearFeature(null);
-        setActiveTab('results');
+        setActiveTab('find');
         document.title = 'Roots of The Valley';
       }
       return; // Organizations list handled, exit early
@@ -912,14 +893,14 @@ function AppContent() {
 
     const pathParts = location.pathname.split('/').filter(Boolean);
 
-    const mainTabPaths = ['results', 'news', 'events', 'settings', 'about'];
-    if (pathParts.length === 1 && mainTabPaths.includes(pathParts[0])) {
-      setActiveTab(pathParts[0]);
-      if (selectedDestination || selectedLinearFeature) {
-        setSelectedDestination(null);
-        setSelectedLinearFeature(null);
-        document.title = 'Roots of The Valley';
-      }
+    // A tab path changes the tab and nothing else: the selection waits for
+    // the map to come back (spec 048).
+    const tabPath = parseTabPath(pathParts);
+    if (tabPath) {
+      setActiveTab(tabPath.tab);
+      if (tabPath.view) setHappeningView(tabPath.view);
+      if (tabPath.redirectTo) navigate(tabPath.redirectTo, { replace: true });
+      document.title = 'Roots of The Valley';
       return;
     }
 
@@ -927,11 +908,7 @@ function AppContent() {
     if (pathParts.length === 2 && pathParts[0] === 'settings' && settingsSubTabs.includes(pathParts[1])) {
       setActiveTab('settings');
       setSettingsTab(pathParts[1]);
-      if (selectedDestination || selectedLinearFeature) {
-        setSelectedDestination(null);
-        setSelectedLinearFeature(null);
-        document.title = 'Roots of The Valley';
-      }
+      document.title = 'Roots of The Valley';
       return;
     }
 
@@ -939,11 +916,7 @@ function AppContent() {
     if (pathParts.length === 2 && pathParts[0] === 'about' && aboutSubTabs.includes(pathParts[1])) {
       setActiveTab('about');
       setAboutTab(pathParts[1]);
-      if (selectedDestination || selectedLinearFeature) {
-        setSelectedDestination(null);
-        setSelectedLinearFeature(null);
-        document.title = 'Roots of The Valley';
-      }
+      document.title = 'Roots of The Valley';
       return;
     }
 
@@ -989,6 +962,8 @@ function AppContent() {
           return;
         }
         isLoadingFromUrlRef.current = false;
+      } else {
+        setActiveTab('view');
       }
       return;
     }
@@ -1001,6 +976,7 @@ function AppContent() {
         : null;
 
       if (currentSlug === poiSlug) {
+        setActiveTab('view');
         return;
       }
 
@@ -1056,6 +1032,7 @@ function AppContent() {
       const currentSlug = selectedDestination ? generateSlug(selectedDestination.name) : null;
 
       if (currentSlug === orgSlug) {
+        setActiveTab('view');
         return;
       }
 
@@ -1110,6 +1087,8 @@ function AppContent() {
           document.title = `${linearFeature.name} | Roots of The Valley`;
         }
         setTimeout(() => { isLoadingFromUrlRef.current = false; }, 0);
+      } else {
+        setActiveTab('view');
       }
       return;
     }
@@ -1122,6 +1101,7 @@ function AppContent() {
         : null;
 
       if (currentSlug === poiSlug) {
+        setActiveTab('view');
         return;
       }
 
@@ -1238,7 +1218,7 @@ function AppContent() {
     const match = location.pathname.match(/^\/tutorial\/step(\d+)$/);
     if (match && !tourActive) {
       const stepNum = parseInt(match[1], 10) - 1;
-      if (stepNum >= 0 && stepNum <= 11) {
+      if (stepNum >= 0 && stepNum < TOUR_STEPS.length) {
         setTourStep(stepNum);
         setTourActive(true);
         setShowTourPrompt(false);
@@ -1434,11 +1414,7 @@ function AppContent() {
   useEffect(() => {
     if (selectedDestination && poiNavigationList.length > 0) {
       const index = poiNavigationList.findIndex(p => !p._isLinear && String(p.id) === String(selectedDestination.id));
-      if (index !== -1) {
-        setCurrentPoiIndex(index);
-      } else {
-        console.warn('[Navigation] Could not find selected destination in navigation list:', selectedDestination.name, 'ID:', selectedDestination.id);
-      }
+      setCurrentPoiIndex(index);
     } else if (!selectedDestination && !selectedLinearFeature) {
       setCurrentPoiIndex(-1);
     }
@@ -1447,14 +1423,7 @@ function AppContent() {
   useEffect(() => {
     if (selectedLinearFeature && poiNavigationList.length > 0) {
       const index = poiNavigationList.findIndex(p => p._isLinear && String(p.id) === String(selectedLinearFeature.id));
-      if (index !== -1) {
-        setCurrentPoiIndex(index);
-      } else {
-        const linearInList = poiNavigationList.filter(p => p._isLinear);
-        console.warn('[Navigation] Could not find selected linear feature in navigation list:', selectedLinearFeature.name, 'ID:', selectedLinearFeature.id);
-        console.warn('[Navigation] Navigation list has', linearInList.length, 'linear features out of', poiNavigationList.length, 'total');
-        console.warn('[Navigation] Is trail in list?', linearInList.some(p => String(p.id) === String(selectedLinearFeature.id)));
-      }
+      setCurrentPoiIndex(index);
     } else if (!selectedDestination && !selectedLinearFeature) {
       setCurrentPoiIndex(-1);
     }
@@ -1491,6 +1460,11 @@ function AppContent() {
     }, 1500);
     return () => clearTimeout(timer);
   }, [activeFilters.search, filteredDestinations, linearFeatures]);
+
+  // One search box for the map legend and the Find tab.
+  const handleSearchChange = useCallback((value) => {
+    setActiveFilters(prev => ({ ...prev, search: value }));
+  }, []);
 
   const handleFilterChange = (filterType, value) => {
     setActiveFilters(prev => ({
@@ -1542,10 +1516,9 @@ function AppContent() {
     document.title = feature ? `${feature.name} | Roots of The Valley` : 'Roots of The Valley';
     if (feature) {
       const index = poiNavigationList.findIndex(p => p._isLinear && String(p.id) === String(feature.id));
+      // -1 when it is outside the map view: the card then shows no position counter
       setCurrentPoiIndex(index);
-      if (index === -1) {
-        console.warn('[Navigation] Could not find linear feature in list:', feature.name, 'ID:', feature.id);
-      }
+      setActiveTab('view');
       if (feature.poi_roles?.includes('boundary')) {
         setVisibleBoundaries(prev => {
           if (prev.has(feature.id)) return prev;
@@ -1558,13 +1531,10 @@ function AppContent() {
       } else if (feature.poi_roles?.includes('river')) {
         setShowRivers(true);
       }
-      if (window.innerWidth < 768 && activeTab !== 'view') {
-        setActiveTab('results');
-      }
     } else {
       setCurrentPoiIndex(-1);
     }
-  }, [updateUrlWithPoi, poiNavigationList, activeTab]);
+  }, [updateUrlWithPoi, poiNavigationList]);
 
   const handleSelectDestination = useCallback((destination) => {
     setSelectedLinearFeature(null);
@@ -1575,16 +1545,11 @@ function AppContent() {
     if (destination) {
       const index = poiNavigationList.findIndex(p => !p._isLinear && String(p.id) === String(destination.id));
       setCurrentPoiIndex(index);
-      if (index === -1) {
-        console.warn('[Navigation] Could not find destination in list:', destination.name, 'ID:', destination.id);
-      }
-      if (window.innerWidth < 768 && activeTab !== 'view') {
-        setActiveTab('results');
-      }
+      setActiveTab('view');
     } else {
       setCurrentPoiIndex(-1);
     }
-  }, [updateUrlWithPoi, poiNavigationList, activeTab]);
+  }, [updateUrlWithPoi, poiNavigationList]);
 
   // Unified map selection entry point. Dispatches by geometry to the existing
   // destination/linear handlers (which carry distinct side effects), and fully
@@ -1610,6 +1575,22 @@ function AppContent() {
     viewSourceRef.current = 'sidebar';
     handleSelectPoi(poi);
   }, [handleSelectPoi]);
+
+  // A place named on a news or event card: open it on the map.
+  const handleContentSelectPoi = useCallback((poiId, source) => {
+    const poi = destinations.find(d => d.id === poiId);
+    if (!poi) return;
+    viewSourceRef.current = source;
+    skipNextFlyRef.current = false;
+    handleSelectPoi(poi);
+  }, [destinations, handleSelectPoi]);
+
+  const handleModerateItem = useCallback((itemId, itemTitle) => {
+    setModerationFocusId(itemId);
+    setModerationFocusTitle(itemTitle || null);
+    setActiveTab('settings');
+    handleSettingsTabChange('moderation');
+  }, [handleSettingsTabChange]);
 
   const handleNavigatePoi = useCallback((direction) => {
     if (poiNavigationList.length === 0) return;
@@ -1656,8 +1637,8 @@ function AppContent() {
     }
   }, [poiNavigationList, currentPoiIndex, updateUrlWithPoi, isInMtbMode, isInOrganizationsMode, navigate]);
 
-  const handleResultsSelectDestination = useCallback((poi, mtbContext) => {
-    viewSourceRef.current = 'results';
+  const handleFindSelectDestination = useCallback((poi, mtbContext) => {
+    viewSourceRef.current = 'find';
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
 
@@ -1736,8 +1717,8 @@ function AppContent() {
     }
   }, [handleSelectDestination, isInMtbMode, isInOrganizationsMode, navigate, poiNavigationList, iconConfig]);
 
-  const handleResultsSelectLinearFeature = useCallback((poi, mtbContext) => {
-    viewSourceRef.current = 'results';
+  const handleFindSelectLinearFeature = useCallback((poi, mtbContext) => {
+    viewSourceRef.current = 'find';
     if (isInMtbMode && poi) {
       const slug = generateSlug(poi.name);
 
@@ -1844,7 +1825,7 @@ function AppContent() {
     setPreviewCoords(null);
   };
 
-  const handleNewPOIFromResults = (subTab) => {
+  const handleNewPOIFromFind = (subTab) => {
     setSelectedDestination(null);
     setSelectedLinearFeature(null);
 
@@ -2066,6 +2047,24 @@ function AppContent() {
 
 
 
+  // The three primary tabs: in the header on a wide screen, in a bar along
+  // the bottom on a phone, where a thumb can reach them (spec 048).
+  const primaryNavButtons = NAV_TABS.map((tab, i) => (
+    <button
+      key={tab.id}
+      className={`tab-btn tab-icon-btn ${activeTab === tab.id ? 'active' : ''} ${kbdFocusIndex === i ? 'kbd-focus' : ''}`}
+      data-nav={tab.nav}
+      onClick={() => handleTabChange(tab.id)}
+      aria-current={activeTab === tab.id ? 'page' : undefined}
+      tabIndex={activeTab === tab.id || (i === 0 && !NAV_TABS.some(t => t.id === activeTab)) ? 0 : -1}
+    >
+      <svg className="nav-tab-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+        <path fill="currentColor" d={tab.icon} />
+      </svg>
+      <span className="nav-tab-label">{tab.label}</span>
+    </button>
+  ));
+
   return (
     <div className="app">
       <a href="#main-content" className="skip-link">Skip to main content</a>
@@ -2088,7 +2087,7 @@ function AppContent() {
             <h1>Roots of The Valley</h1>
             <span className="subtitle">Explore Cuyahoga Valley&apos;s History</span>
           </div>
-          <nav className={`header-tabs ${kbdFocusIndex !== null ? 'kbd-nav' : ''}`} aria-label="Main navigation"
+          <nav className={`header-tabs ${kbdFocusIndex !== null ? 'kbd-nav' : ''}`} aria-label={isMobile ? 'Account' : 'Main navigation'}
             onBlur={(e) => {
               if (!e.currentTarget.contains(e.relatedTarget)) {
                 setKbdFocusIndex(null);
@@ -2099,7 +2098,7 @@ function AppContent() {
               const currentIndex = tabs.indexOf(e.target);
               if (currentIndex === -1) return;
 
-              const isMenuButton = e.target.classList.contains('tab-account') || e.target.textContent.trim() === 'Login';
+              const isMenuButton = e.target.classList.contains('tab-account');
 
               if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) {
                 e.preventDefault();
@@ -2132,38 +2131,10 @@ function AppContent() {
               }
             }}
           >
-          {(() => {
-            let idx = 0;
-            const navTabs = [
-              { id: 'view', label: 'Map', icon: 'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z' },
-              { id: 'results', label: 'Results', icon: 'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z' },
-              { id: 'news', label: 'News', icon: 'M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 4H7v2h10V7zm0 4H7v2h10v-2zm-3 4H7v2h7v-2z' },
-              { id: 'events', label: 'Events', icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z' },
-              { id: 'about', label: 'About', icon: 'M11 7h2v2h-2zm0 4h2v6h-2zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z' },
-            ];
-            return navTabs.map(tab => {
-              const i = idx++;
-              return (
-                <button
-                  key={tab.id}
-                  className={`tab-btn tab-icon-btn ${activeTab === tab.id ? 'active' : ''} ${kbdFocusIndex === i ? 'kbd-focus' : ''}`}
-                  onClick={() => handleTabChange(tab.id)}
-                  aria-current={activeTab === tab.id ? 'page' : undefined}
-                  aria-label={tab.label}
-                  title={tab.label}
-                  tabIndex={activeTab === tab.id ? 0 : -1}
-                >
-                  <svg className="nav-tab-icon" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
-                    <path fill="currentColor" d={tab.icon} />
-                  </svg>
-                  <span className="nav-tab-label">{tab.label}</span>
-                </button>
-              );
-            });
-          })()}
+          {!isMobile && primaryNavButtons}
 
           {(() => {
-            const menuIdx = 5;
+            const menuIdx = isMobile ? 0 : NAV_TABS.length;
             return (
             <>
             <NotificationBell />
@@ -2172,7 +2143,7 @@ function AppContent() {
               <button
                 className={`tab-btn tab-account ${kbdFocusIndex === menuIdx ? 'kbd-focus' : ''}`}
                 onClick={() => setShowUserDropdown(!showUserDropdown)}
-                tabIndex={-1}
+                tabIndex={isMobile ? 0 : -1}
                 aria-expanded={showUserDropdown}
                 aria-haspopup="true"
               >
@@ -2221,6 +2192,12 @@ function AppContent() {
                       Settings
                     </button>
                     <button
+                      className="dropdown-item-inline about-menu-item"
+                      onClick={() => { setShowUserDropdown(false); handleTabChange('about'); }}
+                    >
+                      About
+                    </button>
+                    <button
                       className="dropdown-item-inline"
                       onClick={() => {
                         setShowUserDropdown(false);
@@ -2250,7 +2227,7 @@ function AppContent() {
               <button
                 className={`tab-btn tab-account tab-login-dot ${kbdFocusIndex === menuIdx ? 'kbd-focus' : ''}`}
                 onClick={() => setShowLoginDropdown(!showLoginDropdown)}
-                tabIndex={-1}
+                tabIndex={isMobile ? 0 : -1}
                 aria-expanded={showLoginDropdown}
                 aria-haspopup="true"
                 aria-label="Sign in"
@@ -2287,6 +2264,12 @@ function AppContent() {
                     >
                       Settings
                     </button>
+                    <button
+                      className="dropdown-item-inline about-menu-item"
+                      onClick={() => { setShowLoginDropdown(false); handleTabChange('about'); }}
+                    >
+                      About
+                    </button>
                     <div className="tab-dropdown-divider" />
                     <button
                       className="oauth-btn-inline signup-btn"
@@ -2312,98 +2295,56 @@ function AppContent() {
         </div>
       </header>
 
-      {activeTab === 'results' && (
+      {isMobile && (
+        <nav className="bottom-nav" aria-label="Main navigation" onKeyDown={(e) => handleRovingKeyDown(e, '.tab-btn')}>
+          {primaryNavButtons}
+        </nav>
+      )}
+
+      {activeTab === 'find' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" role="tabpanel">
-          <ResultsTab
-            viewportFilteredDestinations={viewportFilteredDestinations}
-            viewportFilteredLinearFeatures={viewportFilteredLinearFeatures}
-            viewportFilteredVirtualPois={viewportFilteredVirtualPois}
+          <FindTab
             allDestinations={destinations}
             allLinearFeatures={linearFeatures}
             allVirtualPois={virtualPois}
             selectedDestination={selectedDestination}
             selectedLinearFeature={selectedLinearFeature}
-            onSelectDestination={handleResultsSelectDestination}
-            onSelectLinearFeature={handleResultsSelectLinearFeature}
-            mapState={mapState}
-            boundsToFit={boundsToFit}
-            cachedMtbBoundsRef={cachedMtbBoundsRef}
-            onMapClick={() => setActiveTab('view')}
+            onSelectDestination={handleFindSelectDestination}
+            onSelectLinearFeature={handleFindSelectLinearFeature}
+            searchText={activeFilters.search || ''}
+            onSearchChange={handleSearchChange}
             initialShowMtbOnly={initialShowMtbOnly}
             initialShowOrganizationsOnly={isInOrganizationsMode}
             onFilterByTypes={handleFilterByTypes}
-            bypassViewportFilter={bypassViewportFilter}
-            visiblePoiCount={visiblePoiCount}
             iconConfig={iconConfig}
             editMode={editMode}
             isAdmin={isAdmin}
             userRole={role}
-            onNewPOI={handleNewPOIFromResults}
+            onNewPOI={handleNewPOIFromFind}
           />
         </main>
       )}
 
-      {activeTab === 'news' && (
+      {activeTab === 'happening' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
-          <ParkNews
-          isAdmin={isAdmin}
-          editMode={editMode}
-          filteredDestinations={viewportFilteredDestinations}
-          filteredLinearFeatures={viewportFilteredLinearFeatures}
-          filteredVirtualPois={viewportFilteredVirtualPois}
-          mapState={mapState}
-          linearFeatures={linearFeatures}
-          refreshTrigger={newsRefreshTrigger}
-          bypassViewportFilter={bypassViewportFilter}
-          visiblePoiCount={visiblePoiCount}
-          onMapClick={() => setActiveTab('view')}
-          onSelectPoi={(poiId) => {
-            const poi = destinations.find(d => d.id === poiId);
-            if (poi) {
-              viewSourceRef.current = 'news';
-              setSelectedDestination(poi);
-              setActiveTab('view');
-            }
-          }}
-          onEditNewsItem={(newsId, newsTitle) => {
-            setModerationFocusId(newsId);
-            setModerationFocusTitle(newsTitle || null);
-            setActiveTab('settings');
-            handleSettingsTabChange('moderation');
-          }}
-        />
-        </main>
-      )}
-
-      {activeTab === 'events' && (
-        <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
-          <ParkEvents
-          isAdmin={isAdmin}
-          editMode={editMode}
-          filteredDestinations={viewportFilteredDestinations}
-          filteredLinearFeatures={viewportFilteredLinearFeatures}
-          filteredVirtualPois={viewportFilteredVirtualPois}
-          mapState={mapState}
-          linearFeatures={linearFeatures}
-          refreshTrigger={newsRefreshTrigger}
-          bypassViewportFilter={bypassViewportFilter}
-          visiblePoiCount={visiblePoiCount}
-          onMapClick={() => setActiveTab('view')}
-          onSelectPoi={(poiId) => {
-            const poi = destinations.find(d => d.id === poiId);
-            if (poi) {
-              viewSourceRef.current = 'events';
-              setSelectedDestination(poi);
-              setActiveTab('view');
-            }
-          }}
-          onEditEventItem={(eventId, eventTitle) => {
-            setModerationFocusId(eventId);
-            setModerationFocusTitle(eventTitle || null);
-            setActiveTab('settings');
-            handleSettingsTabChange('moderation');
-          }}
-        />
+          <HappeningTab
+            view={happeningView}
+            onViewChange={handleHappeningViewChange}
+            newsProps={{
+              isAdmin,
+              editMode,
+              refreshTrigger: newsRefreshTrigger,
+              onSelectPoi: (poiId) => handleContentSelectPoi(poiId, 'news'),
+              onEditNewsItem: handleModerateItem
+            }}
+            eventsProps={{
+              isAdmin,
+              editMode,
+              refreshTrigger: newsRefreshTrigger,
+              onSelectPoi: (poiId) => handleContentSelectPoi(poiId, 'events'),
+              onEditEventItem: handleModerateItem
+            }}
+          />
         </main>
       )}
 
@@ -2598,7 +2539,7 @@ function AppContent() {
 
       <main
         id={(activeTab === 'view' || activeTab === 'edit') ? 'main-content' : undefined}
-        className={`main-content ${editMode ? 'edit-mode' : ''}`}
+        className={`main-content ${editMode ? 'edit-mode' : ''} ${activeTab === 'view' || activeTab === 'edit' ? '' : 'main-content-behind'}`}
         tabIndex="-1"
                aria-hidden={(activeTab !== 'view' && activeTab !== 'edit') ? 'true' : undefined}
         style={{
@@ -2628,7 +2569,6 @@ function AppContent() {
           visibleTypes={visibleTypes}
           onVisibleTypesChange={setVisibleTypes}
           onVisiblePoisChange={setVisiblePoiIds}
-          onMapStateChange={setMapState}
           showTrails={showTrails}
           onToggleTrails={setShowTrails}
           showRivers={showRivers}
@@ -2672,7 +2612,7 @@ function AppContent() {
             if (remaining.size === 0) requestFit(DEFAULT_PARK_BOUNDS);
           }}
           searchQuery={activeFilters.search}
-          onSearchChange={(value) => handleFilterChange('search', value)}
+          onSearchChange={handleSearchChange}
           onNewsRefresh={() => setNewsRefreshTrigger(prev => prev + 1)}
           skipFlyRef={skipNextFlyRef}
           boundsToFit={boundsToFit}
@@ -2749,7 +2689,7 @@ function AppContent() {
             setSelectedLinearFeature(null);
             setSelectedFromMtbList(false);
             setCurrentMtbIndex(-1);
-            setActiveTab('results');
+            setActiveTab('find');
             isProgrammaticNavigationRef.current = true;
             navigate('/mtb-trail-status');
           }}

@@ -88,9 +88,9 @@ changes via `history.pushState`/`replaceState`.
 | `tracker_stop_click` | `vehicle`, `stop` | water-taxi stop list, `Sidebar.jsx` |
 | `tracker_served_by_click` | `vehicle`, `from_poi` | "Water Taxi" link on a stop, `Sidebar.jsx` |
 | `layer_toggle` | `layer`, `on` | legend POI types (including `train`) and the water-taxi layer |
-| `poi_view` | `poi_id`, `name`, `kind`, `source` (map, results, news, events, sidebar, nav, link, other) | selection effect, `App.jsx` |
-| `tab_view` / `sidebar_tab_view` | `tab` (+ `poi_id`, `vehicle`) | main tabs / sidebar tabs |
-| `search`, `search_no_results` | `query`, `result_count` | legend search, 1.5 s after typing stops |
+| `poi_view` | `poi_id`, `name`, `kind`, `source` (map, find, news, events, sidebar, nav, link, other; `results` before v1.55.0) | selection effect, `App.jsx` |
+| `tab_view` / `sidebar_tab_view` | `tab` (view, find, happening, settings, about; results, news, events before v1.55.0) (+ `poi_id`, `vehicle`) | main tabs / sidebar tabs |
+| `search`, `search_no_results` | `query`, `result_count` | legend or Find search (one shared box), 1.5 s after typing stops |
 | `news_open`, `event_open`, `event_calendar_add` | ids, `poi` | outbound links on news/event cards |
 | `media_view` | `poi_id`, `count` | lightbox open |
 | `trip_save`, `trip_view` | `new_trip`, `stops`, `signed_in` / `slug` | `TripContext.jsx` |

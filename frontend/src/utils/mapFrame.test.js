@@ -59,4 +59,19 @@ describe('frameBounds', () => {
     expect(map.fitBounds.mock.calls[0][1]).toMatchObject({ animate: false });
     expect(map.flyToBounds).not.toHaveBeenCalled();
   });
+
+  it('frames the shape in what a phone place card leaves visible', () => {
+    const [[south], [north]] = VIEW_AROUND_PARK;
+    const map = {
+      ...fakeMap(VIEW_AROUND_PARK),
+      getSize: () => ({ x: 390, y: 600 }),
+      containerPointToLatLng: ([, y]) => ({ lat: north - ((north - south) * y) / 600 })
+    };
+    // On screen, but the card hides the lower half, where part of the park is
+    expect(frameBounds(map, PARK, { coveredBottom: 300 })).toBe(true);
+    expect(map.flyToBounds.mock.calls[0][1]).toMatchObject({
+      paddingTopLeft: [60, 60],
+      paddingBottomRight: [60, 360]
+    });
+  });
 });

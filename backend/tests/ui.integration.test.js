@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
-import { showCarouselViaSwipe, openPoiViaPermalink } from './utils/uiHelpers.js';
+import { showCarouselViaSwipe, openPoiViaPermalink, hasNeighborInView } from './utils/uiHelpers.js';
 
 // .more-info-link only renders when more_info_link is set, so open a POI that has one.
 const openPoiWithMoreInfo = (page, baseUrl) => openPoiViaPermalink(page, baseUrl, {
@@ -333,7 +333,7 @@ describe('UI Integration Tests', () => {
       await page.setViewportSize({ width: 375, height: 667 });
 
       // Permalink, not a marker click: the click can miss while the map settles
-      expect(await openPoiViaPermalink(page, baseUrl)).not.toBeNull();
+      expect(await openPoiViaPermalink(page, baseUrl, { accept: hasNeighborInView })).not.toBeNull();
 
       // Carousel renders only after the first POI navigation — trigger a swipe.
       await showCarouselViaSwipe(page);
@@ -630,7 +630,7 @@ describe('UI Integration Tests', () => {
       await page.setViewportSize({ width: 375, height: 667 });
 
       // Permalink, not a marker click: the click can miss while the map settles
-      expect(await openPoiViaPermalink(page, baseUrl)).not.toBeNull();
+      expect(await openPoiViaPermalink(page, baseUrl, { accept: hasNeighborInView })).not.toBeNull();
       await showCarouselViaSwipe(page);
       await page.waitForSelector('.thumbnail-carousel', { timeout: 5000 });
 
@@ -699,15 +699,18 @@ describe('UI Integration Tests', () => {
         // Check each tab button
         const tabsStatus = tabButtons.map((btn, index) => {
           const btnRect = btn.getBoundingClientRect();
+          // On a phone the three tabs sit in the bottom bar and the account
+          // button in the header (spec 048); each must fit inside its own bar.
+          const barRect = btn.closest('.bottom-nav, .header').getBoundingClientRect();
           return {
             index,
             text: btn.textContent.trim(),
             top: btnRect.top,
             bottom: btnRect.bottom,
             height: btnRect.height,
-            isFullyVisible: btnRect.bottom <= headerRect.bottom && btnRect.top >= headerRect.top,
-            isCutOffAtBottom: btnRect.bottom > headerRect.bottom,
-            visibleHeight: Math.min(btnRect.bottom, headerRect.bottom) - Math.max(btnRect.top, headerRect.top)
+            isFullyVisible: btnRect.bottom <= barRect.bottom && btnRect.top >= barRect.top && btnRect.bottom <= window.innerHeight,
+            isCutOffAtBottom: btnRect.bottom > barRect.bottom,
+            visibleHeight: Math.min(btnRect.bottom, barRect.bottom) - Math.max(btnRect.top, barRect.top)
           };
         });
 
@@ -766,10 +769,10 @@ describe('UI Integration Tests', () => {
       expect(await header.isVisible()).toBe(true);
 
       // Verify header tabs are clickable (not covered by map)
-      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      const resultsTab = page.locator('.tab-btn[data-nav="find"]');
       expect(await resultsTab.isVisible()).toBe(true);
 
-      // Click the Results tab to verify it's not covered using evaluate
+      // Click the Find tab to verify it's not covered using evaluate
       await resultsTab.evaluate(el => el.click());
       await page.waitForTimeout(500);
 
@@ -792,17 +795,18 @@ describe('UI Integration Tests', () => {
     }, 40000);
   });
 
-  describe('Results Tab Filter Badges', () => {
+  describe('Find Tab Filter Badges', () => {
     it('should keep filter badges visible when all are deselected', async () => {
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Switch to Results tab
-      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      // Switch to Find tab
+      const resultsTab = page.locator('.tab-btn[data-nav="find"]');
       await resultsTab.evaluate(el => el.click());
       await page.waitForTimeout(1000);
 
-      // Wait for Results tab content to render
+      // The chips live behind the Filters button (spec 048)
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
+      await page.click('.results-tab-wrapper .filter-sheet-btn');
       await page.waitForSelector('.results-type-filters', { timeout: 10000 });
 
       // Verify filter badges are initially visible (dynamic based on icon config + layers)
@@ -836,13 +840,14 @@ describe('UI Integration Tests', () => {
     it('should keep filter badges visible when search text is entered', async () => {
       await page.goto(baseUrl, { waitUntil: 'networkidle' });
 
-      // Switch to Results tab
-      const resultsTab = page.locator('.tab-btn:has-text("Results")');
+      // Switch to Find tab
+      const resultsTab = page.locator('.tab-btn[data-nav="find"]');
       await resultsTab.evaluate(el => el.click());
       await page.waitForTimeout(1000);
 
-      // Wait for Results tab content to render
+      // The chips live behind the Filters button (spec 048)
       await page.waitForSelector('.results-tab-wrapper', { timeout: 10000 });
+      await page.click('.results-tab-wrapper .filter-sheet-btn');
       await page.waitForSelector('.results-type-filters', { timeout: 10000 });
 
       // Verify filter badges are initially visible (dynamic based on icon config + layers)
@@ -851,7 +856,7 @@ describe('UI Integration Tests', () => {
       expect(initialCount).toBeGreaterThanOrEqual(3); // At least trails, rivers, boundaries
       expect(await page.locator('.results-tab-wrapper .results-type-filters').isVisible()).toBe(true);
 
-      // Type search text - scope to Results tab only
+      // Type search text - scope to Find tab only
       const searchInput = page.locator('.results-tab-wrapper .results-search-input');
       await searchInput.fill('trail');
       await page.waitForTimeout(500);

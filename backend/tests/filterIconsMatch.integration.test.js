@@ -1,5 +1,5 @@
 /**
- * Integration test to verify Results tab filter icons match Map legend icons
+ * Integration test to verify Find tab filter icons match Map legend icons
  *
  * Issue #73: Ensure filter buttons use actual icons instead of letters
  * and that they match the icons shown in the map legend.
@@ -8,7 +8,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { chromium } from 'playwright';
 
-describe('Results Filter Icons Match Legend', () => {
+// The type chips live behind the Filters button in the Find tab (spec 048).
+async function openFindFilters(page) {
+  await page.click('[data-nav="find"]');
+  await page.waitForSelector('.filter-sheet-btn', { timeout: 10000 });
+  if (!(await page.$('.filter-sheet'))) await page.click('.filter-sheet-btn');
+  await page.waitForSelector('.filter-sheet .type-filter-chip', { timeout: 5000 });
+}
+
+describe('Find Filter Icons Match Legend', () => {
   let browser;
   let page;
 
@@ -28,8 +36,7 @@ describe('Results Filter Icons Match Legend', () => {
   });
 
   it('should display filter chips with icons instead of letters', async () => {
-    await page.click('button:has-text("Results")');
-    await page.waitForTimeout(1000);
+    await openFindFilters(page);
 
     const filterChips = await page.$$('.results-type-filters .type-filter-chip');
     expect(filterChips.length).toBeGreaterThan(0);
@@ -50,8 +57,7 @@ describe('Results Filter Icons Match Legend', () => {
   });
 
   it('should have Trails filter with layer icon', async () => {
-    await page.click('button:has-text("Results")');
-    await page.waitForTimeout(500);
+    await openFindFilters(page);
 
     const trailChip = await page.$('.type-filter-chip.trails');
     expect(trailChip).toBeTruthy();
@@ -67,8 +73,7 @@ describe('Results Filter Icons Match Legend', () => {
   });
 
   it('should have Rivers filter with layer icon', async () => {
-    await page.click('button:has-text("Results")');
-    await page.waitForTimeout(500);
+    await openFindFilters(page);
 
     const riverChip = await page.$('.type-filter-chip.rivers');
     expect(riverChip).toBeTruthy();
@@ -84,8 +89,7 @@ describe('Results Filter Icons Match Legend', () => {
   });
 
   it('should have Boundaries filter with layer icon', async () => {
-    await page.click('button:has-text("Results")');
-    await page.waitForTimeout(500);
+    await openFindFilters(page);
 
     const boundaryChip = await page.$('.type-filter-chip.boundaries');
     expect(boundaryChip).toBeTruthy();
@@ -101,8 +105,7 @@ describe('Results Filter Icons Match Legend', () => {
   });
 
   it('should use layer icon paths matching map legend convention', async () => {
-    await page.click('button:has-text("Results")');
-    await page.waitForTimeout(500);
+    await openFindFilters(page);
 
     const trailFilterImg = await page.$('.type-filter-chip.trails img.type-filter-icon');
     const trailFilterSrc = await trailFilterImg.getAttribute('src');
@@ -119,8 +122,7 @@ describe('Results Filter Icons Match Legend', () => {
   });
 
   it('should NOT have letter badges in filter chips', async () => {
-    await page.click('button:has-text("Results")');
-    await page.waitForTimeout(500);
+    await openFindFilters(page);
 
     const filterChips = await page.$$('.results-type-filters .type-filter-chip');
 

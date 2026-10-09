@@ -2225,7 +2225,7 @@ app.get('/api/trails/mtb', async (req, res) => {
 
 app.get('/api/results-subtabs', async (req, res) => {
   const DEFAULT_SUBTABS = [
-    { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
+    { id: 'all', label: 'All places', shortLabel: 'All', route: '/find', filterTypes: null, protected: true },
     { id: 'mtb', label: 'MTB Trail Status', shortLabel: 'MTB Status', route: '/mtb-trail-status', filterTypes: ['mtb-trailhead'], protected: false },
     { id: 'organizations', label: 'Organizations', shortLabel: 'Orgs', route: '/organizations', filterTypes: ['organization'], protected: false }
   ];
@@ -2754,7 +2754,7 @@ app.use(async (req, res, next) => {
 // OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
 // permalink — the form share buttons produce). MUST be mounted before
 // express.static so it can intercept the request before index.html is served.
-const OG_RESERVED_PATHS = new Set(['results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion', 'terms', 'signin', 'signup', 'login', 'welcome', 'reset-password']);
+const OG_RESERVED_PATHS = new Set(['find', 'happening', 'organizations', 'results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion', 'terms', 'signin', 'signup', 'login', 'welcome', 'reset-password']);
 app.use(async (req, res, next) => {
   let poiSlug = null;
   let canonicalPath = null;

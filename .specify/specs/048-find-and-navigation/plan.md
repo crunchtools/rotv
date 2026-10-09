@@ -1,7 +1,7 @@
 # Implementation Plan: Find a place and get to it
 
 > **Spec ID:** 048-find-and-navigation
-> **Status:** Release 1 implemented; release 2 planned
+> **Status:** Implemented (release 1 in v1.54.0, release 2 in v1.55.0)
 > **Last Updated:** 2026-10-09
 
 ## Summary
@@ -36,13 +36,32 @@ Content, coordinates, media (demote the loser's primary before the rows change o
 - The spatial import routes are upserts by name on purpose, so the name guard does not apply to them.
 - No `park` icon type: the park keeps the point's name and activities, so its pin resolves to the icon the point had.
 
-## Release 2: outline
-`PrimaryNav` (header on desktop, bottom bar on phones), `FindTab` replacing `ResultsTab`, `HappeningTab` wrapping `ParkNews` and `ParkEvents`, a shared `FilterSheet`, `utils/poiRank.js` and `utils/parkContainment.js`, a half-height POI card, removal of `MapThumbnail` and the viewport-scoping state, route aliases for the old tab paths, tour and analytics updates.
+## Release 2: Map / Find / Happening
+
+| File | Change |
+|---|---|
+| `frontend/src/App.jsx` | Tab ids `view`, `find`, `happening`; `parseTabPath()` reads tab URLs and redirects `/results`, `/news`, `/events`; `handleTabChange` keeps the selection; the three tabs render in the header on a wide screen and in a bottom bar on a phone; About moves to the account menu |
+| `frontend/src/components/FindTab.jsx` | Replaces `ResultsTab`: every POI, the shared search, a list picker, type chips behind Filters |
+| `frontend/src/components/HappeningTab.jsx` | News / Events toggle around `ParkNews` and `ParkEvents`, which lose the viewport scoping and the mini map |
+| `frontend/src/components/FilterSheet.jsx` | The collapsed Filters menu: popover on a wide screen, bottom sheet on a phone |
+| `frontend/src/utils/poiRank.js`, `parkContainment.js` | Search ranking; "in <park>" by point-in-polygon in the browser |
+| `frontend/src/components/Sidebar.jsx`, `App.css` | Half-height place card on a phone with an expand control; never over the tab bar |
+| `frontend/src/utils/mapFrame.js`, `Map.jsx` | A selection is framed in the part of the map the card leaves showing |
+| `frontend/src/hooks/useIsMobile.js` | One breakpoint (768px) shared with the CSS |
+| `backend/server.js` | `find`, `happening`, `organizations` reserved from POI slugs; default list renamed |
+| Removed | `ResultsTab.jsx`, `MapThumbnail.jsx`, `mapState`, `bypassViewportFilter` |
+
+### Decisions
+- One DOM copy of the tabs, placed by `useIsMobile`, so selectors like `[data-nav="find"]` match once.
+- The stored list config still names its first entry for the old Results tab; `FindTab` relabels it "All places" and routes it to `/find` rather than migrating a setting.
+- The swipe-between-places list stays scoped to the map view. A place picked in Find may be outside it; the card then shows no position counter.
 
 ## Testing
 - `backend/tests/poiMergeService.integration.test.js`: merge, dry run, refusals, candidates, name guard, merged-id and permalink resolution, against PostGIS with its own fixtures.
 - `backend/tests/poiRoles.unit.test.js`; frontend `poiKind`, `mapFrame` and `anonSettings` unit tests.
-- Manual: select a park from Results and confirm the outline is framed and Directions opens at the lot.
+- `backend/tests/findAndNavigate.integration.test.js`: the issue's steps at 390px wide with its own park, trail and restroom.
+- Frontend `poiRank` and `parkContainment` unit tests; `filterIconsMatch`, `ui`, `rovingTabindex`, `accessibility` and `issue63Regression` updated for the new tabs.
+- Manual: select a park from Find and confirm the outline is framed and Directions opens at the lot.
 
 ## Rollout
 1. Deploy release 1.
