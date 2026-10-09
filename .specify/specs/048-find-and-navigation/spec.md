@@ -27,7 +27,7 @@ Searching ROTV for Furnace Run Metro Park on a phone returned several look-alike
 - Anything holding the retired id or permalink follows it: saved and visited ids on a device are rewritten on load, login sync stores the survivor, and the old permalink redirects (301) to the park.
 
 ### The map follows the selection (release 1)
-- Selecting a trail, river or boundary from anywhere but a tap on its own line brings all of it into view, unless it already is.
+- Selecting a trail, river or boundary from anywhere but a tap on its own line brings all of it into view, unless it is already on screen at a readable size.
 - Returning to the Map tab with a place selected puts it in view. With nothing selected the map stays where it was.
 
 ### Map / Find / Happening (release 2)
@@ -49,7 +49,7 @@ Searching ROTV for Furnace Run Metro Park on a phone returned several look-alike
 | MCP | `poi_merge_candidates`, `poi_merge { loser_id, winner_id, dry_run }`; `poi_create` applies the name guard. |
 
 ## Data
-`pois.merged_into_id INTEGER REFERENCES pois(id)`, added idempotently at boot.
+`pois.merged_into_id INTEGER REFERENCES pois(id)` and the SQL function `poi_name_key(text)`, both in migration 095 and in `initDatabase` (a fresh database runs migrations before the table exists).
 
 ## Out of scope
 - Seasonal lists such as the Fall Hiking Spree (#711).

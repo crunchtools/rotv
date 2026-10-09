@@ -21,7 +21,8 @@ The merge is an admin tool, not a migration: ids differ per environment, every m
 | `backend/routes/admin.js` | `guardPoiName` middleware on POI create and update routes |
 | `backend/routes/userSettings.js` | `syncPoiIdList` stores the survivor of a merged id |
 | `backend/services/mcpServer.js` | `poi_merge_candidates`, `poi_merge`; name guard in `poi_create` |
-| `backend/server.js` | `merged_into_id` column; `poi_name_key()` SQL function; `GET /api/pois/merged`; retired slug redirects |
+| `backend/migrations/095_poi_merge.sql`, `backend/server.js` | `merged_into_id` column and `poi_name_key()` SQL function, in both places |
+| `backend/server.js` | `GET /api/pois/merged`; retired slug redirects |
 | `frontend/src/utils/poiKind.js`, `utils/mapFrame.js` | New: `isParkPin`; `frameBounds` |
 | `frontend/src/App.jsx` | `applyMarkerFilters` shared by destinations and park pins; list selections no longer suppress the fly-to |
 | `frontend/src/components/Map.jsx` | Park pins; `MapUpdater` frames linear selections and re-frames on return to the Map tab |

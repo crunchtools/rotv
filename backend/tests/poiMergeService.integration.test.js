@@ -189,6 +189,25 @@ describe('mergePois', () => {
     expect((await row(CHILD)).owner_id).toBe(PARK);
   });
 
+  it('keeps photos that exist only in the image server', async () => {
+    const imageServer = {
+      getPoiAssets: async (poiId) => (poiId === POINT ? [
+        { id: 990001, role: 'primary', asset_type: 'image' },
+        { id: 990002, role: 'gallery', asset_type: 'video' },
+        { id: 990003, role: 'theme', asset_type: 'image' }
+      ] : [])
+    };
+    const outcome = await mergePois(pool, POINT, PARK, { imageServer });
+    expect(outcome.moved.image_server_assets).toBe(2);
+    const media = await pool.query(
+      `SELECT image_server_asset_id AS asset, role, media_type FROM poi_media WHERE poi_id = $1 ORDER BY asset`, [PARK]
+    );
+    expect(media.rows).toEqual([
+      { asset: '990001', role: 'primary', media_type: 'image' },
+      { asset: '990002', role: 'gallery', media_type: 'video' }
+    ]);
+  });
+
   it('changes nothing on a dry run but reports what would move', async () => {
     await pool.query('INSERT INTO user_visits (user_id, poi_id) VALUES ($1, $2)', [userId, POINT]);
     const outcome = await mergePois(pool, POINT, PARK, { dryRun: true });

@@ -32,7 +32,7 @@ The spatial import routes upsert by name on purpose and are not guarded.
 
 1. Copies content onto the park where the park has none; defaulted columns take the point's value.
 2. Sets the park's coordinates and navigation coordinates from the point.
-3. Moves media, demoting the point's primary image when the park has one.
+3. Moves media, demoting the point's primary image when the park has one. Photos that exist only in the image server (filed under the old POI id, with no `poi_media` row) get a `poi_media` row on the park, since the image server cannot refile an asset.
 4. Repoints news, events, series, trail status, trip stops, favorites, visits, associations, owned POIs, route stops and the collection deny list.
 5. Soft-deletes the point, sets `merged_into_id`, and suffixes its name with `[merged into #id]`.
 
@@ -55,7 +55,7 @@ The hand-run imports in `data/boundaries/insert_*.sql` update a park's outline i
 `MapUpdater` in `frontend/src/components/Map.jsx`:
 
 - A selected point flies to at least zoom 15.
-- A selected trail, river or boundary is framed with `frameBounds` (`frontend/src/utils/mapFrame.js`) unless all of it is already in view. Tapping a line or outline on the map itself selects it without moving the map, so a long trail does not zoom out from under the tap.
+- A selected trail, river or boundary is framed with `frameBounds` (`frontend/src/utils/mapFrame.js`) unless it is already on screen at a readable size (a park that is a speck on a region-wide view is zoomed to). Tapping a line or outline on the map itself selects it without moving the map, so a long trail does not zoom out from under the tap.
 - Returning to the Map tab with something selected puts it in view. With nothing selected the map is left alone.
 
 Moves made by the app set `map._isProgrammaticMove` so the visible-POI list is not recomputed mid-animation.

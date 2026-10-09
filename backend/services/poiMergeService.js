@@ -11,6 +11,7 @@
 
 import { createLogger } from '../utils/logger.js';
 import { loadListSetting } from './filterLists.js';
+import imageServerClient from './imageServerClient.js';
 
 const logger = createLogger('PoiMerge');
 
@@ -47,7 +48,10 @@ export function originalMergedName(name) {
   return String(name || '').replace(MERGED_SUFFIX_RE, '');
 }
 
-/** The pair handed to mergePois() is not a point being folded into a park. */
+/**
+ * Raised by mergePois() when the pair is not a live point being folded into a
+ * live park boundary. `status` is the HTTP status a route should answer with (400).
+ */
 export class PoiMergeError extends Error {
   constructor(message) {
     super(message);
@@ -56,7 +60,16 @@ export class PoiMergeError extends Error {
   }
 }
 
+/**
+ * Raised by assertPoiNameAvailable() when another live POI answers to the name.
+ * `status` is the HTTP status a route should answer with (409); `existing` is
+ * the POI that holds the name, as `{ id: number, name: string }`.
+ */
 export class PoiNameConflictError extends Error {
+  /**
+   * @param {string} name - The name that was asked for
+   * @param {{id: number, name: string}} existing - The POI that already has it
+   */
   constructor(name, existing) {
     super(`A place named "${existing.name}" already exists (#${existing.id}). Edit that one instead of creating "${name}".`);
     this.name = 'PoiNameConflictError';
@@ -234,6 +247,35 @@ async function copyContent(client, loserId, winnerId) {
   );
 }
 
+// Older photos exist only in the image server, filed under the POI id they
+// were uploaded for, with no poi_media row; the thumbnail route finds them by
+// asking the image server for that id. The image server cannot refile an
+// asset, so the park gets a poi_media row pointing at each one instead.
+async function adoptImageServerAssets(client, assets, winnerId, counts) {
+  const adoptable = assets.filter(a => a.role === 'primary' || a.role === 'gallery');
+  if (adoptable.length === 0) return;
+  // One statement for all of them. At most one becomes the park's primary, and
+  // only when the park has none: the first primary by asset id.
+  const inserted = await client.query(
+    `INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status)
+     SELECT $1::int, a.media_type, a.asset_id,
+            CASE WHEN a.role = 'primary'
+                  AND row_number() OVER (PARTITION BY a.role ORDER BY a.asset_id) = 1
+                  AND NOT EXISTS (SELECT 1 FROM poi_media WHERE poi_id = $1::int AND role = 'primary')
+                 THEN 'primary' ELSE 'gallery' END,
+            'published'
+       FROM unnest($2::text[], $3::text[], $4::text[]) AS a(asset_id, media_type, role)
+      WHERE NOT EXISTS (SELECT 1 FROM poi_media m WHERE m.image_server_asset_id = a.asset_id)`,
+    [
+      winnerId,
+      adoptable.map(a => String(a.id)),
+      adoptable.map(a => (a.asset_type === 'video' ? 'video' : 'image')),
+      adoptable.map(a => a.role)
+    ]
+  );
+  counts.image_server_assets = inserted.rowCount;
+}
+
 async function moveMedia(client, loserId, winnerId, counts) {
   // One published primary per POI (idx_poi_media_unique_primary): demote the
   // loser's before the rows change owner.
@@ -321,6 +363,8 @@ async function retireLoser(client, loser, winner) {
  *   boundary_type 'park' and a boundary_geom.
  * @param {object} [options]
  * @param {boolean} [options.dryRun=false] - Report what would move, change nothing.
+ * @param {{getPoiAssets: function(number): Promise<object[]>}} [options.imageServer] -
+ *   Source of the loser's image-server assets; defaults to the app's client.
  * @returns {Promise<{
  *   dryRun: boolean,
  *   loser: {id: number, name: string},
@@ -330,7 +374,9 @@ async function retireLoser(client, loser, winner) {
  *   is the name before the merged suffix was added.
  * @throws {PoiMergeError} when the pair is not mergeable (see above).
  */
-export async function mergePois(pool, loserId, winnerId, { dryRun = false } = {}) {
+export async function mergePois(pool, loserId, winnerId, { dryRun = false, imageServer = imageServerClient } = {}) {
+  // Read before the transaction opens: a network call should not hold row locks.
+  const legacyAssets = await imageServer.getPoiAssets(loserId);
   const client = await pool.connect();
   const counts = {};
   try {
@@ -340,6 +386,7 @@ export async function mergePois(pool, loserId, winnerId, { dryRun = false } = {}
 
     await copyContent(client, loserId, winnerId);
     await moveMedia(client, loserId, winnerId, counts);
+    await adoptImageServerAssets(client, legacyAssets, winnerId, counts);
     await repointReferences(client, loserId, winnerId, counts);
     await repointLooseReferences(client, loserId, winnerId, counts);
     await retireLoser(client, loser, winner);

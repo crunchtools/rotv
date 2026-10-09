@@ -13,7 +13,8 @@ function fakeMap(view) {
 
 const PARK = { south: 41.25, west: -81.65, north: 41.27, east: -81.62 };
 const VIEW_ELSEWHERE = [[41.10, -81.55], [41.15, -81.50]];
-const VIEW_AROUND_PARK = [[41.20, -81.70], [41.30, -81.60]];
+const VIEW_AROUND_PARK = [[41.23, -81.67], [41.29, -81.60]];
+const VIEW_WHOLE_REGION = [[40.90, -82.00], [41.60, -81.30]];
 
 describe('frameBounds', () => {
   beforeEach(() => { vi.useFakeTimers(); });
@@ -25,7 +26,13 @@ describe('frameBounds', () => {
     expect(map.flyToBounds).not.toHaveBeenCalled();
   });
 
-  it('leaves the map alone when the whole shape is already in view', () => {
+  it('zooms to a shape that is on screen but only a speck', () => {
+    const map = fakeMap(VIEW_WHOLE_REGION);
+    expect(frameBounds(map, PARK)).toBe(true);
+    expect(map.flyToBounds).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves the map alone when the whole shape is in view at a readable size', () => {
     const map = fakeMap(VIEW_AROUND_PARK);
     expect(frameBounds(map, PARK)).toBe(false);
     expect(map.flyToBounds).not.toHaveBeenCalled();
