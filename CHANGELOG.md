@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **One POI per park (#712)**: production had a content-less boundary and a separate point for the
+  same park, so a search returned look-alike rows. Admin MCP tools `poi_merge_candidates` and
+  `poi_merge` fold the point into the boundary (content, news, events, photos, favorites, visits),
+  with a dry run. Saved places, visited lists and old permalinks follow the merge. A park boundary
+  is now collected for news and events, counted in visited totals, and drawn with a pin.
+- **Duplicate names are refused (#712)**: creating or renaming a POI onto a name another place
+  already answers to returns 409. Case, apostrophe style and a trailing county are ignored.
+
 ### Changed
+- **The map follows what you pick (#712)**: choosing a place from the list no longer leaves the map
+  where it was. A selected trail, river or park is brought fully into view, and returning to the Map
+  tab re-frames the selection. With nothing selected the map keeps its position.
 - **AI research reads the web before it writes (#724)**: research drafted from the model's memory,
   so well-known places came back with unverified detail and URLs nobody had opened. It now runs one
   Serper search, renders the POI's reference page and the top four results, and may state only what

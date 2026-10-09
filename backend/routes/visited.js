@@ -38,18 +38,20 @@ export function createVisitedRouter(pool) {
   });
 
   // Progress stats: how many distinct locations the user has explored out of the
-  // total markable locations (point POIs — the same set rendered as map markers
-  // by /api/destinations). Powers the "23 of 371 explored" counter.
+  // total markable locations (point POIs and parks — the set rendered as map
+  // markers). Powers the "23 of 371 explored" counter.
   router.get('/stats', isAuthenticated, async (req, res) => {
     try {
       const stats = await pool.query(
         `SELECT
            (SELECT COUNT(*) FROM pois
-             WHERE 'point' = ANY(poi_roles) AND deleted IS NOT TRUE) AS total,
+             WHERE ('point' = ANY(poi_roles) OR ('boundary' = ANY(poi_roles) AND boundary_type = 'park'))
+               AND deleted IS NOT TRUE) AS total,
            (SELECT COUNT(*) FROM user_visits v
               JOIN pois p ON p.id = v.poi_id
              WHERE v.user_id = $1 AND p.deleted IS NOT TRUE
-               AND 'point' = ANY(p.poi_roles)) AS visited`,
+               AND ('point' = ANY(p.poi_roles)
+                    OR ('boundary' = ANY(p.poi_roles) AND p.boundary_type = 'park'))) AS visited`,
         [req.user.id]
       );
       const counts = stats.rows[0] || {};

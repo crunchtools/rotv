@@ -6,6 +6,13 @@ import { MCP_ADMIN_USER_ID } from '../utils/systemUsers.js';
 import { isSecretSetting } from '../utils/settingsRedaction.js';
 import { createLogger } from '../utils/logger.js';
 import { getStatsSummary, getStatsTop } from './analyticsService.js';
+import {
+  assertPoiNameAvailable,
+  PoiNameConflictError,
+  findParkMergeCandidates,
+  mergePois,
+  PoiMergeError
+} from './poiMergeService.js';
 
 import {
   getQueue,
@@ -196,6 +203,15 @@ function registerTools(server, pool, boss, mcpUserId) {
         return { content: [{ type: 'text', text: `POI roles '${(args.poi_roles || []).join(', ')}' require latitude and longitude.` }], isError: true };
       }
 
+      try {
+        await assertPoiNameAvailable(pool, { name: args.name });
+      } catch (err) {
+        if (err instanceof PoiNameConflictError) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
+        }
+        throw err;
+      }
+
       const fields = POI_CREATE_COLUMNS.filter(column => args[column] !== undefined);
       const values = fields.map(key => args[key]);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
@@ -205,6 +221,37 @@ function registerTools(server, pool, boss, mcpUserId) {
       );
       const row = insertedPoi.rows[0];
       return { content: [{ type: 'text', text: `Created POI #${row.id}: ${row.name} (${(row.poi_roles || []).join(', ')})` }] };
+    }
+  );
+
+  server.tool(
+    'poi_merge_candidates',
+    'List park boundaries that have a separate point POI of the same name (pairs to merge with poi_merge)',
+    {},
+    async () => {
+      const pairs = await findParkMergeCandidates(pool);
+      return { content: [{ type: 'text', text: JSON.stringify(pairs, null, 2) }] };
+    }
+  );
+
+  server.tool(
+    'poi_merge',
+    'Merge a duplicate point POI into its park boundary: moves content, news, events, media, favorites and visits to the park, then retires the point. Use dry_run first.',
+    {
+      loser_id: z.number().int().describe('Point POI to retire (point_id from poi_merge_candidates)'),
+      winner_id: z.number().int().describe('Park boundary POI that survives (park_id)'),
+      dry_run: z.boolean().optional().default(true).describe('Report what would move without changing anything (default true)')
+    },
+    async ({ loser_id, winner_id, dry_run }) => {
+      try {
+        const outcome = await mergePois(pool, loser_id, winner_id, { dryRun: dry_run });
+        return { content: [{ type: 'text', text: JSON.stringify(outcome, null, 2) }] };
+      } catch (err) {
+        if (err instanceof PoiMergeError) {
+          return { content: [{ type: 'text', text: err.message }], isError: true };
+        }
+        throw err;
+      }
     }
   );
 

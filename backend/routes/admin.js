@@ -82,6 +82,7 @@ import imageServerClient from '../services/imageServerClient.js';
 import { runRiverLevelsCollection } from '../services/riverLevelsService.js';
 import { logInfo, logError, flush as flushJobLogs } from '../services/jobLogger.js';
 import { createLogger } from '../utils/logger.js';
+import { assertPoiNameAvailable, PoiNameConflictError } from '../services/poiMergeService.js';
 
 const logger = createLogger('Admin');
 const twitterAuthLogger = createLogger('Twitter Auth');
@@ -222,7 +223,30 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.put('/pois/:id', isAdmin, async (req, res) => {
+  // One place, one POI (spec 048): refuse a name another live POI already
+  // answers to. An edit that leaves the name alone always passes.
+  const guardPoiName = async (req, res, next) => {
+    const name = req.body?.name;
+    if (typeof name !== 'string' || !name.trim()) return next();
+    try {
+      const id = req.params.id ? parseInt(req.params.id, 10) : null;
+      let currentName = null;
+      if (Number.isInteger(id)) {
+        const current = await pool.query('SELECT name FROM pois WHERE id = $1', [id]);
+        currentName = current.rows[0]?.name ?? null;
+      }
+      await assertPoiNameAvailable(pool, { name, id: Number.isInteger(id) ? id : null, currentName });
+      return next();
+    } catch (error) {
+      if (error instanceof PoiNameConflictError) {
+        return res.status(409).json({ error: error.message, existing_id: error.existing.id });
+      }
+      logger.error('Error checking POI name:', error);
+      return res.status(500).json({ error: 'Failed to check POI name' });
+    }
+  };
+
+  router.put('/pois/:id', isAdmin, guardPoiName, async (req, res) => {
     const { id } = req.params;
     const allowedFields = [
       'name', 'poi_roles', 'latitude', 'longitude', 'geometry', 'geometry_drive_file_id',
@@ -281,7 +305,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.put('/destinations/:id', isAdmin, async (req, res) => {
+  router.put('/destinations/:id', isAdmin, guardPoiName, async (req, res) => {
     const { id } = req.params;
     const allowedFields = [
       'name', 'latitude', 'longitude', 'navigation_latitude', 'navigation_longitude',
@@ -334,7 +358,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.post('/destinations', isAdmin, async (req, res) => {
+  router.post('/destinations', isAdmin, guardPoiName, async (req, res) => {
     const { name, latitude, longitude } = req.body;
 
     if (!name || !name.trim()) {
@@ -394,7 +418,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.post('/pois', isAdmin, async (req, res) => {
+  router.post('/pois', isAdmin, guardPoiName, async (req, res) => {
     const { name, poi_roles, latitude, longitude } = req.body;
 
     if (!name || !name.trim()) {
@@ -2093,7 +2117,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.post('/linear-features', isAdmin, async (req, res) => {
+  router.post('/linear-features', isAdmin, guardPoiName, async (req, res) => {
     try {
       const {
         name, feature_type, geometry, property_owner, owner_id, brief_description,
@@ -2134,7 +2158,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.put('/linear-features/:id', isAdmin, async (req, res) => {
+  router.put('/linear-features/:id', isAdmin, guardPoiName, async (req, res) => {
     try {
       const { id } = req.params;
       const allowedFields = [

@@ -19,3 +19,7 @@ GHSA-3f6p-5ww8-9rcr
 # next/og or ImageResponse, which is the only affected path. Drop when an Umami release
 # ships next >= 16.3.6. Accepted by Josui (CTO) 2026-10-02, review 2026-12-31.
 GHSA-vcvr-r3jv-pc5j
+# Not reachable: the SSRF needs images.remotePatterns, and Umami 3.4.0's next.config.ts has no
+# images block at all. Drop when an Umami release ships next >= 16.3.8. Accepted by Josui (CTO)
+# 2026-10-09, review 2026-12-31.
+CVE-2026-94483

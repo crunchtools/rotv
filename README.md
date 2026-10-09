@@ -54,6 +54,7 @@ See [CLAUDE.md](CLAUDE.md) for development guidelines and [CONTRIBUTING.md](CONT
 - [News & Events Architecture](docs/NEWS_EVENTS_ARCHITECTURE.md)
 - [Trail Status Architecture](docs/TRAIL_STATUS_ARCHITECTURE.md)
 - [River Levels Architecture](docs/RIVER_LEVELS_ARCHITECTURE.md)
+- [Places and Navigation Architecture](docs/NAVIGATION_ARCHITECTURE.md)
 - [CI/CD & Testing](docs/CI_CD_TESTING.md)
 
 ## License

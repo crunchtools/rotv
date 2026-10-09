@@ -89,6 +89,7 @@ import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
 import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from './services/waterTaxiTrackerService.js';
 import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
+import { resolveMergedIds, originalMergedName } from './services/poiMergeService.js';
 import {
   getAllActiveSeries,
   nextOccurrence,
@@ -680,6 +681,24 @@ async function initDatabase() {
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_type TEXT
     `);
+    // A place's name as people mean it: case, apostrophe style and a trailing
+    // county dropped. SQL twin of normalizePoiName() in poiMergeService.js.
+    await client.query(`
+      CREATE OR REPLACE FUNCTION poi_name_key(n text) RETURNS text
+      LANGUAGE sql IMMUTABLE AS $fn$
+        SELECT lower(btrim(regexp_replace(
+          regexp_replace(
+            translate(n, '‘’', ''''''),
+            '\\s+(summit|cuyahoga|portage|medina|stark|geauga|lake)\\s+county\\s*$', '', 'i'),
+          '\\s+', ' ', 'g')))
+      $fn$
+    `);
+
+    // A POI folded into another by poiMergeService (spec 048). The retired row
+    // stays, soft-deleted, so ids and permalinks people hold still resolve.
+    await client.query(`
+      ALTER TABLE pois ADD COLUMN IF NOT EXISTS merged_into_id INTEGER REFERENCES pois(id)
+    `);
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_color TEXT DEFAULT '#228B22'
     `);
@@ -998,6 +1017,23 @@ app.get('/api/pois', async (req, res) => {
   } catch (error) {
     logger.error('Error fetching POIs:', error);
     res.status(500).json({ error: 'Failed to fetch POIs' });
+  }
+});
+
+// Which of these POI ids were merged into another POI, as { oldId: liveId }.
+// Devices hold ids in localStorage (favorites, visited); this lets them follow
+// a merge (spec 048). Registered before /api/pois/:id like "summary" below.
+app.get('/api/pois/merged', async (req, res) => {
+  try {
+    const ids = String(req.query.ids || '')
+      .split(',')
+      .map(s => parseInt(s, 10))
+      .filter(n => Number.isInteger(n) && n > 0)
+      .slice(0, 500);
+    res.json(Object.fromEntries(await resolveMergedIds(pool, ids)));
+  } catch (error) {
+    logger.error('Error resolving merged POIs:', error);
+    res.status(500).json({ error: 'Failed to resolve merged POIs' });
   }
 });
 
@@ -2589,6 +2625,18 @@ function generateSlug(name) {
     .replace(/^-|-$/g, '');
 }
 
+// The live POI name a retired (merged) POI's old slug now points at.
+async function findMergedSlugTarget(poiSlug) {
+  const merged = await pool.query(
+    `SELECT old.name AS old_name, live.name AS live_name
+       FROM pois old
+       JOIN pois live ON live.id = old.merged_into_id
+      WHERE live.deleted IS NOT TRUE`
+  );
+  const hit = merged.rows.find(r => generateSlug(originalMergedName(r.old_name)) === poiSlug);
+  return hit ? hit.live_name : null;
+}
+
 async function findItemBySlugs(type, poiSlug, titleSlug) {
   const poisQuery = await pool.query(
     `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
@@ -2727,6 +2775,16 @@ app.use(async (req, res, next) => {
       `);
 
       const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
+
+      if (!poi) {
+        // A permalink to a POI since merged into another (spec 048) moves to
+        // the survivor instead of going dark.
+        const mergedTo = await findMergedSlugTarget(poiSlug);
+        if (mergedTo) {
+          const target = generateSlug(mergedTo);
+          return res.redirect(301, req.path === '/' ? `/?poi=${target}` : `/${target}`);
+        }
+      }
 
       if (poi) {
         const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;

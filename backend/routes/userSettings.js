@@ -36,9 +36,14 @@ async function syncPoiIdList(pool, userId, ids, field) {
     .slice(0, 500);
   if (poiIds.length === 0) return 0;
   const inserted = await pool.query(
+    // A device may still hold the id of a POI since merged into another
+    // (spec 048): store the survivor.
     `INSERT INTO ${table} (user_id, poi_id)
-     SELECT $1, p FROM UNNEST($2::int[]) AS p
-     WHERE EXISTS (SELECT 1 FROM pois WHERE id = p AND deleted IS NOT TRUE)
+     SELECT DISTINCT $1::int, live.id
+       FROM UNNEST($2::int[]) AS p
+       JOIN pois held ON held.id = p
+       JOIN pois live ON live.id = COALESCE(held.merged_into_id, held.id)
+      WHERE live.deleted IS NOT TRUE
      ON CONFLICT DO NOTHING`,
     [userId, poiIds]
   );

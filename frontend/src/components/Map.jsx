@@ -13,6 +13,7 @@ import { buildConsist, MIN_CONSIST_ZOOM } from '../utils/trainConsist';
 import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
+import { frameBounds } from '../utils/mapFrame';
 
 // Escape user-supplied POI fields before interpolating them into tooltip HTML
 // strings passed to Leaflet's bindTooltip (which sets innerHTML). Prevents XSS
@@ -464,8 +465,32 @@ function MapClickHandler({ isAdmin, editMode, onRightClick, onMapClick }) {
   return null;
 }
 
-function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef }) {
+function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, geometryClickRef, activeTab }) {
   const map = useMap();
+  const prevTab = useRef(activeTab);
+  const selectionRef = useRef({});
+  selectionRef.current = { selectedDestination, selectedLinearFeature };
+
+  // Coming back to the Map tab with something selected: put it in view. With
+  // nothing selected the view is left exactly where it was (#712). Selection
+  // is read from a ref because only a tab change should trigger this.
+  useEffect(() => {
+    const returning = activeTab === 'view' && prevTab.current !== 'view';
+    prevTab.current = activeTab;
+    if (!returning) return;
+    requestAnimationFrame(() => {
+      const { selectedDestination: point, selectedLinearFeature: linear } = selectionRef.current;
+      map.invalidateSize();
+      if (linear?.geometry) {
+        frameBounds(map, getGeometryBounds(linear.geometry), { animate: false });
+      } else if (point?.latitude && point?.longitude) {
+        const at = [parseFloat(point.latitude), parseFloat(point.longitude)];
+        if (!map.getBounds().contains(at)) {
+          map.setView(at, Math.max(map.getZoom(), 15), { animate: false });
+        }
+      }
+    });
+  }, [activeTab, map]);
 
   React.useEffect(() => {
     if (selectedDestination && selectedDestination.latitude && selectedDestination.longitude) {
@@ -506,15 +531,16 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef }) 
         skipFlyRef.current = false;
         return;
       }
-      if (selectedLinearFeature.poi_roles?.includes('water_taxi')) {
-        const b = getGeometryBounds(selectedLinearFeature.geometry);
-        if (b) {
-          map.invalidateSize();
-          map.flyToBounds([[b.south, b.west], [b.north, b.east]], { padding: [60, 60], maxZoom: 16, duration: 0.6 });
-        }
+      // Tapping a line or outline on the map selects it where it is; a long
+      // trail should not zoom the map out from under the tap.
+      if (geometryClickRef && geometryClickRef.current === selectedLinearFeature.id) {
+        geometryClickRef.current = null;
+        return;
       }
+      map.invalidateSize();
+      frameBounds(map, getGeometryBounds(selectedLinearFeature.geometry));
     }
-  }, [selectedLinearFeature, map, skipFlyRef]);
+  }, [selectedLinearFeature, map, skipFlyRef, geometryClickRef]);
 
   return null;
 }
@@ -712,7 +738,7 @@ function ZoomTooltipHider() {
   return null;
 }
 
-function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery, iconConfig }) {
+function MapBoundsTracker({ destinations, parkPins, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery, iconConfig }) {
   const map = useMap();
   const search = (searchQuery || '').toLowerCase();
 
@@ -723,6 +749,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
     if (!bounds || !bounds.isValid()) return;
 
     const visibleIds = [];
+    const seenIds = new Set();
 
     if (destinations && destinations.length > 0) {
       destinations.forEach(dest => {
@@ -742,6 +769,16 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
         }
       });
     }
+
+    // Park pins are markers too, though the park itself is a boundary POI.
+    (parkPins || []).forEach(park => {
+      const iconType = getDestinationIconType(park);
+      if (!search && !visibleTypes.has(iconType) && !poiMatchesActivityForTypes(park, visibleTypes, iconConfig)) return;
+      if (bounds.contains([parseFloat(park.latitude), parseFloat(park.longitude)])) {
+        visibleIds.push(park.id);
+        seenIds.add(park.id);
+      }
+    });
 
     const isFilteredMode = visibleTypes.size < 10; // Small specific set means filtered mode
     const includeLinearFeatures = !!search || !isFilteredMode ||
@@ -774,7 +811,8 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
 
         if (feature.geometry) {
           const geoBounds = getGeometryBounds(feature.geometry);
-          if (boundsIntersect(bounds, geoBounds)) {
+          // A park already counted by its pin is not counted again by its outline.
+          if (boundsIntersect(bounds, geoBounds) && !seenIds.has(feature.id)) {
             visibleIds.push(feature.id);
           }
         }
@@ -798,7 +836,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
         aspectRatio: width / height
       });
     }
-  }, [map, destinations, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search, iconConfig]);
+  }, [map, destinations, parkPins, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search, iconConfig]);
 
   useMapEvents({
     moveend: updateVisiblePois,
@@ -815,7 +853,7 @@ function MapBoundsTracker({ destinations, visibleTypes, getDestinationIconType, 
 
   useEffect(() => {
     updateVisiblePois();
-  }, [destinations, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, updateVisiblePois]);
+  }, [destinations, parkPins, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, updateVisiblePois]);
 
   return null;
 }
@@ -1275,7 +1313,7 @@ function CoordinateConfirmDialog({ destination, newLat, newLng, onConfirm, onCan
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default']);
 
-function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, showWaterTaxis, onToggleWaterTaxis, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded, boatPosition, trainPosition }) {
+function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin, onDestinationUpdate, editMode, activeTab, _onDestinationCreate, previewCoords, onPreviewCoordsChange, newPOI, onStartNewPOI, linearFeatures, visibleTypes, onVisibleTypesChange, onVisiblePoisChange, onMapStateChange, showTrails, onToggleTrails, showRivers, onToggleRivers, showWaterTaxis, onToggleWaterTaxis, visibleBoundaries, onToggleBoundary, onShowBoundaries, onHideBoundaries, searchQuery, onSearchChange, _onNewsRefresh, skipFlyRef, newOrganization, onStartNewOrganization, isDrawingAssociations, addingAssociationsToOrgId, onAddAssociationsFromDrawing, onCancelDrawingAssociations, boundsToFit, fitNonce, onFitBounds, defaultBounds, visiblePoiCount, iconConfig, activeGauge, isLegendExpanded, setIsLegendExpanded, boatPosition, trainPosition }) {
   // Unified selection: one selectedPoi in, one onSelectPoi out (spec 019).
   // `selectedIsLinear` reflects the selection KIND (path), not geometry — a
   // dual-role organization+boundary may be selected as a destination yet still
@@ -1588,10 +1626,25 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
   };
 
 
+  // The line or outline last tapped on the map itself; MapUpdater leaves the
+  // view alone for that selection instead of framing it.
+  const geometryClickRef = useRef(null);
+
   const handleLinearFeatureClick = (feature) => {
     if (onSelectLinearFeature) {
+      // Fix: re-tapping the selected shape changes no state, so MapUpdater would
+      // never clear the marker and a later list pick would go unframed (PR #733 review)
+      const isReselect = feature?.id != null && feature.id === selectedLinearFeature?.id;
+      geometryClickRef.current = isReselect ? null : (feature?.id ?? null);
       onSelectLinearFeature(feature);
     }
+  };
+
+  // A park is a boundary POI; its pin selects it like any other marker, which
+  // turns the outline on and frames it.
+  const handleParkPinSelect = (park) => {
+    geometryClickRef.current = null;
+    if (onSelectLinearFeature) onSelectLinearFeature(park);
   };
 
   // Clicking the moving train or boat itself, as opposed to its route line (#637)
@@ -2099,12 +2152,13 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
           </Marker>
         )}
 
-        <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} />
+        <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} geometryClickRef={geometryClickRef} activeTab={activeTab} />
         <GaugeFocuser activeGauge={activeGauge} />
         <MapVisibilityHandler activeTab={activeTab} />
         <BoundsFitter boundsToFit={boundsToFit} fitNonce={fitNonce} />
         <MapBoundsTracker
           destinations={destinations}
+          parkPins={parkPins}
           visibleTypes={visibleTypes}
           getDestinationIconType={getDestinationIconType}
           onVisiblePoisChange={handleVisiblePoisChange}
@@ -2185,6 +2239,23 @@ function Map({ destinations, selectedPoi, selectedIsLinear, onSelectPoi, isAdmin
               isEditMode={isDraggable}
               onSelect={onSelectDestination}
               onDragEnd={isDraggable ? handleDrag : handleMarkerDragEnd}
+              mapMoveCount={mapMoveCount}
+            />
+          );
+        })}
+
+        {iconConfig.length > 0 && parkPins && parkPins.map((park) => {
+          const iconType = getDestinationIconType(park);
+          if (!searchQuery && !visibleTypes.has(iconType) && !poiMatchesActivityForTypes(park, visibleTypes, iconConfig)) return null;
+          const isSelected = selectedLinearFeature?.id === park.id;
+          return (
+            <DestinationMarker
+              key={`park-pin-${park.id}-${isSelected}`}
+              dest={{ ...park, latitude: parseFloat(park.latitude), longitude: parseFloat(park.longitude) }}
+              icon={getDestinationIcon(park)}
+              isSelected={isSelected}
+              isEditMode={false}
+              onSelect={handleParkPinSelect}
               mapMoveCount={mapMoveCount}
             />
           );

@@ -9,6 +9,7 @@ import { searchNewsUrls } from './serperService.js';
 import { getDomainReputation } from './moderationService.js';
 import { loadListSetting } from './filterLists.js';
 import { classifyPoiType } from '../utils/poiClassify.js';
+import { isCollectiblePoi } from '../utils/poiRoles.js';
 import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
 import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, PIPELINE_DEFAULTS } from './newsPipelines.js';
 import { createLogger } from '../utils/logger.js';
@@ -783,9 +784,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
   // 'historical' (Historical News: web search only, capped). Spec 044.
   const { skipPhaseTwo = false, pipeline = 'current' } = options;
   const isHistorical = pipeline === 'historical';
-  const collectibleRoles = ['point', 'organization', 'river'];
   const poiRoles = poi.poi_roles || [];
-  if (!poiRoles.some(r => collectibleRoles.includes(r))) {
+  if (!isCollectiblePoi(poi)) {
     const jobId = tracker.getCollectionProgress(poi.id)?.jobId;
     const jobType = tracker.getCollectionProgress(poi.id)?.jobType || 'news';
     logInfo(jobId, jobType, poi.id, poi.name, `Skipping: no collectible role (roles: ${poiRoles.join(', ') || 'none'})`);
@@ -1643,7 +1643,7 @@ export async function processNewsCollectionJob(pool, sheets, pgBossJobId, jobDat
   logInfo(jobId, 'news', null, null, `Job started: ${remainingPoiIds.length} POIs remaining`, { total: allPoiIds.length, already_done: processedPoiIds.length });
 
   const poisResult = await pool.query(
-    'SELECT id, name, poi_roles, primary_activities, more_info_link, events_url, news_url, history_query_index FROM pois WHERE id = ANY($1)',
+    'SELECT id, name, poi_roles, boundary_type, primary_activities, more_info_link, events_url, news_url, history_query_index FROM pois WHERE id = ANY($1)',
     [remainingPoiIds]
   );
   const pois = poisResult.rows;
@@ -1909,7 +1909,8 @@ export async function getAllPoisForCollection(pool) {
   const collectionPoiRows = await pool.query(
     `SELECT id, name, primary_activities FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
-       AND poi_roles && ARRAY['point','organization','river']::text[]
+       AND (poi_roles && ARRAY['point','organization','river']::text[]
+            OR ('boundary' = ANY(poi_roles) AND boundary_type = 'park'))
        AND id != ALL($1::int[])
      ORDER BY
        CASE
@@ -1963,7 +1964,8 @@ export async function getPoisForPipeline(pool, pipeline, now = new Date()) {
   const pipelinePoiRows = await pool.query(
     `SELECT id, name, primary_activities, collection_tier, last_current_news_collection FROM pois
      WHERE (deleted IS NULL OR deleted = FALSE)
-       AND poi_roles && ARRAY['point','organization','river']::text[]
+       AND (poi_roles && ARRAY['point','organization','river']::text[]
+            OR ('boundary' = ANY(poi_roles) AND boundary_type = 'park'))
        ${clauses.join('\n       ')}
      ORDER BY ${orderBy}`,
     params

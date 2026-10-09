@@ -45,6 +45,7 @@ import McpSettings from './components/McpSettings';
 import StatsSettings from './components/StatsSettings';
 import { handleRovingKeyDown } from './utils/a11yUtils';
 import { initAnalytics, excludeThisDevice, track, trackerVehicle } from './utils/analytics';
+import { isParkPin } from './utils/poiKind';
 
 const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb-trailhead', 'historic', 'bridge', 'train', 'nature', 'skiing', 'biking', 'picnic', 'camping', 'music', 'default', 'lighthouse', 'cemetery']);
 
@@ -94,6 +95,35 @@ function unionBounds(boundsList) {
   }
   if (minLat === Infinity) return null;
   return [[minLat, minLng], [maxLat, maxLng]];
+}
+
+// The legend's owner / era / pets / search filters, for anything drawn as a marker.
+function applyMarkerFilters(pois, activeFilters) {
+  let filtered = pois;
+
+  if (activeFilters.owner) {
+    filtered = filtered.filter(d => d.property_owner === activeFilters.owner);
+  }
+
+  if (activeFilters.era) {
+    filtered = filtered.filter(d => d.era_name === activeFilters.era);
+  }
+
+  if (activeFilters.pets === 'yes') {
+    filtered = filtered.filter(d => d.pets?.toLowerCase() === 'yes');
+  } else if (activeFilters.pets === 'no') {
+    filtered = filtered.filter(d => d.pets?.toLowerCase() === 'no');
+  }
+
+  if (activeFilters.search) {
+    const searchLower = activeFilters.search.toLowerCase();
+    filtered = filtered.filter(d =>
+      d.name?.toLowerCase().includes(searchLower) ||
+      (d.primary_activities || '').toLowerCase().includes(searchLower)
+    );
+  }
+
+  return filtered;
 }
 
 function AppContent() {
@@ -1431,32 +1461,15 @@ function AppContent() {
   }, [selectedLinearFeature, selectedDestination, poiNavigationList]);
 
   useEffect(() => {
-    let filtered = destinations;
-
-    if (activeFilters.owner) {
-      filtered = filtered.filter(d => d.property_owner === activeFilters.owner);
-    }
-
-    if (activeFilters.era) {
-      filtered = filtered.filter(d => d.era_name === activeFilters.era);
-    }
-
-    if (activeFilters.pets === 'yes') {
-      filtered = filtered.filter(d => d.pets?.toLowerCase() === 'yes');
-    } else if (activeFilters.pets === 'no') {
-      filtered = filtered.filter(d => d.pets?.toLowerCase() === 'no');
-    }
-
-    if (activeFilters.search) {
-      const searchLower = activeFilters.search.toLowerCase();
-      filtered = filtered.filter(d =>
-        d.name?.toLowerCase().includes(searchLower) ||
-        (d.primary_activities || '').toLowerCase().includes(searchLower)
-      );
-    }
-
-    setFilteredDestinations(filtered);
+    setFilteredDestinations(applyMarkerFilters(destinations, activeFilters));
   }, [activeFilters, destinations]);
+
+  // Parks are boundary POIs, but each still gets a map pin (spec 048), under
+  // the same filters as every other marker.
+  const parkPins = useMemo(
+    () => applyMarkerFilters(linearFeatures.filter(isParkPin), activeFilters),
+    [linearFeatures, activeFilters]
+  );
 
   // Search filters as you type, so report a search once typing settles (#637).
   // A data refresh re-runs the filter; don't report the same search twice.
@@ -1715,7 +1728,8 @@ function AppContent() {
 
       navigate(`/organizations/${slug}`);
     } else {
-      skipNextFlyRef.current = true;
+      // The map frames whatever was picked from the list (#712).
+      skipNextFlyRef.current = false;
       handleSelectDestination(poi);
       setSelectedFromMtbList(false);
       setActiveTab('view');
@@ -1764,7 +1778,7 @@ function AppContent() {
         }, 100);
       }, 50); // Small delay to let tab switch complete
     } else {
-      skipNextFlyRef.current = true;
+      skipNextFlyRef.current = false;
       handleSelectLinearFeature(poi);
       setSelectedFromMtbList(false);
       setActiveTab('view');
@@ -2595,6 +2609,7 @@ function AppContent() {
       >
         <Map
           destinations={filteredDestinations}
+          parkPins={parkPins}
           selectedPoi={selectedPoi}
           selectedIsLinear={selectedKind === 'linear'}
           onSelectPoi={handleMapSelectPoi}
