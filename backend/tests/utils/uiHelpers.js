@@ -25,13 +25,14 @@ export async function showCarouselViaSwipe(page) {
     send('touchend', endX, []);
   }, direction);
 
-  await swipe('next');
-  await page.waitForTimeout(400);
-  if (await page.locator('.thumbnail-carousel').count() === 0) {
-    await swipe('prev');
-    await page.waitForTimeout(400);
+  // Fix: a swipe does nothing until the map has settled and reported which
+  // places are in view, so one early swipe was a race; keep trying (PR #737 review)
+  for (let attempt = 0; attempt < 8; attempt++) {
+    await swipe(attempt % 2 === 0 ? 'next' : 'prev');
+    await page.waitForTimeout(500);
+    if (await page.locator('.thumbnail-carousel').count() > 0) return true;
   }
-  return (await page.locator('.thumbnail-carousel').count()) > 0;
+  return false;
 }
 
 /**

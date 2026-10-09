@@ -6,6 +6,18 @@ import useModeration from '../hooks/useModeration';
 import ModerationExtras from './ModerationExtras';
 import useFetchedList from '../hooks/useFetchedList';
 
+/**
+ * Recent news from every place, newest first; one side of the Happening tab.
+ * It is not tied to the map view (spec 048).
+ *
+ * @param {object} props
+ * @param {boolean} props.isAdmin
+ * @param {boolean} props.editMode Admins in edit mode get moderation controls and "+ New"
+ * @param {(poiId: number) => void} props.onSelectPoi Open the place a story is about
+ * @param {(id: number, title?: string) => void} props.onEditNewsItem Open a story in moderation
+ * @param {number} props.refreshTrigger Changes when the list should be fetched again
+ * @returns {JSX.Element}
+ */
 function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, refreshTrigger }) {
   const { items: news, loading, error, reload: fetchNews } = useFetchedList('/api/news/recent', 'Failed to load news');
   const [searchText, setSearchText] = useState('');

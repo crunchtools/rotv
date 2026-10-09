@@ -27,6 +27,18 @@ async function fetchEventWindows() {
   return { today, weekend };
 }
 
+/**
+ * Events from every place, by Today, This Weekend, Future and Past; one side
+ * of the Happening tab. It is not tied to the map view (spec 048).
+ *
+ * @param {object} props
+ * @param {boolean} props.isAdmin
+ * @param {boolean} props.editMode Admins in edit mode get moderation controls and "+ New"
+ * @param {(poiId: number) => void} props.onSelectPoi Open the place an event is at
+ * @param {(id: number, title?: string) => void} props.onEditEventItem Open an event in moderation
+ * @param {number} props.refreshTrigger Changes when the lists should be fetched again
+ * @returns {JSX.Element}
+ */
 function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, refreshTrigger }) {
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
