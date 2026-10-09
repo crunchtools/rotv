@@ -162,15 +162,18 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     const deltaY = touchCurrentY - touchStartY.current;
 
     // The half-height card doesn't scroll: dragging it up opens it in full.
-    // Dragging the full card down from the top of its content brings it back.
+    // Dragging the full card down from the top of its content brings it back,
+    // and one more drag down on the half-height card closes it.
     const opening = isPeek && deltaY < -24;
     const closing = canCollapse && touchStartedAtTop.current && deltaY > 60;
-    if ((opening || closing) && Math.abs(deltaY) > Math.abs(deltaX)) {
+    const dismissing = isPeek && deltaY > 60;
+    if ((opening || closing || dismissing) && Math.abs(deltaY) > Math.abs(deltaX)) {
       touchStartX.current = null;
       touchStartY.current = null;
       setSwipeOffset(0);
       setIsSwipingHorizontally(false);
-      setIsSidebarExpanded(opening);
+      if (dismissing) onClose();
+      else setIsSidebarExpanded(opening);
       return;
     }
     if (!onNavigate) return;

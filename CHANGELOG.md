@@ -25,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **The place card on a phone**: at half height the card is now a summary. The photo is a thumbnail
   in the header that opens the gallery, and the Info, News and History tabs sit directly under it.
   The half card no longer scrolls: dragging it up opens it in full, and dragging the full card down
-  brings it back to half.
+  brings it back to half, and one more drag down closes it.
 - **`./run.sh dev-ui`**: a Vite dev server with hot reload on port 5173, proxying to the running dev
   container. The dev proxy had pointed at a port the backend no longer uses.
 - **Three tabs: Map, Find, Happening (#712)**: the five icon tabs are now three with words on them,

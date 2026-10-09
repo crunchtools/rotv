@@ -119,7 +119,7 @@ describe('Find a park on a phone and get to it (#712)', () => {
     expect(await page.locator('.sidebar.open button[title="Open in Google Maps"]').count()).toBe(1);
   }, 60000);
 
-  it('opens the card in full on a drag up and brings it back to half on a drag down', async () => {
+  it('opens the card in full on a drag up, back to half on a drag down, and closes it on one more', async () => {
     const drag = (selector, fromY, toY) => page.evaluate(({ selector, fromY, toY }) => {
       const target = document.querySelector(selector);
       const fire = (type, y) => {
@@ -170,6 +170,16 @@ describe('Find a park on a phone and get to it (#712)', () => {
     await drag('#drag-test-spacer', 300, 500);
     await page.waitForSelector('.sidebar.open.peek', { timeout: 5000 });
     await page.evaluate(() => document.getElementById('drag-test-spacer').remove());
+
+    // One more drag down, on the half-height card, closes it
+    await drag('.sidebar.open .sidebar-tab-content', 600, 700);
+    await page.waitForSelector('.sidebar.open', { state: 'detached', timeout: 5000 });
+
+    // Pick the park again for the tests that follow
+    await page.click('[data-nav="find"]');
+    await page.waitForSelector('.results-tile', { timeout: 10000 });
+    await page.click('.results-tile');
+    await page.waitForSelector('.sidebar.open.peek', { timeout: 10000 });
   }, 60000);
 
   it('keeps the search and the selection across tabs, showing the card only on the map', async () => {
