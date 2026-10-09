@@ -1,21 +1,20 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// The dev server (./run.sh dev-ui) proxies everything the backend owns to the
+// running dev container.
+const apiTarget = process.env.ROTV_API_TARGET || 'http://localhost:8080';
+const proxied = ['/api', '/auth', '/stats', '/share'];
+
 export default defineConfig({
   plugins: [react()],
+  cacheDir: process.env.VITE_CACHE_DIR || 'node_modules/.vite',
   server: {
     host: '0.0.0.0',
-    port: 8080,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
-        changeOrigin: true
-      },
-      '/auth': {
-        target: 'http://localhost:3001',
-        changeOrigin: true
-      }
-    }
+    port: 5173,
+    proxy: Object.fromEntries(
+      proxied.map((path) => [path, { target: apiTarget, changeOrigin: true }])
+    )
   },
   build: {
     outDir: 'dist',

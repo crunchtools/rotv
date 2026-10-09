@@ -15068,15 +15068,40 @@ button.type-filter-chip {
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
   }
 
-  .sidebar.peek .sidebar-content-wrapper {
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
+  /* At half height the card is a summary: the photo shrinks to a thumbnail in
+     the header, the tabs lead, and dragging up opens the card instead of scrolling. */
+  .sidebar.peek .sidebar-media {
+    display: none;
+  }
+
+  .sidebar.peek .sidebar-header h2 {
+    flex: 1;
+  }
+
+  .sidebar.peek .sidebar-tab-content {
+    overflow: hidden;
+    padding-bottom: 0;
+  }
+
+  /* Each tab has its own scroller; touch-action only reaches as far as the
+     nearest one, so it is set on everything inside the card. */
+  .sidebar.peek .sidebar-tab-content,
+  .sidebar.peek .sidebar-tab-content * {
+    touch-action: none;
+    scrollbar-width: none;
   }
 
   /* Full details cover the header but never the tab bar */
   .sidebar.expanded {
     bottom: var(--bottom-nav-height);
     height: auto;
+  }
+
+  /* Dragging the full card down collapses it; it must not also pull the page
+     into the browser's refresh gesture. */
+  html:has(.sidebar.expanded),
+  html:has(.sidebar.expanded) body {
+    overscroll-behavior-y: none;
   }
 
   /* Four event ranges fit across a phone */

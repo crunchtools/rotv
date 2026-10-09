@@ -78,6 +78,8 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const [hasNavigatedPoi, setHasNavigatedPoi] = useState(false);
   const mobileSheetClass = !isMobile ? '' : (isSidebarExpanded || isEditing || isNewPOI || isNewOrganization) ? 'expanded' : 'peek';
+  const isPeek = mobileSheetClass === 'peek';
+  const canCollapse = isMobile && isSidebarExpanded && !isEditing && !isNewPOI && !isNewOrganization;
 
   useEffect(() => {
     const pointId = destination?.id;
@@ -115,6 +117,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
   const touchStartX = React.useRef(null);
   const touchStartY = React.useRef(null);
+  const touchStartedAtTop = React.useRef(false);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isSwipingHorizontally, setIsSwipingHorizontally] = useState(false);
 
@@ -123,6 +126,15 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // True when nothing between the touched element and the card is scrolled down,
+  // so a downward drag has no content left to reveal.
+  const isAtTop = (target, card) => {
+    for (let el = target; el && el !== card; el = el.parentElement) {
+      if (el.scrollTop > 0) return false;
+    }
+    return true;
+  };
 
   const handleTouchStart = (e) => {
     const target = e.target;
@@ -137,17 +149,31 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
 
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
+    touchStartedAtTop.current = isAtTop(target, e.currentTarget);
     setIsSwipingHorizontally(false);
   };
 
   const handleTouchMove = (e) => {
     if (touchStartX.current === null || touchStartY.current === null) return;
-    if (!onNavigate) return;
 
     const touchCurrentX = e.touches[0].clientX;
     const touchCurrentY = e.touches[0].clientY;
     const deltaX = touchCurrentX - touchStartX.current;
     const deltaY = touchCurrentY - touchStartY.current;
+
+    // The half-height card doesn't scroll: dragging it up opens it in full.
+    // Dragging the full card down from the top of its content brings it back.
+    const opening = isPeek && deltaY < -24;
+    const closing = canCollapse && touchStartedAtTop.current && deltaY > 60;
+    if ((opening || closing) && Math.abs(deltaY) > Math.abs(deltaX)) {
+      touchStartX.current = null;
+      touchStartY.current = null;
+      setSwipeOffset(0);
+      setIsSwipingHorizontally(false);
+      setIsSidebarExpanded(opening);
+      return;
+    }
+    if (!onNavigate) return;
 
     if (!isSwipingHorizontally && Math.abs(deltaX) > 10) {
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
@@ -189,6 +215,10 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     touchStartY.current = null;
     setSwipeOffset(0);
     setIsSwipingHorizontally(false);
+  };
+
+  const handleWheel = (e) => {
+    if (isPeek && e.deltaY > 0) setIsSidebarExpanded(true);
   };
 
   const displayItem = linearFeature || destination;
@@ -618,9 +648,10 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
     return (
       <div
         className={`sidebar open ${isEditing ? 'editing' : ''} ${mobileSheetClass}`}
-        onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
-        onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
-        onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
+        onTouchStart={isMobile ? handleTouchStart : undefined}
+        onTouchMove={isMobile ? handleTouchMove : undefined}
+        onTouchEnd={isMobile ? handleTouchEnd : undefined}
+        onWheel={isMobile ? handleWheel : undefined}
       >
         {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && hasNavigatedPoi && (
           <ThumbnailCarousel
@@ -650,6 +681,9 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           }}
         >
         <div className="sidebar-header">
+          {isPeek && media.length > 0 && (
+            <Mosaic compact media={media} allMedia={allMedia} poiId={linearFeature?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+          )}
           <h2 title={linearFeature.name}>{isEditing ? 'Edit: ' : ''}{linearFeature.name}</h2>
           <div className="header-buttons">
             {selectedFromMtbList && mtbTrailsList && mtbTrailsList.length > 1 && (
@@ -711,7 +745,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
           </div>
         </div>
 
-        <div style={{ position: 'relative' }}>
+        <div className="sidebar-media" style={{ position: 'relative' }}>
           {(
             <>
               {isEditing && linearFeature?.id ? (
@@ -894,9 +928,10 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
   return (
     <div
       className={`sidebar ${destination ? 'open' : ''} ${isEditing ? 'editing' : ''} ${mobileSheetClass}`}
-      onTouchStart={isMobile && onNavigate ? handleTouchStart : undefined}
-      onTouchMove={isMobile && onNavigate ? handleTouchMove : undefined}
-      onTouchEnd={isMobile && onNavigate ? handleTouchEnd : undefined}
+      onTouchStart={isMobile ? handleTouchStart : undefined}
+      onTouchMove={isMobile ? handleTouchMove : undefined}
+      onTouchEnd={isMobile ? handleTouchEnd : undefined}
+      onWheel={isMobile ? handleWheel : undefined}
     >
       {isMobile && !tourActive && onNavigate && poiNavigationList && poiNavigationList.length > 0 && hasNavigatedPoi && (
         <ThumbnailCarousel
@@ -926,6 +961,9 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         }}
       >
       <div className="sidebar-header">
+        {isPeek && media.length > 0 && (
+          <Mosaic compact media={media} allMedia={allMedia} poiId={destination?.id} user={user} onMediaUpdate={handleMediaUpdate} />
+        )}
         <h2 title={destination?.name || 'Location Details'}>
           {isNewOrganization ? 'Create Organization' : (isEditing ? 'Edit: ' : '')}{!isNewOrganization && (destination?.name || 'Location Details')}
         </h2>
@@ -975,7 +1013,7 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
         </div>
       </div>
 
-      <div style={{ position: 'relative' }}>
+      <div className="sidebar-media" style={{ position: 'relative' }}>
         {(
           <>
             {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') ? (
