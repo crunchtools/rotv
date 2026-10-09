@@ -28,6 +28,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run concurrently.
 
 ### Fixed
+- **Park name matching on the production database encoding (#712)**: `poi_name_key()` used
+  `translate()`, which on a SQL_ASCII database turned one curly apostrophe into two straight ones,
+  so "O’Neil Woods" never matched "O'Neil Woods". It now uses `replace()`.
 - **AI research is three times faster and stops failing on the history pass (#727)**: measured in
   prod, the research calls took 35-38s with model reasoning on and the history reply was unparseable
   twice in a row; with reasoning off they take about 10s. A timeout while reading the model's reply

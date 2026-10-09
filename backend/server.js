@@ -683,12 +683,14 @@ async function initDatabase() {
     `);
     // A place's name as people mean it: case, apostrophe style and a trailing
     // county dropped. SQL twin of normalizePoiName() in poiMergeService.js.
+    // Fix: replace(), not translate(); production is SQL_ASCII, where translate() works
+    // a byte at a time and turns one curly apostrophe into two straight ones (PR #733 review)
     await client.query(`
       CREATE OR REPLACE FUNCTION poi_name_key(n text) RETURNS text
       LANGUAGE sql IMMUTABLE AS $fn$
         SELECT lower(btrim(regexp_replace(
           regexp_replace(
-            translate(n, '‘’', ''''''),
+            replace(replace(n, '‘', ''''), '’', ''''),
             '\\s+(summit|cuyahoga|portage|medina|stark|geauga|lake)\\s+county\\s*$', '', 'i'),
           '\\s+', ' ', 'g')))
       $fn$
