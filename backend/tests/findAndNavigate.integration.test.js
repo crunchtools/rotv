@@ -119,6 +119,35 @@ describe('Find a park on a phone and get to it (#712)', () => {
     expect(await page.locator('.sidebar.open button[title="Open in Google Maps"]').count()).toBe(1);
   }, 60000);
 
+  it('opens the card in full on a drag up and brings it back to half on a drag down', async () => {
+    const drag = (selector, fromY, toY) => page.evaluate(({ selector, fromY, toY }) => {
+      const target = document.querySelector(selector);
+      const fire = (type, y) => {
+        const touch = new Touch({ identifier: 1, target, clientX: 195, clientY: y });
+        target.dispatchEvent(new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          touches: type === 'touchend' ? [] : [touch],
+          changedTouches: [touch]
+        }));
+      };
+      fire('touchstart', fromY);
+      fire('touchmove', (fromY + toY) / 2);
+      fire('touchmove', toY);
+      fire('touchend', toY);
+    }, { selector, fromY, toY });
+
+    // At half height the card does not scroll; the tabs lead and the photo block is hidden
+    const media = await page.evaluate(() => getComputedStyle(document.querySelector('.sidebar.open .sidebar-media')).display);
+    expect(media).toBe('none');
+
+    await drag('.sidebar.open .sidebar-tab-content', 700, 600);
+    await page.waitForSelector('.sidebar.open.expanded', { timeout: 5000 });
+
+    await drag('.sidebar.open .sidebar-header h2', 40, 200);
+    await page.waitForSelector('.sidebar.open.peek', { timeout: 5000 });
+  }, 60000);
+
   it('keeps the search and the selection across tabs, showing the card only on the map', async () => {
     await page.click('[data-nav="find"]');
     await page.waitForSelector('.results-search-input', { timeout: 10000 });

@@ -93,4 +93,4 @@ On a wide screen the tabs sit in the header. At 768px and below (`useIsMobile`, 
 
 ## The place card on a phone
 
-`Sidebar.jsx` adds `peek` or `expanded` on a phone. The card opens at `peek`: about 46% of the map area, above the tab bar, scrolling inside. The chevron in its header expands it to cover the header but never the tab bar. Editing, creating a POI, and links straight to an article or sub-tab open it expanded.
+`Sidebar.jsx` adds `peek` or `expanded` on a phone. The card opens at `peek`: about 46% of the map area, above the tab bar. At `peek` it is a summary and does not scroll: the photos shrink to one thumbnail in the header (`Mosaic` with `compact`, which still opens the gallery) and the tabs sit directly under it. Dragging the card up, or the chevron in its header, expands it to cover the header but never the tab bar; dragging the expanded card down from the top of its content, or from its header, brings it back. Editing, creating a POI, and links straight to an article or sub-tab open it expanded.

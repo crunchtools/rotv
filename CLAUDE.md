@@ -42,7 +42,8 @@ Before making any changes, read these documents in order:
 
 ```bash
 # Development (start here)
-./run.sh reload-app    # Hot reload code (~3s)
+./run.sh dev-ui        # Vite hot reload for frontend work, at :5173
+./run.sh reload-app    # Rebuild frontend + restart backend in the container
 ./run.sh restart-db    # Restart PostgreSQL (~5s)
 
 # Full builds
@@ -64,7 +65,7 @@ Before making any changes, read these documents in order:
 
 ```
 1. git checkout -b feature/description
-2. Make changes + ./run.sh reload-app (iterate)
+2. Make changes + ./run.sh dev-ui or reload-app (iterate)
 3. ./run.sh build (MANDATORY before PR)
 4. ./run.sh test (must pass)
 5. git commit

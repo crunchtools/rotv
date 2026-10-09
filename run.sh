@@ -30,10 +30,10 @@ PRODUCTION_CONTAINER="${PRODUCTION_CONTAINER:-rootsofthevalley.org}"
 # dependencies install into a named volume at /work/node_modules, one level up, where
 # Node's upward module lookup finds them without a node_modules in the checkout.
 # The image's entrypoint is systemd, so it is overridden.
-# Usage: run_node_tool <package dir> <volume name> <shell command run in /work/src> [ro|rw]
+# Usage: run_node_tool <package dir> <volume name> <shell command run in /work/src> [ro|rw] [extra podman args]
 run_node_tool() {
-    local pkg_dir="$1" volume="$2" tool_cmd="$3" mount_mode="${4:-ro}"
-    podman run --rm --security-opt label=disable \
+    local pkg_dir="$1" volume="$2" tool_cmd="$3" mount_mode="${4:-ro}" extra_args="$5"
+    podman run --rm --security-opt label=disable $extra_args \
         -v "$PWD/$pkg_dir":/work/src:"$mount_mode" \
         -v "$volume":/work/node_modules \
         -e TOOL_CMD="$tool_cmd" \
@@ -552,6 +552,23 @@ ENVFILE
         echo "✓ Both images pushed"
         ;;
 
+    dev-ui)
+        # Vite dev server with HMR, proxying API calls to the running dev container.
+        # Host networking lets it reach the container on localhost and lets a phone
+        # on the same network load it. The cache goes in the node_modules volume
+        # because the checkout is mounted read-only.
+        if ! podman ps --format '{{.Names}}' | grep -qx "$CONTAINER_NAME"; then
+            echo "❌ Container is not running"
+            echo "Start the container first with: ./run.sh start"
+            exit 1
+        fi
+        DEV_UI_PORT="${ROTV_DEV_UI_PORT:-5173}"
+        echo "Frontend with hot reload at http://localhost:${DEV_UI_PORT} (API: localhost:${HOST_PORT})"
+        run_node_tool frontend rotv-frontend-node-modules \
+            "ROTV_API_TARGET=http://localhost:${HOST_PORT} VITE_CACHE_DIR=/work/node_modules/.vite exec vite --port ${DEV_UI_PORT} --strictPort" \
+            ro "--init --replace --name ${CONTAINER_NAME}-dev-ui --network=host"
+        ;;
+
     reload-app)
         echo "Hot reloading application code..."
         echo ""
@@ -645,7 +662,8 @@ ENVFILE
         echo "DEVELOPMENT COMMANDS"
         echo "  start          Start container with ephemeral storage + seed data"
         echo "  stop           Stop and remove the running container"
-        echo "  reload-app     Hot reload code changes (~3s, dev only)"
+        echo "  dev-ui         Vite dev server with instant hot reload (frontend only)"
+        echo "  reload-app     Rebuild frontend and restart backend in the container"
         echo "                 WARNING: Always run 'build' before creating a PR"
         echo "  seed           Pull fresh data from production server via SSH"
         echo ""
@@ -677,7 +695,8 @@ ENVFILE
         echo "  4. ./run.sh test        # Run tests before PR"
         echo ""
         echo "DEVELOPMENT WORKFLOW"
-        echo "  ./run.sh reload-app     # Hot reload after code changes (~3s)"
+        echo "  ./run.sh dev-ui         # Instant hot reload for frontend work"
+        echo "  ./run.sh reload-app     # Rebuild frontend + restart backend"
         echo "  ./run.sh restart-db     # Restart PostgreSQL if needed (~5s)"
         echo "  ./run.sh build && ./run.sh test  # MANDATORY before PR"
         echo ""
