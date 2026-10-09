@@ -1632,7 +1632,10 @@ function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPo
 
   const handleLinearFeatureClick = (feature) => {
     if (onSelectLinearFeature) {
-      geometryClickRef.current = feature?.id ?? null;
+      // Fix: re-tapping the selected shape changes no state, so MapUpdater would
+      // never clear the marker and a later list pick would go unframed (PR #733 review)
+      const isReselect = feature?.id != null && feature.id === selectedLinearFeature?.id;
+      geometryClickRef.current = isReselect ? null : (feature?.id ?? null);
       onSelectLinearFeature(feature);
     }
   };
