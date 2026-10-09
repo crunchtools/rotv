@@ -465,6 +465,20 @@ function MapClickHandler({ isAdmin, editMode, onRightClick, onMapClick }) {
   return null;
 }
 
+// On a phone the place card covers the lower part of the map (spec 048);
+// whatever is selected is framed in the part still showing.
+function cardCoverPx(map) {
+  const card = map.getContainer().closest('.main-content')?.querySelector('.sidebar.peek');
+  return card ? card.getBoundingClientRect().height : 0;
+}
+
+// Where to center the map so `latlng` sits in the middle of the uncovered part
+function centerAboveCard(map, latlng, zoom) {
+  const cover = cardCoverPx(map);
+  if (!cover) return latlng;
+  return map.unproject(map.project(latlng, zoom).add([0, cover / 2]), zoom);
+}
+
 function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, geometryClickRef, activeTab }) {
   const map = useMap();
   const prevTab = useRef(activeTab);
@@ -482,11 +496,16 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, ge
       const { selectedDestination: point, selectedLinearFeature: linear } = selectionRef.current;
       map.invalidateSize();
       if (linear?.geometry) {
-        frameBounds(map, getGeometryBounds(linear.geometry), { animate: false });
+        frameBounds(map, getGeometryBounds(linear.geometry), { animate: false, coveredBottom: cardCoverPx(map) });
       } else if (point?.latitude && point?.longitude) {
         const at = [parseFloat(point.latitude), parseFloat(point.longitude)];
-        if (!map.getBounds().contains(at)) {
-          map.setView(at, Math.max(map.getZoom(), 15), { animate: false });
+        // In view means in the part the place card leaves showing
+        const spot = map.latLngToContainerPoint(at);
+        const size = map.getSize();
+        const isShowing = spot.x >= 0 && spot.x <= size.x && spot.y >= 0 && spot.y <= size.y - cardCoverPx(map);
+        if (!isShowing) {
+          const zoom = Math.max(map.getZoom(), 15);
+          map.setView(centerAboveCard(map, at, zoom), zoom, { animate: false });
         }
       }
     });
@@ -508,7 +527,8 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, ge
       const currentZoom = map.getZoom();
       const targetZoom = isInitialLoad ? 16 : Math.max(currentZoom, 15);
 
-      map.flyTo([selectedDestination.latitude, selectedDestination.longitude], targetZoom, {
+      const at = [parseFloat(selectedDestination.latitude), parseFloat(selectedDestination.longitude)];
+      map.flyTo(centerAboveCard(map, at, targetZoom), targetZoom, {
         animate: true,
         duration: isInitialLoad ? 0.8 : 0.5 // Slightly longer animation on initial load
       });
@@ -538,7 +558,7 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, ge
         return;
       }
       map.invalidateSize();
-      frameBounds(map, getGeometryBounds(selectedLinearFeature.geometry));
+      frameBounds(map, getGeometryBounds(selectedLinearFeature.geometry), { coveredBottom: cardCoverPx(map) });
     }
   }, [selectedLinearFeature, map, skipFlyRef, geometryClickRef]);
 
@@ -738,7 +758,7 @@ function ZoomTooltipHider() {
   return null;
 }
 
-function MapBoundsTracker({ destinations, parkPins, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery, iconConfig }) {
+function MapBoundsTracker({ destinations, parkPins, visibleTypes, getDestinationIconType, onVisiblePoisChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, searchQuery, iconConfig }) {
   const map = useMap();
   const search = (searchQuery || '').toLowerCase();
 
@@ -822,21 +842,7 @@ function MapBoundsTracker({ destinations, parkPins, visibleTypes, getDestination
     if (onVisiblePoisChange && !map._isProgrammaticMove) {
       onVisiblePoisChange(visibleIds);
     }
-
-    if (onMapStateChange) {
-      const center = map.getCenter();
-      const zoom = map.getZoom();
-      const container = map.getContainer();
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-      onMapStateChange({
-        center: [center.lat, center.lng],
-        zoom: zoom,
-        bounds: [[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]],
-        aspectRatio: width / height
-      });
-    }
-  }, [map, destinations, parkPins, visibleTypes, getDestinationIconType, onVisiblePoisChange, onMapStateChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search, iconConfig]);
+  }, [map, destinations, parkPins, visibleTypes, getDestinationIconType, onVisiblePoisChange, linearFeatures, showTrails, showRivers, showWaterTaxis, visibleBoundaries, search, iconConfig]);
 
   useMapEvents({
     moveend: updateVisiblePois,
@@ -2162,7 +2168,6 @@ function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPo
           visibleTypes={visibleTypes}
           getDestinationIconType={getDestinationIconType}
           onVisiblePoisChange={handleVisiblePoisChange}
-          onMapStateChange={onMapStateChange}
           linearFeatures={linearFeatures}
           showTrails={showTrails}
           showRivers={showRivers}

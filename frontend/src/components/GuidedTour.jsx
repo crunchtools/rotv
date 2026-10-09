@@ -71,7 +71,7 @@ export const TRIP_TOUR_STEPS = [
   }
 ];
 
-const TOUR_STEPS = [
+export const TOUR_STEPS = [
   {
     selector: '.leaflet-container',
     title: 'Interactive Map',
@@ -89,48 +89,30 @@ const TOUR_STEPS = [
     delay: 300
   },
   {
-    selector: '.header-tabs .tab-btn:nth-child(2)',
-    title: 'Browse Results',
-    description: 'Results update as you zoom \u2014 see all points of interest in the current map view.',
+    selector: '[data-nav="find"]',
+    title: 'Find a Place',
+    description: 'Search every park, trail and place in the valley. Pick one and the map takes you there.',
     position: 'bottom',
     padding: 2,
-    action: 'showResults',
+    action: 'showFind',
     delay: 300
   },
   {
-    selector: '.results-subtab[data-subtab="mtb"]',
-    title: 'MTB Trail Status',
-    description: 'Switch to the MTB Trail Status view to see current mountain bike trail conditions.',
+    selector: '.find-list-btn',
+    title: 'Lists',
+    description: 'Switch lists here, for example to MTB Trail Status for current mountain bike trail conditions.',
     position: 'bottom',
     padding: 2,
-    action: 'showResults',
+    action: 'showFind',
     delay: 300
   },
   {
-    selector: '.tab-btn:nth-child(3)',
-    title: 'News',
-    description: 'News updates with the map too \u2014 curated from local sources about the valley.',
+    selector: '[data-nav="happening"]',
+    title: 'What\'s Happening',
+    description: 'News and upcoming events from across the valley: concerts, hikes, programs and local stories.',
     position: 'bottom',
     padding: 2,
-    action: 'showNews',
-    delay: 300
-  },
-  {
-    selector: '.tab-btn:nth-child(4)',
-    title: 'Upcoming Events',
-    description: 'Events also follow the map \u2014 concerts, hikes, programs in your current view.',
-    position: 'bottom',
-    padding: 2,
-    action: 'showEvents',
-    delay: 300
-  },
-  {
-    selector: '.header-tabs .tab-btn:nth-child(5)',
-    title: 'About',
-    description: 'Learn the project story, revisit this tutorial, send feedback, or read the privacy policy.',
-    position: 'bottom',
-    padding: 2,
-    action: 'showAbout',
+    action: 'showHappening',
     delay: 300
   },
   {
@@ -171,8 +153,8 @@ const TOUR_STEPS = [
   },
   {
     selector: '.tab-account-container',
-    title: 'Sign In',
-    description: 'Log in to access settings, edit mode, and personalization.',
+    title: 'Your Menu',
+    description: 'Sign in, open My Valley and Settings, or read About: the project story, this tutorial, feedback and privacy.',
     position: 'bottom-left',
     action: 'showMapView'
   },

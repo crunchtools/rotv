@@ -1,7 +1,24 @@
 import React, { memo } from 'react';
 import { getIconUrlForPOI } from '../utils/iconUtils';
 
-const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, showStatusBadge, status, showStatusInfo, statusData, iconConfig }) {
+/**
+ * One row in the Find tab's list.
+ *
+ * @param {object} props
+ * @param {object} props.poi The place
+ * @param {string} props.poiKey `point-<id>`, `linear-<id>` or `virtual-<id>`; the list reads it back on click
+ * @param {boolean} props.isLinear A trail, river or boundary
+ * @param {boolean} props.isVirtual An organization with no location
+ * @param {boolean} props.isSelected
+ * @param {string|null} [props.parkName] The park the place sits in, shown as "in <park>"
+ * @param {boolean} [props.showStatusBadge] Show `status` as a badge beside the type icon
+ * @param {{status: string}} [props.status]
+ * @param {boolean} [props.showStatusInfo] Show the MTB trail status block instead of the description
+ * @param {{status?: string, conditions?: string, last_updated?: string}} [props.statusData]
+ * @param {object[]} [props.iconConfig] Icon types, for the row's type icon
+ * @returns {JSX.Element}
+ */
+const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, parkName, showStatusBadge, status, showStatusInfo, statusData, iconConfig }) {
   const imageUrl = poi.has_primary_image
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
@@ -49,6 +66,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
 
       <div className="results-tile-content">
         <div className="results-tile-name">{poi.name}</div>
+        {parkName && <div className="results-tile-park">in {parkName}</div>}
 
         <div className="results-tile-badges">
           <img

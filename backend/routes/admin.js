@@ -4502,9 +4502,9 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  // Must stay in sync with hardcoded tabs in frontend ResultsTab.jsx
+  // Must stay in sync with DEFAULT_LISTS in frontend FindTab.jsx
   const DEFAULT_SUBTABS = [
-    { id: 'all', label: 'Points of Interest', shortLabel: 'POIs', route: '/', filterTypes: null, protected: true },
+    { id: 'all', label: 'All places', shortLabel: 'All', route: '/find', filterTypes: null, protected: true },
     { id: 'mtb', label: 'MTB Trail Status', shortLabel: 'MTB Status', route: '/mtb-trail-status', filterTypes: ['mtb-trailhead'], protected: false },
     { id: 'organizations', label: 'Organizations', shortLabel: 'Orgs', route: '/organizations', filterTypes: ['organization'], protected: false }
   ];
@@ -4629,7 +4629,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
 
     if (subtabs[0].id !== 'all') {
-      return res.status(400).json({ error: 'First sub-tab must be "all" (Points of Interest)' });
+      return res.status(400).json({ error: 'First sub-tab must be "all" (All places)' });
     }
 
     try {

@@ -3282,8 +3282,9 @@ body {
     width: 100%;
   }
 
-  /* Raise parent stacking context so expanded sidebar can cover the nav bar */
-  .main-content:has(.sidebar.expanded) {
+  /* Raise parent stacking context so expanded sidebar can cover the nav bar.
+     Only on the Map tab: behind another tab the map must stay behind. */
+  .main-content:not(.main-content-behind):has(.sidebar.expanded) {
     z-index: 10001 !important;
   }
 
@@ -11024,12 +11025,6 @@ body {
   max-width: 100%;
 }
 
-.map-thumbnail-sidebar {
-  flex-shrink: 0;
-  position: sticky;
-  top: 1rem;
-}
-
 /* Event Legend */
 .event-legend {
   margin-top: 1rem;
@@ -11255,66 +11250,6 @@ body {
 .results-tile.poi-type-trail { border-left-color: #795548; }
 .results-tile.poi-type-river { border-left-color: #1565c0; }
 .results-tile.poi-type-boundary { border-left-color: #7b2d8e; }
-
-/* ===== Map Thumbnail for News/Events Tabs ===== */
-.map-thumbnail-container {
-  position: relative;
-  border-radius: 8px;
-  overflow: hidden;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-  cursor: pointer;
-  transition: box-shadow 0.2s ease;
-  background: white;
-  /* Width and height set dynamically via inline styles */
-}
-
-.map-thumbnail-container:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-
-.map-thumbnail-container .leaflet-container {
-  height: 100%;
-  width: 100%;
-  z-index: 1;
-}
-
-/* Disable all map interactions */
-.map-thumbnail-container .leaflet-container {
-  pointer-events: none;
-}
-
-.map-thumbnail-container:hover .leaflet-container {
-  pointer-events: none;
-}
-
-/* POI count chip for thumbnail - matches main map style */
-.map-thumbnail-poi-count {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  background: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-  z-index: 1000;
-  font-size: 0.7rem;
-  font-weight: 500;
-  color: #2d5016;
-}
-
-/* Responsive adjustments - stack on mobile */
-@media (max-width: 768px) {
-  .news-events-layout {
-    flex-direction: column-reverse;
-  }
-
-  .map-thumbnail-sidebar {
-    width: 100%;
-    position: static;
-    display: flex;
-    justify-content: center;
-  }
-}
 
 /* ==================== Results Tab Styles ==================== */
 
@@ -14620,13 +14555,13 @@ button.feedback-link-inline {
   font-size: 0.82rem;
 }
 
-/* ── POI subscriptions: icon tabs + login dot ── */
+/* ── Primary tabs + login dot ── */
 .tab-icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
-/* Desktop shows the word; mobile swaps to the symbol (max-width:768px block). */
+/* Desktop shows the word; the phone bottom bar shows icon and word (spec 048). */
 .nav-tab-icon {
   display: none;
 }
@@ -14646,13 +14581,6 @@ button.feedback-link-inline {
 }
 
 @media (max-width: 768px) {
-  /* Symbols instead of words on mobile */
-  .nav-tab-icon {
-    display: block;
-  }
-  .nav-tab-label {
-    display: none;
-  }
   /* Less dead space at the menu bar edges */
   .header {
     padding-left: 0.5rem;
@@ -14872,5 +14800,316 @@ button.feedback-link-inline {
   .sidebar-expand-btn {
     min-width: 44px;
     min-height: 44px;
+  }
+}
+
+/* ==================== Find / Happening / bottom bar (spec 048) ==================== */
+
+.main-content-behind .sidebar {
+  display: none;
+}
+
+.results-tile-park {
+  font-size: 0.8rem;
+  color: #525252;
+  margin-top: 0.1rem;
+}
+
+button.type-filter-chip {
+  font-family: inherit;
+  color: inherit;
+}
+
+.find-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.find-list-picker,
+.filter-sheet-container {
+  position: relative;
+}
+
+.find-list-btn,
+.filter-sheet-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 40px;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #c8c8c8;
+  border-radius: 6px;
+  background: white;
+  color: #333;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.find-list-btn:hover,
+.filter-sheet-btn:hover {
+  border-color: #4a7c23;
+}
+
+.filter-sheet-btn.has-active {
+  border-color: #2d5016;
+  color: #2d5016;
+  font-weight: 600;
+}
+
+.find-list-menu {
+  left: 0;
+  right: auto;
+  margin-top: 0.25rem;
+  padding: 0.25rem 0;
+}
+
+.find-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.find-list-item.active {
+  font-weight: 600;
+  color: #2d5016;
+}
+
+.find-controls .results-new-btn {
+  margin-bottom: 0;
+}
+
+.filter-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+.filter-sheet {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
+  width: min(420px, calc(100vw - 2rem));
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 1000;
+}
+
+.filter-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.filter-sheet-title {
+  font-weight: 600;
+}
+
+.filter-sheet-done {
+  min-height: 36px;
+  padding: 0.25rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: #2d5016;
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.filter-sheet-body {
+  padding: 0.75rem;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.happening-tab {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.main-content-full .happening-tab .park-news-tab,
+.main-content-full .happening-tab .park-events-tab {
+  max-width: none;
+}
+
+.happening-toggle {
+  display: inline-flex;
+  gap: 0.25rem;
+  padding: 0.25rem;
+  margin-bottom: 0.75rem;
+  border-radius: 8px;
+  background: #e3e6e0;
+}
+
+.happening-toggle-btn {
+  min-height: 40px;
+  padding: 0.4rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #333;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.happening-toggle-btn.active {
+  background: white;
+  color: #2d5016;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-height: 56px;
+    --bottom-nav-height: calc(58px + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* One row: title on the left, notifications and account on the right */
+  .header {
+    height: var(--header-height);
+    min-height: var(--header-height);
+    padding: 0 0.75rem;
+    justify-content: center;
+  }
+
+  .header-content-wrapper {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    min-width: 0;
+  }
+
+  .header-left .subtitle {
+    display: none;
+  }
+
+  .header-tabs {
+    width: auto;
+    overflow: visible;
+    background: transparent;
+    padding: 0;
+    gap: 0.5rem;
+  }
+
+  .tab-dropdown {
+    top: calc(var(--header-height) + 0.25rem);
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: var(--bottom-nav-height);
+    padding: 0 0.5rem env(safe-area-inset-bottom, 0px);
+    background: #2d5016;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+    z-index: 20001;
+  }
+
+  .bottom-nav .tab-btn {
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    height: auto;
+    padding: 0.35rem 0.25rem;
+    border-radius: 8px;
+    margin: 4px 2px;
+    font-size: 0.75rem;
+  }
+
+  .bottom-nav .nav-tab-icon {
+    display: block;
+  }
+
+  /* Everything that reaches the bottom of the screen stops at the bar */
+  .main-content,
+  .main-content-full,
+  .settings-content {
+    bottom: var(--bottom-nav-height);
+  }
+
+  .legend {
+    bottom: calc(var(--bottom-nav-height) + 1rem) !important;
+  }
+
+  .app .trip-builder {
+    bottom: calc(var(--bottom-nav-height) + 8px);
+  }
+
+  /* The place card: half the screen to start, the map still showing above it */
+  .sidebar.peek {
+    top: auto;
+    bottom: 0;
+    height: 46%;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  .sidebar.peek .sidebar-content-wrapper {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Full details cover the header but never the tab bar */
+  .sidebar.expanded {
+    bottom: var(--bottom-nav-height);
+    height: auto;
+  }
+
+  /* Four event ranges fit across a phone */
+  .results-subtab {
+    padding: 0.6rem 0.7rem;
+  }
+
+  /* Filters rise from the bottom on a phone */
+  .filter-sheet-backdrop {
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 20002;
+  }
+
+  .filter-sheet {
+    position: fixed;
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    margin: 0;
+    border-radius: 14px 14px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    z-index: 20003;
+  }
+
+  .filter-sheet-body {
+    max-height: 55vh;
+  }
+
+  .type-filter-chip {
+    min-height: 36px;
+    padding: 0.35rem 0.7rem;
+    font-size: 0.85rem;
   }
 }

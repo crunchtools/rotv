@@ -17,6 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already answers to returns 409. Case, apostrophe style and a trailing county are ignored.
 
 ### Changed
+- **Three tabs: Map, Find, Happening (#712)**: the five icon tabs are now three with words on them,
+  in a bar along the bottom of a phone. News and Events share Happening; About moved to the account
+  menu. Old `/results`, `/news` and `/events` links redirect.
+- **Find lists every place (#712)**: the list no longer shrinks to whatever the map shows. A search
+  puts the park ahead of the trails and restrooms that share its name, each row says which park it
+  is in, and the search box is the same one as the map's. MTB Trail Status and Organizations are
+  entries in a list picker.
+- **Filters are one button (#712)**: type chips in Find, News and Events sit behind `Filters`
+  instead of filling the top of the page. The mini maps on those tabs are gone.
+- **The place card opens at half height on a phone (#712)**: the map stays visible above it and the
+  tabs below it; a chevron expands it. Whatever is selected stays selected while you visit another
+  tab, and is framed in the visible part of the map when you come back.
 - **The map follows what you pick (#712)**: choosing a place from the list no longer leaves the map
   where it was. A selected trail, river or park is brought fully into view, and returning to the Map
   tab re-frames the selection. With nothing selected the map keeps its position.

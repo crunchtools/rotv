@@ -57,8 +57,8 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
     expect(critical).toHaveLength(0);
   }, 60000);
 
-  it('Results view has no critical or serious accessibility violations', async () => {
-    await page.goto(`${BASE_URL}/results`, { waitUntil: 'networkidle' });
+  it('Find view has no critical or serious accessibility violations', async () => {
+    await page.goto(`${BASE_URL}/find`, { waitUntil: 'networkidle' });
     await page.waitForSelector('.results-tab-list', { timeout: 15000 });
 
     const results = await new AxeBuilder({ page })
@@ -68,7 +68,7 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
 
     const critical = results.violations.filter(v => v.impact === 'critical' || v.impact === 'serious');
     if (critical.length > 0) {
-      console.log('Critical/serious violations on Results view:');
+      console.log('Critical/serious violations on Find view:');
       critical.forEach(v => {
         console.log(`  [${v.impact}] ${v.id}: ${v.description}`);
         v.nodes.slice(0, 3).forEach(n => console.log(`    ${n.html.substring(0, 120)}`));
@@ -78,7 +78,7 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
   }, 60000);
 
   it('News view has no critical or serious accessibility violations', async () => {
-    await page.goto(`${BASE_URL}/news`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE_URL}/happening`, { waitUntil: 'networkidle' });
     await page.waitForSelector('main#main-content', { timeout: 15000 });
 
     const results = await new AxeBuilder({ page })
@@ -98,7 +98,7 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
   }, 60000);
 
   it('Events view has no critical or serious accessibility violations', async () => {
-    await page.goto(`${BASE_URL}/events`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE_URL}/happening/events`, { waitUntil: 'networkidle' });
     await page.waitForSelector('main#main-content', { timeout: 15000 });
 
     const results = await new AxeBuilder({ page })
@@ -115,6 +115,14 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
       });
     }
     expect(critical).toHaveLength(0);
+  }, 60000);
+
+  it('old tab links land on the renamed tabs', async () => {
+    for (const [oldPath, newPath] of [['/results', '/find'], ['/news', '/happening'], ['/events', '/happening/events']]) {
+      await page.goto(`${BASE_URL}${oldPath}`, { waitUntil: 'load' });
+      await page.waitForFunction(expected => window.location.pathname === expected, newPath, { timeout: 15000 });
+      await page.waitForSelector(`.tab-btn.active[data-nav="${newPath.split('/')[1]}"]`, { timeout: 15000 });
+    }
   }, 60000);
 
   it('skip navigation link exists and is focusable', async () => {
