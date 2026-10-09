@@ -1,0 +1,135 @@
+{
+  "source": "OpenStreetMap via Overpass",
+  "license": "ODbL 1.0",
+  "retrieved": "2026-05-21",
+  "parks": [
+    {
+      "name": "Liberty Park",
+      "file": "liberty_park.geojson",
+      "osm_id": "ways/466199380,466200710,553210214,553214856",
+      "geometry_type": "MultiPolygon",
+      "points": 97,
+      "color": "#8FBC8F"
+    },
+    {
+      "name": "Cascade Valley Metro Park",
+      "file": "cascade_valley_metro_park.geojson",
+      "osm_id": "relation/14962727",
+      "geometry_type": "MultiPolygon",
+      "points": 216,
+      "color": "#2E8B57"
+    },
+    {
+      "name": "Confluence Metro Park",
+      "file": "confluence_metro_park.geojson",
+      "osm_id": "way/1183430028",
+      "geometry_type": "Polygon",
+      "points": 51,
+      "color": "#3CB371"
+    },
+    {
+      "name": "Deep Lock Quarry Metro Park",
+      "file": "deep_lock_quarry_metro_park.geojson",
+      "osm_id": "way/1118934213",
+      "geometry_type": "Polygon",
+      "points": 99,
+      "color": "#6B8E23"
+    },
+    {
+      "name": "Firestone Metro Park",
+      "file": "firestone_metro_park.geojson",
+      "osm_id": "way/279928717",
+      "geometry_type": "Polygon",
+      "points": 63,
+      "color": "#556B2F"
+    },
+    {
+      "name": "Furnace Run Metro Park",
+      "file": "furnace_run_metro_park.geojson",
+      "osm_id": "relation/1290126",
+      "geometry_type": "Polygon",
+      "points": 278,
+      "color": "#808000"
+    },
+    {
+      "name": "Goodyear Heights Metro Park",
+      "file": "goodyear_heights_metro_park.geojson",
+      "osm_id": "way/422736187",
+      "geometry_type": "Polygon",
+      "points": 62,
+      "color": "#228B22"
+    },
+    {
+      "name": "Gorge Metro Park",
+      "file": "gorge_metro_park.geojson",
+      "osm_id": "way/324814067",
+      "geometry_type": "Polygon",
+      "points": 281,
+      "color": "#008B8B"
+    },
+    {
+      "name": "Hampton Hills Metro Park",
+      "file": "hampton_hills_metro_park.geojson",
+      "osm_id": "way/515714240",
+      "geometry_type": "Polygon",
+      "points": 40,
+      "color": "#66CDAA"
+    },
+    {
+      "name": "Munroe Falls Metro Park",
+      "file": "munroe_falls_metro_park.geojson",
+      "osm_id": "way/324817710",
+      "geometry_type": "Polygon",
+      "points": 79,
+      "color": "#5F9EA0"
+    },
+    {
+      "name": "Nimisila Reservoir Metro Park",
+      "file": "nimisila_reservoir_metro_park.geojson",
+      "osm_id": "way/1119378323",
+      "geometry_type": "Polygon",
+      "points": 107,
+      "color": "#2F8F6F"
+    },
+    {
+      "name": "O'Neil Woods Metro Park",
+      "file": "o_neil_woods_metro_park.geojson",
+      "osm_id": "way/323043456",
+      "geometry_type": "Polygon",
+      "points": 65,
+      "color": "#9ACD32"
+    },
+    {
+      "name": "Sand Run Metro Park",
+      "file": "sand_run_metro_park.geojson",
+      "osm_id": "way/323083638",
+      "geometry_type": "Polygon",
+      "points": 445,
+      "color": "#388E5C"
+    },
+    {
+      "name": "Silver Creek Metro Park",
+      "file": "silver_creek_metro_park.geojson",
+      "osm_id": "way/279929012",
+      "geometry_type": "Polygon",
+      "points": 69,
+      "color": "#4F7942"
+    },
+    {
+      "name": "Springfield Bog Metro Park",
+      "file": "springfield_bog_metro_park.geojson",
+      "osm_id": "way/279927827",
+      "geometry_type": "Polygon",
+      "points": 31,
+      "color": "#7BA05B"
+    },
+    {
+      "name": "F.A. Seiberling Nature Realm",
+      "file": "f_a_seiberling_nature_realm.geojson",
+      "osm_id": "way/321864947",
+      "geometry_type": "Polygon",
+      "points": 16,
+      "color": "#48A860"
+    }
+  ]
+}

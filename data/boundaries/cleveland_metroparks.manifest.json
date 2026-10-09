@@ -1,0 +1,151 @@
+{
+  "source": "OpenStreetMap via Overpass",
+  "license": "ODbL 1.0",
+  "retrieved": "2026-05-21",
+  "parks": [
+    {
+      "name": "Ohio & Erie Canal Reservation",
+      "file": "ohio_erie_canal_reservation.geojson",
+      "osm_id": "relations/3956408,11259162",
+      "geometry_type": "MultiPolygon",
+      "points": 1347,
+      "color": "#9ACD32"
+    },
+    {
+      "name": "Acacia Reservation",
+      "file": "acacia_reservation.geojson",
+      "osm_id": "way/297396089",
+      "geometry_type": "Polygon",
+      "points": 135,
+      "color": "#1F6F4A"
+    },
+    {
+      "name": "Bedford Reservation",
+      "file": "bedford_reservation.geojson",
+      "osm_id": "relation/3956286",
+      "geometry_type": "MultiPolygon",
+      "points": 777,
+      "color": "#2E8B57"
+    },
+    {
+      "name": "Big Creek Reservation",
+      "file": "big_creek_reservation.geojson",
+      "osm_id": "relation/3956339",
+      "geometry_type": "MultiPolygon",
+      "points": 994,
+      "color": "#3CB371"
+    },
+    {
+      "name": "Bradley Woods Reservation",
+      "file": "bradley_woods_reservation.geojson",
+      "osm_id": "relation/11230155",
+      "geometry_type": "MultiPolygon",
+      "points": 231,
+      "color": "#228B22"
+    },
+    {
+      "name": "Brecksville Reservation",
+      "file": "brecksville_reservation.geojson",
+      "osm_id": "relation/7081545",
+      "geometry_type": "MultiPolygon",
+      "points": 1757,
+      "color": "#006400"
+    },
+    {
+      "name": "Brookside Reservation",
+      "file": "brookside_reservation.geojson",
+      "osm_id": "relation/3956352",
+      "geometry_type": "MultiPolygon",
+      "points": 318,
+      "color": "#556B2F"
+    },
+    {
+      "name": "Cleveland Lakefront Reservation",
+      "file": "cleveland_lakefront_reservation.geojson",
+      "osm_id": "relation/3958536",
+      "geometry_type": "MultiPolygon",
+      "points": 655,
+      "color": "#1E90FF"
+    },
+    {
+      "name": "Euclid Creek Reservation",
+      "file": "euclid_creek_reservation.geojson",
+      "osm_id": "relation/3958520",
+      "geometry_type": "MultiPolygon",
+      "points": 322,
+      "color": "#20B2AA"
+    },
+    {
+      "name": "Garfield Park Reservation",
+      "file": "garfield_park_reservation.geojson",
+      "osm_id": "relation/3956380",
+      "geometry_type": "MultiPolygon",
+      "points": 171,
+      "color": "#6B8E23"
+    },
+    {
+      "name": "Hinckley Reservation",
+      "file": "hinckley_reservation.geojson",
+      "osm_id": "relation/3956228",
+      "geometry_type": "MultiPolygon",
+      "points": 293,
+      "color": "#008B8B"
+    },
+    {
+      "name": "Huntington Reservation",
+      "file": "huntington_reservation.geojson",
+      "osm_id": "way/999310008",
+      "geometry_type": "Polygon",
+      "points": 29,
+      "color": "#4682B4"
+    },
+    {
+      "name": "Mill Stream Run Reservation",
+      "file": "mill_stream_run_reservation.geojson",
+      "osm_id": "relation/3951437",
+      "geometry_type": "MultiPolygon",
+      "points": 1232,
+      "color": "#2F8F6F"
+    },
+    {
+      "name": "North Chagrin Reservation",
+      "file": "north_chagrin_reservation.geojson",
+      "osm_id": "relation/3954790",
+      "geometry_type": "MultiPolygon",
+      "points": 344,
+      "color": "#388E5C"
+    },
+    {
+      "name": "Rocky River Reservation",
+      "file": "rocky_river_reservation.geojson",
+      "osm_id": "relation/2292887",
+      "geometry_type": "MultiPolygon",
+      "points": 1191,
+      "color": "#5F9EA0"
+    },
+    {
+      "name": "South Chagrin Reservation",
+      "file": "south_chagrin_reservation.geojson",
+      "osm_id": "relation/3956204",
+      "geometry_type": "MultiPolygon",
+      "points": 1013,
+      "color": "#48A860"
+    },
+    {
+      "name": "Washington Reservation",
+      "file": "washington_reservation.geojson",
+      "osm_id": "relation/3956422",
+      "geometry_type": "MultiPolygon",
+      "points": 281,
+      "color": "#7BA05B"
+    },
+    {
+      "name": "West Creek Reservation",
+      "file": "west_creek_reservation.geojson",
+      "osm_id": "relation/11228395",
+      "geometry_type": "MultiPolygon",
+      "points": 237,
+      "color": "#66CDAA"
+    }
+  ]
+}
