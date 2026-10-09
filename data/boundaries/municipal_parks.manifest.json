@@ -1,0 +1,61 @@
+{
+  "source": "OpenStreetMap via Overpass",
+  "license": "ODbL 1.0",
+  "retrieved": "2026-05-22",
+  "parks": [
+    {
+      "name": "Cascade Park",
+      "file": "cascade_park.geojson",
+      "osm_id": "ways/464364020,1091919433",
+      "geometry_type": "MultiPolygon",
+      "points": 23,
+      "color": "#B0894F",
+      "operator": "City of Akron"
+    },
+    {
+      "name": "Schneider Park",
+      "file": "schneider_park.geojson",
+      "osm_id": "way/633129749",
+      "geometry_type": "Polygon",
+      "points": 37,
+      "color": "#A0786B",
+      "operator": "City of Akron"
+    },
+    {
+      "name": "Summit Lake Park",
+      "file": "summit_lake_park.geojson",
+      "osm_id": "way/472101121",
+      "geometry_type": "Polygon",
+      "points": 31,
+      "color": "#5FA0C0",
+      "operator": "City of Akron"
+    },
+    {
+      "name": "Canal Basin Park",
+      "file": "canal_basin_park.geojson",
+      "osm_id": "way/1266663439",
+      "geometry_type": "Polygon",
+      "points": 27,
+      "color": "#C08040",
+      "operator": "City of Cleveland"
+    },
+    {
+      "name": "Rivergate Park",
+      "file": "rivergate_park.geojson",
+      "osm_id": "way/1011021052",
+      "geometry_type": "Polygon",
+      "points": 33,
+      "color": "#6FAF8F",
+      "operator": "Cleveland Metroparks"
+    },
+    {
+      "name": "Valley View Woods",
+      "file": "valley_view_woods.geojson",
+      "osm_id": "relation/18057126",
+      "geometry_type": "MultiPolygon",
+      "points": 88,
+      "color": "#8FAF5F",
+      "operator": "Village of Valley View"
+    }
+  ]
+}
