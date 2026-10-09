@@ -111,7 +111,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 - `backend/server.js` — Express app setup, route mounting, MCP server startup
 - `backend/routes/` — API route handlers (admin, auth, pois, news, events, media, etc.)
 - `backend/services/` — business logic (collection, moderation, newsletter, geocoding, MCP)
-- `backend/services/mcpServer.js` — MCP admin server, mounted on the main app at `/mcp` (35 tools)
+- `backend/services/mcpServer.js` — MCP admin server, mounted on the main app at `/mcp` (37 tools)
 - `backend/services/moderationService.js` — AI moderation with LLM scoring
 - `backend/services/newsService.js` — News/events web crawling pipeline
 
@@ -169,6 +169,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 | `docs/TRAIL_STATUS_ARCHITECTURE.md` | Trail condition monitoring |
 | `docs/RIVER_LEVELS_ARCHITECTURE.md` | USGS river gauge levels for kayakers |
 | `docs/ANALYTICS_ARCHITECTURE.md` | Self-hosted Umami analytics at /stats, tracked events |
+| `docs/NAVIGATION_ARCHITECTURE.md` | One POI per place, park model, merging duplicates, map selection |
 | `docs/CI_CD_TESTING.md` | GitHub Actions, test suite, code quality tools |
 
 ---

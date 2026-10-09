@@ -123,6 +123,30 @@ export const addVisited = visitedStore.add;
 export const removeVisited = visitedStore.remove;
 
 /**
+ * Follow POI merges: when a saved or visited place was folded into another
+ * (duplicate park cleanup, spec 048), rewrite the stored id to the survivor so
+ * it does not silently drop off the list. Resolves true when anything changed.
+ */
+export async function remapMergedPoiIds() {
+  const stores = [favoritesStore, visitedStore];
+  const held = [...new Set(stores.flatMap(store => store.read()))];
+  if (held.length === 0) return false;
+  try {
+    const res = await fetch(`/api/pois/merged?ids=${held.join(',')}`);
+    if (!res.ok) return false;
+    const mergedInto = await res.json();
+    if (Object.keys(mergedInto).length === 0) return false;
+    for (const store of stores) {
+      store.write([...new Set(store.read().map(id => mergedInto[id] ?? id))]);
+    }
+    return true;
+  } catch (err) {
+    console.warn('[anonSettings] could not check for merged places:', err);
+    return false;
+  }
+}
+
+/**
  * Flush accumulated anonymous state to the backend on first successful
  * sign-in. Server-wins semantics: the backend only fills a NULL timezone and
  * only inserts newsletter subscriptions / trips that don't already exist for

@@ -190,3 +190,9 @@ check = "CH001-absolute_paths"
 path = "backend/services/humanBrowser.js"
 justification = "The X11 socket directory is fixed by the X11 protocol, not a deployment choice"
 classification = "by_design"
+
+[[exceptions]]
+check = "DB002-unsafe_sql_construction"
+path = "backend/services/poiMergeService.js"
+justification = "mergePois repoints a fixed list of tables and copies a fixed list of columns; the interpolated identifiers come only from the module constants FILL_COLUMNS, LOSER_WINS_COLUMNS, PLAIN_REPOINTS and COLLIDING_REPOINTS, never from input. Identifiers cannot be bound as parameters, and every value (the two POI ids) is a $n parameter"
+classification = "by_design"

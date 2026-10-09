@@ -7,7 +7,8 @@ import {
   readVisited,
   addVisited as addAnonVisited,
   removeVisited as removeAnonVisited,
-  clearAnonSettings
+  clearAnonSettings,
+  remapMergedPoiIds
 } from '../utils/anonSettings';
 import { track } from '../utils/analytics';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
@@ -88,6 +89,11 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     fetchUser();
+  }, [fetchUser]);
+
+  // Ids held on this device may name a place since merged into another.
+  useEffect(() => {
+    remapMergedPoiIds().then(changed => { if (changed) fetchUser(); });
   }, [fetchUser]);
 
   useEffect(() => {
