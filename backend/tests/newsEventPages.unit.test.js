@@ -101,4 +101,30 @@ describe('filterDetailLinks', () => {
     expect(followed).toHaveLength(20);
     expect(followed.every(url => /FMID=\d+$/.test(url))).toBe(true);
   });
+
+  // An events page that sends each event to a registration site: the zoo's 5Ks link
+  // only to runsignup.com.
+  it('follows an off-site link to a trusted host, and no other off-site link', () => {
+    const listing = 'https://www.example.org/zoo/program-events/zoo-events';
+    const followed = filterDetailLinks([
+      'https://runsignup.com/Race/OH/Cleveland/Halloween5K',
+      'https://www.runsignup.com/Race/OH/Cleveland/UglySweater5k',
+      'https://www.facebook.com/ExampleZoo',
+      'https://notrunsignup.com/Race/OH/Cleveland/Other'
+    ], listing, '/zoo/program-events', ['/events', 'iteminfo.html', 'runsignup.com']);
+
+    expect(followed).toEqual([
+      'https://runsignup.com/Race/OH/Cleveland/Halloween5K',
+      'https://www.runsignup.com/Race/OH/Cleveland/UglySweater5k'
+    ]);
+  });
+
+  it('does not keep crawling a trusted host from one of its own pages', () => {
+    const racePage = 'https://runsignup.com/Race/OH/Cleveland/Halloween5K';
+    const followed = filterDetailLinks(
+      ['https://runsignup.com/Race/OH/Akron/SomeOtherRace'],
+      racePage, '/zoo/program-events', ['runsignup.com']);
+
+    expect(followed).toEqual([]);
+  });
 });
