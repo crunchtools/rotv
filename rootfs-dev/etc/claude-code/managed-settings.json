@@ -1,0 +1,10 @@
+{
+  "deniedMcpServers": [
+    { "serverName": "claude.ai Gmail" },
+    { "serverName": "claude.ai Google Drive" },
+    { "serverName": "claude.ai Google Calendar" },
+    { "serverUrl": "https://gmailmcp.googleapis.com/*" },
+    { "serverUrl": "https://drivemcp.googleapis.com/*" },
+    { "serverUrl": "https://calendarmcp.googleapis.com/*" }
+  ]
+}

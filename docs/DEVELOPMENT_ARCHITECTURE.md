@@ -180,6 +180,10 @@ phone browser ─▶ Cloudflare ─▶ proxy (basic auth) ─▶ rotv-dev-ui (Vi
   (shape in `deploy/dev.env.example`); `data/checkout` is the git clone,
   mounted read-write at `/work/rotv`; `data/pgdata`; `data/state` holds the
   Claude and gh logins and the git identity. `node_modules` are named volumes.
+- **Connectors:** the session signs in with a personal claude.ai account and
+  would inherit that account's connectors. `managed-settings.json` in the image
+  denies Gmail, Google Drive and Google Calendar: a root session that reads web
+  pages and auto-accepts edits has no business holding a mailbox.
 - **Gate:** basic auth at the proxy. Behind it the app runs `NODE_ENV=test` with
   `BYPASS_AUTH=true`, so every visitor is the test admin. The HMR socket,
   `/__hmr`, is exempt: mobile Safari sends no credentials on a WebSocket.
