@@ -4,6 +4,7 @@ import ResultsTile from './ResultsTile';
 import FilterSheet, { FilterChip } from './FilterSheet';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 import { rankPois } from '../utils/poiRank';
+import { curatedListRows } from '../utils/curatedList';
 import { buildParkIndex, findContainingPark } from '../utils/parkContainment';
 
 const PAGE_SIZE = 20;
@@ -250,24 +251,8 @@ const FindTab = memo(function FindTab({
 
     let ranked;
     if (curatedList) {
-      // The organizer's order, and the organizer's trailhead for Directions.
       // Fix: match the search item by item, so two entries for one place keep their own labels (PR #768 review)
-      const wanted = new Set(curatedList.items.map(item => String(item.poi_id)));
-      const byId = new Map(filtered.filter(poi => wanted.has(String(poi.id))).map(poi => [String(poi.id), poi]));
-      const matches = (item, poi) => !search || [item.label, poi.name, poi.brief_description, poi.primary_activities]
-        .some(text => (text || '').toLowerCase().includes(search));
-      ranked = curatedList.items
-        .filter(item => byId.has(String(item.poi_id)) && matches(item, byId.get(String(item.poi_id))))
-        .map(item => {
-          const poi = byId.get(String(item.poi_id));
-          const hasTrailhead = item.nav_latitude != null && item.nav_longitude != null;
-          return {
-            ...poi,
-            navigation_latitude: hasTrailhead ? item.nav_latitude : poi.navigation_latitude,
-            navigation_longitude: hasTrailhead ? item.nav_longitude : poi.navigation_longitude,
-            _listItem: item
-          };
-        });
+      ranked = curatedListRows(curatedList, filtered, search);
     } else {
       ranked = rankPois(filtered, search);
     }
