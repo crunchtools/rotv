@@ -24,7 +24,6 @@ import { createFavoritesRouter } from './routes/favorites.js';
 import { createVisitedRouter } from './routes/visited.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { isAuthenticated } from './middleware/auth.js';
-import { consolidateFeatures } from './utils/geojson.js';
 import { resolveTimezone } from './utils/requestParams.js';
 import {
   initJobScheduler,
@@ -241,58 +240,6 @@ app.use('/api/favorites', createFavoritesRouter(pool));
 app.use('/api/visited', createVisitedRouter(pool));
 app.use('/api/notifications', createNotificationsRouter(pool));
 
-async function importGeoJSONFeatures(client) {
-  const staticPath = process.env.STATIC_PATH || path.join(__dirname, '../frontend/public');
-  const dataPath = path.join(staticPath, 'data');
-
-  try {
-    const trailsFile = path.join(dataPath, 'cvnp-trails.geojson');
-    const trailsData = JSON.parse(await fs.readFile(trailsFile, 'utf-8'));
-    const consolidatedTrails = consolidateFeatures(trailsData.features);
-
-    for (const trail of consolidatedTrails) {
-      await client.query(
-        `INSERT INTO pois (name, poi_roles, geometry)
-         VALUES ($1, '{trail}', $2)
-         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry`,
-        [trail.name, JSON.stringify(trail.geometry)]
-      );
-    }
-    logger.info(`Imported ${consolidatedTrails.length} trails`);
-
-    const riverFile = path.join(dataPath, 'cvnp-river.geojson');
-    const riverData = JSON.parse(await fs.readFile(riverFile, 'utf-8'));
-    const consolidatedRivers = consolidateFeatures(riverData.features);
-
-    for (const river of consolidatedRivers) {
-      await client.query(
-        `INSERT INTO pois (name, poi_roles, geometry)
-         VALUES ($1, '{river}', $2)
-         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry`,
-        [river.name, JSON.stringify(river.geometry)]
-      );
-    }
-    logger.info(`Imported ${consolidatedRivers.length} rivers`);
-
-    const boundaryFile = path.join(dataPath, 'cvnp-boundary.geojson');
-    const boundaryData = JSON.parse(await fs.readFile(boundaryFile, 'utf-8'));
-
-    for (const feature of boundaryData.features) {
-      const name = feature.properties?.name || 'Park Boundary';
-      await client.query(
-        `INSERT INTO pois (name, poi_roles, geometry)
-         VALUES ($1, '{boundary}', $2)
-         ON CONFLICT (name) DO UPDATE SET geometry = EXCLUDED.geometry`,
-        [name, JSON.stringify(feature.geometry)]
-      );
-    }
-    logger.info(`Imported ${boundaryData.features.length} boundaries`);
-
-  } catch (err) {
-    logger.error('Error importing GeoJSON features:', err.message);
-  }
-}
-
 async function initDatabase() {
   const client = await pool.connect();
   try {
@@ -383,24 +330,30 @@ async function initDatabase() {
       CREATE INDEX IF NOT EXISTS idx_pois_owner_id ON pois(owner_id)
     `);
 
+    // Drop the old poi_type-based constraints if they exist (cleanup only, no replacement)
     await client.query(`
       DO $$ BEGIN
         IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'pois_name_poi_type_key') THEN
           ALTER TABLE pois DROP CONSTRAINT pois_name_poi_type_key;
         END IF;
         ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_poi_type_active_key;
-        ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_name_key;
-        DROP INDEX IF EXISTS pois_name_key;
       END $$;
     `);
 
-    await client.query(`
-      DO $$ BEGIN
-        CREATE UNIQUE INDEX pois_name_key ON pois(name);
-      EXCEPTION WHEN unique_violation OR duplicate_table THEN
-        NULL;
-      END $$;
-    `);
+    // One POI per name; ON CONFLICT (name) in the spatial imports depends on
+    // it. Duplicates block it, so say which (#740) rather than go quiet; the
+    // index was silently missing in production for months. Migration 097
+    // does the same from psql.
+    try {
+      await client.query('CREATE UNIQUE INDEX IF NOT EXISTS pois_name_key ON pois(name)');
+    } catch (error) {
+      if (error.code !== '23505') throw error;
+      const duplicates = await client.query(`
+        SELECT name, string_agg('#' || id || CASE WHEN deleted IS TRUE THEN ' (deleted)' ELSE '' END, ', ' ORDER BY id) AS ids
+        FROM pois GROUP BY name HAVING COUNT(*) > 1 ORDER BY name
+      `);
+      logger.warn(`pois_name_key not created, duplicate names: ${duplicates.rows.map(r => `"${r.name}" ${r.ids}`).join('; ')}`);
+    }
 
     const destTableExists = await client.query(`
       SELECT EXISTS (
@@ -2633,18 +2586,23 @@ async function findMergedSlugTarget(poiSlug) {
     `SELECT old.name AS old_name, live.name AS live_name
        FROM pois old
        JOIN pois live ON live.id = old.merged_into_id
-      WHERE live.deleted IS NOT TRUE`
+      WHERE live.deleted IS NOT TRUE
+      ORDER BY old.id`
   );
   const hit = merged.rows.find(r => generateSlug(originalMergedName(r.old_name)) === poiSlug);
   return hit ? hit.live_name : null;
 }
 
+// The item a /:poiSlug/news/:titleSlug or /events/ permalink names. A park or
+// organization page lists its children's stories too (#406), so the item may
+// belong to a contained POI: poi_id is the item's own, _poi the permalink's.
 async function findItemBySlugs(type, poiSlug, titleSlug) {
   const poisQuery = await pool.query(
-    `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE)`
+    `SELECT id, name FROM pois WHERE (deleted IS NULL OR deleted = FALSE) ORDER BY id`
   );
   const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
   if (!poi) return null;
+  const poiIds = await getRollupPoiIds(pool, poi.id);
 
   let rows;
   if (type === 'event') {
@@ -2656,10 +2614,11 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
       FROM poi_events e
       JOIN pois p ON e.poi_id = p.id
       LEFT JOIN poi_event_urls u ON u.event_id = e.id
-      WHERE e.poi_id = $1 AND e.moderation_status IN ('published', 'auto_approved')
+      WHERE (e.poi_id = ANY($1) OR e.venue_poi_id = ANY($1))
+        AND e.moderation_status IN ('published', 'auto_approved')
       GROUP BY e.id, p.name, p.id
       ORDER BY e.start_date DESC
-    `, [poi.id]);
+    `, [poiIds]);
     rows = q.rows;
   } else {
     const q = await pool.query(`
@@ -2669,10 +2628,10 @@ async function findItemBySlugs(type, poiSlug, titleSlug) {
       FROM poi_news n
       JOIN pois p ON n.poi_id = p.id
       LEFT JOIN poi_news_urls u ON u.news_id = n.id
-      WHERE n.poi_id = $1 AND n.moderation_status IN ('published', 'auto_approved')
+      WHERE n.poi_id = ANY($1) AND n.moderation_status IN ('published', 'auto_approved')
       GROUP BY n.id, p.name, p.id
       ORDER BY COALESCE(n.publication_date, n.collection_date) DESC
-    `, [poi.id]);
+    `, [poiIds]);
     rows = q.rows;
   }
 
@@ -2708,7 +2667,9 @@ async function resolvePoiOgImage(poiId, baseUrl) {
         url = `${baseUrl}/api/pois/${poiId}/thumbnail?size=large`;
       }
     } catch (error) {
+      // Not cached: a blip must not pin the brand card for five minutes.
       logger.error('Error resolving POI OG image:', error);
+      return `${baseUrl}${OG_FALLBACK_IMAGE}`;
     }
   }
   if (!url) {
@@ -2774,6 +2735,7 @@ app.use(async (req, res, next) => {
         SELECT id, name, poi_roles, brief_description
         FROM pois
         WHERE (deleted IS NULL OR deleted = FALSE)
+        ORDER BY id
       `);
 
       const poi = poisQuery.rows.find(p => generateSlug(p.name) === poiSlug);
@@ -2871,9 +2833,14 @@ app.use(async (req, res, next) => {
     const description = (isEvent ? item.description : item.summary) || '';
     const safeTitle = escapeHtml(`${item.title} | ${item._poi.name}`);
     const safeDesc = escapeHtml(description.length > 200 ? description.substring(0, 197) + '...' : description);
-    // Image priority: source article image, then POI primary photo, then brand.
+    // Image priority: source article image, then the item's own POI photo,
+    // then the permalink POI's (a park whose child has none), then brand.
     const sourceImage = isUsableSourceImage(item.image_url) ? item.image_url : null;
-    const ogImage = escapeHtml(sourceImage || await resolvePoiOgImage(item.poi_id, baseUrl));
+    let poiImage = sourceImage || await resolvePoiOgImage(item.poi_id, baseUrl);
+    if (poiImage.endsWith(OG_FALLBACK_IMAGE) && item.poi_id !== item._poi.id) {
+      poiImage = await resolvePoiOgImage(item._poi.id, baseUrl);
+    }
+    const ogImage = escapeHtml(poiImage);
 
     const indexPath = path.join(staticPath, 'index.html');
     let html = await fs.readFile(indexPath, 'utf-8');

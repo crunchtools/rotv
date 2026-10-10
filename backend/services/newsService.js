@@ -1,6 +1,6 @@
 
 import { generateTextWithCustomPrompt as llmGenerateText } from './llmService.js';
-import { parseDate, parseDateTime, extractUrlDate, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
+import { parseDate, parseDateTime, extractUrlDate, extractWebTracDates, easternDay, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
 import { renderPage, setCachePageType, setCacheItemCount } from './renderPage.js';
 import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
@@ -370,7 +370,11 @@ async function classifyPage(pool, markdown, links, url, contentType, sheets, tru
   const filteredContentLinks = dedup(contentLinks.filter(notSelfRef));
   const seen = new Set(filteredContentLinks.map(l => l.url));
   const otherLinks = dedup(links.filter(l => !seen.has(l.url)).filter(notSelfRef));
-  const rankedLinks = [...filteredContentLinks, ...otherLinks].slice(0, 30);
+  // Collapse parameter variants before the cap: a WebTrac listing links each program six
+  // ways (?FMID=1, ?FMID=1&option=..., ...), which spent the 30 slots on five programs (#732).
+  const candidateLinks = [...filteredContentLinks, ...otherLinks];
+  const distinctUrls = new Set(shortestUrlDedup(candidateLinks.map(l => l.url)));
+  const rankedLinks = candidateLinks.filter(l => distinctUrls.has(l.url)).slice(0, 30);
 
   const detailDesc = contentType === 'news'
     ? `a single news item — an article, announcement, or press release about ${poiName || 'this place'} or the surrounding area`
@@ -412,12 +416,23 @@ Return ONLY valid JSON:
   return { pageType: 'listing', detailLinks: rankedLinks.map(l => l.url), reasoning: parsed.reasoning || 'unrecognized classification fallback' };
 }
 
-function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = [], allowedDomains = null) {
+/**
+ * The detail pages worth following from a listing: noise and off-site links dropped,
+ * parameter variants of one page collapsed to the shortest URL, capped at 20.
+ *
+ * @param {string[]} detailLinks - Candidate URLs from the listing page
+ * @param {string} sourceUrl - The listing page's URL
+ * @param {string|null} basePath - Path prefix same-origin links must stay under
+ * @param {string[]} trustedEventPaths - Path patterns allowed off-origin or outside basePath
+ * @param {Set<string>|null} allowedDomains - Other hosts that belong to the POI
+ * @returns {string[]} URLs to render, hash stripped
+ */
+export function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEventPaths = [], allowedDomains = null) {
   if (!detailLinks?.length) return [];
   if (!URL.canParse(sourceUrl)) return [];
   const sourceOrigin = new URL(sourceUrl).origin;
   const seen = new Set();
-  return detailLinks.map(link => {
+  const followable = detailLinks.map(link => {
     if (!URL.canParse(link)) return link;
     const u = new URL(link);
     u.hash = '';
@@ -439,7 +454,9 @@ function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trustedEvent
     if (seen.has(link)) return false;
     seen.add(link);
     return true;
-  }).slice(0, 20);
+  });
+  // Variants of one page collapse before the cap, not after it (#732).
+  return shortestUrlDedup(followable).slice(0, 20);
 }
 
 async function itemCount(pool, markdown, contentType, logContext = {}) {
@@ -563,21 +580,24 @@ async function processPage(pool, page, poi, contentType, options = {}) {
   const renderedContent = pageText || null;
   const items = [];
 
+  const webTrac = isEvent ? extractWebTracDates(pageText) : null;
   const dateSources = isEvent
     ? {
         start: {
           jsonLd: od.eventStartDate ? [od.eventStartDate] : [],
-          meta: [], timeTags: od.timeDates?.length > 0 ? [od.timeDates[0]] : [],
+          meta: [], timeTags: [od.timeDates?.[0], webTrac?.start].filter(Boolean),
           url: extractUrlDate(url)
         },
         end: {
           jsonLd: od.eventEndDate ? [od.eventEndDate] : [],
-          meta: [], timeTags: od.timeDates?.length > 1 ? [od.timeDates[1]] : [],
+          meta: [], timeTags: [od.timeDates?.[1], webTrac?.end].filter(Boolean),
           url: null
         }
       }
     : {
-        jsonLd: od.jsonLdDates || [],
+        // An Event's start/end date is not a publication date (#585). The extractor no
+        // longer folds it in, but detail pages cached before that still carry it.
+        jsonLd: (od.jsonLdDates || []).filter(d => d !== od.eventStartDate && d !== od.eventEndDate),
         meta: [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
         timeTags: od.timeDates || [],
         url: extractUrlDate(url),
@@ -602,7 +622,10 @@ async function processPage(pool, page, poi, contentType, options = {}) {
     }
 
     updateProgress(poi.id, { phase: 'dates', message: `${contentType} ${i}/${count} from ${url}` });
-    const dateSnippet = `${item.title}\n${item.description || item.summary || ''}\n\n${pageText}`.substring(0, 2000);
+    // The WebTrac date line sits after a javascript banner and a long description, past
+    // the 2000-char cut the voters see; put it first.
+    const dateLine = webTrac ? `${webTrac.text}\n` : '';
+    const dateSnippet = `${item.title}\n${dateLine}${item.description || item.summary || ''}\n\n${pageText}`.substring(0, 2000);
 
     if (isEvent) {
       const { startVotes, endVotes } = await runLlmDateVotes(pool, dateSnippet, LLM_DATE_VOTES, 'datetime');
@@ -649,7 +672,17 @@ async function processPage(pool, page, poi, contentType, options = {}) {
 }
 
 
-async function filterKnownPages(pool, pages, contentType, opts = {}) {
+/**
+ * Drops pages whose URL is already stored, before any LLM work is spent on them.
+ * An event crawl checks poi_events; a news crawl checks poi_news and poi_events.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {Array<{url: string}>} pages - Rendered pages
+ * @param {'news'|'event'} contentType
+ * @param {{jobId?: number, jobType?: string, poiId?: number, poiName?: string, phase?: string}} opts - Job log context
+ * @returns {Promise<Array<{url: string}>>} The pages not yet stored
+ */
+export async function filterKnownPages(pool, pages, contentType, opts = {}) {
   if (pages.length === 0) return pages;
   const { jobId = 0, jobType = 'news', poiId, poiName, phase = '' } = opts;
 
@@ -660,14 +693,17 @@ async function filterKnownPages(pool, pages, contentType, opts = {}) {
     return (p.origin + p.pathname).toLowerCase().replace(/\/+$/, '');
   };
 
-  const table = contentType === 'event' ? 'poi_events' : 'poi_news';
+  // A news crawl also skips pages already stored as events, before any LLM work (#585).
+  const tables = contentType === 'event' ? ['poi_events'] : ['poi_news', 'poi_events'];
   const fullUrls = pages.map(p => normFull(p.url));
   const pathUrls = pages.map(p => normPath(p.url));
 
   const existingUrlRows = await pool.query(
-    `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM ${table}
-     WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
-        OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`,
+    tables.map(table =>
+      `SELECT LOWER(REGEXP_REPLACE(source_url, '/+$', '')) AS url FROM ${table}
+       WHERE LOWER(REGEXP_REPLACE(source_url, '/+$', '')) = ANY($1)
+          OR LOWER(REGEXP_REPLACE(REGEXP_REPLACE(source_url, '\\?.*$', ''), '/+$', '')) = ANY($2)`
+    ).join(' UNION '),
     [fullUrls, pathUrls]
   );
   const known = new Set(existingUrlRows.rows.map(r => r.url));
@@ -737,7 +773,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
 
       updateProgress(poi.id, { phase: 'render', message: url });
       logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] ${url} (depth=${depth}, page=${totalPagesRendered})`);
-      const extracted = await renderPage(pool, url, { timeout: 30000, hardTimeout: 60000, extractLinks: true });
+      const extracted = await renderPage(pool, url, { timeout: 30000, hardTimeout: 60000, extractLinks: true, contentType });
       if (!extracted.reachable || !extracted.markdown) {
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Render] Skip — ${extracted.reason || 'no content'}${extracted.cached ? ' (cached)' : ''}`);
         return;
@@ -1275,6 +1311,14 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
         item.published_date = noon ? noon + 'Z' : null;
       }
 
+      // A publication date past tomorrow was parsed off an event page (#585). Tomorrow
+      // itself passes: a UTC timestamp read as a bare date can land a day ahead of Eastern.
+      // The moderation date gate is a second check, this one keeps the row out entirely.
+      if (item.published_date && easternDay(new Date(item.published_date)) > easternDay(new Date(Date.now() + 24 * 60 * 60 * 1000))) {
+        if (log) log(`[Save] Skip news "${item.title}" — publication date in the future (likely an event page)`);
+        continue;
+      }
+
       const resolvedUrl = item.source_url ? await resolveRedirectUrl(item.source_url) : null;
 
       const isRedirectUrl = item.source_url && (
@@ -1375,6 +1419,7 @@ export async function saveNewsItems(pool, poiId, newsItems, options = {}) {
 export async function saveEventItems(pool, poiId, eventItems, options = {}) {
   let savedCount = 0;
   let duplicateCount = 0;
+  let undatedCount = 0;
   const { log = null, uriOwnershipMap = null, contentSource = 'ai' } = options;
 
   for (const item of eventItems) {
@@ -1461,7 +1506,7 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
 
       if (!item.start_date) {
         if (log) log(`[Save] Skip event "${item.title}" — no start_date`);
-        duplicateCount++;
+        undatedCount++;
         continue;
       }
 
@@ -1494,6 +1539,9 @@ export async function saveEventItems(pool, poiId, eventItems, options = {}) {
     }
   }
 
+  if (log && eventItems.length > 0) {
+    log(`[Save] Events: ${savedCount} saved, ${duplicateCount} duplicate, ${undatedCount} undated of ${eventItems.length}`);
+  }
   return savedCount;
 }
 

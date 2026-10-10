@@ -82,7 +82,7 @@ import imageServerClient from '../services/imageServerClient.js';
 import { runRiverLevelsCollection } from '../services/riverLevelsService.js';
 import { logInfo, logError, flush as flushJobLogs } from '../services/jobLogger.js';
 import { createLogger } from '../utils/logger.js';
-import { assertPoiNameAvailable, PoiNameConflictError } from '../services/poiMergeService.js';
+import { assertPoiNameAvailable, PoiNameConflictError, poiNameIndexConflict } from '../services/poiMergeService.js';
 
 const logger = createLogger('Admin');
 const twitterAuthLogger = createLogger('Twitter Auth');
@@ -300,6 +300,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logger.info(`Admin ${req.user.email} updated POI ${id}:`, Object.keys(updates).join(', '));
       res.json(poiRow.rows[0]);
     } catch (error) {
+      const taken = poiNameIndexConflict(error, req.body.name);
+      if (taken) return res.status(409).json({ error: taken });
       logger.error('Error updating POI:', error);
       res.status(500).json({ error: 'Failed to update POI' });
     }
@@ -353,6 +355,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logger.info(`Admin ${req.user.email} updated destination ${id}:`, Object.keys(updates).join(', '));
       res.json(destinationRow.rows[0]);
     } catch (error) {
+      const taken = poiNameIndexConflict(error, req.body.name);
+      if (taken) return res.status(409).json({ error: taken });
       logger.error('Error updating destination:', error);
       res.status(500).json({ error: 'Failed to update destination' });
     }
@@ -413,6 +417,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logger.info(`Admin ${req.user.email} created new destination: ${name}`);
       res.status(201).json(newDestination.rows[0]);
     } catch (error) {
+      const taken = poiNameIndexConflict(error, name);
+      if (taken) return res.status(409).json({ error: taken });
       logger.error('Error creating destination:', error);
       res.status(500).json({ error: 'Failed to create destination' });
     }
@@ -484,6 +490,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logger.info(`Admin ${req.user.email} created new POI (${rolesArray.join(', ')}): ${name}`);
       res.status(201).json(newPoi.rows[0]);
     } catch (error) {
+      const taken = poiNameIndexConflict(error, name);
+      if (taken) return res.status(409).json({ error: taken });
       logger.error('Error creating POI:', error);
       res.status(500).json({ error: 'Failed to create POI' });
     }
@@ -1863,14 +1871,14 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
+      // The flag follows the asset (#739): a failed upload leaves nothing to show.
       if (imageServerAssetId) {
         await swapPrimaryMedia(pool, id, imageServerAssetId, req.user.id);
+        await pool.query(
+          'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+          [id]
+        );
       }
-
-      await pool.query(
-        'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-        [id]
-      );
 
       logger.info(`Admin ${req.user.email} uploaded image for POI ${id}`);
       res.json({
@@ -1944,12 +1952,11 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       if (imageServerAssetId) {
         await swapPrimaryMedia(pool, id, imageServerAssetId, req.user.id);
+        await pool.query(
+          'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+          [id]
+        );
       }
-
-      await pool.query(
-        'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-        [id]
-      );
 
       logger.info(`Admin ${req.user.email} uploaded image for POI ${id}`);
       res.json({
@@ -1985,6 +1992,12 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           } catch (deleteError) {
             logger.warn(`Failed to delete from image server (non-fatal):`, deleteError.message);
           }
+          // swapPrimaryMedia filed the asset under poi_media; the thumbnail
+          // route would keep asking the image server for it.
+          await pool.query(
+            'DELETE FROM poi_media WHERE poi_id = $1 AND image_server_asset_id = $2',
+            [id, String(asset.id)]
+          );
         }
       }
 
@@ -1992,9 +2005,15 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         return res.status(400).json({ error: 'POI has no image' });
       }
 
+      // Gallery photos the thumbnail route can still serve keep the flag.
       await pool.query(
         `UPDATE pois
-         SET has_primary_image = FALSE,
+         SET has_primary_image = EXISTS (
+               SELECT 1 FROM poi_media
+                WHERE poi_id = $1
+                  AND role IN ('primary', 'gallery')
+                  AND media_type IN ('image', 'video')
+                  AND moderation_status IN ('published', 'auto_approved')),
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [id]
@@ -2149,6 +2168,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logger.info(`Admin ${req.user.email} created linear feature: ${name}`);
       res.status(201).json(newLinearFeature.rows[0]);
     } catch (error) {
+      const taken = poiNameIndexConflict(error, req.body.name);
+      if (taken) return res.status(409).json({ error: taken });
       logger.error('Error creating linear feature:', error);
       if (error.code === '23505') {
         res.status(409).json({ error: 'A feature with this name and type already exists' });
@@ -2207,6 +2228,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       logger.info(`Admin ${req.user.email} updated linear feature ${id}`);
       res.json(updatedLinearFeature.rows[0]);
     } catch (error) {
+      const taken = poiNameIndexConflict(error, req.body.name);
+      if (taken) return res.status(409).json({ error: taken });
       logger.error('Error updating linear feature:', error);
       res.status(500).json({ error: 'Failed to update linear feature' });
     }

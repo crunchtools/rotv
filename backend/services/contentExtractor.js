@@ -151,11 +151,12 @@ export async function extractPageContent(url, options = {}) {
             const jsonLd = JSON.parse(script.textContent);
             const items = Array.isArray(jsonLd) ? jsonLd : [jsonLd];
             for (const item of items) {
+              // Publication dates only; an Event's startDate goes to eventStartDate below.
+              // Scoring it as a publication date let event pages into poi_news (#585).
               const candidates = [
                 item.datePublished,
                 item.uploadDate,
-                item.startDate,
-                item['@graph']?.map?.(n => n.datePublished || n.uploadDate || n.startDate)
+                item['@graph']?.map?.(n => n.datePublished || n.uploadDate)
               ].flat().filter(Boolean);
               jsonLdDates.push(...candidates);
 

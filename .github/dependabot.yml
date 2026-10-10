@@ -35,6 +35,10 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # TrackMyShuttle's socket server speaks Socket.IO v2; a v3+ client cannot connect to it.
+      - dependency-name: "socket.io-client"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"

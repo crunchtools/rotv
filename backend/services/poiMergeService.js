@@ -109,6 +109,20 @@ export async function assertPoiNameAvailable(pool, { name, id = null, currentNam
 }
 
 /**
+ * The message for a pois_name_key violation, or null for any other error.
+ * assertPoiNameAvailable() ignores soft-deleted rows but the unique index does
+ * not, so a name a deleted POI still holds passes the guard and fails here.
+ *
+ * @param {Error & {code?: string, constraint?: string}} err - A pg query error
+ * @param {string} name - The name that was being written
+ * @returns {string|null}
+ */
+export function poiNameIndexConflict(err, name) {
+  if (err?.code !== '23505' || err?.constraint !== 'pois_name_key') return null;
+  return `A POI named "${name}" already exists, possibly deleted. Restore or rename that one instead.`;
+}
+
+/**
  * Park boundaries that have a separate point POI of the same name within
  * PARK_POINT_TOLERANCE_M of the park.
  *
@@ -238,7 +252,6 @@ async function copyContent(client, loserId, winnerId) {
     // A boundary only gets a Directions button from the navigation pair.
     'navigation_latitude = COALESCE(l.navigation_latitude, l.latitude)',
     'navigation_longitude = COALESCE(l.navigation_longitude, l.longitude)',
-    'has_primary_image = COALESCE(w.has_primary_image, FALSE) OR COALESCE(l.has_primary_image, FALSE)',
     'updated_at = CURRENT_TIMESTAMP'
   ];
   await client.query(
@@ -274,6 +287,23 @@ async function adoptImageServerAssets(client, assets, winnerId, counts) {
     ]
   );
   counts.image_server_assets = inserted.rowCount;
+}
+
+// The loser's has_primary_image is not copied: production points carried the
+// flag long after their photo was gone (#739). Once media and image-server
+// assets have moved, the park's flag says whether the thumbnail route can
+// serve it something, keeping a TRUE the park already had.
+async function refreshPrimaryImageFlag(client, winnerId) {
+  await client.query(
+    `UPDATE pois SET has_primary_image = COALESCE(has_primary_image, FALSE) OR EXISTS (
+        SELECT 1 FROM poi_media
+         WHERE poi_id = $1
+           AND role IN ('primary', 'gallery')
+           AND media_type IN ('image', 'video')
+           AND moderation_status IN ('published', 'auto_approved'))
+      WHERE id = $1`,
+    [winnerId]
+  );
 }
 
 async function moveMedia(client, loserId, winnerId, counts) {
@@ -387,6 +417,7 @@ export async function mergePois(pool, loserId, winnerId, { dryRun = false, image
     await copyContent(client, loserId, winnerId);
     await moveMedia(client, loserId, winnerId, counts);
     await adoptImageServerAssets(client, legacyAssets, winnerId, counts);
+    await refreshPrimaryImageFlag(client, winnerId);
     await repointReferences(client, loserId, winnerId, counts);
     await repointLooseReferences(client, loserId, winnerId, counts);
     await retireLoser(client, loser, winner);

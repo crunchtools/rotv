@@ -208,6 +208,48 @@ describe('mergePois', () => {
     ]);
   });
 
+  describe('has_primary_image (#739)', () => {
+    it('drops a stale flag the point carried with no photo behind it', async () => {
+      await pool.query('UPDATE pois SET has_primary_image = TRUE WHERE id = $1', [POINT]);
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(false);
+    });
+
+    it('is set when the point brings a published primary photo', async () => {
+      await pool.query(
+        `INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status)
+         VALUES ($1, 'image', '_merge-point-primary', 'primary', 'published')`,
+        [POINT]
+      );
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(true);
+    });
+
+    it('ignores media the thumbnail route cannot serve', async () => {
+      await pool.query(
+        `INSERT INTO poi_media (poi_id, media_type, youtube_url, role, moderation_status)
+         VALUES ($1, 'youtube', 'https://youtu.be/_merge', 'gallery', 'published')`,
+        [POINT]
+      );
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(false);
+    });
+
+    it('is set when a photo adopted from the image server arrives', async () => {
+      const imageServer = {
+        getPoiAssets: async (poiId) => (poiId === POINT ? [{ id: 990011, role: 'primary', asset_type: 'image' }] : [])
+      };
+      await mergePois(pool, POINT, PARK, { imageServer });
+      expect((await row(PARK)).has_primary_image).toBe(true);
+    });
+
+    it('keeps the flag the park already had', async () => {
+      await pool.query('UPDATE pois SET has_primary_image = TRUE WHERE id = $1', [PARK]);
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(true);
+    });
+  });
+
   it('changes nothing on a dry run but reports what would move', async () => {
     await pool.query('INSERT INTO user_visits (user_id, poi_id) VALUES ($1, $2)', [userId, POINT]);
     const outcome = await mergePois(pool, POINT, PARK, { dryRun: true });

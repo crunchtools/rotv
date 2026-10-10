@@ -5,19 +5,27 @@ const logger = createLogger('Cache');
 
 const TTL_MS = {
   detail: Infinity,
+  // A detail page that counted zero items may have rendered badly (WebTrac pages
+  // served a "browser does not support javascript" shell, #732); forever would
+  // never give it a second look.
+  detail_empty: 7 * 24 * 60 * 60 * 1000,
   listing: 23 * 60 * 60 * 1000,
   trail_status: 25 * 60 * 1000
 };
 
-function isCacheFresh(row) {
+function isCacheFresh(row, contentType = null) {
   if (!row || !row.rendered_at) return false;
-  const ttl = TTL_MS[row.page_type] ?? TTL_MS.listing;
+  let ttl = TTL_MS[row.page_type] ?? TTL_MS.listing;
+  if (row.page_type === 'detail' && contentType) {
+    const count = contentType === 'event' ? row.item_count_events : row.item_count_news;
+    if (count === 0) ttl = TTL_MS.detail_empty;
+  }
   if (ttl === Infinity) return true;
   return (Date.now() - new Date(row.rendered_at).getTime()) < ttl;
 }
 
 export async function renderPage(pool, url, options = {}) {
-  const { pageType, ...extractOptions } = options;
+  const { pageType, contentType, ...extractOptions } = options;
 
   const cached = await pool.query(
     'SELECT * FROM rendered_page_cache WHERE url = $1',
@@ -27,7 +35,7 @@ export async function renderPage(pool, url, options = {}) {
     return { rows: [] };
   });
   const row = cached.rows[0];
-  if (row && isCacheFresh(row) && row.markdown) {
+  if (row && isCacheFresh(row, contentType) && row.markdown) {
     return {
       markdown: row.markdown,
       rawText: row.raw_text,
@@ -58,6 +66,8 @@ export async function renderPage(pool, url, options = {}) {
         title = EXCLUDED.title,
         links = EXCLUDED.links,
         page_type = EXCLUDED.page_type,
+        item_count_news = NULL,
+        item_count_events = NULL,
         rendered_at = NOW()
     `, [
       url,

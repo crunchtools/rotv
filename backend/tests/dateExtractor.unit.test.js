@@ -4,7 +4,7 @@
  *   extractUrlDate → normalizeDateSources → scoreDateConsensus (with LLM multi-vote)
  */
 import { describe, it, expect } from 'vitest';
-import { extractUrlDate, normalizeDateSources, scoreDateConsensus } from '../services/dateExtractor.js';
+import { extractUrlDate, extractWebTracDates, easternDay, normalizeDateSources, scoreDateConsensus } from '../services/dateExtractor.js';
 import { normalizeRenderUrl } from '../services/newsService.js';
 
 describe('extractUrlDate', () => {
@@ -57,6 +57,60 @@ describe('extractUrlDate', () => {
   it('rejects invalid month/day values', () => {
     expect(extractUrlDate('https://example.com/2024/13/01/bad-month')).toBeNull();
     expect(extractUrlDate('https://example.com/2024/01/99/bad-day')).toBeNull();
+  });
+});
+
+/**
+ * WebTrac item pages (Cleveland Metroparks, #732) show the date only as visible text.
+ */
+describe('extractWebTracDates', () => {
+  const PAGE = 'Your browser does not support javascript. Backcountry Skills Series: Land Navigation 2 '
+    + 'Learn to read a topo map. Meeting Details Date(s): 10/31/2026 -10/31/2026 Time: 9:30 am - 11:30 am Days: Sat Ages: 16 and Up';
+
+  it('parses the date and time range into local start/end datetimes', () => {
+    expect(extractWebTracDates(PAGE)).toEqual({
+      start: '2026-10-31T09:30',
+      end: '2026-10-31T11:30',
+      text: 'Date(s): 10/31/2026 -10/31/2026 Time: 9:30 am - 11:30 am'
+    });
+  });
+
+  it('spans a multi-day series from the first start to the last end', () => {
+    const r = extractWebTracDates('Date(s): 10/31/2026 - 11/02/2026 Time: 9:30 am - 11:30 am');
+    expect(r.start).toBe('2026-10-31T09:30');
+    expect(r.end).toBe('2026-11-02T11:30');
+  });
+
+  it('handles 12-hour edge cases and single-digit parts', () => {
+    expect(extractWebTracDates('Date(s): 1/5/2027 Time: 12:00 pm - 12:30 am').start).toBe('2027-01-05T12:00');
+    expect(extractWebTracDates('Date(s): 1/5/2027 Time: 12:00 pm - 12:30 am').end).toBe('2027-01-05T00:30');
+    expect(extractWebTracDates('Date(s): 1/5/2027 Time: 7 pm').start).toBe('2027-01-05T19:00');
+  });
+
+  it('returns a bare date when no time is shown, with no end on a single day', () => {
+    expect(extractWebTracDates('Date(s): 10/31/2026 -10/31/2026 Days: Sat')).toEqual({
+      start: '2026-10-31', end: null, text: 'Date(s): 10/31/2026 -10/31/2026'
+    });
+    expect(extractWebTracDates('Date(s): 10/31/2026 - 11/01/2026').end).toBe('2026-11-01');
+  });
+
+  it('feeds normalizeDateSources in datetime mode as Eastern local time', () => {
+    const { start } = extractWebTracDates(PAGE);
+    const result = normalizeDateSources({ timeTags: [start] }, 'America/New_York', 'datetime');
+    expect(result.timeTags).toEqual(['2026-10-31T13:30']);
+  });
+
+  it('returns null without the label, for an implausible date, or non-string input', () => {
+    expect(extractWebTracDates('Meeting 10/31/2026 at 9:30 am')).toBeNull();
+    expect(extractWebTracDates('Date(s): 13/31/2026')).toBeNull();
+    expect(extractWebTracDates(null)).toBeNull();
+  });
+});
+
+describe('easternDay', () => {
+  it('gives the calendar day in US Eastern, not UTC', () => {
+    expect(easternDay(new Date('2026-10-10T03:30:00Z'))).toBe('2026-10-09');
+    expect(easternDay(new Date('2026-10-10T12:00:00Z'))).toBe('2026-10-10');
   });
 });
 

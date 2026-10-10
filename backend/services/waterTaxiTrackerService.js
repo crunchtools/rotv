@@ -1,17 +1,20 @@
 /**
  * Water Taxi Tracker Service (#408)
  *
- * Connects to TrackMyShuttle's Socket.IO v2 feed to receive live GPS
- * positions for the Harbor Hopper water taxi. Caches the latest position
- * in memory (no database) and exposes it via getBoatPositions().
+ * Connects to TrackMyShuttle's Socket.IO feed to receive live GPS positions
+ * for the Harbor Hopper water taxi. Caches the latest position in memory
+ * (no database) and exposes it via getBoatPositions().
  *
- * On startup, fetches the tracker page to seed the cache with the last
- * known position (from their saved_response JSON). This means the docked
- * marker appears immediately even if no socket event has arrived yet.
+ * On startup, fetches the rider API's route snapshot to seed the cache with
+ * each on-duty shuttle's last_known_data (#701). This means the docked marker
+ * appears immediately even if no socket event has arrived yet. Off duty the
+ * snapshot lists no shuttles and there is nothing to seed.
  *
- * Protocol: Socket.IO v2 (EIO=3) at socket.trackmyshuttle.com over
- * websocket (polling→ws upgrade is unstable from a server environment).
- * The event name is the shuttle's hardware serial number.
+ * Protocol: the server at socket.trackmyshuttle.com is Socket.IO v2 (EIO=3);
+ * it answers an EIO=4 handshake with v2 framing, so the client must stay on
+ * socket.io-client 2.x. We go straight to websocket (polling→ws upgrade is
+ * unstable from a server environment). The event name is the shuttle's
+ * hardware serial number.
  */
 
 import io from 'socket.io-client';
@@ -20,7 +23,8 @@ import { createLogger } from '../utils/logger.js';
 const logger = createLogger('WaterTaxiTracker');
 
 const SOCKET_URL = 'https://socket.trackmyshuttle.com/';
-const TRACKER_PAGE = 'https://trackmyshuttle.com/a/5799';
+const RIDER_API_URL = process.env.TMS_RIDER_API_URL || 'https://api.trackmyshuttle.com/rider/api/v3';
+const ORG_ID = process.env.TMS_ORG_ID || '5799';
 const ORG_KEY = process.env.TMS_ORG_KEY || 'f923d2d999391c15d4325a241635cc3b';
 const SERIAL_NUMBER = process.env.TMS_SERIAL || '78W113620299';
 const ACTIVE_STALE_MS = 5 * 60 * 1000;
@@ -37,56 +41,104 @@ let socket = null;
 let position = null;
 let pool = null;
 
-async function seedFromPage() {
+function shuttleSerial(shuttle) {
+  return shuttle.serial_number || shuttle.vin_no || '';
+}
+
+// The rider app feeds last_known_data to the same handler as socket events,
+// so it carries latitude/longitude/heading_degrees/event_reason. The old
+// tracker page used last_latitude/last_longitude/last_heading; accept those
+// too, on either the shuttle or its last_known_data, in case they come back.
+function snapshotToResponse(shuttle) {
+  const lastKnown = shuttle.last_known_data || {};
+  return {
+    ...lastKnown,
+    latitude: lastKnown.latitude ?? lastKnown.last_latitude ?? shuttle.last_latitude,
+    longitude: lastKnown.longitude ?? lastKnown.last_longitude ?? shuttle.last_longitude,
+    heading_degrees: lastKnown.heading_degrees ?? lastKnown.last_heading ?? shuttle.last_heading,
+    event_reason: lastKnown.event_reason ?? shuttle.event_reason,
+  };
+}
+
+/**
+ * Seeds the in-memory position from GET /route-code-details, the call the rider
+ * app makes on load. Only on-duty shuttles are listed, so an empty list is the
+ * normal off-hours state, not an error. Exported for tests.
+ *
+ * @returns {Promise<void>} Never rejects: connect() must run regardless, so
+ *   every failure is logged and leaves the position unset.
+ */
+export async function seedFromApi() {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
-    const res = await fetch(TRACKER_PAGE, {
-      headers: { 'User-Agent': 'RootsOfTheValley/1.0 (+https://rootsofthevalley.org)' },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
+    let res;
+    try {
+      res = await fetch(`${RIDER_API_URL}/route-code-details?route_code=${ORG_ID}&type=2`, {
+        headers: {
+          'token-id': ORG_ID,
+          'User-Agent': 'RootsOfTheValley/1.0 (+https://rootsofthevalley.org)',
+        },
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
 
-    const html = await res.text();
+    if (!res.ok) {
+      logger.warn(`Seed request failed: HTTP ${res.status}`);
+      return;
+    }
 
-    const latMatch = html.match(/"last_latitude"\s*:\s*([-\d.]+)/);
-    const lngMatch = html.match(/"last_longitude"\s*:\s*([-\d.]+)/);
-    if (!latMatch || !lngMatch) return;
+    // Unknown route codes come back HTTP 200 with code 204 "No Data Found".
+    const body = await res.json();
+    if (body?.code !== 200) {
+      logger.warn(`Seed request rejected: code ${body?.code} ${body?.message || ''}`.trim());
+      return;
+    }
 
-    const lat = parseFloat(latMatch[1]);
-    const lng = parseFloat(lngMatch[1]);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    const shuttles = (body.response?.shuttle_details || []).filter(Boolean);
+    if (shuttles.length === 0) {
+      logger.info('No shuttles on duty, nothing to seed');
+      return;
+    }
 
-    const headingMatch = html.match(/"last_heading"\s*:\s*([-\d]+)/);
-    const heading = headingMatch ? parseInt(headingMatch[1], 10) : 0;
+    const serials = shuttles.map(shuttleSerial);
+    // Another boat's position would sit on the map as the Harbor Hopper, and the socket
+    // only listens for SERIAL_NUMBER, so nothing would correct it.
+    const shuttle = shuttles.find(s => shuttleSerial(s) === SERIAL_NUMBER);
+    if (!shuttle) {
+      logger.warn(`Serial ${SERIAL_NUMBER} not on duty (saw: ${serials.join(', ')}) — not seeding; set TMS_SERIAL if the boat's tracker changed`);
+      return;
+    }
 
-    const eventMatch = html.match(/"event_reason"\s*:\s*"([^"]+)"/);
-    const eventReason = eventMatch ? eventMatch[1] : '';
-    const status = ACTIVE_EVENTS.has(eventReason) ? 'active' : 'docked';
+    if (!updatePosition(snapshotToResponse(shuttle))) {
+      logger.warn(`Shuttle ${shuttleSerial(shuttle)} on duty but last_known_data has no coordinates`);
+      return;
+    }
 
-    position = { latitude: lat, longitude: lng, heading, status, updated_at: new Date().toISOString() };
-    logger.info(`Seeded from page: ${lat.toFixed(4)}, ${lng.toFixed(4)} (${status})`);
+    logger.info(`Seeded from API: ${position.latitude.toFixed(4)}, ${position.longitude.toFixed(4)} (${position.status}) — shuttles on duty: ${serials.join(', ')}`);
   } catch (err) {
-    logger.info(`Could not seed from page: ${err.message}`);
+    logger.warn(`Could not seed from API: ${err.message}`);
   }
 }
 
+// Returns true when resp carried usable coordinates. updated_at is always
+// "now": neither the socket payload nor last_known_data carries a fix time, so
+// a seeded snapshot is served as fresh for DOCKED_STALE_MS from startup.
 function updatePosition(resp) {
   const lat = parseFloat(resp.latitude);
   const lng = parseFloat(resp.longitude);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
 
   const heading = parseInt(resp.heading_degrees, 10) || 0;
   const now = new Date().toISOString();
   const eventReason = resp.event_reason || '';
   const endTrip = resp.end_trip === 1 || resp.end_trip === '1';
+  const status = endTrip || !ACTIVE_EVENTS.has(eventReason) ? 'docked' : 'active';
 
-  if (endTrip || !ACTIVE_EVENTS.has(eventReason)) {
-    position = { latitude: lat, longitude: lng, heading, status: 'docked', updated_at: now };
-    return;
-  }
-
-  position = { latitude: lat, longitude: lng, heading, status: 'active', updated_at: now };
+  position = { latitude: lat, longitude: lng, heading, status, updated_at: now };
+  return true;
 }
 
 function connect() {
@@ -105,6 +157,11 @@ function connect() {
 
   socket.on('connect', () => {
     logger.info('Connected to TrackMyShuttle');
+  });
+
+  // A v3+ client against this v2 server lands here on every attempt (#701).
+  socket.on('connect_error', (err) => {
+    logger.warn(`Connect error: ${err?.message || err}`);
   });
 
   socket.on(SERIAL_NUMBER, (message) => {
@@ -131,7 +188,7 @@ async function checkSettingAndConnect() {
       logger.info('Disabled via admin setting — not connecting');
       return;
     }
-    await seedFromPage();
+    await seedFromApi();
     connect();
   } catch (err) {
     logger.error('Failed to check admin setting:', err.message);
@@ -149,6 +206,7 @@ export function stopTracker() {
     socket.close();
     socket = null;
   }
+  position = null;
   logger.info('Stopped');
 }
 

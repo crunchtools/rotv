@@ -93,6 +93,63 @@ export function extractUrlDate(url) {
   return null;
 }
 
+/**
+ * Calendar day in US Eastern, the timezone every stored date is interpreted in.
+ *
+ * @param {Date} date - The instant to place on the Eastern calendar
+ * @returns {string} The day as YYYY-MM-DD
+ */
+export function easternDay(date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(date);
+}
+
+const WEBTRAC_DATE_RE = /Date\(s\):\s*(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*-\s*(\d{1,2})\/(\d{1,2})\/(\d{4}))?(?:\s*Time:\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?(?:\s*-\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?)?)?/i;
+
+/**
+ * Dates from a WebTrac (myvscloud.com) item page. These pages carry no JSON-LD or
+ * <time> tags; the date is visible text of the form
+ * "Date(s): M/D/YYYY -M/D/YYYY Time: 9:30 am - 11:30 am".
+ *
+ * @param {string} text - The page's visible text
+ * @returns {{start: string, end: string|null, text: string}|null} Local
+ *   (timezone-naive) YYYY-MM-DD[THH:MM] start and end for normalizeDateSources,
+ *   plus the matched line so the LLM voters can be shown it first; null when
+ *   the text has no valid "Date(s):" line.
+ */
+export function extractWebTracDates(text) {
+  const m = typeof text === 'string' ? text.match(WEBTRAC_DATE_RE) : null;
+  if (!m) return null;
+
+  const day = (mm, dd, yyyy) => {
+    const year = parseInt(yyyy, 10), month = parseInt(mm, 10), dayOfMonth = parseInt(dd, 10);
+    if (year < 2000 || year > 2100 || month < 1 || month > 12 || dayOfMonth < 1 || dayOfMonth > 31) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(dayOfMonth).padStart(2, '0')}`;
+  };
+  const clock = (hh, mm, ampm) => {
+    if (!hh) return null;
+    let h = parseInt(hh, 10);
+    const min = parseInt(mm || '0', 10);
+    if (h < 1 || h > 12 || min > 59) return null;
+    if (ampm.toLowerCase() === 'a') { if (h === 12) h = 0; } else if (h !== 12) h += 12;
+    return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+  };
+
+  const startDay = day(m[1], m[2], m[3]);
+  if (!startDay) return null;
+  const endDay = m[4] ? day(m[4], m[5], m[6]) : startDay;
+  const startTime = clock(m[7], m[8], m[9]);
+  const endTime = clock(m[10], m[11], m[12]);
+
+  const start = startTime ? `${startDay}T${startTime}` : startDay;
+  let end = null;
+  if (endDay && endTime) end = `${endDay}T${endTime}`;
+  else if (endDay && endDay !== startDay) end = endDay;
+
+  return { start, end, text: m[0].replace(/\s+/g, ' ').trim() };
+}
+
 export function normalizeDateSources(rawSources = {}, timezone = 'America/New_York', mode = 'date') {
   const parser = mode === 'datetime' ? parseDateTime : parseDate;
   const norm = (raw) => {

@@ -35,7 +35,10 @@ describe('Open Graph share images', () => {
     for (const poi of pois.slice(0, 80)) {
       if (poiWithPhoto && poiWithoutPhoto) break;
       const media = await request(BASE_URL).get(`/api/pois/${poi.id}/media`);
-      const hasPhoto = media.status === 200 && Array.isArray(media.body.mosaic) && media.body.mosaic.length > 0;
+      // Mirror resolvePoiOgImage: a YouTube-only mosaic is not a photo the
+      // thumbnail route can serve.
+      const hasPhoto = media.status === 200 && Array.isArray(media.body.mosaic)
+        && media.body.mosaic.some(m => m.media_type === 'image' || m.media_type === 'video');
       if (hasPhoto && !poiWithPhoto) poiWithPhoto = poi;
       if (!hasPhoto && !poiWithoutPhoto) poiWithoutPhoto = poi;
     }
@@ -103,27 +106,33 @@ describe('Open Graph share images', () => {
     // (server.js). For a POI that has a photo, the permalink must resolve to one
     // of the first two, never the brand card.
     // The server resolves a non-brand image only from (a) a usable source
-    // article image or (b) the POI primary photo (thumbnail endpoint) — a
-    // gallery mosaic alone is NOT sufficient (resolvePoiOgImage requires a
-    // primary/poi_media asset). Select a target the server can actually
-    // resolve, mirroring that priority.
+    // article image or (b) a photo the thumbnail route serves for the item's
+    // own POI or, failing that, the permalink POI. The list endpoint rolls up
+    // contained/child-POI news (#406) and the permalink resolver searches the
+    // same set (#475), so a park's permalink to a child's story counts too.
+    // Prefer such a rollup pairing when the data has one.
+    const thumbStatus = new Map();
+    const hasThumb = async (id) => {
+      if (!thumbStatus.has(id)) {
+        thumbStatus.set(id, (await request(BASE_URL).get(`/api/pois/${id}/thumbnail?size=large`)).status === 200);
+      }
+      return thumbStatus.get(id);
+    };
     let target = null;
+    let rollupTarget = null;
     for (const poi of (poiWithPhoto ? [poiWithPhoto, ...pois] : pois).slice(0, 80)) {
       const news = await request(BASE_URL).get(`/api/pois/${poi.id}/news`);
       if (news.status !== 200 || !Array.isArray(news.body) || news.body.length === 0) continue;
-      // The list endpoint rolls up contained/child-POI news (#406), but the
-      // permalink resolver (findItemBySlugs) only searches the slug'd POI's OWN
-      // news — the same news/POI pairing the app's share links use. Pair a news
-      // item with a foreign poi_id and the resolver can't find it, so it serves
-      // the brand fallback. Restrict to this POI's own items so the URL we build
-      // is one the resolver can actually resolve.
-      const own = news.body.filter(n => n.poi_id === poi.id);
-      if (own.length === 0) continue;
-      const withSourceImage = own.find(n => isUsableSourceImage(n.image_url));
-      if (withSourceImage) { target = { poi, news: withSourceImage }; break; }
-      const thumb = await request(BASE_URL).get(`/api/pois/${poi.id}/thumbnail?size=large`);
-      if (thumb.status === 200) { target = { poi, news: own[0] }; break; }
+      for (const item of news.body) {
+        const resolvable = isUsableSourceImage(item.image_url)
+          || await hasThumb(item.poi_id) || await hasThumb(poi.id);
+        if (!resolvable) continue;
+        if (item.poi_id !== poi.id) { rollupTarget = { poi, news: item }; break; }
+        if (!target) target = { poi, news: item };
+      }
+      if (rollupTarget) break;
     }
+    target = rollupTarget || target;
 
     if (!target) {
       console.warn('[og-share] No POI with both a photo and news in seed — skipping news permalink assertion');
@@ -137,7 +146,7 @@ describe('Open Graph share images', () => {
     const [twitterImage] = metaContent(res.text, 'name', 'twitter:image');
     expect(ogImages.length).toBe(1);
     expect(ogImages[0].endsWith(FALLBACK_IMAGE_PATH)).toBe(false);
-    const isPoiPhoto = new RegExp(`/api/pois/${target.poi.id}/thumbnail\\?size=large$`).test(ogImages[0]);
+    const isPoiPhoto = new RegExp(`/api/pois/(${target.poi.id}|${target.news.poi_id})/thumbnail\\?size=large$`).test(ogImages[0]);
     const isSourceImage = /^https?:\/\//i.test(ogImages[0]);
     expect(isPoiPhoto || isSourceImage).toBe(true);
     expect(twitterImage).toBe(ogImages[0]);
