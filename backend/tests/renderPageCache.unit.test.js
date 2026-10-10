@@ -55,4 +55,30 @@ describe('renderPage', () => {
     const upsert = pool.query.mock.calls.find(([sql]) => sql.includes('INSERT INTO rendered_page_cache'));
     expect(upsert[0]).toMatch(/item_count_news = NULL,\s*item_count_events = NULL/);
   });
+
+  it('reports a WAF block page as unreachable and does not cache it', async () => {
+    extractPageContent.mockResolvedValue({
+      reachable: true, title: 'Attention Required! | Cloudflare', links: [],
+      markdown: '## Why have I been blocked?\n\nThis website is using a security service to protect itself from online attacks.'
+    });
+    const pool = { query: vi.fn(async () => ({ rows: [] })) };
+
+    const page = await renderPage(pool, 'https://example.org/search.html', { contentType: 'event' });
+
+    expect(page.reachable).toBe(false);
+    expect(page.reason).toBe('blocked by site security');
+    expect(pool.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO rendered_page_cache'))).toBe(false);
+  });
+
+  it('does not mistake a long article that mentions being blocked for a block page', async () => {
+    extractPageContent.mockResolvedValue({
+      reachable: true, title: 'Trail news', links: [], rawText: 'x',
+      markdown: 'Why have I been blocked? asks a hiker at the closed gate. ' + 'The trail reopens in spring. '.repeat(100)
+    });
+    const pool = { query: vi.fn(async () => ({ rows: [] })) };
+
+    const page = await renderPage(pool, 'https://example.org/news/gate', {});
+
+    expect(page.reachable).toBe(true);
+  });
 });
