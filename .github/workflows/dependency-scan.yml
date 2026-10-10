@@ -53,7 +53,7 @@ jobs:
 
       - name: Gate on new findings
         if: github.event_name == 'pull_request'
-        uses: OWASP/cve-lite-cli@v1.37.0
+        uses: OWASP/cve-lite-cli@v1.38.0
         with:
           version: "1.37.0"
           path: ${{ matrix.dir }}
@@ -66,7 +66,7 @@ jobs:
 
       - name: Full scan
         if: github.event_name != 'pull_request'
-        uses: OWASP/cve-lite-cli@v1.37.0
+        uses: OWASP/cve-lite-cli@v1.38.0
         with:
           version: "1.37.0"
           path: ${{ matrix.dir }}
