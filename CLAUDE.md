@@ -166,6 +166,7 @@ Your working directory is `/work/rotv` inside the hosted dev container
 - Unit tests: `cd backend && npx vitest run tests/<file>.unit.test.js`, or `cd frontend && npx vitest run`.
 - The full gate is the PR: branch, commit, `git push`, `gh pr create`, and let GHA build and test.
 - The database is a copy of production. Scheduled jobs and mail are off; leave them off.
+- Shipping: `/deploy` (`.claude/skills/deploy/`) merges, tags and runs `ssh rotv-prod deploy`. That key runs `deploy`, `status` and `logs` on the production host and nothing else.
 
 ### Gotchas
 - `CREATE OR REPLACE VIEW` fails if columns changed — must DROP first

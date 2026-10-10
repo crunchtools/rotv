@@ -165,7 +165,7 @@ the Claude Code session that edits the code all live in it.
 ```
 phone / claude.ai ──Remote Control──▶ rotv-dev-claude.service ─ edits ─▶ /work/rotv
                                                                             │
-phone browser ─▶ Cloudflare ─▶ proxy (basic auth) ─▶ rotv-dev-ui (Vite :5173, HMR)
+phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev-ui (Vite :5173, HMR)
                                                         └─ /api /auth /stats /share ─▶ rotv-backend :8080
 ```
 
@@ -180,9 +180,16 @@ phone browser ─▶ Cloudflare ─▶ proxy (basic auth) ─▶ rotv-dev-ui (Vi
   (shape in `deploy/dev.env.example`); `data/checkout` is the git clone,
   mounted read-write at `/work/rotv`; `data/pgdata`; `data/state` holds the
   Claude and gh logins and the git identity. `node_modules` are named volumes.
-- **Gate:** basic auth at the proxy. Behind it the app runs `NODE_ENV=test` with
-  `BYPASS_AUTH=true`, so every visitor is the test admin. The HMR socket,
-  `/__hmr`, is exempt: mobile Safari sends no credentials on a WebSocket.
+- **Connectors:** the session signs in with a personal claude.ai account and
+  would inherit that account's connectors. `managed-settings.json` in the image
+  denies Gmail, Google Drive and Google Calendar: a root session that reads web
+  pages and auto-accepts edits has no business holding a mailbox.
+- **Gate:** Cloudflare Access (application "ROTV dev", a 30-day session, an
+  allow policy by email). Behind it the app runs `NODE_ENV=test` with
+  `BYPASS_AUTH=true`, so every visitor is the test admin. Access alone would
+  not be a gate, because the host's proxy also answers requests sent straight
+  to its address: a Cloudflare request-header rule adds a secret header to
+  requests for this hostname, and the proxy refuses the vhost without it.
 - **Data:** a copy of production, replaced by `./run.sh dev-host seed`
   (`scripts/dev-seed.sh`). The copy is scrubbed in the same transaction that
   loads it: account emails and names, sessions, login tokens, third-party API
@@ -196,6 +203,14 @@ phone browser ─▶ Cloudflare ─▶ proxy (basic auth) ─▶ rotv-dev-ui (Vi
   nothing is written to it.
 - **What it cannot do:** `./run.sh build` and `./run.sh test` need podman. Unit
   tests run in place; the full gate is the pull request.
+- **Deploying from here:** the session can ship what it merged. The project
+  skill `.claude/skills/deploy/` merges the PR, tags the release, waits for the
+  build and runs `ssh rotv-prod deploy`. That key is not a login: its
+  `authorized_keys` line forces `scripts/rotv-deploy.sh`, which accepts `deploy`,
+  `status` and `logs` and restarts only the production service. A session that
+  reads web pages as root does not get a shell on the host that runs everything
+  else. The script is installed under `/srv/rootsofthevalley.org/config/`, which
+  the dev container does not mount.
 
 First start needs three things done by hand in a terminal, once, because they
 are interactive and the logins are personal:
@@ -206,6 +221,21 @@ podman exec -it dev.rootsofthevalley.org gh auth login
 podman exec -it -w /work/rotv dev.rootsofthevalley.org claude remote-control   # answer the trust and enable questions, then Ctrl-C
 podman exec dev.rootsofthevalley.org systemctl restart rotv-dev-claude
 ```
+
+The deploy key is made once too, on the production host:
+
+```bash
+install -m 0755 scripts/rotv-deploy.sh /srv/rootsofthevalley.org/config/rotv-deploy.sh
+podman exec dev.rootsofthevalley.org sh -c 'mkdir -p -m 700 /var/lib/rotv-dev/ssh && ssh-keygen -q -t ed25519 -N "" -C rotv-dev-deploy -f /var/lib/rotv-dev/ssh/id_ed25519'
+# known_hosts: the host's own key, under the name and port in ssh_config.d/rotv-prod.conf
+echo "[lotor.dc3.crunchtools.com]:22422 $(cat /etc/ssh/ssh_host_ed25519_key.pub)" > /srv/dev.rootsofthevalley.org/data/state/ssh/known_hosts
+echo "restrict,from=\"10.88.0.0/16\",command=\"/srv/rootsofthevalley.org/config/rotv-deploy.sh\" $(cat /srv/dev.rootsofthevalley.org/data/state/ssh/id_ed25519.pub)" >> /root/.ssh/authorized_keys
+```
+
+Sessions run in auto mode, whose classifier refuses to merge and deploy on its
+own. `data/state/claude/settings.json` carries the `autoMode` block that names
+this repository and `rotv-prod` as trusted; it is user settings, so it lives on
+the state volume rather than in the checkout.
 
 ## Key Technologies
 
