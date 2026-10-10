@@ -322,16 +322,24 @@ function isNoiseLink(url, sourceUrl) {
   return false;
 }
 
-// A trusted_content_paths entry is a path fragment ("/events", "iteminfo.html") or a
-// hostname ("runsignup.com"). The host form is how an events page that sends each event
-// to a registration site gets its events collected at all.
+// A trusted_content_paths entry is a path fragment ("/events", "iteminfo.html") or, with
+// the "host:" prefix, a hostname ("host:runsignup.com"). The host form is how an events
+// page that sends each event to a registration site gets its events collected at all.
+// The prefix keeps the two apart: a bare "runsignup.com" would also match as a path
+// fragment on any host.
+const TRUSTED_HOST_PREFIX = 'host:';
+
 function matchesTrustedPath(parsedUrl, patterns) {
-  return patterns.some(pattern => parsedUrl.pathname.includes(pattern));
+  return patterns.some(pattern => !pattern.startsWith(TRUSTED_HOST_PREFIX) && parsedUrl.pathname.includes(pattern));
 }
 
 function matchesTrustedHost(parsedUrl, patterns) {
   const host = parsedUrl.hostname.replace(/^www\./, '').toLowerCase();
-  return patterns.some(pattern => host === pattern || host.endsWith(`.${pattern}`));
+  return patterns.some(pattern => {
+    if (!pattern.startsWith(TRUSTED_HOST_PREFIX)) return false;
+    const trustedHost = pattern.slice(TRUSTED_HOST_PREFIX.length);
+    return trustedHost.length > 0 && (host === trustedHost || host.endsWith(`.${trustedHost}`));
+  });
 }
 
 function shortestUrlDedup(urls) {
@@ -437,7 +445,7 @@ Return ONLY valid JSON:
  * @param {string} sourceUrl - The listing page's URL
  * @param {string|null} basePath - Path prefix same-origin links must stay under
  * @param {string[]} trustedEventPaths - Path fragments allowed off-origin or outside basePath,
- *   and hostnames whose pages may be followed one hop off-origin
+ *   and "host:"-prefixed hostnames whose pages may be followed one hop off-origin
  * @param {Set<string>|null} allowedDomains - Other hosts that belong to the POI
  * @returns {string[]} URLs to render, hash stripped
  */

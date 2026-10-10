@@ -729,7 +729,7 @@ function DataCollectionSettings() {
             <FilterList
               title="Content Path Allow List"
               type="allow"
-              hint="URL path patterns the content crawler may follow beyond the listing page (e.g., /event, /events, iteminfo.html), or a registration site's hostname whose event pages it may follow (e.g., runsignup.com)."
+              hint="URL path patterns the content crawler may follow beyond the listing page (e.g., /event, /events, iteminfo.html), or a registration site's hostname whose event pages it may follow (e.g., host:runsignup.com)."
               items={trustedEventPaths}
               value={newTrustedEventPath}
               onValueChange={setNewTrustedEventPath}

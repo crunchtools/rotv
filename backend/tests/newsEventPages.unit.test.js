@@ -110,8 +110,10 @@ describe('filterDetailLinks', () => {
       'https://runsignup.com/Race/OH/Cleveland/Halloween5K',
       'https://www.runsignup.com/Race/OH/Cleveland/UglySweater5k',
       'https://www.facebook.com/ExampleZoo',
-      'https://notrunsignup.com/Race/OH/Cleveland/Other'
-    ], listing, '/zoo/program-events', ['/events', 'iteminfo.html', 'runsignup.com']);
+      'https://notrunsignup.com/Race/OH/Cleveland/Other',
+      'https://evil.example/runsignup.com/Race',
+      'http://127.0.0.1/host:runsignup.com'
+    ], listing, '/zoo/program-events', ['/events', 'iteminfo.html', 'host:runsignup.com']);
 
     expect(followed).toEqual([
       'https://runsignup.com/Race/OH/Cleveland/Halloween5K',
@@ -123,7 +125,7 @@ describe('filterDetailLinks', () => {
     const racePage = 'https://runsignup.com/Race/OH/Cleveland/Halloween5K';
     const followed = filterDetailLinks(
       ['https://runsignup.com/Race/OH/Akron/SomeOtherRace'],
-      racePage, '/zoo/program-events', ['runsignup.com']);
+      racePage, '/zoo/program-events', ['host:runsignup.com']);
 
     expect(followed).toEqual([]);
   });
