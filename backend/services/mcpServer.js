@@ -9,6 +9,7 @@ import { getStatsSummary, getStatsTop } from './analyticsService.js';
 import {
   assertPoiNameAvailable,
   PoiNameConflictError,
+  poiNameIndexConflict,
   findParkMergeCandidates,
   mergePois,
   PoiMergeError
@@ -217,10 +218,17 @@ function registerTools(server, pool, boss, mcpUserId) {
       const fields = POI_CREATE_COLUMNS.filter(column => args[column] !== undefined);
       const values = fields.map(key => args[key]);
       const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-      const insertedPoi = await pool.query(
-        `INSERT INTO pois (${fields.join(', ')}) VALUES (${placeholders}) RETURNING id, name, poi_roles`,
-        values
-      );
+      let insertedPoi;
+      try {
+        insertedPoi = await pool.query(
+          `INSERT INTO pois (${fields.join(', ')}) VALUES (${placeholders}) RETURNING id, name, poi_roles`,
+          values
+        );
+      } catch (err) {
+        const taken = poiNameIndexConflict(err, args.name);
+        if (taken) return { content: [{ type: 'text', text: taken }], isError: true };
+        throw err;
+      }
       const row = insertedPoi.rows[0];
       return { content: [{ type: 'text', text: `Created POI #${row.id}: ${row.name} (${(row.poi_roles || []).join(', ')})` }] };
     }

@@ -71,8 +71,9 @@ function fakePool({ news = [], events = [] } = {}) {
     queries,
     query: vi.fn(async (sql, params) => {
       queries.push({ sql, params });
-      if (sql.includes('FROM poi_events')) return { rows: events };
+      // The news query also names poi_events in its NOT EXISTS, so check news first.
       if (sql.includes('FROM poi_news')) return { rows: news };
+      if (sql.includes('FROM poi_events')) return { rows: events };
       if (sql.includes('admin_settings')) return { rows: [] };
       return { rows: [] };
     })
@@ -97,7 +98,7 @@ describe('getDigestDraft', () => {
     await getDigestDraft(pool, { tz: TZ, asOf: sendsAt });
 
     const newsQuery = pool.queries.find(q => q.sql.includes('FROM poi_news'));
-    const eventsQuery = pool.queries.find(q => q.sql.includes('FROM poi_events'));
+    const eventsQuery = pool.queries.find(q => q.sql.includes('JOIN pois p ON e.poi_id'));
     expect(newsQuery.params).toEqual([sendsAt]);
     expect(eventsQuery.params).toEqual([TZ, sendsAt]);
   });
@@ -107,7 +108,16 @@ describe('getDigestDraft', () => {
     await getDigestDraft(pool, { tz: TZ, asOf: sendsAt });
 
     expect(pool.queries.find(q => q.sql.includes('FROM poi_news')).sql).toContain('NOT n.digest_excluded');
-    expect(pool.queries.find(q => q.sql.includes('FROM poi_events')).sql).toContain('NOT e.digest_excluded');
+    expect(pool.queries.find(q => q.sql.includes('JOIN pois p ON e.poi_id')).sql).toContain('NOT e.digest_excluded');
+  });
+
+  it('leaves out news rows whose URL is a stored event (#585)', async () => {
+    const pool = fakePool();
+    await getDigestDraft(pool, { tz: TZ, asOf: sendsAt });
+
+    const newsSql = pool.queries.find(q => q.sql.includes('FROM poi_news')).sql;
+    expect(newsSql).toMatch(/NOT EXISTS \(\s*SELECT 1 FROM poi_events ev/);
+    expect(newsSql).toContain("LOWER(REGEXP_REPLACE(ev.source_url, '/+$', '')) = LOWER(REGEXP_REPLACE(n.source_url, '/+$', ''))");
   });
 
   it('drops social hosts the email also drops', async () => {

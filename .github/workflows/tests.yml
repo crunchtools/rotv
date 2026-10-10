@@ -187,6 +187,28 @@ jobs:
         working-directory: frontend
         run: npm test
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      # ESLint and its plugins live in the root package, not in frontend/ or backend/.
+      - name: Install lint dependencies
+        run: npm ci
+
+      - name: Lint frontend and backend
+        run: npm run lint
+
   gourmand-review:
     name: Code Quality (Gourmand)
     uses: crunchtools/gatehouse/.github/workflows/gourmand.yml@v0.15.2

@@ -5,19 +5,47 @@ const logger = createLogger('Cache');
 
 const TTL_MS = {
   detail: Infinity,
+  // A detail page that counted zero items may have rendered badly (WebTrac pages
+  // served a "browser does not support javascript" shell, #732); forever would
+  // never give it a second look.
+  detail_empty: 7 * 24 * 60 * 60 * 1000,
   listing: 23 * 60 * 60 * 1000,
   trail_status: 25 * 60 * 1000
 };
 
-function isCacheFresh(row) {
+/**
+ * Whether a cached render can still be served.
+ *
+ * @param {object|undefined} row - A rendered_page_cache row
+ * @param {'news'|'event'|null} contentType - The crawl asking; a detail page that
+ *   counted zero items of this type expires after TTL_MS.detail_empty
+ * @returns {boolean}
+ */
+export function isCacheFresh(row, contentType = null) {
   if (!row || !row.rendered_at) return false;
-  const ttl = TTL_MS[row.page_type] ?? TTL_MS.listing;
+  let ttl = TTL_MS[row.page_type] ?? TTL_MS.listing;
+  if (row.page_type === 'detail' && contentType) {
+    const count = contentType === 'event' ? row.item_count_events : row.item_count_news;
+    if (count === 0) ttl = TTL_MS.detail_empty;
+  }
   if (ttl === Infinity) return true;
   return (Date.now() - new Date(row.rendered_at).getTime()) < ttl;
 }
 
+/**
+ * Renders a page through the browser pool, or serves it from rendered_page_cache.
+ *
+ * @param {import('pg').Pool} pool
+ * @param {string} url
+ * @param {object} options - Extraction options, plus:
+ * @param {string} [options.pageType] - Cache class for a fresh render ('detail', 'listing', 'trail_status')
+ * @param {'news'|'event'} [options.contentType] - The crawl's content type. With it, a cached
+ *   detail page that yielded no items of that type is re-rendered after seven days instead
+ *   of being served forever; a re-render clears both cached item counts.
+ * @returns {Promise<object>} The extracted page, with cached: true when served from cache
+ */
 export async function renderPage(pool, url, options = {}) {
-  const { pageType, ...extractOptions } = options;
+  const { pageType, contentType, ...extractOptions } = options;
 
   const cached = await pool.query(
     'SELECT * FROM rendered_page_cache WHERE url = $1',
@@ -27,7 +55,7 @@ export async function renderPage(pool, url, options = {}) {
     return { rows: [] };
   });
   const row = cached.rows[0];
-  if (row && isCacheFresh(row) && row.markdown) {
+  if (row && isCacheFresh(row, contentType) && row.markdown) {
     return {
       markdown: row.markdown,
       rawText: row.raw_text,
@@ -58,6 +86,8 @@ export async function renderPage(pool, url, options = {}) {
         title = EXCLUDED.title,
         links = EXCLUDED.links,
         page_type = EXCLUDED.page_type,
+        item_count_news = NULL,
+        item_count_events = NULL,
         rendered_at = NOW()
     `, [
       url,

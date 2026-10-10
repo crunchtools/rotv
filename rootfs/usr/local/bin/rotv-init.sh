@@ -27,13 +27,18 @@ if [ -f /tmp/seed-data.sql ]; then
 fi
 
 # Run all numbered SQL migrations in sorted order
-# Migrations are idempotent (IF NOT EXISTS, etc.) so safe to re-run
+# Migrations are idempotent (IF NOT EXISTS, etc.) so safe to re-run. A failing
+# statement does not stop the boot (no ON_ERROR_STOP), so its ERROR and any
+# WARNING a migration raises go to the journal as "<file>:<line>: ..."; the
+# routine "already exists, skipping" NOTICEs stay in the output file.
 echo "Running database migrations..."
 MIGRATION_COUNT=0
 for migration in /app/migrations/[0-9]*.sql; do
   [ -f "$migration" ] || continue
   MIGRATION_NAME=$(basename "$migration")
   psql -h localhost -U postgres -d rotv -f "$migration" > /tmp/migration_output.txt 2>&1
+  grep -E '^psql:.*: (ERROR|WARNING):|^(DETAIL|HINT):' /tmp/migration_output.txt \
+    | sed -E "s#^psql:[^:]*/([^/:]*):#\1:#; s#^(DETAIL|HINT):#$MIGRATION_NAME: &#" || true
   MIGRATION_COUNT=$((MIGRATION_COUNT + 1))
 done
 echo "$MIGRATION_COUNT migrations applied"

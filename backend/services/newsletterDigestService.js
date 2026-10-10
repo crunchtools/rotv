@@ -280,6 +280,11 @@ async function fetchDigestContent(pool, tz, asOfDate) {
       AND n.collection_date > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
       AND n.collection_date <= COALESCE($1::timestamptz, NOW())
       AND COALESCE(n.publication_date, n.collection_date) <= COALESCE($1::timestamptz, NOW())
+      -- A news row whose URL is also a stored event is an event page ingested as news (#585).
+      AND NOT EXISTS (
+        SELECT 1 FROM poi_events ev
+        WHERE LOWER(REGEXP_REPLACE(ev.source_url, '/+$', '')) = LOWER(REGEXP_REPLACE(n.source_url, '/+$', ''))
+      )
     ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.id DESC
     LIMIT ${DIGEST_NEWS_LIMIT * DIGEST_NEWS_FETCH_MULTIPLIER}
   `;
@@ -844,6 +849,10 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
           AND NOT n.digest_excluded
           AND n.collection_date > NOW() - INTERVAL '7 days'
           AND COALESCE(n.publication_date, n.collection_date) <= NOW()
+          AND NOT EXISTS (
+            SELECT 1 FROM poi_events ev
+            WHERE LOWER(REGEXP_REPLACE(ev.source_url, '/+$', '')) = LOWER(REGEXP_REPLACE(n.source_url, '/+$', ''))
+          )
         ORDER BY COALESCE(n.publication_date, n.collection_date) DESC`,
       [allPoiIds]
     ),

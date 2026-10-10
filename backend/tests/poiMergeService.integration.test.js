@@ -6,12 +6,14 @@
  */
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest';
 import pg from 'pg';
+import { readFile } from 'fs/promises';
 import request from 'supertest';
 import {
   mergePois,
   findParkMergeCandidates,
   assertPoiNameAvailable,
   PoiNameConflictError,
+  poiNameIndexConflict,
   normalizePoiName,
   originalMergedName,
   resolveMergedIds
@@ -208,6 +210,48 @@ describe('mergePois', () => {
     ]);
   });
 
+  describe('has_primary_image (#739)', () => {
+    it('drops a stale flag the point carried with no photo behind it', async () => {
+      await pool.query('UPDATE pois SET has_primary_image = TRUE WHERE id = $1', [POINT]);
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(false);
+    });
+
+    it('is set when the point brings a published primary photo', async () => {
+      await pool.query(
+        `INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status)
+         VALUES ($1, 'image', '_merge-point-primary', 'primary', 'published')`,
+        [POINT]
+      );
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(true);
+    });
+
+    it('ignores media the thumbnail route cannot serve', async () => {
+      await pool.query(
+        `INSERT INTO poi_media (poi_id, media_type, youtube_url, role, moderation_status)
+         VALUES ($1, 'youtube', 'https://youtu.be/_merge', 'gallery', 'published')`,
+        [POINT]
+      );
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(false);
+    });
+
+    it('is set when a photo adopted from the image server arrives', async () => {
+      const imageServer = {
+        getPoiAssets: async (poiId) => (poiId === POINT ? [{ id: 990011, role: 'primary', asset_type: 'image' }] : [])
+      };
+      await mergePois(pool, POINT, PARK, { imageServer });
+      expect((await row(PARK)).has_primary_image).toBe(true);
+    });
+
+    it('keeps the flag the park already had', async () => {
+      await pool.query('UPDATE pois SET has_primary_image = TRUE WHERE id = $1', [PARK]);
+      await mergePois(pool, POINT, PARK);
+      expect((await row(PARK)).has_primary_image).toBe(true);
+    });
+  });
+
   it('changes nothing on a dry run but reports what would move', async () => {
     await pool.query('INSERT INTO user_visits (user_id, poi_id) VALUES ($1, $2)', [userId, POINT]);
     const outcome = await mergePois(pool, POINT, PARK, { dryRun: true });
@@ -291,5 +335,44 @@ describe('following a merge', () => {
     expect(park.brief_description).toBe('An 890-acre park.');
     const points = await request(BASE_URL).get('/api/pois?role=point').expect(200);
     expect(points.body.find(p => p.id === POINT)).toBeUndefined();
+  });
+});
+
+describe('pois_name_key (#740)', () => {
+  it('reads a unique violation on the index as a name conflict, and nothing else', () => {
+    expect(poiNameIndexConflict({ code: '23505', constraint: 'pois_name_key' }, 'Gorge Metro Park'))
+      .toContain('"Gorge Metro Park" already exists');
+    expect(poiNameIndexConflict({ code: '23505', constraint: 'users_email_key' }, 'x')).toBeNull();
+    expect(poiNameIndexConflict({ code: '23503', constraint: 'pois_name_key' }, 'x')).toBeNull();
+    expect(poiNameIndexConflict(new Error('boom'), 'x')).toBeNull();
+    expect(poiNameIndexConflict(null, 'x')).toBeNull();
+  });
+
+  it('migration 097 builds the index only once no name is duplicated', async () => {
+    const migration = await readFile(new URL('../migrations/097_pois_name_unique.sql', import.meta.url), 'utf8');
+    await pool.query('DROP SCHEMA IF EXISTS name_index_probe CASCADE');
+    await pool.query('CREATE SCHEMA name_index_probe');
+    const probe = new pg.Pool({ ...pool.options, options: '-c search_path=name_index_probe' });
+    const hasIndex = async () => (await probe.query(`SELECT to_regclass('name_index_probe.pois_name_key') AS idx`)).rows[0].idx !== null;
+    try {
+      await probe.query(migration);
+      expect(await hasIndex()).toBe(false);
+
+      await probe.query(`
+        CREATE TABLE pois (id serial PRIMARY KEY, name text, deleted boolean);
+        INSERT INTO pois (name, deleted) VALUES ('Gorge Metro Park', FALSE), ('Gorge Metro Park', TRUE);
+      `);
+      await probe.query(migration);
+      expect(await hasIndex()).toBe(false);
+
+      await probe.query(`UPDATE pois SET name = name || ' [merged into #1]' WHERE deleted`);
+      await probe.query(migration);
+      expect(await hasIndex()).toBe(true);
+      await probe.query(migration);
+      expect(await hasIndex()).toBe(true);
+    } finally {
+      await probe.end();
+      await pool.query('DROP SCHEMA IF EXISTS name_index_probe CASCADE');
+    }
   });
 });

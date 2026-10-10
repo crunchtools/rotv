@@ -1,7 +1,7 @@
 import { generateTextWithCustomPrompt } from './llmService.js';
 import { renderPage } from './renderPage.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate } from './dateExtractor.js';
+import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate, easternDay, publicationJsonLdDates } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
@@ -258,9 +258,12 @@ Return ONLY valid JSON: {"choice": "${keys.join('|')}"}`;
 // above the floor — catches hallucinated 1800s values), AND has consensus at/above the
 // threshold. Age is never penalized. Source reputation carries no weight here: an official
 // domain with a weak machine-readable date goes to manual review like any other source.
-const easternDay = (date) => new Intl.DateTimeFormat('en-CA', {
-  timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
-}).format(date);
+// JSON-LD dates for a fresh render: an event is dated by its Event startDate, news by its
+// publication dates.
+function jsonLdDatesFor(contentType, ogDates) {
+  if (contentType === 'event') return ogDates.eventStartDate ? [ogDates.eventStartDate] : [];
+  return publicationJsonLdDates(ogDates);
+}
 
 // Events store date_signals as { start, end }; news stores the signals at the top level.
 // Reading events at the top level scored nothing and wiped the event's date.
@@ -484,7 +487,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
             pageContent,
             threshold: effectiveThreshold,
             sources: {
-              jsonLd: ogDates.jsonLdDates || [],
+              jsonLd: jsonLdDatesFor(contentType, ogDates),
               meta: [ogDates.publishedTime, ogDates.parselyPubDate, ogDates.dcDate].filter(Boolean),
               timeTags: ogDates.timeDates || [],
               url: extractUrlDate(row.source_url),
@@ -920,7 +923,7 @@ export async function fixDate(pool, contentType, contentId) {
       title: item.title, description: item.description,
       pageContent,
       sources: {
-        jsonLd: ogDates.jsonLdDates || [],
+        jsonLd: jsonLdDatesFor(contentType, ogDates),
         meta: [ogDates.publishedTime, ogDates.parselyPubDate, ogDates.dcDate].filter(Boolean),
         timeTags: ogDates.timeDates || [],
         url: extractUrlDate(item.source_url),
