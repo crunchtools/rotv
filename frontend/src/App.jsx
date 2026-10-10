@@ -524,13 +524,11 @@ function AppContent() {
         setActiveTab('view');
         const visitorCenter = destinations.find(d => d.name === 'Boston Mill Visitor Center');
         if (visitorCenter) {
+          // Fix: open the card in full the way a /place/info link does, not by clicking its button on a timer (PR #745 review)
+          // Add to Trip is on the full card, not the half-height summary.
+          setInitialSidebarTab('view');
           setSelectedDestination(visitorCenter);
         }
-        // Add to trip is on the full card, not the half-height summary
-        setTimeout(() => {
-          const expand = document.querySelector('.sidebar.peek .sidebar-expand-btn');
-          if (expand) expand.click();
-        }, 300);
         break;
       }
       case 'selectVisitorCenter': {
