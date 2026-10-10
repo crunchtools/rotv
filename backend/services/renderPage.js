@@ -13,6 +13,16 @@ const TTL_MS = {
   trail_status: 25 * 60 * 1000
 };
 
+// A WAF refusal renders as a short page of its own (Cloudflare: "Why have I been
+// blocked?"). Cached as content it was classified "neither" and served for a day,
+// so the next daily crawl read the refusal instead of the listing.
+const BLOCK_PAGE_RE = /why have i been blocked\?|sorry, you have been blocked|access denied\b.*\bsecurity service/i;
+
+function isBlockPage(rendered) {
+  const text = rendered.markdown || '';
+  return text.length < 2000 && BLOCK_PAGE_RE.test(`${rendered.title || ''}\n${text}`);
+}
+
 /**
  * Whether a cached render can still be served.
  *
@@ -73,6 +83,11 @@ export async function renderPage(pool, url, options = {}) {
   }
 
   const rendered = await extractPageContent(url, extractOptions);
+
+  if (rendered.reachable && isBlockPage(rendered)) {
+    logger.warn(`Blocked by site security: ${url}`);
+    return { ...rendered, reachable: false, markdown: null, reason: 'blocked by site security' };
+  }
 
   if (rendered.reachable && rendered.markdown) {
     await pool.query(`
