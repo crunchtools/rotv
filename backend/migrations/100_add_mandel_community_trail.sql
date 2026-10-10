@@ -46,3 +46,20 @@ WHERE NOT EXISTS (
 -- Point geometry for spatial queries (mirrors migration 021, which runs before this file).
 UPDATE pois SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
 WHERE name = 'Mandel Community Trail' AND geom IS NULL;
+
+-- The trail's opening was covered before it had a POI, so the collector filed those
+-- articles under the nearest places it knew. Move them to the trail so they show on
+-- its News tab. Each row is matched by URL and by the POI it was filed under, so this
+-- fires once and never undoes a later admin reassignment.
+UPDATE poi_news n
+SET poi_id = trail.id
+FROM (VALUES
+  ('https://www.news5cleveland.com/news/local-news/oh-cuyahoga/cleveland-metroparks-opens-mandel-community-trail-connecting-lakefront-to-city-neighborhoods', 'Cleveland Lakefront Bikeway'),
+  ('https://cuyahogacounty.gov/county-news/county-news-detail/2026/09/22/mandel-community-trail-opens--creating-new-connection-to-cleveland-s-lakefront', 'East 55th Street Marina'),
+  ('https://spectrumnews1.com/oh/dayton/news/2026/09/24/new-trail-increases-access-to-cleveland-s-east-side-lakefront', 'Cleveland Metroparks'),
+  ('https://www.clevelandmetroparks.com/news-press/transformative-mandel-community-trail-opens-creating-new-connection-to-cleveland-s-lakefront', 'Cleveland Metroparks')
+) AS moved(source_url, filed_under)
+JOIN pois filed ON filed.name = moved.filed_under
+JOIN pois trail ON trail.name = 'Mandel Community Trail'
+WHERE n.source_url = moved.source_url
+  AND n.poi_id = filed.id;
