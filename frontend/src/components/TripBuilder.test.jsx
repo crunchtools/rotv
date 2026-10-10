@@ -79,6 +79,21 @@ describe('TripBuilder', () => {
     expect(container.querySelectorAll('.poi-action--primary').length).toBe(1);
   });
 
+  it('offers no route when no stop has usable coordinates', () => {
+    tripState.trip.stops = [{ poi_id: 3, label: 'Somewhere', latitude: 'unknown', longitude: 'unknown' }];
+    const { container, rerender } = render(<TripBuilder />);
+
+    expect(container.querySelector('.trip-builder-handle a')).toBeNull();
+
+    tripState.showBuilder = true;
+    rerender(<TripBuilder />);
+
+    const navigate = container.querySelector('.trip-builder-actions-primary a.poi-action--primary');
+    expect(navigate.getAttribute('aria-disabled')).toBe('true');
+    expect(navigate.classList.contains('disabled')).toBe(true);
+    expect(navigate.getAttribute('href')).toBe('#');
+  });
+
   it('reorders and removes stops', () => {
     tripState.showBuilder = true;
     render(<TripBuilder />);
