@@ -12,6 +12,7 @@ vi.mock('pg-boss', () => ({
       });
       this.workers = {};
       this.schedule = vi.fn().mockResolvedValue(undefined);
+      this.unschedule = vi.fn().mockResolvedValue(undefined);
       this.send = vi.fn().mockResolvedValue('pgboss-job-1');
       this.on = vi.fn();
       this.start = vi.fn().mockResolvedValue(undefined);
@@ -26,7 +27,7 @@ const {
   registerNewsletterHandler, registerModerationSweepHandler, registerDigestHandler,
   registerPipelineCollectionHandler, submitBatchNewsJob, triggerDigestManually,
   triggerPreviewManually, scheduleNewsCollection, schedulePipelineCollection, scheduleImageBackup,
-  scheduleUnconfirmedCleanup, registerUnconfirmedCleanupHandler
+  scheduleUnconfirmedCleanup, registerUnconfirmedCleanupHandler, updateSchedule
 } = await import('../services/jobScheduler.js');
 
 let infoSpy;
@@ -46,6 +47,36 @@ beforeEach(async () => {
 afterEach(async () => {
   await stopJobScheduler();
   vi.restoreAllMocks();
+});
+
+describe('SCHEDULED_JOBS_ENABLED=false (dev host, #748)', () => {
+  afterEach(() => {
+    delete process.env.SCHEDULED_JOBS_ENABLED;
+  });
+
+  it('removes schedules instead of setting them, and keeps workers', async () => {
+    process.env.SCHEDULED_JOBS_ENABLED = 'false';
+
+    await scheduleUnconfirmedCleanup();
+    await schedulePipelineCollection('events', '30 4 * * *');
+    await updateSchedule(JOB_NAMES.NEWSLETTER_DIGEST, '0 8 * * 5');
+
+    expect(boss.schedule).not.toHaveBeenCalled();
+    expect(boss.unschedule.mock.calls.map(([name]) => name)).toEqual([
+      JOB_NAMES.UNCONFIRMED_CLEANUP, JOB_NAMES.EVENTS_COLLECTION, JOB_NAMES.NEWSLETTER_DIGEST
+    ]);
+
+    const handler = vi.fn().mockResolvedValue(undefined);
+    await registerUnconfirmedCleanupHandler(handler);
+    expect(boss.workers[JOB_NAMES.UNCONFIRMED_CLEANUP]).toBeDefined();
+  });
+
+  it('schedules normally for any other value', async () => {
+    process.env.SCHEDULED_JOBS_ENABLED = 'true';
+    await scheduleUnconfirmedCleanup();
+    expect(boss.schedule).toHaveBeenCalledTimes(1);
+    expect(boss.unschedule).not.toHaveBeenCalled();
+  });
 });
 
 describe('unconfirmed-account cleanup (spec 046)', () => {

@@ -569,6 +569,40 @@ ENVFILE
             ro "--init --replace --name ${CONTAINER_NAME}-dev-ui --network=host"
         ;;
 
+    dev-host)
+        # dev.rootsofthevalley.org: the hosted dev container on the production host.
+        # Its checkout is edited in place by the Claude session running inside it;
+        # these are the few things done to it from outside.
+        DEV_HOST_CONTAINER="dev.rootsofthevalley.org"
+        dev_host_ssh() {
+            ssh -p "$PRODUCTION_PORT" root@"$PRODUCTION_HOST" "$@"
+        }
+        case "${2:-status}" in
+            seed)
+                dev_host_ssh "PRODUCTION_CONTAINER=$PRODUCTION_CONTAINER DEV_CONTAINER=$DEV_HOST_CONTAINER bash -s" < scripts/dev-seed.sh
+                ;;
+            status)
+                dev_host_ssh "podman exec $DEV_HOST_CONTAINER systemctl status postgresql rotv-init rotv-backend rotv-dev-deps rotv-dev-ui rotv-dev-claude --no-pager -n 0; podman exec $DEV_HOST_CONTAINER git -C /work/rotv status -sb | head -20"
+                ;;
+            logs)
+                # The unit name goes into a root shell on the production host
+                case "${3:-rotv-backend}" in
+                    postgresql|rotv-init|rotv-backend|rotv-dev-deps|rotv-dev-ui|rotv-dev-claude|umami) ;;
+                    *) echo "Unknown unit: $3"; exit 1 ;;
+                esac
+                dev_host_ssh "podman exec $DEV_HOST_CONTAINER journalctl -f --no-pager -n 50 -u ${3:-rotv-backend}"
+                ;;
+            restart)
+                dev_host_ssh "systemctl restart $DEV_HOST_CONTAINER"
+                echo "✓ $DEV_HOST_CONTAINER restarted"
+                ;;
+            *)
+                echo "Usage: ./run.sh dev-host <status|seed|logs [unit]|restart>"
+                exit 1
+                ;;
+        esac
+        ;;
+
     reload-app)
         echo "Hot reloading application code..."
         echo ""
@@ -666,6 +700,7 @@ ENVFILE
         echo "  reload-app     Rebuild frontend and restart backend in the container"
         echo "                 WARNING: Always run 'build' before creating a PR"
         echo "  seed           Pull fresh data from production server via SSH"
+        echo "  dev-host       dev.rootsofthevalley.org: status | seed | logs [unit] | restart"
         echo ""
         echo "TESTING COMMANDS"
         echo "  test           Run full test suite + Gourmand + ESLint + frontend unit tests + Gatehouse"

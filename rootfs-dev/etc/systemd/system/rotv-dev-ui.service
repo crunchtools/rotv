@@ -1,0 +1,20 @@
+[Unit]
+Description=ROTV Vite dev server (hot reload) for the mounted checkout
+After=rotv-dev-deps.service rotv-backend.service
+Requires=rotv-dev-deps.service
+ConditionPathExists=/work/rotv/frontend/package.json
+
+[Service]
+Type=simple
+WorkingDirectory=/work/rotv/frontend
+Environment=ROTV_API_TARGET=http://localhost:8080
+Environment=VITE_CACHE_DIR=/work/rotv/frontend/node_modules/.vite
+# ROTV_DEV_HOST
+EnvironmentFile=-/etc/rotv/environment
+# The environment file sets NODE_ENV=test for the backend, and it wins over Environment=
+ExecStart=/usr/bin/env NODE_ENV=development /work/rotv/frontend/node_modules/.bin/vite --port 5173 --strictPort
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
