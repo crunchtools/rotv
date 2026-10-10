@@ -5,8 +5,10 @@
 --   named "Mandel Community Trail" (way/1422115795 at East 9th through way/1557687515
 --   at East 55th) chained end to end into one line.
 -- Idempotent: the insert is guarded by name, so re-runs are no-ops and later admin
---   edits are not clobbered.
+--   edits are not clobbered. The news move below rides on the insert, so it happens
+--   only on the run that creates the trail.
 
+WITH created AS (
 INSERT INTO pois (
   name,
   brief_description,
@@ -41,27 +43,26 @@ SELECT
   'https://www.clevelandmetroparks.com/about/planning-design/planning-and-design-projects/projects/mandel-community-trail'
 WHERE NOT EXISTS (
   SELECT 1 FROM pois WHERE name = 'Mandel Community Trail'
-);
-
--- Point geometry for spatial queries (mirrors migration 021, which runs before this file).
-UPDATE pois SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
-WHERE name = 'Mandel Community Trail' AND geom IS NULL;
-
+)
+RETURNING id
+)
 -- The trail's opening was covered before it had a POI, so the collector filed those
 -- articles under the nearest places it knew. Move them to the trail so they show on
--- its News tab. Each row is matched by URL and by the POI it was filed under, and the
--- move only happens while the trail has no news at all, so it fires once and never
--- undoes a later admin reassignment, including one back to the original POI.
+-- its News tab. Each row is matched by URL and by the POI it was filed under, and
+-- only when this run created the trail: a re-run finds the trail already there and
+-- moves nothing, so an admin who files an article back where it was keeps it there.
 UPDATE poi_news n
-SET poi_id = trail.id
-FROM (VALUES
+SET poi_id = created.id
+FROM created, (VALUES
   ('https://www.news5cleveland.com/news/local-news/oh-cuyahoga/cleveland-metroparks-opens-mandel-community-trail-connecting-lakefront-to-city-neighborhoods', 'Cleveland Lakefront Bikeway'),
   ('https://cuyahogacounty.gov/county-news/county-news-detail/2026/09/22/mandel-community-trail-opens--creating-new-connection-to-cleveland-s-lakefront', 'East 55th Street Marina'),
   ('https://spectrumnews1.com/oh/dayton/news/2026/09/24/new-trail-increases-access-to-cleveland-s-east-side-lakefront', 'Cleveland Metroparks'),
   ('https://www.clevelandmetroparks.com/news-press/transformative-mandel-community-trail-opens-creating-new-connection-to-cleveland-s-lakefront', 'Cleveland Metroparks')
 ) AS moved(source_url, filed_under)
 JOIN pois filed ON filed.name = moved.filed_under
-JOIN pois trail ON trail.name = 'Mandel Community Trail'
 WHERE n.source_url = moved.source_url
-  AND n.poi_id = filed.id
-  AND NOT EXISTS (SELECT 1 FROM poi_news existing WHERE existing.poi_id = trail.id);
+  AND n.poi_id = filed.id;
+
+-- Point geometry for spatial queries (mirrors migration 021, which runs before this file).
+UPDATE pois SET geom = ST_SetSRID(ST_MakePoint(longitude, latitude), 4326)
+WHERE name = 'Mandel Community Trail' AND geom IS NULL;
