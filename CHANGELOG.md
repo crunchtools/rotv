@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `digest_excluded` flag on news and events (migration 096).
 
 ### Changed
+- **Labels and actions on a place are told apart**: the Info tab mixed labels (MTB Trailhead, Modern
+  Era) and buttons (Share, Navigate) in one row of look-alike pills. Labels are now small grey tags,
+  with colour kept for live status; actions are a separate row of bordered buttons with Navigate
+  the one filled button, 44px tall on a phone. More info and Live tracker join that row, so they
+  are reachable from the half-height card, which leaves Add to trip and Mark visited for the full
+  card. A trail status Source is a text link beside its updated time.
 - **The place card on a phone**: at half height the card is now a summary. The photo is a thumbnail
   in the header that opens the gallery, and the Info, News and History tabs sit directly under it.
   The half card no longer scrolls: dragging it up opens it in full, and dragging the full card down

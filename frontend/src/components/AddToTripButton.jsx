@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTrip } from '../hooks/useTrip';
 
-export default function AddToTripButton({ poi, stops, className = 'share-badge-btn add-to-trip-btn' }) {
+export default function AddToTripButton({ poi, stops, className = 'poi-action add-to-trip-btn' }) {
   const { trip, addStop, removeStopByPoi, hasStop, MAX_STOPS } = useTrip();
 
   if (!Array.isArray(stops) || stops.length === 0) return null;
