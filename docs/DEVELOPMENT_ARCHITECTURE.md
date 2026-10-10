@@ -165,7 +165,7 @@ the Claude Code session that edits the code all live in it.
 ```
 phone / claude.ai ──Remote Control──▶ rotv-dev-claude.service ─ edits ─▶ /work/rotv
                                                                             │
-phone browser ─▶ Cloudflare ─▶ proxy (basic auth) ─▶ rotv-dev-ui (Vite :5173, HMR)
+phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev-ui (Vite :5173, HMR)
                                                         └─ /api /auth /stats /share ─▶ rotv-backend :8080
 ```
 
@@ -184,9 +184,12 @@ phone browser ─▶ Cloudflare ─▶ proxy (basic auth) ─▶ rotv-dev-ui (Vi
   would inherit that account's connectors. `managed-settings.json` in the image
   denies Gmail, Google Drive and Google Calendar: a root session that reads web
   pages and auto-accepts edits has no business holding a mailbox.
-- **Gate:** basic auth at the proxy. Behind it the app runs `NODE_ENV=test` with
-  `BYPASS_AUTH=true`, so every visitor is the test admin. The HMR socket,
-  `/__hmr`, is exempt: mobile Safari sends no credentials on a WebSocket.
+- **Gate:** Cloudflare Access (application "ROTV dev", a 30-day session, an
+  allow policy by email). Behind it the app runs `NODE_ENV=test` with
+  `BYPASS_AUTH=true`, so every visitor is the test admin. Access alone would
+  not be a gate, because the host's proxy also answers requests sent straight
+  to its address: a Cloudflare request-header rule adds a secret header to
+  requests for this hostname, and the proxy refuses the vhost without it.
 - **Data:** a copy of production, replaced by `./run.sh dev-host seed`
   (`scripts/dev-seed.sh`). The copy is scrubbed in the same transaction that
   loads it: account emails and names, sessions, login tokens, third-party API
