@@ -838,12 +838,25 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
             )
           )}
 
-          {sidebarTab === 'news' && linearFeature && (
+          {/* Trails and rivers open an article or event in the card too, like destinations (#738) */}
+          {permalinkInfo && (sidebarTab === 'news' || sidebarTab === 'events') && (
+            <ContentDetail
+              permalinkInfo={permalinkInfo}
+              onItemLoaded={setPermalinkItem}
+              onBack={() => {
+                if (onClearPermalink) onClearPermalink();
+                const subTab = permalinkInfo?.type === 'event' ? 'events' : 'news';
+                navigate(`/${generateSlug(linearFeature.name)}/${subTab}`);
+              }}
+            />
+          )}
+
+          {sidebarTab === 'news' && linearFeature && !permalinkInfo && (
             <PoiNews poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setNewsCount}
               onSelectNews={(info) => onSetPermalink && onSetPermalink(info)} />
           )}
 
-          {sidebarTab === 'events' && linearFeature && (
+          {sidebarTab === 'events' && linearFeature && !permalinkInfo && (
             <PoiEvents poiId={linearFeature.id} poiName={linearFeature.name} isAdmin={isAdmin} editMode={editMode} onCountChange={setEventsCount}
               onSelectEvent={(info) => onSetPermalink && onSetPermalink(info)} />
           )}
