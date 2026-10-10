@@ -2,9 +2,11 @@
 # Replace the dev database with a scrubbed copy of production's. Runs on the
 # host that has both containers (./run.sh dev-host seed sends it over ssh).
 #
-# The dump and the scrub go through one psql transaction that stops on the
-# first error, so the dev database is either the old one or a complete,
-# scrubbed new one. Unscrubbed production data is never committed to it.
+# The dev database is dropped and recreated, then the dump and the scrub go
+# through one psql transaction that stops on the first error. So the database
+# is either empty or a complete, scrubbed copy: unscrubbed production data is
+# never committed to it. A fresh database rather than pg_dump --clean, whose
+# DROPs fail on pg-boss's partitioned tables ("cannot drop inherited constraint").
 set -euo pipefail
 
 PROD="${PRODUCTION_CONTAINER:-rootsofthevalley.org}"
@@ -18,6 +20,8 @@ DEV="${DEV_CONTAINER:-dev.rootsofthevalley.org}"
 # production had queued must not run a second time from here.
 scrub_sql() {
     cat <<'SQL'
+-- pg_dump leaves the session with an empty search_path
+SET search_path = public;
 TRUNCATE sessions, email_login_tokens, user_passwords, user_passkeys, user_identities;
 TRUNCATE trips CASCADE;
 UPDATE users SET
@@ -38,8 +42,10 @@ SQL
 podman exec "$DEV" systemctl stop rotv-backend.service
 
 echo "Copying the rotv database from $PROD to $DEV..."
+podman exec "$DEV" psql -q -U postgres -d postgres -v ON_ERROR_STOP=1 \
+    -c "DROP DATABASE IF EXISTS rotv WITH (FORCE)" -c "CREATE DATABASE rotv"
 {
-    podman exec "$PROD" pg_dump -U rotv --clean --if-exists --no-owner --no-acl rotv
+    podman exec "$PROD" pg_dump -U rotv --no-owner --no-acl rotv
     scrub_sql
 } | podman exec -i "$DEV" psql -q -U postgres -d rotv -v ON_ERROR_STOP=1 --single-transaction >/dev/null
 
