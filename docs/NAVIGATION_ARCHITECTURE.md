@@ -98,3 +98,7 @@ On a wide screen the tabs sit in the header. At 768px and below (`useIsMobile`, 
 ## Labels and actions on the Info tab
 
 `ReadOnlyView.jsx` opens with two rows. `.poi-tags` says what the place is (type, era, owner, status): small grey rectangles, never tappable, with colour kept for live status only. `.poi-actions` is everything you can do: bordered pills with an icon, in the order Navigate, Share, Favorite, More info, Live tracker, Add to trip, Mark visited. Navigate is the only filled button. At `peek` the card hides Add to trip and Mark visited. Links inside the text, such as a trail status Source, are underlined `.link-button`s.
+
+## The trip bar
+
+`TripBuilder.jsx` renders whenever the trip in progress (`TripContext.jsx`) has a stop. On a phone it is a bar docked on the tab bar, on the tab bar's layer, so it shows over the full-height place card and on every tab; tapping it opens it upward into a sheet with the stops. `App.jsx` puts `has-trip` on `.app`, which sets `--trip-bar-height`, and everything that reaches the bottom of the screen (`.main-content`, the expanded card, the legend) ends above the bar instead of under it. On a desktop the same component floats over the bottom of the map. Its buttons are the place card's `.poi-action`s, with Navigate the one filled button.

@@ -14298,7 +14298,8 @@ button.feedback-link-inline {
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 10002;
+  /* Over the tab bar and the trip bar (20001) and the My Trips modal */
+  z-index: 20020;
   pointer-events: all;
 }
 
@@ -14325,7 +14326,7 @@ button.feedback-link-inline {
   width: 300px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
   pointer-events: all;
-  z-index: 10003;
+  z-index: 20021;
   transition: top 0.3s ease-out, left 0.3s ease-out;
 }
 
@@ -14997,6 +14998,11 @@ button.type-filter-chip {
     --bottom-nav-height: calc(58px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* A trip in progress docks a bar on the tab bar (TripBuilder.css) */
+  .app.has-trip {
+    --trip-bar-height: 53px;
+  }
+
   /* One row: title on the left, notifications and account on the right */
   .header {
     height: var(--header-height);
@@ -15066,15 +15072,11 @@ button.type-filter-chip {
   .main-content,
   .main-content-full,
   .settings-content {
-    bottom: var(--bottom-nav-height);
+    bottom: calc(var(--bottom-nav-height) + var(--trip-bar-height, 0px));
   }
 
   .legend {
-    bottom: calc(var(--bottom-nav-height) + 1rem) !important;
-  }
-
-  .app .trip-builder {
-    bottom: calc(var(--bottom-nav-height) + 8px);
+    bottom: calc(var(--bottom-nav-height) + var(--trip-bar-height, 0px) + 1rem) !important;
   }
 
   /* The place card: half the screen to start, the map still showing above it */
@@ -15122,7 +15124,7 @@ button.type-filter-chip {
 
   /* Full details cover the header but never the tab bar */
   .sidebar.expanded {
-    bottom: var(--bottom-nav-height);
+    bottom: calc(var(--bottom-nav-height) + var(--trip-bar-height, 0px));
     height: auto;
   }
 

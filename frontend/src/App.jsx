@@ -324,7 +324,8 @@ function AppContent() {
     loadFromSlug: loadTripFromSlug,
     addStop: tripAddStop,
     clear: tripClear,
-    setShowBuilder: tripSetShowBuilder
+    setShowBuilder: tripSetShowBuilder,
+    trip: activeTrip
   } = useTrip();
 
   const [kbdFocusIndex, setKbdFocusIndex] = useState(null);
@@ -525,6 +526,11 @@ function AppContent() {
         if (visitorCenter) {
           setSelectedDestination(visitorCenter);
         }
+        // Add to trip is on the full card, not the half-height summary
+        setTimeout(() => {
+          const expand = document.querySelector('.sidebar.peek .sidebar-expand-btn');
+          if (expand) expand.click();
+        }, 300);
         break;
       }
       case 'selectVisitorCenter': {
@@ -574,6 +580,8 @@ function AppContent() {
         break;
       }
       case 'tripTourEndDemo': {
+        // Back to the bar, so the open trip does not sit over the menu and My Valley
+        tripSetShowBuilder(false);
         setSelectedDestination(null);
         if (isAuthenticated) {
           setShowUserDropdown(true);
@@ -2066,7 +2074,7 @@ function AppContent() {
   ));
 
   return (
-    <div className="app">
+    <div className={`app${activeTrip.stops.length > 0 ? ' has-trip' : ''}`}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
         {activeTheme && videoUrls[activeTheme] && (

@@ -4,6 +4,11 @@ import { useAuth } from '../hooks/useAuth';
 import { buildGoogleMapsUrl } from './NavigateButton';
 import './TripBuilder.css';
 
+const CHEVRON_UP = 'M7.41 15.41L12 10.83l4.59 4.58L18 14l-6-6-6 6z';
+const CHEVRON_DOWN = 'M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z';
+const TRASH = 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z';
+const DIRECTIONS = 'M21.71 11.29l-9-9a1 1 0 0 0-1.41 0l-9 9a1 1 0 0 0 0 1.41l9 9a1 1 0 0 0 1.41 0l9-9a1 1 0 0 0 0-1.41zM14 14.5V12h-4v3H8v-4a1 1 0 0 1 1-1h5V7.5L17.5 11 14 14.5z';
+
 export default function TripBuilder({ onOpenMyTrips }) {
   const {
     trip, showBuilder, setShowBuilder,
@@ -40,8 +45,9 @@ export default function TripBuilder({ onOpenMyTrips }) {
     }
   };
 
-  const handleClear = () => {
-    if (!confirmClear) {
+  // A saved trip closes at once; an unsaved one is lost, so it takes a second tap
+  const handleDiscard = () => {
+    if (!trip.id && !confirmClear) {
       setConfirmClear(true);
       setTimeout(() => setConfirmClear(false), 4000);
       return;
@@ -50,56 +56,37 @@ export default function TripBuilder({ onOpenMyTrips }) {
     setConfirmClear(false);
   };
 
-  const handleClose = () => {
-    if (trip.id) {
-      clear();
-      return;
-    }
-    if (!confirmClear) {
-      setConfirmClear(true);
-      setTimeout(() => setConfirmClear(false), 4000);
-      return;
-    }
-    clear();
-    setConfirmClear(false);
-  };
+  const summary = `${trip.name || 'Untitled Trip'} · ${trip.stops.length} stop${trip.stops.length === 1 ? '' : 's'}`;
 
   return (
-    <div className="trip-builder" role="region" aria-label="Trip Builder">
+    <div className={`trip-builder${expanded ? ' open' : ''}`} role="region" aria-label="Trip Builder">
       <div className="trip-builder-handle">
         <button
           type="button"
           className="trip-builder-toggle"
           onClick={() => setShowBuilder(!expanded)}
-          aria-label={expanded ? 'Collapse trip builder' : 'Expand trip builder'}
-          title={expanded ? 'Collapse' : 'Expand'}
-        >
-          {expanded ? '▾' : '▴'}
-        </button>
-        <span
-          className="trip-builder-handle-summary"
-          onClick={() => setShowBuilder(!expanded)}
-          role="button"
-          tabIndex={0}
           aria-expanded={expanded}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault();
-              setShowBuilder(!expanded);
-            }
-          }}
+          title={expanded ? 'Hide trip' : 'Show trip'}
         >
-          {trip.name || 'Untitled Trip'} · {trip.stops.length} stop{trip.stops.length === 1 ? '' : 's'}
-        </span>
-        <button
-          type="button"
-          className={`trip-builder-close${confirmClear ? ' confirming' : ''}`}
-          onClick={handleClose}
-          aria-label={confirmClear ? 'Tap again to discard trip' : 'Close trip'}
-          title={confirmClear ? 'Tap again to discard' : (trip.id ? 'Close' : 'Discard trip')}
-        >
-          {confirmClear ? 'Discard?' : '×'}
+          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+            <path fill="currentColor" d={expanded ? CHEVRON_DOWN : CHEVRON_UP} />
+          </svg>
+          <span className="trip-builder-handle-summary">{summary}</span>
         </button>
+        {!expanded && googleMapsUrl && (
+          <a
+            href={googleMapsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="poi-action poi-action--primary"
+            title="Open the trip in Google Maps"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="currentColor" d={DIRECTIONS} />
+            </svg>
+            Navigate
+          </a>
+        )}
       </div>
 
       {expanded && (
@@ -108,6 +95,7 @@ export default function TripBuilder({ onOpenMyTrips }) {
             type="text"
             className="trip-name-input"
             placeholder="Untitled Trip"
+            aria-label="Trip name"
             value={trip.name}
             onChange={(e) => setName(e.target.value)}
             maxLength={200}
@@ -126,7 +114,11 @@ export default function TripBuilder({ onOpenMyTrips }) {
                     disabled={i === 0}
                     aria-label="Move up"
                     title="Move up"
-                  >▲</button>
+                  >
+                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                      <path fill="currentColor" d={CHEVRON_UP} />
+                    </svg>
+                  </button>
                   <button
                     type="button"
                     className="trip-stop-action-btn"
@@ -134,14 +126,22 @@ export default function TripBuilder({ onOpenMyTrips }) {
                     disabled={i === trip.stops.length - 1}
                     aria-label="Move down"
                     title="Move down"
-                  >▼</button>
+                  >
+                    <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                      <path fill="currentColor" d={CHEVRON_DOWN} />
+                    </svg>
+                  </button>
                   <button
                     type="button"
-                    className="trip-stop-remove-btn"
+                    className="trip-stop-action-btn trip-stop-remove-btn"
                     onClick={() => removeStop(i)}
                     aria-label="Remove stop"
                     title="Remove stop"
-                  >×</button>
+                  >
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path fill="currentColor" d={TRASH} />
+                    </svg>
+                  </button>
                 </div>
               </li>
             ))}
@@ -161,15 +161,18 @@ export default function TripBuilder({ onOpenMyTrips }) {
               href={googleMapsUrl || '#'}
               target="_blank"
               rel="noopener noreferrer"
-              className={`primary${googleMapsUrl ? '' : ' disabled'}`}
+              className={`poi-action poi-action--primary${googleMapsUrl ? '' : ' disabled'}`}
               onClick={(e) => { if (!googleMapsUrl) e.preventDefault(); }}
               aria-disabled={!googleMapsUrl}
             >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d={DIRECTIONS} />
+              </svg>
               Navigate
             </a>
             <button
               type="button"
-              className="primary"
+              className="poi-action"
               onClick={handleSave}
               disabled={saving}
               title={isAuthenticated ? '' : 'Saved to this browser until you sign in'}
@@ -178,37 +181,42 @@ export default function TripBuilder({ onOpenMyTrips }) {
             </button>
             <button
               type="button"
-              className="primary"
+              className="poi-action"
               onClick={onOpenMyTrips}
             >
-              My Trips
+              My trips
             </button>
           </div>
 
-          {(isAuthenticated || isAdmin) && (
-            <div className="trip-builder-toggles">
-              {isAuthenticated && (
-                <label className="trip-builder-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={trip.is_public}
-                    onChange={(e) => setIsPublic(e.target.checked)}
-                  />
-                  Public
-                </label>
-              )}
-              {isAdmin && (
-                <label className="trip-builder-checkbox">
-                  <input
-                    type="checkbox"
-                    checked={trip.is_featured}
-                    onChange={(e) => setIsFeatured(e.target.checked)}
-                  />
-                  Featured
-                </label>
-              )}
-            </div>
-          )}
+          <div className="trip-builder-footer">
+            {isAuthenticated && (
+              <label className="trip-builder-checkbox">
+                <input
+                  type="checkbox"
+                  checked={trip.is_public}
+                  onChange={(e) => setIsPublic(e.target.checked)}
+                />
+                Public
+              </label>
+            )}
+            {isAdmin && (
+              <label className="trip-builder-checkbox">
+                <input
+                  type="checkbox"
+                  checked={trip.is_featured}
+                  onChange={(e) => setIsFeatured(e.target.checked)}
+                />
+                Featured
+              </label>
+            )}
+            <button
+              type="button"
+              className={`link-button trip-builder-discard${confirmClear ? ' confirming' : ''}`}
+              onClick={handleDiscard}
+            >
+              {trip.id ? 'Close trip' : confirmClear ? 'Tap again to discard' : 'Discard trip'}
+            </button>
+          </div>
         </div>
       )}
     </div>

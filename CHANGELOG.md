@@ -22,6 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `digest_excluded` flag on news and events (migration 096).
 
 ### Changed
+- **The trip in progress is always in view**: on a phone the trip builder floated behind the
+  full-height place card, so tapping Add to Trip there showed nothing, and at half height it covered
+  the card's buttons. It is now a bar docked on the tab bar, visible on every tab and over the full
+  card, and the page ends above it. Tapping it opens the stops. It uses the place card's buttons and
+  greens, icon buttons for reordering, and Discard trip moved inside the sheet. My Trips matches.
 - **Labels and actions on a place are told apart**: the Info tab mixed labels (MTB Trailhead, Modern
   Era) and buttons (Share, Navigate) in one row of look-alike pills. Labels are now small grey tags,
   with colour kept for live status; actions are a separate row of bordered buttons with Navigate
