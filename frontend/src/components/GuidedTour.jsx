@@ -4,7 +4,7 @@ export const TRIP_TOUR_STEPS = [
   {
     selector: '.add-to-trip-btn',
     title: 'Add to Trip',
-    description: 'Open any point of interest and look for the "+ Add to Trip" badge next to Share and Navigate. Tap it to drop the stop into a new day-trip.',
+    description: 'Open any point of interest and look for Add to Trip in the row of buttons under its labels. Tap it to drop the stop into a new day-trip.',
     position: 'left',
     action: 'selectVisitorCenter',
     delay: 450,
@@ -19,7 +19,7 @@ export const TRIP_TOUR_STEPS = [
   {
     selector: '.trip-builder',
     title: 'Trip Builder',
-    description: 'When you add a stop, a small card appears at the bottom with your trip. Tap the chevron on the left to expand or collapse it without losing your stops. The × on the right discards the trip.',
+    description: 'When you add a stop, your trip appears in a bar at the bottom. Tap the bar to open or close it without losing your stops. Discard trip, at the bottom, throws it away.',
     position: 'top',
     action: 'tripTourExpandBuilder',
     delay: 300,
@@ -30,7 +30,7 @@ export const TRIP_TOUR_STEPS = [
   {
     selector: '.trip-stop-row',
     title: 'Stops in Order',
-    description: 'Reorder with ▲/▼ or remove a stop with ×. Trips are capped at 9 stops so Google Maps can start the route from your current location.',
+    description: 'Reorder with the arrows or remove a stop with the trash can. Trips are capped at 9 stops so Google Maps can start the route from your current location.',
     position: 'top',
     action: 'tripTourExpandBuilder',
     spotlightSelector: '.trip-stop-row',
@@ -41,7 +41,7 @@ export const TRIP_TOUR_STEPS = [
   {
     selector: '.trip-builder-actions-primary',
     title: 'Navigate · Save · My Trips',
-    description: 'Three green buttons: Navigate hands the route to Google Maps. Save stores the trip to your account. My Trips opens your library and Find Trips — Featured Routes from admins and trips other users have shared.',
+    description: 'Navigate hands the route to Google Maps. Save stores the trip to your account. My Trips opens your library and Find Trips — Featured Routes from admins and trips other users have shared.',
     position: 'top',
     action: 'tripTourExpandBuilder',
     spotlightSelector: '.trip-builder-actions-primary',

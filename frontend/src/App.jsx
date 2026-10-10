@@ -324,7 +324,8 @@ function AppContent() {
     loadFromSlug: loadTripFromSlug,
     addStop: tripAddStop,
     clear: tripClear,
-    setShowBuilder: tripSetShowBuilder
+    setShowBuilder: tripSetShowBuilder,
+    trip: activeTrip
   } = useTrip();
 
   const [kbdFocusIndex, setKbdFocusIndex] = useState(null);
@@ -523,6 +524,9 @@ function AppContent() {
         setActiveTab('view');
         const visitorCenter = destinations.find(d => d.name === 'Boston Mill Visitor Center');
         if (visitorCenter) {
+          // Fix: open the card in full the way a /place/info link does, not by clicking its button on a timer (PR #745 review)
+          // Add to Trip is on the full card, not the half-height summary.
+          setInitialSidebarTab('view');
           setSelectedDestination(visitorCenter);
         }
         break;
@@ -574,6 +578,8 @@ function AppContent() {
         break;
       }
       case 'tripTourEndDemo': {
+        // Back to the bar, so the open trip does not sit over the menu and My Valley
+        tripSetShowBuilder(false);
         setSelectedDestination(null);
         if (isAuthenticated) {
           setShowUserDropdown(true);
@@ -2066,7 +2072,7 @@ function AppContent() {
   ));
 
   return (
-    <div className="app">
+    <div className={`app${activeTrip.stops.length > 0 ? ' has-trip' : ''}`}>
       <a href="#main-content" className="skip-link">Skip to main content</a>
       <header className={`header ${activeTheme ? `theme-${activeTheme}` : ''} ${isNightMode ? 'theme-night' : ''}`}>
         {activeTheme && videoUrls[activeTheme] && (

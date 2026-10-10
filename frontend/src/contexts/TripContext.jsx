@@ -85,7 +85,7 @@ export function TripProvider({ children }) {
         longitude: Number(stop.longitude)
       }] };
     });
-    setShowBuilder(true);
+    // The trip bar shows the new count; the stops stay closed so the place stays in view
   }, []);
 
   const removeStop = useCallback((index) => {

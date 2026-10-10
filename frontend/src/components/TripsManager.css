@@ -2,7 +2,8 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 1200;
+  /* Over the tab bar, the trip bar and the full-height place card */
+  z-index: 20010;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -56,17 +57,20 @@
 }
 
 .my-trips-actions-row button {
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid #4a7c23;
   background: white;
-  border-radius: 4px;
-  padding: 0.4rem 0.75rem;
+  color: #2d5016;
+  border-radius: 999px;
+  min-height: 36px;
+  padding: 0 0.9rem;
+  font-weight: 500;
   cursor: pointer;
 }
 
 .my-trips-actions-row button.primary {
-  background: var(--accent, #2d6a4f);
+  background: #2d5016;
   color: white;
-  border-color: var(--accent, #2d6a4f);
+  border-color: #2d5016;
 }
 
 .my-trips-list {
@@ -84,8 +88,8 @@
   justify-content: space-between;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: #f7f7f7;
-  border-radius: 4px;
+  background: #f5f5f5;
+  border-radius: 8px;
 }
 
 .my-trips-row-info {
@@ -109,17 +113,34 @@
 }
 
 .my-trips-row-actions button {
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  border: 1px solid #4a7c23;
   background: white;
-  border-radius: 4px;
-  padding: 0.2rem 0.5rem;
+  color: #2d5016;
+  border-radius: 999px;
+  min-height: 32px;
+  padding: 0 0.75rem;
   font-size: 0.8rem;
+  font-weight: 500;
   cursor: pointer;
 }
 
+.my-trips-row-actions button:hover {
+  background: #e8f5e9;
+}
+
+.my-trips-row-actions button.primary {
+  background: #2d5016;
+  border-color: #2d5016;
+  color: white;
+}
+
 .my-trips-row-actions button.danger {
-  border-color: rgba(220, 53, 69, 0.4);
-  color: #dc3545;
+  border-color: #c62828;
+  color: #c62828;
+}
+
+.my-trips-row-actions button.danger:hover {
+  background: #ffebee;
 }
 
 .my-trips-empty {

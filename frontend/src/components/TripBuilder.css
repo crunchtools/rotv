@@ -1,3 +1,6 @@
+/* The trip in progress. On a desktop it floats over the bottom of the map; on a
+   phone it is a bar docked on the tab bar that opens upward into a sheet. Its
+   buttons are the place card's (.poi-action in App.css). */
 .trip-builder {
   position: fixed;
   bottom: 8px;
@@ -5,9 +8,9 @@
   transform: translateX(-50%);
   z-index: 1100;
   width: min(480px, calc(100vw - 16px));
-  background: var(--surface, #ffffff);
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  border-radius: 10px;
+  background: white;
+  border: 1px solid #dfe7d8;
+  border-radius: 14px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
   font-size: 0.9rem;
   display: flex;
@@ -16,78 +19,71 @@
 }
 
 .trip-builder-handle {
-  display: grid;
-  grid-template-columns: 32px 1fr 32px;
+  display: flex;
   align-items: center;
-  padding: 0.5rem 0.5rem;
-  background: var(--surface-strong, #f5f5f5);
-  user-select: none;
-}
-
-.trip-builder-handle-summary {
-  font-weight: 600;
-  text-align: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.trip-builder-close {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 1.1rem;
-  line-height: 1;
-  padding: 0.2rem 0.4rem;
-  color: rgba(0, 0, 0, 0.55);
-  border-radius: 4px;
-  justify-self: end;
-}
-
-.trip-builder-close:hover {
-  background: rgba(0, 0, 0, 0.06);
-  color: #dc3545;
-}
-
-.trip-builder-close.confirming {
-  color: #dc3545;
-  font-size: 0.72rem;
-  font-weight: 700;
-  padding: 0.2rem 0.4rem;
+  gap: 0.5rem;
+  min-height: 52px;
+  padding: 0 0.75rem 0 0.25rem;
 }
 
 .trip-builder-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  padding: 0 0.5rem;
   border: none;
+  border-radius: 8px;
   background: transparent;
+  color: #2d5016;
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
   cursor: pointer;
-  font-size: 1rem;
-  line-height: 1;
-  padding: 0.2rem 0.4rem;
-  color: rgba(0, 0, 0, 0.6);
-  border-radius: 4px;
-  justify-self: start;
 }
 
 .trip-builder-toggle:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: #e8f5e9;
+}
+
+.trip-builder-toggle:focus-visible {
+  outline: 2px solid #4a7c23;
+  outline-offset: -2px;
+}
+
+.trip-builder-toggle svg {
+  flex-shrink: 0;
+}
+
+.trip-builder-handle-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trip-builder-body {
   padding: 0.75rem;
   max-height: min(50vh, 360px);
   overflow-y: auto;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid #dfe7d8;
 }
 
 .trip-name-input {
   width: 100%;
+  box-sizing: border-box;
   font-size: 1rem;
-  padding: 0.4rem 0.5rem;
-  border: 1px solid rgba(0, 0, 0, 0.15);
-  border-radius: 4px;
-  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid #c9d3c1;
+  border-radius: 8px;
+  margin-bottom: 0.6rem;
   background: white;
+}
+
+.trip-name-input:focus-visible {
+  outline: 2px solid #4a7c23;
+  outline-offset: 1px;
 }
 
 .trip-stops-list {
@@ -103,9 +99,9 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.4rem 0.5rem;
-  background: var(--surface-strong, #f5f5f5);
-  border-radius: 4px;
+  padding: 0.25rem 0.25rem 0.25rem 0.5rem;
+  background: #f5f5f5;
+  border-radius: 8px;
 }
 
 .trip-stop-position {
@@ -115,7 +111,7 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
-  background: var(--accent, #2d6a4f);
+  background: #2d5016;
   color: white;
   font-weight: 700;
   font-size: 0.8rem;
@@ -131,88 +127,75 @@
 
 .trip-stop-actions {
   display: flex;
-  gap: 0.25rem;
 }
 
 .trip-stop-action-btn {
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  background: white;
-  border-radius: 4px;
-  padding: 0.15rem 0.4rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: #2d5016;
   cursor: pointer;
-  font-size: 0.85rem;
+}
+
+.trip-stop-action-btn:hover:not(:disabled) {
+  background: #e8f5e9;
+}
+
+.trip-stop-action-btn:focus-visible {
+  outline: 2px solid #4a7c23;
 }
 
 .trip-stop-action-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
 .trip-stop-remove-btn {
-  border: 1px solid rgba(220, 53, 69, 0.4);
-  background: white;
-  color: #dc3545;
-  border-radius: 4px;
-  padding: 0.15rem 0.5rem;
-  cursor: pointer;
-  font-size: 0.85rem;
+  color: #616161;
+}
+
+.trip-stop-remove-btn:hover:not(:disabled) {
+  background: #ffebee;
+  color: #c62828;
 }
 
 .trip-builder-limit-hint {
   font-size: 0.78rem;
-  color: rgba(0, 0, 0, 0.55);
-  margin: 0 0 0.5rem 0;
+  color: #616161;
+  margin: 0 0 0.75rem 0;
 }
 
 .trip-builder-warning {
-  background: rgba(255, 193, 7, 0.12);
-  border: 1px solid rgba(255, 193, 7, 0.4);
-  border-radius: 4px;
-  padding: 0.4rem 0.5rem;
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
   margin: 0.5rem 0;
   font-size: 0.85rem;
 }
 
 .trip-builder-actions-primary {
   display: flex;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  align-items: stretch;
-  padding-top: 0.5rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.trip-builder-actions-primary button,
-.trip-builder-actions-primary a {
-  flex: 1;
-  text-align: center;
-  background: var(--accent, #2d6a4f);
-  color: white;
-  border: 1px solid var(--accent, #2d6a4f);
-  border-radius: 4px;
-  padding: 0.5rem 0.5rem;
-  cursor: pointer;
-  font-size: 0.9rem;
-  font-weight: 600;
-  text-decoration: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.trip-builder-actions-primary button:disabled,
-.trip-builder-actions-primary a.disabled,
-.trip-builder-actions-primary a[aria-disabled="true"] {
-  opacity: 0.45;
-  cursor: not-allowed;
+.trip-builder-actions-primary .poi-action.disabled {
+  opacity: 0.55;
   pointer-events: none;
 }
 
-.trip-builder-toggles {
+.trip-builder-footer {
   display: flex;
-  gap: 1rem;
-  align-items: center;
-  padding-top: 0.5rem;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding-top: 0.75rem;
 }
 
 .trip-builder-checkbox {
@@ -220,6 +203,21 @@
   align-items: center;
   gap: 0.3rem;
   font-size: 0.85rem;
+}
+
+.trip-builder .trip-builder-discard {
+  margin-left: auto;
+  color: #616161;
+  font-size: 0.85rem;
+}
+
+.trip-builder .trip-builder-discard:hover,
+.trip-builder .trip-builder-discard.confirming {
+  color: #c62828;
+}
+
+.trip-builder-discard.confirming {
+  font-weight: 600;
 }
 
 .trip-stop-icon {
@@ -233,7 +231,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #2d6a4f;
+  background: #2d5016;
   color: white;
   font-weight: 700;
   border-radius: 50%;
@@ -241,4 +239,45 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
   font-size: 0.85rem;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+@media (max-width: 768px) {
+  /* Docked on the tab bar and on its layer, so it shows over the full-height
+     place card. The page ends above it (--trip-bar-height in App.css). */
+  .trip-builder {
+    left: 0;
+    right: 0;
+    bottom: var(--bottom-nav-height);
+    width: auto;
+    transform: none;
+    z-index: 20001;
+    border: none;
+    border-top: 1px solid #dfe7d8;
+    border-radius: 0;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
+  }
+
+  .trip-builder.open {
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
+  }
+
+  .trip-builder-body {
+    max-height: calc(70vh - var(--bottom-nav-height));
+    overscroll-behavior: contain;
+  }
+
+  .trip-stop-row {
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .trip-stop-action-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .trip-builder-discard {
+    min-height: 44px;
+  }
 }

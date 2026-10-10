@@ -191,6 +191,45 @@ describe('Find a park on a phone and get to it (#712)', () => {
     await page.waitForSelector('.sidebar.open.peek', { timeout: 10000 });
   }, 60000);
 
+  it('shows the trip bar over the full card, with the card ending above it', async () => {
+    const layout = () => page.evaluate(() => {
+      const bar = document.querySelector('.trip-builder').getBoundingClientRect();
+      const card = document.querySelector('.sidebar.open').getBoundingClientRect();
+      const nav = document.querySelector('.bottom-nav').getBoundingClientRect();
+      const hit = document.elementFromPoint(bar.left + bar.width / 2, bar.top + bar.height / 2);
+      return { onTop: !!hit?.closest('.trip-builder'), barTop: bar.top, barBottom: bar.bottom, cardBottom: card.bottom, navTop: nav.top };
+    });
+    const expectDocked = ({ onTop, barTop, barBottom, cardBottom, navTop }) => {
+      expect(onTop).toBe(true);
+      expect(Math.abs(barBottom - navTop)).toBeLessThanOrEqual(1);
+      expect(cardBottom).toBeLessThanOrEqual(barTop + 1);
+    };
+
+    // Add to trip is on the full card; the bar has to show there, not behind it
+    await page.click('.sidebar.open .sidebar-expand-btn');
+    await page.waitForSelector('.sidebar.open.expanded', { timeout: 5000 });
+    await page.click('.sidebar.open .add-to-trip-btn');
+    await page.waitForSelector('.trip-builder', { timeout: 5000 });
+    expect(await page.textContent('.trip-builder-handle-summary')).toBe('Untitled Trip · 1 stop');
+    expectDocked(await layout());
+
+    await page.click('.sidebar.open .sidebar-expand-btn');
+    await page.waitForSelector('.sidebar.open.peek', { timeout: 5000 });
+    expectDocked(await layout());
+
+    // The bar opens into the stops; discarding takes two taps and gives the room back
+    await page.click('.trip-builder-toggle');
+    await page.waitForSelector('.trip-builder.open .trip-stop-row', { timeout: 5000 });
+    await page.click('.trip-builder-discard');
+    await page.click('.trip-builder-discard');
+    await page.waitForSelector('.trip-builder', { state: 'detached', timeout: 5000 });
+    const after = await page.evaluate(() => ({
+      cardBottom: document.querySelector('.sidebar.open').getBoundingClientRect().bottom,
+      navTop: document.querySelector('.bottom-nav').getBoundingClientRect().top
+    }));
+    expect(Math.abs(after.cardBottom - after.navTop)).toBeLessThanOrEqual(1);
+  }, 60000);
+
   it('keeps the search and the selection across tabs, showing the card only on the map', async () => {
     await page.click('[data-nav="find"]');
     await page.waitForSelector('.results-search-input', { timeout: 10000 });
