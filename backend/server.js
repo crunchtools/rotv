@@ -89,6 +89,7 @@ import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from 
 import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import { resolveMergedIds, originalMergedName } from './services/poiMergeService.js';
+import { getActiveLists } from './services/poiListService.js';
 import {
   getAllActiveSeries,
   nextOccurrence,
@@ -654,6 +655,44 @@ async function initDatabase() {
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS merged_into_id INTEGER REFERENCES pois(id)
     `);
+    // Curated lists of places, one row per edition (spec 050). Twin of
+    // migration 101, which runs before this table's parent exists on a fresh database.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS poi_lists (
+        id SERIAL PRIMARY KEY,
+        series TEXT NOT NULL,
+        edition INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        goal_count INTEGER,
+        source_url TEXT,
+        organizer_poi_id INTEGER REFERENCES pois(id) ON DELETE SET NULL,
+        starts_on DATE NOT NULL,
+        ends_on DATE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (series, edition)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS poi_list_items (
+        id SERIAL PRIMARY KEY,
+        list_id INTEGER NOT NULL REFERENCES poi_lists(id) ON DELETE CASCADE,
+        poi_id INTEGER NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        label TEXT,
+        note TEXT,
+        miles NUMERIC(5,2),
+        rating TEXT,
+        trail_class TEXT,
+        trailhead TEXT,
+        nav_latitude NUMERIC(10,8),
+        nav_longitude NUMERIC(11,8),
+        UNIQUE (list_id, position)
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_poi_list_items_poi_id ON poi_list_items(poi_id)');
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_color TEXT DEFAULT '#228B22'
     `);
@@ -2194,6 +2233,16 @@ app.get('/api/results-subtabs', async (req, res) => {
   } catch (error) {
     logger.error('Error fetching results subtabs:', error);
     res.json({ subtabs: DEFAULT_SUBTABS });
+  }
+});
+
+// Curated lists in season right now (spec 050), for the Find tab's list picker.
+app.get('/api/lists', async (req, res) => {
+  try {
+    res.json(await getActiveLists(pool));
+  } catch (error) {
+    logger.error('Error fetching lists:', error);
+    res.status(500).json({ error: 'Failed to fetch lists' });
   }
 });
 

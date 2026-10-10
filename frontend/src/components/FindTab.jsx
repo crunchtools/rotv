@@ -20,12 +20,28 @@ const EMPTY_STATES = {
   all: { icon: '🗺️', text: 'No places match.', hint: 'Try a different search, or open Filters and show more types.' }
 };
 
+const LIST_EMPTY_STATE = { icon: '🥾', text: 'Nothing on this list matches.', hint: 'Clear the search to see the whole list.' };
+
+// Curated lists (spec 050) share the picker with the built-in ones; the prefix
+// keeps a list's slug from colliding with a built-in id.
+const curatedListId = (slug) => `list:${slug}`;
+
+const formatSeasonDay = (isoDate) =>
+  new Date(`${isoDate}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+
 const NEW_POI_KINDS = { mtb: 'MTB trailhead', organizations: 'organization', all: 'point of interest' };
+
+// A row's key in the list; a curated list may name the same place twice.
+const poiRowKey = (poi) => {
+  const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
+  return poi._listItem ? `${type}-${poi.id}-${poi._listItem.position}` : `${type}-${poi.id}`;
+};
 
 /**
  * The Find tab (spec 048): a directory of every place, whatever the map is
  * showing. One search box shared with the map, a list picker (all places, MTB
- * trail status, organizations), and type filters behind a Filters menu.
+ * trail status, organizations, and curated lists such as the Fall Hiking Spree,
+ * spec 050), and type filters behind a Filters menu.
  *
  * @param {object} props
  * @param {object[]} props.allDestinations Every point POI
@@ -39,6 +55,7 @@ const NEW_POI_KINDS = { mtb: 'MTB trailhead', organizations: 'organization', all
  * @param {(text: string) => void} props.onSearchChange
  * @param {boolean} [props.initialShowMtbOnly=false] The URL asks for the MTB Trail Status list
  * @param {boolean} [props.initialShowOrganizationsOnly=false] The URL asks for the Organizations list
+ * @param {string|null} [props.listSlug=null] The URL names a curated list (/find/<slug>)
  * @param {(types: string[]|null) => void} [props.onFilterByTypes] Tells the map which marker types
  *   the current list is about; null means all
  * @param {object[]} [props.iconConfig] Icon types, for the type chips and row icons
@@ -60,6 +77,7 @@ const FindTab = memo(function FindTab({
   onSearchChange,
   initialShowMtbOnly = false,
   initialShowOrganizationsOnly = false,
+  listSlug = null,
   onFilterByTypes,
   iconConfig,
   editMode = false,
@@ -70,11 +88,12 @@ const FindTab = memo(function FindTab({
   const navigate = useNavigate();
   const isNavigatingRef = useRef(false);
 
-  const [activeList, setActiveList] = useState(
-    initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all'
-  );
+  const urlList = listSlug ? curatedListId(listSlug)
+    : initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all';
+  const [requestedList, setRequestedList] = useState(urlList);
   const [currentPage, setCurrentPage] = useState(1);
   const [listConfig, setListConfig] = useState(null);
+  const [curatedLists, setCuratedLists] = useState([]);
   const [isListMenuOpen, setIsListMenuOpen] = useState(false);
   const listButtonRef = useRef(null);
   const listMenuRef = useRef(null);
@@ -90,11 +109,23 @@ const FindTab = memo(function FindTab({
       .catch(err => console.error('Failed to fetch list config:', err));
   }, []);
 
+  useEffect(() => {
+    fetch('/api/lists')
+      .then(res => (res.ok ? res.json() : []))
+      .then(setCuratedLists)
+      .catch(err => console.error('Failed to fetch curated lists:', err));
+  }, []);
+
   // The stored config predates the Find tab: its first entry is still named
   // for the old Results tab and routed at the map.
-  const lists = useMemo(() => (listConfig || DEFAULT_LISTS).map(list =>
-    list.id === 'all' ? { ...list, label: 'All places', route: '/find' } : list
-  ), [listConfig]);
+  const lists = useMemo(() => [
+    ...(listConfig || DEFAULT_LISTS).map(list =>
+      list.id === 'all' ? { ...list, label: 'All places', route: '/find' } : list),
+    ...curatedLists.map(list => ({ id: curatedListId(list.slug), label: list.name, route: `/find/${list.slug}` }))
+  ], [listConfig, curatedLists]);
+  const curatedList = curatedLists.find(l => curatedListId(l.slug) === requestedList) || null;
+  // A list that is out of season, or a slug that never existed, shows every place.
+  const activeList = requestedList.startsWith('list:') && !curatedList ? 'all' : requestedList;
   const currentList = lists.find(l => l.id === activeList) || lists[0];
 
   const allFilterTypes = useMemo(() => {
@@ -125,14 +156,13 @@ const FindTab = memo(function FindTab({
       return;
     }
 
-    if (initialShowMtbOnly && activeList !== 'mtb') {
-      setActiveList('mtb');
-    } else if (initialShowOrganizationsOnly && activeList !== 'organizations') {
-      setActiveList('organizations');
-    } else if (!initialShowMtbOnly && !initialShowOrganizationsOnly && (activeList === 'mtb' || activeList === 'organizations')) {
-      setActiveList('all');
+    // A list an admin configured has no URL of its own, so /find leaves it selected.
+    const hasOwnUrl = (id) => id === 'mtb' || id === 'organizations' || id.startsWith('list:');
+    if (requestedList !== urlList && (urlList !== 'all' || hasOwnUrl(requestedList))) {
+      setRequestedList(urlList);
+      setCurrentPage(1);
     }
-  }, [initialShowMtbOnly, initialShowOrganizationsOnly, activeList]);
+  }, [urlList, requestedList]);
 
   useEffect(() => {
     if (activeList === 'mtb') {
@@ -205,10 +235,12 @@ const FindTab = memo(function FindTab({
 
     let filtered = [...dests, ...linear, ...virtual];
 
+    const listLabels = new Map((curatedList?.items || []).map(item => [String(item.poi_id), item.label || '']));
     const search = searchText.trim().toLowerCase();
     if (search) {
       filtered = filtered.filter(poi =>
         (poi.name || '').toLowerCase().includes(search) ||
+        (listLabels.get(String(poi.id)) || '').toLowerCase().includes(search) ||
         (poi.brief_description || '').toLowerCase().includes(search) ||
         (poi.primary_activities || '').toLowerCase().includes(search)
       );
@@ -218,16 +250,31 @@ const FindTab = memo(function FindTab({
       filtered = filtered.filter(poi => enabledFilters.has(poi._poiType));
     }
 
-    const ranked = rankPois(filtered, search);
+    let ranked;
+    if (curatedList) {
+      // The organizer's order, and the organizer's trailhead for Directions.
+      const byId = new Map(filtered.map(poi => [String(poi.id), poi]));
+      ranked = curatedList.items
+        .filter(item => byId.has(String(item.poi_id)))
+        .map(item => {
+          const poi = byId.get(String(item.poi_id));
+          const hasTrailhead = item.nav_latitude != null && item.nav_longitude != null;
+          return {
+            ...poi,
+            navigation_latitude: hasTrailhead ? item.nav_latitude : poi.navigation_latitude,
+            navigation_longitude: hasTrailhead ? item.nav_longitude : poi.navigation_longitude,
+            _listItem: item
+          };
+        });
+    } else {
+      ranked = rankPois(filtered, search);
+    }
 
     const map = new Map();
-    ranked.forEach(poi => {
-      const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
-      map.set(`${type}-${poi.id}`, poi);
-    });
+    ranked.forEach(poi => map.set(poiRowKey(poi), poi));
 
     return { rankedPois: ranked, poiMap: map };
-  }, [activeList, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, iconConfig]);
+  }, [activeList, curatedList, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, iconConfig]);
 
   const totalPages = Math.ceil(rankedPois.length / PAGE_SIZE) || 1;
   // The list can shrink under the stored page; show the last page that exists
@@ -320,7 +367,7 @@ const FindTab = memo(function FindTab({
     if (listId === activeList) return;
 
     isNavigatingRef.current = true;
-    setActiveList(listId);
+    setRequestedList(listId);
     setCurrentPage(1);
     navigate((lists.find(l => l.id === listId) || lists[0]).route);
   };
@@ -340,7 +387,7 @@ const FindTab = memo(function FindTab({
 
   const firstShown = rankedPois.length === 0 ? 0 : ((clampedPage - 1) * PAGE_SIZE) + 1;
   const lastShown = Math.min(clampedPage * PAGE_SIZE, rankedPois.length);
-  const emptyState = EMPTY_STATES[activeList] || EMPTY_STATES.all;
+  const emptyState = curatedList ? LIST_EMPTY_STATE : (EMPTY_STATES[activeList] || EMPTY_STATES.all);
 
   return (
     <div className="results-tab-wrapper find-tab">
@@ -421,6 +468,25 @@ const FindTab = memo(function FindTab({
             </button>
           )}
         </div>
+        {curatedList && (
+          <div className="find-list-about">
+            <p className="find-list-description">{curatedList.description}</p>
+            <p className="find-list-season">
+              {curatedList.goal_count
+                ? `Hike any ${curatedList.goal_count} of ${curatedList.items.length}`
+                : `${curatedList.items.length} places`}
+              {' · '}{formatSeasonDay(curatedList.starts_on)} to {formatSeasonDay(curatedList.ends_on)}
+              {curatedList.source_url && (
+                <>
+                  {' · '}
+                  <a className="link-button" href={curatedList.source_url} target="_blank" rel="noopener noreferrer">
+                    Official details
+                  </a>
+                </>
+              )}
+            </p>
+          </div>
+        )}
         <div className="results-count" aria-live="polite">
           {rankedPois.length === 0
             ? 'No places'
@@ -448,8 +514,7 @@ const FindTab = memo(function FindTab({
             }
           }}>
             {paginatedPois.map(poi => {
-              const type = poi._isVirtual ? 'virtual' : (poi._isLinear ? 'linear' : 'point');
-              const poiKey = `${type}-${poi.id}`;
+              const poiKey = poiRowKey(poi);
               const isSelected = poi._isLinear
                 ? selectedLinearId === poi.id
                 : selectedId === poi.id;
@@ -464,6 +529,7 @@ const FindTab = memo(function FindTab({
                   parkName={poi._isVirtual ? null : findContainingPark(poi, parkIndex)?.name}
                   showStatusInfo={activeList === 'mtb'}
                   statusData={mtbTrailStatuses[poi.id]}
+                  listItem={poi._listItem}
                   iconConfig={iconConfig}
                 />
               );

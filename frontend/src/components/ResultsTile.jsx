@@ -15,10 +15,12 @@ import { getIconUrlForPOI } from '../utils/iconUtils';
  * @param {{status: string}} [props.status]
  * @param {boolean} [props.showStatusInfo] Show the MTB trail status block instead of the description
  * @param {{status?: string, conditions?: string, last_updated?: string}} [props.statusData]
+ * @param {object} [props.listItem] The row is an entry on a curated list (spec 050): what the
+ *   organizer calls it, how long and hard it is, and where to park
  * @param {object[]} [props.iconConfig] Icon types, for the row's type icon
  * @returns {JSX.Element}
  */
-const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, parkName, showStatusBadge, status, showStatusInfo, statusData, iconConfig }) {
+const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, parkName, showStatusBadge, status, showStatusInfo, statusData, listItem, iconConfig }) {
   const imageUrl = poi.has_primary_image
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
@@ -65,7 +67,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       </div>
 
       <div className="results-tile-content">
-        <div className="results-tile-name">{poi.name}</div>
+        <div className="results-tile-name">{listItem?.label || poi.name}</div>
         {parkName && <div className="results-tile-park">in {parkName}</div>}
 
         <div className="results-tile-badges">
@@ -84,7 +86,13 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
           {poi.era_name && (
             <span className="results-tile-era">{poi.era_name}</span>
           )}
-          {isLinear && poi.difficulty && (
+          {listItem && (
+            <span className="results-tile-list-facts">
+              {[listItem.miles != null && `${listItem.miles} mi`, listItem.rating, listItem.trail_class && `Class ${listItem.trail_class}`]
+                .filter(Boolean).join(' · ')}
+            </span>
+          )}
+          {isLinear && poi.difficulty && !listItem && (
             <span className={`results-tile-difficulty ${poi.difficulty.toLowerCase()}`}>
               {poi.difficulty}
             </span>
@@ -106,6 +114,11 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
                 Updated: {new Date(statusData.last_updated).toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}
               </div>
             )}
+          </div>
+        ) : listItem ? (
+          <div className="results-tile-description">
+            {listItem.note && <div>{listItem.note}</div>}
+            {listItem.trailhead && <div>Park at {listItem.trailhead}</div>}
           </div>
         ) : poi.brief_description && (
           <div className="results-tile-description">

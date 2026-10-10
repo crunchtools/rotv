@@ -69,7 +69,7 @@ Three primary tabs, each a word and an icon (`NAV_TABS` in `frontend/src/App.jsx
 | Tab | id | URL | What it is |
 |---|---|---|---|
 | Map | `view` | `/`, `/<poi-slug>` | The map and the place card |
-| Find | `find` | `/find`, `/mtb-trail-status`, `/organizations` | A directory of every place (`FindTab.jsx`) |
+| Find | `find` | `/find`, `/find/<list>`, `/mtb-trail-status`, `/organizations` | A directory of every place (`FindTab.jsx`) |
 | Happening | `happening` | `/happening`, `/happening/events` | News and events (`HappeningTab.jsx`) |
 
 Settings and About are tabs too (`settings`, `about`) but are reached from the account menu. `/results`, `/news` and `/events` redirect in the browser to `/find`, `/happening` and `/happening/events`; `parseTabPath()` owns the mapping. The server keeps tab paths out of POI slugs with `OG_RESERVED_PATHS` in `backend/server.js`; a new top-level path must be added in both places.
@@ -88,8 +88,18 @@ On a wide screen the tabs sit in the header. At 768px and below (`useIsMobile`, 
 - Lists every POI whatever the map shows. No query: alphabetical. With a query: `rankPois()` (`frontend/src/utils/poiRank.js`) puts an exact name first, then parks, destinations and organizations, trails and rivers, and amenities (restrooms, playgrounds, parking) last; a name that starts with the query beats one that contains it.
 - The search box is the same value as the map legend's search (`activeFilters.search`).
 - Each row names the park it is in. `buildParkIndex()` and `findContainingPark()` (`frontend/src/utils/parkContainment.js`) do point-in-polygon against the park outlines already loaded; a trail uses its first point and the smallest containing park wins. Nothing is stored and the API is unchanged.
-- The list picker switches between All places, MTB Trail Status and Organizations, from `/api/results-subtabs`. Seasonal lists (#711) will be more entries here.
+- The list picker switches between All places, MTB Trail Status and Organizations, from `/api/results-subtabs`, followed by any curated list in season (below).
 - Type chips sit behind a `Filters · n` button (`FilterSheet.jsx`), where n is the number of types hidden. News and Events use the same component.
+
+## Curated lists
+
+A curated list is a set of places an organizer names for a season, such as the Summit Metro Parks Fall Hiking Spree (spec 050). `poi_lists` holds one row per edition of a series (`fall-hiking-spree`, 2026); `poi_list_items` holds a POI plus what the organizer says about it: their name for the hike, miles, rating, class, a note, and the trailhead in words and coordinates.
+
+- `GET /api/lists` (`backend/services/poiListService.js`) returns the lists that are published and in season today, in Eastern time. Nothing else is public, so a draft for next year can sit in the table.
+- Find adds each one to its picker at `/find/<series>` (`parseTabPath` returns `list`). Rows keep the organizer's order and are not ranked.
+- A row hands the map the POI with the item's trailhead copied onto `navigation_latitude/longitude`, so Navigate goes to the lot for that hike even when the POI is a 100-mile trail. The copy lives only on the selected object; the POI row is untouched.
+- `mergePois` repoints `poi_list_items`. A deleted POI's item is left out of the response.
+- A new edition is a new `poi_lists` row and its items; migration 101 seeds 2026 and shows the shape.
 
 ## The place card on a phone
 

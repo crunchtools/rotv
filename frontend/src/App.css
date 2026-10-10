@@ -15171,3 +15171,23 @@ button.type-filter-chip {
     font-size: 0.85rem;
   }
 }
+
+/* Curated lists in Find (spec 050) */
+.find-list-about {
+  font-size: 0.85rem;
+  color: #525252;
+}
+
+.find-list-about p {
+  margin: 0;
+}
+
+.find-list-about .find-list-season {
+  margin-top: 0.25rem;
+  font-weight: 600;
+}
+
+.results-tile-list-facts {
+  font-size: 0.75rem;
+  color: #525252;
+}

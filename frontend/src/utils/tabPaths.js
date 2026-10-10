@@ -12,7 +12,8 @@ const LEGACY_TAB_PATHS = { results: '/find', news: '/happening', events: '/happe
 /**
  * Read a tab out of a URL path.
  * @param {string[]} pathParts Path segments, no empty ones
- * @returns {{tab: string, view?: 'news'|'events', redirectTo?: string}|null} null when the path belongs to a POI
+ * @returns {{tab: string, view?: 'news'|'events', list?: string, redirectTo?: string}|null} null when the path
+ *   belongs to a POI; `list` is the curated list a /find/<list> URL names (spec 050)
  */
 export function parseTabPath(pathParts) {
   const redirectTo = pathParts.length === 1 ? LEGACY_TAB_PATHS[pathParts[0]] : undefined;
@@ -21,6 +22,8 @@ export function parseTabPath(pathParts) {
   let found = null;
   if (first === 'happening' && rest.length === 0 && (second === undefined || second === 'events')) {
     found = { tab: 'happening', view: second === 'events' ? 'events' : 'news' };
+  } else if (first === 'find' && second !== undefined && rest.length === 0) {
+    found = { tab: 'find', list: second };
   } else if (second === undefined && MAIN_TAB_PATHS.includes(first)) {
     found = { tab: first };
   }
