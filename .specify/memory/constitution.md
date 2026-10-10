@@ -100,7 +100,8 @@ Nagios: HTTP check of the backend on 8080, TCP check of PostgreSQL on 5432,
 `pg_isready`, and a process check for `weston` (`rotv-display.service`).
 
 dev.rootsofthevalley.org: container running, container memory, the vhost on
-the proxy, and the external HTTPS path expecting 401 (basic auth). Its inner
+the proxy, and the external HTTPS path expecting 302 (the Cloudflare Access
+login redirect). Its inner
 services are not paged on: it is a workbench, and a stopped unit there is
 often deliberate.
 

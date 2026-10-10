@@ -6,9 +6,8 @@ import react from '@vitejs/plugin-react';
 const apiTarget = process.env.ROTV_API_TARGET || 'http://localhost:8080';
 const proxied = ['/api', '/auth', '/stats', '/share'];
 
-// On dev.rootsofthevalley.org the dev server sits behind the TLS proxy, which
-// asks for basic auth on everything but the HMR socket: its own path, because
-// mobile Safari sends no credentials on a WebSocket.
+// On dev.rootsofthevalley.org the dev server sits behind Cloudflare and the TLS
+// proxy, so the page is served on 443 and the HMR socket must connect there too.
 const devHost = process.env.ROTV_DEV_HOST;
 const behindProxy = devHost
   ? { allowedHosts: [devHost], hmr: { path: '/__hmr', clientPort: 443 } }
