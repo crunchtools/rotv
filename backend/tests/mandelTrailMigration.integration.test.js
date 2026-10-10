@@ -42,14 +42,11 @@ beforeEach(async () => {
       (3, 'East 55th Street Marina', '{point}'),
       (4, 'Edgewater Park', '{point}');
     SELECT setval('pois_id_seq', 4);
-    INSERT INTO poi_news VALUES
-      (1, 2, '${NEWS5}'),
-      (2, 3, '${COUNTY}'),
-      (3, 1, '${SPECTRUM}'),
-      (4, 1, '${METROPARKS}'),
-      (5, 4, '${SPECTRUM}'),
-      (6, 1, '${UNRELATED}');
   `);
+  await probe.query(
+    `INSERT INTO poi_news VALUES (1, 2, $1), (2, 3, $2), (3, 1, $3), (4, 1, $4), (5, 4, $3), (6, 1, $5)`,
+    [NEWS5, COUNTY, SPECTRUM, METROPARKS, UNRELATED]
+  );
 });
 
 afterAll(async () => {
