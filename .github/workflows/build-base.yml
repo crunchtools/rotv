@@ -78,11 +78,21 @@ jobs:
           exit-code: "0"
           severity: "CRITICAL,HIGH"
 
+      # The crunchtools-ci App's token, not a personal one: it has its own rate
+      # limit, so a throttled account can't stop this step.
+      - name: Mint CI token
+        id: ci-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ vars.CRUNCHTOOLS_CI_APP_ID || secrets.CRUNCHTOOLS_CI_APP_ID }}
+          private-key: ${{ secrets.CRUNCHTOOLS_CI_APP_KEY }}
+          owner: crunchtools
+
       # Fix: build-base.yml itself listens for parent-image-updated, so sending
       # that event here re-triggered build-base forever (PR #627 review).
       - name: Trigger rotv rebuild
         env:
-          GH_TOKEN: ${{ secrets.CRUNCHTOOLS_DISPATCH_TOKEN }}
+          GH_TOKEN: ${{ steps.ci-token.outputs.token }}
         run: |
           gh api repos/crunchtools/rotv/dispatches \
             -f event_type=rotv-base-updated
