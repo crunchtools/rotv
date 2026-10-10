@@ -49,8 +49,9 @@ WHERE name = 'Mandel Community Trail' AND geom IS NULL;
 
 -- The trail's opening was covered before it had a POI, so the collector filed those
 -- articles under the nearest places it knew. Move them to the trail so they show on
--- its News tab. Each row is matched by URL and by the POI it was filed under, so this
--- fires once and never undoes a later admin reassignment.
+-- its News tab. Each row is matched by URL and by the POI it was filed under, and the
+-- move only happens while the trail has no news at all, so it fires once and never
+-- undoes a later admin reassignment, including one back to the original POI.
 UPDATE poi_news n
 SET poi_id = trail.id
 FROM (VALUES
@@ -62,4 +63,5 @@ FROM (VALUES
 JOIN pois filed ON filed.name = moved.filed_under
 JOIN pois trail ON trail.name = 'Mandel Community Trail'
 WHERE n.source_url = moved.source_url
-  AND n.poi_id = filed.id;
+  AND n.poi_id = filed.id
+  AND NOT EXISTS (SELECT 1 FROM poi_news existing WHERE existing.poi_id = trail.id);
