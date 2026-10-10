@@ -1,0 +1,24 @@
+[Unit]
+Description=Claude Code Remote Control server for the mounted checkout
+After=network-online.target rotv-dev-deps.service
+Wants=network-online.target
+ConditionPathExists=/work/rotv/.git
+
+[Service]
+Type=simple
+WorkingDirectory=/work/rotv
+Environment=HOME=/root
+Environment=CLAUDE_CONFIG_DIR=/var/lib/rotv-dev/claude
+Environment=GH_CONFIG_DIR=/var/lib/rotv-dev/gh
+Environment=GIT_CONFIG_GLOBAL=/var/lib/rotv-dev/gitconfig
+Environment=DISABLE_AUTOUPDATER=1
+# Sessions share the one checkout because Vite serves the one checkout. Until
+# someone has logged in and answered the first-run questions by hand (see
+# docs/DEVELOPMENT_ARCHITECTURE.md) this exits and is retried.
+ExecStart=/usr/local/bin/claude remote-control --spawn same-dir --capacity 2 --permission-mode acceptEdits --remote-control-session-name-prefix rotv-dev
+# The server gives up after about ten minutes without a network
+Restart=always
+RestartSec=30s
+
+[Install]
+WantedBy=multi-user.target

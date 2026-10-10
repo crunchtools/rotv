@@ -70,8 +70,26 @@ async function ensureQueue(scheduler, queueName) {
   }
 }
 
+/**
+ * Set a cron schedule, or with SCHEDULED_JOBS_ENABLED=false remove it. That switch
+ * is for a container running on a copy of production data (dev.rootsofthevalley.org),
+ * which must not repeat production's crawls, backups and digests. The schedules
+ * arrive with the dump, so they are removed, not just left unset. Workers stay
+ * registered, so a job an admin triggers by hand still runs.
+ *
+ * @param {string} jobName - pg-boss queue name.
+ * @param {string} cronExpression - Five-field cron, America/New_York.
+ * @param {string} label - Human name for the log line.
+ * @param {object} [data] - Payload handed to each scheduled job.
+ * @returns {Promise<void>}
+ */
 async function scheduleCron(jobName, cronExpression, label, data = {}) {
   const scheduler = getJobScheduler();
+  if (process.env.SCHEDULED_JOBS_ENABLED === 'false') {
+    await scheduler.unschedule(jobName);
+    logger.info(`${label} not scheduled: SCHEDULED_JOBS_ENABLED=false`);
+    return;
+  }
   await scheduler.schedule(jobName, cronExpression, data, { tz: 'America/New_York' });
   logger.info(`${label} scheduled with cron: ${cronExpression}`);
 }
@@ -252,10 +270,16 @@ export async function registerUnconfirmedCleanupHandler(handler) {
   await registerWorker(JOB_NAMES.UNCONFIRMED_CLEANUP, 'unconfirmed account cleanup', job => handler(job.data));
 }
 
+/**
+ * Change a job's cron schedule. With SCHEDULED_JOBS_ENABLED=false the schedule is
+ * removed instead, as in scheduleCron().
+ *
+ * @param {string} jobName - pg-boss queue name.
+ * @param {string} cronExpression - Five-field cron, America/New_York.
+ * @returns {Promise<void>}
+ */
 export async function updateSchedule(jobName, cronExpression) {
-  const scheduler = getJobScheduler();
-  await scheduler.schedule(jobName, cronExpression, {}, { tz: 'America/New_York' });
-  logger.info(`Schedule updated: ${jobName} → ${cronExpression}`);
+  await scheduleCron(jobName, cronExpression, jobName);
 }
 
 export async function registerDigestHandler(handler) {

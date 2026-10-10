@@ -1,8 +1,8 @@
 # rotv Constitution
 
-> **Version:** 2.2.0
+> **Version:** 2.3.0
 > **Ratified:** 2026-03-10
-> **Amended:** 2026-10-02
+> **Amended:** 2026-10-10
 > **Status:** Active
 > **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.22.0
 > **Profile:** Web Application
@@ -49,6 +49,11 @@ storage or sync mechanism. The recipe is in `docs/USER_DATA_FRAMEWORK.md`.
   `BASE_IMAGE=quay.io/crunchtools/rotv-base:latest` for fast builds; the
   default, `ubi10-core`, builds everything from scratch for local dev. The app
   build listens for `parent-image-updated` and `rotv-base-updated`.
+- `Containerfile.dev` builds `quay.io/crunchtools/rotv-dev` on top of the app
+  image, for dev.rootsofthevalley.org: git, gh, Claude Code, and the
+  `rootfs-dev/` units (`rotv-dev-deps`, `rotv-dev-ui`, `rotv-dev-claude`) that
+  run a mounted checkout. `build-dev.yml` rebuilds it after every app build. It
+  is never deployed as production. See `docs/DEVELOPMENT_ARCHITECTURE.md`.
 - The frontend is built in the image (`npm run build` into `/app/public/`).
 - PostgreSQL 17 + PostGIS come from the pgdg RPM repo. PostGIS's SFCGAL
   dependency needs boost-serialization, so the build registers with RHSM
@@ -80,6 +85,12 @@ Under `/srv/rotv/`:
 - `data/`: the PostgreSQL data directory (`/data/pgdata`) and seed data,
   bind-mounted `:Z`. PostgreSQL holds all application data.
 
+dev.rootsofthevalley.org has no `code/`: its git checkout is working state,
+edited in place by the session inside the container, so it lives in
+`data/checkout`. Nothing under that container's `data/` is backed up. The
+database is a scrubbed copy of production (`scripts/dev-seed.sh`) and the rest
+is rebuilt by cloning and logging in again.
+
 **Exception:** `.env.test` may carry hardcoded credentials, for local testing
 against ephemeral tmpfs-backed databases only.
 
@@ -87,6 +98,11 @@ against ephemeral tmpfs-backed databases only.
 
 Nagios: HTTP check of the backend on 8080, TCP check of PostgreSQL on 5432,
 `pg_isready`, and a process check for `weston` (`rotv-display.service`).
+
+dev.rootsofthevalley.org: container running, container memory, the vhost on
+the proxy, and the external HTTPS path expecting 401 (basic auth). Its inner
+services are not paged on: it is a workbench, and a stopped unit there is
+often deliberate.
 
 ## Smoke Tests
 
@@ -113,6 +129,7 @@ fixes:
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.3.0 | 2026-10-10 | `rotv-dev` image and its units added to the image chain (#748) |
 | 2.2.0 | 2026-10-02 | Manifest under constitution v1.18.0: fleet and profile restatement removed; image chain and service list updated to match the Containerfiles and `rootfs/` |
 
 Earlier versions, from ratification on 2026-03-10 through 2.1.3, are in git

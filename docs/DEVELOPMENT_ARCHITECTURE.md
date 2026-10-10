@@ -156,6 +156,57 @@ Version bump (1.10.0 → 1.11.0):
   ✓ Application layer: REBUILD (fast, only ~2 minutes)
 ```
 
+## Hosted dev (dev.rootsofthevalley.org)
+
+A second container on the production host, for working when the laptop is off
+and for seeing changes on a real phone (#748). The checkout, the dev server and
+the Claude Code session that edits the code all live in it.
+
+```
+phone / claude.ai ──Remote Control──▶ rotv-dev-claude.service ─ edits ─▶ /work/rotv
+                                                                            │
+phone browser ─▶ Cloudflare ─▶ proxy (basic auth) ─▶ rotv-dev-ui (Vite :5173, HMR)
+                                                        └─ /api /auth /stats /share ─▶ rotv-backend :8080
+```
+
+- **Image:** `quay.io/crunchtools/rotv-dev`, built by `build-dev.yml` from
+  `Containerfile.dev`. It is the app image plus git, gh and Claude Code. `/app`
+  is a symlink to `/work/rotv/backend`, so `rotv-init` and `rotv-backend` run the
+  checkout's migrations and `server.js` unmodified.
+- **Units added** (`rootfs-dev/`): `rotv-dev-deps` (`npm ci` when a lockfile
+  changes), `rotv-dev-ui` (Vite), `rotv-dev-claude` (`claude remote-control`,
+  two sessions at most, sharing the one checkout because Vite serves one tree).
+- **Host layout**, under `/srv/dev.rootsofthevalley.org/`: `config/dev.env`
+  (shape in `deploy/dev.env.example`); `data/checkout` is the git clone,
+  mounted read-write at `/work/rotv`; `data/pgdata`; `data/state` holds the
+  Claude and gh logins and the git identity. `node_modules` are named volumes.
+- **Gate:** basic auth at the proxy. Behind it the app runs `NODE_ENV=test` with
+  `BYPASS_AUTH=true`, so every visitor is the test admin. The HMR socket,
+  `/__hmr`, is exempt: mobile Safari sends no credentials on a WebSocket.
+- **Data:** a copy of production, replaced by `./run.sh dev-host seed`
+  (`scripts/dev-seed.sh`). The copy is scrubbed in the same transaction that
+  loads it: account emails and names, sessions, login tokens, third-party API
+  keys and queued jobs do not come across.
+- **Nothing here is backed up, on purpose.** The database is rebuilt by
+  `seed`, the checkout by `git clone`, and `data/state` by repeating the logins
+  below. Work that matters is on a pushed branch.
+- **It does not act on the world:** `SCHEDULED_JOBS_ENABLED=false` removes every
+  cron schedule at boot (they arrive with the dump), `NEWSLETTER_SEND_ENABLED=false`,
+  and no SMTP or image-server settings, so images are read from production and
+  nothing is written to it.
+- **What it cannot do:** `./run.sh build` and `./run.sh test` need podman. Unit
+  tests run in place; the full gate is the pull request.
+
+First start needs three things done by hand in a terminal, once, because they
+are interactive and the logins are personal:
+
+```bash
+podman exec -it dev.rootsofthevalley.org claude auth login    # claude.ai account, not an API key
+podman exec -it dev.rootsofthevalley.org gh auth login
+podman exec -it -w /work/rotv dev.rootsofthevalley.org claude remote-control   # answer the trust and enable questions, then Ctrl-C
+podman exec dev.rootsofthevalley.org systemctl restart rotv-dev-claude
+```
+
 ## Key Technologies
 
 ### Storage Technologies

@@ -1,0 +1,16 @@
+[Unit]
+Description=Install ROTV dependencies for the mounted checkout
+After=network-online.target
+Wants=network-online.target
+Before=rotv-backend.service rotv-dev-ui.service
+ConditionPathExists=/work/rotv/backend/package-lock.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rotv-dev-deps.sh
+RemainAfterExit=yes
+# A cold install of both trees on a busy host
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

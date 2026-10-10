@@ -1,0 +1,14 @@
+[Unit]
+Description=Podman container - dev.rootsofthevalley.org
+
+[Service]
+Type=simple
+ExecStartPre=/usr/bin/podman pull quay.io/crunchtools/rotv-dev:latest
+ExecStart=/usr/bin/podman run --hostname dev.rootsofthevalley.org --tmpfs /var/lib/rsyslog:rw,size=8m --label io.containers.autoupdate=registry --label PODMAN_SYSTEMD_UNIT=dev.rootsofthevalley.org.service --systemd=always --memory=4g --memory-swap=4g --shm-size=256m -i --rm --name dev.rootsofthevalley.org -p 127.0.0.1:8087:5173 -v /srv/dev.rootsofthevalley.org/data/checkout:/work/rotv:Z -v rotv-dev-backend-node-modules:/work/rotv/backend/node_modules -v rotv-dev-frontend-node-modules:/work/rotv/frontend/node_modules -v /srv/dev.rootsofthevalley.org/data/pgdata:/data/pgdata:Z -v /srv/dev.rootsofthevalley.org/data/state:/var/lib/rotv-dev:Z -v /srv/dev.rootsofthevalley.org/config/dev.env:/etc/rotv/environment:Z,ro quay.io/crunchtools/rotv-dev:latest
+ExecStop=/usr/bin/podman stop -t 3 dev.rootsofthevalley.org
+ExecStopPost=/usr/bin/podman rm -f dev.rootsofthevalley.org
+RestartSec=3
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

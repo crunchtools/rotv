@@ -46,6 +46,9 @@ Before making any changes, read these documents in order:
 ./run.sh reload-app    # Rebuild frontend + restart backend in the container
 ./run.sh restart-db    # Restart PostgreSQL (~5s)
 
+# Hosted dev container (dev.rootsofthevalley.org)
+./run.sh dev-host status   # Units and checkout state; also: seed, logs [unit], restart
+
 # Full builds
 ./run.sh build         # Build container (~60s)
 ./run.sh start         # Start container
@@ -152,6 +155,17 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 - Start with the route handler in backend/routes/
 - Business logic is in backend/services/ (same name as the route usually)
 - Database schema is created in server.js initDatabase()
+
+### When you are running on dev.rootsofthevalley.org
+Your working directory is `/work/rotv` inside the hosted dev container
+(`docs/DEVELOPMENT_ARCHITECTURE.md`, "Hosted dev"). There is no podman, so no `./run.sh`.
+- Frontend edits hot-reload at https://dev.rootsofthevalley.org on save. Nothing to run.
+- Backend edits: `systemctl restart rotv-backend`. A new migration: `systemctl restart rotv-init` first.
+- A changed `package-lock.json`: `systemctl restart rotv-dev-deps`, then the service that uses it.
+- Logs: `journalctl -u rotv-backend -n 50` (also `rotv-dev-ui`).
+- Unit tests: `cd backend && npx vitest run tests/<file>.unit.test.js`, or `cd frontend && npx vitest run`.
+- The full gate is the PR: branch, commit, `git push`, `gh pr create`, and let GHA build and test.
+- The database is a copy of production. Scheduled jobs and mail are off; leave them off.
 
 ### Gotchas
 - `CREATE OR REPLACE VIEW` fails if columns changed — must DROP first

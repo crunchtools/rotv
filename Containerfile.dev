@@ -1,0 +1,42 @@
+# Roots of The Valley — hosted development image (dev.rootsofthevalley.org, #748)
+# The production image plus what it takes to work on the code inside the
+# container: git, gh, Claude Code, and units that run the backend and a Vite
+# dev server from a checkout mounted at /work/rotv instead of the code baked
+# into the image. See docs/DEVELOPMENT_ARCHITECTURE.md, "Hosted dev".
+
+ARG ROTV_IMAGE=quay.io/crunchtools/rotv:latest
+FROM ${ROTV_IMAGE}
+
+LABEL maintainer="fatherlinux <scott.mccarty@crunchtools.com>"
+LABEL description="Roots of The Valley - hosted development container"
+
+RUN curl -fsSL https://cli.github.com/packages/rpm/gh-cli.repo -o /etc/yum.repos.d/gh-cli.repo && \
+    dnf install -y git gh openssh-clients && \
+    dnf clean all
+
+# Global, not the native installer: that one installs under $HOME and updates
+# itself in place. The image is rebuilt after every rotv build instead.
+RUN npm install -g @anthropic-ai/claude-code && npm cache clean --force
+
+# Logins and git identity live on a volume. `podman exec` gets these from the
+# image; rotv-dev-claude.service sets them again because systemd units do not.
+ENV CLAUDE_CONFIG_DIR=/var/lib/rotv-dev/claude \
+    GH_CONFIG_DIR=/var/lib/rotv-dev/gh \
+    GIT_CONFIG_GLOBAL=/var/lib/rotv-dev/gitconfig \
+    DISABLE_AUTOUPDATER=1
+
+# The image's units all run from /app. Point it at the checkout and they run
+# the checkout's server.js and migrations unmodified. The built frontend stays
+# reachable for the few backend routes that read index.html (STATIC_PATH, set
+# in rotv-backend.service.d/dev.conf).
+RUN mv /app /opt/rotv-image && \
+    mkdir -p /work/rotv /var/lib/rotv-dev && \
+    ln -s /work/rotv/backend /app
+
+COPY rootfs-dev/ /
+
+RUN chmod +x /usr/local/bin/rotv-dev-deps.sh && \
+    systemctl enable rotv-dev-deps rotv-dev-ui rotv-dev-claude
+
+WORKDIR /work/rotv
+EXPOSE 5173
