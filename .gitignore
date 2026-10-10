@@ -27,3 +27,7 @@ data/boundaries/*.py
 # Gourmand reports and cache
 gourmand-report.txt
 .gourmand-cache/
+
+# Claude Code per-machine state (skills and shared settings are tracked)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

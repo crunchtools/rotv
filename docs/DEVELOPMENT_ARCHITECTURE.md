@@ -203,6 +203,14 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
   nothing is written to it.
 - **What it cannot do:** `./run.sh build` and `./run.sh test` need podman. Unit
   tests run in place; the full gate is the pull request.
+- **Deploying from here:** the session can ship what it merged. The project
+  skill `.claude/skills/deploy/` merges the PR, tags the release, waits for the
+  build and runs `ssh rotv-prod deploy`. That key is not a login: its
+  `authorized_keys` line forces `deploy/rotv-deploy.sh`, which accepts `deploy`,
+  `status` and `logs` and restarts only the production service. A session that
+  reads web pages as root does not get a shell on the host that runs everything
+  else. The script is installed under `/srv/rootsofthevalley.org/config/`, which
+  the dev container does not mount.
 
 First start needs three things done by hand in a terminal, once, because they
 are interactive and the logins are personal:
@@ -213,6 +221,21 @@ podman exec -it dev.rootsofthevalley.org gh auth login
 podman exec -it -w /work/rotv dev.rootsofthevalley.org claude remote-control   # answer the trust and enable questions, then Ctrl-C
 podman exec dev.rootsofthevalley.org systemctl restart rotv-dev-claude
 ```
+
+The deploy key is made once too, on the production host:
+
+```bash
+install -m 0755 deploy/rotv-deploy.sh /srv/rootsofthevalley.org/config/rotv-deploy.sh
+podman exec dev.rootsofthevalley.org sh -c 'mkdir -p -m 700 /var/lib/rotv-dev/ssh && ssh-keygen -q -t ed25519 -N "" -C rotv-dev-deploy -f /var/lib/rotv-dev/ssh/id_ed25519'
+# known_hosts: the host's own key, under the name and port in ssh_config.d/rotv-prod.conf
+echo "[lotor.dc3.crunchtools.com]:22422 $(cat /etc/ssh/ssh_host_ed25519_key.pub)" > /srv/dev.rootsofthevalley.org/data/state/ssh/known_hosts
+echo "restrict,from=\"10.88.0.0/16\",command=\"/srv/rootsofthevalley.org/config/rotv-deploy.sh\" $(cat /srv/dev.rootsofthevalley.org/data/state/ssh/id_ed25519.pub)" >> /root/.ssh/authorized_keys
+```
+
+Sessions run in auto mode, whose classifier refuses to merge and deploy on its
+own. `data/state/claude/settings.json` carries the `autoMode` block that names
+this repository and `rotv-prod` as trusted; it is user settings, so it lives on
+the state volume rather than in the checkout.
 
 ## Key Technologies
 
