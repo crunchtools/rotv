@@ -93,6 +93,10 @@ export function extractUrlDate(url) {
   return null;
 }
 
+const EASTERN_DAY_FORMAT = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
+});
+
 /**
  * Calendar day in US Eastern, the timezone every stored date is interpreted in.
  *
@@ -100,9 +104,19 @@ export function extractUrlDate(url) {
  * @returns {string} The day as YYYY-MM-DD
  */
 export function easternDay(date) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit'
-  }).format(date);
+  return EASTERN_DAY_FORMAT.format(date);
+}
+
+/**
+ * The JSON-LD dates of a rendered page that count as publication dates. An Event's
+ * start and end are not: scoring them let event pages into poi_news (#585). The
+ * extractor no longer folds startDate in, but pages cached before that still carry it.
+ *
+ * @param {{jsonLdDates?: string[], eventStartDate?: string, eventEndDate?: string}} ogDates
+ * @returns {string[]}
+ */
+export function publicationJsonLdDates(ogDates = {}) {
+  return (ogDates.jsonLdDates || []).filter(d => d !== ogDates.eventStartDate && d !== ogDates.eventEndDate);
 }
 
 const WEBTRAC_DATE_RE = /Date\(s\):\s*(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s*-\s*(\d{1,2})\/(\d{1,2})\/(\d{4}))?(?:\s*Time:\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?(?:\s*-\s*(\d{1,2})(?::(\d{2}))?\s*([ap])\.?m\.?)?)?/i;

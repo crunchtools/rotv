@@ -1,7 +1,7 @@
 import { generateTextWithCustomPrompt } from './llmService.js';
 import { renderPage } from './renderPage.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
-import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate, easternDay } from './dateExtractor.js';
+import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate, easternDay, publicationJsonLdDates } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
@@ -259,10 +259,10 @@ Return ONLY valid JSON: {"choice": "${keys.join('|')}"}`;
 // threshold. Age is never penalized. Source reputation carries no weight here: an official
 // domain with a weak machine-readable date goes to manual review like any other source.
 // JSON-LD dates for a fresh render: an event is dated by its Event startDate, news by its
-// publication dates. Pages cached before #585 still fold startDate into jsonLdDates.
+// publication dates.
 function jsonLdDatesFor(contentType, ogDates) {
   if (contentType === 'event') return ogDates.eventStartDate ? [ogDates.eventStartDate] : [];
-  return (ogDates.jsonLdDates || []).filter(d => d !== ogDates.eventStartDate && d !== ogDates.eventEndDate);
+  return publicationJsonLdDates(ogDates);
 }
 
 // Events store date_signals as { start, end }; news stores the signals at the top level.

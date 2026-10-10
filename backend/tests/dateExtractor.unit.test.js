@@ -4,7 +4,7 @@
  *   extractUrlDate → normalizeDateSources → scoreDateConsensus (with LLM multi-vote)
  */
 import { describe, it, expect } from 'vitest';
-import { extractUrlDate, extractWebTracDates, easternDay, normalizeDateSources, scoreDateConsensus } from '../services/dateExtractor.js';
+import { extractUrlDate, extractWebTracDates, easternDay, publicationJsonLdDates, normalizeDateSources, scoreDateConsensus } from '../services/dateExtractor.js';
 import { normalizeRenderUrl } from '../services/newsService.js';
 
 describe('extractUrlDate', () => {
@@ -401,5 +401,24 @@ describe('scoreDateConsensus with datetime strings', () => {
     }, votes);
     expect(result.sourceMap['2026-04-22T10:30']).toContain('json-ld');
     expect(result.sourceMap['2026-04-22T10:30']).toContain('llm-vote');
+  });
+});
+
+describe('publicationJsonLdDates (#585)', () => {
+  it('keeps publication dates', () => {
+    expect(publicationJsonLdDates({ jsonLdDates: ['2024-03-15T09:00:00Z'] })).toEqual(['2024-03-15T09:00:00Z']);
+  });
+
+  it('drops an Event start and end that a page cached before the fix folded in', () => {
+    expect(publicationJsonLdDates({
+      jsonLdDates: ['2024-03-15', '2024-10-10T18:00', '2024-10-10T21:00'],
+      eventStartDate: '2024-10-10T18:00',
+      eventEndDate: '2024-10-10T21:00'
+    })).toEqual(['2024-03-15']);
+  });
+
+  it('is empty for a page with no JSON-LD', () => {
+    expect(publicationJsonLdDates({})).toEqual([]);
+    expect(publicationJsonLdDates()).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 
 import { generateTextWithCustomPrompt as llmGenerateText } from './llmService.js';
-import { parseDate, parseDateTime, extractUrlDate, extractWebTracDates, easternDay, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
+import { parseDate, parseDateTime, extractUrlDate, extractWebTracDates, easternDay, publicationJsonLdDates, normalizeDateSources, scoreDateConsensus } from './dateExtractor.js';
 import { renderPage, setCachePageType, setCacheItemCount } from './renderPage.js';
 import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
@@ -595,9 +595,7 @@ async function processPage(pool, page, poi, contentType, options = {}) {
         }
       }
     : {
-        // An Event's start/end date is not a publication date (#585). The extractor no
-        // longer folds it in, but detail pages cached before that still carry it.
-        jsonLd: (od.jsonLdDates || []).filter(d => d !== od.eventStartDate && d !== od.eventEndDate),
+        jsonLd: publicationJsonLdDates(od),
         meta: [od.publishedTime, od.parselyPubDate, od.dcDate].filter(Boolean),
         timeTags: od.timeDates || [],
         url: extractUrlDate(url),
