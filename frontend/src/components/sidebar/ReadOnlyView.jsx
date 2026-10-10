@@ -18,7 +18,7 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
       <div className="view-scroll">
 
         <div className="sidebar-content">
-        <div className="badges-row">
+        <div className="poi-tags">
           {isLinearFeature ? (
             <span className={`poi-type-badge ${destination.poi_roles?.includes('river') ? 'river' : destination.poi_roles?.includes('water_taxi') ? 'water-taxi' : destination.poi_roles?.includes('boundary') ? 'boundary' : 'trail'}`}>
               {destination.poi_roles?.includes('river') ? 'River' :
@@ -79,26 +79,40 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
                trailStatus.status === 'maintenance' ? 'Maintenance' : 'Unknown'}
             </span>
           )}
-          {destination.status_url && trailStatus && trailStatus.source_url && (
-            <a href={trailStatus.source_url} target="_blank" rel="noopener noreferrer" className="trail-status-badge source">
-              Source
-            </a>
-          )}
+        </div>
+
+        <div className="poi-actions">
+          <NavigateButton stops={getNavigationStops(destination, isLinearFeature)} />
           {onShare && (
-            <button className="share-badge-btn" onClick={onShare} title="Share this location">
-              <svg viewBox="0 0 24 24" width="14" height="14">
+            <button className="poi-action" onClick={onShare} title="Share this location">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
                 <path fill="currentColor" d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z"/>
               </svg>
               Share
             </button>
           )}
-          <NavigateButton stops={getNavigationStops(destination, isLinearFeature)} />
-          <AddToTripButton poi={destination} stops={getNavigationStops(destination, isLinearFeature)} />
           <FavoriteToggle poi={destination} />
+          {moreInfoLink && (
+            <a href={moreInfoLink} target="_blank" rel="noopener noreferrer" className="poi-action more-info-link">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
+              </svg>
+              More info
+            </a>
+          )}
+          {liveTrackerUrl && (
+            <a href={liveTrackerUrl} target="_blank" rel="noopener noreferrer" className="poi-action live-tracker-link">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z" />
+              </svg>
+              Live tracker
+            </a>
+          )}
+          <AddToTripButton poi={destination} stops={getNavigationStops(destination, isLinearFeature)} />
           <VisitedToggle poi={destination} />
         </div>
 
-        {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated) && (
+        {destination.status_url && trailStatus && trailStatus.status !== 'unknown' && (trailStatus.conditions || trailStatus.weather_impact || trailStatus.seasonal_closure || trailStatus.last_updated || trailStatus.source_url) && (
           <div className="section">
             <h3>Trail Status {isAdmin && editMode && onCollectStatus && (
               <button className="collect-status-inline-btn" onClick={onCollectStatus} title="Refresh trail status">
@@ -114,8 +128,14 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
             {trailStatus.seasonal_closure && (
               <p className="trail-status-detail trail-status-seasonal">Seasonal Closure in Effect</p>
             )}
-            {trailStatus.last_updated && (
-              <p className="trail-status-updated">Updated: {formatDateTime(trailStatus.last_updated)}</p>
+            {(trailStatus.last_updated || trailStatus.source_url) && (
+              <p className="trail-status-updated">
+                {trailStatus.last_updated && `Updated: ${formatDateTime(trailStatus.last_updated)}`}
+                {trailStatus.last_updated && trailStatus.source_url && ' · '}
+                {trailStatus.source_url && (
+                  <a href={trailStatus.source_url} target="_blank" rel="noopener noreferrer" className="link-button">Source</a>
+                )}
+              </p>
             )}
           </div>
         )}
@@ -240,38 +260,6 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
           </div>
         )}
         </div>
-
-        {liveTrackerUrl && (
-          <div className="more-info-section">
-            <a
-              href={liveTrackerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="more-info-link live-tracker-link"
-            >
-              Live Tracker
-              <svg viewBox="0 0 24 24" width="16" height="16" style={{ marginLeft: '8px' }}>
-                <path fill="currentColor" d="M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z" />
-              </svg>
-            </a>
-          </div>
-        )}
-
-        {moreInfoLink && (
-          <div className="more-info-section">
-            <a
-              href={moreInfoLink}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="more-info-link"
-            >
-              More Information
-              <svg viewBox="0 0 24 24" width="16" height="16" style={{ marginLeft: '8px' }}>
-                <path fill="currentColor" d="M14,3V5H17.59L7.76,14.83L9.17,16.24L19,6.41V10H21V3M19,19H5V5H12V3H5C3.89,3 3,3.9 3,5V19A2,2 0 0,0 5,21H19A2,2 0 0,0 21,19V12H19V19Z" />
-              </svg>
-            </a>
-          </div>
-        )}
       </div>
     </div>
   );

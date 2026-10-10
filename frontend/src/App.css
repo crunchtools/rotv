@@ -1185,28 +1185,68 @@ body {
   gap: 0.5rem;
 }
 
-/* Share badge button in badges row */
-.share-badge-btn {
+/* POI actions: everything tappable in the Info tab is a bordered pill with an
+   icon. Navigate is the one filled button. Labels live in .poi-tags. */
+.poi-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.poi-action {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.75rem;
-  background: #2d5016;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 0.75rem;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0 0.9rem;
+  background: white;
+  color: #2d5016;
+  border: 1px solid #4a7c23;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.8rem;
   font-weight: 500;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
   transition: background-color 0.2s;
 }
 
-.share-badge-btn:hover {
+.poi-action:hover {
+  background: #e8f5e9;
+}
+
+.poi-action:focus-visible {
+  outline: 2px solid #4a7c23;
+  outline-offset: 2px;
+}
+
+.poi-action svg {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.poi-action--primary {
+  background: #2d5016;
+  border-color: #2d5016;
+  color: white;
+}
+
+.poi-action--primary:hover {
   background: #3d6a1e;
 }
 
-.share-badge-btn svg {
-  flex-shrink: 0;
+.poi-action[aria-pressed="true"] {
+  background: #e8f5e9;
+  border-color: #2d5016;
+}
+
+.poi-action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* NPS Map toggle button in badges row */
@@ -2120,14 +2160,60 @@ body {
   box-sizing: border-box;
 }
 
-.badges-row {
+/* POI tags: what a place is, never tappable. Small grey rectangles; only live
+   status (trail, boat, difficulty) keeps a colour. */
+.poi-tags {
   display: flex;
   flex-wrap: wrap;
-  justify-content: flex-start;
-  align-items: flex-start;
-  column-gap: 0.5rem;
-  row-gap: 0.75rem;
-  margin-bottom: 1rem;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
+}
+
+/* .sidebar-content and span lift this over the shared badge colours (.poi-type-badge.mtb etc.) */
+.sidebar-content .poi-tags > span {
+  padding: 0.15rem 0.5rem;
+  background: #f5f5f5;
+  color: #525252;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  cursor: default;
+}
+
+.poi-tags .trail-status-badge.status-open,
+.poi-tags .difficulty-badge.easy,
+.poi-tags .service-badge.live {
+  background: #c8e6c9;
+  border-color: #c8e6c9;
+  color: #1b5e20;
+}
+
+.poi-tags .trail-status-badge.status-limited,
+.poi-tags .difficulty-badge.moderate,
+.poi-tags .service-badge.docked {
+  background: #fff3e0;
+  border-color: #fff3e0;
+  color: #bf360c;
+}
+
+.poi-tags .trail-status-badge.status-closed,
+.poi-tags .difficulty-badge.difficult {
+  background: #ffebee;
+  border-color: #ffebee;
+  color: #c62828;
+}
+
+.poi-tags .trail-status-badge.status-maintenance {
+  background: #e3f2fd;
+  border-color: #e3f2fd;
+  color: #1565c0;
+}
+
+.poi-tags .service-badge.offline {
+  color: #616161;
 }
 
 .era-badge-large {
@@ -2228,21 +2314,6 @@ body {
 
 .signal-bar.active {
   background: #4a7c23;
-}
-
-.more-info-link {
-  display: inline-block;
-  margin-top: 1rem;
-  padding: 0.6rem 1.2rem;
-  background: #4a7c23;
-  color: white;
-  text-decoration: none;
-  border-radius: 4px;
-  font-size: 0.9rem;
-}
-
-.more-info-link:hover {
-  background: #2d5016;
 }
 
 /* News and Events */
@@ -4476,38 +4547,6 @@ body {
 
 .edit-buttons-footer .delete-btn:hover {
   background: #ffebee;
-}
-
-/* More Information link at bottom of Info tab content */
-.more-info-section {
-  padding: 1.5rem 1.25rem;
-  margin-top: 1rem;
-  border-top: 1px solid #e0e0e0;
-}
-
-.more-info-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem 1.5rem;
-  background: #3d6a1e;
-  color: white;
-  text-decoration: none;
-  border-radius: 8px;
-  font-size: 0.95rem;
-  font-weight: 500;
-  transition: background 0.2s, transform 0.1s;
-  width: 100%;
-  text-align: center;
-}
-
-.more-info-link:hover {
-  background: #2d5016;
-  transform: translateY(-1px);
-}
-
-.more-info-link:active {
-  transform: translateY(0);
 }
 
 .edit-buttons-right {
@@ -12774,7 +12813,7 @@ svg.leaflet-zoom-animated {
   color: white;
 }
 
-/* Trail Status Badge (for badges-row in Info tab) */
+/* Trail Status Badge (for poi-tags in Info tab) */
 .trail-status-badge {
   display: inline-block;
   padding: 0.3rem 0.75rem;
@@ -12880,17 +12919,6 @@ svg.leaflet-zoom-animated {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 0.5rem;
-}
-
-.trail-status-badge.source {
-  background: #6c757d;
-  color: white;
-  text-decoration: none;
-  transition: background-color 0.2s;
-}
-
-.trail-status-badge.source:hover {
-  background: #5a6268;
 }
 
 .trail-status-detail {
@@ -14395,19 +14423,6 @@ button.feedback-link-inline {
 }
 
 /* ── POI subscriptions: favorite toggle, notification bell, favorites tab ── */
-.favorite-toggle-btn.favorited {
-  background: #c8941a;
-}
-.favorite-toggle-btn.favorited:hover {
-  background: #b07f12;
-}
-.visited-toggle-btn.visited {
-  background: #2e7d32;
-}
-.visited-toggle-btn.visited:hover {
-  background: #256628;
-}
-
 .notification-bell {
   position: relative;
   display: inline-flex;
@@ -14801,6 +14816,9 @@ button.feedback-link-inline {
     min-width: 44px;
     min-height: 44px;
   }
+  .poi-action {
+    min-height: 44px;
+  }
 }
 
 /* ==================== Find / Happening / bottom bar (spec 048) ==================== */
@@ -15063,7 +15081,8 @@ button.type-filter-chip {
   .sidebar.peek {
     top: auto;
     bottom: 0;
-    height: 46%;
+    /* Never shorter than the tags and two rows of actions need on a short phone */
+    height: max(46%, 290px);
     border-radius: 14px 14px 0 0;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.25);
   }
@@ -15081,6 +15100,16 @@ button.type-filter-chip {
   .sidebar.peek .sidebar-tab-content {
     overflow: hidden;
     padding-bottom: 0;
+  }
+
+  /* The summary keeps the actions people reach for first; the rest wait for the full card */
+  .sidebar.peek .add-to-trip-btn,
+  .sidebar.peek .visited-toggle-btn {
+    display: none;
+  }
+
+  .sidebar.peek .sidebar-content {
+    padding-top: 0.75rem;
   }
 
   /* Each tab has its own scroller; touch-action only reaches as far as the

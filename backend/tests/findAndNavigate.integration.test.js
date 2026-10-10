@@ -117,6 +117,15 @@ describe('Find a park on a phone and get to it (#712)', () => {
     expect(layout.navBottom).toBeLessThanOrEqual(layout.viewport);
 
     expect(await page.locator('.sidebar.open button[title="Open in Google Maps"]').count()).toBe(1);
+
+    // Labels and actions are separate rows: nothing in the tags is tappable, and
+    // the summary card shows touch-sized actions, leaving the rest for the full card
+    expect(await page.locator('.sidebar.open .poi-tags button, .sidebar.open .poi-tags a').count()).toBe(0);
+    const navigate = await page.locator('.sidebar.open .poi-actions button[title="Open in Google Maps"]').boundingBox();
+    expect(navigate.height).toBeGreaterThanOrEqual(44);
+    expect(await page.locator('.sidebar.open .poi-actions .favorite-toggle-btn').isVisible()).toBe(true);
+    expect(await page.locator('.sidebar.open .poi-actions .add-to-trip-btn').isVisible()).toBe(false);
+    expect(await page.locator('.sidebar.open .poi-actions .visited-toggle-btn').isVisible()).toBe(false);
   }, 60000);
 
   it('opens the card in full on a drag up, back to half on a drag down, and closes it on one more', async () => {

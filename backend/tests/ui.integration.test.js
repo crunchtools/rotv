@@ -352,7 +352,7 @@ describe('UI Integration Tests', () => {
       await page.setViewportSize({ width: 1280, height: 720 });
     }, 30000);
 
-    it('should show More Info button only on Info tab', async () => {
+    it('should show More Info as an action on the half-height card', async () => {
       // Set viewport to mobile size
       await page.setViewportSize({ width: 375, height: 667 });
 
@@ -363,52 +363,19 @@ describe('UI Integration Tests', () => {
         return;
       }
 
-      // Scroll to bottom of Info tab content to make the link visible
-      const tabContent = await page.locator('.sidebar-tab-content');
-      await tabContent.evaluate(el => el.scrollTop = el.scrollHeight);
-      await page.waitForTimeout(300);
+      // More Info sits with the other actions, not at the end of the content
+      const moreInfoLink = page.locator('.poi-actions .more-info-link');
+      expect(await moreInfoLink.count()).toBe(1);
+      expect(await page.locator('.more-info-link').count()).toBe(1);
 
-      // Verify More Info link exists at bottom of scrollable content
-      const moreInfoLink = await page.locator('.more-info-link');
-      const linkExists = await moreInfoLink.count();
-      expect(linkExists).toBe(1);
-
-      // Verify link is visible after scrolling to bottom
-      let isVisible = await moreInfoLink.isVisible();
-      expect(isVisible).toBe(true);
-
-      // Reset viewport
-      await page.setViewportSize({ width: 1280, height: 720 });
-    }, 40000);
-
-    it('should show More Info link at bottom of scrollable content', async () => {
-      // Set viewport to mobile size
-      await page.setViewportSize({ width: 375, height: 667 });
-
-      const poi = await openPoiWithMoreInfo(page, baseUrl);
-      if (!poi) {
-        console.warn('[ui] No POI with a More Info link in seed — skipping');
-        await page.setViewportSize({ width: 1280, height: 720 });
-        return;
-      }
-
-      // More Info link is at bottom of scrollable content, so scroll down to see it
-      const tabContent = await page.locator('.sidebar-tab-content');
-      await tabContent.evaluate(el => el.scrollTop = el.scrollHeight);
-      await page.waitForTimeout(300);
-
-      // Verify More Info link appears at bottom of content
-      const moreInfoLink = await page.locator('.more-info-link');
-      const linkVisible = await moreInfoLink.isVisible();
-      expect(linkVisible).toBe(true);
-
-      // Scroll back up - link should move out of view (not fixed)
-      await tabContent.evaluate(el => el.scrollTop = 0);
-      await page.waitForTimeout(300);
-
-      // Link should still exist but may not be in viewport (it scrolls with content)
-      const linkCount = await moreInfoLink.count();
-      expect(linkCount).toBe(1);
+      // Reachable without expanding the card or scrolling
+      await page.waitForSelector('.sidebar.open.peek', { timeout: 5000 });
+      const inCard = await moreInfoLink.evaluate(el => {
+        const link = el.getBoundingClientRect();
+        const card = document.querySelector('.sidebar.open').getBoundingClientRect();
+        return link.top >= card.top && link.bottom <= card.bottom;
+      });
+      expect(inCard).toBe(true);
 
       // Reset viewport
       await page.setViewportSize({ width: 1280, height: 720 });

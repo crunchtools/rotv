@@ -27,7 +27,7 @@ export function buildGoogleMapsUrl(stops) {
   return url;
 }
 
-export default function NavigateButton({ stops, label = 'Navigate', className = 'share-badge-btn', title = 'Open in Google Maps' }) {
+export default function NavigateButton({ stops, label = 'Navigate', className = 'poi-action poi-action--primary', title = 'Open in Google Maps' }) {
   const url = buildGoogleMapsUrl(stops);
   if (!url) return null;
 
