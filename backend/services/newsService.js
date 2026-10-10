@@ -322,6 +322,26 @@ function isNoiseLink(url, sourceUrl) {
   return false;
 }
 
+// A trusted_content_paths entry is a path fragment ("/events", "iteminfo.html") or, with
+// the "host:" prefix, a hostname ("host:runsignup.com"). The host form is how an events
+// page that sends each event to a registration site gets its events collected at all.
+// The prefix keeps the two apart: a bare "runsignup.com" would also match as a path
+// fragment on any host.
+const TRUSTED_HOST_PREFIX = 'host:';
+
+function matchesTrustedPath(parsedUrl, patterns) {
+  return patterns.some(pattern => !pattern.startsWith(TRUSTED_HOST_PREFIX) && parsedUrl.pathname.includes(pattern));
+}
+
+function matchesTrustedHost(parsedUrl, patterns) {
+  const host = parsedUrl.hostname.replace(/^www\./, '').toLowerCase();
+  return patterns.some(pattern => {
+    if (!pattern.startsWith(TRUSTED_HOST_PREFIX)) return false;
+    const trustedHost = pattern.slice(TRUSTED_HOST_PREFIX.length);
+    return trustedHost.length > 0 && (host === trustedHost || host.endsWith(`.${trustedHost}`));
+  });
+}
+
 function shortestUrlDedup(urls) {
   const byUrl = new Map();
   for (const url of urls) {
@@ -349,11 +369,12 @@ async function classifyPage(pool, markdown, links, url, contentType, sheets, tru
     if (/\b(article|post|news|event|card|entry|blog)\b/i.test(l.parentClassName || '')) return true;
     if (/\b(article|post|news|event|card|entry|blog)\b/i.test(l.className || '')) return true;
     if (!URL.canParse(l.url)) return false;
-    const linkPath = new URL(l.url).pathname;
+    const parsedLink = new URL(l.url);
+    const linkPath = parsedLink.pathname;
     if (sourceOrigin.length > 1 && linkPath.startsWith(sourceOrigin) && linkPath !== sourceOrigin && linkPath !== sourceOrigin + '/') return true;
     const sourceDir = sourceOrigin.replace(/\/[^/]+\.[^/]+$/, '');
     if (sourceDir && sourceDir !== sourceOrigin && linkPath.startsWith(sourceDir + '/') && linkPath !== sourceOrigin) return true;
-    return trustedEventPaths.some(pattern => linkPath.includes(pattern));
+    return matchesTrustedPath(parsedLink, trustedEventPaths) || matchesTrustedHost(parsedLink, trustedEventPaths);
   });
   const notSelfRef = l => {
     if (!sourcePathname || !URL.canParse(l.url)) return true;
@@ -423,7 +444,8 @@ Return ONLY valid JSON:
  * @param {string[]} detailLinks - Candidate URLs from the listing page
  * @param {string} sourceUrl - The listing page's URL
  * @param {string|null} basePath - Path prefix same-origin links must stay under
- * @param {string[]} trustedEventPaths - Path patterns allowed off-origin or outside basePath
+ * @param {string[]} trustedEventPaths - Path fragments allowed off-origin or outside basePath,
+ *   and "host:"-prefixed hostnames whose pages may be followed one hop off-origin
  * @param {Set<string>|null} allowedDomains - Other hosts that belong to the POI
  * @returns {string[]} URLs to render, hash stripped
  */
@@ -441,13 +463,13 @@ export function filterDetailLinks(detailLinks, sourceUrl, basePath = null, trust
     if (!URL.canParse(link)) return false;
     const parsed = new URL(link);
     if (isNoiseLink(link, sourceUrl)) return false;
-    const matchesTrusted = trustedEventPaths.some(pattern =>
-      parsed.pathname.includes(pattern)
-    );
+    const matchesTrusted = matchesTrustedPath(parsed, trustedEventPaths);
     if (parsed.origin !== sourceOrigin) {
       const host = parsed.hostname.replace(/^www\./, '').toLowerCase();
       const ownDomain = allowedDomains && allowedDomains.has(host);
-      if (!matchesTrusted && !ownDomain) return false;
+      // A trusted host only opens the hop onto it; once there, its own links fall
+      // under the base-path rule below like any other site's.
+      if (!matchesTrusted && !ownDomain && !matchesTrustedHost(parsed, trustedEventPaths)) return false;
     } else if (basePath && !parsed.pathname.startsWith(basePath)) {
       if (!matchesTrusted) return false;
     }
