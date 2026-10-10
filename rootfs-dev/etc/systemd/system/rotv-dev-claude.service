@@ -16,6 +16,8 @@ Environment=DISABLE_AUTOUPDATER=1
 # someone has logged in and answered the first-run questions by hand (see
 # docs/DEVELOPMENT_ARCHITECTURE.md) this exits and is retried.
 ExecStart=/usr/local/bin/claude remote-control --spawn same-dir --capacity 2 --permission-mode acceptEdits --remote-control-session-name-prefix rotv-dev
+# It redraws a terminal status screen every second; errors still reach the journal
+StandardOutput=null
 # The server gives up after about ten minutes without a network
 Restart=always
 RestartSec=30s
