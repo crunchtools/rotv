@@ -235,12 +235,10 @@ const FindTab = memo(function FindTab({
 
     let filtered = [...dests, ...linear, ...virtual];
 
-    const listLabels = new Map((curatedList?.items || []).map(item => [String(item.poi_id), item.label || '']));
     const search = searchText.trim().toLowerCase();
-    if (search) {
+    if (search && !curatedList) {
       filtered = filtered.filter(poi =>
         (poi.name || '').toLowerCase().includes(search) ||
-        (listLabels.get(String(poi.id)) || '').toLowerCase().includes(search) ||
         (poi.brief_description || '').toLowerCase().includes(search) ||
         (poi.primary_activities || '').toLowerCase().includes(search)
       );
@@ -253,9 +251,13 @@ const FindTab = memo(function FindTab({
     let ranked;
     if (curatedList) {
       // The organizer's order, and the organizer's trailhead for Directions.
-      const byId = new Map(filtered.map(poi => [String(poi.id), poi]));
+      // Fix: match the search item by item, so two entries for one place keep their own labels (PR #768 review)
+      const wanted = new Set(curatedList.items.map(item => String(item.poi_id)));
+      const byId = new Map(filtered.filter(poi => wanted.has(String(poi.id))).map(poi => [String(poi.id), poi]));
+      const matches = (item, poi) => !search || [item.label, poi.name, poi.brief_description, poi.primary_activities]
+        .some(text => (text || '').toLowerCase().includes(search));
       ranked = curatedList.items
-        .filter(item => byId.has(String(item.poi_id)))
+        .filter(item => byId.has(String(item.poi_id)) && matches(item, byId.get(String(item.poi_id))))
         .map(item => {
           const poi = byId.get(String(item.poi_id));
           const hasTrailhead = item.nav_latitude != null && item.nav_longitude != null;
