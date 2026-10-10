@@ -32,7 +32,7 @@ case "${SSH_ORIGINAL_COMMAND:-}" in
             exit 1
         fi
         for _ in $(seq "$HEALTH_TRIES"); do
-            if curl -fsS -o /dev/null --max-time 3 "$HEALTH_URL"; then
+            if curl -fs -o /dev/null --max-time 3 "$HEALTH_URL"; then
                 show_status
                 exit 0
             fi
