@@ -206,7 +206,7 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
 - **Deploying from here:** the session can ship what it merged. The project
   skill `.claude/skills/deploy/` merges the PR, tags the release, waits for the
   build and runs `ssh rotv-prod deploy`. That key is not a login: its
-  `authorized_keys` line forces `deploy/rotv-deploy.sh`, which accepts `deploy`,
+  `authorized_keys` line forces `scripts/rotv-deploy.sh`, which accepts `deploy`,
   `status` and `logs` and restarts only the production service. A session that
   reads web pages as root does not get a shell on the host that runs everything
   else. The script is installed under `/srv/rootsofthevalley.org/config/`, which
@@ -225,7 +225,7 @@ podman exec dev.rootsofthevalley.org systemctl restart rotv-dev-claude
 The deploy key is made once too, on the production host:
 
 ```bash
-install -m 0755 deploy/rotv-deploy.sh /srv/rootsofthevalley.org/config/rotv-deploy.sh
+install -m 0755 scripts/rotv-deploy.sh /srv/rootsofthevalley.org/config/rotv-deploy.sh
 podman exec dev.rootsofthevalley.org sh -c 'mkdir -p -m 700 /var/lib/rotv-dev/ssh && ssh-keygen -q -t ed25519 -N "" -C rotv-dev-deploy -f /var/lib/rotv-dev/ssh/id_ed25519'
 # known_hosts: the host's own key, under the name and port in ssh_config.d/rotv-prod.conf
 echo "[lotor.dc3.crunchtools.com]:22422 $(cat /etc/ssh/ssh_host_ed25519_key.pub)" > /srv/dev.rootsofthevalley.org/data/state/ssh/known_hosts
