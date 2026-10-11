@@ -7,6 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useActiveLists } from '../hooks/useActiveLists';
 
 const navigate = vi.fn();
+const markFeatureOpened = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../hooks/useActiveLists', () => ({ useActiveLists: vi.fn() }));
@@ -36,10 +37,13 @@ const destinations = [
 beforeEach(() => {
   vi.useFakeTimers();
   navigate.mockClear();
-  localStorage.clear();
-  useAuth.mockReturnValue({ listCheckins: [] });
+  markFeatureOpened.mockClear();
+  useAuth.mockReturnValue({ listCheckins: [], featuresOpened: [], markFeatureOpened });
   useActiveLists.mockReturnValue([spree]);
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [{ status: 'open' }, { status: 'closed' }, { status: 'open' }] })));
+  vi.stubGlobal('fetch', vi.fn(async (url) => ({
+    ok: true,
+    json: async () => (url === '/api/river-gauges' ? gauges : [{ status: 'open' }, { status: 'closed' }, { status: 'open' }])
+  })));
 });
 
 afterEach(() => {
@@ -101,16 +105,42 @@ describe('the live features', () => {
 
 describe('FeatureBanner', () => {
   it('leads with a feature the person has not opened, and remembers the one they open', async () => {
-    localStorage.setItem('rotv-features-opened', JSON.stringify(['list-fall-hiking-spree-2026']));
+    useAuth.mockReturnValue({ listCheckins: [], featuresOpened: ['list-fall-hiking-spree-2026'], markFeatureOpened });
     render(<FeatureBanner destinations={destinations} />);
     await act(async () => { await Promise.resolve(); });
 
     fireEvent.click(screen.getByText('2 of 3 trails open right now'));
 
     expect(navigate).toHaveBeenCalledWith('/mtb-trail-status');
-    expect(JSON.parse(localStorage.getItem('rotv-features-opened'))).toEqual(['list-fall-hiking-spree-2026', 'mtb']);
-    // The slide tapped stays up until the page changes: no other one flashes past
-    expect(screen.getByText('2 of 3 trails open right now')).toBeTruthy();
+    expect(markFeatureOpened).toHaveBeenCalledWith('mtb');
+  });
+
+  it('keeps the slide tapped on screen: its order holds even once that feature counts as opened', async () => {
+    const { rerender } = render(<FeatureBanner destinations={destinations} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText('Through November 30 · 13 trails')).toBeTruthy();
+
+    useAuth.mockReturnValue({ listCheckins: [], featuresOpened: ['list-fall-hiking-spree-2026'], markFeatureOpened });
+    rerender(<FeatureBanner destinations={destinations} />);
+
+    expect(screen.getByText('Through November 30 · 13 trails')).toBeTruthy();
+  });
+
+  it('shows the river\'s flow once the gauges load, and does without it when they do not', async () => {
+    useActiveLists.mockReturnValue([]);
+    const first = render(<FeatureBanner destinations={[]} routes={routes} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText('1,234 cfs at Jaite right now, with a 7-day chart')).toBeTruthy();
+    first.unmount();
+
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (url === '/api/river-gauges') throw new Error('offline');
+      return { ok: false, json: async () => ({ error: 'no' }) };
+    }));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<FeatureBanner destinations={[]} routes={routes} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText('Is the river runnable? Live flow and a 7-day chart.')).toBeTruthy();
   });
 
   it('leaves out the page it is on, and shows nothing when that was the only feature', async () => {

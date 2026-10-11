@@ -6,8 +6,6 @@ import { listProgress, formatListDay } from '../utils/listProgress';
 import { listPath } from '../utils/tabPaths';
 import { generateSlug } from '../components/sidebar/helpers';
 
-const KEY_OPENED = 'rotv-features-opened';
-
 // The photo to show for a feature: the first of these places that has one,
 // else any place of the kind that does.
 const PREFERRED_PHOTOS = {
@@ -33,21 +31,6 @@ function photosOf(pois, preferred) {
   return [...new Set([...named, ...withPhoto])]
     .slice(0, MAX_PHOTOS)
     .map(poi => `/api/pois/${poi.id}/thumbnail?size=medium&v=${poi.updated_at || ''}`);
-}
-
-/**
- * Read a list of ids the browser keeps, e.g. the features a person has opened.
- * @param {string} key The localStorage key
- * @returns {string[]} Empty when nothing is stored or storage is unavailable
- */
-export function storedIds(key) {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(key) || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    console.warn(`Could not read ${key}:`, err);
-    return [];
-  }
 }
 
 /**
@@ -164,6 +147,7 @@ export function featureSlides({ list, listCheckins, destinations, routes = [], m
 /**
  * The features to advertise to this person, newest to them first: one they
  * have never opened leads, and the one opened longest ago follows the rest.
+ * What they have opened is kept with their other preferences (AuthContext).
  *
  * @param {object[]} destinations Every point POI
  * @param {object[]} routes Every river, railroad and water taxi
@@ -173,11 +157,13 @@ export function featureSlides({ list, listCheckins, destinations, routes = [], m
  */
 export function useFeatureSlides(destinations, routes, reorderOnOpen = false) {
   const navigate = useNavigate();
-  const { listCheckins } = useAuth();
+  const { listCheckins, featuresOpened = [], markFeatureOpened } = useAuth();
   const lists = useActiveLists();
   const [mtb, setMtb] = useState(null);
   const [gauges, setGauges] = useState([]);
-  const [opened, setOpened] = useState(() => storedIds(KEY_OPENED));
+  // A banner keeps the order it started with: see reorderOnOpen above.
+  const [openedAtFirst] = useState(featuresOpened);
+  const opened = reorderOnOpen ? featuresOpened : openedAtFirst;
 
   useEffect(() => {
     let current = true;
@@ -203,15 +189,9 @@ export function useFeatureSlides(destinations, routes, reorderOnOpen = false) {
   }, [lists, listCheckins, destinations, routes, mtb, gauges, opened]);
 
   const open = useCallback((slide) => {
-    const next = [...storedIds(KEY_OPENED).filter(id => id !== slide.id), slide.id];
-    if (reorderOnOpen) setOpened(next);
-    try {
-      localStorage.setItem(KEY_OPENED, JSON.stringify(next));
-    } catch (err) {
-      console.warn('Could not remember which feature was opened:', err);
-    }
+    if (markFeatureOpened) markFeatureOpened(slide.id);
     navigate(slide.to);
-  }, [navigate, reorderOnOpen]);
+  }, [navigate, markFeatureOpened]);
 
   return { slides, open };
 }

@@ -71,4 +71,5 @@ keeps the account's date where both have one and drops any the list's rules refu
 Display preferences live in `users.preferences` (JSONB). `allowedPreferences()` in
 `backend/routes/userSettings.js` is the whitelist of keys and values; `/sync` fills gaps from the
 device and `PUT /api/user/settings/preferences` replaces a value the signed-in user changes. The
-first one is `listSort`, how a curated list is ordered.
+first one is `listSort`, how a curated list is ordered. `featuresOpened` is the list of site features the person has opened from a banner or the
+map's pill (`rotv-features-opened` on the device), so the ones they have not seen are shown first on every device.

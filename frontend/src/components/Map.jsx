@@ -482,7 +482,7 @@ function centerAboveCard(map, latlng, zoom) {
 // How close the map comes to a train or boat that is reporting where it is.
 const TRACKER_ZOOM = 14;
 
-function MapUpdater({ selectedDestination, selectedLinearFeature, trackerAt, skipFlyRef, geometryClickRef, activeTab }) {
+function MapUpdater({ selectedDestination, selectedLinearFeature, selectedTrackerAt, skipFlyRef, geometryClickRef, activeTab }) {
   const map = useMap();
   const prevTab = useRef(activeTab);
   const selectionRef = useRef({});
@@ -490,7 +490,7 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, trackerAt, ski
   // Where the selected route's train or boat is, when it is reporting. Read
   // from a ref: a vehicle that moves must not pull the map along behind it.
   const trackerRef = useRef(null);
-  trackerRef.current = trackerAt;
+  trackerRef.current = selectedTrackerAt;
 
   // A route with a live tracker is shown at the vehicle, above the place
   // card, rather than zoomed out to the whole line.
@@ -2183,7 +2183,7 @@ function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPo
           </Marker>
         )}
 
-        <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} trackerAt={selectedTrackerAt} skipFlyRef={skipFlyRef} geometryClickRef={geometryClickRef} activeTab={activeTab} />
+        <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} selectedTrackerAt={selectedTrackerAt} skipFlyRef={skipFlyRef} geometryClickRef={geometryClickRef} activeTab={activeTab} />
         <GaugeFocuser activeGauge={activeGauge} />
         <MapVisibilityHandler activeTab={activeTab} />
         <BoundsFitter boundsToFit={boundsToFit} fitNonce={fitNonce} />

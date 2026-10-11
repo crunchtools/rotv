@@ -6,6 +6,9 @@ import { useAuth } from '../../hooks/useAuth';
 import { useActiveLists } from '../../hooks/useActiveLists';
 
 const navigate = vi.fn();
+// The context's own list, so opening a feature is seen on the next render as it is in the app
+let featuresOpened = [];
+const markFeatureOpened = vi.fn((id) => { featuresOpened = [...featuresOpened.filter(each => each !== id), id]; });
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../../hooks/useActiveLists', () => ({ useActiveLists: vi.fn() }));
@@ -23,7 +26,9 @@ const show = async () => {
 beforeEach(() => {
   navigate.mockClear();
   localStorage.clear();
-  useAuth.mockReturnValue({ listCheckins: [] });
+  featuresOpened = [];
+  markFeatureOpened.mockClear();
+  useAuth.mockImplementation(() => ({ listCheckins: [], featuresOpened, markFeatureOpened }));
   useActiveLists.mockReturnValue([]);
   vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [] })));
 });
@@ -35,16 +40,18 @@ afterEach(() => {
 
 describe('SeasonalFeature', () => {
   it('opens the feature it names, then names one the person has not opened', async () => {
-    await show();
+    const view = await show();
 
     fireEvent.click(screen.getByRole('button', { name: /River Levels/ }));
+    view.rerender(<SeasonalFeature destinations={[]} routes={routes} />);
 
     expect(navigate).toHaveBeenCalledWith('/cuyahoga-river/river_levels');
+    expect(markFeatureOpened).toHaveBeenCalledWith('river-levels');
     expect(screen.getByRole('button', { name: /Train Tracker/ })).toBeTruthy();
   });
 
   it('comes back round to the feature opened longest ago once every one has been opened', async () => {
-    localStorage.setItem('rotv-features-opened', JSON.stringify(['train-tracker', 'happening', 'river-levels']));
+    featuresOpened = ['train-tracker', 'happening', 'river-levels'];
     await show();
     expect(screen.getByRole('button', { name: /Train Tracker/ })).toBeTruthy();
   });

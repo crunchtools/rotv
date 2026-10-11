@@ -261,6 +261,27 @@ describe('AuthContext', () => {
       expect(saves.at(-1)[1].body).toBe(JSON.stringify({ listChoices: { 1: 1044, 2: 1016 } }));
     });
 
+    it('remembers the features opened, oldest first, on the device and the account', async () => {
+      const fetchMock = mockFetch();
+      await renderHiker();
+
+      await act(() => captured.current.markFeatureOpened('mtb'));
+      await act(() => captured.current.markFeatureOpened('river-levels'));
+      await act(() => captured.current.markFeatureOpened('mtb'));
+
+      expect(captured.current.featuresOpened).toEqual(['river-levels', 'mtb']);
+      expect(JSON.parse(localStorage.getItem('rotv-features-opened'))).toEqual(['river-levels', 'mtb']);
+      const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/user/settings/preferences');
+      expect(saves.at(-1)[1].body).toBe(JSON.stringify({ featuresOpened: ['river-levels', 'mtb'] }));
+    });
+
+    it('takes the features the account says were opened', async () => {
+      mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { featuresOpened: ['happening'] } }) });
+      await renderHiker();
+
+      await waitFor(() => expect(captured.current.featuresOpened).toEqual(['happening']));
+    });
+
     it('takes the picks the account holds', async () => {
       mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listChoices: { 1: 1016 } } }) });
       await renderHiker();

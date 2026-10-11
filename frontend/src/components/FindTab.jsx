@@ -187,14 +187,11 @@ const FindTab = memo(function FindTab({
     }
   }, [activeList]);
 
-  // The map is narrowed for a list about one kind of place and put back on
-  // leaving it. Any other list leaves the map's legend as the person set it.
-  const narrowedMapRef = useRef(false);
+  // The map is narrowed for a list about one kind of place. App puts it back
+  // once Find shows any other list, and leaves the legend alone otherwise.
   useEffect(() => {
     if (!onFilterByTypes) return;
-    const typesToShow = activeList === 'mtb' ? ['mtb-trailhead'] : activeList === 'organizations' ? ['organization'] : null;
-    if (typesToShow || narrowedMapRef.current) onFilterByTypes(typesToShow);
-    narrowedMapRef.current = Boolean(typesToShow);
+    onFilterByTypes(activeList === 'mtb' ? ['mtb-trailhead'] : activeList === 'organizations' ? ['organization'] : null);
   }, [activeList, onFilterByTypes]);
 
   const parkIndex = useMemo(() => buildParkIndex(allLinearFeatures), [allLinearFeatures]);

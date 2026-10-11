@@ -733,15 +733,19 @@ function AppContent() {
     }
   }, [location.pathname, location.search]);
 
-  // Find narrows the map to the list it shows; leaving that list puts the
-  // legend back as it starts, hidden-by-default types included, so nothing is
-  // left for the URL to carry (#531).
+  // Find narrows the map to a list about one kind of place. Once it shows
+  // any other list, or a link opens a place, the legend goes back to how it
+  // starts, hidden-by-default types included, so nothing is left for the URL
+  // to carry (#531). The ref outlives Find, which unmounts between visits; a
+  // legend Find never narrowed is left as the person set it.
+  const narrowedByFindRef = useRef(false);
   const handleFilterByTypes = useCallback((typesToShow) => {
     if (typesToShow && typesToShow.length > 0) {
       setVisibleTypes(new Set(typesToShow));
-    } else {
+    } else if (narrowedByFindRef.current) {
       setVisibleTypes(new Set(defaultTypesRef.current || DEFAULT_ICON_TYPES));
     }
+    narrowedByFindRef.current = Boolean(typesToShow && typesToShow.length > 0);
   }, []);
 
   useEffect(() => {
@@ -1176,6 +1180,8 @@ function AppContent() {
       // on the card already open is not such a link and leaves it as it is.
       setInitialSidebarTab(null);
       if (activeTab !== 'view' || currentSlug !== poiSlug) setCardResetNonce(nonce => nonce + 1);
+      // Nor does a list's narrowing of the map follow a link to somewhere else.
+      if (activeTab !== 'view') handleFilterByTypes(null);
 
       if (currentSlug === poiSlug) {
         setActiveTab('view');

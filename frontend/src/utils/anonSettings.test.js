@@ -62,6 +62,15 @@ describe('syncAnonSettings preferences (spec 050)', () => {
     expect(sentBody()).toEqual({ favorites: [12] });
   });
 
+  it('sends the features opened on this device, and keeps them here afterwards', async () => {
+    localStorage.setItem('rotv-features-opened', JSON.stringify(['mtb', 7, 'river-levels']));
+    vi.stubGlobal('fetch', respond({ synced: {} }));
+    await syncAnonSettings();
+
+    expect(sentBody()).toEqual({ preferences: { featuresOpened: ['mtb', 'river-levels'] } });
+    expect(JSON.parse(localStorage.getItem('rotv-features-opened'))).toEqual(['mtb', 7, 'river-levels']);
+  });
+
   it('sends the free-choice picks alone, and together with the list sort', async () => {
     localStorage.setItem('rotv-list-choices', JSON.stringify({ 1: 1044 }));
     vi.stubGlobal('fetch', respond({ synced: {} }));

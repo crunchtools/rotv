@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
-import { useFeatureSlides, storedIds } from '../../hooks/useFeatureSlides';
+import { useFeatureSlides } from '../../hooks/useFeatureSlides';
 
 const KEY_DISMISSED = 'rotv-feature-dismissed';
+
+function readDismissed() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(KEY_DISMISSED) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (err) {
+    console.warn('Could not read which seasonal features were hidden:', err);
+    return [];
+  }
+}
 
 /**
  * The feature spotlight on the map (spec 050): a pill naming one other part of
@@ -17,7 +27,7 @@ const KEY_DISMISSED = 'rotv-feature-dismissed';
  */
 export default function SeasonalFeature({ destinations, routes }) {
   const { slides, open } = useFeatureSlides(destinations, routes, true);
-  const [dismissed, setDismissed] = useState(() => storedIds(KEY_DISMISSED));
+  const [dismissed, setDismissed] = useState(readDismissed);
 
   const feature = slides.find(slide => !dismissed.includes(slide.id));
   if (!feature) return null;

@@ -38,6 +38,24 @@ describe('HappeningTab', () => {
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
+  it('moves through the menu with the arrow keys, wrapping at both ends, and picks nothing until asked', () => {
+    const onViewChange = vi.fn();
+    render(<HappeningTab view="news" onViewChange={onViewChange} newsProps={{}} eventsProps={{}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'News' }));
+    const menu = screen.getByRole('menu');
+    const focused = () => document.activeElement.textContent;
+    expect(focused()).toBe('News');
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(focused()).toBe('Events');
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(focused()).toBe('News');
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(focused()).toBe('Events');
+
+    expect(onViewChange).not.toHaveBeenCalled();
+  });
+
   it('closes the menu on Escape without changing the view', () => {
     const onViewChange = vi.fn();
     render(<HappeningTab view="news" onViewChange={onViewChange} newsProps={{}} eventsProps={{}} />);
