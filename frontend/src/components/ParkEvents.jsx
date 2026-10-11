@@ -294,7 +294,7 @@ END:VCALENDAR`;
       <div className="news-events-header tab-header-with-new">
         <div>
           <h2>{tabLabel}</h2>
-          <p className="tab-subtitle">News and events from across Cuyahoga Valley National Park</p>
+          <p className="tab-subtitle">News and events from all of the parks in the Cuyahoga Valley</p>
         </div>
         {editMode && isAdmin && (
           <button className="tab-new-btn" onClick={() => setShowNewForm(true)}>+ New</button>
