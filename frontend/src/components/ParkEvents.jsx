@@ -248,7 +248,7 @@ END:VCALENDAR`;
     activeSubTab === 'future' ? loading :
     activeSubTab === 'past' ? pastLoading :
     windowLoading;
-  const tabLabel = 'Events';
+  const tabLabel = 'News & Events';
 
   const renderSubTabs = () => (
     <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
@@ -294,7 +294,7 @@ END:VCALENDAR`;
       <div className="news-events-header tab-header-with-new">
         <div>
           <h2>{tabLabel}</h2>
-          <p className="tab-subtitle">Events across Cuyahoga Valley National Park</p>
+          <p className="tab-subtitle">News and events from across Cuyahoga Valley National Park</p>
         </div>
         {editMode && isAdmin && (
           <button className="tab-new-btn" onClick={() => setShowNewForm(true)}>+ New</button>
