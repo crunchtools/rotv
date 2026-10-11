@@ -61,6 +61,16 @@ export default function ListChallenge({ list, choiceName = '', onStartTour }) {
     status = `Ended ${formatListDay(list.ends_on)}. Hikes from the season can still be filled in.`;
   }
 
+  // The same green button as the form's, so the header has one kind of action.
+  const tourButton = onStartTour && (
+    <button type="button" className="poi-action poi-action--primary" onClick={onStartTour}>
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+        <path fill="currentColor" d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 17h-2v-2h2v2zm2.070-7.750l-.900.920C13.450 12.900 13 13.500 13 15h-2v-.500c0-1.100.450-2.100 1.170-2.830l1.240-1.260A2 2 0 0010 9H8a4 4 0 118 0c0 .880-.360 1.680-.930 2.250z" />
+      </svg>
+      Take the tour
+    </button>
+  );
+
   return (
     <div className="list-challenge">
       {list.hero_image && (
@@ -106,14 +116,17 @@ export default function ListChallenge({ list, choiceName = '', onStartTour }) {
         </div>
       </div>
 
-      {list.form_file && list.form_layout && (
+      {list.form_file && list.form_layout ? (
         <div className="list-challenge-form">
-          <button type="button" className="poi-action poi-action--primary" onClick={downloadForm} disabled={formState === 'working'}>
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-              <path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z" />
-            </svg>
-            {formState === 'working' ? 'Filling in your form…' : 'Download completed form'}
-          </button>
+          <div className="list-challenge-actions">
+            <button type="button" className="poi-action poi-action--primary" onClick={downloadForm} disabled={formState === 'working'}>
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z" />
+              </svg>
+              {formState === 'working' ? 'Filling in your form…' : 'Download completed form'}
+            </button>
+            {tourButton}
+          </div>
           <p className="list-challenge-form-about">
             The official form with your hike dates{isAuthenticated ? ', name and email' : ''} filled in.{' '}
             {contact.address
@@ -134,18 +147,12 @@ export default function ListChallenge({ list, choiceName = '', onStartTour }) {
             </p>
           )}
         </div>
-      )}
+      ) : tourButton && <div className="list-challenge-actions">{tourButton}</div>}
 
       {!isAuthenticated && progress.done > 0 && (
         <p className="list-challenge-nudge">
           Your hikes are saved on this device. Sign in to keep them on your account, year after year.
         </p>
-      )}
-
-      {onStartTour && (
-        <button type="button" className="link-button list-challenge-tour" onClick={onStartTour}>
-          New here? Take the tour
-        </button>
       )}
 
       <details className="list-challenge-rules">

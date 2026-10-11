@@ -78,7 +78,7 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ### Tour
 - A guided tour of the featured list in season (`listTourSteps` in `GuidedTour.jsx`, the same spotlight tour as Navigation and Trips): checking a trail off, setting its date, the meter and percent, adding details in Settings › General, the Download completed form button, and a picture of a filled-in form.
-- It starts from "New here? Take the tour" on the list and from About › Tutorial, where its section (`about_list_tutorial_md`) shows only while a featured list is in season. It ends back on the list.
+- It starts from the Take the tour button beside Download completed form on the list and from About › Tutorial, where its section (`about_list_tutorial_md`) shows only while a featured list is in season. It ends back on the list.
 - The picture is the list's `form_file` with `-sample.webp` in place of `.pdf`, made with invented details; a new year's form needs a new one.
 
 ### My Valley
