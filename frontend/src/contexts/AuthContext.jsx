@@ -388,11 +388,12 @@ export function AuthProvider({ children }) {
   }, [user, fetchUser]);
 
   // How curated lists are sorted (spec 050): remembered on the device, and on
-  // the account when signed in.
+  // the account when signed in. Resolves false when the account could not be
+  // told; the device has it either way.
   const setListSort = useCallback(async (sort) => {
     setListSortState(sort);
     writeListSort(sort);
-    if (!user) return;
+    if (!user) return true;
     try {
       const res = await fetch('/api/user/settings/preferences', {
         method: 'PUT',
@@ -400,9 +401,10 @@ export function AuthProvider({ children }) {
         credentials: 'include',
         body: JSON.stringify({ listSort: sort })
       });
-      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+      return res.ok;
     } catch (err) {
       console.warn('Could not save the list sort to the account; it is kept on this device:', err);
+      return false;
     }
   }, [user]);
 

@@ -139,11 +139,18 @@ export function removeListCheckin(listId, itemId) {
   safeWrite(KEY_LIST_CHECKINS, JSON.stringify(readListCheckins().filter(c => !sameCheckin(c, gone))));
 }
 
-/** How the person last sorted a curated list (spec 050); null until they choose. */
+/**
+ * How the person last sorted a curated list on this device (spec 050).
+ * @returns {string|null} One of LIST_SORTS' ids; null until they choose
+ */
 export function readListSort() {
   return safeRead(KEY_LIST_SORT);
 }
 
+/**
+ * Remember on this device how the person sorts a curated list.
+ * @param {'official'|'trail'|'park'|'difficulty'} sort One of LIST_SORTS' ids (utils/curatedList.js)
+ */
 export function writeListSort(sort) {
   safeWrite(KEY_LIST_SORT, sort);
 }
