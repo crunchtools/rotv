@@ -49,4 +49,11 @@ grep -q " ui: failed (3)$" "$work/logs/control.log" || fail "a failed kick is no
 for _ in $(seq 300); do "$kick" backend > /dev/null; done
 [ "$(wc -l < "$work/logs/control.log")" -le 500 ] || fail "control.log grew past its cap"
 
+# Kicks that overlap must each keep both of their lines.
+: > "$work/logs/control.log"
+for name in ui backend init deps ui backend init deps; do "$kick" "$name" > /dev/null & done
+wait
+[ "$(wc -l < "$work/logs/control.log")" -eq 16 ] || fail "concurrent kicks lost lines: $(wc -l < "$work/logs/control.log") of 16"
+[ -z "$(find "$work/logs" -name '.control.log.*' -print -quit)" ] || fail "a temporary file was left behind"
+
 echo "rotv-dev-kick: all checks passed"
