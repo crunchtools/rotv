@@ -42,27 +42,33 @@ describe('ListCheckinControl', () => {
     expect(saveListCheckin).toHaveBeenCalledWith(1, 11, 1081, '2026-10-11');
   });
 
-  it('shows the date of a logged hike and lets it be corrected inside the season', () => {
-    const { saveListCheckin } = auth([{ list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' }]);
+  it('shows the date of a logged hike right away and lets it be set inside the season', () => {
+    const { saveListCheckin } = auth([{ list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-11' }]);
     render(<ListCheckinControl list={list} item={quarry} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /hiked oct 4/i }));
-    const date = screen.getByLabelText(/hiked on/i);
+    const date = screen.getByLabelText('Date you hiked Quarry Trail');
+    expect(date.value).toBe('2026-10-11');
     expect(date.getAttribute('min')).toBe('2026-09-01');
     expect(date.getAttribute('max')).toBe('2026-10-11');
 
     fireEvent.change(date, { target: { value: '2026-12-25' } });
     expect(saveListCheckin).not.toHaveBeenCalled();
-    fireEvent.change(date, { target: { value: '2026-09-20' } });
-    expect(saveListCheckin).toHaveBeenCalledWith(1, 11, 1081, '2026-09-20');
+    fireEvent.change(date, { target: { value: '2026-10-04' } });
+    expect(saveListCheckin).toHaveBeenCalledWith(1, 11, 1081, '2026-10-04');
   });
 
-  it('takes a hike back', () => {
+  it('offers no date until the hike is marked', () => {
+    auth();
+    render(<ListCheckinControl list={list} item={quarry} />);
+
+    expect(screen.queryByLabelText(/date you hiked/i)).toBeNull();
+  });
+
+  it('takes a hike back when the checked button is tapped', () => {
     const { removeListCheckin } = auth([{ list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' }]);
     render(<ListCheckinControl list={list} item={quarry} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /hiked oct 4/i }));
-    fireEvent.click(screen.getByRole('button', { name: /remove/i }));
+    fireEvent.click(screen.getByRole('button', { name: /hiked/i, pressed: true }));
 
     expect(removeListCheckin).toHaveBeenCalledWith(1, 11);
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { curatedListRows } from './curatedList';
+import { curatedListRows, sortListRows } from './curatedList';
 
 const towpath = { id: 1062, name: 'Ohio & Erie Canal Towpath Trail', primary_activities: 'Biking, Hiking' };
 const quarry = { id: 1081, name: 'Quarry Trail', navigation_latitude: 41.2, navigation_longitude: -81.5 };
@@ -38,3 +38,33 @@ describe('curatedListRows', () => {
     expect(curatedListRows(list, pois, 'nothing like this')).toEqual([]);
   });
 });
+
+describe('sortListRows', () => {
+  const row = (position, label, park) => ({ name: label, _park: park, _listItem: { position, label } });
+  const rows = [
+    row(1, 'Towpath Trail from Wilbeth Road', 'Wilbeth Road Trailhead'),
+    row(2, 'Rock Creek Trail', 'Furnace Run Metro Park'),
+    row(3, 'Adam Run Trail', 'Hampton Hills Metro Park'),
+    row(4, 'Old Mill Trail', 'Furnace Run Metro Park')
+  ];
+  const positions = (sorted) => sorted.map(r => r._listItem.position);
+
+  it('keeps the organizer\'s order by default, and for a sort it does not know', () => {
+    expect(positions(sortListRows(rows, 'official'))).toEqual([1, 2, 3, 4]);
+    expect(positions(sortListRows(rows, 'nonsense'))).toEqual([1, 2, 3, 4]);
+  });
+
+  it('orders by trail name', () => {
+    expect(positions(sortListRows(rows, 'trail'))).toEqual([3, 4, 2, 1]);
+  });
+
+  it('orders by park, then by trail within a park', () => {
+    expect(positions(sortListRows(rows, 'park'))).toEqual([4, 2, 3, 1]);
+  });
+
+  it('does not reorder the rows it was given', () => {
+    sortListRows(rows, 'trail');
+    expect(positions(rows)).toEqual([1, 2, 3, 4]);
+  });
+});
+

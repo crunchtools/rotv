@@ -37,7 +37,7 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ### Check-ins
 - A check-in is one dated hike: a list item, or the list's free choice with the trail chosen. A person has at most one per item and one free choice per list.
-- Marking a hike logs today's date, or the season's last day once the season has ended. The date can be changed to any day inside the season up to today. A hike can be removed.
+- Marking a hike logs today's date, or the season's last day once the season has ended. The date then shows beside the button and can be set to any day inside the season up to today. Tapping the checked button removes the hike.
 - A hike cannot be logged before the season opens. After it ends, hikes from the season can still be filled in.
 - Progress is the number of check-ins against the goal. The badge is earned when the goal is reached, on the date of the hike that reached it. Hikes past the goal still count toward the total shown.
 - Check-ins are local-first (`docs/USER_DATA_FRAMEWORK.md`): on the device when signed out, on the account when signed in, folded into the account on sign-in. The account's date wins over the device's, and a check-in the rules refuse is dropped.
@@ -49,8 +49,8 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ### Find
 - A list in season is an entry in the Find tab's list picker, after the built-in ones, at `/find/<series>`.
-- The list opens with its description, the badge, the tally with a progress bar, what is left and how many days remain, the free choice, and a "How it works" section with the rules and rewards. Its items follow in the organizer's order. Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
-- Each row shows the organizer's name for the hike, the park it is in, `miles · rating · class`, the note, where to park, and the check-in button.
+- The list opens with its description, the badge, the tally with a progress bar, what is left and how many days remain, the free choice, and a "How it works" section with the rules and rewards. Its items follow in the organizer's order, and can be sorted by trail name or by park. Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
+- Each row shows the organizer's name for the hike, the park it is in, `miles · rating · class`, the note, where to park, a Navigate button to that hike's trailhead, and the check-in button with its date.
 - Picking a row selects the POI on the map as any Find row does. Navigate and Add to trip use the item's trailhead. The place card of a POI on a list in season carries the same check-in button.
 - `/find/<series>` for a list that is out of season, or does not exist, shows All places.
 

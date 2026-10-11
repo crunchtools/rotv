@@ -15324,37 +15324,62 @@ button.type-filter-chip {
   gap: 0.35rem;
 }
 
-.results-tile .list-checkin {
-  margin-top: 0.45rem;
-}
-
 .poi-action.list-checkin-btn.done {
   background: #2d5016;
   border-color: #2d5016;
   color: white;
 }
 
-.list-checkin-editor {
+.list-checkin-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
-  font-size: 0.8rem;
+  gap: 0.5rem;
 }
 
-.list-checkin-editor label {
+.list-checkin-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-checkin-date input[type="date"] {
+  min-height: 36px;
+  padding: 0 0.45rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #2d5016;
+  background: white;
+  border: 1px solid #4a7c23;
+  border-radius: 8px;
+}
+
+.results-tile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.find-list-sort {
   display: inline-flex;
   align-items: center;
   gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #525252;
 }
 
-.list-checkin-editor input[type="date"] {
-  min-height: 34px;
-  padding: 0 0.4rem;
+.find-list-sort select {
+  min-height: 36px;
+  padding: 0 0.5rem;
   font-family: inherit;
   font-size: 0.85rem;
+  background: white;
   border: 1px solid #b8b8b8;
-  border-radius: 6px;
+  border-radius: 8px;
 }
 
 .list-checkin-closed,

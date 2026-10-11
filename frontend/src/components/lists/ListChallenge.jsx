@@ -94,11 +94,15 @@ export default function ListChallenge({ list, trails }) {
         <summary>How it works</summary>
         <ul>
           <li>
-            Hike at least {progress.goal} of the {list.items.length} trails below
-            {list.choice_label ? `. Your ${list.choice_label} counts as one` : ''}.
+            Hike at least {progress.goal} of the {list.items.length} trails below.
           </li>
+          {list.choice_label && (
+            <li>
+              One of the {progress.goal} can be your {list.choice_label}, as on the official form: {list.choice_description}
+            </li>
+          )}
           <li>Hikes count from {formatListDay(list.starts_on)} through {formatListDay(list.ends_on, { year: true })}.</li>
-          <li>Each trail counts once. Mark it when you have hiked it; the date can be corrected.</li>
+          <li>Each trail counts once. Mark it hiked, then set the date beside it to the day you hiked it.</li>
           {(list.rewards || '').split('\n').filter(Boolean).map(line => <li key={line}>{line}</li>)}
           {list.rewards_until && <li>Rewards are not available after {formatListDay(list.rewards_until, { year: true })}.</li>}
         </ul>

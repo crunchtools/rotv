@@ -32,3 +32,27 @@ export function curatedListRows(list, pois, search = '') {
   }
   return rows;
 }
+
+/** How a curated list's rows can be ordered. */
+export const LIST_SORTS = [
+  { id: 'official', label: 'Official order' },
+  { id: 'trail', label: 'Trail, A to Z' },
+  { id: 'park', label: 'Park, A to Z' }
+];
+
+/**
+ * Order a curated list's rows: as the organizer lists them, by the hike's
+ * name, or by park and then name.
+ *
+ * @param {object[]} rows Rows from curatedListRows(), each with `_listItem` and, for the park order, `_park`
+ * @param {'official'|'trail'|'park'} sort
+ * @returns {object[]} A new array; an unknown `sort` leaves the organizer's order
+ */
+export function sortListRows(rows, sort) {
+  const nameOf = (row) => row._listItem.label || row.name || '';
+  const byName = (a, b) => nameOf(a).localeCompare(nameOf(b));
+  if (sort === 'trail') return [...rows].sort(byName);
+  if (sort === 'park') return [...rows].sort((a, b) => (a._park || '').localeCompare(b._park || '') || byName(a, b));
+  return [...rows];
+}
+

@@ -4,7 +4,9 @@ import ResultsTile from './ResultsTile';
 import FilterSheet, { FilterChip } from './FilterSheet';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 import { rankPois } from '../utils/poiRank';
-import { curatedListRows } from '../utils/curatedList';
+import { curatedListRows, sortListRows, LIST_SORTS } from '../utils/curatedList';
+import NavigateButton from './NavigateButton';
+import { getNavigationStops } from './sidebar/helpers';
 import { useActiveLists } from '../hooks/useActiveLists';
 import ListChallenge from './lists/ListChallenge';
 import ListCheckinControl from './lists/ListCheckinControl';
@@ -94,6 +96,7 @@ const FindTab = memo(function FindTab({
     : initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all';
   const [requestedList, setRequestedList] = useState(urlList);
   const [currentPage, setCurrentPage] = useState(1);
+  const [listSort, setListSort] = useState('official');
   const [listConfig, setListConfig] = useState(null);
   const curatedLists = useActiveLists();
   const [isListMenuOpen, setIsListMenuOpen] = useState(false);
@@ -250,7 +253,12 @@ const FindTab = memo(function FindTab({
     let ranked;
     if (curatedList) {
       // Fix: match the search item by item, so two entries for one place keep their own labels (PR #768 review)
-      ranked = curatedListRows(curatedList, filtered, search);
+      // A hike is filed under the park it is in; the Towpath is in none, so under its trailhead.
+      const rows = curatedListRows(curatedList, filtered, search).map(row => ({
+        ...row,
+        _park: findContainingPark(row, parkIndex)?.name || (row._listItem.trailhead || '').split(',')[0]
+      }));
+      ranked = sortListRows(rows, listSort);
     } else {
       ranked = rankPois(filtered, search);
     }
@@ -259,7 +267,7 @@ const FindTab = memo(function FindTab({
     ranked.forEach(poi => map.set(poiRowKey(poi), poi));
 
     return { rankedPois: ranked, poiMap: map };
-  }, [activeList, curatedList, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, iconConfig]);
+  }, [activeList, curatedList, listSort, parkIndex, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, iconConfig]);
 
   const totalPages = Math.ceil(rankedPois.length / PAGE_SIZE) || 1;
   // The list can shrink under the stored page; show the last page that exists
@@ -457,6 +465,14 @@ const FindTab = memo(function FindTab({
           <ListChallenge list={curatedList} trails={trails} />
         )}
         {activeList === 'all' && !searchText.trim() && <SeasonalFeature variant="card" />}
+        {curatedList && (
+          <label className="find-list-sort">
+            Sort by
+            <select value={listSort} onChange={(e) => { setListSort(e.target.value); setCurrentPage(1); }}>
+              {LIST_SORTS.map(sort => <option key={sort.id} value={sort.id}>{sort.label}</option>)}
+            </select>
+          </label>
+        )}
         <div className="results-count" aria-live="polite">
           {rankedPois.length === 0
             ? 'No places'
@@ -503,7 +519,13 @@ const FindTab = memo(function FindTab({
                   iconConfig={iconConfig}
                 >
                   {poi._listItem && (
-                    <ListCheckinControl list={curatedList} item={poi._listItem} className="poi-action list-checkin-row-btn" />
+                    <div className="results-tile-actions" onKeyDown={(e) => e.stopPropagation()}>
+                      <NavigateButton
+                        stops={getNavigationStops(poi, poi._isLinear)}
+                        title={`Directions to where ${poi._listItem.label} starts`}
+                      />
+                      <ListCheckinControl list={curatedList} item={poi._listItem} />
+                    </div>
                   )}
                 </ResultsTile>
               );
