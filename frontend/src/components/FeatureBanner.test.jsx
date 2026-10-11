@@ -109,6 +109,8 @@ describe('FeatureBanner', () => {
 
     expect(navigate).toHaveBeenCalledWith('/mtb-trail-status');
     expect(JSON.parse(localStorage.getItem('rotv-features-opened'))).toEqual(['list-fall-hiking-spree-2026', 'mtb']);
+    // The slide tapped stays up until the page changes: no other one flashes past
+    expect(screen.getByText('2 of 3 trails open right now')).toBeTruthy();
   });
 
   it('leaves out the page it is on, and shows nothing when that was the only feature', async () => {

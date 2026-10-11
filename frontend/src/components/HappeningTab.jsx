@@ -12,7 +12,7 @@ const VIEWS = [
 /**
  * The Happening tab (spec 048): news and events share one tab, switched by a
  * two-way toggle. Each view keeps its own search and filters. The feature
- * banner under the toggle shows what else the site has.
+ * banner above the toggle shows what else the site has.
  *
  * @param {object} props
  * @param {'news'|'events'} props.view Which side of the toggle is showing
@@ -30,6 +30,7 @@ const VIEWS = [
 export default function HappeningTab({ view, onViewChange, newsProps, eventsProps, destinations, routes }) {
   return (
     <div className="happening-tab">
+      <FeatureBanner destinations={destinations} routes={routes} exclude="happening" />
       <div
         className="happening-toggle"
         role="group"
@@ -49,9 +50,6 @@ export default function HappeningTab({ view, onViewChange, newsProps, eventsProp
             {v.label}
           </button>
         ))}
-      </div>
-      <div className="happening-features">
-        <FeatureBanner destinations={destinations} routes={routes} exclude="happening" />
       </div>
       {view === 'events' ? <ParkEvents {...eventsProps} /> : <ParkNews {...newsProps} />}
     </div>

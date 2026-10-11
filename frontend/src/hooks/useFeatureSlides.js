@@ -167,9 +167,11 @@ export function featureSlides({ list, listCheckins, destinations, routes = [], m
  *
  * @param {object[]} destinations Every point POI
  * @param {object[]} routes Every river, railroad and water taxi
+ * @param {boolean} [reorderOnOpen=false] Put a feature behind the others the moment it is opened. The map's
+ *   pill wants that; a banner would show a different slide for an instant before the page changed.
  * @returns {{slides: object[], open: (slide: object) => void}} `open` goes to a feature and remembers it was opened
  */
-export function useFeatureSlides(destinations, routes) {
+export function useFeatureSlides(destinations, routes, reorderOnOpen = false) {
   const navigate = useNavigate();
   const { listCheckins } = useAuth();
   const lists = useActiveLists();
@@ -202,14 +204,14 @@ export function useFeatureSlides(destinations, routes) {
 
   const open = useCallback((slide) => {
     const next = [...storedIds(KEY_OPENED).filter(id => id !== slide.id), slide.id];
-    setOpened(next);
+    if (reorderOnOpen) setOpened(next);
     try {
       localStorage.setItem(KEY_OPENED, JSON.stringify(next));
     } catch (err) {
       console.warn('Could not remember which feature was opened:', err);
     }
     navigate(slide.to);
-  }, [navigate]);
+  }, [navigate, reorderOnOpen]);
 
   return { slides, open };
 }

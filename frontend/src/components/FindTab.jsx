@@ -416,12 +416,16 @@ const FindTab = memo(function FindTab({
   const lastShown = Math.min(clampedPage * PAGE_SIZE, rankedPois.length);
   const emptyState = curatedList ? LIST_EMPTY_STATE : (EMPTY_STATES[activeList] || EMPTY_STATES.all);
 
+  // The banner advertises the rest of the site, not the list it sits above.
+  const featureShown = curatedList ? `list-${curatedList.slug}-${curatedList.edition}` : activeList === 'mtb' ? 'mtb' : null;
+
   return (
+    <>
+    <FeatureBanner destinations={allDestinations} routes={allLinearFeatures} exclude={featureShown} />
     <div className="results-tab-wrapper find-tab">
       <div className="news-events-header">
         <h2>Find</h2>
         <p className="tab-subtitle">Every park, trail and place in the valley</p>
-        {activeList === 'all' && !searchText.trim() && <FeatureBanner destinations={allDestinations} routes={allLinearFeatures} />}
       </div>
 
       <div className="results-filters find-controls">
@@ -625,6 +629,7 @@ const FindTab = memo(function FindTab({
         </>
       )}
     </div>
+    </>
   );
 });
 

@@ -16,7 +16,7 @@ const KEY_DISMISSED = 'rotv-feature-dismissed';
  * @returns {JSX.Element|null}
  */
 export default function SeasonalFeature({ destinations, routes }) {
-  const { slides, open } = useFeatureSlides(destinations, routes);
+  const { slides, open } = useFeatureSlides(destinations, routes, true);
   const [dismissed, setDismissed] = useState(() => storedIds(KEY_DISMISSED));
 
   const feature = slides.find(slide => !dismissed.includes(slide.id));

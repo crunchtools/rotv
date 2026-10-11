@@ -7,7 +7,7 @@ const ROTATE_MS = 7000;
 const SWIPE_PX = 40;
 
 /**
- * The rotating banner in the header of Find and Happening: one other part of the site at a time,
+ * The rotating banner across the top of Find and Happening: one other part of the site at a time,
  * each a way in. It is dark, photographic and labelled with where a tap goes,
  * so it reads as a door to somewhere else rather than as part of the list. It rotates on its own unless the person has asked for less
  * motion, is pointing at it, or has picked a slide themselves. A sideways
@@ -16,7 +16,7 @@ const SWIPE_PX = 40;
  * @param {object} props
  * @param {object[]} props.destinations Every point POI
  * @param {object[]} [props.routes] Every river, railroad and water taxi
- * @param {string} [props.exclude] The id of a feature to leave out: the page the banner is already on
+ * @param {string|null} [props.exclude] The id of a feature to leave out: the page the banner is already on
  * @returns {JSX.Element|null} Nothing when there is no other feature to show
  */
 export default function FeatureBanner({ destinations, routes, exclude }) {

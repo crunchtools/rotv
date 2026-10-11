@@ -15670,9 +15670,13 @@ button.type-filter-chip {
 
 /* The feature banner in Find's header: a door to another part of the site,
    so it is dark and photographic where the lists below it are light. */
+/* Sits above everything on Find and Happening, as wide as the panel under it */
 .feature-banner {
   position: relative;
-  margin-top: 0.75rem;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto 0.75rem;
   touch-action: pan-y;
 }
 
