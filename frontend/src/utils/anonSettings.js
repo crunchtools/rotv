@@ -13,6 +13,7 @@ const KEY_FAVORITES = 'rotv-favorites';
 const KEY_VISITED = 'rotv-visited';
 const KEY_LIST_CHECKINS = 'rotv-list-checkins';
 const KEY_LIST_SORT = 'rotv-list-sort';
+const KEY_LIST_CHOICES = 'rotv-list-choices';
 
 function safeRead(key) {
   try {
@@ -45,7 +46,7 @@ function safeRemove(key) {
  */
 export function clearAnonSettings() {
   [KEY_TIMEZONE, KEY_NEWSLETTER_EMAIL, KEY_NEWSLETTER_SUBSCRIBED, KEY_SAVED_TRIPS, KEY_FAVORITES, KEY_VISITED,
-    KEY_LIST_CHECKINS, KEY_LIST_SORT]
+    KEY_LIST_CHECKINS, KEY_LIST_SORT, KEY_LIST_CHOICES]
     .forEach(safeRemove);
 }
 
@@ -156,6 +157,30 @@ export function writeListSort(sort) {
 }
 
 /**
+ * The trail picked for each list's free choice before it is hiked (spec 050).
+ * @returns {Object<string, number>} `{ listId: poiId }`; empty until one is picked
+ */
+export function readListChoices() {
+  const raw = safeRead(KEY_LIST_CHOICES);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch (err) {
+    console.warn(`[anonSettings] ${KEY_LIST_CHOICES} is not valid JSON; ignoring it:`, err);
+    return {};
+  }
+}
+
+/**
+ * Remember on this device the trails picked for lists' free choices.
+ * @param {Object<string, number>} choices `{ listId: poiId }`, the whole set
+ */
+export function writeListChoices(choices) {
+  safeWrite(KEY_LIST_CHOICES, JSON.stringify(choices));
+}
+
+/**
  * Follow POI merges: when a saved or visited place was folded into another
  * (duplicate park cleanup, spec 048), rewrite the stored id to the survivor so
  * it does not silently drop off the list. Resolves true when anything changed.
@@ -199,9 +224,11 @@ export async function syncAnonSettings() {
   const visited = readVisited();
   const listCheckins = readListCheckins();
   const listSort = readListSort();
+  const listChoices = readListChoices();
+  const hasChoices = Object.keys(listChoices).length > 0;
 
   const hasState = timezone || (email && subscribed) || trips.length > 0
-    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0 || listSort;
+    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0 || listSort || hasChoices;
   if (!hasState) return { synced: false };
 
   const payload = {};
@@ -211,8 +238,10 @@ export async function syncAnonSettings() {
   if (favorites.length > 0) payload.favorites = favorites;
   if (visited.length > 0) payload.visited = visited;
   if (listCheckins.length > 0) payload.listCheckins = listCheckins;
-  // Like the timezone, the sort stays on the device after syncing: it is read from there too.
-  if (listSort) payload.preferences = { listSort };
+  // Like the timezone, these stay on the device after syncing: they are read from there too.
+  if (listSort || hasChoices) {
+    payload.preferences = { ...(listSort ? { listSort } : {}), ...(hasChoices ? { listChoices } : {}) };
+  }
 
   try {
     const res = await fetch('/api/user/settings/sync', {

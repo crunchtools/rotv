@@ -18,14 +18,28 @@ const PREFERENCE_VALUES = {
 /**
  * The preferences in a request body that are known and hold an allowed value.
  * @param {object} raw Untrusted input
- * @returns {object} Only the recognised keys; empty when there are none
+ * @returns {object} Only the recognised keys; empty when there are none. `listChoices` keeps
+ *   its `{ listId: poiId }` pairs that are positive integers, up to 50
  */
 export function allowedPreferences(raw) {
   const kept = {};
   for (const [key, values] of Object.entries(PREFERENCE_VALUES)) {
     if (raw && values.includes(raw[key])) kept[key] = raw[key];
   }
+  const choices = pickedListChoices(raw?.listChoices);
+  if (choices) kept.listChoices = choices;
   return kept;
+}
+
+const MAX_LIST_CHOICES = 50;
+
+// The trail picked for each list's free choice before it is hiked: { listId: poiId }.
+function pickedListChoices(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const pairs = Object.entries(raw)
+    .filter(([listId, poiId]) => /^[1-9]\d{0,8}$/.test(listId) && Number.isInteger(poiId) && poiId > 0)
+    .slice(0, MAX_LIST_CHOICES);
+  return pairs.length > 0 ? Object.fromEntries(pairs) : null;
 }
 
 /**

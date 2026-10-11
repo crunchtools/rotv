@@ -101,9 +101,7 @@ const FindTab = memo(function FindTab({
     : initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all';
   const [requestedList, setRequestedList] = useState(urlList);
   const [currentPage, setCurrentPage] = useState(1);
-  const { listSort, setListSort, favorites, listCheckins, saveListCheckin } = useAuth();
-  // The trail picked for a list's free choice before it is marked hiked
-  const [pickedChoice, setPickedChoice] = useState(null);
+  const { listSort, setListSort, favorites, listCheckins, saveListCheckin, listChoices, setListChoice } = useAuth();
   const [listConfig, setListConfig] = useState(null);
   const curatedLists = useActiveLists();
   const [isListMenuOpen, setIsListMenuOpen] = useState(false);
@@ -207,6 +205,9 @@ const FindTab = memo(function FindTab({
   const choiceCheckin = curatedList
     ? listCheckins.find(c => c.list_id === curatedList.id && c.item_id == null) || null
     : null;
+  // Fix: the trail picked for this list's free choice, kept per list and saved with the
+  // person's preferences rather than held in component state (PR #768 review)
+  const pickedChoice = curatedList ? listChoices[curatedList.id] ?? null : null;
 
   const { rankedPois, poiMap, choiceOptions } = useMemo(() => {
     let sourceDestinations = allDestinations || [];
@@ -300,7 +301,7 @@ const FindTab = memo(function FindTab({
 
   // Changing the trail of a choice already hiked keeps its date.
   const changeChoice = (poiId) => {
-    setPickedChoice(poiId);
+    setListChoice(curatedList.id, poiId);
     if (choiceCheckin) saveListCheckin(curatedList.id, null, poiId, choiceCheckin.done_on);
   };
 

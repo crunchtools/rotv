@@ -64,6 +64,13 @@ describe('PUT /api/user/settings/preferences', () => {
     expect(await preferencesOf(HIKER)).toEqual({ theme: 'dark', listSort: 'difficulty-desc' });
   });
 
+  it('saves the trail picked for a list\'s free choice', async () => {
+    const res = await request(app).put('/api/user/settings/preferences').send({ listChoices: { 1: 1044, bogus: 7 } });
+
+    expect(res.status).toBe(200);
+    expect(await preferencesOf(HIKER)).toEqual({ theme: 'dark', listChoices: { 1: 1044 } });
+  });
+
   it('refuses a body with no known preference and stores nothing', async () => {
     const res = await request(app).put('/api/user/settings/preferences').send({ listSort: 'sideways', isAdmin: true });
 

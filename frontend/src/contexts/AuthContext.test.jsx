@@ -184,9 +184,15 @@ describe('AuthContext', () => {
   describe('list check-ins (spec 050)', () => {
     const checkinUrl = '/api/lists/1/checkins';
 
+    // The probe publishes the context in an effect, so wait for the signed-in one.
+    const renderHiker = async () => {
+      await renderSignedIn();
+      await waitFor(() => expect(captured.current.user).toBeTruthy());
+    };
+
     it('keeps both hikes when two are marked before the first has rendered', async () => {
       const fetchMock = mockFetch();
-      await renderSignedIn();
+      await renderHiker();
 
       await act(async () => {
         const { saveListCheckin } = captured.current;
@@ -207,7 +213,7 @@ describe('AuthContext', () => {
         '/auth/user': fetchResponse({ ...SIGNED_IN, listCheckins: [held] }),
         [checkinUrl]: fetchResponse({ error: refusal }, { status: 400 })
       });
-      await renderSignedIn();
+      await renderHiker();
 
       let problem;
       await act(async () => { problem = await captured.current.saveListCheckin(1, 11, 1081, '2026-12-25'); });
@@ -222,7 +228,7 @@ describe('AuthContext', () => {
         '/auth/user': fetchResponse({ ...SIGNED_IN, listCheckins: [held] }),
         [`${checkinUrl}/11`]: fetchResponse({ error: 'down' }, { status: 500 })
       });
-      await renderSignedIn();
+      await renderHiker();
 
       await act(() => captured.current.removeListCheckin(1, 11));
 
@@ -231,7 +237,7 @@ describe('AuthContext', () => {
 
     it('remembers the list sort on the device and on the account', async () => {
       const fetchMock = mockFetch();
-      await renderSignedIn();
+      await renderHiker();
       expect(captured.current.listSort).toBe('trail');
 
       await act(() => captured.current.setListSort('park'));
@@ -242,10 +248,30 @@ describe('AuthContext', () => {
       expect(request).toMatchObject({ method: 'PUT', body: JSON.stringify({ listSort: 'park' }) });
     });
 
+    it('remembers the trail picked for a list\'s free choice, per list', async () => {
+      const fetchMock = mockFetch();
+      await renderHiker();
+
+      await act(() => captured.current.setListChoice(1, 1044));
+      await act(() => captured.current.setListChoice(2, 1016));
+
+      expect(captured.current.listChoices).toEqual({ 1: 1044, 2: 1016 });
+      expect(JSON.parse(localStorage.getItem('rotv-list-choices'))).toEqual({ 1: 1044, 2: 1016 });
+      const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/user/settings/preferences');
+      expect(saves.at(-1)[1].body).toBe(JSON.stringify({ listChoices: { 1: 1044, 2: 1016 } }));
+    });
+
+    it('takes the picks the account holds', async () => {
+      mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listChoices: { 1: 1016 } } }) });
+      await renderHiker();
+
+      await waitFor(() => expect(captured.current.listChoices).toEqual({ 1: 1016 }));
+    });
+
     it('takes the sort the account holds over the device\'s', async () => {
       localStorage.setItem('rotv-list-sort', 'difficulty-desc');
       mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listSort: 'park' } }) });
-      await renderSignedIn();
+      await renderHiker();
 
       await waitFor(() => expect(captured.current.listSort).toBe('park'));
     });

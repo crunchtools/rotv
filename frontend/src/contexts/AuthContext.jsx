@@ -12,6 +12,8 @@ import {
   removeListCheckin as removeAnonListCheckin,
   readListSort,
   writeListSort,
+  readListChoices,
+  writeListChoices,
   clearAnonSettings,
   remapMergedPoiIds
 } from '../utils/anonSettings';
@@ -45,6 +47,7 @@ export function AuthProvider({ children }) {
   const [visited, setVisited] = useState(() => readVisited());
   const [listCheckins, setListCheckins] = useState(() => readListCheckins());
   const [listSort, setListSortState] = useState(() => readListSort() || 'trail');
+  const [listChoices, setListChoicesState] = useState(() => readListChoices());
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
   const [providers, setProviders] = useState({ google: true, facebook: false, password: true, passkey: true, passwordReset: false });
@@ -75,6 +78,7 @@ export function AuthProvider({ children }) {
           setVisited(userData.visited || []);
           setListCheckins(userData.listCheckins || []);
           if (userData.preferences?.listSort) setListSortState(userData.preferences.listSort);
+          if (userData.preferences?.listChoices) setListChoicesState(userData.preferences.listChoices);
         } else {
           setUser(null);
           setFavorites(readFavorites());
@@ -387,26 +391,38 @@ export function AuthProvider({ children }) {
     }
   }, [user, fetchUser]);
 
-  // How curated lists are sorted (spec 050): remembered on the device, and on
-  // the account when signed in. Resolves false when the account could not be
-  // told; the device has it either way.
-  const setListSort = useCallback(async (sort) => {
-    setListSortState(sort);
-    writeListSort(sort);
+  // Display preferences for curated lists (spec 050) are remembered on the
+  // device and, signed in, on the account. Resolves false when the account
+  // could not be told; the device has them either way.
+  const savePreferences = useCallback(async (changes) => {
     if (!user) return true;
     try {
       const res = await fetch('/api/user/settings/preferences', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ listSort: sort })
+        body: JSON.stringify(changes)
       });
       return res.ok;
     } catch (err) {
-      console.warn('Could not save the list sort to the account; it is kept on this device:', err);
+      console.warn('Could not save the preference to the account; it is kept on this device:', err);
       return false;
     }
   }, [user]);
+
+  const setListSort = useCallback((sort) => {
+    setListSortState(sort);
+    writeListSort(sort);
+    return savePreferences({ listSort: sort });
+  }, [savePreferences]);
+
+  // The trail picked for a list's free choice before it is marked hiked.
+  const setListChoice = useCallback((listId, poiId) => {
+    const next = { ...listChoices, [listId]: poiId };
+    setListChoicesState(next);
+    writeListChoices(next);
+    return savePreferences({ listChoices: next });
+  }, [listChoices, savePreferences]);
 
   const value = {
     user,
@@ -426,6 +442,8 @@ export function AuthProvider({ children }) {
     removeListCheckin,
     listSort,
     setListSort,
+    listChoices,
+    setListChoice,
     logout,
     loginWithGoogle,
     loginWithFacebook,

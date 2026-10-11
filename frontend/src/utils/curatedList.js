@@ -40,7 +40,7 @@ export const LIST_SORTS = [
   { id: 'difficulty', label: 'Difficulty' }
 ];
 
-export const DEFAULT_LIST_SORT = 'trail';
+const DEFAULT_LIST_SORT = 'trail';
 
 // Easiest first. The organizer rates Easy / Moderate / Strenuous; our own trails say Difficult.
 const RATING_RANK = { easy: 0, moderate: 1, strenuous: 2, difficult: 2 };

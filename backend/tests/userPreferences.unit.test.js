@@ -7,6 +7,12 @@ describe('allowedPreferences', () => {
     expect(allowedPreferences({ listSort: 'difficulty-desc' })).toEqual({ listSort: 'difficulty-desc' });
   });
 
+  it('keeps the free-choice picks that are a list id and a POI id', () => {
+    expect(allowedPreferences({ listChoices: { 1: 1044, 2: 'x', abc: 5, 3: -4 } })).toEqual({ listChoices: { 1: 1044 } });
+    expect(allowedPreferences({ listChoices: [1044] })).toEqual({});
+    expect(allowedPreferences({ listChoices: { abc: 5 } })).toEqual({});
+  });
+
   it('drops unknown keys, disallowed values and non-objects', () => {
     expect(allowedPreferences({ listSort: 'sideways', isAdmin: true })).toEqual({});
     expect(allowedPreferences(null)).toEqual({});
