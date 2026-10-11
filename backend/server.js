@@ -679,6 +679,8 @@ async function initDatabase() {
         form_url TEXT,
         hero_image TEXT,
         hero_credit TEXT,
+        form_file TEXT,
+        form_layout JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (series, edition)

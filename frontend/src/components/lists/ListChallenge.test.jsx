@@ -15,7 +15,7 @@ const list = {
 };
 
 const renderWith = (overrides = {}, listCheckins = []) => {
-  useAuth.mockReturnValue({ isAuthenticated: true, listCheckins, saveListCheckin: vi.fn(), removeListCheckin: vi.fn() });
+  useAuth.mockReturnValue({ isAuthenticated: true, user: { fullName: 'Scott McCarty', email: 'scott@example.com' }, listCheckins, saveListCheckin: vi.fn(), removeListCheckin: vi.fn() });
   return render(<ListChallenge list={{ ...list, ...overrides }} />);
 };
 
@@ -55,5 +55,15 @@ describe('ListChallenge', () => {
 
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('2');
     expect(screen.getByText('Badge earned September 12.')).toBeTruthy();
+  });
+
+  it('offers the completed form only when the list has one', () => {
+    renderWith();
+    expect(screen.queryByRole('button', { name: /download completed form/i })).toBeNull();
+    cleanup();
+
+    renderWith({ form_file: '/lists/form.pdf', form_layout: { page: 0 } });
+    expect(screen.getByRole('button', { name: /download completed form/i })).toBeTruthy();
+    expect(screen.getByText(/hike dates, name and email filled in/i)).toBeTruthy();
   });
 });

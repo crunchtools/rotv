@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { listProgress, formatListDay } from '../../utils/listProgress';
+import { listProgress, formatListDay, earlierEditionsEarned } from '../../utils/listProgress';
+import { formEntries, fillListForm, saveFile } from '../../utils/listForm';
 import ListBadge from './ListBadge';
 
 /**
@@ -10,9 +11,34 @@ import ListBadge from './ListBadge';
  *
  * @param {object} props
  * @param {object} props.list The list, from /api/lists
+ * @param {string} [props.choiceName] The trail hiked as the free choice, for the completed form
  */
-export default function ListChallenge({ list }) {
-  const { isAuthenticated, listCheckins } = useAuth();
+export default function ListChallenge({ list, choiceName = '' }) {
+  const { isAuthenticated, user, listCheckins } = useAuth();
+  const [formState, setFormState] = useState('idle');
+
+  // The organizer's form with everything ROTV knows written on it: the hikes'
+  // dates, the free choice, and the account's name and email.
+  const downloadForm = async () => {
+    setFormState('working');
+    try {
+      const otherIds = [...new Set(listCheckins.map(c => c.list_id))].filter(id => id !== list.id);
+      const earlier = otherIds.length > 0
+        ? await fetch(`/api/lists?ids=${otherIds.join(',')}`).then(res => (res.ok ? res.json() : []))
+        : [];
+      const entries = formEntries(list, listCheckins, {
+        name: user?.fullName || '',
+        email: user?.email || '',
+        choiceName,
+        returning: earlierEditionsEarned(list, earlier, listCheckins) > 0
+      });
+      saveFile(await fillListForm(list, entries), `${list.slug}-${list.edition}-form.pdf`);
+      setFormState('idle');
+    } catch (err) {
+      console.error('Could not fill in the form:', err);
+      setFormState('failed');
+    }
+  };
   const progress = listProgress(list, listCheckins);
   const percent = Math.min(100, Math.round((progress.done / progress.goal) * 100));
 
@@ -68,6 +94,26 @@ export default function ListChallenge({ list }) {
           <div className="list-challenge-status" aria-live="polite">{status}</div>
         </div>
       </div>
+
+      {list.form_file && list.form_layout && (
+        <div className="list-challenge-form">
+          <button type="button" className="poi-action poi-action--primary" onClick={downloadForm} disabled={formState === 'working'}>
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path fill="currentColor" d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z" />
+            </svg>
+            {formState === 'working' ? 'Filling in your form…' : 'Download completed form'}
+          </button>
+          <p className="list-challenge-form-about">
+            The official form with your hike dates{isAuthenticated ? ', name and email' : ''} filled in.
+            Add your address and anything else it asks for, then turn it in.
+          </p>
+          {formState === 'failed' && (
+            <p className="list-checkin-problem" role="alert">
+              The form could not be filled in. The blank one is under How it works.
+            </p>
+          )}
+        </div>
+      )}
 
       {!isAuthenticated && progress.done > 0 && (
         <p className="list-challenge-nudge">

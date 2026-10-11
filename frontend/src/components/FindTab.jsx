@@ -498,7 +498,10 @@ const FindTab = memo(function FindTab({
           )}
         </div>
         {curatedList && (
-          <ListChallenge list={curatedList} />
+          <ListChallenge
+            list={curatedList}
+            choiceName={choiceCheckin ? (allLinearFeatures || []).find(f => f.id === choiceCheckin.poi_id)?.name || '' : ''}
+          />
         )}
         {activeList === 'all' && !searchText.trim() && <SeasonalFeature variant="card" />}
         {curatedList && (

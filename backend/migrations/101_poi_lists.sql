@@ -9,7 +9,9 @@
 --      and lines are from Summit Metro Parks' own public layers ("SMP Park
 --      Boundaries" and "SMP Trails by Name" on ArcGIS Online, retrieved
 --      2026-10-10).
---   3. The 2026 list, from the district's 2026 Fall Hiking Spree form. Trailheads
+--   3. The 2026 list, from the district's 2026 Fall Hiking Spree form. form_layout
+--      says where on that form (PDF points, origin bottom left) each hike's date and
+--      the hiker's name and email go, so the form can be handed back filled in. Trailheads
 --      are the parking lot nearest the trail at the address the form prints.
 -- Idempotent: tables are IF NOT EXISTS, each POI insert is guarded by name, and
 --   the list and its items are seeded only on the run that creates the list, so
@@ -35,6 +37,8 @@ CREATE TABLE IF NOT EXISTS poi_lists (
   form_url TEXT,
   hero_image TEXT,
   hero_credit TEXT,
+  form_file TEXT,
+  form_layout JSONB,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (series, edition)
@@ -150,7 +154,7 @@ WHERE NOT EXISTS (SELECT 1 FROM pois WHERE name = 'Willow Trail');
 WITH created AS (
   INSERT INTO poi_lists (series, edition, name, description, goal_count, source_url, organizer_poi_id,
                          starts_on, ends_on, status, featured, choice_label, choice_description,
-                         rewards, rewards_until, form_url, hero_image, hero_credit)
+                         rewards, rewards_until, form_url, hero_image, hero_credit, form_file, form_layout)
   SELECT
     'fall-hiking-spree', 2026, 'Fall Hiking Spree',
     'Summit Metro Parks'' 63rd annual Fall Hiking Spree. Hike at least eight of these trails between September 1 and November 30 to earn the hiking staff and shield.',
@@ -162,7 +166,9 @@ The spree is free. Summit County residents receive their rewards at no cost; out
 Roots of The Valley keeps your tally. The staff and shield come from Summit Metro Parks: date the district''s form after each hike and turn it in.
 Pick up rewards at the Administrative Offices, 975 Treaty Line Rd., Akron (Monday through Friday, 8 a.m. to 4:30 p.m.), or at F.A. Seiberling Nature Realm, Liberty Park Nature Center or Summit Lake Nature Center (Wednesday through Saturday 10 a.m. to 5 p.m., Sunday noon to 5 p.m.). Returning hikers may mail the form with a self-addressed, stamped envelope.',
     DATE '2027-03-31', 'https://www.summitmetroparks.org/wp-content/uploads/2026-Fall-Hiking-Spree-Form.pdf',
-    '/lists/fall-hiking-spree-2026.webp', 'Summit Metro Parks'
+    '/lists/fall-hiking-spree-2026.webp', 'Summit Metro Parks',
+    '/lists/fall-hiking-spree-2026-form.pdf',
+    '{"page":0,"fontSize":9,"dateX":552,"rows":{"1":277.65,"2":262.8,"3":247.95,"4":233.1,"5":218.25,"6":203.4,"7":188.55,"8":173.7,"9":158.85,"10":144.0,"11":129.15,"12":114.3,"13":99.45},"choice":{"x":164,"y":86,"maxWidth":130,"dateY":84.6},"lastName":{"x":207,"y":488.5,"maxWidth":120},"firstName":{"x":333,"y":488.5,"maxWidth":72},"email":{"x":207,"y":446.5,"maxWidth":190},"returning":{"x":509.8,"y":486.3}}'::jsonb
   WHERE NOT EXISTS (SELECT 1 FROM poi_lists WHERE series = 'fall-hiking-spree' AND edition = 2026)
   RETURNING id
 )

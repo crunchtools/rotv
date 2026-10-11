@@ -29,7 +29,7 @@ export class CheckinError extends Error {
 async function loadLists(pool, onDate, ids) {
   const listRows = await pool.query(
     `SELECT l.id, l.series AS slug, l.edition, l.name, l.description, l.goal_count, l.source_url,
-            l.featured, l.choice_label, l.choice_description, l.rewards, l.form_url, l.hero_image, l.hero_credit, l.organizer_poi_id,
+            l.featured, l.choice_label, l.choice_description, l.rewards, l.form_url, l.hero_image, l.hero_credit, l.organizer_poi_id, l.form_file, l.form_layout,
             to_char(l.starts_on, 'YYYY-MM-DD') AS starts_on,
             to_char(l.ends_on, 'YYYY-MM-DD') AS ends_on,
             to_char(l.rewards_until, 'YYYY-MM-DD') AS rewards_until

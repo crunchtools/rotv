@@ -9,6 +9,7 @@ Summit Metro Parks runs its Fall Hiking Spree every September through November: 
 - As a hiker, I mark a trail hiked in one tap, correct the date if I logged it late, and see how many I have left and how many days remain.
 - As a hiker, my Hiker's Choice is a tile in the list like the other trails, already showing a trail I might pick, and I change it to the one I hiked.
 - As a hiker, I earn the year's badge when I reach the goal, and I can still see it, and the hikes behind it, in later years.
+- As a hiker, I download the park district's own form with my hike dates, my Hiker's Choice and my name and email already written on it, and only add what ROTV does not know.
 - As a hiker who has not signed in, my hikes stay on my phone and move to my account when I sign in.
 - As a visitor outside the season, I am not offered a list I cannot use.
 - As an admin, next year's spree shows up for my approval without anyone retyping it (release 2).
@@ -25,6 +26,7 @@ These are the spree's, held as data on the list so another program can differ.
 | Rewards, who pays, where and until when to collect them | `rewards`, `rewards_until`, `form_url` |
 | The program is promoted while it runs | `featured` |
 | The program's own banner, credited to the organizer | `hero_image`, `hero_credit` |
+| The organizer's paper form, and where on it each answer goes | `form_file`, `form_layout` |
 
 ROTV keeps the tally and awards its own badge. The staff and shield are the park district's, awarded from its form; the list says so and links the form.
 
@@ -55,6 +57,13 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 - Each row shows the organizer's name for the hike, the park it is in, `miles · rating · class`, the note, where to park, a Navigate button to that hike's trailhead, and the check-in button with its date.
 - Picking a row selects the POI on the map as any Find row does. Navigate and Add to trip use the item's trailhead. The place card of a POI on a list in season carries the same check-in button.
 - A list's address, when the list is out of season or does not exist, shows All places.
+
+### The completed form
+- A list with a form shows a Download completed form button under the tally. The blank Official form link under How it works stays.
+- The download is the organizer's PDF, unchanged, with this written on it: the date of each hike on that trail's row, the free choice's trail and date on its row, and, signed in, the account's first name, last name and email. Returning hiker is ticked when the person earned an earlier year's badge in ROTV; First-year is never ticked, because ROTV cannot know.
+- Everything else (address, phone, county, signatures, other participants) is left for the person.
+- It is written in the browser (`frontend/src/utils/listForm.js`, pdf-lib loaded on demand), so it works signed out with the hikes held on the device and nothing is sent anywhere.
+- `form_layout` holds the positions in PDF points from the page's bottom left: `dateX`, a `rows` map from item position to baseline, `choice`, `lastName`, `firstName`, `email`, `returning`. A new year's form needs a new layout; `listForm.test.js` writes a filled form to `LIST_FORM_OUT` for checking one by eye.
 
 ### My Valley
 - A Badges tab lists every list the person has a check-in on, plus those in season: the badge, the tally or the date earned, the dated hikes, and which year of the series this is for them.

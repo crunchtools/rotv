@@ -15225,6 +15225,18 @@ button.type-filter-chip {
   color: #525252;
 }
 
+.list-challenge-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.list-challenge .list-challenge-form-about {
+  font-size: 0.8rem;
+  color: #525252;
+}
+
 .list-challenge-nudge {
   padding: 0.5rem 0.65rem;
   background: #fff7ed;
