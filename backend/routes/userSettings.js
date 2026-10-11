@@ -12,6 +12,8 @@ const MAX_SYNC_TRIPS = 50;
 
 const MAX_LIST_CHOICES = 50;
 
+const MAX_FEATURES_OPENED = 30;
+
 // What a person may tell us about themselves to have forms filled in for them,
 // and the longest each may be.
 const CONTACT_FIELDS = { firstName: 60, lastName: 60, address: 120, city: 60, state: 30, zip: 12, phone: 30 };
@@ -26,7 +28,8 @@ const PREFERENCE_VALUES = {
  * @param {object} raw Untrusted input
  * @returns {object} Only the recognised keys; empty when there are none. `listChoices` keeps
  *   its `{ listId: poiId }` pairs that are positive integers, up to 50. `contact` keeps its known
- *   text fields (name, mailing address, phone), trimmed and capped in length
+ *   text fields (name, mailing address, phone), trimmed and capped in length. `featuresOpened` keeps
+ *   its feature slugs, without repeats, the 30 most recent
  */
 export function allowedPreferences(raw) {
   const kept = {};
@@ -40,6 +43,12 @@ export function allowedPreferences(raw) {
       .filter(([listId, poiId]) => /^[1-9]\d{0,8}$/.test(listId) && Number.isInteger(poiId) && poiId > 0)
       .slice(0, MAX_LIST_CHOICES);
     if (pairs.length > 0) kept.listChoices = Object.fromEntries(pairs);
+  }
+  // The site features the person has opened, oldest first: short slugs such as "river-levels".
+  const opened = raw?.featuresOpened;
+  if (Array.isArray(opened)) {
+    const ids = [...new Set(opened.filter(id => typeof id === 'string' && /^[a-z0-9-]{1,80}$/.test(id)))];
+    if (ids.length > 0) kept.featuresOpened = ids.slice(-MAX_FEATURES_OPENED);
   }
   // Contact details: only the known fields, trimmed and capped. A field sent blank stays
   // blank, so a name the person cleared is not filled back in from the account.

@@ -14,6 +14,7 @@ const KEY_VISITED = 'rotv-visited';
 const KEY_LIST_CHECKINS = 'rotv-list-checkins';
 const KEY_LIST_SORT = 'rotv-list-sort';
 const KEY_LIST_CHOICES = 'rotv-list-choices';
+const KEY_FEATURES_OPENED = 'rotv-features-opened';
 const KEY_CONTACT = 'rotv-contact';
 
 function safeRead(key) {
@@ -47,7 +48,7 @@ function safeRemove(key) {
  */
 export function clearAnonSettings() {
   [KEY_TIMEZONE, KEY_NEWSLETTER_EMAIL, KEY_NEWSLETTER_SUBSCRIBED, KEY_SAVED_TRIPS, KEY_FAVORITES, KEY_VISITED,
-    KEY_LIST_CHECKINS, KEY_LIST_SORT, KEY_LIST_CHOICES, KEY_CONTACT]
+    KEY_LIST_CHECKINS, KEY_LIST_SORT, KEY_LIST_CHOICES, KEY_FEATURES_OPENED, KEY_CONTACT]
     .forEach(safeRemove);
 }
 
@@ -175,6 +176,23 @@ export function writeListChoices(choices) {
   safeWrite(KEY_LIST_CHOICES, JSON.stringify(choices));
 }
 
+/**
+ * The site features this person has opened from a banner or the map's pill,
+ * oldest first (spec 050). The features they have not opened are shown first.
+ * @returns {string[]} Feature ids, e.g. `river-levels`; empty until one is opened
+ */
+export function readFeaturesOpened() {
+  return readArray(KEY_FEATURES_OPENED).filter(id => typeof id === 'string');
+}
+
+/**
+ * Remember on this device which features the person has opened.
+ * @param {string[]} ids Feature ids, oldest first, the whole list
+ */
+export function writeFeaturesOpened(ids) {
+  safeWrite(KEY_FEATURES_OPENED, JSON.stringify(ids));
+}
+
 const isPlainObject = (held) => Boolean(held) && typeof held === 'object' && !Array.isArray(held);
 
 /**
@@ -243,9 +261,11 @@ export async function syncAnonSettings() {
   const hasChoices = Object.keys(listChoices).length > 0;
   const contact = readContact();
   const hasContact = Object.keys(contact).length > 0;
+  const featuresOpened = readFeaturesOpened();
+  const hasOpened = featuresOpened.length > 0;
 
   const hasState = timezone || (email && subscribed) || trips.length > 0
-    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0 || listSort || hasChoices || hasContact;
+    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0 || listSort || hasChoices || hasContact || hasOpened;
   if (!hasState) return { synced: false };
 
   const payload = {};
@@ -256,11 +276,12 @@ export async function syncAnonSettings() {
   if (visited.length > 0) payload.visited = visited;
   if (listCheckins.length > 0) payload.listCheckins = listCheckins;
   // Like the timezone, these stay on the device after syncing: they are read from there too.
-  if (listSort || hasChoices || hasContact) {
+  if (listSort || hasChoices || hasContact || hasOpened) {
     payload.preferences = {
       ...(listSort ? { listSort } : {}),
       ...(hasChoices ? { listChoices } : {}),
-      ...(hasContact ? { contact } : {})
+      ...(hasContact ? { contact } : {}),
+      ...(hasOpened ? { featuresOpened } : {})
     };
   }
 

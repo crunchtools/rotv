@@ -21,6 +21,17 @@ describe('allowedPreferences', () => {
     expect(kept[51]).toBeUndefined();
   });
 
+  it('keeps the features opened that are slugs, once each, the 30 most recent', () => {
+    expect(allowedPreferences({ featuresOpened: ['mtb', 'river-levels', 'mtb', 7, '<b>', 'list-fall-hiking-spree-2026'] }))
+      .toEqual({ featuresOpened: ['mtb', 'river-levels', 'list-fall-hiking-spree-2026'] });
+    expect(allowedPreferences({ featuresOpened: 'mtb' })).toEqual({});
+    expect(allowedPreferences({ featuresOpened: [] })).toEqual({});
+    const many = Array.from({ length: 40 }, (_, i) => `feature-${i}`);
+    const kept = allowedPreferences({ featuresOpened: many }).featuresOpened;
+    expect(kept).toHaveLength(30);
+    expect(kept.at(-1)).toBe('feature-39');
+  });
+
   it('keeps contact details it knows, trimmed and capped, and lets them be cleared', () => {
     expect(allowedPreferences({ contact: { firstName: ' Scott ', lastName: 'McCarty', zip: '4'.repeat(40), role: 'admin', city: 7, phone: '  ' } }))
       .toEqual({ contact: { firstName: 'Scott', lastName: 'McCarty', zip: '4'.repeat(12), phone: '' } });

@@ -14,6 +14,8 @@ import {
   writeListSort,
   readListChoices,
   writeListChoices,
+  readFeaturesOpened,
+  writeFeaturesOpened,
   readContact,
   writeContact,
   clearAnonSettings,
@@ -50,6 +52,7 @@ export function AuthProvider({ children }) {
   const [listCheckins, setListCheckins] = useState(() => readListCheckins());
   const [listSort, setListSortState] = useState(() => readListSort() || 'trail');
   const [listChoices, setListChoicesState] = useState(() => readListChoices());
+  const [featuresOpened, setFeaturesOpenedState] = useState(() => readFeaturesOpened());
   const [contact, setContactState] = useState(() => readContact());
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
@@ -82,6 +85,7 @@ export function AuthProvider({ children }) {
           setListCheckins(userData.listCheckins || []);
           if (userData.preferences?.listSort) setListSortState(userData.preferences.listSort);
           if (userData.preferences?.listChoices) setListChoicesState(userData.preferences.listChoices);
+          if (Array.isArray(userData.preferences?.featuresOpened)) setFeaturesOpenedState(userData.preferences.featuresOpened);
           setContactState(userData.preferences?.contact || {});
         } else {
           setUser(null);
@@ -446,6 +450,20 @@ export function AuthProvider({ children }) {
   }, [listChoices, savePreferences]);
 
   /**
+   * Remember that the person opened a site feature from a banner or the map's
+   * pill (spec 050). `featuresOpened` in the context lists them oldest first,
+   * so the ones never opened, then the one opened longest ago, are shown first.
+   * @param {string} featureId e.g. `river-levels`
+   * @returns {Promise<boolean>} false when signed in and the account could not be told
+   */
+  const markFeatureOpened = useCallback((featureId) => {
+    const next = [...featuresOpened.filter(id => id !== featureId), featureId];
+    setFeaturesOpenedState(next);
+    writeFeaturesOpened(next);
+    return savePreferences({ featuresOpened: next });
+  }, [featuresOpened, savePreferences]);
+
+  /**
    * Save the name, mailing address and phone used to fill in forms (Settings ›
    * General). Signed in they are kept on the account only; signed out, on the
    * device. `contact` in the context is what was last saved.
@@ -484,6 +502,8 @@ export function AuthProvider({ children }) {
     setListSort,
     listChoices,
     setListChoice,
+    featuresOpened,
+    markFeatureOpened,
     contact,
     setContact,
     logout,

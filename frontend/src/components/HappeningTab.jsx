@@ -1,7 +1,8 @@
 import React from 'react';
 import ParkNews from './ParkNews';
 import ParkEvents from './ParkEvents';
-import { handleRovingKeyDown } from '../utils/a11yUtils';
+import FeatureBanner from './FeatureBanner';
+import MenuPicker from './MenuPicker';
 
 const VIEWS = [
   { id: 'news', label: 'News' },
@@ -10,7 +11,8 @@ const VIEWS = [
 
 /**
  * The Happening tab (spec 048): news and events share one tab, switched by a
- * two-way toggle. Each view keeps its own search and filters.
+ * menu beside each view's Filters button. Each view keeps its own search and
+ * filters. The feature banner across the top shows what else the site has.
  *
  * @param {object} props
  * @param {'news'|'events'} props.view Which side of the toggle is showing
@@ -21,32 +23,16 @@ const VIEWS = [
  * @param {{isAdmin: boolean, editMode: boolean, refreshTrigger: number,
  *   onSelectPoi: (poiId: number) => void,
  *   onEditEventItem: (id: number, title?: string) => void}} props.eventsProps Passed through to ParkEvents
+ * @param {object[]} [props.destinations] Every point POI, for the feature banner
+ * @param {object[]} [props.routes] Every river, railroad and water taxi, for the feature banner
  * @returns {JSX.Element}
  */
-export default function HappeningTab({ view, onViewChange, newsProps, eventsProps }) {
+export default function HappeningTab({ view, onViewChange, newsProps, eventsProps, destinations, routes }) {
+  const viewPicker = <MenuPicker label="News or events" options={VIEWS} value={view} onChange={onViewChange} />;
   return (
     <div className="happening-tab">
-      <div
-        className="happening-toggle"
-        role="group"
-        aria-label="News or events"
-        onKeyDown={(e) => handleRovingKeyDown(e, '.happening-toggle-btn')}
-      >
-        {VIEWS.map(v => (
-          <button
-            key={v.id}
-            type="button"
-            className={`happening-toggle-btn ${view === v.id ? 'active' : ''}`}
-            data-view={v.id}
-            aria-pressed={view === v.id}
-            tabIndex={view === v.id ? 0 : -1}
-            onClick={() => onViewChange(v.id)}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
-      {view === 'events' ? <ParkEvents {...eventsProps} /> : <ParkNews {...newsProps} />}
+      <FeatureBanner destinations={destinations} routes={routes} exclude="happening" />
+      {view === 'events' ? <ParkEvents {...eventsProps} viewPicker={viewPicker} /> : <ParkNews {...newsProps} viewPicker={viewPicker} />}
     </div>
   );
 }

@@ -1,11 +1,13 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, act } from '@testing-library/react';
-import FeatureBanner, { featureSlides } from './FeatureBanner';
+import FeatureBanner from './FeatureBanner';
+import { featureSlides } from '../hooks/useFeatureSlides';
 import { useAuth } from '../hooks/useAuth';
 import { useActiveLists } from '../hooks/useActiveLists';
 
 const navigate = vi.fn();
+const markFeatureOpened = vi.fn();
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
 vi.mock('../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('../hooks/useActiveLists', () => ({ useActiveLists: vi.fn() }));
@@ -15,6 +17,16 @@ const spree = {
   starts_on: '2026-09-01', ends_on: '2026-11-30', hero_image: '/lists/spree.webp', choice_label: null,
   items: Array.from({ length: 13 }, (_, i) => ({ id: 100 + i, poi_id: 1000 + i }))
 };
+const routes = [
+  { id: 20, name: 'Cuyahoga River', poi_roles: ['river'], has_primary_image: true, updated_at: 'r' },
+  { id: 21, name: 'Cuyahoga Valley Scenic Railroad', poi_roles: ['organization', 'railroad'], has_primary_image: true, updated_at: 't' },
+  { id: 22, name: 'Harbor Hopper', poi_roles: ['water_taxi'], has_primary_image: false }
+];
+const gauges = [
+  { id: 1, name: 'Hiram Rapids', river_poi_id: 20, latest: null },
+  { id: 2, name: 'Old Portage', river_poi_id: 20, latest: { discharge_cfs: 80 } },
+  { id: 3, name: 'Jaite', river_poi_id: 20, latest: { discharge_cfs: 1234.4 } }
+];
 const destinations = [
   { id: 1, name: 'East Rim Trailhead', status_url: 'https://example.org/east-rim', has_primary_image: true, updated_at: 'a' },
   { id: 2, name: 'Hampton Hills Mountain Bike Trailhead', status_url: 'https://example.org/hh', has_primary_image: true, updated_at: 'b' },
@@ -25,9 +37,13 @@ const destinations = [
 beforeEach(() => {
   vi.useFakeTimers();
   navigate.mockClear();
-  useAuth.mockReturnValue({ listCheckins: [] });
+  markFeatureOpened.mockClear();
+  useAuth.mockReturnValue({ listCheckins: [], featuresOpened: [], markFeatureOpened });
   useActiveLists.mockReturnValue([spree]);
-  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => [{ status: 'open' }, { status: 'closed' }, { status: 'open' }] })));
+  vi.stubGlobal('fetch', vi.fn(async (url) => ({
+    ok: true,
+    json: async () => (url === '/api/river-gauges' ? gauges : [{ status: 'open' }, { status: 'closed' }, { status: 'open' }])
+  })));
 });
 
 afterEach(() => {
@@ -41,7 +57,7 @@ describe('featureSlides', () => {
     const slides = featureSlides({ list: spree, listCheckins: [], destinations, mtb: { open: 2, total: 3 } });
 
     expect(slides.map(s => [s.id, s.to])).toEqual([
-      ['list-fall-hiking-spree', '/fall-hiking-spree'], ['mtb', '/mtb-trail-status'], ['happening', '/happening']
+      ['list-fall-hiking-spree-2026', '/fall-hiking-spree'], ['mtb', '/mtb-trail-status'], ['happening', '/happening']
     ]);
     expect(slides[0]).toMatchObject({ images: ['/lists/spree.webp'], imageHasTitle: true, text: 'Through November 30 · 13 trails' });
     expect(slides[1].text).toBe('2 of 3 trails open right now');
@@ -63,7 +79,81 @@ describe('featureSlides', () => {
   });
 });
 
+describe('the live features', () => {
+  it('advertises river levels, the train and the water taxi, each with its own photo and a link to its place', () => {
+    const slides = featureSlides({ list: null, listCheckins: [], destinations: [], routes, mtb: null, gauges });
+
+    expect(slides.map(s => [s.id, s.to])).toEqual([
+      ['river-levels', '/cuyahoga-river/river_levels'],
+      ['train-tracker', '/cuyahoga-valley-scenic-railroad'],
+      ['water-taxi', '/harbor-hopper'],
+      ['happening', '/happening']
+    ]);
+    // The gauge inside the park, not the first one upstream
+    expect(slides[0].text).toBe('1,234 cfs at Jaite right now, with a 7-day chart');
+    expect(slides[0].short).toBe('1,234 cfs at Jaite');
+    expect(slides[0].images).toEqual(['/api/pois/20/thumbnail?size=medium&v=r']);
+    expect(slides[2].images).toEqual([]);
+    expect(slides.every(s => s.icon && s.short && s.cta)).toBe(true);
+  });
+
+  it('still advertises river levels before a reading has loaded', () => {
+    const [river] = featureSlides({ list: null, listCheckins: [], destinations: [], routes, mtb: null });
+    expect(river.text).toBe('Is the river runnable? Live flow and a 7-day chart.');
+  });
+});
+
 describe('FeatureBanner', () => {
+  it('leads with a feature the person has not opened, and remembers the one they open', async () => {
+    useAuth.mockReturnValue({ listCheckins: [], featuresOpened: ['list-fall-hiking-spree-2026'], markFeatureOpened });
+    render(<FeatureBanner destinations={destinations} />);
+    await act(async () => { await Promise.resolve(); });
+
+    fireEvent.click(screen.getByText('2 of 3 trails open right now'));
+
+    expect(navigate).toHaveBeenCalledWith('/mtb-trail-status');
+    expect(markFeatureOpened).toHaveBeenCalledWith('mtb');
+  });
+
+  it('keeps the slide tapped on screen: its order holds even once that feature counts as opened', async () => {
+    const { rerender } = render(<FeatureBanner destinations={destinations} />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText('Through November 30 · 13 trails')).toBeTruthy();
+
+    useAuth.mockReturnValue({ listCheckins: [], featuresOpened: ['list-fall-hiking-spree-2026'], markFeatureOpened });
+    rerender(<FeatureBanner destinations={destinations} />);
+
+    expect(screen.getByText('Through November 30 · 13 trails')).toBeTruthy();
+  });
+
+  it('shows the river\'s flow once the gauges load, and does without it when they do not', async () => {
+    useActiveLists.mockReturnValue([]);
+    const first = render(<FeatureBanner destinations={[]} routes={routes} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText('1,234 cfs at Jaite right now, with a 7-day chart')).toBeTruthy();
+    first.unmount();
+
+    vi.stubGlobal('fetch', vi.fn(async (url) => {
+      if (url === '/api/river-gauges') throw new Error('offline');
+      return { ok: false, json: async () => ({ error: 'no' }) };
+    }));
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<FeatureBanner destinations={[]} routes={routes} />);
+    await act(async () => { await Promise.resolve(); await Promise.resolve(); });
+    expect(screen.getByText('Is the river runnable? Live flow and a 7-day chart.')).toBeTruthy();
+  });
+
+  it('leaves out the page it is on, and shows nothing when that was the only feature', async () => {
+    const { container, rerender } = render(<FeatureBanner destinations={destinations} exclude="happening" />);
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.queryByRole('button', { name: 'Show Happening in the valley' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Show MTB Trail Status' })).toBeTruthy();
+
+    useActiveLists.mockReturnValue([]);
+    rerender(<FeatureBanner destinations={[]} exclude="happening" />);
+    expect(container.querySelector('.feature-banner')).toBeNull();
+  });
+
   it('rotates on its own and opens the feature shown', async () => {
     render(<FeatureBanner destinations={destinations} />);
     await act(async () => { await Promise.resolve(); });

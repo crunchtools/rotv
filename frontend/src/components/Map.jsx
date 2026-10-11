@@ -479,11 +479,27 @@ function centerAboveCard(map, latlng, zoom) {
   return map.unproject(map.project(latlng, zoom).add([0, cover / 2]), zoom);
 }
 
-function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, geometryClickRef, activeTab }) {
+// How close the map comes to a train or boat that is reporting where it is.
+const TRACKER_ZOOM = 14;
+
+function MapUpdater({ selectedDestination, selectedLinearFeature, selectedTrackerAt, skipFlyRef, geometryClickRef, activeTab }) {
   const map = useMap();
   const prevTab = useRef(activeTab);
   const selectionRef = useRef({});
   selectionRef.current = { selectedDestination, selectedLinearFeature };
+  // Where the selected route's train or boat is, when it is reporting. Read
+  // from a ref: a vehicle that moves must not pull the map along behind it.
+  const trackerRef = useRef(null);
+  trackerRef.current = selectedTrackerAt;
+
+  // A route with a live tracker is shown at the vehicle, above the place
+  // card, rather than zoomed out to the whole line.
+  const showTracker = (animate) => {
+    if (!trackerRef.current) return false;
+    const zoom = Math.max(map.getZoom(), TRACKER_ZOOM);
+    map.setView(centerAboveCard(map, trackerRef.current, zoom), zoom, { animate });
+    return true;
+  };
 
   // Coming back to the Map tab with something selected: put it in view. With
   // nothing selected the view is left exactly where it was (#712). Selection
@@ -495,6 +511,7 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, ge
     requestAnimationFrame(() => {
       const { selectedDestination: point, selectedLinearFeature: linear } = selectionRef.current;
       map.invalidateSize();
+      if (linear && showTracker(false)) return;
       if (linear?.geometry) {
         frameBounds(map, getGeometryBounds(linear.geometry), { animate: false, coveredBottom: cardCoverPx(map) });
       } else if (point?.latitude && point?.longitude) {
@@ -558,6 +575,7 @@ function MapUpdater({ selectedDestination, selectedLinearFeature, skipFlyRef, ge
         return;
       }
       map.invalidateSize();
+      if (showTracker(true)) return;
       frameBounds(map, getGeometryBounds(selectedLinearFeature.geometry), { coveredBottom: cardCoverPx(map) });
     }
   }, [selectedLinearFeature, map, skipFlyRef, geometryClickRef]);
@@ -1678,6 +1696,13 @@ function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPo
   const animatedTrain = useAnimatedTrackerPosition(trainPosition, trainLineCoords, mapZoom, { pollIntervalMs: 5000, iconHalfPx: 32 });
   const { label: trainStatusLabel, className: trainStatusClass } = getTrainStatus(trainPosition);
 
+  // Where the selected route's own train or boat is, for the map to open on.
+  const selectedTracker = !selectedLinearFeature ? null
+    : selectedLinearFeature.id === trainFeature?.id ? trainPosition
+    : selectedLinearFeature.id === boatFeature?.id ? boatPosition : null;
+  const selectedTrackerAt = selectedTracker?.latitude != null && selectedTracker?.longitude != null
+    ? [selectedTracker.latitude, selectedTracker.longitude] : null;
+
   // The consist is laid out around the unit the GPS device rides in, not the
   // lead engine (#573). Built at EVERY zoom, not just above MIN_CONSIST_ZOOM:
   // the lead engine's position is derived from it, so gating the computation
@@ -2158,7 +2183,7 @@ function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPo
           </Marker>
         )}
 
-        <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} skipFlyRef={skipFlyRef} geometryClickRef={geometryClickRef} activeTab={activeTab} />
+        <MapUpdater selectedDestination={selectedDestination} selectedLinearFeature={selectedLinearFeature} selectedTrackerAt={selectedTrackerAt} skipFlyRef={skipFlyRef} geometryClickRef={geometryClickRef} activeTab={activeTab} />
         <GaugeFocuser activeGauge={activeGauge} />
         <MapVisibilityHandler activeTab={activeTab} />
         <BoundsFitter boundsToFit={boundsToFit} fitNonce={fitNonce} />

@@ -16,6 +16,7 @@ import { listPath } from '../utils/tabPaths';
 import ListChallenge from './lists/ListChallenge';
 import ListCheckinControl from './lists/ListCheckinControl';
 import FeatureBanner from './FeatureBanner';
+import MenuPicker from './MenuPicker';
 import { buildParkIndex, findContainingPark } from '../utils/parkContainment';
 
 const PAGE_SIZE = 20;
@@ -106,9 +107,6 @@ const FindTab = memo(function FindTab({
   const { listSort, setListSort, favorites, listCheckins, saveListCheckin, listChoices, setListChoice } = useAuth();
   const [listConfig, setListConfig] = useState(null);
   const curatedLists = useActiveLists();
-  const [isListMenuOpen, setIsListMenuOpen] = useState(false);
-  const listButtonRef = useRef(null);
-  const listMenuRef = useRef(null);
 
   useEffect(() => {
     fetch('/api/results-subtabs')
@@ -189,18 +187,11 @@ const FindTab = memo(function FindTab({
     }
   }, [activeList]);
 
+  // The map is narrowed for a list about one kind of place. App puts it back
+  // once Find shows any other list, and leaves the legend alone otherwise.
   useEffect(() => {
-    if (onFilterByTypes) {
-      let typesToShow = null;
-
-      if (activeList === 'mtb') {
-        typesToShow = ['mtb-trailhead'];
-      } else if (activeList === 'organizations') {
-        typesToShow = ['organization'];
-      }
-
-      onFilterByTypes(typesToShow);
-    }
+    if (!onFilterByTypes) return;
+    onFilterByTypes(activeList === 'mtb' ? ['mtb-trailhead'] : activeList === 'organizations' ? ['organization'] : null);
   }, [activeList, onFilterByTypes]);
 
   const parkIndex = useMemo(() => buildParkIndex(allLinearFeatures), [allLinearFeatures]);
@@ -383,18 +374,7 @@ const FindTab = memo(function FindTab({
     setCurrentPage(1);
   }, []);
 
-  const closeListMenu = () => {
-    setIsListMenuOpen(false);
-    listButtonRef.current?.focus();
-  };
-
-  useEffect(() => {
-    if (isListMenuOpen) listMenuRef.current?.querySelector('[aria-checked="true"]')?.focus();
-  }, [isListMenuOpen]);
-
   const handleListChange = (listId) => {
-    setIsListMenuOpen(false);
-    listButtonRef.current?.focus();
     if (listId === activeList) return;
 
     isNavigatingRef.current = true;
@@ -403,29 +383,20 @@ const FindTab = memo(function FindTab({
     navigate((lists.find(l => l.id === listId) || lists[0]).route);
   };
 
-  const handleListMenuKeyDown = (e) => {
-    if (e.key === 'Escape') {
-      e.stopPropagation();
-      closeListMenu();
-    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const items = Array.from(e.currentTarget.querySelectorAll('[role="menuitemradio"]'));
-      const idx = items.indexOf(document.activeElement);
-      const next = e.key === 'ArrowDown' ? (idx + 1) % items.length : (idx - 1 + items.length) % items.length;
-      items[next]?.focus();
-    }
-  };
-
   const firstShown = rankedPois.length === 0 ? 0 : ((clampedPage - 1) * PAGE_SIZE) + 1;
   const lastShown = Math.min(clampedPage * PAGE_SIZE, rankedPois.length);
   const emptyState = curatedList ? LIST_EMPTY_STATE : (EMPTY_STATES[activeList] || EMPTY_STATES.all);
 
+  // The banner advertises the rest of the site, not the list it sits above.
+  const featureShown = curatedList ? `list-${curatedList.slug}-${curatedList.edition}` : activeList === 'mtb' ? 'mtb' : null;
+
   return (
+    <>
+    <FeatureBanner destinations={allDestinations} routes={allLinearFeatures} exclude={featureShown} />
     <div className="results-tab-wrapper find-tab">
       <div className="news-events-header">
         <h2>Find</h2>
         <p className="tab-subtitle">Every park, trail and place in the valley</p>
-        {activeList === 'all' && !searchText.trim() && <FeatureBanner destinations={allDestinations} />}
       </div>
 
       <div className="results-filters find-controls">
@@ -438,41 +409,7 @@ const FindTab = memo(function FindTab({
           onChange={(e) => { onSearchChange(e.target.value); setCurrentPage(1); }}
         />
         <div className="find-controls-row">
-          <div className="find-list-picker">
-            <button
-              type="button"
-              ref={listButtonRef}
-              className="find-list-btn"
-              aria-haspopup="menu"
-              aria-expanded={isListMenuOpen}
-              onClick={() => setIsListMenuOpen(prev => !prev)}
-            >
-              <span className="find-list-btn-label">{currentList.label}</span>
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-                <path fill="currentColor" d="M7 10l5 5 5-5z" />
-              </svg>
-            </button>
-            {isListMenuOpen && (
-              <>
-                <div className="tab-dropdown-backdrop" onClick={closeListMenu} />
-                <div className="tab-dropdown find-list-menu" role="menu" aria-label="Lists" ref={listMenuRef} onKeyDown={handleListMenuKeyDown}>
-                  {lists.map(list => (
-                    <button
-                      key={list.id}
-                      type="button"
-                      role="menuitemradio"
-                      aria-checked={list.id === activeList}
-                      className={`dropdown-item-inline find-list-item ${list.id === activeList ? 'active' : ''}`}
-                      data-list={list.id}
-                      onClick={() => handleListChange(list.id)}
-                    >
-                      {list.label}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
+          <MenuPicker label="Lists" options={lists} value={activeList} onChange={handleListChange} />
           {activeList === 'all' && (
             <FilterSheet activeCount={hiddenTypeCount}>
               <div className="results-filter-actions">
@@ -629,6 +566,7 @@ const FindTab = memo(function FindTab({
         </>
       )}
     </div>
+    </>
   );
 });
 

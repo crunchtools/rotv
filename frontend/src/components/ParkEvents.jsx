@@ -36,10 +36,11 @@ async function fetchEventWindows() {
  * @param {boolean} props.editMode Admins in edit mode get moderation controls and "+ New"
  * @param {(poiId: number) => void} props.onSelectPoi Open the place an event is at
  * @param {(id: number, title?: string) => void} props.onEditEventItem Open an event in moderation
+ * @param {JSX.Element} [props.viewPicker] The News or Events menu, shown beside Filters
  * @param {number} props.refreshTrigger Changes when the lists should be fetched again
  * @returns {JSX.Element}
  */
-function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, refreshTrigger }) {
+function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, refreshTrigger, viewPicker }) {
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 20;
@@ -330,26 +331,29 @@ END:VCALENDAR`;
           value={searchText}
           onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
         />
-        <FilterSheet activeCount={Object.values(typeFilters).filter(on => !on).length}>
-          <div className="results-type-filters">
-            {[
-              { key: 'hike', icon: 'H', label: 'Hike' },
-              { key: 'race', icon: 'R', label: 'Race' },
-              { key: 'concert', icon: 'C', label: 'Concert' },
-              { key: 'festival', icon: 'F', label: 'Festival' },
-              { key: 'program', icon: 'P', label: 'Program' },
-              { key: 'volunteer', icon: 'V', label: 'Volunteer' },
-              { key: 'arts', icon: 'A', label: 'Arts' },
-              { key: 'community', icon: 'M', label: 'Community' },
-              { key: 'alert', icon: '!', label: 'Alert' },
-            ].map(f => (
-              <FilterChip key={f.key} id={f.key} active={typeFilters[f.key]} onToggle={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}>
-                <span className="type-filter-icon">{f.icon}</span>
-                {f.label}
-              </FilterChip>
-            ))}
-          </div>
-        </FilterSheet>
+        <div className="find-controls-row">
+          {viewPicker}
+          <FilterSheet activeCount={Object.values(typeFilters).filter(on => !on).length}>
+            <div className="results-type-filters">
+              {[
+                { key: 'hike', icon: 'H', label: 'Hike' },
+                { key: 'race', icon: 'R', label: 'Race' },
+                { key: 'concert', icon: 'C', label: 'Concert' },
+                { key: 'festival', icon: 'F', label: 'Festival' },
+                { key: 'program', icon: 'P', label: 'Program' },
+                { key: 'volunteer', icon: 'V', label: 'Volunteer' },
+                { key: 'arts', icon: 'A', label: 'Arts' },
+                { key: 'community', icon: 'M', label: 'Community' },
+                { key: 'alert', icon: '!', label: 'Alert' },
+              ].map(f => (
+                <FilterChip key={f.key} id={f.key} active={typeFilters[f.key]} onToggle={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}>
+                  <span className="type-filter-icon">{f.icon}</span>
+                  {f.label}
+                </FilterChip>
+              ))}
+            </div>
+          </FilterSheet>
+        </div>
         <div className="results-count">
           Showing {filteredEvents.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, filteredEvents.length)}`} of {filteredEvents.length} events
         </div>

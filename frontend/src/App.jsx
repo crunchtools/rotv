@@ -349,9 +349,16 @@ function AppContent() {
   const [tourStep, setTourStep] = useState(0);
 
   const location = useLocation();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
 
   const isProgrammaticNavigationRef = useRef(false);
+  // The flag tells the URL handling below to skip one navigation. A navigation
+  // to the page already showing changes nothing, so its flag would be left up
+  // and swallow the next real one: a banner or pill tapped later went nowhere.
+  const navigate = useCallback((to, options) => {
+    if (to === window.location.pathname) isProgrammaticNavigationRef.current = false;
+    routerNavigate(to, options);
+  }, [routerNavigate]);
   const isLoadingFromUrlRef = useRef(false);
   const prevPathnameRef = useRef(location.pathname);
 
@@ -726,27 +733,20 @@ function AppContent() {
     }
   }, [location.pathname, location.search]);
 
+  // Find narrows the map to a list about one kind of place. Once it shows
+  // any other list, or a link opens a place, the legend goes back to how it
+  // starts, hidden-by-default types included, so nothing is left for the URL
+  // to carry (#531). The ref outlives Find, which unmounts between visits; a
+  // legend Find never narrowed is left as the person set it.
+  const narrowedByFindRef = useRef(false);
   const handleFilterByTypes = useCallback((typesToShow) => {
     if (typesToShow && typesToShow.length > 0) {
       setVisibleTypes(new Set(typesToShow));
-    } else {
-      if (iconConfig && iconConfig.length > 0) {
-        const allTypes = new Set(
-          iconConfig
-            .filter(icon => icon.enabled !== false)
-            .map(icon => icon.name)
-        );
-        if (!allTypes.has('default')) allTypes.add('default');
-        allTypes.add('trail');
-        allTypes.add('river');
-        allTypes.add('boundary');
-        allTypes.add('organization');
-        setVisibleTypes(allTypes);
-      } else {
-        setVisibleTypes(new Set(DEFAULT_ICON_TYPES));
-      }
+    } else if (narrowedByFindRef.current) {
+      setVisibleTypes(new Set(defaultTypesRef.current || DEFAULT_ICON_TYPES));
     }
-  }, [iconConfig]);
+    narrowedByFindRef.current = Boolean(typesToShow && typesToShow.length > 0);
+  }, []);
 
   useEffect(() => {
     if (role !== 'admin' && role !== 'poi_admin') {
@@ -833,6 +833,8 @@ function AppContent() {
 
   const [initialPoiSlug, setInitialPoiSlug] = useState(null);
   const [initialSidebarTab, setInitialSidebarTab] = useState(null);
+  // Bumped when a link opens a place with no tab named, so its card starts over
+  const [cardResetNonce, setCardResetNonce] = useState(0);
   // River Levels carousel (#92): the gauge currently shown, so the map can highlight + fly to it
   const [activeGauge, setActiveGauge] = useState(null);
   const [permalinkInfo, setPermalinkInfo] = useState(null); // { type: 'news'|'event', poiSlug, titleSlug }
@@ -1172,6 +1174,15 @@ function AppContent() {
         : selectedLinearFeature ? generateSlug(selectedLinearFeature.name)
         : null;
 
+      // A link to a place itself opens its card afresh: Info, at half height
+      // on a phone. The tab and height an earlier link asked for (River
+      // Levels, say) belong to that link, not to the next place. Picking Info
+      // on the card already open is not such a link and leaves it as it is.
+      setInitialSidebarTab(null);
+      if (activeTab !== 'view' || currentSlug !== poiSlug) setCardResetNonce(nonce => nonce + 1);
+      // Nor does a list's narrowing of the map follow a link to somewhere else.
+      if (activeTab !== 'view') handleFilterByTypes(null);
+
       if (currentSlug === poiSlug) {
         setActiveTab('view');
         return;
@@ -1363,6 +1374,17 @@ function AppContent() {
     const params = new URLSearchParams(window.location.search);
     let changed = false;
 
+    // The legend belongs to the map. Away from it the address is the tab's
+    // own, with none of the map's filters trailing after it.
+    if (activeTab !== 'view') {
+      const carried = ['types', 'layers', 'boundaries'].filter(name => params.has(name));
+      if (carried.length === 0) return;
+      carried.forEach(name => params.delete(name));
+      const search = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (search ? `?${search}` : ''));
+      return;
+    }
+
     const defaultTypes = defaultTypesRef.current;
     const typesDefault = defaultTypes && visibleTypes.size === defaultTypes.size &&
       [...visibleTypes].every(t => defaultTypes.has(t));
@@ -1411,7 +1433,7 @@ function AppContent() {
       const newUrl = window.location.pathname + (search ? `?${search}` : '');
       window.history.replaceState({}, '', newUrl);
     }
-  }, [visibleTypes, visibleBoundaries, showTrails, showRivers, showWaterTaxis]);
+  }, [visibleTypes, visibleBoundaries, showTrails, showRivers, showWaterTaxis, activeTab, location.pathname]);
 
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
@@ -2402,6 +2424,8 @@ function AppContent() {
       {activeTab === 'happening' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <HappeningTab
+            destinations={destinations}
+            routes={linearFeatures}
             view={happeningView}
             onViewChange={handleHappeningViewChange}
             newsProps={{
@@ -2622,7 +2646,7 @@ function AppContent() {
           pointerEvents: activeTab === 'view' ? 'auto' : 'none'
         }}
       >
-        {activeTab === 'view' && !editMode && <SeasonalFeature />}
+        {activeTab === 'view' && !editMode && <SeasonalFeature destinations={destinations} routes={linearFeatures} />}
         <Map
           destinations={filteredDestinations}
           parkPins={parkPins}
@@ -2794,6 +2818,7 @@ function AppContent() {
           onSetPermalink={setPermalinkInfo}
           onClearPermalink={() => setPermalinkInfo(null)}
           initialSidebarTab={initialSidebarTab}
+          resetNonce={cardResetNonce}
           onSidebarTabChange={(tab) => setInitialSidebarTab(null)}
           onActiveGaugeChange={setActiveGauge}
           boatPosition={boatPosition}

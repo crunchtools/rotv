@@ -15172,34 +15172,6 @@ button.type-filter-chip {
   max-width: none;
 }
 
-.happening-toggle {
-  display: inline-flex;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  margin-bottom: 0.75rem;
-  border-radius: 8px;
-  background: #e3e6e0;
-}
-
-.happening-toggle-btn {
-  min-height: 40px;
-  padding: 0.4rem 1.25rem;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #333;
-  font: inherit;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.happening-toggle-btn.active {
-  background: white;
-  color: #2d5016;
-  font-weight: 600;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
-}
-
 .bottom-nav {
   display: none;
 }
@@ -15670,9 +15642,13 @@ button.type-filter-chip {
 
 /* The feature banner in Find's header: a door to another part of the site,
    so it is dark and photographic where the lists below it are light. */
+/* Sits above everything on Find and Happening, as wide as the panel under it */
 .feature-banner {
   position: relative;
-  margin-top: 0.75rem;
+  flex: 0 0 auto;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto 0.75rem;
   touch-action: pan-y;
 }
 
