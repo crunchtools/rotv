@@ -1,0 +1,110 @@
+# Spec 050: Seasonal challenges, starting with the Fall Hiking Spree
+
+## Why
+Summit Metro Parks runs its Fall Hiking Spree every September through November: thirteen named trails, hike any eight, date each one, earn the hiking staff and shield. A visitor doing the spree wants those trails in one place, directions to the lot each hike starts from, and a tally they can check off as they go and keep from year to year (#711). ROTV had eight of the trails, none of the trailheads, and no way to say "these places belong together this season" or "I did this one".
+
+## User stories
+- As a hiker, in the fall the spree is put in front of me on the map and in Find, and I open this year's trails in the park district's order, with each one's length and rating.
+- As a hiker, I tap a spree trail and Navigate takes me to the lot that hike starts from, not to an arbitrary end of the trail.
+- As a hiker, I mark a trail hiked in one tap, correct the date if I logged it late, and see how many I have left and how many days remain.
+- As a hiker, my Hiker's Choice is a tile in the list like the other trails, already showing a trail I might pick, and I change it to the one I hiked.
+- As a hiker, I earn the year's badge when I reach the goal, and I can still see it, and the hikes behind it, in later years.
+- As a hiker, I download the park district's own form with my hike dates, my Hiker's Choice and my name and email already written on it, and only add what ROTV does not know.
+- As a hiker who has not signed in, my hikes stay on my phone and move to my account when I sign in.
+- As a visitor outside the season, I am not offered a list I cannot use.
+- As an admin, next year's spree shows up for my approval without anyone retyping it (release 2).
+
+## Rules
+These are the spree's, held as data on the list so another program can differ.
+
+| Rule | Where it lives |
+|---|---|
+| The season runs September 1 through November 30 | `starts_on`, `ends_on` |
+| Hike at least eight different designated trails | `goal_count`; one check-in per item |
+| One hike may be a trail of the hiker's own choosing | `choice_label`, `choice_description`; one check-in with no item |
+| Date each hike; it must fall inside the season | check-in `done_on`, refused outside the season or in the future |
+| Rewards, who pays, where and until when to collect them | `rewards`, `rewards_until`, `form_url` |
+| The program is promoted while it runs | `featured` |
+| The program's own banner, credited to the organizer | `hero_image`, `hero_credit` |
+| The organizer's paper form, and where on it each answer goes | `form_file`, `form_layout` |
+
+ROTV keeps the tally and awards its own badge. The staff and shield are the park district's, awarded from its form; the list says so and links the form.
+
+## Behavior
+
+### Lists
+- A list is one edition of a series: the 2026 Fall Hiking Spree is series `fall-hiking-spree`, edition 2026. Next year's is a new list, so a draft for the coming season can sit beside the published one, and last year's stays for the badges earned on it.
+- A list is offered only while it is published and today, in the valley's time zone, is inside the season.
+- An item is a POI plus what the organizer says about it: the name they use, miles, rating, trail class, a note, the trailhead in words, and the trailhead's coordinates. An item may point at a trail much longer than the hike (the Towpath from Wilbeth Road) or one that spans two parks (Parcours).
+- An item whose POI has been deleted is left out. Merging a POI moves its list items and check-ins to the survivor.
+
+### Check-ins
+- A check-in is one dated hike: a list item, or the list's free choice with the trail chosen. A person has at most one per item and one free choice per list.
+- Marking a hike logs today's date, or the season's last day once the season has ended. The date then shows beside the button and can be set to any day inside the season up to today. Tapping the checked button removes the hike.
+- A hike cannot be logged before the season opens. After it ends, hikes from the season can still be filled in.
+- Progress is the number of check-ins against the goal. The badge is earned when the goal is reached, on the date of the hike that reached it. Hikes past the goal still count toward the total shown.
+- Check-ins are local-first (`docs/USER_DATA_FRAMEWORK.md`): on the device when signed out, on the account when signed in, folded into the account on sign-in. The account's date wins over the device's, and a check-in the rules refuse is dropped.
+- Check-ins are never removed at the end of a season. Deleting the account deletes them.
+
+### Seasonal spotlight
+- While a featured list is in season, the map shows a pill with its name and the person's tally, which opens the list. The pill can be dismissed; it stays dismissed for that edition on that device.
+
+### Feature banner
+- Find's header, under its title, carries a banner about 180 pixels tall that shows one other part of the site at a time and opens it when tapped: the featured list in season, MTB Trail Status (how many trails are open right now, over a photo from one of the MTB trailheads), and Happening (over a photo of a place in the valley).
+- It is meant to read as a door to somewhere else, not as part of the list: dark and photographic where the lists are light, headed "Also on Roots of The Valley", with a button that names where the tap goes ("Open Fall Hiking Spree", "Check trail status").
+- A feature whose picture already carries its name (the spree's banner) is shown whole, with only the person's tally and the button under it.
+- It moves to the next feature every seven seconds. It holds still while pointed at or focused, once the person picks a slide with the dots, and for anyone whose device asks for reduced motion.
+- A feature that does not apply is left out: the list out of season, MTB where no trail reports status. A photo that will not load gives way to the next candidate, then to a plain dark ground.
+- The banner shows on All places and is hidden while searching.
+
+### Trail thumbnails
+- Every trail in a Find list is shown as a drawing of its own line, north up, coloured by difficulty: a small trail map rather than a photo. Other places keep their photos.
+
+### Find
+- A list in season is an entry in the Find tab's list picker, after the built-in ones. The spree lives at `/fall-hiking-spree`; a list without an address of its own lives at `/find/<series>`, and `/find/fall-hiking-spree` redirects.
+- The list opens with its banner, credited and linked to the organizer, then its description, the badge, the tally with a progress bar, what is left and how many days remain, and a "How it works" section with the rules and rewards. Its hikes follow, sorted by Trail, Park or Difficulty (easiest first, shorter hikes first within a rating): three buttons, each of which reverses when pressed again. The sort is remembered on the device and, signed in, on the account (`users.preferences.listSort`). Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
+- The free choice is one more row, tagged with its name (Hiker's Choice) and showing the chosen trail's own park, length and difficulty, with a menu to change the trail. Until the person picks, it shows a suggestion: a trail they have favorited, else one drawn for the day. The menu offers trails in the parks the list's hikes are in, or in parks its organizer owns, that are not already on the list. Changing the trail of a choice already hiked keeps its date.
+- Each row shows the organizer's name for the hike, the park it is in, `miles · rating · class`, the note, where to park, a Navigate button to that hike's trailhead, and the check-in button with its date.
+- Picking a row selects the POI on the map as any Find row does. Navigate and Add to trip use the item's trailhead. The place card of a POI on a list in season carries the same check-in button.
+- A list's address, when the list is out of season or does not exist, shows All places.
+
+### The completed form
+- A list with a form shows a Download completed form button under the tally. The blank Official form link under How it works stays.
+- The download is the organizer's PDF, unchanged, with this written on it: the date of each hike on that trail's row, the free choice's trail and date on its row, the person's details from Settings (first and last name, mailing address, city, state, ZIP, cell number), and, signed in, the account's email. A name not given in Settings falls back to the account's. Returning hiker is ticked when the person earned an earlier year's badge in ROTV; First-year is never ticked, because ROTV cannot know.
+- Everything else (county resident, signatures, other participants) is left for the person.
+- Settings › General has a Your details section for those fields. They are used only to fill in forms. Signed in they are kept on the account (`users.preferences.contact`) and not on the device; signed out they are kept on the device and move to the account on sign-in.
+- It is written in the browser (`frontend/src/utils/listForm.js`, pdf-lib loaded on demand), so it works signed out with the hikes held on the device. Making and downloading the PDF uploads nothing: the finished form never leaves the device. (The details themselves are saved as described above: to the account when signed in, and synced there on sign-in.)
+- `form_layout` holds the positions in PDF points from the page's bottom left: `dateX`, a `rows` map from item position to baseline, `choice`, `returning`, and one entry per detail (`lastName`, `firstName`, `address`, `city`, `state`, `zip`, `email`, `phone`). On this form each answer is written above its rule, with the label printed beneath. A new year's form needs a new layout; `listForm.test.js` writes a filled form to `LIST_FORM_OUT` for checking one by eye.
+
+### My Valley
+- A Badges tab lists every list the person has a check-in on, plus those in season: the badge, the tally or the date earned, the dated hikes, and which year of the series this is for them.
+
+### The 2026 spree
+- Wood Hollow Metro Park and five trails (Black Bear, Chippewa, Downy Loop, Firefly, Willow) are added from Summit Metro Parks' public ArcGIS layers, "SMP Park Boundaries" and "SMP Trails by Name".
+- The thirteen items, their miles, ratings and classes, the Hiker's Choice and the rewards are from the district's 2026 Fall Hiking Spree form. Each trailhead is the parking lot nearest the trail at the address the form prints.
+
+### Yearly refresh (release 2)
+- Each August a job reads the district's spree page and form, matches each trail to a POI, and saves next season's list as a draft.
+- The admin is notified, sees the draft with anything that did not match, fixes it and publishes. Nothing reaches visitors unapproved.
+
+## API
+| Route | Change |
+|---|---|
+| `GET /api/lists` | New, public. Lists in season, each with its rules and `items[]`. |
+| `GET /api/lists?ids=` | New, public. Those published lists whatever the season, for earlier years' badges. |
+| `PUT /api/lists/:listId/checkins` | New, signed in. `{ item_id, poi_id, done_on }`; `item_id` null is the free choice. Answers with the stored check-in. 400 `{ error }` for a list id that is not a number or a check-in the rules refuse (the reason is the message); 404 for a list that does not exist or is not published; 401 signed out. |
+| `DELETE /api/lists/:listId/checkins/:itemId` | New, signed in. `:itemId` is an item id or `choice`. 400 when either id is neither; removing a check-in that is not there succeeds; 401 signed out. |
+| `GET /auth/user` | Adds `listCheckins`. |
+| `POST /api/user/settings/sync` | Accepts `listCheckins` and `preferences` from the device; a preference the account already holds wins. |
+| `PUT /api/user/settings/preferences` | New, signed in. Any of `{ listSort, listChoices, contact }`; 400 when nothing in the body is a known preference with an allowed value. |
+
+## Data
+`poi_lists`, `poi_list_items` and `user_list_checkins`, in migration 101 and in `initDatabase` (a fresh database runs migrations before `pois` exists). The migration also adds the six POIs and seeds the 2026 list, each only once.
+
+### Privacy pages
+- Migration 102 adds seasonal challenge hikes and the optional contact details to the privacy policy, the data deletion page and the terms, each as a guarded edit that leaves an admin's rewording alone. It also removes a sentence that migration 092 had been adding to the privacy policy on every boot, and 092 is now guarded.
+
+## Out of scope
+- Showing only a list's places on the map.
+- Enforcing on the server that the free choice is one of the organizer's trails: many of the district's trails carry no owner, so the menu narrows the choice and the server takes any trail.
+- An admin screen for editing lists by hand; release 2 brings the review screen.

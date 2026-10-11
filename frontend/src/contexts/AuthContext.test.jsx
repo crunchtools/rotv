@@ -180,4 +180,162 @@ describe('AuthContext', () => {
       await expect(captured.current.setPassword('another long one')).rejects.toMatchObject({ reauth: true });
     });
   });
+
+  describe('list check-ins (spec 050)', () => {
+    const checkinUrl = '/api/lists/1/checkins';
+
+    // The probe publishes the context in an effect, so wait for the signed-in one.
+    const renderHiker = async () => {
+      await renderSignedIn();
+      await waitFor(() => expect(captured.current.user).toBeTruthy());
+    };
+
+    it('keeps both hikes when two are marked before the first has rendered', async () => {
+      const fetchMock = mockFetch();
+      await renderHiker();
+
+      await act(async () => {
+        const { saveListCheckin } = captured.current;
+        await Promise.all([
+          saveListCheckin(1, 11, 1081, '2026-10-04'),
+          saveListCheckin(1, 12, 1054, '2026-10-05')
+        ]);
+      });
+
+      expect(captured.current.listCheckins.map(c => c.item_id).sort()).toEqual([11, 12]);
+      expect(fetchMock.mock.calls.filter(([url]) => url === checkinUrl)).toHaveLength(2);
+    });
+
+    it('reloads what the account holds and reports why when the server refuses a change', async () => {
+      const refusal = 'Only 2026-09-01 through 2026-11-30 counts for this list.';
+      const held = { list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' };
+      mockFetch(undefined, {
+        '/auth/user': fetchResponse({ ...SIGNED_IN, listCheckins: [held] }),
+        [checkinUrl]: fetchResponse({ error: refusal }, { status: 400 })
+      });
+      await renderHiker();
+
+      let problem;
+      await act(async () => { problem = await captured.current.saveListCheckin(1, 11, 1081, '2026-12-25'); });
+
+      expect(problem).toBe(refusal);
+      expect(captured.current.listCheckins).toEqual([held]);
+    });
+
+    it('reloads what the account holds when a removal fails', async () => {
+      const held = { list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' };
+      mockFetch(undefined, {
+        '/auth/user': fetchResponse({ ...SIGNED_IN, listCheckins: [held] }),
+        [`${checkinUrl}/11`]: fetchResponse({ error: 'down' }, { status: 500 })
+      });
+      await renderHiker();
+
+      await act(() => captured.current.removeListCheckin(1, 11));
+
+      expect(captured.current.listCheckins).toEqual([held]);
+    });
+
+    it('remembers the list sort on the device and on the account', async () => {
+      const fetchMock = mockFetch();
+      await renderHiker();
+      expect(captured.current.listSort).toBe('trail');
+
+      await act(() => captured.current.setListSort('park'));
+
+      expect(captured.current.listSort).toBe('park');
+      expect(localStorage.getItem('rotv-list-sort')).toBe('park');
+      const [, request] = fetchMock.mock.calls.find(([url]) => url === '/api/user/settings/preferences');
+      expect(request).toMatchObject({ method: 'PUT', body: JSON.stringify({ listSort: 'park' }) });
+    });
+
+    it('remembers the trail picked for a list\'s free choice, per list', async () => {
+      const fetchMock = mockFetch();
+      await renderHiker();
+
+      await act(() => captured.current.setListChoice(1, 1044));
+      await act(() => captured.current.setListChoice(2, 1016));
+
+      expect(captured.current.listChoices).toEqual({ 1: 1044, 2: 1016 });
+      expect(JSON.parse(localStorage.getItem('rotv-list-choices'))).toEqual({ 1: 1044, 2: 1016 });
+      const saves = fetchMock.mock.calls.filter(([url]) => url === '/api/user/settings/preferences');
+      expect(saves.at(-1)[1].body).toBe(JSON.stringify({ listChoices: { 1: 1044, 2: 1016 } }));
+    });
+
+    it('takes the picks the account holds', async () => {
+      mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listChoices: { 1: 1016 } } }) });
+      await renderHiker();
+
+      await waitFor(() => expect(captured.current.listChoices).toEqual({ 1: 1016 }));
+    });
+
+    it('saves contact details to the account only, when signed in', async () => {
+      const fetchMock = mockFetch();
+      await renderHiker();
+      const details = { firstName: 'Scott', lastName: 'McCarty', address: '1 Main St' };
+
+      let saved;
+      await act(async () => { saved = await captured.current.setContact(details); });
+
+      expect(saved).toBe(true);
+      expect(captured.current.contact).toEqual(details);
+      expect(localStorage.getItem('rotv-contact')).toBeNull();
+      const [, request] = fetchMock.mock.calls.find(([url]) => url === '/api/user/settings/preferences');
+      expect(request.body).toBe(JSON.stringify({ contact: details }));
+    });
+
+    it('reports when the account could not be told the contact details', async () => {
+      mockFetch(undefined, { '/api/user/settings/preferences': fetchResponse({ error: 'down' }, { status: 500 }) });
+      await renderHiker();
+
+      let saved;
+      await act(async () => { saved = await captured.current.setContact({ firstName: 'Scott' }); });
+
+      expect(saved).toBe(false);
+    });
+
+    it('keeps a signed-out visitor\'s contact details on the device', async () => {
+      const fetchMock = vi.fn(async (url) => fetchResponse(url === '/auth/user' ? null : {}));
+      vi.stubGlobal('fetch', fetchMock);
+      render(<AuthProvider><Probe /></AuthProvider>);
+      await waitFor(() => expect(captured.current.loading).toBe(false));
+
+      let saved;
+      await act(async () => { saved = await captured.current.setContact({ firstName: 'Scott', zip: '44313' }); });
+
+      expect(saved).toBe(true);
+      expect(JSON.parse(localStorage.getItem('rotv-contact'))).toEqual({ firstName: 'Scott', zip: '44313' });
+      expect(fetchMock.mock.calls.some(([url]) => url === '/api/user/settings/preferences')).toBe(false);
+    });
+
+    it('shows the contact details the account holds', async () => {
+      mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { contact: { city: 'Akron' } } }) });
+      await renderHiker();
+
+      await waitFor(() => expect(captured.current.contact).toEqual({ city: 'Akron' }));
+    });
+
+    it('takes the sort the account holds over the device\'s', async () => {
+      localStorage.setItem('rotv-list-sort', 'difficulty-desc');
+      mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listSort: 'park' } }) });
+      await renderHiker();
+
+      await waitFor(() => expect(captured.current.listSort).toBe('park'));
+    });
+
+    it('keeps a signed-out visitor\'s hikes on the device, and removes them there', async () => {
+      const fetchMock = vi.fn(async (url) => fetchResponse(url === '/auth/user' ? null : {}));
+      vi.stubGlobal('fetch', fetchMock);
+      render(<AuthProvider><Probe /></AuthProvider>);
+      await waitFor(() => expect(captured.current.loading).toBe(false));
+
+      await act(() => captured.current.saveListCheckin(1, null, 1044, '2026-10-06'));
+      expect(JSON.parse(localStorage.getItem('rotv-list-checkins')))
+        .toEqual([{ list_id: 1, item_id: null, poi_id: 1044, done_on: '2026-10-06' }]);
+      expect(fetchMock.mock.calls.some(([url]) => url === checkinUrl)).toBe(false);
+
+      await act(() => captured.current.removeListCheckin(1, null));
+      expect(captured.current.listCheckins).toEqual([]);
+      expect(JSON.parse(localStorage.getItem('rotv-list-checkins'))).toEqual([]);
+    });
+  });
 });

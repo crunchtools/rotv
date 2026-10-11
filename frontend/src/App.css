@@ -15171,3 +15171,538 @@ button.type-filter-chip {
     font-size: 0.85rem;
   }
 }
+
+/* Curated lists and their challenge (spec 050) */
+.results-tile-list-facts {
+  font-size: 0.75rem;
+  color: #525252;
+}
+
+.list-challenge {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #3d3d3d;
+}
+
+.list-challenge p {
+  margin: 0;
+}
+
+.list-challenge-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.list-challenge-tally {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-challenge-count {
+  font-size: 0.95rem;
+}
+
+.list-challenge-track {
+  height: 8px;
+  margin: 0.3rem 0;
+  background: #e2e2e2;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.list-challenge-fill {
+  height: 100%;
+  background: #b5541c;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.list-challenge-status {
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-challenge-form {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.list-challenge .list-challenge-form-about {
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-challenge-nudge {
+  padding: 0.5rem 0.65rem;
+  background: #fff7ed;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+.list-challenge-rules summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list-challenge-rules ul {
+  margin: 0.4rem 0;
+  padding-left: 1.1rem;
+}
+
+.list-challenge-rules li {
+  margin-bottom: 0.3rem;
+}
+
+.list-challenge-links {
+  display: flex;
+  gap: 1rem;
+}
+
+.list-badge-shield {
+  fill: #ececec;
+  stroke: #9a9a9a;
+  stroke-width: 2;
+}
+
+.list-badge-leaf {
+  fill: #b8b8b8;
+}
+
+.list-badge-year {
+  fill: #525252;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.list-badge.earned .list-badge-shield {
+  fill: #b5541c;
+  stroke: #6e2f0c;
+}
+
+.list-badge.earned .list-badge-leaf {
+  fill: #f6c453;
+}
+
+.list-badge.earned .list-badge-year {
+  fill: white;
+}
+
+.list-checkin {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.poi-action.list-checkin-btn.done {
+  background: #2d5016;
+  border-color: #2d5016;
+  color: white;
+}
+
+.list-checkin-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.list-checkin-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-checkin-date input[type="date"] {
+  min-height: 36px;
+  padding: 0 0.45rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #2d5016;
+  background: white;
+  border: 1px solid #4a7c23;
+  border-radius: 8px;
+}
+
+.results-tile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.find-list-sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #525252;
+}
+
+.find-list-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-height: 36px;
+  padding: 0 0.5rem 0 0.75rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #3d3d3d;
+  background: white;
+  border: 1px solid #b8b8b8;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.find-list-sort-btn path {
+  fill: #c4c4c4;
+}
+
+.find-list-sort-btn.active {
+  color: #2d5016;
+  border-color: #4a7c23;
+  font-weight: 600;
+}
+
+.find-list-sort-btn path.on {
+  fill: #2d5016;
+}
+
+.results-tile-list-tag {
+  display: inline-block;
+  margin-bottom: 0.15rem;
+  padding: 0.1rem 0.45rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #6e2f0c;
+  background: #fff7ed;
+  border: 1px solid #e9c9a8;
+  border-radius: 4px;
+}
+
+.list-choice-select {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 0.5rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  background: white;
+  border: 1px solid #b8b8b8;
+  border-radius: 8px;
+}
+
+.list-checkin-closed,
+.list-checkin-problem {
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-checkin-problem {
+  color: #a12a1a;
+}
+
+.list-hero {
+  margin: 0;
+}
+
+.list-hero img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+.list-hero figcaption {
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  color: #6b6b6b;
+  text-align: right;
+}
+
+/* The feature banner in Find's header: a door to another part of the site,
+   so it is dark and photographic where the lists below it are light. */
+.feature-banner {
+  position: relative;
+  margin-top: 0.75rem;
+}
+
+.feature-banner-slide {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  height: 180px;
+  padding: 0.85rem 0.9rem 1.5rem;
+  overflow: hidden;
+  background: #16240c;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+  font-family: inherit;
+  color: white;
+  text-align: left;
+  cursor: pointer;
+  animation: feature-banner-in 0.4s ease;
+}
+
+.feature-banner-slide.plain {
+  background: linear-gradient(120deg, #16240c, #3d5a1f 60%, #6e2f0c);
+}
+
+@keyframes feature-banner-in {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+.feature-banner-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.feature-banner-slide.titled .feature-banner-photo {
+  object-fit: contain;
+  object-position: top center;
+}
+
+.feature-banner-slide.titled .feature-banner-scrim {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 45%);
+}
+
+.feature-banner-scrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.35) 55%, rgba(0, 0, 0, 0.1) 100%);
+}
+
+.feature-banner-copy {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.feature-banner-kicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f6c453;
+}
+
+.feature-banner-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+.feature-banner-text {
+  font-size: 0.85rem;
+}
+
+.feature-banner-cta {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #16240c;
+  background: #f6c453;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.feature-banner-dots {
+  position: absolute;
+  bottom: 0.2rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 0.1rem;
+}
+
+.feature-banner-dot {
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.feature-banner-dot::before {
+  content: '';
+  display: block;
+  width: 7px;
+  height: 7px;
+  margin: 0 auto;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 50%;
+}
+
+.feature-banner-dot.active::before {
+  background: #f6c453;
+}
+
+.feature-banner .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .feature-banner-slide {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    height: 176px;
+  }
+
+  .feature-banner-slide.titled {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  .feature-banner-title {
+    font-size: 1.15rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-banner-slide {
+    animation: none;
+  }
+}
+
+.trail-shape-thumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #eef4e6;
+}
+
+.trail-shape-thumbnail path {
+  fill: none;
+  stroke: #2d5016;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trail-shape-thumbnail.moderate path {
+  stroke: #a8660a;
+}
+
+.trail-shape-thumbnail.strenuous path,
+.trail-shape-thumbnail.difficult path {
+  stroke: #8a2c12;
+}
+
+.seasonal-feature-pill {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  max-width: calc(100% - 9rem);
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #e9c9a8;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.seasonal-feature-open,
+.seasonal-feature-dismiss {
+  min-height: 34px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6e2f0c;
+  cursor: pointer;
+}
+
+.seasonal-feature-open {
+  padding: 0 0.25rem 0 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seasonal-feature-tally {
+  font-weight: 400;
+  color: #525252;
+}
+
+.seasonal-feature-dismiss {
+  padding: 0 0.7rem 0 0.4rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.list-badges {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list-badges-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #ececec;
+}
+
+.list-badges-name {
+  font-weight: 600;
+}
+
+.list-badges-status {
+  font-size: 0.85rem;
+  color: #525252;
+}
+
+.list-badges-hikes {
+  margin: 0.35rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: #3d3d3d;
+}
+
+@media (max-width: 768px) {
+  .seasonal-feature-pill {
+    top: 3.4rem;
+    max-width: calc(100% - 5rem);
+  }
+
+  .seasonal-feature-tally {
+    display: none;
+  }
+}

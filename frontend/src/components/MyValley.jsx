@@ -9,6 +9,8 @@ import PoiEvents from './sidebar/PoiEvents';
 import ContentDetail from './sidebar/ContentDetail';
 import BackButton from './BackButton';
 import TripsManager from './TripsManager';
+import ListBadges from './lists/ListBadges';
+import { listPath } from '../utils/tabPaths';
 import './MyValley.css';
 
 /**
@@ -41,6 +43,7 @@ export default function MyValley({ open, onClose, destinations = [] }) {
   // When set, a single news/event article is shown in-panel — { type, poiSlug, titleSlug }.
   const [favArticle, setFavArticle] = useState(null);
   const [tripCount, setTripCount] = useState(0);
+  const [badgeCount, setBadgeCount] = useState(0);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -211,6 +214,12 @@ export default function MyValley({ open, onClose, destinations = [] }) {
           >
             🗺️ Trips ({tripCount})
           </button>
+          <button
+            className={`settings-tab-btn ${view === 'badges' ? 'active' : ''}`}
+            onClick={() => selectView('badges')}
+          >
+            🛡️ Badges ({badgeCount})
+          </button>
         </nav>
 
         <div className="my-valley-body">
@@ -351,6 +360,11 @@ export default function MyValley({ open, onClose, destinations = [] }) {
           {view === 'trips' && (
             <TripsManager active={view === 'trips'} onClosed={onClose} />
           )}
+
+          {/* Mounted on every tab so the tab's count is known before it is opened. */}
+          <div hidden={view !== 'badges'}>
+            <ListBadges onCount={setBadgeCount} onOpenList={(slug) => { onClose(); navigate(listPath(slug)); }} />
+          </div>
         </div>
       </div>
     </div>

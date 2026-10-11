@@ -7,6 +7,7 @@ import { useTrip } from './hooks/useTrip';
 import TripBuilder from './components/TripBuilder';
 import MyTripsModal from './components/MyTripsModal';
 import MyValley from './components/MyValley';
+import SeasonalFeature from './components/lists/SeasonalFeature';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
 import useBoatPosition from './hooks/useBoatPosition';
 import useTrainPosition from './hooks/useTrainPosition';
@@ -348,6 +349,7 @@ function AppContent() {
   const prevPathnameRef = useRef(location.pathname);
 
   const [initialShowMtbOnly, setInitialShowMtbOnly] = useState(false);
+  const [findListSlug, setFindListSlug] = useState(null);
   const [isInMtbMode, setIsInMtbMode] = useState(false);
   const [selectedFromMtbList, setSelectedFromMtbList] = useState(false);
   const [mtbTrailsList, setMtbTrailsList] = useState([]);
@@ -808,6 +810,7 @@ function AppContent() {
     if (tabPath) {
       setActiveTab(tabPath.tab);
       if (tabPath.view) setHappeningView(tabPath.view);
+      if (tabPath.tab === 'find') setFindListSlug(tabPath.list || null);
       if (tabPath.redirectTo) navigate(tabPath.redirectTo, { replace: true });
     } else if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
       poiSlug = pathParts[0];
@@ -905,6 +908,7 @@ function AppContent() {
     if (tabPath) {
       setActiveTab(tabPath.tab);
       if (tabPath.view) setHappeningView(tabPath.view);
+      if (tabPath.tab === 'find') setFindListSlug(tabPath.list || null);
       if (tabPath.redirectTo) navigate(tabPath.redirectTo, { replace: true });
       document.title = 'Roots of The Valley';
       return;
@@ -2321,6 +2325,7 @@ function AppContent() {
             onSearchChange={handleSearchChange}
             initialShowMtbOnly={initialShowMtbOnly}
             initialShowOrganizationsOnly={isInOrganizationsMode}
+            listSlug={findListSlug}
             onFilterByTypes={handleFilterByTypes}
             iconConfig={iconConfig}
             editMode={editMode}
@@ -2554,6 +2559,7 @@ function AppContent() {
           pointerEvents: activeTab === 'view' ? 'auto' : 'none'
         }}
       >
+        {activeTab === 'view' && !editMode && <SeasonalFeature />}
         <Map
           destinations={filteredDestinations}
           parkPins={parkPins}

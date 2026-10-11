@@ -7,6 +7,15 @@ import {
   readVisited,
   addVisited as addAnonVisited,
   removeVisited as removeAnonVisited,
+  readListCheckins,
+  putListCheckin as putAnonListCheckin,
+  removeListCheckin as removeAnonListCheckin,
+  readListSort,
+  writeListSort,
+  readListChoices,
+  writeListChoices,
+  readContact,
+  writeContact,
   clearAnonSettings,
   remapMergedPoiIds
 } from '../utils/anonSettings';
@@ -38,6 +47,10 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null);
   const [favorites, setFavorites] = useState(() => readFavorites());
   const [visited, setVisited] = useState(() => readVisited());
+  const [listCheckins, setListCheckins] = useState(() => readListCheckins());
+  const [listSort, setListSortState] = useState(() => readListSort() || 'trail');
+  const [listChoices, setListChoicesState] = useState(() => readListChoices());
+  const [contact, setContactState] = useState(() => readContact());
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
   const [providers, setProviders] = useState({ google: true, facebook: false, password: true, passkey: true, passwordReset: false });
@@ -66,15 +79,23 @@ export function AuthProvider({ children }) {
           });
           setFavorites(userData.favorites || []);
           setVisited(userData.visited || []);
+          setListCheckins(userData.listCheckins || []);
+          if (userData.preferences?.listSort) setListSortState(userData.preferences.listSort);
+          if (userData.preferences?.listChoices) setListChoicesState(userData.preferences.listChoices);
+          setContactState(userData.preferences?.contact || {});
         } else {
           setUser(null);
           setFavorites(readFavorites());
           setVisited(readVisited());
+          setListCheckins(readListCheckins());
+          setContactState(readContact());
         }
       } else {
         setUser(null);
         setFavorites(readFavorites());
         setVisited(readVisited());
+        setListCheckins(readListCheckins());
+        setContactState(readContact());
       }
     } catch (err) {
       console.error('Failed to fetch user:', err);
@@ -82,6 +103,8 @@ export function AuthProvider({ children }) {
       setUser(null);
       setFavorites(readFavorites());
       setVisited(readVisited());
+      setListCheckins(readListCheckins());
+      setContactState(readContact());
     } finally {
       setLoading(false);
     }
@@ -118,6 +141,8 @@ export function AuthProvider({ children }) {
         setUser(null);
         setFavorites(readFavorites());
         setVisited(readVisited());
+        setListCheckins(readListCheckins());
+        setContactState(readContact());
       }
     } catch (err) {
       console.error('Logout failed:', err);
@@ -142,6 +167,8 @@ export function AuthProvider({ children }) {
     setUser(null);
     setFavorites([]);
     setVisited([]);
+    setListCheckins([]);
+    setContactState({});
   };
 
   // Shared by the account calls: send JSON, throw the server's message on failure.
@@ -319,6 +346,122 @@ export function AuthProvider({ children }) {
     return !wasVisited;
   }, [visited, user]);
 
+  const sameCheckin = (a, b) => a.list_id === b.list_id && (a.item_id ?? null) === (b.item_id ?? null);
+
+  // Log, or re-date, one check-in on a curated list (spec 050). `itemId` null
+  // is the list's free choice, and `poiId` then the trail chosen. Resolves to
+  // an error message, or null when it was saved. Updates build on the latest
+  // state, so two hikes marked in quick succession both stay.
+  // Fix: a refused or failed change reloads the account's check-ins rather than restoring a
+  // snapshot, which overlapping changes to one hike could leave stale (PR #768 review)
+  const saveListCheckin = useCallback(async (listId, itemId, poiId, doneOn) => {
+    const checkin = { list_id: listId, item_id: itemId ?? null, poi_id: poiId ?? null, done_on: doneOn };
+    setListCheckins(current => [...current.filter(c => !sameCheckin(c, checkin)), checkin]);
+
+    if (!user) {
+      putAnonListCheckin(checkin);
+      return null;
+    }
+    try {
+      const res = await fetch(`/api/lists/${listId}/checkins`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(checkin)
+      });
+      if (res.ok) return null;
+      const problem = await res.json();
+      await fetchUser();
+      return problem.error || 'Could not save that. Please try again.';
+    } catch (err) {
+      console.warn('Could not save the check-in:', err);
+      await fetchUser();
+      return 'Could not save that. Please try again.';
+    }
+  }, [user, fetchUser]);
+
+  const removeListCheckin = useCallback(async (listId, itemId) => {
+    const gone = { list_id: listId, item_id: itemId ?? null };
+    setListCheckins(current => current.filter(c => !sameCheckin(c, gone)));
+
+    if (!user) {
+      removeAnonListCheckin(listId, itemId ?? null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/lists/${listId}/checkins/${itemId ?? 'choice'}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    } catch (err) {
+      console.warn('Could not remove the check-in:', err);
+      await fetchUser();
+    }
+  }, [user, fetchUser]);
+
+  // Display preferences for curated lists (spec 050) are remembered on the
+  // device and, signed in, on the account. Resolves false when the account
+  // could not be told; the device has them either way.
+  const savePreferences = useCallback(async (changes) => {
+    if (!user) return true;
+    try {
+      const res = await fetch('/api/user/settings/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(changes)
+      });
+      return res.ok;
+    } catch (err) {
+      console.warn('Could not save the preference to the account; it is kept on this device:', err);
+      return false;
+    }
+  }, [user]);
+
+  /**
+   * Remember how curated lists are sorted.
+   * @param {string} sort A sort as parseListSort() reads it, e.g. `park-desc`
+   * @returns {Promise<boolean>} false when signed in and the account could not be told
+   */
+  const setListSort = useCallback((sort) => {
+    setListSortState(sort);
+    writeListSort(sort);
+    return savePreferences({ listSort: sort });
+  }, [savePreferences]);
+
+  /**
+   * Remember the trail picked for a list's free choice before it is marked
+   * hiked. `listChoices` in the context is the whole set, `{ listId: poiId }`.
+   * Kept on the device, and on the account when signed in.
+   * @param {number} listId The curated list
+   * @param {number} poiId The trail picked
+   * @returns {Promise<boolean>} false when signed in and the account could not be told
+   */
+  const setListChoice = useCallback((listId, poiId) => {
+    const next = { ...listChoices, [listId]: poiId };
+    setListChoicesState(next);
+    writeListChoices(next);
+    return savePreferences({ listChoices: next });
+  }, [listChoices, savePreferences]);
+
+  /**
+   * Save the name, mailing address and phone used to fill in forms (Settings ›
+   * General). Signed in they are kept on the account only; signed out, on the
+   * device. `contact` in the context is what was last saved.
+   * @param {{firstName?: string, lastName?: string, address?: string, city?: string, state?: string,
+   *   zip?: string, phone?: string}} details The whole set; a blank field clears it
+   * @returns {Promise<boolean>} false when signed in and the account could not be told
+   */
+  const setContact = useCallback((details) => {
+    setContactState(details);
+    if (!user) {
+      writeContact(details);
+      return Promise.resolve(true);
+    }
+    return savePreferences({ contact: details });
+  }, [user, savePreferences]);
+
   const value = {
     user,
     loading,
@@ -332,6 +475,15 @@ export function AuthProvider({ children }) {
     visited,
     isVisited,
     toggleVisited,
+    listCheckins,
+    saveListCheckin,
+    removeListCheckin,
+    listSort,
+    setListSort,
+    listChoices,
+    setListChoice,
+    contact,
+    setContact,
     logout,
     loginWithGoogle,
     loginWithFacebook,

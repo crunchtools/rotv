@@ -89,6 +89,7 @@ import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from 
 import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import { resolveMergedIds, originalMergedName } from './services/poiMergeService.js';
+import { createListsRouter } from './routes/lists.js';
 import {
   getAllActiveSeries,
   nextOccurrence,
@@ -238,6 +239,7 @@ app.use('/api/trips', createTripsRouter(pool));
 app.use('/api/user/settings', createUserSettingsRouter(pool));
 app.use('/api/favorites', createFavoritesRouter(pool));
 app.use('/api/visited', createVisitedRouter(pool));
+app.use('/api/lists', createListsRouter(pool));
 app.use('/api/notifications', createNotificationsRouter(pool));
 
 async function initDatabase() {
@@ -654,6 +656,74 @@ async function initDatabase() {
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS merged_into_id INTEGER REFERENCES pois(id)
     `);
+    // Curated lists of places, one row per edition (spec 050). Twin of
+    // migration 101, which runs before this table's parent exists on a fresh database.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS poi_lists (
+        id SERIAL PRIMARY KEY,
+        series TEXT NOT NULL,
+        edition INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        description TEXT,
+        goal_count INTEGER,
+        source_url TEXT,
+        organizer_poi_id INTEGER REFERENCES pois(id) ON DELETE SET NULL,
+        starts_on DATE NOT NULL,
+        ends_on DATE NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+        featured BOOLEAN NOT NULL DEFAULT FALSE,
+        choice_label TEXT,
+        choice_description TEXT,
+        rewards TEXT,
+        rewards_until DATE,
+        form_url TEXT,
+        hero_image TEXT,
+        hero_credit TEXT,
+        form_file TEXT,
+        form_layout JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (series, edition)
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS poi_list_items (
+        id SERIAL PRIMARY KEY,
+        list_id INTEGER NOT NULL REFERENCES poi_lists(id) ON DELETE CASCADE,
+        poi_id INTEGER NOT NULL REFERENCES pois(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        label TEXT,
+        note TEXT,
+        miles NUMERIC(5,2),
+        rating TEXT,
+        trail_class TEXT,
+        trailhead TEXT,
+        nav_latitude NUMERIC(10,8),
+        nav_longitude NUMERIC(11,8),
+        UNIQUE (list_id, position)
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_poi_list_items_poi_id ON poi_list_items(poi_id)');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_list_checkins (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        list_id INTEGER NOT NULL REFERENCES poi_lists(id) ON DELETE CASCADE,
+        item_id INTEGER REFERENCES poi_list_items(id) ON DELETE CASCADE,
+        poi_id INTEGER REFERENCES pois(id) ON DELETE SET NULL,
+        done_on DATE NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_list_checkins_item
+        ON user_list_checkins (user_id, list_id, item_id) WHERE item_id IS NOT NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_list_checkins_choice
+        ON user_list_checkins (user_id, list_id) WHERE item_id IS NULL
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_user_list_checkins_poi ON user_list_checkins (poi_id)');
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_color TEXT DEFAULT '#228B22'
     `);
@@ -2715,7 +2785,7 @@ app.use(async (req, res, next) => {
 // OG-tag injection for POI deep links: ?poi=slug (query) and /:slug (path
 // permalink — the form share buttons produce). MUST be mounted before
 // express.static so it can intercept the request before index.html is served.
-const OG_RESERVED_PATHS = new Set(['find', 'happening', 'organizations', 'results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'privacy', 'data-deletion', 'terms', 'signin', 'signup', 'login', 'welcome', 'reset-password']);
+const OG_RESERVED_PATHS = new Set(['find', 'happening', 'organizations', 'results', 'news', 'events', 'settings', 'about', 'mtb-trail-status', 'fall-hiking-spree', 'privacy', 'data-deletion', 'terms', 'signin', 'signup', 'login', 'welcome', 'reset-password']);
 app.use(async (req, res, next) => {
   let poiSlug = null;
   let canonicalPath = null;
