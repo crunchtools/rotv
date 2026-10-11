@@ -3,15 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import AccountProfile from './auth/AccountProfile';
 import SignInMethods from './auth/SignInMethods';
+import ContactDetails from './ContactDetails';
 
 const TIMEZONES = [
-  { value: 'America/New_York', label: 'Eastern Time (EST/EDT)', icon: '🗽' },
-  { value: 'America/Chicago', label: 'Central Time (CST/CDT)', icon: '🌆' },
-  { value: 'America/Denver', label: 'Mountain Time (MST/MDT)', icon: '⛰️' },
-  { value: 'America/Los_Angeles', label: 'Pacific Time (PST/PDT)', icon: '🌉' },
-  { value: 'America/Anchorage', label: 'Alaska Time (AKST/AKDT)', icon: '❄️' },
-  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST)', icon: '🌺' },
-  { value: 'UTC', label: 'UTC (Universal Time)', icon: '🌍' }
+  { value: 'America/New_York', label: 'Eastern Time (EST/EDT)' },
+  { value: 'America/Chicago', label: 'Central Time (CST/CDT)' },
+  { value: 'America/Denver', label: 'Mountain Time (MST/MDT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific Time (PST/PDT)' },
+  { value: 'America/Anchorage', label: 'Alaska Time (AKST/AKDT)' },
+  { value: 'Pacific/Honolulu', label: 'Hawaii Time (HST)' },
+  { value: 'UTC', label: 'UTC (Universal Time)' }
 ];
 
 // Self-service account deletion (#700). Two-step inline confirm rather than a
@@ -36,8 +37,8 @@ function DeleteAccount() {
   };
 
   return (
-    <div className="danger-zone">
-      <h4>Delete my account</h4>
+    <section className="settings-card danger-zone">
+      <h3>Delete my account</h3>
       <p className="danger-warning">
         Permanently deletes your account, favorites, visited places, saved trips and preferences,
         and signs you out everywhere. This cannot be undone.
@@ -62,34 +63,23 @@ function DeleteAccount() {
           What gets deleted and what stays
         </a>
       </p>
-    </div>
+    </section>
   );
 }
 
-// Settings › Your Account (#700, spec 046): profile, email confirmation,
-// sign-in methods, and account deletion.
-function AccountSection() {
-  const { user, isAdmin } = useAuth();
-  if (!user) return null;
+const LEGAL_PAGES = [
+  { path: '/privacy', label: 'Privacy Policy' },
+  { path: '/data-deletion', label: 'Deleting Your Data' },
+  { path: '/terms', label: 'Terms of Service' }
+];
 
-  return (
-    <>
-      <div className="settings-divider"></div>
-      <div className="settings-section">
-        <h3>Your Account</h3>
-        <AccountProfile />
-        <SignInMethods />
-        {!isAdmin && <DeleteAccount />}
-      </div>
-    </>
-  );
-}
-
+// Settings › General: who you are first, then how you sign in, then
+// preferences; deleting the account and the legal pages close the page.
 function GeneralSettings() {
   const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
   const [timezone, setTimezone] = useState('America/New_York');
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState(null);
+  const [timezoneSaved, setTimezoneSaved] = useState(false);
 
   useEffect(() => {
     const savedTimezone = localStorage.getItem('app-timezone');
@@ -98,104 +88,68 @@ function GeneralSettings() {
     }
   }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
-    setSaveMessage(null);
-
+  // Saved as soon as it is picked: there is nothing else on the form to confirm.
+  const pickTimezone = (value) => {
+    setTimezone(value);
     try {
-      localStorage.setItem('app-timezone', timezone);
-
-      setSaveMessage({ type: 'success', text: 'Timezone saved successfully!' });
-      setTimeout(() => setSaveMessage(null), 3000);
-    } catch {
-      setSaveMessage({ type: 'error', text: 'Failed to save timezone' });
-    } finally {
-      setSaving(false);
+      localStorage.setItem('app-timezone', value);
+      setTimezoneSaved(true);
+    } catch (err) {
+      console.warn('Could not save the timezone on this device:', err);
+      setTimezoneSaved(false);
     }
   };
 
-  const selectedTz = TIMEZONES.find(tz => tz.value === timezone);
-
   return (
     <div className="general-settings">
-      <div className="settings-section">
-        <h3>🕐 Timezone</h3>
-        <p className="settings-description">
-          Select your local timezone. This ensures dates from news articles and events are interpreted correctly.
-        </p>
+      {user ? (
+        <>
+          <section className="settings-card">
+            <h3>Your Account</h3>
+            <AccountProfile />
+          </section>
+          <section className="settings-card">
+            <SignInMethods />
+          </section>
+        </>
+      ) : (
+        <ContactDetails />
+      )}
 
+      <section className="settings-card">
+        <h3>Preferences</h3>
         <div className="settings-field">
-          <label htmlFor="timezone-select">Your Timezone</label>
+          <label htmlFor="timezone-select">Timezone</label>
           <select
             id="timezone-select"
             value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
+            onChange={(e) => pickTimezone(e.target.value)}
             className="timezone-select"
           >
             {TIMEZONES.map(tz => (
-              <option key={tz.value} value={tz.value}>
-                {tz.icon} {tz.label}
-              </option>
+              <option key={tz.value} value={tz.value}>{tz.label}</option>
             ))}
           </select>
-          <p className="field-hint">
-            All news and event dates will be interpreted in {selectedTz?.label || 'your selected timezone'}
+          <p className="field-hint" role="status">
+            {timezoneSaved ? 'Saved. ' : ''}News and event dates are shown in this timezone.
           </p>
         </div>
+      </section>
 
-        <div className="settings-actions">
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="save-settings-btn"
+      {user && !isAdmin && <DeleteAccount />}
+
+      <nav className="settings-legal" aria-label="Legal">
+        {LEGAL_PAGES.map(page => (
+          <a
+            key={page.path}
+            href={page.path}
+            className="settings-link"
+            onClick={(e) => { e.preventDefault(); navigate(page.path); }}
           >
-            {saving ? '💾 Saving...' : '💾 Save Settings'}
-          </button>
-
-          {saveMessage && (
-            <div className={`save-message ${saveMessage.type}`}>
-              {saveMessage.type === 'success' ? '✓' : '✗'} {saveMessage.text}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="settings-divider"></div>
-
-      <div className="settings-info-box">
-        <div className="info-box-header">
-          <span className="info-icon">ℹ️</span>
-          <strong>How Timezone Works</strong>
-        </div>
-        <ul className="info-list">
-          <li>When you refresh News or Events, the AI uses your timezone setting</li>
-          <li>Dates are extracted in ISO 8601 format (YYYY-MM-DD)</li>
-          <li>All dates match exactly what appears on the source websites</li>
-        </ul>
-      </div>
-
-      <div className="settings-divider"></div>
-
-      <div className="settings-section">
-        <h3>Legal</h3>
-        <a
-          href="/privacy"
-          className="settings-link"
-          onClick={(e) => { e.preventDefault(); navigate('/privacy'); }}
-        >
-          Privacy Policy
-        </a>
-        <br />
-        <a
-          href="/data-deletion"
-          className="settings-link"
-          onClick={(e) => { e.preventDefault(); navigate('/data-deletion'); }}
-        >
-          Deleting Your Data
-        </a>
-      </div>
-
-      <AccountSection />
+            {page.label}
+          </a>
+        ))}
+      </nav>
     </div>
   );
 }

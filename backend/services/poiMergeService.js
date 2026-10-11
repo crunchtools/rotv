@@ -188,6 +188,8 @@ const PLAIN_REPOINTS = [
   ['river_gauges', 'river_poi_id'],
   ['photo_submissions', 'poi_id'],
   ['poi_newsletter_sources', 'poi_id'],
+  ['poi_list_items', 'poi_id'],
+  ['user_list_checkins', 'poi_id'],
   ['pois', 'owner_id']
 ];
 

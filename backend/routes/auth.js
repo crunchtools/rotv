@@ -9,6 +9,7 @@ import { limiter, ipKey, stampLogin } from '../utils/authSession.js';
 import { addAccountRoutes } from './authAccounts.js';
 import { displayNameOf } from '../services/accountProfile.js';
 import { releaseNewsletterOptIn } from '../services/signupNewsletter.js';
+import { getUserCheckins } from '../services/poiListService.js';
 
 const logger = createLogger('Auth');
 
@@ -188,15 +189,35 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
 
   addAccountRoutes(router, pool, { mailer, frontendUrl: FRONTEND_URL });
 
+  // The rest of /auth/user must still load when the check-ins cannot be read.
+  const loadListCheckins = async (userId) => {
+    try {
+      return await getUserCheckins(pool, userId);
+    } catch (err) {
+      logger.error('Failed to load list check-ins for /auth/user, returning none:', err);
+      return [];
+    }
+  };
+
   router.get('/user', async (req, res) => {
     if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
+      // What the test admin saved in Settings, read for real so the hosted dev
+      // container shows it after a reload as production would.
+      let testAdmin = {};
+      try {
+        const saved = await pool.query('SELECT name, preferences FROM users WHERE id = 999');
+        testAdmin = saved.rows[0] || {};
+      } catch (err) {
+        logger.error('Failed to load the test admin for /auth/user, using defaults:', err);
+      }
       return res.json({
         id: 999,
         email: 'test-admin@rotv.local',
-        name: 'Test Admin',
+        name: testAdmin.name || 'Test Admin',
         username: null,
         displayPreference: 'name',
-        displayName: 'Test Admin',
+        // Fix: follow the saved name here too, as the header shows displayName (PR #768 review)
+        displayName: testAdmin.name || 'Test Admin',
         emailVerified: true,
         needsSignupCompletion: false,
         pictureUrl: null,
@@ -204,7 +225,9 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         role: 'admin',
         favorites: [],
         visited: [],
-        preferences: {}
+        // Read for real, so a check-in made in the hosted dev container survives a reload.
+        listCheckins: await loadListCheckins(999),
+        preferences: testAdmin.preferences || {}
       });
     }
 
@@ -232,6 +255,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         logger.error('Failed to load visited for /auth/user, returning none:', err);
         visited = [];
       }
+      const listCheckins = await loadListCheckins(id);
       res.json({
         id,
         email,
@@ -246,6 +270,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         role: role || 'viewer',
         favorites,
         visited,
+        listCheckins,
         preferences: preferences || {}
       });
     } else {

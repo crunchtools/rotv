@@ -63,3 +63,12 @@ Timezone, newsletter, and trips are also synced through `syncAnonSettings()` /
 `/sync` but are not POI-id lists; they each have a bespoke server-wins branch. The
 rule (anonymous-first + idempotent login sync) is the same; only the storage helper
 differs.
+
+Check-ins against curated lists (spec 050) are the same again: `rotv-list-checkins` holds
+`{ list_id, item_id, poi_id, done_on }` rows, `/sync` passes them to `syncCheckins()`, which
+keeps the account's date where both have one and drops any the list's rules refuse.
+
+Display preferences live in `users.preferences` (JSONB). `allowedPreferences()` in
+`backend/routes/userSettings.js` is the whitelist of keys and values; `/sync` fills gaps from the
+device and `PUT /api/user/settings/preferences` replaces a value the signed-in user changes. The
+first one is `listSort`, how a curated list is ordered.

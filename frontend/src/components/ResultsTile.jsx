@@ -1,5 +1,6 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo } from 'react';
 import { getIconUrlForPOI } from '../utils/iconUtils';
+import { trailShapePath } from '../utils/trailShape';
 
 /**
  * One row in the Find tab's list.
@@ -15,10 +16,13 @@ import { getIconUrlForPOI } from '../utils/iconUtils';
  * @param {{status: string}} [props.status]
  * @param {boolean} [props.showStatusInfo] Show the MTB trail status block instead of the description
  * @param {{status?: string, conditions?: string, last_updated?: string}} [props.statusData]
+ * @param {object} [props.listItem] The row is an entry on a curated list (spec 050): what the
+ *   organizer calls it, how long and hard it is, and where to park
  * @param {object[]} [props.iconConfig] Icon types, for the row's type icon
+ * @param {import('react').ReactNode} [props.children] Controls shown under the row's text
  * @returns {JSX.Element}
  */
-const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, parkName, showStatusBadge, status, showStatusInfo, statusData, iconConfig }) {
+const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, parkName, showStatusBadge, status, showStatusInfo, statusData, listItem, iconConfig, children }) {
   const imageUrl = poi.has_primary_image
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
@@ -26,6 +30,13 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
   const isMtbTrailhead = !isLinear && !isVirtual && (poi.poi_roles?.includes('mtb_trail') || (poi.status_url && poi.status_url.trim() !== ''));
 
   const getDefaultThumbnail = () => '/brand/rotv-logo.png';
+
+  // A trail is shown as a drawing of its own line, not a photo: a small trail map.
+  const trailShape = useMemo(
+    () => (isLinear && poi.poi_roles?.includes('trail') ? trailShapePath(poi.geometry) : null),
+    [isLinear, poi.poi_roles, poi.geometry]
+  );
+  const ratingClass = (listItem?.rating || poi.difficulty || '').toLowerCase();
 
   const getPoiType = () => {
     if (isVirtual) return 'virtual';
@@ -48,7 +59,11 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       tabIndex={0}
     >
       <div className={`results-tile-image ${isVirtual ? 'virtual-thumbnail' : ''}`}>
-        {imageUrl ? (
+        {trailShape ? (
+          <svg className={`trail-shape-thumbnail ${ratingClass}`} viewBox="0 0 100 100" role="img" aria-label={`Shape of ${poi.name}`}>
+            <path d={trailShape} />
+          </svg>
+        ) : imageUrl ? (
           <img
             src={imageUrl}
             alt={poi.name}
@@ -65,7 +80,8 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       </div>
 
       <div className="results-tile-content">
-        <div className="results-tile-name">{poi.name}</div>
+        {listItem?.tag && <div className="results-tile-list-tag">{listItem.tag}</div>}
+        <div className="results-tile-name">{listItem?.label || poi.name}</div>
         {parkName && <div className="results-tile-park">in {parkName}</div>}
 
         <div className="results-tile-badges">
@@ -84,7 +100,13 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
           {poi.era_name && (
             <span className="results-tile-era">{poi.era_name}</span>
           )}
-          {isLinear && poi.difficulty && (
+          {listItem && (
+            <span className="results-tile-list-facts">
+              {[listItem.miles != null && `${listItem.miles} mi`, listItem.rating, listItem.trail_class && `Class ${listItem.trail_class}`]
+                .filter(Boolean).join(' · ')}
+            </span>
+          )}
+          {isLinear && poi.difficulty && !listItem && (
             <span className={`results-tile-difficulty ${poi.difficulty.toLowerCase()}`}>
               {poi.difficulty}
             </span>
@@ -107,11 +129,17 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
               </div>
             )}
           </div>
+        ) : listItem ? (
+          <div className="results-tile-description">
+            {listItem.note && <div>{listItem.note}</div>}
+            {listItem.trailhead && <div>Park at {listItem.trailhead}</div>}
+          </div>
         ) : poi.brief_description && (
           <div className="results-tile-description">
             {poi.brief_description}
           </div>
         )}
+        {children}
       </div>
     </div>
   );

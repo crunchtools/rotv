@@ -17,6 +17,7 @@
     "leaflet": "^1.9.4",
     "leaflet-draw": "^1.0.4",
     "marked": "^18.0.14",
+    "pdf-lib": "^1.17.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-leaflet": "^5.0.0",

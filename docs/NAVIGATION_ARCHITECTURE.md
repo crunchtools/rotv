@@ -69,7 +69,7 @@ Three primary tabs, each a word and an icon (`NAV_TABS` in `frontend/src/App.jsx
 | Tab | id | URL | What it is |
 |---|---|---|---|
 | Map | `view` | `/`, `/<poi-slug>` | The map and the place card |
-| Find | `find` | `/find`, `/mtb-trail-status`, `/organizations` | A directory of every place (`FindTab.jsx`) |
+| Find | `find` | `/find`, `/fall-hiking-spree`, `/find/<list>`, `/mtb-trail-status`, `/organizations` | A directory of every place (`FindTab.jsx`) |
 | Happening | `happening` | `/happening`, `/happening/events` | News and events (`HappeningTab.jsx`) |
 
 Settings and About are tabs too (`settings`, `about`) but are reached from the account menu. `/results`, `/news` and `/events` redirect in the browser to `/find`, `/happening` and `/happening/events`; `parseTabPath()` owns the mapping. The server keeps tab paths out of POI slugs with `OG_RESERVED_PATHS` in `backend/server.js`; a new top-level path must be added in both places.
@@ -88,8 +88,24 @@ On a wide screen the tabs sit in the header. At 768px and below (`useIsMobile`, 
 - Lists every POI whatever the map shows. No query: alphabetical. With a query: `rankPois()` (`frontend/src/utils/poiRank.js`) puts an exact name first, then parks, destinations and organizations, trails and rivers, and amenities (restrooms, playgrounds, parking) last; a name that starts with the query beats one that contains it.
 - The search box is the same value as the map legend's search (`activeFilters.search`).
 - Each row names the park it is in. `buildParkIndex()` and `findContainingPark()` (`frontend/src/utils/parkContainment.js`) do point-in-polygon against the park outlines already loaded; a trail uses its first point and the smallest containing park wins. Nothing is stored and the API is unchanged.
-- The list picker switches between All places, MTB Trail Status and Organizations, from `/api/results-subtabs`. Seasonal lists (#711) will be more entries here.
+- The list picker switches between All places, MTB Trail Status and Organizations, from `/api/results-subtabs`, followed by any curated list in season (below).
 - Type chips sit behind a `Filters · n` button (`FilterSheet.jsx`), where n is the number of types hidden. News and Events use the same component.
+
+## Curated lists and challenges
+
+A curated list is a set of places an organizer names for a season, with the rules for completing it: the Summit Metro Parks Fall Hiking Spree (spec 050). `poi_lists` holds one row per edition of a series (`fall-hiking-spree`, 2026) with its season, goal, free choice and rewards; `poi_list_items` holds a POI plus what the organizer says about it; `user_list_checkins` holds one dated hike a person logged.
+
+- `GET /api/lists` (`backend/routes/lists.js`, `backend/services/poiListService.js`) returns the lists that are published and in season today, in Eastern time. `?ids=` returns published lists whatever the season, which is how an earlier year's badge finds its list.
+- The rules live in two places that must agree: `checkinProblem()` on the server decides what is stored, and `frontend/src/utils/listProgress.js` decides what the buttons offer and when the badge is earned. A hike is dated inside the season and not in the future; one per item; one free choice.
+- Check-ins follow the local-first recipe in `docs/USER_DATA_FRAMEWORK.md`: `rotv-list-checkins` in localStorage, `listCheckins` in `AuthContext` and `/auth/user`, `syncCheckins()` on sign-in.
+- Find adds each list to its picker (`parseTabPath` returns `list`). A list named in `LIST_PATHS` (`frontend/src/utils/tabPaths.js`) has a top-level address, `/fall-hiking-spree`, which must also be in `OG_RESERVED_PATHS`; any other list is at `/find/<series>`. `listPath()` gives the right one. `ListChallenge` is the header (banner, tally, badge, rules). Rows come from `curatedListRows`, plus one `choiceRow` for the free choice (`choiceCandidates` narrows the menu, `suggestChoice` fills it before the person picks), sorted by `sortListRows`; each carries a Navigate button and a `ListCheckinControl`.
+- A row hands the map the POI with the item's trailhead copied onto `navigation_latitude/longitude`, so Navigate goes to the lot for that hike even when the POI is a 100-mile trail. The copy lives only on the selected object; the POI row is untouched.
+- Download completed form (`frontend/src/utils/listForm.js`) writes the person's hike dates, free choice, name and email onto the organizer's own PDF in the browser. The PDF is `form_file` (kept in `frontend/public/lists/`) and `form_layout` says where each answer goes; both are per edition.
+- `SeasonalFeature` is the pill over the map for a `featured` list in season, dismissed per edition. `ListBadges` is My Valley's Badges tab.
+- `FeatureBanner` (`frontend/src/components/FeatureBanner.jsx`) is the rotating banner at the top of Find's All places; `featureSlides()` decides what it advertises, and a new feature is one more slide there.
+- `ResultsTile` draws every trail from its geometry (`frontend/src/utils/trailShape.js`) instead of showing a photo.
+- `mergePois` repoints `poi_list_items` and `user_list_checkins`. A deleted POI's item is left out of the response.
+- A new edition is a new `poi_lists` row and its items; migration 101 seeds 2026 and shows the shape. Earlier editions are never deleted: people's badges hang off them.
 
 ## The place card on a phone
 

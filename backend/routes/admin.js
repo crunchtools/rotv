@@ -745,6 +745,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'github_api_token',
       'about_story_md',
       'about_tutorial_md',
+      'about_trip_tutorial_md',
+      'about_list_tutorial_md',
       'about_privacy_md',
       'about_data_deletion_md',
       'about_terms_md',
