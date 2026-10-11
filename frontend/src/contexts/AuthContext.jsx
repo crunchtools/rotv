@@ -14,6 +14,8 @@ import {
   writeListSort,
   readListChoices,
   writeListChoices,
+  readContact,
+  writeContact,
   clearAnonSettings,
   remapMergedPoiIds
 } from '../utils/anonSettings';
@@ -48,6 +50,7 @@ export function AuthProvider({ children }) {
   const [listCheckins, setListCheckins] = useState(() => readListCheckins());
   const [listSort, setListSortState] = useState(() => readListSort() || 'trail');
   const [listChoices, setListChoicesState] = useState(() => readListChoices());
+  const [contact, setContactState] = useState(() => readContact());
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
   const [providers, setProviders] = useState({ google: true, facebook: false, password: true, passkey: true, passwordReset: false });
@@ -79,17 +82,20 @@ export function AuthProvider({ children }) {
           setListCheckins(userData.listCheckins || []);
           if (userData.preferences?.listSort) setListSortState(userData.preferences.listSort);
           if (userData.preferences?.listChoices) setListChoicesState(userData.preferences.listChoices);
+          setContactState(userData.preferences?.contact || {});
         } else {
           setUser(null);
           setFavorites(readFavorites());
           setVisited(readVisited());
           setListCheckins(readListCheckins());
+          setContactState(readContact());
         }
       } else {
         setUser(null);
         setFavorites(readFavorites());
         setVisited(readVisited());
         setListCheckins(readListCheckins());
+        setContactState(readContact());
       }
     } catch (err) {
       console.error('Failed to fetch user:', err);
@@ -98,6 +104,7 @@ export function AuthProvider({ children }) {
       setFavorites(readFavorites());
       setVisited(readVisited());
       setListCheckins(readListCheckins());
+      setContactState(readContact());
     } finally {
       setLoading(false);
     }
@@ -135,6 +142,7 @@ export function AuthProvider({ children }) {
         setFavorites(readFavorites());
         setVisited(readVisited());
         setListCheckins(readListCheckins());
+        setContactState(readContact());
       }
     } catch (err) {
       console.error('Logout failed:', err);
@@ -160,6 +168,7 @@ export function AuthProvider({ children }) {
     setFavorites([]);
     setVisited([]);
     setListCheckins([]);
+    setContactState({});
   };
 
   // Shared by the account calls: send JSON, throw the server's message on failure.
@@ -424,6 +433,17 @@ export function AuthProvider({ children }) {
     return savePreferences({ listChoices: next });
   }, [listChoices, savePreferences]);
 
+  // Name, mailing address and phone for filling in forms (Settings › General).
+  // Signed in they are kept on the account only; signed out, on the device.
+  const setContact = useCallback((details) => {
+    setContactState(details);
+    if (!user) {
+      writeContact(details);
+      return Promise.resolve(true);
+    }
+    return savePreferences({ contact: details });
+  }, [user, savePreferences]);
+
   const value = {
     user,
     loading,
@@ -444,6 +464,8 @@ export function AuthProvider({ children }) {
     setListSort,
     listChoices,
     setListChoice,
+    contact,
+    setContact,
     logout,
     loginWithGoogle,
     loginWithFacebook,

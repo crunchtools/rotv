@@ -60,10 +60,11 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ### The completed form
 - A list with a form shows a Download completed form button under the tally. The blank Official form link under How it works stays.
-- The download is the organizer's PDF, unchanged, with this written on it: the date of each hike on that trail's row, the free choice's trail and date on its row, and, signed in, the account's first name, last name and email. Returning hiker is ticked when the person earned an earlier year's badge in ROTV; First-year is never ticked, because ROTV cannot know.
-- Everything else (address, phone, county, signatures, other participants) is left for the person.
+- The download is the organizer's PDF, unchanged, with this written on it: the date of each hike on that trail's row, the free choice's trail and date on its row, the person's details from Settings (first and last name, mailing address, city, state, ZIP, cell number), and, signed in, the account's email. A name not given in Settings falls back to the account's. Returning hiker is ticked when the person earned an earlier year's badge in ROTV; First-year is never ticked, because ROTV cannot know.
+- Everything else (county resident, signatures, other participants) is left for the person.
+- Settings › General has a Your details section for those fields. They are used only to fill in forms. Signed in they are kept on the account (`users.preferences.contact`) and not on the device; signed out they are kept on the device and move to the account on sign-in.
 - It is written in the browser (`frontend/src/utils/listForm.js`, pdf-lib loaded on demand), so it works signed out with the hikes held on the device and nothing is sent anywhere.
-- `form_layout` holds the positions in PDF points from the page's bottom left: `dateX`, a `rows` map from item position to baseline, `choice`, `lastName`, `firstName`, `email`, `returning`. A new year's form needs a new layout; `listForm.test.js` writes a filled form to `LIST_FORM_OUT` for checking one by eye.
+- `form_layout` holds the positions in PDF points from the page's bottom left: `dateX`, a `rows` map from item position to baseline, `choice`, `returning`, and one entry per detail (`lastName`, `firstName`, `address`, `city`, `state`, `zip`, `email`, `phone`). On this form each answer is written above its rule, with the label printed beneath. A new year's form needs a new layout; `listForm.test.js` writes a filled form to `LIST_FORM_OUT` for checking one by eye.
 
 ### My Valley
 - A Badges tab lists every list the person has a check-in on, plus those in season: the badge, the tally or the date earned, the dated hikes, and which year of the series this is for them.
@@ -85,7 +86,7 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 | `DELETE /api/lists/:listId/checkins/:itemId` | New, signed in. `:itemId` is an item id or `choice`. 400 when either id is neither; removing a check-in that is not there succeeds; 401 signed out. |
 | `GET /auth/user` | Adds `listCheckins`. |
 | `POST /api/user/settings/sync` | Accepts `listCheckins` and `preferences` from the device; a preference the account already holds wins. |
-| `PUT /api/user/settings/preferences` | New, signed in. `{ listSort }`; 400 when nothing in the body is a known preference with an allowed value. |
+| `PUT /api/user/settings/preferences` | New, signed in. Any of `{ listSort, listChoices, contact }`; 400 when nothing in the body is a known preference with an allowed value. |
 
 ## Data
 `poi_lists`, `poi_list_items` and `user_list_checkins`, in migration 101 and in `initDatabase` (a fresh database runs migrations before `pois` exists). The migration also adds the six POIs and seeds the 2026 list, each only once.

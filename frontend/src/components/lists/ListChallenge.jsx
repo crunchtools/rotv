@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { listProgress, formatListDay, earlierEditionsEarned } from '../../utils/listProgress';
-import { formEntries, fillListForm, saveFile } from '../../utils/listForm';
+import { useNavigate } from 'react-router-dom';
+import { formEntries, fillListForm, saveFile, splitName } from '../../utils/listForm';
 import ListBadge from './ListBadge';
 
 /**
@@ -14,11 +15,13 @@ import ListBadge from './ListBadge';
  * @param {string} [props.choiceName] The trail hiked as the free choice, for the completed form
  */
 export default function ListChallenge({ list, choiceName = '' }) {
-  const { isAuthenticated, user, listCheckins } = useAuth();
+  const { isAuthenticated, user, listCheckins, contact } = useAuth();
+  const navigate = useNavigate();
   const [formState, setFormState] = useState('idle');
 
   // The organizer's form with everything ROTV knows written on it: the hikes'
-  // dates, the free choice, and the account's name and email.
+  // dates, the free choice, the details from Settings › General, and the
+  // account's email. A name not given there falls back to the account's.
   const downloadForm = async () => {
     setFormState('working');
     try {
@@ -26,8 +29,11 @@ export default function ListChallenge({ list, choiceName = '' }) {
       const earlier = otherIds.length > 0
         ? await fetch(`/api/lists?ids=${otherIds.join(',')}`).then(res => (res.ok ? res.json() : []))
         : [];
+      const accountName = splitName(user?.fullName || '');
       const entries = formEntries(list, listCheckins, {
-        name: user?.fullName || '',
+        ...contact,
+        firstName: contact.firstName || accountName.first,
+        lastName: contact.lastName || accountName.last,
         email: user?.email || '',
         choiceName,
         returning: earlierEditionsEarned(list, earlier, listCheckins) > 0
@@ -104,8 +110,18 @@ export default function ListChallenge({ list, choiceName = '' }) {
             {formState === 'working' ? 'Filling in your form…' : 'Download completed form'}
           </button>
           <p className="list-challenge-form-about">
-            The official form with your hike dates{isAuthenticated ? ', name and email' : ''} filled in.
-            Add your address and anything else it asks for, then turn it in.
+            The official form with your hike dates{isAuthenticated ? ', name and email' : ''} filled in.{' '}
+            {contact.address
+              ? 'Your mailing address and cell number go on it too.'
+              : (
+                <>
+                  Add your mailing address and cell number in{' '}
+                  <a className="link-button" href="/settings/general" onClick={(e) => { e.preventDefault(); navigate('/settings/general'); }}>
+                    Settings
+                  </a>{' '}
+                  and they will be filled in as well.
+                </>
+              )}
           </p>
           {formState === 'failed' && (
             <p className="list-checkin-problem" role="alert">

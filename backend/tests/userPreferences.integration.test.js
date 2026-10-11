@@ -71,6 +71,17 @@ describe('PUT /api/user/settings/preferences', () => {
     expect(await preferencesOf(HIKER)).toEqual({ theme: 'dark', listChoices: { 1: 1044 } });
   });
 
+  it('saves contact details and clears them again', async () => {
+    await request(app).put('/api/user/settings/preferences')
+      .send({ contact: { firstName: 'Scott', lastName: 'McCarty', address: '1 Main St', isAdmin: 'yes' } });
+    expect(await preferencesOf(HIKER)).toEqual({
+      theme: 'dark', contact: { firstName: 'Scott', lastName: 'McCarty', address: '1 Main St' }
+    });
+
+    await request(app).put('/api/user/settings/preferences').send({ contact: {} });
+    expect(await preferencesOf(HIKER)).toEqual({ theme: 'dark', contact: {} });
+  });
+
   it('refuses a body with no known preference and stores nothing', async () => {
     const res = await request(app).put('/api/user/settings/preferences').send({ listSort: 'sideways', isAdmin: true });
 

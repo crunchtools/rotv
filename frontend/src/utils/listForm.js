@@ -23,27 +23,36 @@ export function splitName(fullName) {
   return { first: words.slice(0, -1).join(' '), last: words[words.length - 1] };
 }
 
+// Fields of `details` that go on the form as they are, where the layout has a place of the same name.
+const DETAIL_FIELDS = ['lastName', 'firstName', 'address', 'city', 'state', 'zip', 'email', 'phone'];
+
 /**
  * What to write on the form, and where.
  *
  * @param {object} list A list from /api/lists, with `form_layout`
  * @param {object[]} checkins Every check-in the person has
- * @param {object} [details]
- * @param {string} [details.name] The person's full name, when the account holds one
+ * @param {object} [details] What is known about the person; anything missing is left blank
+ * @param {string} [details.firstName]
+ * @param {string} [details.lastName]
+ * @param {string} [details.address] Street address
+ * @param {string} [details.city]
+ * @param {string} [details.state]
+ * @param {string} [details.zip]
  * @param {string} [details.email]
+ * @param {string} [details.phone]
  * @param {string} [details.choiceName] The trail hiked as the free choice
  * @param {boolean} [details.returning] They finished an earlier year, so "Returning hiker" is ticked
  * @returns {{text: string, x: number, y: number, maxWidth?: number}[]} Empty when the list has no layout
  */
-export function formEntries(list, checkins, { name = '', email = '', choiceName = '', returning = false } = {}) {
+export function formEntries(list, checkins, details = {}) {
   const layout = list.form_layout;
   if (!layout) return [];
+  const { choiceName = '', returning = false } = details;
 
   const entries = [];
-  const { first, last } = splitName(name);
-  if (last) entries.push({ text: last, ...layout.lastName });
-  if (first) entries.push({ text: first, ...layout.firstName });
-  if (email) entries.push({ text: email, ...layout.email });
+  for (const field of DETAIL_FIELDS) {
+    if (details[field] && layout[field]) entries.push({ text: details[field], ...layout[field] });
+  }
   if (returning) entries.push({ text: 'X', ...layout.returning });
 
   for (const checkin of checkinsForList(list, checkins)) {
@@ -54,8 +63,8 @@ export function formEntries(list, checkins, { name = '', email = '', choiceName 
       continue;
     }
     const item = list.items.find(i => i.id === checkin.item_id);
-    const y = layout.rows[item.position];
-    if (y != null) entries.push({ text: date, x: layout.dateX, y });
+    const rowBaseline = layout.rows[item.position];
+    if (rowBaseline != null) entries.push({ text: date, x: layout.dateX, y: rowBaseline });
   }
   return entries;
 }

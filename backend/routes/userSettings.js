@@ -10,6 +10,12 @@ const logger = createLogger('UserSettings');
 
 const MAX_SYNC_TRIPS = 50;
 
+const MAX_LIST_CHOICES = 50;
+
+// What a person may tell us about themselves to have forms filled in for them,
+// and the longest each may be.
+const CONTACT_FIELDS = { firstName: 60, lastName: 60, address: 120, city: 60, state: 30, zip: 12, phone: 30 };
+
 // Display preferences kept on the account (users.preferences), and what each may hold.
 const PREFERENCE_VALUES = {
   listSort: ['trail', 'trail-desc', 'park', 'park-desc', 'difficulty', 'difficulty-desc']
@@ -19,27 +25,30 @@ const PREFERENCE_VALUES = {
  * The preferences in a request body that are known and hold an allowed value.
  * @param {object} raw Untrusted input
  * @returns {object} Only the recognised keys; empty when there are none. `listChoices` keeps
- *   its `{ listId: poiId }` pairs that are positive integers, up to 50
+ *   its `{ listId: poiId }` pairs that are positive integers, up to 50. `contact` keeps its known
+ *   text fields (name, mailing address, phone), trimmed and capped in length
  */
 export function allowedPreferences(raw) {
   const kept = {};
   for (const [key, values] of Object.entries(PREFERENCE_VALUES)) {
     if (raw && values.includes(raw[key])) kept[key] = raw[key];
   }
-  const choices = pickedListChoices(raw?.listChoices);
-  if (choices) kept.listChoices = choices;
+  // The trail picked for each list's free choice before it is hiked: { listId: poiId }.
+  const choices = raw?.listChoices;
+  if (choices && typeof choices === 'object' && !Array.isArray(choices)) {
+    const pairs = Object.entries(choices)
+      .filter(([listId, poiId]) => /^[1-9]\d{0,8}$/.test(listId) && Number.isInteger(poiId) && poiId > 0)
+      .slice(0, MAX_LIST_CHOICES);
+    if (pairs.length > 0) kept.listChoices = Object.fromEntries(pairs);
+  }
+  // Contact details: only the known fields, trimmed and capped; an empty object clears them.
+  const contact = raw?.contact;
+  if (contact && typeof contact === 'object' && !Array.isArray(contact)) {
+    kept.contact = Object.fromEntries(Object.entries(CONTACT_FIELDS)
+      .filter(([field]) => typeof contact[field] === 'string' && contact[field].trim())
+      .map(([field, longest]) => [field, contact[field].trim().slice(0, longest)]));
+  }
   return kept;
-}
-
-const MAX_LIST_CHOICES = 50;
-
-// The trail picked for each list's free choice before it is hiked: { listId: poiId }.
-function pickedListChoices(raw) {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const pairs = Object.entries(raw)
-    .filter(([listId, poiId]) => /^[1-9]\d{0,8}$/.test(listId) && Number.isInteger(poiId) && poiId > 0)
-    .slice(0, MAX_LIST_CHOICES);
-  return pairs.length > 0 ? Object.fromEntries(pairs) : null;
 }
 
 /**

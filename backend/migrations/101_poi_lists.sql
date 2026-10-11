@@ -168,7 +168,7 @@ Pick up rewards at the Administrative Offices, 975 Treaty Line Rd., Akron (Monda
     DATE '2027-03-31', 'https://www.summitmetroparks.org/wp-content/uploads/2026-Fall-Hiking-Spree-Form.pdf',
     '/lists/fall-hiking-spree-2026.webp', 'Summit Metro Parks',
     '/lists/fall-hiking-spree-2026-form.pdf',
-    '{"page":0,"fontSize":9,"dateX":552,"rows":{"1":277.65,"2":262.8,"3":247.95,"4":233.1,"5":218.25,"6":203.4,"7":188.55,"8":173.7,"9":158.85,"10":144.0,"11":129.15,"12":114.3,"13":99.45},"choice":{"x":164,"y":86,"maxWidth":130,"dateY":84.6},"lastName":{"x":207,"y":488.5,"maxWidth":120},"firstName":{"x":333,"y":488.5,"maxWidth":72},"email":{"x":207,"y":446.5,"maxWidth":190},"returning":{"x":509.8,"y":486.3}}'::jsonb
+    '{"page":0,"fontSize":9,"dateX":552,"rows":{"1":277.65,"2":262.8,"3":247.95,"4":233.1,"5":218.25,"6":203.4,"7":188.55,"8":173.7,"9":158.85,"10":144.0,"11":129.15,"12":114.3,"13":99.45},"choice":{"x":164,"y":86,"maxWidth":130,"dateY":84.6},"lastName":{"x":207,"y":488.5,"maxWidth":120},"firstName":{"x":333,"y":488.5,"maxWidth":72},"email":{"x":207,"y":446.5,"maxWidth":190},"returning":{"x":509.8,"y":486.3},"address":{"x":207,"y":467.5,"maxWidth":195},"city":{"x":410,"y":467.5,"maxWidth":88},"state":{"x":504,"y":467.5,"maxWidth":44},"zip":{"x":555.5,"y":467.5,"maxWidth":48},"phone":{"x":407,"y":446.5,"maxWidth":195}}'::jsonb
   WHERE NOT EXISTS (SELECT 1 FROM poi_lists WHERE series = 'fall-hiking-spree' AND edition = 2026)
   RETURNING id
 )

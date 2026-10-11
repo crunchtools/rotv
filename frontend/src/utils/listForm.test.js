@@ -11,6 +11,11 @@ const layout = {
   lastName: { x: 207, y: 488.5, maxWidth: 120 },
   firstName: { x: 333, y: 488.5, maxWidth: 72 },
   email: { x: 207, y: 446.5, maxWidth: 190 },
+  address: { x: 207, y: 467.5, maxWidth: 195 },
+  city: { x: 410, y: 467.5, maxWidth: 88 },
+  state: { x: 504, y: 467.5, maxWidth: 44 },
+  zip: { x: 555.5, y: 467.5, maxWidth: 48 },
+  phone: { x: 407, y: 446.5, maxWidth: 195 },
   returning: { x: 509.8, y: 486.3 }
 };
 const list = {
@@ -53,14 +58,30 @@ describe('formEntries', () => {
     expect(formEntries(list, [hike(null, '2026-10-10')])).toEqual([{ text: '10/10/26', x: 552, y: 84.6 }]);
   });
 
-  it('fills in what the account knows about the hiker, and nothing it does not', () => {
-    expect(formEntries(list, [], { name: 'Scott McCarty', email: 'scott@example.com', returning: true })).toEqual([
+  it('fills in what is known about the hiker, each on its own line, and nothing that is not', () => {
+    const details = {
+      firstName: 'Scott', lastName: 'McCarty', address: '1 Main St', city: 'Akron', state: 'OH', zip: '44313',
+      email: 'scott@example.com', phone: '330-555-0100', returning: true
+    };
+    expect(formEntries(list, [], details)).toEqual([
       { text: 'McCarty', ...layout.lastName },
       { text: 'Scott', ...layout.firstName },
+      { text: '1 Main St', ...layout.address },
+      { text: 'Akron', ...layout.city },
+      { text: 'OH', ...layout.state },
+      { text: '44313', ...layout.zip },
       { text: 'scott@example.com', ...layout.email },
+      { text: '330-555-0100', ...layout.phone },
       { text: 'X', ...layout.returning }
     ]);
+    expect(formEntries(list, [], { firstName: 'Scott', city: '' })).toEqual([{ text: 'Scott', ...layout.firstName }]);
     expect(formEntries(list, [])).toEqual([]);
+  });
+
+  it('skips a detail an older layout has no place for', () => {
+    const older = { ...layout };
+    delete older.phone;
+    expect(formEntries({ ...list, form_layout: older }, [], { phone: '330-555-0100' })).toEqual([]);
   });
 
   it('ignores hikes on other lists, and a list with no form', () => {
@@ -81,7 +102,11 @@ describe('fillListForm', () => {
     const entries = formEntries(
       list,
       [...list.items.map((item, i) => hike(item.id, `2026-10-${String(i + 1).padStart(2, '0')}`)), hike(null, '2026-11-05')],
-      { name: 'Scott McCarty', email: 'scott.mccarty@example.com', choiceName: 'Buckeye / Parkway Jogging / Valley Link Trail', returning: true }
+      {
+        firstName: 'Scott', lastName: 'McCarty', address: '1234 Akron-Peninsula Road', city: 'Cuyahoga Falls', state: 'OH',
+        zip: '44313', email: 'scott.mccarty@example.com', phone: '330-555-0100',
+        choiceName: 'Buckeye / Parkway Jogging / Valley Link Trail', returning: true
+      }
     );
 
     const filled = await fillListForm(list, entries);

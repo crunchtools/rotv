@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import AccountProfile from './auth/AccountProfile';
 import SignInMethods from './auth/SignInMethods';
+import ContactDetails from './ContactDetails';
 
 const TIMEZONES = [
   { value: 'America/New_York', label: 'Eastern Time (EST/EDT)', icon: '🗽' },
@@ -173,6 +174,10 @@ function GeneralSettings() {
           <li>All dates match exactly what appears on the source websites</li>
         </ul>
       </div>
+
+      <div className="settings-divider"></div>
+
+      <ContactDetails />
 
       <div className="settings-divider"></div>
 

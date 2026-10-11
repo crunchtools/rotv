@@ -5,6 +5,7 @@ import ListChallenge from './ListChallenge';
 import { useAuth } from '../../hooks/useAuth';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
+vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 
 const list = {
   id: 1, slug: 'fall-hiking-spree', edition: 2026, name: 'Fall Hiking Spree',
@@ -15,7 +16,7 @@ const list = {
 };
 
 const renderWith = (overrides = {}, listCheckins = []) => {
-  useAuth.mockReturnValue({ isAuthenticated: true, user: { fullName: 'Scott McCarty', email: 'scott@example.com' }, listCheckins, saveListCheckin: vi.fn(), removeListCheckin: vi.fn() });
+  useAuth.mockReturnValue({ isAuthenticated: true, user: { fullName: 'Scott McCarty', email: 'scott@example.com' }, contact: {}, listCheckins, saveListCheckin: vi.fn(), removeListCheckin: vi.fn() });
   return render(<ListChallenge list={{ ...list, ...overrides }} />);
 };
 
@@ -65,5 +66,6 @@ describe('ListChallenge', () => {
     renderWith({ form_file: '/lists/form.pdf', form_layout: { page: 0 } });
     expect(screen.getByRole('button', { name: /download completed form/i })).toBeTruthy();
     expect(screen.getByText(/hike dates, name and email filled in/i)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings/general');
   });
 });

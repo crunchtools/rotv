@@ -13,6 +13,13 @@ describe('allowedPreferences', () => {
     expect(allowedPreferences({ listChoices: { abc: 5 } })).toEqual({});
   });
 
+  it('keeps contact details it knows, trimmed and capped, and lets them be cleared', () => {
+    expect(allowedPreferences({ contact: { firstName: ' Scott ', lastName: 'McCarty', zip: '4'.repeat(40), role: 'admin', city: 7, phone: '  ' } }))
+      .toEqual({ contact: { firstName: 'Scott', lastName: 'McCarty', zip: '4'.repeat(12) } });
+    expect(allowedPreferences({ contact: {} })).toEqual({ contact: {} });
+    expect(allowedPreferences({ contact: 'Scott' })).toEqual({});
+  });
+
   it('drops unknown keys, disallowed values and non-objects', () => {
     expect(allowedPreferences({ listSort: 'sideways', isAdmin: true })).toEqual({});
     expect(allowedPreferences(null)).toEqual({});

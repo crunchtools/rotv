@@ -14,6 +14,7 @@ const KEY_VISITED = 'rotv-visited';
 const KEY_LIST_CHECKINS = 'rotv-list-checkins';
 const KEY_LIST_SORT = 'rotv-list-sort';
 const KEY_LIST_CHOICES = 'rotv-list-choices';
+const KEY_CONTACT = 'rotv-contact';
 
 function safeRead(key) {
   try {
@@ -46,7 +47,7 @@ function safeRemove(key) {
  */
 export function clearAnonSettings() {
   [KEY_TIMEZONE, KEY_NEWSLETTER_EMAIL, KEY_NEWSLETTER_SUBSCRIBED, KEY_SAVED_TRIPS, KEY_FAVORITES, KEY_VISITED,
-    KEY_LIST_CHECKINS, KEY_LIST_SORT, KEY_LIST_CHOICES]
+    KEY_LIST_CHECKINS, KEY_LIST_SORT, KEY_LIST_CHOICES, KEY_CONTACT]
     .forEach(safeRemove);
 }
 
@@ -62,18 +63,20 @@ export function writeSubscribed(value) {
   safeWrite(KEY_NEWSLETTER_SUBSCRIBED, value ? 'true' : 'false');
 }
 
-// A stored JSON array, or [] when the key is unset or does not hold one.
-function readArray(key) {
+// Stored JSON of the expected shape, or `empty` when the key is unset or holds something else.
+function readJson(key, isExpected, empty) {
   const raw = safeRead(key);
-  if (!raw) return [];
+  if (!raw) return empty;
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    return isExpected(parsed) ? parsed : empty;
   } catch (err) {
     console.warn(`[anonSettings] ${key} is not valid JSON; ignoring it:`, err);
-    return [];
+    return empty;
   }
 }
+
+const readArray = (key) => readJson(key, Array.isArray, []);
 
 export function readTrips() {
   return readArray(KEY_SAVED_TRIPS);
@@ -161,15 +164,7 @@ export function writeListSort(sort) {
  * @returns {Object<string, number>} `{ listId: poiId }`; empty until one is picked
  */
 export function readListChoices() {
-  const raw = safeRead(KEY_LIST_CHOICES);
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch (err) {
-    console.warn(`[anonSettings] ${KEY_LIST_CHOICES} is not valid JSON; ignoring it:`, err);
-    return {};
-  }
+  return readJson(KEY_LIST_CHOICES, isPlainObject, {});
 }
 
 /**
@@ -178,6 +173,26 @@ export function readListChoices() {
  */
 export function writeListChoices(choices) {
   safeWrite(KEY_LIST_CHOICES, JSON.stringify(choices));
+}
+
+const isPlainObject = (held) => Boolean(held) && typeof held === 'object' && !Array.isArray(held);
+
+/**
+ * A signed-out visitor's contact details (Settings › General), used to fill in
+ * forms they download. Once signed in they live on the account, not here.
+ * @returns {{firstName?: string, lastName?: string, address?: string, city?: string, state?: string,
+ *   zip?: string, phone?: string}} Empty until any is entered
+ */
+export function readContact() {
+  return readJson(KEY_CONTACT, isPlainObject, {});
+}
+
+/**
+ * Keep a signed-out visitor's contact details on this device.
+ * @param {object} contact The whole set, as readContact() returns it
+ */
+export function writeContact(contact) {
+  safeWrite(KEY_CONTACT, JSON.stringify(contact));
 }
 
 /**
@@ -226,9 +241,11 @@ export async function syncAnonSettings() {
   const listSort = readListSort();
   const listChoices = readListChoices();
   const hasChoices = Object.keys(listChoices).length > 0;
+  const contact = readContact();
+  const hasContact = Object.keys(contact).length > 0;
 
   const hasState = timezone || (email && subscribed) || trips.length > 0
-    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0 || listSort || hasChoices;
+    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0 || listSort || hasChoices || hasContact;
   if (!hasState) return { synced: false };
 
   const payload = {};
@@ -239,8 +256,12 @@ export async function syncAnonSettings() {
   if (visited.length > 0) payload.visited = visited;
   if (listCheckins.length > 0) payload.listCheckins = listCheckins;
   // Like the timezone, these stay on the device after syncing: they are read from there too.
-  if (listSort || hasChoices) {
-    payload.preferences = { ...(listSort ? { listSort } : {}), ...(hasChoices ? { listChoices } : {}) };
+  if (listSort || hasChoices || hasContact) {
+    payload.preferences = {
+      ...(listSort ? { listSort } : {}),
+      ...(hasChoices ? { listChoices } : {}),
+      ...(hasContact ? { contact } : {})
+    };
   }
 
   try {
@@ -267,6 +288,10 @@ export async function syncAnonSettings() {
     }
     if (listCheckins.length > 0) {
       safeRemove(KEY_LIST_CHECKINS);
+    }
+    // A name and address belong on the account once there is one, not on the device.
+    if (hasContact) {
+      safeRemove(KEY_CONTACT);
     }
 
     return { synced: true };
