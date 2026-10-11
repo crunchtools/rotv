@@ -10,6 +10,24 @@ const logger = createLogger('UserSettings');
 
 const MAX_SYNC_TRIPS = 50;
 
+// Display preferences kept on the account (users.preferences), and what each may hold.
+const PREFERENCE_VALUES = {
+  listSort: ['official', 'trail', 'park']
+};
+
+/**
+ * The preferences in a request body that are known and hold an allowed value.
+ * @param {object} raw Untrusted input
+ * @returns {object} Only the recognised keys; empty when there are none
+ */
+export function allowedPreferences(raw) {
+  const kept = {};
+  for (const [key, values] of Object.entries(PREFERENCE_VALUES)) {
+    if (raw && values.includes(raw[key])) kept[key] = raw[key];
+  }
+  return kept;
+}
+
 /**
  * Whitelist of user POI-id-list tables that anonymous localStorage collections
  * sync into. Keys are the sync payload field names; values are the table names.
@@ -66,8 +84,8 @@ export function createUserSettingsRouter(pool) {
   const router = express.Router();
 
   router.post('/sync', isAuthenticated, async (req, res) => {
-    const { timezone, newsletter, trips, favorites, visited, listCheckins } = req.body || {};
-    const synced = { timezone: false, newsletter: false, trips: 0, favorites: 0, visited: 0, listCheckins: 0 };
+    const { timezone, newsletter, trips, favorites, visited, listCheckins, preferences } = req.body || {};
+    const synced = { timezone: false, newsletter: false, trips: 0, favorites: 0, visited: 0, listCheckins: 0, preferences: false };
 
     try {
       if (typeof timezone === 'string' && timezone.trim()) {
@@ -99,6 +117,16 @@ export function createUserSettingsRouter(pool) {
       synced.favorites = await syncPoiIdList(pool, req.user.id, favorites, 'favorites');
       synced.visited = await syncPoiIdList(pool, req.user.id, visited, 'visited');
       synced.listCheckins = await syncCheckins(pool, req.user.id, listCheckins);
+
+      // Fill gaps only: a preference the account already holds wins over the device's.
+      const devicePreferences = allowedPreferences(preferences);
+      if (Object.keys(devicePreferences).length > 0) {
+        await pool.query(
+          `UPDATE users SET preferences = $1::jsonb || COALESCE(preferences, '{}'::jsonb) WHERE id = $2`,
+          [JSON.stringify(devicePreferences), req.user.id]
+        );
+        synced.preferences = true;
+      }
 
       if (Array.isArray(trips) && trips.length > 0) {
         const client = await pool.connect();
@@ -143,6 +171,25 @@ export function createUserSettingsRouter(pool) {
     } catch (err) {
       logger.error('POST /api/user/settings/sync failed:', err);
       res.status(500).json({ error: 'Failed to sync settings' });
+    }
+  });
+
+  // A signed-in user changing a preference: this one replaces what the account held.
+  router.put('/preferences', isAuthenticated, async (req, res) => {
+    const changed = allowedPreferences(req.body);
+    if (Object.keys(changed).length === 0) {
+      return res.status(400).json({ error: 'No known preference to save' });
+    }
+    try {
+      const saved = await pool.query(
+        `UPDATE users SET preferences = COALESCE(preferences, '{}'::jsonb) || $1::jsonb WHERE id = $2
+         RETURNING preferences`,
+        [JSON.stringify(changed), req.user.id]
+      );
+      res.json({ preferences: saved.rows[0]?.preferences || changed });
+    } catch (err) {
+      logger.error('PUT /api/user/settings/preferences failed:', err);
+      res.status(500).json({ error: 'Failed to save preferences' });
     }
   });
 

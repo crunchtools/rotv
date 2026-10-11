@@ -27,6 +27,12 @@ describe('curatedListRows', () => {
     expect(towpath.navigation_latitude).toBeUndefined();
   });
 
+  it('uses the place\'s own pair when the item has only half a trailhead', () => {
+    const half = { items: [{ poi_id: 1081, position: 1, label: 'Quarry Trail', nav_latitude: 41.9, nav_longitude: null }] };
+    const [row] = curatedListRows(half, pois);
+    expect([row.navigation_latitude, row.navigation_longitude]).toEqual([41.2, -81.5]);
+  });
+
   it('matches two entries for one place by their own labels', () => {
     expect(curatedListRows(list, pois, 'wilbeth').map(row => row._listItem.position)).toEqual([1]);
     expect(curatedListRows(list, pois, 'botzum').map(row => row._listItem.position)).toEqual([3]);

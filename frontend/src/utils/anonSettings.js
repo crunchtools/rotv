@@ -12,6 +12,7 @@ const KEY_SAVED_TRIPS = 'rotv-saved-trips';
 const KEY_FAVORITES = 'rotv-favorites';
 const KEY_VISITED = 'rotv-visited';
 const KEY_LIST_CHECKINS = 'rotv-list-checkins';
+const KEY_LIST_SORT = 'rotv-list-sort';
 
 function safeRead(key) {
   try {
@@ -44,7 +45,7 @@ function safeRemove(key) {
  */
 export function clearAnonSettings() {
   [KEY_TIMEZONE, KEY_NEWSLETTER_EMAIL, KEY_NEWSLETTER_SUBSCRIBED, KEY_SAVED_TRIPS, KEY_FAVORITES, KEY_VISITED,
-    KEY_LIST_CHECKINS]
+    KEY_LIST_CHECKINS, KEY_LIST_SORT]
     .forEach(safeRemove);
 }
 
@@ -138,6 +139,15 @@ export function removeListCheckin(listId, itemId) {
   safeWrite(KEY_LIST_CHECKINS, JSON.stringify(readListCheckins().filter(c => !sameCheckin(c, gone))));
 }
 
+/** How the person last sorted a curated list (spec 050); null until they choose. */
+export function readListSort() {
+  return safeRead(KEY_LIST_SORT);
+}
+
+export function writeListSort(sort) {
+  safeWrite(KEY_LIST_SORT, sort);
+}
+
 /**
  * Follow POI merges: when a saved or visited place was folded into another
  * (duplicate park cleanup, spec 048), rewrite the stored id to the survivor so
@@ -181,9 +191,10 @@ export async function syncAnonSettings() {
   const favorites = readFavorites();
   const visited = readVisited();
   const listCheckins = readListCheckins();
+  const listSort = readListSort();
 
   const hasState = timezone || (email && subscribed) || trips.length > 0
-    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0;
+    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0 || listSort;
   if (!hasState) return { synced: false };
 
   const payload = {};
@@ -193,6 +204,8 @@ export async function syncAnonSettings() {
   if (favorites.length > 0) payload.favorites = favorites;
   if (visited.length > 0) payload.visited = visited;
   if (listCheckins.length > 0) payload.listCheckins = listCheckins;
+  // Like the timezone, the sort stays on the device after syncing: it is read from there too.
+  if (listSort) payload.preferences = { listSort };
 
   try {
     const res = await fetch('/api/user/settings/sync', {

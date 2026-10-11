@@ -10,6 +10,8 @@ import {
   readListCheckins,
   putListCheckin as putAnonListCheckin,
   removeListCheckin as removeAnonListCheckin,
+  readListSort,
+  writeListSort,
   clearAnonSettings,
   remapMergedPoiIds
 } from '../utils/anonSettings';
@@ -42,6 +44,7 @@ export function AuthProvider({ children }) {
   const [favorites, setFavorites] = useState(() => readFavorites());
   const [visited, setVisited] = useState(() => readVisited());
   const [listCheckins, setListCheckins] = useState(() => readListCheckins());
+  const [listSort, setListSortState] = useState(() => readListSort() || 'official');
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
   const [providers, setProviders] = useState({ google: true, facebook: false, password: true, passkey: true, passwordReset: false });
@@ -71,6 +74,7 @@ export function AuthProvider({ children }) {
           setFavorites(userData.favorites || []);
           setVisited(userData.visited || []);
           setListCheckins(userData.listCheckins || []);
+          if (userData.preferences?.listSort) setListSortState(userData.preferences.listSort);
         } else {
           setUser(null);
           setFavorites(readFavorites());
@@ -335,19 +339,16 @@ export function AuthProvider({ children }) {
   // is the list's free choice, and `poiId` then the trail chosen. Resolves to
   // an error message, or null when it was saved. Updates build on the latest
   // state, so two hikes marked in quick succession both stay.
+  // Fix: a refused or failed change reloads the account's check-ins rather than restoring a
+  // snapshot, which overlapping changes to one hike could leave stale (PR #768 review)
   const saveListCheckin = useCallback(async (listId, itemId, poiId, doneOn) => {
     const checkin = { list_id: listId, item_id: itemId ?? null, poi_id: poiId ?? null, done_on: doneOn };
-    const previous = listCheckins.find(c => sameCheckin(c, checkin));
     setListCheckins(current => [...current.filter(c => !sameCheckin(c, checkin)), checkin]);
 
     if (!user) {
       putAnonListCheckin(checkin);
       return null;
     }
-    const undo = () => setListCheckins(current => [
-      ...current.filter(c => !sameCheckin(c, checkin)),
-      ...(previous ? [previous] : [])
-    ]);
     try {
       const res = await fetch(`/api/lists/${listId}/checkins`, {
         method: 'PUT',
@@ -356,19 +357,18 @@ export function AuthProvider({ children }) {
         body: JSON.stringify(checkin)
       });
       if (res.ok) return null;
-      undo();
       const problem = await res.json();
+      await fetchUser();
       return problem.error || 'Could not save that. Please try again.';
     } catch (err) {
       console.warn('Could not save the check-in:', err);
-      undo();
+      await fetchUser();
       return 'Could not save that. Please try again.';
     }
-  }, [listCheckins, user]);
+  }, [user, fetchUser]);
 
   const removeListCheckin = useCallback(async (listId, itemId) => {
     const gone = { list_id: listId, item_id: itemId ?? null };
-    const previous = listCheckins.find(c => sameCheckin(c, gone));
     setListCheckins(current => current.filter(c => !sameCheckin(c, gone)));
 
     if (!user) {
@@ -380,12 +380,31 @@ export function AuthProvider({ children }) {
         method: 'DELETE',
         credentials: 'include'
       });
-      if (!res.ok) throw new Error('Request failed');
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
     } catch (err) {
       console.warn('Could not remove the check-in:', err);
-      if (previous) setListCheckins(current => [...current.filter(c => !sameCheckin(c, gone)), previous]);
+      await fetchUser();
     }
-  }, [listCheckins, user]);
+  }, [user, fetchUser]);
+
+  // How curated lists are sorted (spec 050): remembered on the device, and on
+  // the account when signed in.
+  const setListSort = useCallback(async (sort) => {
+    setListSortState(sort);
+    writeListSort(sort);
+    if (!user) return;
+    try {
+      const res = await fetch('/api/user/settings/preferences', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ listSort: sort })
+      });
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+    } catch (err) {
+      console.warn('Could not save the list sort to the account; it is kept on this device:', err);
+    }
+  }, [user]);
 
   const value = {
     user,
@@ -403,6 +422,8 @@ export function AuthProvider({ children }) {
     listCheckins,
     saveListCheckin,
     removeListCheckin,
+    listSort,
+    setListSort,
     logout,
     loginWithGoogle,
     loginWithFacebook,

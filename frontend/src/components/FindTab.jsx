@@ -8,6 +8,7 @@ import { curatedListRows, sortListRows, LIST_SORTS } from '../utils/curatedList'
 import NavigateButton from './NavigateButton';
 import { getNavigationStops } from './sidebar/helpers';
 import { useActiveLists } from '../hooks/useActiveLists';
+import { useAuth } from '../hooks/useAuth';
 import { listPath } from '../utils/tabPaths';
 import ListChallenge from './lists/ListChallenge';
 import ListCheckinControl from './lists/ListCheckinControl';
@@ -97,7 +98,7 @@ const FindTab = memo(function FindTab({
     : initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all';
   const [requestedList, setRequestedList] = useState(urlList);
   const [currentPage, setCurrentPage] = useState(1);
-  const [listSort, setListSort] = useState('official');
+  const { listSort, setListSort } = useAuth();
   const [listConfig, setListConfig] = useState(null);
   const curatedLists = useActiveLists();
   const [isListMenuOpen, setIsListMenuOpen] = useState(false);

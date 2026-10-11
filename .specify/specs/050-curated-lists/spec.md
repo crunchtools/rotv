@@ -49,7 +49,7 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ### Find
 - A list in season is an entry in the Find tab's list picker, after the built-in ones. The spree lives at `/fall-hiking-spree`; a list without an address of its own lives at `/find/<series>`, and `/find/fall-hiking-spree` redirects.
-- The list opens with its description, the badge, the tally with a progress bar, what is left and how many days remain, the free choice, and a "How it works" section with the rules and rewards. Its items follow in the organizer's order, and can be sorted by trail name or by park. Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
+- The list opens with its description, the badge, the tally with a progress bar, what is left and how many days remain, the free choice, and a "How it works" section with the rules and rewards. Its items follow in the organizer's order, and can be sorted by trail name or by park; the choice is remembered on the device and, signed in, on the account (`users.preferences.listSort`). Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
 - Each row shows the organizer's name for the hike, the park it is in, `miles · rating · class`, the note, where to park, a Navigate button to that hike's trailhead, and the check-in button with its date.
 - Picking a row selects the POI on the map as any Find row does. Navigate and Add to trip use the item's trailhead. The place card of a POI on a list in season carries the same check-in button.
 - A list's address, when the list is out of season or does not exist, shows All places.
@@ -73,7 +73,8 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 | `PUT /api/lists/:listId/checkins` | New, signed in. `{ item_id, poi_id, done_on }`; `item_id` null is the free choice. Answers with the stored check-in. 400 `{ error }` for a list id that is not a number or a check-in the rules refuse (the reason is the message); 404 for a list that does not exist or is not published; 401 signed out. |
 | `DELETE /api/lists/:listId/checkins/:itemId` | New, signed in. `:itemId` is an item id or `choice`. 400 when either id is neither; removing a check-in that is not there succeeds; 401 signed out. |
 | `GET /auth/user` | Adds `listCheckins`. |
-| `POST /api/user/settings/sync` | Accepts `listCheckins` from the device. |
+| `POST /api/user/settings/sync` | Accepts `listCheckins` and `preferences` from the device; a preference the account already holds wins. |
+| `PUT /api/user/settings/preferences` | New, signed in. `{ listSort }`; 400 when nothing in the body is a known preference with an allowed value. |
 
 ## Data
 `poi_lists`, `poi_list_items` and `user_list_checkins`, in migration 101 and in `initDatabase` (a fresh database runs migrations before `pois` exists). The migration also adds the six POIs and seeds the 2026 list, each only once.

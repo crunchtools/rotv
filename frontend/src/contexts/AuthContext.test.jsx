@@ -200,21 +200,54 @@ describe('AuthContext', () => {
       expect(fetchMock.mock.calls.filter(([url]) => url === checkinUrl)).toHaveLength(2);
     });
 
-    it('puts the earlier date back and reports why when the server refuses a new one', async () => {
+    it('reloads what the account holds and reports why when the server refuses a change', async () => {
       const refusal = 'Only 2026-09-01 through 2026-11-30 counts for this list.';
-      let refuse = false;
+      const held = { list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' };
       mockFetch(undefined, {
-        get [checkinUrl]() { return refuse ? fetchResponse({ error: refusal }, { status: 400 }) : undefined; }
+        '/auth/user': fetchResponse({ ...SIGNED_IN, listCheckins: [held] }),
+        [checkinUrl]: fetchResponse({ error: refusal }, { status: 400 })
       });
       await renderSignedIn();
-      await act(() => captured.current.saveListCheckin(1, 11, 1081, '2026-10-04'));
 
-      refuse = true;
       let problem;
       await act(async () => { problem = await captured.current.saveListCheckin(1, 11, 1081, '2026-12-25'); });
 
       expect(problem).toBe(refusal);
-      expect(captured.current.listCheckins).toEqual([{ list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' }]);
+      expect(captured.current.listCheckins).toEqual([held]);
+    });
+
+    it('reloads what the account holds when a removal fails', async () => {
+      const held = { list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' };
+      mockFetch(undefined, {
+        '/auth/user': fetchResponse({ ...SIGNED_IN, listCheckins: [held] }),
+        [`${checkinUrl}/11`]: fetchResponse({ error: 'down' }, { status: 500 })
+      });
+      await renderSignedIn();
+
+      await act(() => captured.current.removeListCheckin(1, 11));
+
+      expect(captured.current.listCheckins).toEqual([held]);
+    });
+
+    it('remembers the list sort on the device and on the account', async () => {
+      const fetchMock = mockFetch();
+      await renderSignedIn();
+      expect(captured.current.listSort).toBe('official');
+
+      await act(() => captured.current.setListSort('park'));
+
+      expect(captured.current.listSort).toBe('park');
+      expect(localStorage.getItem('rotv-list-sort')).toBe('park');
+      const [, request] = fetchMock.mock.calls.find(([url]) => url === '/api/user/settings/preferences');
+      expect(request).toMatchObject({ method: 'PUT', body: JSON.stringify({ listSort: 'park' }) });
+    });
+
+    it('takes the sort the account holds over the device\'s', async () => {
+      localStorage.setItem('rotv-list-sort', 'trail');
+      mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listSort: 'park' } }) });
+      await renderSignedIn();
+
+      await waitFor(() => expect(captured.current.listSort).toBe('park'));
     });
 
     it('keeps a signed-out visitor\'s hikes on the device, and removes them there', async () => {
