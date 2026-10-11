@@ -8,6 +8,7 @@ import { curatedListRows, sortListRows, LIST_SORTS } from '../utils/curatedList'
 import NavigateButton from './NavigateButton';
 import { getNavigationStops } from './sidebar/helpers';
 import { useActiveLists } from '../hooks/useActiveLists';
+import { listPath } from '../utils/tabPaths';
 import ListChallenge from './lists/ListChallenge';
 import ListCheckinControl from './lists/ListCheckinControl';
 import SeasonalFeature from './lists/SeasonalFeature';
@@ -119,7 +120,7 @@ const FindTab = memo(function FindTab({
   const lists = useMemo(() => [
     ...(listConfig || DEFAULT_LISTS).map(list =>
       list.id === 'all' ? { ...list, label: 'All places', route: '/find' } : list),
-    ...curatedLists.map(list => ({ id: curatedListId(list.slug), label: list.name, route: `/find/${list.slug}` }))
+    ...curatedLists.map(list => ({ id: curatedListId(list.slug), label: list.name, route: listPath(list.slug) }))
   ], [listConfig, curatedLists]);
   const curatedList = curatedLists.find(l => curatedListId(l.slug) === requestedList) || null;
   // A list that is out of season, or a slug that never existed, shows every place.

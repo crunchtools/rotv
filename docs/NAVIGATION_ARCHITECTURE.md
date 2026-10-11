@@ -69,7 +69,7 @@ Three primary tabs, each a word and an icon (`NAV_TABS` in `frontend/src/App.jsx
 | Tab | id | URL | What it is |
 |---|---|---|---|
 | Map | `view` | `/`, `/<poi-slug>` | The map and the place card |
-| Find | `find` | `/find`, `/find/<list>`, `/mtb-trail-status`, `/organizations` | A directory of every place (`FindTab.jsx`) |
+| Find | `find` | `/find`, `/fall-hiking-spree`, `/find/<list>`, `/mtb-trail-status`, `/organizations` | A directory of every place (`FindTab.jsx`) |
 | Happening | `happening` | `/happening`, `/happening/events` | News and events (`HappeningTab.jsx`) |
 
 Settings and About are tabs too (`settings`, `about`) but are reached from the account menu. `/results`, `/news` and `/events` redirect in the browser to `/find`, `/happening` and `/happening/events`; `parseTabPath()` owns the mapping. The server keeps tab paths out of POI slugs with `OG_RESERVED_PATHS` in `backend/server.js`; a new top-level path must be added in both places.
@@ -98,7 +98,7 @@ A curated list is a set of places an organizer names for a season, with the rule
 - `GET /api/lists` (`backend/routes/lists.js`, `backend/services/poiListService.js`) returns the lists that are published and in season today, in Eastern time. `?ids=` returns published lists whatever the season, which is how an earlier year's badge finds its list.
 - The rules live in two places that must agree: `checkinProblem()` on the server decides what is stored, and `frontend/src/utils/listProgress.js` decides what the buttons offer and when the badge is earned. A hike is dated inside the season and not in the future; one per item; one free choice.
 - Check-ins follow the local-first recipe in `docs/USER_DATA_FRAMEWORK.md`: `rotv-list-checkins` in localStorage, `listCheckins` in `AuthContext` and `/auth/user`, `syncCheckins()` on sign-in.
-- Find adds each list to its picker at `/find/<series>` (`parseTabPath` returns `list`). `ListChallenge` is the header (tally, badge, free choice, rules); rows keep the organizer's order (`curatedListRows`) and carry a `ListCheckinControl`.
+- Find adds each list to its picker (`parseTabPath` returns `list`). A list named in `LIST_PATHS` (`frontend/src/utils/tabPaths.js`) has a top-level address, `/fall-hiking-spree`, which must also be in `OG_RESERVED_PATHS`; any other list is at `/find/<series>`. `listPath()` gives the right one. `ListChallenge` is the header (tally, badge, free choice, rules); rows keep the organizer's order (`curatedListRows`) and carry a `ListCheckinControl`.
 - A row hands the map the POI with the item's trailhead copied onto `navigation_latitude/longitude`, so Navigate goes to the lot for that hike even when the POI is a 100-mile trail. The copy lives only on the selected object; the POI row is untouched.
 - `SeasonalFeature` is the spotlight for a `featured` list in season: a pill over the map, dismissed per edition, and a card in Find. `ListBadges` is My Valley's Badges tab.
 - `mergePois` repoints `poi_list_items` and `user_list_checkins`. A deleted POI's item is left out of the response.

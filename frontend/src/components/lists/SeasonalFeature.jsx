@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useActiveLists } from '../../hooks/useActiveLists';
 import { listProgress, formatListDay } from '../../utils/listProgress';
+import { listPath } from '../../utils/tabPaths';
 
 const KEY_DISMISSED = 'rotv-feature-dismissed';
 
@@ -40,7 +41,7 @@ export default function SeasonalFeature({ variant }) {
   const tally = progress.earned
     ? 'Badge earned'
     : progress.done > 0 ? `${progress.done} of ${progress.goal} hiked` : `Through ${formatListDay(list.ends_on)}`;
-  const open = () => navigate(`/find/${list.slug}`);
+  const open = () => navigate(listPath(list.slug));
 
   if (variant === 'card') {
     return (

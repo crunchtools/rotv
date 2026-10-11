@@ -10,6 +10,7 @@ import ContentDetail from './sidebar/ContentDetail';
 import BackButton from './BackButton';
 import TripsManager from './TripsManager';
 import ListBadges from './lists/ListBadges';
+import { listPath } from '../utils/tabPaths';
 import './MyValley.css';
 
 /**
@@ -362,7 +363,7 @@ export default function MyValley({ open, onClose, destinations = [] }) {
 
           {/* Mounted on every tab so the tab's count is known before it is opened. */}
           <div hidden={view !== 'badges'}>
-            <ListBadges onCount={setBadgeCount} onOpenList={(slug) => { onClose(); navigate(`/find/${slug}`); }} />
+            <ListBadges onCount={setBadgeCount} onOpenList={(slug) => { onClose(); navigate(listPath(slug)); }} />
           </div>
         </div>
       </div>

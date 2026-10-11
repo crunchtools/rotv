@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseTabPath } from './tabPaths';
+import { parseTabPath, listPath } from './tabPaths';
 
 const parse = (path) => parseTabPath(path.split('/').filter(Boolean));
 
@@ -12,8 +12,18 @@ describe('parseTabPath', () => {
     expect(parse('/happening/events')).toEqual({ tab: 'happening', view: 'events' });
   });
 
-  it('reads a curated list out of a Find path', () => {
-    expect(parse('/find/fall-hiking-spree')).toEqual({ tab: 'find', list: 'fall-hiking-spree' });
+  it('gives the Fall Hiking Spree an address of its own', () => {
+    expect(parse('/fall-hiking-spree')).toEqual({ tab: 'find', list: 'fall-hiking-spree' });
+    expect(parse('/find/fall-hiking-spree'))
+      .toEqual({ tab: 'find', list: 'fall-hiking-spree', redirectTo: '/fall-hiking-spree' });
+    expect(listPath('fall-hiking-spree')).toBe('/fall-hiking-spree');
+  });
+
+  it('reads any other curated list out of a Find path', () => {
+    expect(parse('/find/winter-challenge')).toEqual({ tab: 'find', list: 'winter-challenge' });
+    expect(listPath('winter-challenge')).toBe('/find/winter-challenge');
+    // A place's own sub-tabs are not lists
+    expect(parse('/fall-hiking-spree/news')).toBeNull();
   });
 
   it('redirects links from before the tabs were renamed', () => {
