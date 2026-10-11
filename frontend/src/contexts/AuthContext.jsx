@@ -352,9 +352,10 @@ export function AuthProvider({ children }) {
       });
       if (res.ok) return null;
       setListCheckins(before);
-      const problem = await res.json().catch(() => null);
-      return problem?.error || 'Could not save that. Please try again.';
+      const problem = await res.json();
+      return problem.error || 'Could not save that. Please try again.';
     } catch (err) {
+      console.warn('Could not save the check-in:', err);
       setListCheckins(before);
       return 'Could not save that. Please try again.';
     }

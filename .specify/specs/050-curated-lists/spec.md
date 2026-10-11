@@ -70,8 +70,8 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 |---|---|
 | `GET /api/lists` | New, public. Lists in season, each with its rules and `items[]`. |
 | `GET /api/lists?ids=` | New, public. Those published lists whatever the season, for earlier years' badges. |
-| `PUT /api/lists/:listId/checkins` | New, signed in. `{ item_id, poi_id, done_on }`; `item_id` null is the free choice. 400 with the reason when the rules refuse it. |
-| `DELETE /api/lists/:listId/checkins/:itemId` | New, signed in. `:itemId` is an item id or `choice`. |
+| `PUT /api/lists/:listId/checkins` | New, signed in. `{ item_id, poi_id, done_on }`; `item_id` null is the free choice. Answers with the stored check-in. 400 `{ error }` for a list id that is not a number or a check-in the rules refuse (the reason is the message); 404 for a list that does not exist or is not published; 401 signed out. |
+| `DELETE /api/lists/:listId/checkins/:itemId` | New, signed in. `:itemId` is an item id or `choice`. 400 when either id is neither; removing a check-in that is not there succeeds; 401 signed out. |
 | `GET /auth/user` | Adds `listCheckins`. |
 | `POST /api/user/settings/sync` | Accepts `listCheckins` from the device. |
 

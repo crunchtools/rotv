@@ -189,6 +189,16 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
 
   addAccountRoutes(router, pool, { mailer, frontendUrl: FRONTEND_URL });
 
+  // The rest of /auth/user must still load when the check-ins cannot be read.
+  const loadListCheckins = async (userId) => {
+    try {
+      return await getUserCheckins(pool, userId);
+    } catch (err) {
+      logger.error('Failed to load list check-ins for /auth/user, returning none:', err);
+      return [];
+    }
+  };
+
   router.get('/user', async (req, res) => {
     if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
       return res.json({
@@ -206,7 +216,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         favorites: [],
         visited: [],
         // Read for real, so a check-in made in the hosted dev container survives a reload.
-        listCheckins: await getUserCheckins(pool, 999).catch(() => []),
+        listCheckins: await loadListCheckins(999),
         preferences: {}
       });
     }
@@ -235,13 +245,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         logger.error('Failed to load visited for /auth/user, returning none:', err);
         visited = [];
       }
-      let listCheckins;
-      try {
-        listCheckins = await getUserCheckins(pool, id);
-      } catch (err) {
-        logger.error('Failed to load list check-ins for /auth/user, returning none:', err);
-        listCheckins = [];
-      }
+      const listCheckins = await loadListCheckins(id);
       res.json({
         id,
         email,

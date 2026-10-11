@@ -15,7 +15,7 @@ export function todayInValley(now = new Date()) {
 const daysBetween = (fromIso, toIso) =>
   Math.round((Date.parse(`${toIso}T12:00:00Z`) - Date.parse(`${fromIso}T12:00:00Z`)) / DAY_MS);
 
-/** "October 4" for an ISO date; with `year`, "October 4, 2026". */
+/** An ISO date as "October 4"; `year` adds the year, `short` abbreviates the month. */
 export function formatListDay(isoDate, { year = false, short = false } = {}) {
   return new Date(`${isoDate}T12:00:00`).toLocaleDateString('en-US', {
     month: short ? 'short' : 'long', day: 'numeric', ...(year ? { year: 'numeric' } : {})
@@ -25,6 +25,12 @@ export function formatListDay(isoDate, { year = false, short = false } = {}) {
 /**
  * The check-ins that count toward a list: one per item still on it, plus the
  * free choice when the list offers one.
+ *
+ * @param {{id: number, choice_label: string|null, items: {id: number}[]}} list A list from /api/lists
+ * @param {{list_id: number, item_id: number|null, poi_id: number|null, done_on: string}[]} checkins
+ *   Every check-in the person has, on any list; `item_id` null is a free choice
+ * @returns {{list_id: number, item_id: number|null, poi_id: number|null, done_on: string}[]} Those
+ *   that count toward this list, in the order given, the first kept where two name the same hike
  */
 export function checkinsForList(list, checkins) {
   const itemIds = new Set(list.items.map(item => item.id));
@@ -83,6 +89,7 @@ export function checkinDateBounds(list, today = todayInValley()) {
  */
 export function earlierEditionsEarned(list, allLists, checkins) {
   return allLists.filter(other =>
-    other.slug === list.slug && other.edition < list.edition && listProgress(other, checkins, other.ends_on).earned
+    other.slug === list.slug && other.edition < list.edition
+    && checkinsForList(other, checkins).length >= (other.goal_count || other.items.length)
   ).length;
 }

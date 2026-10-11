@@ -10,7 +10,8 @@ function readDismissed() {
   try {
     const parsed = JSON.parse(localStorage.getItem(KEY_DISMISSED) || '[]');
     return Array.isArray(parsed) ? parsed : [];
-  } catch {
+  } catch (err) {
+    console.warn('Could not read which seasonal features were hidden:', err);
     return [];
   }
 }
@@ -69,7 +70,11 @@ export default function SeasonalFeature({ variant }) {
       <button type="button" className="seasonal-feature-open" onClick={open}>
         <span aria-hidden="true">🍂</span> {list.name} <span className="seasonal-feature-tally">· {tally}</span>
       </button>
-      <button type="button" className="seasonal-feature-dismiss" onClick={dismiss} aria-label={`Hide ${list.name}`}>×</button>
+      <button type="button" className="seasonal-feature-dismiss" onClick={dismiss} aria-label={`Hide ${list.name}`}>
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.410 10.59 12 5 17.590 6.41 19 12 13.410 17.590 19 19 17.590 13.410 12z" />
+        </svg>
+      </button>
     </div>
   );
 }

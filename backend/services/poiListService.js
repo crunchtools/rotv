@@ -25,16 +25,19 @@ export class CheckinError extends Error {
   }
 }
 
-const LIST_COLUMNS = `l.id, l.series AS slug, l.edition, l.name, l.description, l.goal_count, l.source_url,
-  l.featured, l.choice_label, l.choice_description, l.rewards, l.form_url,
-  to_char(l.starts_on, 'YYYY-MM-DD') AS starts_on,
-  to_char(l.ends_on, 'YYYY-MM-DD') AS ends_on,
-  to_char(l.rewards_until, 'YYYY-MM-DD') AS rewards_until`;
-
-async function loadLists(pool, where, params) {
+// Published lists that are in season on `onDate`, or named in `ids`; either may be null.
+async function loadLists(pool, onDate, ids) {
   const listRows = await pool.query(
-    `SELECT ${LIST_COLUMNS} FROM poi_lists l WHERE l.status = 'published' AND ${where} ORDER BY l.starts_on, l.id`,
-    params
+    `SELECT l.id, l.series AS slug, l.edition, l.name, l.description, l.goal_count, l.source_url,
+            l.featured, l.choice_label, l.choice_description, l.rewards, l.form_url,
+            to_char(l.starts_on, 'YYYY-MM-DD') AS starts_on,
+            to_char(l.ends_on, 'YYYY-MM-DD') AS ends_on,
+            to_char(l.rewards_until, 'YYYY-MM-DD') AS rewards_until
+       FROM poi_lists l
+      WHERE l.status = 'published'
+        AND ($1::date BETWEEN l.starts_on AND l.ends_on OR l.id = ANY($2::int[]))
+      ORDER BY l.starts_on, l.id`,
+    [onDate, ids]
   );
   if (listRows.rows.length === 0) return [];
 
@@ -72,7 +75,7 @@ async function loadLists(pool, where, params) {
  * @returns {Promise<object[]>} Lists with their `items`, earliest season first
  */
 export function getActiveLists(pool, onDate = todayInValley()) {
-  return loadLists(pool, '$1::date BETWEEN l.starts_on AND l.ends_on', [onDate]);
+  return loadLists(pool, onDate, null);
 }
 
 /**
@@ -85,7 +88,7 @@ export function getActiveLists(pool, onDate = todayInValley()) {
  */
 export function getListsByIds(pool, ids) {
   if (ids.length === 0) return Promise.resolve([]);
-  return loadLists(pool, 'l.id = ANY($1::int[])', [ids]);
+  return loadLists(pool, null, ids);
 }
 
 /**
@@ -122,30 +125,19 @@ const normalizeCheckin = (raw) => ({
   done_on: raw?.done_on
 });
 
-// The free choice must be a trail that still exists.
-async function isLiveTrail(pool, poiId) {
-  const trail = await pool.query(
-    `SELECT 1 FROM pois WHERE id = $1 AND deleted IS NOT TRUE AND 'trail' = ANY(poi_roles)`,
-    [poiId]
+// Which of these POIs are trails that still exist: the free choice must be one.
+async function liveTrailIds(pool, poiIds) {
+  if (poiIds.length === 0) return new Set();
+  const trails = await pool.query(
+    `SELECT id FROM pois WHERE id = ANY($1::int[]) AND deleted IS NOT TRUE AND 'trail' = ANY(poi_roles)`,
+    [poiIds]
   );
-  return trail.rows.length > 0;
+  return new Set(trails.rows.map(row => row.id));
 }
 
-async function writeCheckin(pool, userId, list, checkin, onConflict) {
-  const poiId = checkin.item_id == null
-    ? checkin.poi_id
-    : list.items.find(item => item.id === checkin.item_id).poi_id;
-  const target = checkin.item_id == null
-    ? '(user_id, list_id) WHERE item_id IS NULL'
-    : '(user_id, list_id, item_id) WHERE item_id IS NOT NULL';
-  const written = await pool.query(
-    `INSERT INTO user_list_checkins (user_id, list_id, item_id, poi_id, done_on)
-     VALUES ($1, $2, $3, $4, $5::date)
-     ON CONFLICT ${target} ${onConflict}`,
-    [userId, list.id, checkin.item_id, poiId, checkin.done_on]
-  );
-  return written.rowCount;
-}
+const poiOfCheckin = (list, checkin) => (checkin.item_id == null
+  ? checkin.poi_id
+  : list.items.find(item => item.id === checkin.item_id).poi_id);
 
 /**
  * Log, or re-date, one check-in for a user.
@@ -154,7 +146,7 @@ async function writeCheckin(pool, userId, list, checkin, onConflict) {
  * @param {number} userId
  * @param {number} listId
  * @param {object} rawCheckin `{ item_id, poi_id, done_on }`; `item_id` null is the free choice
- * @param {string} [today]
+ * @param {string} [today] ISO date; defaults to today in the valley
  * @returns {Promise<{list_id: number, item_id: number|null, poi_id: number, done_on: string}>}
  * @throws {CheckinError} when the list is unknown or its rules refuse the check-in
  */
@@ -165,12 +157,25 @@ export async function saveCheckin(pool, userId, listId, rawCheckin, today = toda
   const checkin = normalizeCheckin(rawCheckin);
   const problem = checkinProblem(list, checkin, today);
   if (problem) throw new CheckinError(problem);
-  if (checkin.item_id == null && !(await isLiveTrail(pool, checkin.poi_id))) {
+  if (checkin.item_id == null && !(await liveTrailIds(pool, [checkin.poi_id])).has(checkin.poi_id)) {
     throw new CheckinError('Pick a trail for your free choice.');
   }
 
-  await writeCheckin(pool, userId, list, checkin, 'DO UPDATE SET done_on = EXCLUDED.done_on, poi_id = EXCLUDED.poi_id');
-  const poiId = checkin.item_id == null ? checkin.poi_id : list.items.find(i => i.id === checkin.item_id).poi_id;
+  const poiId = poiOfCheckin(list, checkin);
+  const redated = await pool.query(
+    `UPDATE user_list_checkins SET done_on = $4::date, poi_id = $5
+      WHERE user_id = $1 AND list_id = $2 AND item_id IS NOT DISTINCT FROM $3::int`,
+    [userId, list.id, checkin.item_id, checkin.done_on, poiId]
+  );
+  if (redated.rowCount === 0) {
+    // Two taps at once: the unique indexes keep one, and it is this same hike.
+    await pool.query(
+      `INSERT INTO user_list_checkins (user_id, list_id, item_id, poi_id, done_on)
+       VALUES ($1, $2, $3, $4, $5::date)
+       ON CONFLICT DO NOTHING`,
+      [userId, list.id, checkin.item_id, poiId, checkin.done_on]
+    );
+  }
   return { list_id: list.id, item_id: checkin.item_id, poi_id: poiId, done_on: checkin.done_on };
 }
 
@@ -204,6 +209,12 @@ export async function getUserCheckins(pool, userId) {
  * wins: a check-in the account already has keeps its date, and one the rules
  * refuse is dropped.
  *
+ * @param {import('pg').Pool} pool
+ * @param {number} userId The account to add them to
+ * @param {{list_id: number, item_id: number|null, poi_id?: number|null, done_on: string}[]} rawCheckins
+ *   What the device held, untrusted: `item_id` null is the list's free choice and `poi_id` then the
+ *   trail chosen; `done_on` is an ISO date. Anything else, and anything past the first 200, is ignored.
+ * @param {string} [today] ISO date (YYYY-MM-DD) the rules are judged against; defaults to today in the valley
  * @returns {Promise<number>} how many were added
  */
 export async function syncCheckins(pool, userId, rawCheckins, today = todayInValley()) {
@@ -213,12 +224,24 @@ export async function syncCheckins(pool, userId, rawCheckins, today = todayInVal
     .filter(({ listId }) => Number.isInteger(listId) && listId > 0);
   const lists = new Map((await getListsByIds(pool, [...new Set(wanted.map(w => w.listId))])).map(l => [l.id, l]));
 
-  let added = 0;
-  for (const { listId, checkin } of wanted) {
-    const list = lists.get(listId);
-    if (!list || checkinProblem(list, checkin, today)) continue;
-    if (checkin.item_id == null && !(await isLiveTrail(pool, checkin.poi_id))) continue;
-    added += await writeCheckin(pool, userId, list, checkin, 'DO NOTHING');
-  }
-  return added;
+  const allowed = wanted.filter(({ listId, checkin }) =>
+    lists.has(listId) && !checkinProblem(lists.get(listId), checkin, today));
+  const trails = await liveTrailIds(pool, allowed.filter(w => w.checkin.item_id == null).map(w => w.checkin.poi_id));
+  const rows = allowed.filter(({ checkin }) => checkin.item_id != null || trails.has(checkin.poi_id));
+  if (rows.length === 0) return 0;
+
+  const added = await pool.query(
+    `INSERT INTO user_list_checkins (user_id, list_id, item_id, poi_id, done_on)
+     SELECT $1::int, held.list_id, held.item_id, held.poi_id, held.done_on
+       FROM UNNEST($2::int[], $3::int[], $4::int[], $5::date[]) AS held(list_id, item_id, poi_id, done_on)
+     ON CONFLICT DO NOTHING`,
+    [
+      userId,
+      rows.map(r => r.listId),
+      rows.map(r => r.checkin.item_id),
+      rows.map(r => poiOfCheckin(lists.get(r.listId), r.checkin)),
+      rows.map(r => r.checkin.done_on)
+    ]
+  );
+  return added.rowCount;
 }

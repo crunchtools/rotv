@@ -60,16 +60,21 @@ export function writeSubscribed(value) {
   safeWrite(KEY_NEWSLETTER_SUBSCRIBED, value ? 'true' : 'false');
 }
 
-export function readTrips() {
-  const raw = safeRead(KEY_SAVED_TRIPS);
+// A stored JSON array, or [] when the key is unset or does not hold one.
+function readArray(key) {
+  const raw = safeRead(key);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
   } catch (err) {
-    console.warn('[anonSettings] saved trips are not valid JSON; ignoring them:', err);
+    console.warn(`[anonSettings] ${key} is not valid JSON; ignoring it:`, err);
     return [];
   }
+}
+
+export function readTrips() {
+  return readArray(KEY_SAVED_TRIPS);
 }
 
 function writeTrips(trips) {
@@ -94,17 +99,7 @@ export function removeTrip(slug) {
  * See docs/USER_DATA_FRAMEWORK.md.
  */
 export function createPoiIdListStore(key) {
-  const read = () => {
-    const raw = safeRead(key);
-    if (!raw) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.filter(n => Number.isInteger(n)) : [];
-    } catch (err) {
-      console.warn(`[anonSettings] ${key} is not valid JSON; ignoring it:`, err);
-      return [];
-    }
-  };
+  const read = () => readArray(key).filter(n => Number.isInteger(n));
   const write = (poiIds) => safeWrite(key, JSON.stringify(poiIds));
   const add = (poiId) => {
     const ids = read();
@@ -131,17 +126,7 @@ export const removeVisited = visitedStore.remove;
 const sameCheckin = (a, b) => a.list_id === b.list_id && (a.item_id ?? null) === (b.item_id ?? null);
 
 export function readListCheckins() {
-  const raw = safeRead(KEY_LIST_CHECKINS);
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter(c => c && Number.isInteger(c.list_id) && typeof c.done_on === 'string')
-      : [];
-  } catch (err) {
-    console.warn('[anonSettings] list check-ins are not valid JSON; ignoring them:', err);
-    return [];
-  }
+  return readArray(KEY_LIST_CHECKINS).filter(c => c && Number.isInteger(c.list_id) && typeof c.done_on === 'string');
 }
 
 export function putListCheckin(checkin) {

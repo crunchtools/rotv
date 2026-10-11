@@ -4,19 +4,6 @@ import { useEffect, useState } from 'react';
 // spotlight all ask which curated lists are in season (spec 050).
 let activeListsRequest = null;
 
-function loadActiveLists() {
-  if (!activeListsRequest) {
-    activeListsRequest = fetch('/api/lists')
-      .then(res => (res.ok ? res.json() : []))
-      .catch(err => {
-        console.error('Failed to fetch curated lists:', err);
-        activeListsRequest = null;
-        return [];
-      });
-  }
-  return activeListsRequest;
-}
-
 /**
  * The curated lists in season today.
  * @returns {object[]} Empty until loaded, and when none is in season
@@ -25,7 +12,16 @@ export function useActiveLists() {
   const [lists, setLists] = useState([]);
   useEffect(() => {
     let current = true;
-    loadActiveLists().then(loaded => { if (current) setLists(loaded); });
+    if (!activeListsRequest) {
+      activeListsRequest = fetch('/api/lists')
+        .then(res => (res.ok ? res.json() : []))
+        .catch(err => {
+          console.error('Failed to fetch curated lists:', err);
+          activeListsRequest = null;
+          return [];
+        });
+    }
+    activeListsRequest.then(loaded => { if (current) setLists(loaded); });
     return () => { current = false; };
   }, []);
   return lists;
