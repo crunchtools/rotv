@@ -34,8 +34,8 @@ function photosOf(pois, preferred) {
  * @param {object[]} state.listCheckins The person's check-ins
  * @param {object[]} state.destinations Every point POI, for the photos
  * @param {{open: number, total: number}|null} state.mtb How many MTB trails are open, once known
- * @returns {{id: string, title: string, text: string, to: string, images: string[], imageHasTitle?: boolean}[]}
- *   `images` are photos to try in order; `imageHasTitle` says the photo already carries the feature's name
+ * @returns {{id: string, title: string, text: string, cta: string, to: string, images: string[], imageHasTitle?: boolean}[]}
+ *   `cta` names where a tap goes; `images` are photos to try in order; `imageHasTitle` says the photo already carries the feature's name
  */
 export function featureSlides({ list, listCheckins, destinations, mtb }) {
   const slides = [];
@@ -48,6 +48,7 @@ export function featureSlides({ list, listCheckins, destinations, mtb }) {
       id: `list-${list.slug}`,
       title: list.name,
       text: `${tally} · ${list.items.length} trails`,
+      cta: `Open ${list.name}`,
       to: listPath(list.slug),
       images: list.hero_image ? [list.hero_image] : [],
       imageHasTitle: Boolean(list.hero_image)
@@ -62,6 +63,7 @@ export function featureSlides({ list, listCheckins, destinations, mtb }) {
       text: mtb && mtb.total > 0
         ? `${mtb.open} of ${mtb.total} trails open right now`
         : 'Open or closed? Know before you load the bike.',
+      cta: 'Check trail status',
       to: '/mtb-trail-status',
       images: photosOf(mtbTrailheads, PREFERRED_PHOTOS.mtb)
     });
@@ -71,6 +73,7 @@ export function featureSlides({ list, listCheckins, destinations, mtb }) {
     id: 'happening',
     title: 'Happening in the valley',
     text: 'News and events from every park, in one place.',
+    cta: 'See what\'s on',
     to: '/happening',
     images: photosOf(destinations, PREFERRED_PHOTOS.happening)
   });
@@ -78,8 +81,9 @@ export function featureSlides({ list, listCheckins, destinations, mtb }) {
 }
 
 /**
- * The rotating banner at the top of Find: one feature of the site at a time,
- * each a way in. It rotates on its own unless the person has asked for less
+ * The rotating banner in Find's header: one other part of the site at a time,
+ * each a way in. It is dark, photographic and labelled with where a tap goes,
+ * so it reads as a door to somewhere else rather than as part of the list. It rotates on its own unless the person has asked for less
  * motion, is pointing at it, or has picked a slide themselves.
  *
  * @param {object} props
@@ -122,33 +126,44 @@ export default function FeatureBanner({ destinations }) {
   const image = slide.images.find(url => !failedImages.has(url)) || null;
   const hasImage = Boolean(image);
 
+  // A photo that already carries the feature's name is shown whole, with only the tally and the way in under it.
+  const titled = hasImage && Boolean(slide.imageHasTitle);
+
   return (
     <section
       className="feature-banner"
       aria-roledescription="carousel"
-      aria-label="Features"
+      aria-label="More to do on Roots of The Valley"
       onPointerEnter={() => setPaused(true)}
       onPointerLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
     >
-      <button type="button" key={slide.id} className="feature-banner-slide" onClick={() => navigate(slide.to)}>
-        <span className={`feature-banner-picture ${hasImage ? '' : 'plain'}`}>
-          {hasImage && (
-            <img
-              src={image}
-              alt=""
-              onError={() => setFailedImages(failed => new Set(failed).add(image))}
-            />
-          )}
-          {!(hasImage && slide.imageHasTitle) && <span className="feature-banner-title">{slide.title}</span>}
+      <button
+        type="button"
+        key={slide.id}
+        className={`feature-banner-slide ${hasImage ? '' : 'plain'} ${titled ? 'titled' : ''}`}
+        onClick={() => navigate(slide.to)}
+      >
+        {hasImage && (
+          <img
+            className="feature-banner-photo"
+            src={image}
+            alt=""
+            onError={() => setFailedImages(failed => new Set(failed).add(image))}
+          />
+        )}
+        <span className="feature-banner-scrim" aria-hidden="true" />
+        <span className="feature-banner-copy">
+          <span className={`feature-banner-kicker ${titled ? 'visually-hidden' : ''}`}>Also on Roots of The Valley</span>
+          <span className={`feature-banner-title ${titled ? 'visually-hidden' : ''}`}>{slide.title}</span>
+          <span className="feature-banner-text">{slide.text}</span>
         </span>
-        <span className="feature-banner-row">
-          <span className="feature-banner-text">
-            <strong>{slide.title}</strong>
-            <span>{slide.text}</span>
-          </span>
-          <span className="feature-banner-go" aria-hidden="true">›</span>
+        <span className="feature-banner-cta">
+          {slide.cta}
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <path fill="currentColor" d="M12 4l-1.410 1.410L16.170 11H4v2h12.170l-5.580 5.590L12 20l8-8z" />
+          </svg>
         </span>
       </button>
       {slides.length > 1 && (

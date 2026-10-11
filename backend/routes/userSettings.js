@@ -41,11 +41,12 @@ export function allowedPreferences(raw) {
       .slice(0, MAX_LIST_CHOICES);
     if (pairs.length > 0) kept.listChoices = Object.fromEntries(pairs);
   }
-  // Contact details: only the known fields, trimmed and capped; an empty object clears them.
+  // Contact details: only the known fields, trimmed and capped. A field sent blank stays
+  // blank, so a name the person cleared is not filled back in from the account.
   const contact = raw?.contact;
   if (contact && typeof contact === 'object' && !Array.isArray(contact)) {
     kept.contact = Object.fromEntries(Object.entries(CONTACT_FIELDS)
-      .filter(([field]) => typeof contact[field] === 'string' && contact[field].trim())
+      .filter(([field]) => typeof contact[field] === 'string')
       .map(([field, longest]) => [field, contact[field].trim().slice(0, longest)]));
   }
   return kept;

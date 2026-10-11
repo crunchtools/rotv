@@ -423,6 +423,7 @@ const FindTab = memo(function FindTab({
       <div className="news-events-header">
         <h2>Find</h2>
         <p className="tab-subtitle">Every park, trail and place in the valley</p>
+        {activeList === 'all' && !searchText.trim() && <FeatureBanner destinations={allDestinations} />}
       </div>
 
       <div className="results-filters find-controls">
@@ -503,7 +504,6 @@ const FindTab = memo(function FindTab({
             choiceName={choiceCheckin ? (allLinearFeatures || []).find(f => f.id === choiceCheckin.poi_id)?.name || '' : ''}
           />
         )}
-        {activeList === 'all' && !searchText.trim() && <FeatureBanner destinations={allDestinations} />}
         {curatedList && (
           <div className="find-list-sort" role="group" aria-label="Sort the list">
             <span className="find-list-sort-label">Sort</span>

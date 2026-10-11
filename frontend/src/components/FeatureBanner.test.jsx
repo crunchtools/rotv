@@ -45,6 +45,7 @@ describe('featureSlides', () => {
     ]);
     expect(slides[0]).toMatchObject({ images: ['/lists/spree.webp'], imageHasTitle: true, text: 'Through November 30 · 13 trails' });
     expect(slides[1].text).toBe('2 of 3 trails open right now');
+    expect(slides.map(s => s.cta)).toEqual(['Open Fall Hiking Spree', 'Check trail status', "See what's on"]);
     // The preferred place's photo first, then the others to fall back on
     expect(slides[1].images).toEqual(['/api/pois/2/thumbnail?size=medium&v=b', '/api/pois/1/thumbnail?size=medium&v=a']);
     expect(slides[2].images[0]).toBe('/api/pois/3/thumbnail?size=medium&v=c');
@@ -75,6 +76,18 @@ describe('FeatureBanner', () => {
     expect(navigate).toHaveBeenCalledWith('/mtb-trail-status');
   });
 
+  it('says where a tap goes, and does not print a name the photo already carries', async () => {
+    const { container } = render(<FeatureBanner destinations={destinations} />);
+    await act(async () => { await Promise.resolve(); });
+
+    expect(screen.getByText('Open Fall Hiking Spree')).toBeTruthy();
+    expect(container.querySelector('.feature-banner-title').className).toContain('visually-hidden');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show MTB Trail Status' }));
+    expect(screen.getByText('Check trail status')).toBeTruthy();
+    expect(container.querySelector('.feature-banner-title').className).not.toContain('visually-hidden');
+  });
+
   it('stops rotating once the person picks a slide', async () => {
     render(<FeatureBanner destinations={destinations} />);
     await act(async () => { await Promise.resolve(); });
@@ -100,12 +113,13 @@ describe('FeatureBanner', () => {
     const { container } = render(<FeatureBanner destinations={destinations} />);
     await act(async () => { await Promise.resolve(); });
 
-    const firstPhoto = container.querySelector('.feature-banner-picture img').getAttribute('src');
-    fireEvent.error(container.querySelector('.feature-banner-picture img'));
-    expect(container.querySelector('.feature-banner-picture img').getAttribute('src')).not.toBe(firstPhoto);
-    fireEvent.error(container.querySelector('.feature-banner-picture img'));
+    const photo = () => container.querySelector('.feature-banner-photo');
+    const firstPhoto = photo().getAttribute('src');
+    fireEvent.error(photo());
+    expect(photo().getAttribute('src')).not.toBe(firstPhoto);
+    fireEvent.error(photo());
 
-    expect(container.querySelector('.feature-banner-picture img')).toBeNull();
-    expect(container.querySelector('.feature-banner-picture.plain .feature-banner-title').textContent).toBe('MTB Trail Status');
+    expect(photo()).toBeNull();
+    expect(container.querySelector('.feature-banner-slide.plain .feature-banner-title').textContent).toBe('MTB Trail Status');
   });
 });

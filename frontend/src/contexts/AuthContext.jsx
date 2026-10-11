@@ -419,13 +419,25 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
+  /**
+   * Remember how curated lists are sorted.
+   * @param {string} sort A sort as parseListSort() reads it, e.g. `park-desc`
+   * @returns {Promise<boolean>} false when signed in and the account could not be told
+   */
   const setListSort = useCallback((sort) => {
     setListSortState(sort);
     writeListSort(sort);
     return savePreferences({ listSort: sort });
   }, [savePreferences]);
 
-  // The trail picked for a list's free choice before it is marked hiked.
+  /**
+   * Remember the trail picked for a list's free choice before it is marked
+   * hiked. `listChoices` in the context is the whole set, `{ listId: poiId }`.
+   * Kept on the device, and on the account when signed in.
+   * @param {number} listId The curated list
+   * @param {number} poiId The trail picked
+   * @returns {Promise<boolean>} false when signed in and the account could not be told
+   */
   const setListChoice = useCallback((listId, poiId) => {
     const next = { ...listChoices, [listId]: poiId };
     setListChoicesState(next);
@@ -433,8 +445,14 @@ export function AuthProvider({ children }) {
     return savePreferences({ listChoices: next });
   }, [listChoices, savePreferences]);
 
-  // Name, mailing address and phone for filling in forms (Settings › General).
-  // Signed in they are kept on the account only; signed out, on the device.
+  /**
+   * Save the name, mailing address and phone used to fill in forms (Settings ›
+   * General). Signed in they are kept on the account only; signed out, on the
+   * device. `contact` in the context is what was last saved.
+   * @param {{firstName?: string, lastName?: string, address?: string, city?: string, state?: string,
+   *   zip?: string, phone?: string}} details The whole set; a blank field clears it
+   * @returns {Promise<boolean>} false when signed in and the account could not be told
+   */
   const setContact = useCallback((details) => {
     setContactState(details);
     if (!user) {

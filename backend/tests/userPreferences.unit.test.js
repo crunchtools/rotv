@@ -13,9 +13,17 @@ describe('allowedPreferences', () => {
     expect(allowedPreferences({ listChoices: { abc: 5 } })).toEqual({});
   });
 
+  it('keeps at most 50 free-choice picks', () => {
+    const picks = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [String(i + 1), 1000 + i]));
+    const kept = allowedPreferences({ listChoices: picks }).listChoices;
+    expect(Object.keys(kept)).toHaveLength(50);
+    expect(kept[50]).toBe(1049);
+    expect(kept[51]).toBeUndefined();
+  });
+
   it('keeps contact details it knows, trimmed and capped, and lets them be cleared', () => {
     expect(allowedPreferences({ contact: { firstName: ' Scott ', lastName: 'McCarty', zip: '4'.repeat(40), role: 'admin', city: 7, phone: '  ' } }))
-      .toEqual({ contact: { firstName: 'Scott', lastName: 'McCarty', zip: '4'.repeat(12) } });
+      .toEqual({ contact: { firstName: 'Scott', lastName: 'McCarty', zip: '4'.repeat(12), phone: '' } });
     expect(allowedPreferences({ contact: {} })).toEqual({ contact: {} });
     expect(allowedPreferences({ contact: 'Scott' })).toEqual({});
   });

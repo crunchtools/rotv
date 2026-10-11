@@ -38,9 +38,8 @@ export default function ContactDetails() {
   const save = async (e) => {
     e.preventDefault();
     setStatus('saving');
-    const details = Object.fromEntries(
-      FIELDS.map(field => [field.id, (draft[field.id] || '').trim()]).filter(([, text]) => text)
-    );
+    // Every field is saved, blank ones too: a name the person cleared must stay cleared.
+    const details = Object.fromEntries(FIELDS.map(field => [field.id, (draft[field.id] || '').trim()]));
     setStatus(await setContact(details) ? 'saved' : 'failed');
   };
 

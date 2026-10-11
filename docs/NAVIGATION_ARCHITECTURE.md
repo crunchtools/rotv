@@ -103,7 +103,7 @@ A curated list is a set of places an organizer names for a season, with the rule
 - Download completed form (`frontend/src/utils/listForm.js`) writes the person's hike dates, free choice, name and email onto the organizer's own PDF in the browser. The PDF is `form_file` (kept in `frontend/public/lists/`) and `form_layout` says where each answer goes; both are per edition.
 - `SeasonalFeature` is the pill over the map for a `featured` list in season, dismissed per edition. `ListBadges` is My Valley's Badges tab.
 - `FeatureBanner` (`frontend/src/components/FeatureBanner.jsx`) is the rotating banner at the top of Find's All places; `featureSlides()` decides what it advertises, and a new feature is one more slide there.
-- `ResultsTile` draws a trail that has no photo from its geometry (`frontend/src/utils/trailShape.js`).
+- `ResultsTile` draws every trail from its geometry (`frontend/src/utils/trailShape.js`) instead of showing a photo.
 - `mergePois` repoints `poi_list_items` and `user_list_checkins`. A deleted POI's item is left out of the response.
 - A new edition is a new `poi_lists` row and its items; migration 101 seeds 2026 and shows the shape. Earlier editions are never deleted: people's badges hang off them.
 

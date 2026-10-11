@@ -1,11 +1,18 @@
 import React from 'react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import ListChallenge from './ListChallenge';
+import { fillListForm, saveFile } from '../../utils/listForm';
 import { useAuth } from '../../hooks/useAuth';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
+// The entries are worked out for real; only writing the PDF and saving it are stubbed.
+vi.mock('../../utils/listForm', async (importOriginal) => ({
+  ...(await importOriginal()),
+  fillListForm: vi.fn(async () => new Uint8Array([1, 2, 3])),
+  saveFile: vi.fn()
+}));
 
 const list = {
   id: 1, slug: 'fall-hiking-spree', edition: 2026, name: 'Fall Hiking Spree',
@@ -15,8 +22,8 @@ const list = {
   items: [{ id: 11, poi_id: 1081, label: 'Quarry Trail' }, { id: 12, poi_id: 1054, label: 'Missing Link Trail' }]
 };
 
-const renderWith = (overrides = {}, listCheckins = []) => {
-  useAuth.mockReturnValue({ isAuthenticated: true, user: { fullName: 'Scott McCarty', email: 'scott@example.com' }, contact: {}, listCheckins, saveListCheckin: vi.fn(), removeListCheckin: vi.fn() });
+const renderWith = (overrides = {}, listCheckins = [], contact = {}) => {
+  useAuth.mockReturnValue({ isAuthenticated: true, user: { fullName: 'Scott McCarty', email: 'scott@example.com' }, contact, listCheckins, saveListCheckin: vi.fn(), removeListCheckin: vi.fn() });
   return render(<ListChallenge list={{ ...list, ...overrides }} />);
 };
 
@@ -67,5 +74,54 @@ describe('ListChallenge', () => {
     expect(screen.getByRole('button', { name: /download completed form/i })).toBeTruthy();
     expect(screen.getByText(/hike dates, name and email filled in/i)).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Settings' }).getAttribute('href')).toBe('/settings/general');
+  });
+
+  describe('the completed form', () => {
+    const form = {
+      form_file: '/lists/form.pdf',
+      form_layout: {
+        page: 0, dateX: 552, rows: { 1: 277.65, 2: 262.8 }, choice: { x: 164, y: 86, dateY: 84.6 },
+        lastName: { x: 207, y: 488.5 }, firstName: { x: 333, y: 488.5 }, address: { x: 207, y: 467.5 },
+        email: { x: 207, y: 446.5 }, phone: { x: 407, y: 446.5 }, returning: { x: 509.8, y: 486.3 }
+      },
+      items: [{ id: 11, position: 1, poi_id: 1081, label: 'Quarry Trail' }, { id: 12, position: 2, poi_id: 1054, label: 'Missing Link Trail' }]
+    };
+    const hikes = [{ list_id: 1, item_id: 12, poi_id: 1054, done_on: '2026-10-03' }];
+    const written = () => Object.fromEntries(fillListForm.mock.calls.at(-1)[1].map(entry => [`${entry.x},${entry.y}`, entry.text]));
+
+    it('writes the saved details, the account email and the hike dates, and saves the file', async () => {
+      renderWith(form, hikes, { firstName: 'S.', lastName: 'McCarty', address: '1 Main St', phone: '330-555-0100' });
+
+      fireEvent.click(screen.getByRole('button', { name: /download completed form/i }));
+
+      await waitFor(() => expect(saveFile).toHaveBeenCalledWith(expect.any(Uint8Array), 'fall-hiking-spree-2026-form.pdf'));
+      expect(written()).toEqual({
+        '207,488.5': 'McCarty', '333,488.5': 'S.', '207,467.5': '1 Main St', '207,446.5': 'scott@example.com',
+        '407,446.5': '330-555-0100', '552,262.8': '10/3/26'
+      });
+    });
+
+    it('falls back to the account\'s name only where none was given, not where it was cleared', async () => {
+      renderWith(form, hikes, { firstName: '' });
+
+      fireEvent.click(screen.getByRole('button', { name: /download completed form/i }));
+
+      await waitFor(() => expect(fillListForm).toHaveBeenCalled());
+      expect(written()['207,488.5']).toBe('McCarty');
+      expect(written()['333,488.5']).toBeUndefined();
+    });
+
+    it('says so, and saves nothing, when earlier years cannot be loaded', async () => {
+      saveFile.mockClear();
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 503 })));
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      renderWith(form, [...hikes, { list_id: 7, item_id: 70, poi_id: 1, done_on: '2025-10-01' }]);
+
+      fireEvent.click(screen.getByRole('button', { name: /download completed form/i }));
+
+      expect((await screen.findByRole('alert')).textContent).toContain('could not be filled in');
+      expect(saveFile).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    });
   });
 });

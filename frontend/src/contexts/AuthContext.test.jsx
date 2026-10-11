@@ -268,6 +268,52 @@ describe('AuthContext', () => {
       await waitFor(() => expect(captured.current.listChoices).toEqual({ 1: 1016 }));
     });
 
+    it('saves contact details to the account only, when signed in', async () => {
+      const fetchMock = mockFetch();
+      await renderHiker();
+      const details = { firstName: 'Scott', lastName: 'McCarty', address: '1 Main St' };
+
+      let saved;
+      await act(async () => { saved = await captured.current.setContact(details); });
+
+      expect(saved).toBe(true);
+      expect(captured.current.contact).toEqual(details);
+      expect(localStorage.getItem('rotv-contact')).toBeNull();
+      const [, request] = fetchMock.mock.calls.find(([url]) => url === '/api/user/settings/preferences');
+      expect(request.body).toBe(JSON.stringify({ contact: details }));
+    });
+
+    it('reports when the account could not be told the contact details', async () => {
+      mockFetch(undefined, { '/api/user/settings/preferences': fetchResponse({ error: 'down' }, { status: 500 }) });
+      await renderHiker();
+
+      let saved;
+      await act(async () => { saved = await captured.current.setContact({ firstName: 'Scott' }); });
+
+      expect(saved).toBe(false);
+    });
+
+    it('keeps a signed-out visitor\'s contact details on the device', async () => {
+      const fetchMock = vi.fn(async (url) => fetchResponse(url === '/auth/user' ? null : {}));
+      vi.stubGlobal('fetch', fetchMock);
+      render(<AuthProvider><Probe /></AuthProvider>);
+      await waitFor(() => expect(captured.current.loading).toBe(false));
+
+      let saved;
+      await act(async () => { saved = await captured.current.setContact({ firstName: 'Scott', zip: '44313' }); });
+
+      expect(saved).toBe(true);
+      expect(JSON.parse(localStorage.getItem('rotv-contact'))).toEqual({ firstName: 'Scott', zip: '44313' });
+      expect(fetchMock.mock.calls.some(([url]) => url === '/api/user/settings/preferences')).toBe(false);
+    });
+
+    it('shows the contact details the account holds', async () => {
+      mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { contact: { city: 'Akron' } } }) });
+      await renderHiker();
+
+      await waitFor(() => expect(captured.current.contact).toEqual({ city: 'Akron' }));
+    });
+
     it('takes the sort the account holds over the device\'s', async () => {
       localStorage.setItem('rotv-list-sort', 'difficulty-desc');
       mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listSort: 'park' } }) });

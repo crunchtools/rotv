@@ -15429,24 +15429,36 @@ button.type-filter-chip {
   text-align: right;
 }
 
+/* The feature banner in Find's header: a door to another part of the site,
+   so it is dark and photographic where the lists below it are light. */
 .feature-banner {
   position: relative;
+  margin-top: 0.75rem;
 }
 
 .feature-banner-slide {
-  display: block;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
   width: 100%;
-  padding: 0;
+  height: 180px;
+  padding: 0.85rem 0.9rem 1.5rem;
   overflow: hidden;
-  background: #fff7ed;
-  border: 1px solid #e9c9a8;
-  border-radius: 8px;
+  background: #16240c;
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
   font-family: inherit;
-  font-size: 0.85rem;
-  color: #3d3d3d;
+  color: white;
   text-align: left;
   cursor: pointer;
   animation: feature-banner-in 0.4s ease;
+}
+
+.feature-banner-slide.plain {
+  background: linear-gradient(120deg, #16240c, #3d5a1f 60%, #6e2f0c);
 }
 
 @keyframes feature-banner-in {
@@ -15454,70 +15466,83 @@ button.type-filter-chip {
   to { opacity: 1; }
 }
 
-.feature-banner-picture {
-  position: relative;
-  display: block;
-  aspect-ratio: 1007 / 468;
-  background: linear-gradient(135deg, #2d5016, #6e2f0c);
-}
-
-.feature-banner-picture img {
-  display: block;
+.feature-banner-photo {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.feature-banner-title {
+.feature-banner-slide.titled .feature-banner-photo {
+  object-fit: contain;
+  object-position: top center;
+}
+
+.feature-banner-slide.titled .feature-banner-scrim {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0) 45%);
+}
+
+.feature-banner-scrim {
   position: absolute;
-  inset: auto 0 0 0;
-  padding: 1.5rem 0.75rem 0.6rem;
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: white;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0));
-}
-
-.feature-banner-picture.plain .feature-banner-title {
   inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0.75rem;
-  font-size: 1.5rem;
-  text-align: center;
-  background: none;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.35) 55%, rgba(0, 0, 0, 0.1) 100%);
 }
 
-.feature-banner-row {
+.feature-banner-copy {
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.55rem 0.75rem;
+  flex-direction: column;
+  min-width: 0;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.7);
+}
+
+.feature-banner-kicker {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #f6c453;
+}
+
+.feature-banner-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.15;
 }
 
 .feature-banner-text {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  min-width: 0;
+  font-size: 0.85rem;
 }
 
-.feature-banner-go {
-  font-size: 1.3rem;
-  color: #6e2f0c;
+.feature-banner-cta {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #16240c;
+  background: #f6c453;
+  border-radius: 999px;
+  white-space: nowrap;
 }
 
 .feature-banner-dots {
+  position: absolute;
+  bottom: 0.2rem;
+  left: 0;
+  right: 0;
   display: flex;
   justify-content: center;
-  gap: 0.25rem;
-  margin-top: 0.25rem;
+  gap: 0.1rem;
 }
 
 .feature-banner-dot {
-  width: 28px;
-  height: 24px;
+  width: 22px;
+  height: 20px;
   padding: 0;
   background: none;
   border: none;
@@ -15527,15 +15552,44 @@ button.type-filter-chip {
 .feature-banner-dot::before {
   content: '';
   display: block;
-  width: 9px;
-  height: 9px;
+  width: 7px;
+  height: 7px;
   margin: 0 auto;
-  background: #c4c4c4;
+  background: rgba(255, 255, 255, 0.5);
   border-radius: 50%;
 }
 
 .feature-banner-dot.active::before {
-  background: #6e2f0c;
+  background: #f6c453;
+}
+
+.feature-banner .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .feature-banner-slide {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-end;
+    gap: 0.45rem;
+    height: 176px;
+  }
+
+  .feature-banner-slide.titled {
+    flex-direction: row;
+    align-items: flex-end;
+    justify-content: space-between;
+  }
+
+  .feature-banner-title {
+    font-size: 1.15rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

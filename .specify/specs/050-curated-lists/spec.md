@@ -50,13 +50,15 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 - While a featured list is in season, the map shows a pill with its name and the person's tally, which opens the list. The pill can be dismissed; it stays dismissed for that edition on that device.
 
 ### Feature banner
-- The top of Find's All places carries a banner that shows one feature of the site at a time and opens it when tapped: the featured list in season (its own banner and the person's tally), MTB Trail Status (how many trails are open right now, over a photo from one of the MTB trailheads), and Happening (over a photo of a place in the valley).
+- Find's header, under its title, carries a banner about 180 pixels tall that shows one other part of the site at a time and opens it when tapped: the featured list in season, MTB Trail Status (how many trails are open right now, over a photo from one of the MTB trailheads), and Happening (over a photo of a place in the valley).
+- It is meant to read as a door to somewhere else, not as part of the list: dark and photographic where the lists are light, headed "Also on Roots of The Valley", with a button that names where the tap goes ("Open Fall Hiking Spree", "Check trail status").
+- A feature whose picture already carries its name (the spree's banner) is shown whole, with only the person's tally and the button under it.
 - It moves to the next feature every seven seconds. It holds still while pointed at or focused, once the person picks a slide with the dots, and for anyone whose device asks for reduced motion.
-- A feature that does not apply is left out: the list out of season, MTB where no trail reports status. A photo that will not load gives way to the next candidate, then to the feature's name on a plain ground.
-- The banner is hidden while searching.
+- A feature that does not apply is left out: the list out of season, MTB where no trail reports status. A photo that will not load gives way to the next candidate, then to a plain dark ground.
+- The banner shows on All places and is hidden while searching.
 
 ### Trail thumbnails
-- A trail with no photo, or whose photo will not load, is drawn from its own line in every Find list, north up, coloured by difficulty. On the spree that covers the trails the district added this year.
+- Every trail in a Find list is shown as a drawing of its own line, north up, coloured by difficulty: a small trail map rather than a photo. Other places keep their photos.
 
 ### Find
 - A list in season is an entry in the Find tab's list picker, after the built-in ones. The spree lives at `/fall-hiking-spree`; a list without an address of its own lives at `/find/<series>`, and `/find/fall-hiking-spree` redirects.
@@ -71,7 +73,7 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 - The download is the organizer's PDF, unchanged, with this written on it: the date of each hike on that trail's row, the free choice's trail and date on its row, the person's details from Settings (first and last name, mailing address, city, state, ZIP, cell number), and, signed in, the account's email. A name not given in Settings falls back to the account's. Returning hiker is ticked when the person earned an earlier year's badge in ROTV; First-year is never ticked, because ROTV cannot know.
 - Everything else (county resident, signatures, other participants) is left for the person.
 - Settings › General has a Your details section for those fields. They are used only to fill in forms. Signed in they are kept on the account (`users.preferences.contact`) and not on the device; signed out they are kept on the device and move to the account on sign-in.
-- It is written in the browser (`frontend/src/utils/listForm.js`, pdf-lib loaded on demand), so it works signed out with the hikes held on the device and nothing is sent anywhere.
+- It is written in the browser (`frontend/src/utils/listForm.js`, pdf-lib loaded on demand), so it works signed out with the hikes held on the device. Making and downloading the PDF uploads nothing: the finished form never leaves the device. (The details themselves are saved as described above: to the account when signed in, and synced there on sign-in.)
 - `form_layout` holds the positions in PDF points from the page's bottom left: `dateX`, a `rows` map from item position to baseline, `choice`, `returning`, and one entry per detail (`lastName`, `firstName`, `address`, `city`, `state`, `zip`, `email`, `phone`). On this form each answer is written above its rule, with the label printed beneath. A new year's form needs a new layout; `listForm.test.js` writes a filled form to `LIST_FORM_OUT` for checking one by eye.
 
 ### My Valley
@@ -98,6 +100,9 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ## Data
 `poi_lists`, `poi_list_items` and `user_list_checkins`, in migration 101 and in `initDatabase` (a fresh database runs migrations before `pois` exists). The migration also adds the six POIs and seeds the 2026 list, each only once.
+
+### Privacy pages
+- Migration 102 adds seasonal challenge hikes and the optional contact details to the privacy policy, the data deletion page and the terms, each as a guarded edit that leaves an admin's rewording alone. It also removes a sentence that migration 092 had been adding to the privacy policy on every boot, and 092 is now guarded.
 
 ## Out of scope
 - Showing only a list's places on the map.

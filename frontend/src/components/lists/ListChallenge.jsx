@@ -26,14 +26,17 @@ export default function ListChallenge({ list, choiceName = '' }) {
     setFormState('working');
     try {
       const otherIds = [...new Set(listCheckins.map(c => c.list_id))].filter(id => id !== list.id);
-      const earlier = otherIds.length > 0
-        ? await fetch(`/api/lists?ids=${otherIds.join(',')}`).then(res => (res.ok ? res.json() : []))
-        : [];
+      let earlier = [];
+      if (otherIds.length > 0) {
+        const res = await fetch(`/api/lists?ids=${otherIds.join(',')}`);
+        if (!res.ok) throw new Error(`Could not load earlier years: ${res.status}`);
+        earlier = await res.json();
+      }
       const accountName = splitName(user?.fullName || '');
       const entries = formEntries(list, listCheckins, {
         ...contact,
-        firstName: contact.firstName || accountName.first,
-        lastName: contact.lastName || accountName.last,
+        firstName: contact.firstName ?? accountName.first,
+        lastName: contact.lastName ?? accountName.last,
         email: user?.email || '',
         choiceName,
         returning: earlierEditionsEarned(list, earlier, listCheckins) > 0

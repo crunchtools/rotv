@@ -15,7 +15,7 @@ const auth = (overrides = {}) => {
 afterEach(cleanup);
 
 describe('ContactDetails', () => {
-  it('starts the name from the account and saves only what was filled in', async () => {
+  it('starts the name from the account and saves every field, trimmed', async () => {
     const { setContact } = auth({ user: { fullName: 'Scott McCarty' } });
     render(<ContactDetails />);
 
@@ -26,7 +26,7 @@ describe('ContactDetails', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
 
     await waitFor(() => expect(setContact).toHaveBeenCalledWith({
-      firstName: 'Scott', lastName: 'McCarty', address: '1 Main St', phone: '330-555-0100'
+      firstName: 'Scott', lastName: 'McCarty', address: '1 Main St', city: '', state: '', zip: '', phone: '330-555-0100'
     }));
     expect((await screen.findByRole('status')).textContent).toContain('Details saved');
   });
@@ -38,6 +38,17 @@ describe('ContactDetails', () => {
     expect(screen.getByLabelText('First name').value).toBe('');
     expect(screen.getByLabelText('Last name').value).toBe('M.');
     expect(screen.getByLabelText('City').value).toBe('Akron');
+  });
+
+  it('saves a cleared name as blank instead of dropping it', async () => {
+    const { setContact } = auth({ user: { fullName: 'Scott McCarty' }, contact: { firstName: 'Scott', lastName: 'McCarty' } });
+    render(<ContactDetails />);
+
+    fireEvent.change(screen.getByLabelText('First name'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
+
+    await waitFor(() => expect(setContact).toHaveBeenCalled());
+    expect(setContact.mock.calls[0][0]).toMatchObject({ firstName: '', lastName: 'McCarty' });
   });
 
   it('tells a signed-out visitor the details stay on the device', () => {
