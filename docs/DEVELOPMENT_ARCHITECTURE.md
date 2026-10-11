@@ -198,7 +198,7 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
 | Restart the backend by hand | `touch data/control/backend` |
 | Run migrations again | `touch data/control/init`. Adding or editing a file in `backend/migrations/` does it on its own. Restarts the backend after. |
 | Reinstall dependencies | `touch data/control/deps`. A changed `package-lock.json` does it on its own. Restarts both servers after. |
-| Read a unit's log | `data/logs/rotv-backend.log`, `rotv-dev-ui.log`, `rotv-dev-deps.log`, `rotv-init.log`. Each is a mirror of that unit's journal since the mirror last started. `control.log` records every kick. |
+| Read a unit's log | `data/logs/rotv-backend.log`, `rotv-dev-ui.log`, `rotv-dev-deps.log`, `rotv-init.log`. Each holds the last 1,000 lines of that unit's journal, rewritten every five seconds (follow with `tail -F`). `control.log` records the last 500 kicks. |
 | Run unit tests | From the checkout: `cd backend && npx vitest run tests/<file>.unit.test.js`, or `cd frontend && npx vitest run`. |
 | Restart the whole container | Restart `dev.rootsofthevalley.org.service` on the host. Only a new image needs it. |
 

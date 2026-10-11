@@ -8,12 +8,14 @@ on:
     paths:
       - Containerfile.dev
       - 'rootfs-dev/**'
+      - scripts/test-rotv-dev-kick.sh
       - .github/workflows/build-dev.yml
   pull_request:
     branches: [main, master]
     paths:
       - Containerfile.dev
       - 'rootfs-dev/**'
+      - scripts/test-rotv-dev-kick.sh
       - .github/workflows/build-dev.yml
   workflow_run:
     workflows: ["Build and Push Container Image"]

@@ -25,7 +25,7 @@ Two directories beside the checkout, mounted into both containers.
 |---|---|---|
 | `data/checkout/` | agent writes | The code. Vite hot-reloads it; `rotv-backend` runs under `node --watch`. |
 | `data/control/<name>` | agent touches | Restart the units behind `<name>`: `ui`, `backend`, `init` (migrations, then backend), `deps` (npm ci, then both servers). Any other name does nothing. |
-| `data/logs/<unit>.log` | agent reads | A mirror of that unit's journal since the mirror started. `control.log` records each kick. |
+| `data/logs/<unit>.log` | agent reads | The last 1,000 lines of that unit's journal, rewritten every few seconds. `control.log` records the last 500 kicks. Both are capped: the files sit on the host's disk. |
 
 A changed `package-lock.json` runs `deps` and a change in `backend/migrations/` runs `init`
 without a touch.

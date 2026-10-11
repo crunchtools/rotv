@@ -21,7 +21,12 @@ RUN mv /app /opt/rotv-image && \
 
 COPY rootfs-dev/ /
 
-RUN chmod +x /usr/local/bin/rotv-dev-deps.sh /usr/local/bin/rotv-dev-kick.sh && \
+# The control names are this image's interface; a wrong mapping fails the build.
+COPY scripts/test-rotv-dev-kick.sh /tmp/test-rotv-dev-kick.sh
+
+RUN chmod +x /usr/local/bin/rotv-dev-deps.sh /usr/local/bin/rotv-dev-kick.sh \
+        /usr/local/bin/rotv-dev-log-mirror.sh && \
+    bash /tmp/test-rotv-dev-kick.sh && rm -f /tmp/test-rotv-dev-kick.sh && \
     systemctl enable rotv-dev-deps rotv-dev-ui \
         rotv-dev-kick@ui.path rotv-dev-kick@backend.path \
         rotv-dev-kick@init.path rotv-dev-kick@deps.path \

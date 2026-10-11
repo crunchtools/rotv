@@ -4,6 +4,10 @@
 # The names are a closed set: a file with any other name does nothing.
 set -euo pipefail
 
+log_dir=${ROTV_DEV_LOG_DIR:-/var/lib/rotv-dev/logs}
+# control.log keeps its last kicks, not every one since the disk was new
+keep_lines=500
+
 case "${1:-}" in
   ui)      units=(rotv-dev-ui) ;;
   backend) units=(rotv-backend) ;;
@@ -17,6 +21,15 @@ case "${1:-}" in
     ;;
 esac
 
-echo "$(date --iso-8601=seconds) $1: restarting ${units[*]}" | tee -a /var/lib/rotv-dev/logs/control.log
-systemctl restart "${units[@]}"
-echo "$(date --iso-8601=seconds) $1: done" | tee -a /var/lib/rotv-dev/logs/control.log
+record() {
+  echo "$(date --iso-8601=seconds) $1: $2" | tee -a "$log_dir/control.log"
+}
+
+record "$1" "restarting ${units[*]}"
+status=0
+systemctl restart "${units[@]}" || status=$?
+record "$1" "$([ "$status" -eq 0 ] && echo done || echo "failed ($status)")"
+
+tail -n "$keep_lines" "$log_dir/control.log" > "$log_dir/.control.log.tmp"
+mv -f "$log_dir/.control.log.tmp" "$log_dir/control.log"
+exit "$status"
