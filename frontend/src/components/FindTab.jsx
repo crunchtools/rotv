@@ -4,7 +4,10 @@ import ResultsTile from './ResultsTile';
 import FilterSheet, { FilterChip } from './FilterSheet';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 import { rankPois } from '../utils/poiRank';
-import { curatedListRows, sortListRows, LIST_SORTS } from '../utils/curatedList';
+import {
+  curatedListRows, sortListRows, LIST_SORTS, parseListSort, nextListSort, choiceCandidates, suggestChoice, choiceRow
+} from '../utils/curatedList';
+import { todayInValley } from '../utils/listProgress';
 import NavigateButton from './NavigateButton';
 import { getNavigationStops } from './sidebar/helpers';
 import { useActiveLists } from '../hooks/useActiveLists';
@@ -98,7 +101,9 @@ const FindTab = memo(function FindTab({
     : initialShowMtbOnly ? 'mtb' : initialShowOrganizationsOnly ? 'organizations' : 'all';
   const [requestedList, setRequestedList] = useState(urlList);
   const [currentPage, setCurrentPage] = useState(1);
-  const { listSort, setListSort } = useAuth();
+  const { listSort, setListSort, favorites, listCheckins, saveListCheckin } = useAuth();
+  // The trail picked for a list's free choice before it is marked hiked
+  const [pickedChoice, setPickedChoice] = useState(null);
   const [listConfig, setListConfig] = useState(null);
   const curatedLists = useActiveLists();
   const [isListMenuOpen, setIsListMenuOpen] = useState(false);
@@ -199,12 +204,11 @@ const FindTab = memo(function FindTab({
   }, [activeList, onFilterByTypes]);
 
   const parkIndex = useMemo(() => buildParkIndex(allLinearFeatures), [allLinearFeatures]);
-  const trails = useMemo(
-    () => (allLinearFeatures || []).filter(f => f.poi_roles?.includes('trail')),
-    [allLinearFeatures]
-  );
+  const choiceCheckin = curatedList
+    ? listCheckins.find(c => c.list_id === curatedList.id && c.item_id == null) || null
+    : null;
 
-  const { rankedPois, poiMap } = useMemo(() => {
+  const { rankedPois, poiMap, choiceOptions } = useMemo(() => {
     let sourceDestinations = allDestinations || [];
     let sourceLinear = allLinearFeatures || [];
     let sourceVirtual = allVirtualPois || [];
@@ -253,14 +257,35 @@ const FindTab = memo(function FindTab({
     }
 
     let ranked;
+    let options = [];
     if (curatedList) {
       // Fix: match the search item by item, so two entries for one place keep their own labels (PR #768 review)
+      const rows = curatedListRows(curatedList, filtered, search);
+
+      // The free choice is a row like the rest, for the trail hiked, picked or suggested.
+      if (curatedList.choice_label) {
+        const ownerOf = new Map(linear.map(f => [f.id, f.owner_id]));
+        const parkOf = (poi) => {
+          const park = findContainingPark(poi, parkIndex);
+          return park ? { id: park.id, owner_id: ownerOf.get(park.id) } : null;
+        };
+        const trailRows = linear.filter(f => f.poi_roles?.includes('trail'));
+        options = choiceCandidates(curatedList, trailRows, parkOf, curatedListRows(curatedList, filtered));
+        const chosenId = choiceCheckin?.poi_id ?? pickedChoice ?? suggestChoice(options, favorites, todayInValley())?.id;
+        const chosen = trailRows.find(trail => trail.id === chosenId);
+        if (chosen) {
+          if (!options.includes(chosen)) options = [chosen, ...options];
+          const row = choiceRow(curatedList, chosen);
+          const text = `${row.name} ${row._listItem.tag}`.toLowerCase();
+          if (!search || text.includes(search)) rows.push(row);
+        }
+      }
+
       // A hike is filed under the park it is in; the Towpath is in none, so under its trailhead.
-      const rows = curatedListRows(curatedList, filtered, search).map(row => ({
+      ranked = sortListRows(rows.map(row => ({
         ...row,
         _park: findContainingPark(row, parkIndex)?.name || (row._listItem.trailhead || '').split(',')[0]
-      }));
-      ranked = sortListRows(rows, listSort);
+      })), listSort);
     } else {
       ranked = rankPois(filtered, search);
     }
@@ -268,8 +293,16 @@ const FindTab = memo(function FindTab({
     const map = new Map();
     ranked.forEach(poi => map.set(poiRowKey(poi), poi));
 
-    return { rankedPois: ranked, poiMap: map };
-  }, [activeList, curatedList, listSort, parkIndex, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, iconConfig]);
+    return { rankedPois: ranked, poiMap: map, choiceOptions: options };
+  }, [activeList, curatedList, listSort, parkIndex, choiceCheckin, pickedChoice, favorites, allDestinations, allLinearFeatures, allVirtualPois, searchText, enabledFilters, iconConfig]);
+
+  const activeSort = parseListSort(listSort);
+
+  // Changing the trail of a choice already hiked keeps its date.
+  const changeChoice = (poiId) => {
+    setPickedChoice(poiId);
+    if (choiceCheckin) saveListCheckin(curatedList.id, null, poiId, choiceCheckin.done_on);
+  };
 
   const totalPages = Math.ceil(rankedPois.length / PAGE_SIZE) || 1;
   // The list can shrink under the stored page; show the last page that exists
@@ -464,16 +497,33 @@ const FindTab = memo(function FindTab({
           )}
         </div>
         {curatedList && (
-          <ListChallenge list={curatedList} trails={trails} />
+          <ListChallenge list={curatedList} />
         )}
         {activeList === 'all' && !searchText.trim() && <SeasonalFeature variant="card" />}
         {curatedList && (
-          <label className="find-list-sort">
-            Sort by
-            <select value={listSort} onChange={(e) => { setListSort(e.target.value); setCurrentPage(1); }}>
-              {LIST_SORTS.map(sort => <option key={sort.id} value={sort.id}>{sort.label}</option>)}
-            </select>
-          </label>
+          <div className="find-list-sort" role="group" aria-label="Sort the list">
+            <span className="find-list-sort-label">Sort</span>
+            {LIST_SORTS.map(sort => {
+              const active = activeSort.key === sort.id;
+              const direction = active && activeSort.descending ? 'descending' : 'ascending';
+              return (
+                <button
+                  key={sort.id}
+                  type="button"
+                  className={`find-list-sort-btn ${active ? 'active' : ''}`}
+                  aria-pressed={active}
+                  aria-label={`Sort by ${sort.label.toLowerCase()}${active ? `, ${direction}; press to reverse` : ''}`}
+                  onClick={() => { setListSort(nextListSort(listSort, sort.id)); setCurrentPage(1); }}
+                >
+                  {sort.label}
+                  <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+                    <path className={active && !activeSort.descending ? 'on' : ''} d="M7 10l5-5 5 5z" />
+                    <path className={active && activeSort.descending ? 'on' : ''} d="M7 14l5 5 5-5z" />
+                  </svg>
+                </button>
+              );
+            })}
+          </div>
         )}
         <div className="results-count" aria-live="polite">
           {rankedPois.length === 0
@@ -522,11 +572,24 @@ const FindTab = memo(function FindTab({
                 >
                   {poi._listItem && (
                     <div className="results-tile-actions" onKeyDown={(e) => e.stopPropagation()}>
+                      {poi._listItem.choice && (
+                        <select
+                          className="list-choice-select"
+                          aria-label={`${curatedList.choice_label}: change the trail`}
+                          value={poi.id}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={(e) => changeChoice(Number(e.target.value))}
+                        >
+                          {choiceOptions.map(trail => <option key={trail.id} value={trail.id}>{trail.name}</option>)}
+                        </select>
+                      )}
                       <NavigateButton
                         stops={getNavigationStops(poi, poi._isLinear)}
                         title={`Directions to where ${poi._listItem.label} starts`}
                       />
-                      <ListCheckinControl list={curatedList} item={poi._listItem} />
+                      {poi._listItem.choice
+                        ? <ListCheckinControl list={curatedList} choicePoiId={poi.id} />
+                        : <ListCheckinControl list={curatedList} item={poi._listItem} />}
                     </div>
                   )}
                 </ResultsTile>

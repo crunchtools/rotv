@@ -141,7 +141,7 @@ export function removeListCheckin(listId, itemId) {
 
 /**
  * How the person last sorted a curated list on this device (spec 050).
- * @returns {string|null} One of LIST_SORTS' ids; null until they choose
+ * @returns {string|null} A sort as parseListSort() reads it; null until they choose
  */
 export function readListSort() {
   return safeRead(KEY_LIST_SORT);
@@ -149,7 +149,7 @@ export function readListSort() {
 
 /**
  * Remember on this device how the person sorts a curated list.
- * @param {'official'|'trail'|'park'|'difficulty'} sort One of LIST_SORTS' ids (utils/curatedList.js)
+ * @param {string} sort A sort as parseListSort() reads it (utils/curatedList.js): `park`, `park-desc`, …
  */
 export function writeListSort(sort) {
   safeWrite(KEY_LIST_SORT, sort);

@@ -1,28 +1,19 @@
-import React, { useMemo, useState } from 'react';
+import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { listProgress, formatListDay } from '../../utils/listProgress';
 import ListBadge from './ListBadge';
-import ListCheckinControl from './ListCheckinControl';
 
 /**
  * A curated list as a challenge (spec 050): how far along the person is, the
- * badge, the list's rules and rewards, and its free choice.
+ * badge, and the list's rules and rewards. The hikes, and the free choice
+ * among them, are the rows under it.
  *
  * @param {object} props
  * @param {object} props.list The list, from /api/lists
- * @param {object[]} props.trails Every trail POI, for the free choice
  */
-export default function ListChallenge({ list, trails }) {
+export default function ListChallenge({ list }) {
   const { isAuthenticated, listCheckins } = useAuth();
-  const [choicePoiId, setChoicePoiId] = useState('');
-
   const progress = listProgress(list, listCheckins);
-  const choice = listCheckins.find(c => c.list_id === list.id && c.item_id == null);
-  const sortedTrails = useMemo(
-    () => [...trails].sort((a, b) => (a.name || '').localeCompare(b.name || '')),
-    [trails]
-  );
-  const chosenTrail = choice ? trails.find(t => t.id === choice.poi_id) : null;
   const percent = Math.min(100, Math.round((progress.done / progress.goal) * 100));
 
   let status;
@@ -84,28 +75,6 @@ export default function ListChallenge({ list, trails }) {
         </p>
       )}
 
-      {list.choice_label && (
-        <div className="list-challenge-choice">
-          <div className="list-challenge-choice-name">{list.choice_label}</div>
-          <div className="list-challenge-choice-about">
-            {chosenTrail ? chosenTrail.name : list.choice_description}
-          </div>
-          <div className="list-challenge-choice-row">
-            {!choice && (
-              <select
-                aria-label={`${list.choice_label}: pick a trail`}
-                value={choicePoiId}
-                onChange={(e) => setChoicePoiId(e.target.value)}
-              >
-                <option value="">Pick a trail…</option>
-                {sortedTrails.map(trail => <option key={trail.id} value={trail.id}>{trail.name}</option>)}
-              </select>
-            )}
-            <ListCheckinControl list={list} choicePoiId={choicePoiId ? Number(choicePoiId) : null} />
-          </div>
-        </div>
-      )}
-
       <details className="list-challenge-rules">
         <summary>How it works</summary>
         <ul>
@@ -114,7 +83,8 @@ export default function ListChallenge({ list, trails }) {
           </li>
           {list.choice_label && (
             <li>
-              One of the {progress.goal} can be your {list.choice_label}, as on the official form: {list.choice_description}
+              One of the {progress.goal} can be your {list.choice_label}, as on the official form: {list.choice_description}{' '}
+              It is a tile in the list; change the trail on it to the one you hiked.
             </li>
           )}
           <li>Hikes count from {formatListDay(list.starts_on)} through {formatListDay(list.ends_on, { year: true })}.</li>

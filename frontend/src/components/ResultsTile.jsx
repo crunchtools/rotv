@@ -68,6 +68,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       </div>
 
       <div className="results-tile-content">
+        {listItem?.tag && <div className="results-tile-list-tag">{listItem.tag}</div>}
         <div className="results-tile-name">{listItem?.label || poi.name}</div>
         {parkName && <div className="results-tile-park">in {parkName}</div>}
 

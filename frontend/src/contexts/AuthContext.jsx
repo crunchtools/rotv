@@ -44,7 +44,7 @@ export function AuthProvider({ children }) {
   const [favorites, setFavorites] = useState(() => readFavorites());
   const [visited, setVisited] = useState(() => readVisited());
   const [listCheckins, setListCheckins] = useState(() => readListCheckins());
-  const [listSort, setListSortState] = useState(() => readListSort() || 'official');
+  const [listSort, setListSortState] = useState(() => readListSort() || 'trail');
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
   const [providers, setProviders] = useState({ google: true, facebook: false, password: true, passkey: true, passwordReset: false });

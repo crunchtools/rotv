@@ -232,7 +232,7 @@ describe('AuthContext', () => {
     it('remembers the list sort on the device and on the account', async () => {
       const fetchMock = mockFetch();
       await renderSignedIn();
-      expect(captured.current.listSort).toBe('official');
+      expect(captured.current.listSort).toBe('trail');
 
       await act(() => captured.current.setListSort('park'));
 
@@ -243,7 +243,7 @@ describe('AuthContext', () => {
     });
 
     it('takes the sort the account holds over the device\'s', async () => {
-      localStorage.setItem('rotv-list-sort', 'trail');
+      localStorage.setItem('rotv-list-sort', 'difficulty-desc');
       mockFetch(undefined, { '/auth/user': fetchResponse({ ...SIGNED_IN, preferences: { listSort: 'park' } }) });
       await renderSignedIn();
 

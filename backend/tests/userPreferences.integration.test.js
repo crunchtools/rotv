@@ -59,9 +59,9 @@ describe('PUT /api/user/settings/preferences', () => {
 
   it('replaces the value the account held', async () => {
     await request(app).put('/api/user/settings/preferences').send({ listSort: 'park' });
-    await request(app).put('/api/user/settings/preferences').send({ listSort: 'difficulty' });
+    await request(app).put('/api/user/settings/preferences').send({ listSort: 'difficulty-desc' });
 
-    expect(await preferencesOf(HIKER)).toEqual({ theme: 'dark', listSort: 'difficulty' });
+    expect(await preferencesOf(HIKER)).toEqual({ theme: 'dark', listSort: 'difficulty-desc' });
   });
 
   it('refuses a body with no known preference and stores nothing', async () => {

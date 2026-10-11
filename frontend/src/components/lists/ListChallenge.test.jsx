@@ -16,7 +16,7 @@ const list = {
 
 const renderWith = (overrides = {}, listCheckins = []) => {
   useAuth.mockReturnValue({ isAuthenticated: true, listCheckins, saveListCheckin: vi.fn(), removeListCheckin: vi.fn() });
-  return render(<ListChallenge list={{ ...list, ...overrides }} trails={[]} />);
+  return render(<ListChallenge list={{ ...list, ...overrides }} />);
 };
 
 afterEach(cleanup);

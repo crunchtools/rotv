@@ -7,7 +7,7 @@ Summit Metro Parks runs its Fall Hiking Spree every September through November: 
 - As a hiker, in the fall the spree is put in front of me on the map and in Find, and I open this year's trails in the park district's order, with each one's length and rating.
 - As a hiker, I tap a spree trail and Navigate takes me to the lot that hike starts from, not to an arbitrary end of the trail.
 - As a hiker, I mark a trail hiked in one tap, correct the date if I logged it late, and see how many I have left and how many days remain.
-- As a hiker, I use my Hiker's Choice on any trail I like, once.
+- As a hiker, my Hiker's Choice is a tile in the list like the other trails, already showing a trail I might pick, and I change it to the one I hiked.
 - As a hiker, I earn the year's badge when I reach the goal, and I can still see it, and the hikes behind it, in later years.
 - As a hiker who has not signed in, my hikes stay on my phone and move to my account when I sign in.
 - As a visitor outside the season, I am not offered a list I cannot use.
@@ -50,7 +50,8 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ### Find
 - A list in season is an entry in the Find tab's list picker, after the built-in ones. The spree lives at `/fall-hiking-spree`; a list without an address of its own lives at `/find/<series>`, and `/find/fall-hiking-spree` redirects.
-- The list opens with its banner, credited and linked to the organizer, then its description, the badge, the tally with a progress bar, what is left and how many days remain, the free choice, and a "How it works" section with the rules and rewards. Its items follow in the organizer's order, and can be sorted by trail name, by park, or by difficulty (easiest first, shorter hikes first within a rating); the choice is remembered on the device and, signed in, on the account (`users.preferences.listSort`). Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
+- The list opens with its banner, credited and linked to the organizer, then its description, the badge, the tally with a progress bar, what is left and how many days remain, and a "How it works" section with the rules and rewards. Its hikes follow, sorted by Trail, Park or Difficulty (easiest first, shorter hikes first within a rating): three buttons, each of which reverses when pressed again. The sort is remembered on the device and, signed in, on the account (`users.preferences.listSort`). Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
+- The free choice is one more row, tagged with its name (Hiker's Choice) and showing the chosen trail's own park, length and difficulty, with a menu to change the trail. Until the person picks, it shows a suggestion: a trail they have favorited, else one drawn for the day. The menu offers trails in the parks the list's hikes are in, or in parks its organizer owns, that are not already on the list. Changing the trail of a choice already hiked keeps its date.
 - Each row shows the organizer's name for the hike, the park it is in, `miles · rating · class`, the note, where to park, a Navigate button to that hike's trailhead, and the check-in button with its date.
 - Picking a row selects the POI on the map as any Find row does. Navigate and Add to trip use the item's trailhead. The place card of a POI on a list in season carries the same check-in button.
 - A list's address, when the list is out of season or does not exist, shows All places.
@@ -82,5 +83,5 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 
 ## Out of scope
 - Showing only a list's places on the map.
-- Requiring the free choice to be one of the organizer's trails: many of the district's trails carry no owner, so the list states the rule and takes any trail.
+- Enforcing on the server that the free choice is one of the organizer's trails: many of the district's trails carry no owner, so the menu narrows the choice and the server takes any trail.
 - An admin screen for editing lists by hand; release 2 brings the review screen.
