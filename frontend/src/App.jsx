@@ -349,9 +349,16 @@ function AppContent() {
   const [tourStep, setTourStep] = useState(0);
 
   const location = useLocation();
-  const navigate = useNavigate();
+  const routerNavigate = useNavigate();
 
   const isProgrammaticNavigationRef = useRef(false);
+  // The flag tells the URL handling below to skip one navigation. A navigation
+  // to the page already showing changes nothing, so its flag would be left up
+  // and swallow the next real one: a banner or pill tapped later went nowhere.
+  const navigate = useCallback((to, options) => {
+    if (to === window.location.pathname) isProgrammaticNavigationRef.current = false;
+    routerNavigate(to, options);
+  }, [routerNavigate]);
   const isLoadingFromUrlRef = useRef(false);
   const prevPathnameRef = useRef(location.pathname);
 
@@ -726,27 +733,16 @@ function AppContent() {
     }
   }, [location.pathname, location.search]);
 
+  // Find narrows the map to the list it shows; leaving that list puts the
+  // legend back as it starts, hidden-by-default types included, so nothing is
+  // left for the URL to carry (#531).
   const handleFilterByTypes = useCallback((typesToShow) => {
     if (typesToShow && typesToShow.length > 0) {
       setVisibleTypes(new Set(typesToShow));
     } else {
-      if (iconConfig && iconConfig.length > 0) {
-        const allTypes = new Set(
-          iconConfig
-            .filter(icon => icon.enabled !== false)
-            .map(icon => icon.name)
-        );
-        if (!allTypes.has('default')) allTypes.add('default');
-        allTypes.add('trail');
-        allTypes.add('river');
-        allTypes.add('boundary');
-        allTypes.add('organization');
-        setVisibleTypes(allTypes);
-      } else {
-        setVisibleTypes(new Set(DEFAULT_ICON_TYPES));
-      }
+      setVisibleTypes(new Set(defaultTypesRef.current || DEFAULT_ICON_TYPES));
     }
-  }, [iconConfig]);
+  }, []);
 
   useEffect(() => {
     if (role !== 'admin' && role !== 'poi_admin') {
@@ -1363,6 +1359,17 @@ function AppContent() {
     const params = new URLSearchParams(window.location.search);
     let changed = false;
 
+    // The legend belongs to the map. Away from it the address is the tab's
+    // own, with none of the map's filters trailing after it.
+    if (activeTab !== 'view') {
+      const carried = ['types', 'layers', 'boundaries'].filter(name => params.has(name));
+      if (carried.length === 0) return;
+      carried.forEach(name => params.delete(name));
+      const search = params.toString();
+      window.history.replaceState({}, '', window.location.pathname + (search ? `?${search}` : ''));
+      return;
+    }
+
     const defaultTypes = defaultTypesRef.current;
     const typesDefault = defaultTypes && visibleTypes.size === defaultTypes.size &&
       [...visibleTypes].every(t => defaultTypes.has(t));
@@ -1411,7 +1418,7 @@ function AppContent() {
       const newUrl = window.location.pathname + (search ? `?${search}` : '');
       window.history.replaceState({}, '', newUrl);
     }
-  }, [visibleTypes, visibleBoundaries, showTrails, showRivers, showWaterTaxis]);
+  }, [visibleTypes, visibleBoundaries, showTrails, showRivers, showWaterTaxis, activeTab, location.pathname]);
 
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
@@ -2402,6 +2409,8 @@ function AppContent() {
       {activeTab === 'happening' && (
         <main id="main-content" className="main-content-full" tabIndex="-1" style={{ display: 'flex', flexDirection: 'column' }}>
           <HappeningTab
+            destinations={destinations}
+            routes={linearFeatures}
             view={happeningView}
             onViewChange={handleHappeningViewChange}
             newsProps={{
@@ -2622,7 +2631,7 @@ function AppContent() {
           pointerEvents: activeTab === 'view' ? 'auto' : 'none'
         }}
       >
-        {activeTab === 'view' && !editMode && <SeasonalFeature />}
+        {activeTab === 'view' && !editMode && <SeasonalFeature destinations={destinations} routes={linearFeatures} />}
         <Map
           destinations={filteredDestinations}
           parkPins={parkPins}

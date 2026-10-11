@@ -66,6 +66,8 @@ Acceptance Criteria:
 **NFR-039-1: URL cleanliness**
 - When all filters match the default state, the `types` and `boundaries` params should be absent (clean URL)
 - Only add params when the state differs from defaults
+- The params show only while the map is: on Find, Happening, Settings and About the address carries none, and they return with the map. A filter given in a link to one of those tabs is still applied.
+- Leaving a Find list that narrows the map (MTB Trail Status, Organizations) puts the legend back to its defaults, not to every type.
 
 **NFR-039-2: No page reloads**
 - Use `window.history.replaceState()` to update the URL without triggering navigation

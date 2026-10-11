@@ -1,6 +1,7 @@
 import React from 'react';
 import ParkNews from './ParkNews';
 import ParkEvents from './ParkEvents';
+import FeatureBanner from './FeatureBanner';
 import { handleRovingKeyDown } from '../utils/a11yUtils';
 
 const VIEWS = [
@@ -10,7 +11,8 @@ const VIEWS = [
 
 /**
  * The Happening tab (spec 048): news and events share one tab, switched by a
- * two-way toggle. Each view keeps its own search and filters.
+ * two-way toggle. Each view keeps its own search and filters. The feature
+ * banner under the toggle shows what else the site has.
  *
  * @param {object} props
  * @param {'news'|'events'} props.view Which side of the toggle is showing
@@ -21,9 +23,11 @@ const VIEWS = [
  * @param {{isAdmin: boolean, editMode: boolean, refreshTrigger: number,
  *   onSelectPoi: (poiId: number) => void,
  *   onEditEventItem: (id: number, title?: string) => void}} props.eventsProps Passed through to ParkEvents
+ * @param {object[]} [props.destinations] Every point POI, for the feature banner
+ * @param {object[]} [props.routes] Every river, railroad and water taxi, for the feature banner
  * @returns {JSX.Element}
  */
-export default function HappeningTab({ view, onViewChange, newsProps, eventsProps }) {
+export default function HappeningTab({ view, onViewChange, newsProps, eventsProps, destinations, routes }) {
   return (
     <div className="happening-tab">
       <div
@@ -45,6 +49,9 @@ export default function HappeningTab({ view, onViewChange, newsProps, eventsProp
             {v.label}
           </button>
         ))}
+      </div>
+      <div className="happening-features">
+        <FeatureBanner destinations={destinations} routes={routes} exclude="happening" />
       </div>
       {view === 'events' ? <ParkEvents {...eventsProps} /> : <ParkNews {...newsProps} />}
     </div>

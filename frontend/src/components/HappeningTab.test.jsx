@@ -4,6 +4,8 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 vi.mock('./ParkNews', () => ({ default: ({ label }) => <p>news list {label}</p> }));
 vi.mock('./ParkEvents', () => ({ default: ({ label }) => <p>events list {label}</p> }));
 
+vi.mock('./FeatureBanner', () => ({ default: ({ exclude }) => <p>banner without {exclude}</p> }));
+
 const { default: HappeningTab } = await import('./HappeningTab');
 
 afterEach(cleanup);
@@ -14,6 +16,8 @@ describe('HappeningTab', () => {
     const { rerender } = render(<HappeningTab view="news" {...props} />);
     expect(screen.getByText('news list n')).toBeTruthy();
     expect(screen.queryByText('events list e')).toBeNull();
+    // The banner advertises the rest of the site, not the tab it sits on
+    expect(screen.getByText('banner without happening')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'News' }).getAttribute('aria-pressed')).toBe('true');
 
     rerender(<HappeningTab view="events" {...props} />);

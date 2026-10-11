@@ -47,10 +47,11 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 - Check-ins are never removed at the end of a season. Deleting the account deletes them.
 
 ### Seasonal spotlight
-- While a featured list is in season, the map shows a pill with its name and the person's tally, which opens the list. The pill can be dismissed; it stays dismissed for that edition on that device.
+- The map shows a pill naming one feature from the banner below, with a few words of what is there now (the person's tally, the river's flow, how many MTB trails are open), which opens it. It names a feature the person has not opened on that device while one is left, so opening one brings up the next; once all have been opened it names the one opened longest ago. Opening a feature from the banner counts too. Closing the pill hides it for every feature known that day; a new one, such as the next edition of a list, brings it back.
 
 ### Feature banner
-- Find's header, under its title, carries a banner about 180 pixels tall that shows one other part of the site at a time and opens it when tapped: the featured list in season, MTB Trail Status (how many trails are open right now, over a photo from one of the MTB trailheads), and Happening (over a photo of a place in the valley).
+- Find's header, under its title, carries a banner about 180 pixels tall that shows one other part of the site at a time and opens it when tapped: the featured list in season, River Levels (the Cuyahoga's flow at the gauge inside the park, opening the river's River Levels tab), the Train Tracker and the Water Taxi Tracker (each opening its place on the map, over that place's photo), MTB Trail Status (how many trails are open right now, over a photo from one of the MTB trailheads), and Happening (over a photo of a place in the valley). Features the person has not opened come first.
+- Happening carries the same banner under its News and Events toggle, without the Happening slide.
 - It is meant to read as a door to somewhere else, not as part of the list: dark and photographic where the lists are light, headed "Also on Roots of The Valley", with a button that names where the tap goes ("Open Fall Hiking Spree", "Check trail status").
 - A feature whose picture already carries its name (the spree's banner) is shown whole, with only the person's tally and the button under it.
 - It moves to the next feature every seven seconds. It holds still while pointed at or focused, once the person picks a slide with the dots, and for anyone whose device asks for reduced motion.

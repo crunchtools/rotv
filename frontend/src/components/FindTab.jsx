@@ -189,18 +189,14 @@ const FindTab = memo(function FindTab({
     }
   }, [activeList]);
 
+  // The map is narrowed for a list about one kind of place and put back on
+  // leaving it. Any other list leaves the map's legend as the person set it.
+  const narrowedMapRef = useRef(false);
   useEffect(() => {
-    if (onFilterByTypes) {
-      let typesToShow = null;
-
-      if (activeList === 'mtb') {
-        typesToShow = ['mtb-trailhead'];
-      } else if (activeList === 'organizations') {
-        typesToShow = ['organization'];
-      }
-
-      onFilterByTypes(typesToShow);
-    }
+    if (!onFilterByTypes) return;
+    const typesToShow = activeList === 'mtb' ? ['mtb-trailhead'] : activeList === 'organizations' ? ['organization'] : null;
+    if (typesToShow || narrowedMapRef.current) onFilterByTypes(typesToShow);
+    narrowedMapRef.current = Boolean(typesToShow);
   }, [activeList, onFilterByTypes]);
 
   const parkIndex = useMemo(() => buildParkIndex(allLinearFeatures), [allLinearFeatures]);
@@ -425,7 +421,7 @@ const FindTab = memo(function FindTab({
       <div className="news-events-header">
         <h2>Find</h2>
         <p className="tab-subtitle">Every park, trail and place in the valley</p>
-        {activeList === 'all' && !searchText.trim() && <FeatureBanner destinations={allDestinations} />}
+        {activeList === 'all' && !searchText.trim() && <FeatureBanner destinations={allDestinations} routes={allLinearFeatures} />}
       </div>
 
       <div className="results-filters find-controls">
