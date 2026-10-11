@@ -62,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run concurrently.
 
 ### Fixed
+- **White band in the expanded place card on mobile (#765)**: the Info tab kept an 80px bottom
+  reserve, so content was clipped about 80px above the tab bar. The reserve is gone on mobile.
 - **Park name matching on the production database encoding (#712)**: `poi_name_key()` used
   `translate()`, which on a SQL_ASCII database turned one curly apostrophe into two straight ones,
   so "O’Neil Woods" never matched "O'Neil Woods". It now uses `replace()`.
