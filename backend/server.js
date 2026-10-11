@@ -677,6 +677,8 @@ async function initDatabase() {
         rewards TEXT,
         rewards_until DATE,
         form_url TEXT,
+        hero_image TEXT,
+        hero_credit TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (series, edition)

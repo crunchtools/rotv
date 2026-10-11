@@ -45,13 +45,16 @@ export default function SeasonalFeature({ variant }) {
 
   if (variant === 'card') {
     return (
-      <button type="button" className="seasonal-feature-card" onClick={open}>
-        <span className="seasonal-feature-mark" aria-hidden="true">🍂</span>
-        <span className="seasonal-feature-text">
-          <strong>{list.name}</strong>
-          <span>{tally} · {list.items.length} trails</span>
+      <button type="button" className={`seasonal-feature-card ${list.hero_image ? 'with-hero' : ''}`} onClick={open}>
+        {list.hero_image && <img className="seasonal-feature-hero" src={list.hero_image} alt="" />}
+        <span className="seasonal-feature-row">
+          {!list.hero_image && <span className="seasonal-feature-mark" aria-hidden="true">🍂</span>}
+          <span className="seasonal-feature-text">
+            <strong>{list.name}</strong>
+            <span>{tally} · {list.items.length} trails</span>
+          </span>
+          <span className="seasonal-feature-go" aria-hidden="true">›</span>
         </span>
-        <span className="seasonal-feature-go" aria-hidden="true">›</span>
       </button>
     );
   }

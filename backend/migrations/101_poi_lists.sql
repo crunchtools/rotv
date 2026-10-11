@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS poi_lists (
   rewards TEXT,
   rewards_until DATE,
   form_url TEXT,
+  hero_image TEXT,
+  hero_credit TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (series, edition)
@@ -148,7 +150,7 @@ WHERE NOT EXISTS (SELECT 1 FROM pois WHERE name = 'Willow Trail');
 WITH created AS (
   INSERT INTO poi_lists (series, edition, name, description, goal_count, source_url, organizer_poi_id,
                          starts_on, ends_on, status, featured, choice_label, choice_description,
-                         rewards, rewards_until, form_url)
+                         rewards, rewards_until, form_url, hero_image, hero_credit)
   SELECT
     'fall-hiking-spree', 2026, 'Fall Hiking Spree',
     'Summit Metro Parks'' 63rd annual Fall Hiking Spree. Hike at least eight of these trails between September 1 and November 30 to earn the hiking staff and shield.',
@@ -159,7 +161,8 @@ WITH created AS (
 The spree is free. Summit County residents receive their rewards at no cost; out-of-county residents pay $10 as a first-year hiker or $5 as a returning hiker.
 Roots of The Valley keeps your tally. The staff and shield come from Summit Metro Parks: date the district''s form after each hike and turn it in.
 Pick up rewards at the Administrative Offices, 975 Treaty Line Rd., Akron (Monday through Friday, 8 a.m. to 4:30 p.m.), or at F.A. Seiberling Nature Realm, Liberty Park Nature Center or Summit Lake Nature Center (Wednesday through Saturday 10 a.m. to 5 p.m., Sunday noon to 5 p.m.). Returning hikers may mail the form with a self-addressed, stamped envelope.',
-    DATE '2027-03-31', 'https://www.summitmetroparks.org/wp-content/uploads/2026-Fall-Hiking-Spree-Form.pdf'
+    DATE '2027-03-31', 'https://www.summitmetroparks.org/wp-content/uploads/2026-Fall-Hiking-Spree-Form.pdf',
+    '/lists/fall-hiking-spree-2026.webp', 'Summit Metro Parks'
   WHERE NOT EXISTS (SELECT 1 FROM poi_lists WHERE series = 'fall-hiking-spree' AND edition = 2026)
   RETURNING id
 )

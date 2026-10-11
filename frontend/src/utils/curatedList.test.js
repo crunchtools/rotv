@@ -68,6 +68,19 @@ describe('sortListRows', () => {
     expect(positions(sortListRows(rows, 'park'))).toEqual([4, 2, 3, 1]);
   });
 
+  it('orders by difficulty: rating, then the shorter hike, with an unrated hike last', () => {
+    const rated = (position, label, rating, miles) => ({ name: label, _listItem: { position, label, rating, miles } });
+    const hikes = [
+      rated(1, 'Nuthatch', 'Strenuous', 3.3),
+      rated(2, 'Quarry', 'Moderate', 1.4),
+      rated(3, 'Mystery', null, 0.5),
+      rated(4, 'Willow', 'Easy', 1.6),
+      rated(5, 'Parcours', 'Strenuous', 1.8),
+      rated(6, 'Missing Link', 'Easy', 1.1)
+    ];
+    expect(positions(sortListRows(hikes, 'difficulty'))).toEqual([6, 4, 2, 5, 1, 3]);
+  });
+
   it('does not reorder the rows it was given', () => {
     sortListRows(rows, 'trail');
     expect(positions(rows)).toEqual([1, 2, 3, 4]);

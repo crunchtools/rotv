@@ -24,6 +24,7 @@ These are the spree's, held as data on the list so another program can differ.
 | Date each hike; it must fall inside the season | check-in `done_on`, refused outside the season or in the future |
 | Rewards, who pays, where and until when to collect them | `rewards`, `rewards_until`, `form_url` |
 | The program is promoted while it runs | `featured` |
+| The program's own banner, credited to the organizer | `hero_image`, `hero_credit` |
 
 ROTV keeps the tally and awards its own badge. The staff and shield are the park district's, awarded from its form; the list says so and links the form.
 
@@ -44,12 +45,12 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 - Check-ins are never removed at the end of a season. Deleting the account deletes them.
 
 ### Seasonal spotlight
-- While a featured list is in season, the map shows a pill with its name and the person's tally, and Find's All places shows a card. Both open the list.
+- While a featured list is in season, the map shows a pill with its name and the person's tally, and Find's All places shows a card carrying the list's banner. Both open the list.
 - The pill can be dismissed; it stays dismissed for that edition on that device. The card and the list picker entry stay.
 
 ### Find
 - A list in season is an entry in the Find tab's list picker, after the built-in ones. The spree lives at `/fall-hiking-spree`; a list without an address of its own lives at `/find/<series>`, and `/find/fall-hiking-spree` redirects.
-- The list opens with its description, the badge, the tally with a progress bar, what is left and how many days remain, the free choice, and a "How it works" section with the rules and rewards. Its items follow in the organizer's order, and can be sorted by trail name or by park; the choice is remembered on the device and, signed in, on the account (`users.preferences.listSort`). Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
+- The list opens with its banner, credited and linked to the organizer, then its description, the badge, the tally with a progress bar, what is left and how many days remain, the free choice, and a "How it works" section with the rules and rewards. Its items follow in the organizer's order, and can be sorted by trail name, by park, or by difficulty (easiest first, shorter hikes first within a rating); the choice is remembered on the device and, signed in, on the account (`users.preferences.listSort`). Search narrows them by the POI's name or the organizer's name for it. Type filters do not apply.
 - Each row shows the organizer's name for the hike, the park it is in, `miles · rating · class`, the note, where to park, a Navigate button to that hike's trailhead, and the check-in button with its date.
 - Picking a row selects the POI on the map as any Find row does. Navigate and Add to trip use the item's trailhead. The place card of a POI on a list in season carries the same check-in button.
 - A list's address, when the list is out of season or does not exist, shows All places.

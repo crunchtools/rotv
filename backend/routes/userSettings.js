@@ -12,7 +12,7 @@ const MAX_SYNC_TRIPS = 50;
 
 // Display preferences kept on the account (users.preferences), and what each may hold.
 const PREFERENCE_VALUES = {
-  listSort: ['official', 'trail', 'park']
+  listSort: ['official', 'trail', 'park', 'difficulty']
 };
 
 /**

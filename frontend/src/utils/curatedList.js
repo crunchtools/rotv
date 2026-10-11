@@ -37,15 +37,19 @@ export function curatedListRows(list, pois, search = '') {
 export const LIST_SORTS = [
   { id: 'official', label: 'Official order' },
   { id: 'trail', label: 'Trail, A to Z' },
-  { id: 'park', label: 'Park, A to Z' }
+  { id: 'park', label: 'Park, A to Z' },
+  { id: 'difficulty', label: 'Difficulty, easiest first' }
 ];
+
+// The organizer's ratings, easiest first; one it does not use sorts last.
+const RATING_ORDER = ['easy', 'moderate', 'strenuous'];
 
 /**
  * Order a curated list's rows: as the organizer lists them, by the hike's
- * name, or by park and then name.
+ * name, by park and then name, or by difficulty (rating, then the shorter hike first).
  *
  * @param {object[]} rows Rows from curatedListRows(), each with `_listItem` and, for the park order, `_park`
- * @param {'official'|'trail'|'park'} sort
+ * @param {'official'|'trail'|'park'|'difficulty'} sort
  * @returns {object[]} A new array; an unknown `sort` leaves the organizer's order
  */
 export function sortListRows(rows, sort) {
@@ -53,6 +57,14 @@ export function sortListRows(rows, sort) {
   const byName = (a, b) => nameOf(a).localeCompare(nameOf(b));
   if (sort === 'trail') return [...rows].sort(byName);
   if (sort === 'park') return [...rows].sort((a, b) => (a._park || '').localeCompare(b._park || '') || byName(a, b));
+  if (sort === 'difficulty') {
+    const rank = (row) => {
+      const at = RATING_ORDER.indexOf((row._listItem.rating || '').toLowerCase());
+      return at === -1 ? RATING_ORDER.length : at;
+    };
+    const miles = (row) => row._listItem.miles ?? Infinity;
+    return [...rows].sort((a, b) => rank(a) - rank(b) || miles(a) - miles(b) || byName(a, b));
+  }
   return [...rows];
 }
 

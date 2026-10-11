@@ -228,7 +228,10 @@ describe('check-ins', () => {
 
     expect(await getActiveLists(probe, '2027-06-01')).toEqual([]);
     const [past] = await getListsByIds(probe, [spree.id]);
-    expect(past).toMatchObject({ slug: 'fall-hiking-spree', edition: 2026, rewards_until: '2027-03-31', featured: true });
+    expect(past).toMatchObject({
+      slug: 'fall-hiking-spree', edition: 2026, rewards_until: '2027-03-31', featured: true,
+      hero_image: '/lists/fall-hiking-spree-2026.webp', hero_credit: 'Summit Metro Parks'
+    });
     expect(await getUserCheckins(probe, HIKER)).toHaveLength(1);
   });
 });

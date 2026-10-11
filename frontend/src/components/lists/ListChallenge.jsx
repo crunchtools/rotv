@@ -36,6 +36,22 @@ export default function ListChallenge({ list, trails }) {
 
   return (
     <div className="list-challenge">
+      {list.hero_image && (
+        <figure className="list-hero">
+          <img
+            src={list.hero_image}
+            alt={`${list.name}, ${formatListDay(list.starts_on)} to ${formatListDay(list.ends_on)}`}
+          />
+          {list.hero_credit && (
+            <figcaption>
+              Image:{' '}
+              {list.source_url
+                ? <a className="link-button" href={list.source_url} target="_blank" rel="noopener noreferrer">{list.hero_credit}</a>
+                : list.hero_credit}
+            </figcaption>
+          )}
+        </figure>
+      )}
       <p className="find-list-description">{list.description}</p>
 
       <div className="list-challenge-progress">

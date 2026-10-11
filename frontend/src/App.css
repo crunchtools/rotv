@@ -15392,12 +15392,29 @@ button.type-filter-chip {
   color: #a12a1a;
 }
 
-.seasonal-feature-card {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
+.list-hero {
+  margin: 0;
+}
+
+.list-hero img {
+  display: block;
   width: 100%;
-  padding: 0.55rem 0.75rem;
+  height: auto;
+  border-radius: 8px;
+}
+
+.list-hero figcaption {
+  margin-top: 0.2rem;
+  font-size: 0.7rem;
+  color: #6b6b6b;
+  text-align: right;
+}
+
+.seasonal-feature-card {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
   background: #fff7ed;
   border: 1px solid #e9c9a8;
   border-radius: 8px;
@@ -15406,6 +15423,19 @@ button.type-filter-chip {
   color: #3d3d3d;
   text-align: left;
   cursor: pointer;
+}
+
+.seasonal-feature-hero {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.seasonal-feature-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.75rem;
 }
 
 .seasonal-feature-mark {
