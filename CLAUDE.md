@@ -162,6 +162,7 @@ your container. The site runs it from a different container that you cannot
 enter (`docs/DEVELOPMENT_ARCHITECTURE.md`, "Hosted dev"). There is no podman,
 so no `./run.sh`. `D` below is `/srv/dev.rootsofthevalley.org/data`.
 - Frontend edits hot-reload at https://dev.rootsofthevalley.org on save. Nothing to run.
+- To check a change yourself: `curl http://10.89.14.20:5173/` (Vite, and `/api` through it) or `http://10.89.14.20:8080/api/health` (the backend). No proxy, no login. There is no browser, so this shows what is served, not how it renders.
 - Backend edits restart `rotv-backend` on save (`node --watch`). To force it: `touch $D/control/backend`.
 - A new or edited migration runs on save. To force it: `touch $D/control/init`.
 - A changed `package-lock.json` reinstalls on save. To force it: `touch $D/control/deps`. Restart Vite alone: `touch $D/control/ui`.
