@@ -1,9 +1,10 @@
 -- Migration: 101_poi_lists.sql
 -- Description: Curated lists of places (#711, spec 050), and the first one: the
 --   2026 Summit Metro Parks Fall Hiking Spree.
---   1. poi_lists / poi_list_items. A list is one edition of a series (the spree
---      is a new list every year); an item is a POI plus what the organizer says
---      about it and where to park for it.
+--   1. poi_lists / poi_list_items / user_list_checkins. A list is one edition of
+--      a series (the spree is a new list every year); an item is a POI plus what
+--      the organizer says about it and where to park for it; a check-in is one
+--      dated hike a person logged against a list.
 --   2. Wood Hollow Metro Park and the five spree trails that had no POI. Outlines
 --      and lines are from Summit Metro Parks' own public layers ("SMP Park
 --      Boundaries" and "SMP Trails by Name" on ArcGIS Online, retrieved
@@ -26,6 +27,12 @@ CREATE TABLE IF NOT EXISTS poi_lists (
   starts_on DATE NOT NULL,
   ends_on DATE NOT NULL,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+  featured BOOLEAN NOT NULL DEFAULT FALSE,
+  choice_label TEXT,
+  choice_description TEXT,
+  rewards TEXT,
+  rewards_until DATE,
+  form_url TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   UNIQUE (series, edition)
@@ -48,6 +55,24 @@ CREATE TABLE IF NOT EXISTS poi_list_items (
 );
 
 CREATE INDEX IF NOT EXISTS idx_poi_list_items_poi_id ON poi_list_items(poi_id);
+
+-- One row per thing a person has done on a list. item_id NULL is the list's
+-- free choice ("Hiker's Choice"); poi_id is then the place they chose.
+CREATE TABLE IF NOT EXISTS user_list_checkins (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  list_id INTEGER NOT NULL REFERENCES poi_lists(id) ON DELETE CASCADE,
+  item_id INTEGER REFERENCES poi_list_items(id) ON DELETE CASCADE,
+  poi_id INTEGER REFERENCES pois(id) ON DELETE SET NULL,
+  done_on DATE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_list_checkins_item
+  ON user_list_checkins (user_id, list_id, item_id) WHERE item_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_list_checkins_choice
+  ON user_list_checkins (user_id, list_id) WHERE item_id IS NULL;
+CREATE INDEX IF NOT EXISTS idx_user_list_checkins_poi ON user_list_checkins (poi_id);
 
 -- The pois id sequence can lag max(id) after past manual-id inserts; realign it.
 SELECT setval(pg_get_serial_sequence('pois', 'id'), (SELECT GREATEST(MAX(id), 1) FROM pois));
@@ -122,12 +147,19 @@ WHERE NOT EXISTS (SELECT 1 FROM pois WHERE name = 'Willow Trail');
 
 WITH created AS (
   INSERT INTO poi_lists (series, edition, name, description, goal_count, source_url, organizer_poi_id,
-                         starts_on, ends_on, status)
+                         starts_on, ends_on, status, featured, choice_label, choice_description,
+                         rewards, rewards_until, form_url)
   SELECT
     'fall-hiking-spree', 2026, 'Fall Hiking Spree',
     'Summit Metro Parks'' 63rd annual Fall Hiking Spree. Hike at least eight of these trails between September 1 and November 30 to earn the hiking staff and shield.',
     8, 'https://www.summitmetroparks.org/programs-events/fall-hiking-spree/', (SELECT id FROM pois WHERE name = 'Summit Metro Parks' AND 'organization' = ANY(poi_roles) AND deleted IS NOT TRUE LIMIT 1),
-    DATE '2026-09-01', DATE '2026-11-30', 'published'
+    DATE '2026-09-01', DATE '2026-11-30', 'published', TRUE,
+    'Hiker''s Choice', 'Hike any one of your favorite Summit Metro Parks trails.',
+    E'First-year hikers earn a hiking staff and the 2026 shield. Returning hikers earn the shield.
+The spree is free. Summit County residents receive their rewards at no cost; out-of-county residents pay $10 as a first-year hiker or $5 as a returning hiker.
+Roots of The Valley keeps your tally. The staff and shield come from Summit Metro Parks: date the district''s form after each hike and turn it in.
+Pick up rewards at the Administrative Offices, 975 Treaty Line Rd., Akron (Monday through Friday, 8 a.m. to 4:30 p.m.), or at F.A. Seiberling Nature Realm, Liberty Park Nature Center or Summit Lake Nature Center (Wednesday through Saturday 10 a.m. to 5 p.m., Sunday noon to 5 p.m.). Returning hikers may mail the form with a self-addressed, stamped envelope.',
+    DATE '2027-03-31', 'https://www.summitmetroparks.org/wp-content/uploads/2026-Fall-Hiking-Spree-Form.pdf'
   WHERE NOT EXISTS (SELECT 1 FROM poi_lists WHERE series = 'fall-hiking-spree' AND edition = 2026)
   RETURNING id
 )

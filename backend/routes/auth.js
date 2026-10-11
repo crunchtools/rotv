@@ -9,6 +9,7 @@ import { limiter, ipKey, stampLogin } from '../utils/authSession.js';
 import { addAccountRoutes } from './authAccounts.js';
 import { displayNameOf } from '../services/accountProfile.js';
 import { releaseNewsletterOptIn } from '../services/signupNewsletter.js';
+import { getUserCheckins } from '../services/poiListService.js';
 
 const logger = createLogger('Auth');
 
@@ -204,6 +205,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         role: 'admin',
         favorites: [],
         visited: [],
+        listCheckins: [],
         preferences: {}
       });
     }
@@ -232,6 +234,13 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         logger.error('Failed to load visited for /auth/user, returning none:', err);
         visited = [];
       }
+      let listCheckins;
+      try {
+        listCheckins = await getUserCheckins(pool, id);
+      } catch (err) {
+        logger.error('Failed to load list check-ins for /auth/user, returning none:', err);
+        listCheckins = [];
+      }
       res.json({
         id,
         email,
@@ -246,6 +255,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         role: role || 'viewer',
         favorites,
         visited,
+        listCheckins,
         preferences: preferences || {}
       });
     } else {

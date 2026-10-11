@@ -4,6 +4,7 @@ import { isAuthenticated } from '../middleware/auth.js';
 import { validateStops, insertStops, insertTripWithSlugRetry, rollbackQuietly } from './trips.js';
 import { addSubscriber } from '../services/buttondownClient.js';
 import { createLogger } from '../utils/logger.js';
+import { syncCheckins } from '../services/poiListService.js';
 
 const logger = createLogger('UserSettings');
 
@@ -65,8 +66,8 @@ export function createUserSettingsRouter(pool) {
   const router = express.Router();
 
   router.post('/sync', isAuthenticated, async (req, res) => {
-    const { timezone, newsletter, trips, favorites, visited } = req.body || {};
-    const synced = { timezone: false, newsletter: false, trips: 0, favorites: 0, visited: 0 };
+    const { timezone, newsletter, trips, favorites, visited, listCheckins } = req.body || {};
+    const synced = { timezone: false, newsletter: false, trips: 0, favorites: 0, visited: 0, listCheckins: 0 };
 
     try {
       if (typeof timezone === 'string' && timezone.trim()) {
@@ -97,6 +98,7 @@ export function createUserSettingsRouter(pool) {
 
       synced.favorites = await syncPoiIdList(pool, req.user.id, favorites, 'favorites');
       synced.visited = await syncPoiIdList(pool, req.user.id, visited, 'visited');
+      synced.listCheckins = await syncCheckins(pool, req.user.id, listCheckins);
 
       if (Array.isArray(trips) && trips.length > 0) {
         const client = await pool.connect();

@@ -89,7 +89,7 @@ import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from 
 import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import { resolveMergedIds, originalMergedName } from './services/poiMergeService.js';
-import { getActiveLists } from './services/poiListService.js';
+import { createListsRouter } from './routes/lists.js';
 import {
   getAllActiveSeries,
   nextOccurrence,
@@ -239,6 +239,7 @@ app.use('/api/trips', createTripsRouter(pool));
 app.use('/api/user/settings', createUserSettingsRouter(pool));
 app.use('/api/favorites', createFavoritesRouter(pool));
 app.use('/api/visited', createVisitedRouter(pool));
+app.use('/api/lists', createListsRouter(pool));
 app.use('/api/notifications', createNotificationsRouter(pool));
 
 async function initDatabase() {
@@ -670,6 +671,12 @@ async function initDatabase() {
         starts_on DATE NOT NULL,
         ends_on DATE NOT NULL,
         status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+        featured BOOLEAN NOT NULL DEFAULT FALSE,
+        choice_label TEXT,
+        choice_description TEXT,
+        rewards TEXT,
+        rewards_until DATE,
+        form_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (series, edition)
@@ -693,6 +700,26 @@ async function initDatabase() {
       )
     `);
     await client.query('CREATE INDEX IF NOT EXISTS idx_poi_list_items_poi_id ON poi_list_items(poi_id)');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_list_checkins (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        list_id INTEGER NOT NULL REFERENCES poi_lists(id) ON DELETE CASCADE,
+        item_id INTEGER REFERENCES poi_list_items(id) ON DELETE CASCADE,
+        poi_id INTEGER REFERENCES pois(id) ON DELETE SET NULL,
+        done_on DATE NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_list_checkins_item
+        ON user_list_checkins (user_id, list_id, item_id) WHERE item_id IS NOT NULL
+    `);
+    await client.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_list_checkins_choice
+        ON user_list_checkins (user_id, list_id) WHERE item_id IS NULL
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS idx_user_list_checkins_poi ON user_list_checkins (poi_id)');
     await client.query(`
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS boundary_color TEXT DEFAULT '#228B22'
     `);
@@ -2233,16 +2260,6 @@ app.get('/api/results-subtabs', async (req, res) => {
   } catch (error) {
     logger.error('Error fetching results subtabs:', error);
     res.json({ subtabs: DEFAULT_SUBTABS });
-  }
-});
-
-// Curated lists in season right now (spec 050), for the Find tab's list picker.
-app.get('/api/lists', async (req, res) => {
-  try {
-    res.json(await getActiveLists(pool));
-  } catch (error) {
-    logger.error('Error fetching lists:', error);
-    res.status(500).json({ error: 'Failed to fetch lists' });
   }
 });
 

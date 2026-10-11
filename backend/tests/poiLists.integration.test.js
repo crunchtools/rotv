@@ -1,13 +1,16 @@
 /**
  * Migration 101 and poiListService against a real database (spec 050): the
  * migration seeds the 2026 Fall Hiking Spree once, a re-run (every boot) leaves
- * an admin's edits alone, and a list is served only while it is published and
- * in season.
+ * an admin's edits alone, a list is served only while it is published and in
+ * season, and a check-in is kept only when the spree's rules allow it.
  */
 import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { readFile } from 'fs/promises';
 import pg from 'pg';
-import { getActiveLists } from '../services/poiListService.js';
+import {
+  getActiveLists, getListsByIds, checkinProblem, saveCheckin, removeCheckin, getUserCheckins,
+  syncCheckins, CheckinError
+} from '../services/poiListService.js';
 
 const adminPool = new pg.Pool();
 // public stays on the path for the PostGIS types and functions the migration uses.
@@ -33,6 +36,8 @@ beforeEach(async () => {
       boundary_geom geometry(MultiPolygon, 4326)
     )
   `);
+  await probe.query('CREATE TABLE users (id serial PRIMARY KEY, email text)');
+  await probe.query('INSERT INTO users (email) VALUES ($1), ($2)', ['hiker@example.com', 'other@example.com']);
   await probe.query(
     `INSERT INTO pois (name, poi_roles) VALUES ($1, '{organization}')`,
     ['Summit Metro Parks']
@@ -119,5 +124,111 @@ describe('getActiveLists', () => {
 
     await probe.query('UPDATE poi_lists SET status = $1', ['draft']);
     expect(await getActiveLists(probe, '2026-10-10')).toEqual([]);
+  });
+});
+
+describe('check-ins', () => {
+  const HIKER = 1;
+  const OTHER = 2;
+  const TODAY = '2026-10-11';
+  let spree;
+  const item = (label) => spree.items.find(i => i.label === label);
+
+  beforeEach(async () => {
+    await probe.query(migration);
+    [spree] = await getActiveLists(probe, TODAY);
+  });
+
+  it('allows a hike on the list inside the season, up to today', () => {
+    const quarry = item('Quarry Trail').id;
+    expect(checkinProblem(spree, { item_id: quarry, done_on: '2026-09-01' }, TODAY)).toBeNull();
+    expect(checkinProblem(spree, { item_id: quarry, done_on: TODAY }, TODAY)).toBeNull();
+    expect(checkinProblem(spree, { item_id: quarry, done_on: '2026-08-31' }, TODAY)).toMatch(/2026-09-01 through 2026-11-30/);
+    expect(checkinProblem(spree, { item_id: quarry, done_on: '2026-10-12' }, TODAY)).toMatch(/not happened/);
+    expect(checkinProblem(spree, { item_id: quarry, done_on: '2026-12-01' }, '2026-12-15')).toMatch(/through/);
+    expect(checkinProblem(spree, { item_id: quarry, done_on: 'last week' }, TODAY)).toMatch(/date/);
+    expect(checkinProblem(spree, { item_id: 999999, done_on: TODAY }, TODAY)).toMatch(/not on this list/);
+  });
+
+  it('allows the free choice only where the list offers one', () => {
+    expect(checkinProblem(spree, { item_id: null, poi_id: 5, done_on: TODAY }, TODAY)).toBeNull();
+    expect(checkinProblem(spree, { item_id: null, poi_id: null, done_on: TODAY }, TODAY)).toMatch(/Pick the trail/);
+    expect(checkinProblem({ ...spree, choice_label: null }, { item_id: null, poi_id: 5, done_on: TODAY }, TODAY))
+      .toMatch(/no free choice/);
+  });
+
+  it('logs a hike once per trail and lets the date be corrected', async () => {
+    const quarry = item('Quarry Trail');
+    await saveCheckin(probe, HIKER, spree.id, { item_id: quarry.id, done_on: '2026-10-03' }, TODAY);
+    const saved = await saveCheckin(probe, HIKER, spree.id, { item_id: quarry.id, done_on: '2026-10-04' }, TODAY);
+
+    expect(saved).toEqual({ list_id: spree.id, item_id: quarry.id, poi_id: quarry.poi_id, done_on: '2026-10-04' });
+    expect(await getUserCheckins(probe, HIKER)).toEqual([saved]);
+    expect(await getUserCheckins(probe, OTHER)).toEqual([]);
+  });
+
+  it('takes one free choice, which must be a trail', async () => {
+    const pois = await probe.query('SELECT id, name FROM pois WHERE name = ANY($1::text[])', [['Seneca Trail', 'Summit Metro Parks', 'Willow Trail']]);
+    const idOf = (name) => pois.rows.find(p => p.name === name).id;
+
+    await expect(saveCheckin(probe, HIKER, spree.id, { item_id: null, poi_id: idOf('Summit Metro Parks'), done_on: TODAY }, TODAY))
+      .rejects.toBeInstanceOf(CheckinError);
+    await saveCheckin(probe, HIKER, spree.id, { item_id: null, poi_id: idOf('Seneca Trail'), done_on: '2026-10-01' }, TODAY);
+    await saveCheckin(probe, HIKER, spree.id, { item_id: null, poi_id: idOf('Willow Trail'), done_on: '2026-10-02' }, TODAY);
+
+    expect(await getUserCheckins(probe, HIKER)).toEqual([
+      { list_id: spree.id, item_id: null, poi_id: idOf('Willow Trail'), done_on: '2026-10-02' }
+    ]);
+  });
+
+  it('refuses a hike the rules do not allow, and an unknown list', async () => {
+    const quarry = item('Quarry Trail');
+    await expect(saveCheckin(probe, HIKER, spree.id, { item_id: quarry.id, done_on: '2026-08-01' }, TODAY))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(saveCheckin(probe, HIKER, 424242, { item_id: quarry.id, done_on: TODAY }, TODAY))
+      .rejects.toMatchObject({ status: 404 });
+    expect(await getUserCheckins(probe, HIKER)).toEqual([]);
+  });
+
+  it('removes a hike, and the free choice, separately', async () => {
+    const quarry = item('Quarry Trail');
+    const seneca = item('Seneca Trail');
+    await saveCheckin(probe, HIKER, spree.id, { item_id: quarry.id, done_on: TODAY }, TODAY);
+    await saveCheckin(probe, HIKER, spree.id, { item_id: null, poi_id: seneca.poi_id, done_on: TODAY }, TODAY);
+
+    expect(await removeCheckin(probe, HIKER, spree.id, null)).toBe(true);
+    expect((await getUserCheckins(probe, HIKER)).map(c => c.item_id)).toEqual([quarry.id]);
+    expect(await removeCheckin(probe, HIKER, spree.id, quarry.id)).toBe(true);
+    expect(await removeCheckin(probe, HIKER, spree.id, quarry.id)).toBe(false);
+  });
+
+  it('folds a device\'s hikes into the account without overwriting what it has', async () => {
+    const quarry = item('Quarry Trail');
+    const willow = item('Willow Trail');
+    await saveCheckin(probe, HIKER, spree.id, { item_id: quarry.id, done_on: '2026-10-05' }, TODAY);
+
+    const added = await syncCheckins(probe, HIKER, [
+      { list_id: spree.id, item_id: quarry.id, done_on: '2026-09-20' },
+      { list_id: spree.id, item_id: willow.id, done_on: '2026-09-21' },
+      { list_id: spree.id, item_id: willow.id, done_on: '2026-07-04' },
+      { list_id: 424242, item_id: willow.id, done_on: '2026-09-21' },
+      { item_id: willow.id }
+    ], TODAY);
+
+    expect(added).toBe(1);
+    expect(await getUserCheckins(probe, HIKER)).toEqual([
+      { list_id: spree.id, item_id: willow.id, poi_id: willow.poi_id, done_on: '2026-09-21' },
+      { list_id: spree.id, item_id: quarry.id, poi_id: quarry.poi_id, done_on: '2026-10-05' }
+    ]);
+  });
+
+  it('keeps a past season\'s list and hikes readable after it ends', async () => {
+    const quarry = item('Quarry Trail');
+    await saveCheckin(probe, HIKER, spree.id, { item_id: quarry.id, done_on: '2026-11-30' }, '2026-12-20');
+
+    expect(await getActiveLists(probe, '2027-06-01')).toEqual([]);
+    const [past] = await getListsByIds(probe, [spree.id]);
+    expect(past).toMatchObject({ slug: 'fall-hiking-spree', edition: 2026, rewards_until: '2027-03-31', featured: true });
+    expect(await getUserCheckins(probe, HIKER)).toHaveLength(1);
   });
 });
