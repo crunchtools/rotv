@@ -32,6 +32,14 @@ describe('AccountProfile', () => {
     expect(screen.queryByLabelText('Full name')).toBeNull();
   });
 
+  it('keeps a last name saved as blank blank, instead of refilling it from the account', () => {
+    auth({ contact: { firstName: 'Scott', lastName: '' } });
+    render(<AccountProfile />);
+
+    expect(screen.getByLabelText('First name').value).toBe('Scott');
+    expect(screen.getByLabelText('Last name').value).toBe('');
+  });
+
   it('saves the name to the account and the details to the contact in one go', async () => {
     const { updateProfile, setContact } = auth({ contact: { firstName: 'Scott', lastName: 'McCarty', city: 'Akron' } });
     render(<AccountProfile />);
@@ -41,7 +49,7 @@ describe('AccountProfile', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     await waitFor(() => expect(setContact).toHaveBeenCalledWith({
-      firstName: 'Scott', lastName: 'M.', address: '', city: 'Akron', state: '', zip: '', phone: '330-555-0100'
+      firstName: 'Scott', lastName: 'M.', city: 'Akron', phone: ' 330-555-0100 '
     }));
     expect(updateProfile).toHaveBeenCalledWith({ name: 'Scott M.', username: '', displayPreference: 'name' });
     expect((await screen.findByRole('status')).textContent).toBe('Saved.');

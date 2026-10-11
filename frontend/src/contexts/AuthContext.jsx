@@ -453,7 +453,9 @@ export function AuthProvider({ children }) {
    *   zip?: string, phone?: string}} details The whole set; a blank field clears it
    * @returns {Promise<boolean>} false when signed in and the account could not be told
    */
-  const setContact = useCallback((details) => {
+  const setContact = useCallback((typed) => {
+    // As typed in a form: stray spaces around a value are not part of it.
+    const details = Object.fromEntries(Object.entries(typed).map(([field, text]) => [field, String(text ?? '').trim()]));
     setContactState(details);
     if (!user) {
       writeContact(details);

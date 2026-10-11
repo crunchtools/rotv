@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { splitName } from '../../utils/listForm';
-import { ContactFields, contactFrom } from '../ContactDetails';
+import { ContactFields } from '../ContactDetails';
 import ProfileFields from './ProfileFields';
 
 const NO_DETAILS = {};
@@ -21,8 +21,9 @@ function AccountProfile() {
     const fromAccount = splitName(user.fullName || '');
     return {
       ...contact,
-      firstName: contact.firstName || fromAccount.first,
-      lastName: contact.lastName || fromAccount.last
+      // Fix: a name saved as blank stays blank; only one never given starts from the account's (PR #768 review)
+      firstName: contact.firstName ?? fromAccount.first,
+      lastName: contact.lastName ?? fromAccount.last
     };
   });
   const [shownAs, setShownAs] = useState({
@@ -50,7 +51,7 @@ function AccountProfile() {
     e.preventDefault();
     act(async () => {
       await updateProfile({ ...shownAs, name });
-      if (!await setContact(contactFrom(details))) {
+      if (!await setContact(details)) {
         throw new Error('Your name was saved, but not your address and cell number. Please try again.');
       }
       return 'Saved.';

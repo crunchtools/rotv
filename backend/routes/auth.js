@@ -216,7 +216,8 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         name: testAdmin.name || 'Test Admin',
         username: null,
         displayPreference: 'name',
-        displayName: 'Test Admin',
+        // Fix: follow the saved name here too, as the header shows displayName (PR #768 review)
+        displayName: testAdmin.name || 'Test Admin',
         emailVerified: true,
         needsSignupCompletion: false,
         pictureUrl: null,

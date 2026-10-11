@@ -7,7 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 
 vi.mock('../../hooks/useAuth', () => ({ useAuth: vi.fn() }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
-// The entries are worked out for real; only writing the PDF and saving it are stubbed.
+// The entries are worked out for real; writing the PDF and saving it are not.
 vi.mock('../../utils/listForm', async (importOriginal) => ({
   ...(await importOriginal()),
   fillListForm: vi.fn(async () => new Uint8Array([1, 2, 3])),
@@ -45,6 +45,25 @@ describe('ListChallenge', () => {
 
     expect(screen.queryByRole('link', { name: 'Summit Metro Parks' })).toBeNull();
     expect(screen.getByText(/Summit Metro Parks/)).toBeTruthy();
+  });
+
+  it('puts Take the tour beside the form button, and on its own for a list with no form', () => {
+    const onStartTour = vi.fn();
+    const withForm = { ...list, form_file: '/lists/form.pdf', form_layout: { page: 0, rows: {} } };
+    useAuth.mockReturnValue({ isAuthenticated: false, user: null, contact: {}, listCheckins: [] });
+
+    const { container, rerender } = render(<ListChallenge list={withForm} onStartTour={onStartTour} />);
+    const actions = container.querySelector('.list-challenge-form .list-challenge-actions');
+    expect([...actions.querySelectorAll('button')].map(button => button.textContent))
+      .toEqual(['Download completed form', 'Take the tour']);
+
+    rerender(<ListChallenge list={list} onStartTour={onStartTour} />);
+    expect(container.querySelector('.list-challenge-form')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Take the tour' }));
+    expect(onStartTour).toHaveBeenCalledTimes(1);
+
+    rerender(<ListChallenge list={list} />);
+    expect(screen.queryByRole('button', { name: 'Take the tour' })).toBeNull();
   });
 
   it('shows the description and tally without a banner', () => {

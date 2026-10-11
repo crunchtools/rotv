@@ -300,10 +300,11 @@ describe('AuthContext', () => {
       await waitFor(() => expect(captured.current.loading).toBe(false));
 
       let saved;
-      await act(async () => { saved = await captured.current.setContact({ firstName: 'Scott', zip: '44313' }); });
+      await act(async () => { saved = await captured.current.setContact({ firstName: ' Scott ', zip: '44313', city: '' }); });
 
       expect(saved).toBe(true);
-      expect(JSON.parse(localStorage.getItem('rotv-contact'))).toEqual({ firstName: 'Scott', zip: '44313' });
+      // Spaces around a value are dropped; a field cleared to blank stays, as blank.
+      expect(JSON.parse(localStorage.getItem('rotv-contact'))).toEqual({ firstName: 'Scott', zip: '44313', city: '' });
       expect(fetchMock.mock.calls.some(([url]) => url === '/api/user/settings/preferences')).toBe(false);
     });
 

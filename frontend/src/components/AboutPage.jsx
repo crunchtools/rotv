@@ -54,6 +54,20 @@ function AboutTutorial({ onStartTour, content, contentKey, buttonLabel, isAdmin,
   );
 }
 
+/**
+ * The About pages: the project's story, the tutorials, feedback and privacy.
+ *
+ * @param {object} props
+ * @param {() => void} props.onStartTour Starts the Navigation tour
+ * @param {() => void} props.onStartTripTour Starts the Trip Planning tour
+ * @param {(() => void)|null} [props.onStartListTour] Starts the tour of the featured curated list
+ *   (spec 050). Null while no featured list is in season, and its tutorial section is then left out
+ * @param {string} [props.listName] That list's name, for the button: "Take the <listName> Tour"
+ * @param {'story'|'tutorial'|'feedback'|'privacy'} props.aboutTab The section shown
+ * @param {(tab: string) => void} props.onTabChange Called when another section is picked
+ * @param {boolean} props.isAdmin Whether the viewer may edit the text
+ * @param {boolean} props.editMode Whether editing is switched on
+ */
 function AboutPage({ onStartTour, onStartTripTour, onStartListTour, listName, aboutTab, onTabChange, isAdmin, editMode }) {
   const [aboutContent, setAboutContent] = useState({});
 

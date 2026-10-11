@@ -14,21 +14,11 @@ const FIELDS = [
 const NO_DETAILS = {};
 
 /**
- * Every contact field, trimmed, blank ones included: a field the person
- * cleared must be saved as cleared.
- * @param {object} draft What is in the inputs
- * @returns {object} The whole set, as AuthContext's setContact() takes it
- */
-export function contactFrom(draft) {
-  return Object.fromEntries(FIELDS.map(field => [field.id, (draft[field.id] || '').trim()]));
-}
-
-/**
  * The name, mailing address and cell number inputs (spec 050), laid out as a
  * grid: used by Your Account when signed in and by Your details when not.
  *
  * @param {object} props
- * @param {object} props.value The draft, keyed as contactFrom() returns it
+ * @param {object} props.value The draft, keyed by field: firstName, lastName, address, city, state, zip, phone
  * @param {(next: object) => void} props.onChange Called with the whole draft on every edit
  * @param {string[]} [props.required] Ids of fields that must be filled in
  */
@@ -69,7 +59,7 @@ export default function ContactDetails() {
   const save = async (e) => {
     e.preventDefault();
     setStatus('saving');
-    setStatus(await setContact(contactFrom(draft)) ? 'saved' : 'failed');
+    setStatus(await setContact(draft) ? 'saved' : 'failed');
   };
 
   return (

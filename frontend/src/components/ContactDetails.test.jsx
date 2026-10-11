@@ -15,7 +15,7 @@ const auth = (overrides = {}) => {
 afterEach(cleanup);
 
 describe('ContactDetails', () => {
-  it('saves every field, trimmed', async () => {
+  it('saves what was typed along with what was already there', async () => {
     const { setContact } = auth({ contact: { firstName: 'Scott', lastName: 'McCarty' } });
     render(<ContactDetails />);
 
@@ -24,7 +24,7 @@ describe('ContactDetails', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
 
     await waitFor(() => expect(setContact).toHaveBeenCalledWith({
-      firstName: 'Scott', lastName: 'McCarty', address: '1 Main St', city: '', state: '', zip: '', phone: '330-555-0100'
+      firstName: 'Scott', lastName: 'McCarty', address: ' 1 Main St ', phone: '330-555-0100'
     }));
     expect((await screen.findByRole('status')).textContent).toContain('Details saved');
   });
