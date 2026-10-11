@@ -571,8 +571,8 @@ ENVFILE
 
     dev-host)
         # dev.rootsofthevalley.org: the hosted dev container on the production host.
-        # Its checkout is edited in place by the Claude session running inside it;
-        # these are the few things done to it from outside.
+        # Its checkout is edited from another container through a bind mount;
+        # these are the few things done to it from a laptop.
         DEV_HOST_CONTAINER="dev.rootsofthevalley.org"
         dev_host_ssh() {
             ssh -p "$PRODUCTION_PORT" root@"$PRODUCTION_HOST" "$@"
@@ -582,12 +582,12 @@ ENVFILE
                 dev_host_ssh "PRODUCTION_CONTAINER=$PRODUCTION_CONTAINER DEV_CONTAINER=$DEV_HOST_CONTAINER bash -s" < scripts/dev-seed.sh
                 ;;
             status)
-                dev_host_ssh "podman exec $DEV_HOST_CONTAINER systemctl status postgresql rotv-init rotv-backend rotv-dev-deps rotv-dev-ui rotv-dev-claude --no-pager -n 0; podman exec $DEV_HOST_CONTAINER git -C /work/rotv status -sb | head -20"
+                dev_host_ssh "podman exec $DEV_HOST_CONTAINER systemctl status postgresql rotv-init rotv-backend rotv-dev-deps rotv-dev-ui --no-pager -n 0; git -C /srv/dev.rootsofthevalley.org/data/checkout status -sb | head -20"
                 ;;
             logs)
                 # The unit name goes into a root shell on the production host
                 case "${3:-rotv-backend}" in
-                    postgresql|rotv-init|rotv-backend|rotv-dev-deps|rotv-dev-ui|rotv-dev-claude|umami) ;;
+                    postgresql|rotv-init|rotv-backend|rotv-dev-deps|rotv-dev-ui|umami) ;;
                     *) echo "Unknown unit: $3"; exit 1 ;;
                 esac
                 dev_host_ssh "podman exec $DEV_HOST_CONTAINER journalctl -f --no-pager -n 50 -u ${3:-rotv-backend}"

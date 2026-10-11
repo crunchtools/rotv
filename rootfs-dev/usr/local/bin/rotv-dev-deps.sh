@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install backend and frontend dependencies into the node_modules volumes, and
+# Install backend and frontend dependencies into the checkout, and
 # again only when a lockfile changes (a branch that adds a package).
 set -e
 

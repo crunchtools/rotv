@@ -1,7 +1,7 @@
 name: Build and Push Dev Image
 
-# quay.io/crunchtools/rotv-dev: the app image plus git, gh and Claude Code, for
-# dev.rootsofthevalley.org. Rebuilt whenever the app image is.
+# quay.io/crunchtools/rotv-dev: the app image plus the units that run a mounted
+# checkout, for dev.rootsofthevalley.org. Rebuilt whenever the app image is.
 on:
   push:
     branches: [main, master]

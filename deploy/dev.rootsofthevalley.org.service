@@ -1,10 +1,15 @@
 [Unit]
 Description=Podman container - dev.rootsofthevalley.org
 
+# The checkout, control and logs directories are shared (:z) with the
+# container the code is edited from; node_modules live in the checkout so
+# unit tests run from there too. See docs/DEVELOPMENT_ARCHITECTURE.md.
+
 [Service]
 Type=simple
+ExecStartPre=/usr/bin/mkdir -p /srv/dev.rootsofthevalley.org/data/control /srv/dev.rootsofthevalley.org/data/logs
 ExecStartPre=/usr/bin/podman pull quay.io/crunchtools/rotv-dev:latest
-ExecStart=/usr/bin/podman run --hostname dev.rootsofthevalley.org --tmpfs /var/lib/rsyslog:rw,size=8m --label io.containers.autoupdate=registry --label PODMAN_SYSTEMD_UNIT=dev.rootsofthevalley.org.service --systemd=always --memory=4g --memory-swap=4g --shm-size=256m -i --rm --name dev.rootsofthevalley.org -p 127.0.0.1:8087:5173 -v /srv/dev.rootsofthevalley.org/data/checkout:/work/rotv:Z -v rotv-dev-backend-node-modules:/work/rotv/backend/node_modules -v rotv-dev-frontend-node-modules:/work/rotv/frontend/node_modules -v /srv/dev.rootsofthevalley.org/data/pgdata:/data/pgdata:Z -v /srv/dev.rootsofthevalley.org/data/state:/var/lib/rotv-dev:Z -v /srv/dev.rootsofthevalley.org/config/dev.env:/etc/rotv/environment:Z,ro quay.io/crunchtools/rotv-dev:latest
+ExecStart=/usr/bin/podman run --hostname dev.rootsofthevalley.org --tmpfs /var/lib/rsyslog:rw,size=8m --label io.containers.autoupdate=registry --label PODMAN_SYSTEMD_UNIT=dev.rootsofthevalley.org.service --systemd=always --memory=4g --memory-swap=4g --shm-size=256m -i --rm --name dev.rootsofthevalley.org -p 127.0.0.1:8087:5173 -v /srv/dev.rootsofthevalley.org/data/checkout:/work/rotv:z -v /srv/dev.rootsofthevalley.org/data/control:/var/lib/rotv-dev/control:z -v /srv/dev.rootsofthevalley.org/data/logs:/var/lib/rotv-dev/logs:z -v /srv/dev.rootsofthevalley.org/data/pgdata:/data/pgdata:z -v /srv/dev.rootsofthevalley.org/config/dev.env:/etc/rotv/environment:z,ro quay.io/crunchtools/rotv-dev:latest
 ExecStop=/usr/bin/podman stop -t 3 dev.rootsofthevalley.org
 ExecStopPost=/usr/bin/podman rm -f dev.rootsofthevalley.org
 RestartSec=3

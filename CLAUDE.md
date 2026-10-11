@@ -156,17 +156,20 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 - Business logic is in backend/services/ (same name as the route usually)
 - Database schema is created in server.js initDatabase()
 
-### When you are running on dev.rootsofthevalley.org
-Your working directory is `/work/rotv` inside the hosted dev container
-(`docs/DEVELOPMENT_ARCHITECTURE.md`, "Hosted dev"). There is no podman, so no `./run.sh`.
+### When you are working on dev.rootsofthevalley.org
+The checkout is `/srv/dev.rootsofthevalley.org/data/checkout`, bind-mounted into
+your container. The site runs it from a different container that you cannot
+enter (`docs/DEVELOPMENT_ARCHITECTURE.md`, "Hosted dev"). There is no podman,
+so no `./run.sh`. `D` below is `/srv/dev.rootsofthevalley.org/data`.
 - Frontend edits hot-reload at https://dev.rootsofthevalley.org on save. Nothing to run.
-- Backend edits: `systemctl restart rotv-backend`. A new migration: `systemctl restart rotv-init` first.
-- A changed `package-lock.json`: `systemctl restart rotv-dev-deps`, then the service that uses it.
-- Logs: `journalctl -u rotv-backend -n 50` (also `rotv-dev-ui`).
+- Backend edits restart `rotv-backend` on save (`node --watch`). To force it: `touch $D/control/backend`.
+- A new or edited migration runs on save. To force it: `touch $D/control/init`.
+- A changed `package-lock.json` reinstalls on save. To force it: `touch $D/control/deps`. Restart Vite alone: `touch $D/control/ui`.
+- Logs: `tail -50 $D/logs/rotv-backend.log` (also `rotv-dev-ui`, `rotv-dev-deps`, `rotv-init`, and `control.log` for the kicks).
 - Unit tests: `cd backend && npx vitest run tests/<file>.unit.test.js`, or `cd frontend && npx vitest run`.
 - The full gate is the PR: branch, commit, `git push`, `gh pr create`, and let GHA build and test.
 - The database is a copy of production. Scheduled jobs and mail are off; leave them off.
-- Shipping: `/deploy` (`.claude/skills/deploy/`) merges, tags and runs `ssh rotv-prod deploy`. That key runs `deploy`, `status` and `logs` on the production host and nothing else.
+- Shipping: `/deploy` (`.claude/skills/deploy/`) merges, tags, waits for the build and restarts the production unit through the gateway's systemd tool.
 
 ### Gotchas
 - `CREATE OR REPLACE VIEW` fails if columns changed — must DROP first

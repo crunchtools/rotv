@@ -1,0 +1,10 @@
+[Unit]
+Description=Run migrations when one is added or edited in the checkout
+ConditionPathIsDirectory=/work/rotv/backend/migrations
+
+[Path]
+PathChanged=/work/rotv/backend/migrations
+Unit=rotv-dev-kick@init.service
+
+[Install]
+WantedBy=multi-user.target

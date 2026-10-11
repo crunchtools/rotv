@@ -50,9 +50,10 @@ storage or sync mechanism. The recipe is in `docs/USER_DATA_FRAMEWORK.md`.
   default, `ubi10-core`, builds everything from scratch for local dev. The app
   build listens for `parent-image-updated` and `rotv-base-updated`.
 - `Containerfile.dev` builds `quay.io/crunchtools/rotv-dev` on top of the app
-  image, for dev.rootsofthevalley.org: git, gh, Claude Code, and the
-  `rootfs-dev/` units (`rotv-dev-deps`, `rotv-dev-ui`, `rotv-dev-claude`) that
-  run a mounted checkout. `build-dev.yml` rebuilds it after every app build. It
+  image, for dev.rootsofthevalley.org: the `rootfs-dev/` units that run a
+  mounted checkout (`rotv-dev-deps`, `rotv-dev-ui`) and let it be driven from
+  outside the container through files (`rotv-dev-kick@`, `rotv-dev-log@`). It
+  holds no agent and no credential (#779). `build-dev.yml` rebuilds it after every app build. It
   is never deployed as production. See `docs/DEVELOPMENT_ARCHITECTURE.md`.
 - The frontend is built in the image (`npm run build` into `/app/public/`).
 - PostgreSQL 17 + PostGIS come from the pgdg RPM repo. PostGIS's SFCGAL
