@@ -15128,6 +15128,12 @@ button.type-filter-chip {
     height: auto;
   }
 
+  /* The 80px reserve is for a button that no longer floats; here it left a white
+     band the clipped, scrolling content ended above. */
+  .sidebar.expanded .sidebar-tab-content {
+    padding-bottom: 0;
+  }
+
   /* Dragging the card down collapses it, then closes it; it must not also pull
      the page into the browser's refresh gesture. */
   html:has(.sidebar.peek),
