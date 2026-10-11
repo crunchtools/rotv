@@ -7,6 +7,9 @@ import {
   readVisited,
   addVisited as addAnonVisited,
   removeVisited as removeAnonVisited,
+  readListCheckins,
+  putListCheckin as putAnonListCheckin,
+  removeListCheckin as removeAnonListCheckin,
   clearAnonSettings,
   remapMergedPoiIds
 } from '../utils/anonSettings';
@@ -38,6 +41,7 @@ export function AuthProvider({ children }) {
   const [error, setError] = useState(null);
   const [favorites, setFavorites] = useState(() => readFavorites());
   const [visited, setVisited] = useState(() => readVisited());
+  const [listCheckins, setListCheckins] = useState(() => readListCheckins());
   // Google is the long-standing default; Facebook only appears once the
   // backend confirms it is configured, so no one clicks into a 501.
   const [providers, setProviders] = useState({ google: true, facebook: false, password: true, passkey: true, passwordReset: false });
@@ -66,15 +70,18 @@ export function AuthProvider({ children }) {
           });
           setFavorites(userData.favorites || []);
           setVisited(userData.visited || []);
+          setListCheckins(userData.listCheckins || []);
         } else {
           setUser(null);
           setFavorites(readFavorites());
           setVisited(readVisited());
+          setListCheckins(readListCheckins());
         }
       } else {
         setUser(null);
         setFavorites(readFavorites());
         setVisited(readVisited());
+        setListCheckins(readListCheckins());
       }
     } catch (err) {
       console.error('Failed to fetch user:', err);
@@ -82,6 +89,7 @@ export function AuthProvider({ children }) {
       setUser(null);
       setFavorites(readFavorites());
       setVisited(readVisited());
+      setListCheckins(readListCheckins());
     } finally {
       setLoading(false);
     }
@@ -118,6 +126,7 @@ export function AuthProvider({ children }) {
         setUser(null);
         setFavorites(readFavorites());
         setVisited(readVisited());
+        setListCheckins(readListCheckins());
       }
     } catch (err) {
       console.error('Logout failed:', err);
@@ -142,6 +151,7 @@ export function AuthProvider({ children }) {
     setUser(null);
     setFavorites([]);
     setVisited([]);
+    setListCheckins([]);
   };
 
   // Shared by the account calls: send JSON, throw the server's message on failure.
@@ -319,6 +329,57 @@ export function AuthProvider({ children }) {
     return !wasVisited;
   }, [visited, user]);
 
+  const sameCheckin = (a, b) => a.list_id === b.list_id && (a.item_id ?? null) === (b.item_id ?? null);
+
+  // Log, or re-date, one check-in on a curated list (spec 050). `itemId` null
+  // is the list's free choice, and `poiId` then the trail chosen. Resolves to
+  // an error message, or null when it was saved.
+  const saveListCheckin = useCallback(async (listId, itemId, poiId, doneOn) => {
+    const checkin = { list_id: listId, item_id: itemId ?? null, poi_id: poiId ?? null, done_on: doneOn };
+    const before = listCheckins;
+    setListCheckins([...before.filter(c => !sameCheckin(c, checkin)), checkin]);
+
+    if (!user) {
+      putAnonListCheckin(checkin);
+      return null;
+    }
+    try {
+      const res = await fetch(`/api/lists/${listId}/checkins`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(checkin)
+      });
+      if (res.ok) return null;
+      setListCheckins(before);
+      const problem = await res.json().catch(() => null);
+      return problem?.error || 'Could not save that. Please try again.';
+    } catch (err) {
+      setListCheckins(before);
+      return 'Could not save that. Please try again.';
+    }
+  }, [listCheckins, user]);
+
+  const removeListCheckin = useCallback(async (listId, itemId) => {
+    const gone = { list_id: listId, item_id: itemId ?? null };
+    const before = listCheckins;
+    setListCheckins(before.filter(c => !sameCheckin(c, gone)));
+
+    if (!user) {
+      removeAnonListCheckin(listId, itemId ?? null);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/lists/${listId}/checkins/${itemId ?? 'choice'}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+      if (!res.ok) throw new Error('Request failed');
+    } catch (err) {
+      setListCheckins(before);
+    }
+  }, [listCheckins, user]);
+
   const value = {
     user,
     loading,
@@ -332,6 +393,9 @@ export function AuthProvider({ children }) {
     visited,
     isVisited,
     toggleVisited,
+    listCheckins,
+    saveListCheckin,
+    removeListCheckin,
     logout,
     loginWithGoogle,
     loginWithFacebook,

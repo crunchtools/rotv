@@ -5,6 +5,10 @@ import FilterSheet, { FilterChip } from './FilterSheet';
 import { getDestinationIconTypeFromConfig } from '../utils/iconUtils';
 import { rankPois } from '../utils/poiRank';
 import { curatedListRows } from '../utils/curatedList';
+import { useActiveLists } from '../hooks/useActiveLists';
+import ListChallenge from './lists/ListChallenge';
+import ListCheckinControl from './lists/ListCheckinControl';
+import SeasonalFeature from './lists/SeasonalFeature';
 import { buildParkIndex, findContainingPark } from '../utils/parkContainment';
 
 const PAGE_SIZE = 20;
@@ -26,9 +30,6 @@ const LIST_EMPTY_STATE = { icon: '🥾', text: 'Nothing on this list matches.', 
 // Curated lists (spec 050) share the picker with the built-in ones; the prefix
 // keeps a list's slug from colliding with a built-in id.
 const curatedListId = (slug) => `list:${slug}`;
-
-const formatSeasonDay = (isoDate) =>
-  new Date(`${isoDate}T12:00:00`).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
 const NEW_POI_KINDS = { mtb: 'MTB trailhead', organizations: 'organization', all: 'point of interest' };
 
@@ -94,7 +95,7 @@ const FindTab = memo(function FindTab({
   const [requestedList, setRequestedList] = useState(urlList);
   const [currentPage, setCurrentPage] = useState(1);
   const [listConfig, setListConfig] = useState(null);
-  const [curatedLists, setCuratedLists] = useState([]);
+  const curatedLists = useActiveLists();
   const [isListMenuOpen, setIsListMenuOpen] = useState(false);
   const listButtonRef = useRef(null);
   const listMenuRef = useRef(null);
@@ -108,13 +109,6 @@ const FindTab = memo(function FindTab({
         }
       })
       .catch(err => console.error('Failed to fetch list config:', err));
-  }, []);
-
-  useEffect(() => {
-    fetch('/api/lists')
-      .then(res => (res.ok ? res.json() : []))
-      .then(setCuratedLists)
-      .catch(err => console.error('Failed to fetch curated lists:', err));
   }, []);
 
   // The stored config predates the Find tab: its first entry is still named
@@ -200,6 +194,10 @@ const FindTab = memo(function FindTab({
   }, [activeList, onFilterByTypes]);
 
   const parkIndex = useMemo(() => buildParkIndex(allLinearFeatures), [allLinearFeatures]);
+  const trails = useMemo(
+    () => (allLinearFeatures || []).filter(f => f.poi_roles?.includes('trail')),
+    [allLinearFeatures]
+  );
 
   const { rankedPois, poiMap } = useMemo(() => {
     let sourceDestinations = allDestinations || [];
@@ -456,24 +454,9 @@ const FindTab = memo(function FindTab({
           )}
         </div>
         {curatedList && (
-          <div className="find-list-about">
-            <p className="find-list-description">{curatedList.description}</p>
-            <p className="find-list-season">
-              {curatedList.goal_count
-                ? `Hike any ${curatedList.goal_count} of ${curatedList.items.length}`
-                : `${curatedList.items.length} places`}
-              {' · '}{formatSeasonDay(curatedList.starts_on)} to {formatSeasonDay(curatedList.ends_on)}
-              {curatedList.source_url && (
-                <>
-                  {' · '}
-                  <a className="link-button" href={curatedList.source_url} target="_blank" rel="noopener noreferrer">
-                    Official details
-                  </a>
-                </>
-              )}
-            </p>
-          </div>
+          <ListChallenge list={curatedList} trails={trails} />
         )}
+        {activeList === 'all' && !searchText.trim() && <SeasonalFeature variant="card" />}
         <div className="results-count" aria-live="polite">
           {rankedPois.length === 0
             ? 'No places'
@@ -518,7 +501,11 @@ const FindTab = memo(function FindTab({
                   statusData={mtbTrailStatuses[poi.id]}
                   listItem={poi._listItem}
                   iconConfig={iconConfig}
-                />
+                >
+                  {poi._listItem && (
+                    <ListCheckinControl list={curatedList} item={poi._listItem} className="poi-action list-checkin-row-btn" />
+                  )}
+                </ResultsTile>
               );
             })}
           </div>

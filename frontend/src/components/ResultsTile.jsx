@@ -18,9 +18,10 @@ import { getIconUrlForPOI } from '../utils/iconUtils';
  * @param {object} [props.listItem] The row is an entry on a curated list (spec 050): what the
  *   organizer calls it, how long and hard it is, and where to park
  * @param {object[]} [props.iconConfig] Icon types, for the row's type icon
+ * @param {import('react').ReactNode} [props.children] Controls shown under the row's text
  * @returns {JSX.Element}
  */
-const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, parkName, showStatusBadge, status, showStatusInfo, statusData, listItem, iconConfig }) {
+const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual, isSelected, parkName, showStatusBadge, status, showStatusInfo, statusData, listItem, iconConfig, children }) {
   const imageUrl = poi.has_primary_image
     ? `/api/pois/${poi.id}/thumbnail?size=small&v=${poi.updated_at || Date.now()}`
     : null;
@@ -125,6 +126,7 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
             {poi.brief_description}
           </div>
         )}
+        {children}
       </div>
     </div>
   );

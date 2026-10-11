@@ -91,15 +91,18 @@ On a wide screen the tabs sit in the header. At 768px and below (`useIsMobile`, 
 - The list picker switches between All places, MTB Trail Status and Organizations, from `/api/results-subtabs`, followed by any curated list in season (below).
 - Type chips sit behind a `Filters · n` button (`FilterSheet.jsx`), where n is the number of types hidden. News and Events use the same component.
 
-## Curated lists
+## Curated lists and challenges
 
-A curated list is a set of places an organizer names for a season, such as the Summit Metro Parks Fall Hiking Spree (spec 050). `poi_lists` holds one row per edition of a series (`fall-hiking-spree`, 2026); `poi_list_items` holds a POI plus what the organizer says about it: their name for the hike, miles, rating, class, a note, and the trailhead in words and coordinates.
+A curated list is a set of places an organizer names for a season, with the rules for completing it: the Summit Metro Parks Fall Hiking Spree (spec 050). `poi_lists` holds one row per edition of a series (`fall-hiking-spree`, 2026) with its season, goal, free choice and rewards; `poi_list_items` holds a POI plus what the organizer says about it; `user_list_checkins` holds one dated hike a person logged.
 
-- `GET /api/lists` (`backend/services/poiListService.js`) returns the lists that are published and in season today, in Eastern time. Nothing else is public, so a draft for next year can sit in the table.
-- Find adds each one to its picker at `/find/<series>` (`parseTabPath` returns `list`). Rows keep the organizer's order and are not ranked.
+- `GET /api/lists` (`backend/routes/lists.js`, `backend/services/poiListService.js`) returns the lists that are published and in season today, in Eastern time. `?ids=` returns published lists whatever the season, which is how an earlier year's badge finds its list.
+- The rules live in two places that must agree: `checkinProblem()` on the server decides what is stored, and `frontend/src/utils/listProgress.js` decides what the buttons offer and when the badge is earned. A hike is dated inside the season and not in the future; one per item; one free choice.
+- Check-ins follow the local-first recipe in `docs/USER_DATA_FRAMEWORK.md`: `rotv-list-checkins` in localStorage, `listCheckins` in `AuthContext` and `/auth/user`, `syncCheckins()` on sign-in.
+- Find adds each list to its picker at `/find/<series>` (`parseTabPath` returns `list`). `ListChallenge` is the header (tally, badge, free choice, rules); rows keep the organizer's order (`curatedListRows`) and carry a `ListCheckinControl`.
 - A row hands the map the POI with the item's trailhead copied onto `navigation_latitude/longitude`, so Navigate goes to the lot for that hike even when the POI is a 100-mile trail. The copy lives only on the selected object; the POI row is untouched.
-- `mergePois` repoints `poi_list_items`. A deleted POI's item is left out of the response.
-- A new edition is a new `poi_lists` row and its items; migration 101 seeds 2026 and shows the shape.
+- `SeasonalFeature` is the spotlight for a `featured` list in season: a pill over the map, dismissed per edition, and a card in Find. `ListBadges` is My Valley's Badges tab.
+- `mergePois` repoints `poi_list_items` and `user_list_checkins`. A deleted POI's item is left out of the response.
+- A new edition is a new `poi_lists` row and its items; migration 101 seeds 2026 and shows the shape. Earlier editions are never deleted: people's badges hang off them.
 
 ## The place card on a phone
 

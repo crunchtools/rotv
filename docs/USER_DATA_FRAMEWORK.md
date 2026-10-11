@@ -63,3 +63,7 @@ Timezone, newsletter, and trips are also synced through `syncAnonSettings()` /
 `/sync` but are not POI-id lists; they each have a bespoke server-wins branch. The
 rule (anonymous-first + idempotent login sync) is the same; only the storage helper
 differs.
+
+Check-ins against curated lists (spec 050) are the same again: `rotv-list-checkins` holds
+`{ list_id, item_id, poi_id, done_on }` rows, `/sync` passes them to `syncCheckins()`, which
+keeps the account's date where both have one and drops any the list's rules refuse.

@@ -205,7 +205,8 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         role: 'admin',
         favorites: [],
         visited: [],
-        listCheckins: [],
+        // Read for real, so a check-in made in the hosted dev container survives a reload.
+        listCheckins: await getUserCheckins(pool, 999).catch(() => []),
         preferences: {}
       });
     }

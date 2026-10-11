@@ -15172,22 +15172,314 @@ button.type-filter-chip {
   }
 }
 
-/* Curated lists in Find (spec 050) */
-.find-list-about {
+/* Curated lists and their challenge (spec 050) */
+.results-tile-list-facts {
+  font-size: 0.75rem;
+  color: #525252;
+}
+
+.list-challenge {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #3d3d3d;
+}
+
+.list-challenge p {
+  margin: 0;
+}
+
+.list-challenge-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.list-challenge-tally {
+  flex: 1;
+  min-width: 0;
+}
+
+.list-challenge-count {
+  font-size: 0.95rem;
+}
+
+.list-challenge-track {
+  height: 8px;
+  margin: 0.3rem 0;
+  background: #e2e2e2;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.list-challenge-fill {
+  height: 100%;
+  background: #b5541c;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+.list-challenge-status {
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-challenge-nudge {
+  padding: 0.5rem 0.65rem;
+  background: #fff7ed;
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+.list-challenge-choice {
+  padding: 0.6rem 0.75rem;
+  background: white;
+  border: 1px solid #e2e2e2;
+  border-radius: 8px;
+}
+
+.list-challenge-choice-name {
+  font-weight: 600;
+}
+
+.list-challenge-choice-about {
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-challenge-choice-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+}
+
+.list-challenge-choice-row select {
+  flex: 1;
+  min-width: 0;
+  min-height: 36px;
+  padding: 0 0.5rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border: 1px solid #b8b8b8;
+  border-radius: 8px;
+  background: white;
+}
+
+.list-challenge-rules summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.list-challenge-rules ul {
+  margin: 0.4rem 0;
+  padding-left: 1.1rem;
+}
+
+.list-challenge-rules li {
+  margin-bottom: 0.3rem;
+}
+
+.list-challenge-links {
+  display: flex;
+  gap: 1rem;
+}
+
+.list-badge-shield {
+  fill: #ececec;
+  stroke: #9a9a9a;
+  stroke-width: 2;
+}
+
+.list-badge-leaf {
+  fill: #b8b8b8;
+}
+
+.list-badge-year {
+  fill: #525252;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.list-badge.earned .list-badge-shield {
+  fill: #b5541c;
+  stroke: #6e2f0c;
+}
+
+.list-badge.earned .list-badge-leaf {
+  fill: #f6c453;
+}
+
+.list-badge.earned .list-badge-year {
+  fill: white;
+}
+
+.list-checkin {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.results-tile .list-checkin {
+  margin-top: 0.45rem;
+}
+
+.poi-action.list-checkin-btn.done {
+  background: #2d5016;
+  border-color: #2d5016;
+  color: white;
+}
+
+.list-checkin-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+}
+
+.list-checkin-editor label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.list-checkin-editor input[type="date"] {
+  min-height: 34px;
+  padding: 0 0.4rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  border: 1px solid #b8b8b8;
+  border-radius: 6px;
+}
+
+.list-checkin-closed,
+.list-checkin-problem {
+  font-size: 0.8rem;
+  color: #525252;
+}
+
+.list-checkin-problem {
+  color: #a12a1a;
+}
+
+.seasonal-feature-card {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  background: #fff7ed;
+  border: 1px solid #e9c9a8;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #3d3d3d;
+  text-align: left;
+  cursor: pointer;
+}
+
+.seasonal-feature-mark {
+  font-size: 1.3rem;
+}
+
+.seasonal-feature-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.seasonal-feature-go {
+  font-size: 1.3rem;
+  color: #6e2f0c;
+}
+
+.seasonal-feature-pill {
+  position: absolute;
+  top: 0.6rem;
+  left: 50%;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  max-width: calc(100% - 9rem);
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #e9c9a8;
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.seasonal-feature-open,
+.seasonal-feature-dismiss {
+  min-height: 34px;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6e2f0c;
+  cursor: pointer;
+}
+
+.seasonal-feature-open {
+  padding: 0 0.25rem 0 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.seasonal-feature-tally {
+  font-weight: 400;
+  color: #525252;
+}
+
+.seasonal-feature-dismiss {
+  padding: 0 0.7rem 0 0.4rem;
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.list-badges {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.list-badges-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid #ececec;
+}
+
+.list-badges-name {
+  font-weight: 600;
+}
+
+.list-badges-status {
   font-size: 0.85rem;
   color: #525252;
 }
 
-.find-list-about p {
-  margin: 0;
+.list-badges-hikes {
+  margin: 0.35rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  color: #3d3d3d;
 }
 
-.find-list-about .find-list-season {
-  margin-top: 0.25rem;
-  font-weight: 600;
-}
+@media (max-width: 768px) {
+  .seasonal-feature-pill {
+    top: 3.4rem;
+    max-width: calc(100% - 5rem);
+  }
 
-.results-tile-list-facts {
-  font-size: 0.75rem;
-  color: #525252;
+  .seasonal-feature-tally {
+    display: none;
+  }
 }

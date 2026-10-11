@@ -11,6 +11,7 @@ const KEY_NEWSLETTER_SUBSCRIBED = 'rotv-newsletter-subscribed';
 const KEY_SAVED_TRIPS = 'rotv-saved-trips';
 const KEY_FAVORITES = 'rotv-favorites';
 const KEY_VISITED = 'rotv-visited';
+const KEY_LIST_CHECKINS = 'rotv-list-checkins';
 
 function safeRead(key) {
   try {
@@ -42,7 +43,8 @@ function safeRemove(key) {
  * nothing personal is left behind on the device either.
  */
 export function clearAnonSettings() {
-  [KEY_TIMEZONE, KEY_NEWSLETTER_EMAIL, KEY_NEWSLETTER_SUBSCRIBED, KEY_SAVED_TRIPS, KEY_FAVORITES, KEY_VISITED]
+  [KEY_TIMEZONE, KEY_NEWSLETTER_EMAIL, KEY_NEWSLETTER_SUBSCRIBED, KEY_SAVED_TRIPS, KEY_FAVORITES, KEY_VISITED,
+    KEY_LIST_CHECKINS]
     .forEach(safeRemove);
 }
 
@@ -123,6 +125,35 @@ export const addVisited = visitedStore.add;
 export const removeVisited = visitedStore.remove;
 
 /**
+ * Check-ins against curated lists (spec 050), as `{ list_id, item_id, poi_id,
+ * done_on }`; `item_id` null is the list's free choice. One per list item.
+ */
+const sameCheckin = (a, b) => a.list_id === b.list_id && (a.item_id ?? null) === (b.item_id ?? null);
+
+export function readListCheckins() {
+  const raw = safeRead(KEY_LIST_CHECKINS);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter(c => c && Number.isInteger(c.list_id) && typeof c.done_on === 'string')
+      : [];
+  } catch (err) {
+    console.warn('[anonSettings] list check-ins are not valid JSON; ignoring them:', err);
+    return [];
+  }
+}
+
+export function putListCheckin(checkin) {
+  safeWrite(KEY_LIST_CHECKINS, JSON.stringify([...readListCheckins().filter(c => !sameCheckin(c, checkin)), checkin]));
+}
+
+export function removeListCheckin(listId, itemId) {
+  const gone = { list_id: listId, item_id: itemId };
+  safeWrite(KEY_LIST_CHECKINS, JSON.stringify(readListCheckins().filter(c => !sameCheckin(c, gone))));
+}
+
+/**
  * Follow POI merges: when a saved or visited place was folded into another
  * (duplicate park cleanup, spec 048), rewrite the stored id to the survivor so
  * it does not silently drop off the list. Resolves true when anything changed.
@@ -164,9 +195,10 @@ export async function syncAnonSettings() {
   const trips = readTrips();
   const favorites = readFavorites();
   const visited = readVisited();
+  const listCheckins = readListCheckins();
 
   const hasState = timezone || (email && subscribed) || trips.length > 0
-    || favorites.length > 0 || visited.length > 0;
+    || favorites.length > 0 || visited.length > 0 || listCheckins.length > 0;
   if (!hasState) return { synced: false };
 
   const payload = {};
@@ -175,6 +207,7 @@ export async function syncAnonSettings() {
   if (trips.length > 0) payload.trips = trips;
   if (favorites.length > 0) payload.favorites = favorites;
   if (visited.length > 0) payload.visited = visited;
+  if (listCheckins.length > 0) payload.listCheckins = listCheckins;
 
   try {
     const res = await fetch('/api/user/settings/sync', {
@@ -197,6 +230,9 @@ export async function syncAnonSettings() {
     }
     if (visited.length > 0) {
       safeRemove(KEY_VISITED);
+    }
+    if (listCheckins.length > 0) {
+      safeRemove(KEY_LIST_CHECKINS);
     }
 
     return { synced: true };

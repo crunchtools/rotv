@@ -7,6 +7,7 @@ import { useTrip } from './hooks/useTrip';
 import TripBuilder from './components/TripBuilder';
 import MyTripsModal from './components/MyTripsModal';
 import MyValley from './components/MyValley';
+import SeasonalFeature from './components/lists/SeasonalFeature';
 import useSeasonalTheme from './hooks/useSeasonalTheme';
 import useBoatPosition from './hooks/useBoatPosition';
 import useTrainPosition from './hooks/useTrainPosition';
@@ -2558,6 +2559,7 @@ function AppContent() {
           pointerEvents: activeTab === 'view' ? 'auto' : 'none'
         }}
       >
+        {activeTab === 'view' && !editMode && <SeasonalFeature variant="map" />}
         <Map
           destinations={filteredDestinations}
           parkPins={parkPins}
