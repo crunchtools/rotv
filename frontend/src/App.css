@@ -15429,7 +15429,11 @@ button.type-filter-chip {
   text-align: right;
 }
 
-.seasonal-feature-card {
+.feature-banner {
+  position: relative;
+}
+
+.feature-banner-slide {
   display: block;
   width: 100%;
   padding: 0;
@@ -15442,35 +15446,126 @@ button.type-filter-chip {
   color: #3d3d3d;
   text-align: left;
   cursor: pointer;
+  animation: feature-banner-in 0.4s ease;
 }
 
-.seasonal-feature-hero {
+@keyframes feature-banner-in {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+.feature-banner-picture {
+  position: relative;
+  display: block;
+  aspect-ratio: 1007 / 468;
+  background: linear-gradient(135deg, #2d5016, #6e2f0c);
+}
+
+.feature-banner-picture img {
   display: block;
   width: 100%;
-  height: auto;
+  height: 100%;
+  object-fit: cover;
 }
 
-.seasonal-feature-row {
+.feature-banner-title {
+  position: absolute;
+  inset: auto 0 0 0;
+  padding: 1.5rem 0.75rem 0.6rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: white;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.65), rgba(0, 0, 0, 0));
+}
+
+.feature-banner-picture.plain .feature-banner-title {
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  font-size: 1.5rem;
+  text-align: center;
+  background: none;
+}
+
+.feature-banner-row {
   display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.55rem 0.75rem;
 }
 
-.seasonal-feature-mark {
-  font-size: 1.3rem;
-}
-
-.seasonal-feature-text {
+.feature-banner-text {
   display: flex;
   flex: 1;
   flex-direction: column;
   min-width: 0;
 }
 
-.seasonal-feature-go {
+.feature-banner-go {
   font-size: 1.3rem;
   color: #6e2f0c;
+}
+
+.feature-banner-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
+}
+
+.feature-banner-dot {
+  width: 28px;
+  height: 24px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.feature-banner-dot::before {
+  content: '';
+  display: block;
+  width: 9px;
+  height: 9px;
+  margin: 0 auto;
+  background: #c4c4c4;
+  border-radius: 50%;
+}
+
+.feature-banner-dot.active::before {
+  background: #6e2f0c;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .feature-banner-slide {
+    animation: none;
+  }
+}
+
+.trail-shape-thumbnail {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #eef4e6;
+}
+
+.trail-shape-thumbnail path {
+  fill: none;
+  stroke: #2d5016;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trail-shape-thumbnail.moderate path {
+  stroke: #a8660a;
+}
+
+.trail-shape-thumbnail.strenuous path,
+.trail-shape-thumbnail.difficult path {
+  stroke: #8a2c12;
 }
 
 .seasonal-feature-pill {

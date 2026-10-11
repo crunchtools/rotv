@@ -2559,7 +2559,7 @@ function AppContent() {
           pointerEvents: activeTab === 'view' ? 'auto' : 'none'
         }}
       >
-        {activeTab === 'view' && !editMode && <SeasonalFeature variant="map" />}
+        {activeTab === 'view' && !editMode && <SeasonalFeature />}
         <Map
           destinations={filteredDestinations}
           parkPins={parkPins}

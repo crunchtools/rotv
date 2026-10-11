@@ -101,7 +101,9 @@ A curated list is a set of places an organizer names for a season, with the rule
 - Find adds each list to its picker (`parseTabPath` returns `list`). A list named in `LIST_PATHS` (`frontend/src/utils/tabPaths.js`) has a top-level address, `/fall-hiking-spree`, which must also be in `OG_RESERVED_PATHS`; any other list is at `/find/<series>`. `listPath()` gives the right one. `ListChallenge` is the header (banner, tally, badge, rules). Rows come from `curatedListRows`, plus one `choiceRow` for the free choice (`choiceCandidates` narrows the menu, `suggestChoice` fills it before the person picks), sorted by `sortListRows`; each carries a Navigate button and a `ListCheckinControl`.
 - A row hands the map the POI with the item's trailhead copied onto `navigation_latitude/longitude`, so Navigate goes to the lot for that hike even when the POI is a 100-mile trail. The copy lives only on the selected object; the POI row is untouched.
 - Download completed form (`frontend/src/utils/listForm.js`) writes the person's hike dates, free choice, name and email onto the organizer's own PDF in the browser. The PDF is `form_file` (kept in `frontend/public/lists/`) and `form_layout` says where each answer goes; both are per edition.
-- `SeasonalFeature` is the spotlight for a `featured` list in season: a pill over the map, dismissed per edition, and a card in Find. `ListBadges` is My Valley's Badges tab.
+- `SeasonalFeature` is the pill over the map for a `featured` list in season, dismissed per edition. `ListBadges` is My Valley's Badges tab.
+- `FeatureBanner` (`frontend/src/components/FeatureBanner.jsx`) is the rotating banner at the top of Find's All places; `featureSlides()` decides what it advertises, and a new feature is one more slide there.
+- `ResultsTile` draws a trail that has no photo from its geometry (`frontend/src/utils/trailShape.js`).
 - `mergePois` repoints `poi_list_items` and `user_list_checkins`. A deleted POI's item is left out of the response.
 - A new edition is a new `poi_lists` row and its items; migration 101 seeds 2026 and shows the shape. Earlier editions are never deleted: people's badges hang off them.
 

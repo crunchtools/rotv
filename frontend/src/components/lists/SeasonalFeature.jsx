@@ -18,14 +18,11 @@ function readDismissed() {
 }
 
 /**
- * The seasonal spotlight (spec 050): while a featured list is in season, a
- * way into it from the map and from Find, showing the person's tally.
- *
- * @param {object} props
- * @param {'map'|'card'} props.variant `map` is a pill over the map that can be
- *   dismissed for the season; `card` is a row at the top of Find
+ * The seasonal spotlight on the map (spec 050): while a featured list is in
+ * season, a pill with its name and the person's tally that opens it. It can
+ * be dismissed for the season. Find advertises the list in its FeatureBanner.
  */
-export default function SeasonalFeature({ variant }) {
+export default function SeasonalFeature() {
   const navigate = useNavigate();
   const { listCheckins } = useAuth();
   const lists = useActiveLists();
@@ -35,29 +32,13 @@ export default function SeasonalFeature({ variant }) {
   if (!list) return null;
 
   const editionKey = `${list.slug}-${list.edition}`;
-  if (variant === 'map' && dismissed.includes(editionKey)) return null;
+  if (dismissed.includes(editionKey)) return null;
 
   const progress = listProgress(list, listCheckins);
   const tally = progress.earned
     ? 'Badge earned'
     : progress.done > 0 ? `${progress.done} of ${progress.goal} hiked` : `Through ${formatListDay(list.ends_on)}`;
   const open = () => navigate(listPath(list.slug));
-
-  if (variant === 'card') {
-    return (
-      <button type="button" className={`seasonal-feature-card ${list.hero_image ? 'with-hero' : ''}`} onClick={open}>
-        {list.hero_image && <img className="seasonal-feature-hero" src={list.hero_image} alt="" />}
-        <span className="seasonal-feature-row">
-          {!list.hero_image && <span className="seasonal-feature-mark" aria-hidden="true">🍂</span>}
-          <span className="seasonal-feature-text">
-            <strong>{list.name}</strong>
-            <span>{tally} · {list.items.length} trails</span>
-          </span>
-          <span className="seasonal-feature-go" aria-hidden="true">›</span>
-        </span>
-      </button>
-    );
-  }
 
   const dismiss = () => {
     const next = [...dismissed, editionKey];

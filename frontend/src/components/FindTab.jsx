@@ -15,7 +15,7 @@ import { useAuth } from '../hooks/useAuth';
 import { listPath } from '../utils/tabPaths';
 import ListChallenge from './lists/ListChallenge';
 import ListCheckinControl from './lists/ListCheckinControl';
-import SeasonalFeature from './lists/SeasonalFeature';
+import FeatureBanner from './FeatureBanner';
 import { buildParkIndex, findContainingPark } from '../utils/parkContainment';
 
 const PAGE_SIZE = 20;
@@ -503,7 +503,7 @@ const FindTab = memo(function FindTab({
             choiceName={choiceCheckin ? (allLinearFeatures || []).find(f => f.id === choiceCheckin.poi_id)?.name || '' : ''}
           />
         )}
-        {activeList === 'all' && !searchText.trim() && <SeasonalFeature variant="card" />}
+        {activeList === 'all' && !searchText.trim() && <FeatureBanner destinations={allDestinations} />}
         {curatedList && (
           <div className="find-list-sort" role="group" aria-label="Sort the list">
             <span className="find-list-sort-label">Sort</span>

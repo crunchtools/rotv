@@ -1,5 +1,6 @@
-import React, { memo } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { getIconUrlForPOI } from '../utils/iconUtils';
+import { trailShapePath } from '../utils/trailShape';
 
 /**
  * One row in the Find tab's list.
@@ -30,6 +31,15 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
 
   const getDefaultThumbnail = () => '/brand/rotv-logo.png';
 
+  // A trail with no photo, or one whose photo will not load, is drawn from its own line.
+  const [photoFailed, setPhotoFailed] = useState(false);
+  const trailShape = useMemo(
+    () => (isLinear && poi.poi_roles?.includes('trail') ? trailShapePath(poi.geometry) : null),
+    [isLinear, poi.poi_roles, poi.geometry]
+  );
+  const drawTrail = Boolean(trailShape) && (!imageUrl || photoFailed);
+  const ratingClass = (listItem?.rating || poi.difficulty || '').toLowerCase();
+
   const getPoiType = () => {
     if (isVirtual) return 'virtual';
     if (!isLinear) {
@@ -51,13 +61,21 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
       tabIndex={0}
     >
       <div className={`results-tile-image ${isVirtual ? 'virtual-thumbnail' : ''}`}>
-        {imageUrl ? (
+        {drawTrail ? (
+          <svg className={`trail-shape-thumbnail ${ratingClass}`} viewBox="0 0 100 100" role="img" aria-label={`Shape of ${poi.name}`}>
+            <path d={trailShape} />
+          </svg>
+        ) : imageUrl ? (
           <img
             src={imageUrl}
             alt={poi.name}
             loading="lazy"
             className={isVirtual ? 'logo-image' : ''}
             onError={(e) => {
+              if (trailShape) {
+                setPhotoFailed(true);
+                return;
+              }
               e.target.src = getDefaultThumbnail();
               e.target.className = 'default-thumbnail';
             }}

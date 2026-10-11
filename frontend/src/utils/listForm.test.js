@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { readFile, writeFile } from 'fs/promises';
+import process from 'node:process';
+import { Buffer } from 'node:buffer';
 import { PDFDocument } from 'pdf-lib';
 import { formatFormDate, splitName, formEntries, fillListForm } from './listForm';
 

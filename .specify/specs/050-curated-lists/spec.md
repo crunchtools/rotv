@@ -47,8 +47,16 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 - Check-ins are never removed at the end of a season. Deleting the account deletes them.
 
 ### Seasonal spotlight
-- While a featured list is in season, the map shows a pill with its name and the person's tally, and Find's All places shows a card carrying the list's banner. Both open the list.
-- The pill can be dismissed; it stays dismissed for that edition on that device. The card and the list picker entry stay.
+- While a featured list is in season, the map shows a pill with its name and the person's tally, which opens the list. The pill can be dismissed; it stays dismissed for that edition on that device.
+
+### Feature banner
+- The top of Find's All places carries a banner that shows one feature of the site at a time and opens it when tapped: the featured list in season (its own banner and the person's tally), MTB Trail Status (how many trails are open right now, over a photo from one of the MTB trailheads), and Happening (over a photo of a place in the valley).
+- It moves to the next feature every seven seconds. It holds still while pointed at or focused, once the person picks a slide with the dots, and for anyone whose device asks for reduced motion.
+- A feature that does not apply is left out: the list out of season, MTB where no trail reports status. A photo that will not load gives way to the next candidate, then to the feature's name on a plain ground.
+- The banner is hidden while searching.
+
+### Trail thumbnails
+- A trail with no photo, or whose photo will not load, is drawn from its own line in every Find list, north up, coloured by difficulty. On the spree that covers the trails the district added this year.
 
 ### Find
 - A list in season is an entry in the Find tab's list picker, after the built-in ones. The spree lives at `/fall-hiking-spree`; a list without an address of its own lives at `/find/<series>`, and `/find/fall-hiking-spree` redirects.
