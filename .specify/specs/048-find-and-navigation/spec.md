@@ -31,7 +31,7 @@ Searching ROTV for Furnace Run Metro Park on a phone returned several look-alike
 - Returning to the Map tab with a place selected puts it in view. With nothing selected the map stays where it was.
 
 ### Map / Find / Happening (release 2)
-- Three labeled tabs. Map is the map. Find is every POI. Happening is news and events behind a toggle. About moves to the account menu. On a phone the tabs are a bottom bar with labels always visible.
+- Three labeled tabs. Map is the map. Find is every POI. Happening is news and events, switched by a menu beside its Filters button. About moves to the account menu. On a phone the tabs are a bottom bar with labels always visible.
 - Find lists all POIs regardless of the map view, with one search shared with the map, a list picker (All places, MTB trail status, Organizations, and later seasonal lists), and a collapsed Filters menu.
 - With a query, parks rank first, then destinations, then trails and rivers, then amenities; name-starts-with before name-contains. Each row says what it is and which park it is in.
 - The POI card shows only on Map. Selecting a place elsewhere switches to Map. Moving to Find or Happening keeps the selection and hides the card.

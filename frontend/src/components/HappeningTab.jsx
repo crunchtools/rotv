@@ -2,7 +2,7 @@ import React from 'react';
 import ParkNews from './ParkNews';
 import ParkEvents from './ParkEvents';
 import FeatureBanner from './FeatureBanner';
-import { handleRovingKeyDown } from '../utils/a11yUtils';
+import MenuPicker from './MenuPicker';
 
 const VIEWS = [
   { id: 'news', label: 'News' },
@@ -11,8 +11,8 @@ const VIEWS = [
 
 /**
  * The Happening tab (spec 048): news and events share one tab, switched by a
- * two-way toggle. Each view keeps its own search and filters. The feature
- * banner above the toggle shows what else the site has.
+ * menu beside each view's Filters button. Each view keeps its own search and
+ * filters. The feature banner across the top shows what else the site has.
  *
  * @param {object} props
  * @param {'news'|'events'} props.view Which side of the toggle is showing
@@ -28,30 +28,11 @@ const VIEWS = [
  * @returns {JSX.Element}
  */
 export default function HappeningTab({ view, onViewChange, newsProps, eventsProps, destinations, routes }) {
+  const viewPicker = <MenuPicker label="News or events" options={VIEWS} value={view} onChange={onViewChange} />;
   return (
     <div className="happening-tab">
       <FeatureBanner destinations={destinations} routes={routes} exclude="happening" />
-      <div
-        className="happening-toggle"
-        role="group"
-        aria-label="News or events"
-        onKeyDown={(e) => handleRovingKeyDown(e, '.happening-toggle-btn')}
-      >
-        {VIEWS.map(v => (
-          <button
-            key={v.id}
-            type="button"
-            className={`happening-toggle-btn ${view === v.id ? 'active' : ''}`}
-            data-view={v.id}
-            aria-pressed={view === v.id}
-            tabIndex={view === v.id ? 0 : -1}
-            onClick={() => onViewChange(v.id)}
-          >
-            {v.label}
-          </button>
-        ))}
-      </div>
-      {view === 'events' ? <ParkEvents {...eventsProps} /> : <ParkNews {...newsProps} />}
+      {view === 'events' ? <ParkEvents {...eventsProps} viewPicker={viewPicker} /> : <ParkNews {...newsProps} viewPicker={viewPicker} />}
     </div>
   );
 }

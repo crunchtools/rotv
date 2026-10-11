@@ -15,10 +15,11 @@ import useFetchedList from '../hooks/useFetchedList';
  * @param {boolean} props.editMode Admins in edit mode get moderation controls and "+ New"
  * @param {(poiId: number) => void} props.onSelectPoi Open the place a story is about
  * @param {(id: number, title?: string) => void} props.onEditNewsItem Open a story in moderation
+ * @param {JSX.Element} [props.viewPicker] The News or Events menu, shown beside Filters
  * @param {number} props.refreshTrigger Changes when the list should be fetched again
  * @returns {JSX.Element}
  */
-function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, refreshTrigger }) {
+function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, refreshTrigger, viewPicker }) {
   const { items: news, loading, error, reload: fetchNews } = useFetchedList('/api/news/recent', 'Failed to load news');
   const [searchText, setSearchText] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
@@ -111,22 +112,25 @@ function ParkNews({ isAdmin, editMode, onSelectPoi, onEditNewsItem, refreshTrigg
           value={searchText}
           onChange={(e) => { setSearchText(e.target.value); setCurrentPage(1); }}
         />
-        <FilterSheet activeCount={Object.values(typeFilters).filter(on => !on).length}>
-          <div className="results-type-filters">
-            {[
-              { key: 'general', icon: 'N', label: 'General' },
-              { key: 'alert', icon: '!', label: 'Alert' },
-              { key: 'wildlife', icon: 'W', label: 'Wildlife' },
-              { key: 'infrastructure', icon: 'I', label: 'Infrastructure' },
-              { key: 'community', icon: 'M', label: 'Community' },
-            ].map(f => (
-              <FilterChip key={f.key} id={f.key} active={typeFilters[f.key]} onToggle={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}>
-                <span className="type-filter-icon">{f.icon}</span>
-                {f.label}
-              </FilterChip>
-            ))}
-          </div>
-        </FilterSheet>
+        <div className="find-controls-row">
+          {viewPicker}
+          <FilterSheet activeCount={Object.values(typeFilters).filter(on => !on).length}>
+            <div className="results-type-filters">
+              {[
+                { key: 'general', icon: 'N', label: 'General' },
+                { key: 'alert', icon: '!', label: 'Alert' },
+                { key: 'wildlife', icon: 'W', label: 'Wildlife' },
+                { key: 'infrastructure', icon: 'I', label: 'Infrastructure' },
+                { key: 'community', icon: 'M', label: 'Community' },
+              ].map(f => (
+                <FilterChip key={f.key} id={f.key} active={typeFilters[f.key]} onToggle={() => { setTypeFilters(prev => ({ ...prev, [f.key]: !prev[f.key] })); setCurrentPage(1); }}>
+                  <span className="type-filter-icon">{f.icon}</span>
+                  {f.label}
+                </FilterChip>
+              ))}
+            </div>
+          </FilterSheet>
+        </div>
         <div className="results-count">
           Showing {filteredNews.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, filteredNews.length)}`} of {filteredNews.length} news items
         </div>
