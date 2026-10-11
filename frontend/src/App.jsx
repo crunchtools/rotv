@@ -829,6 +829,8 @@ function AppContent() {
 
   const [initialPoiSlug, setInitialPoiSlug] = useState(null);
   const [initialSidebarTab, setInitialSidebarTab] = useState(null);
+  // Bumped when a link opens a place with no tab named, so its card starts over
+  const [cardResetNonce, setCardResetNonce] = useState(0);
   // River Levels carousel (#92): the gauge currently shown, so the map can highlight + fly to it
   const [activeGauge, setActiveGauge] = useState(null);
   const [permalinkInfo, setPermalinkInfo] = useState(null); // { type: 'news'|'event', poiSlug, titleSlug }
@@ -1167,6 +1169,13 @@ function AppContent() {
       const currentSlug = selectedDestination ? generateSlug(selectedDestination.name)
         : selectedLinearFeature ? generateSlug(selectedLinearFeature.name)
         : null;
+
+      // A link to a place itself opens its card afresh: Info, at half height
+      // on a phone. The tab and height an earlier link asked for (River
+      // Levels, say) belong to that link, not to the next place. Picking Info
+      // on the card already open is not such a link and leaves it as it is.
+      setInitialSidebarTab(null);
+      if (activeTab !== 'view' || currentSlug !== poiSlug) setCardResetNonce(nonce => nonce + 1);
 
       if (currentSlug === poiSlug) {
         setActiveTab('view');
@@ -2803,6 +2812,7 @@ function AppContent() {
           onSetPermalink={setPermalinkInfo}
           onClearPermalink={() => setPermalinkInfo(null)}
           initialSidebarTab={initialSidebarTab}
+          resetNonce={cardResetNonce}
           onSidebarTabChange={(tab) => setInitialSidebarTab(null)}
           onActiveGaugeChange={setActiveGauge}
           boatPosition={boatPosition}

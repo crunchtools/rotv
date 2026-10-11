@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ImageUploader from './ImageUploader';
 import ThumbnailCarousel from './ThumbnailCarousel';
@@ -26,7 +26,7 @@ const SIDEBAR_TAB_LABELS = {
   river_levels: 'Water Levels',
 };
 
-function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, onSidebarTabChange, onActiveGaugeChange, boatPosition }) {
+function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNewOrganization, onClose, isAdmin, user, editMode, onPoiUpdate, onPoiDelete, onSaveNewPOI, onCancelNewPOI, onSaveNewOrganization, onCancelNewOrganization, previewCoords, onPreviewCoordsChange, onNavigate, currentIndex, totalCount, poiNavigationList, associations, allDestinations, allLinearFeatures, allVirtualPois, onSelectPoi, onAssociationsChanged, onStartDrawingAssociations, isInMtbMode, selectedFromMtbList, mtbTrailsList, currentMtbIndex, onNavigateMtbTrail, onBackToMtbList, permalinkInfo, onSetPermalink, onClearPermalink, initialSidebarTab, resetNonce, onSidebarTabChange, onActiveGaugeChange, boatPosition }) {
   const navigate = useNavigate();
 
   // Unified POI prop (spec 019). The sidebar takes a single `poi` plus
@@ -315,6 +315,17 @@ function Sidebar({ tourActive, poi, isLinearPoi, isNewPOI, newOrganization, isNe
       setIsSidebarExpanded(false);
     }
   }, [displayItem, isAdmin, editMode, isNewPOI, selectedFromMtbList, initialSidebarTab, permalinkInfo, isMobile]);
+
+  // A link to the place itself, with no tab named, starts the card over:
+  // Info, and half height so the map shows. Without this the card kept the
+  // tab and height of whatever link came before.
+  const seenResetRef = useRef(resetNonce);
+  useEffect(() => {
+    if (seenResetRef.current === resetNonce) return;
+    seenResetRef.current = resetNonce;
+    setSidebarTab('view');
+    setIsSidebarExpanded(false);
+  }, [resetNonce]);
 
   useEffect(() => {
     if (permalinkInfo) return;
