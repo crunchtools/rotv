@@ -180,4 +180,57 @@ describe('AuthContext', () => {
       await expect(captured.current.setPassword('another long one')).rejects.toMatchObject({ reauth: true });
     });
   });
+
+  describe('list check-ins (spec 050)', () => {
+    const checkinUrl = '/api/lists/1/checkins';
+
+    it('keeps both hikes when two are marked before the first has rendered', async () => {
+      const fetchMock = mockFetch();
+      await renderSignedIn();
+
+      await act(async () => {
+        const { saveListCheckin } = captured.current;
+        await Promise.all([
+          saveListCheckin(1, 11, 1081, '2026-10-04'),
+          saveListCheckin(1, 12, 1054, '2026-10-05')
+        ]);
+      });
+
+      expect(captured.current.listCheckins.map(c => c.item_id).sort()).toEqual([11, 12]);
+      expect(fetchMock.mock.calls.filter(([url]) => url === checkinUrl)).toHaveLength(2);
+    });
+
+    it('puts the earlier date back and reports why when the server refuses a new one', async () => {
+      const refusal = 'Only 2026-09-01 through 2026-11-30 counts for this list.';
+      let refuse = false;
+      mockFetch(undefined, {
+        get [checkinUrl]() { return refuse ? fetchResponse({ error: refusal }, { status: 400 }) : undefined; }
+      });
+      await renderSignedIn();
+      await act(() => captured.current.saveListCheckin(1, 11, 1081, '2026-10-04'));
+
+      refuse = true;
+      let problem;
+      await act(async () => { problem = await captured.current.saveListCheckin(1, 11, 1081, '2026-12-25'); });
+
+      expect(problem).toBe(refusal);
+      expect(captured.current.listCheckins).toEqual([{ list_id: 1, item_id: 11, poi_id: 1081, done_on: '2026-10-04' }]);
+    });
+
+    it('keeps a signed-out visitor\'s hikes on the device, and removes them there', async () => {
+      const fetchMock = vi.fn(async (url) => fetchResponse(url === '/auth/user' ? null : {}));
+      vi.stubGlobal('fetch', fetchMock);
+      render(<AuthProvider><Probe /></AuthProvider>);
+      await waitFor(() => expect(captured.current.loading).toBe(false));
+
+      await act(() => captured.current.saveListCheckin(1, null, 1044, '2026-10-06'));
+      expect(JSON.parse(localStorage.getItem('rotv-list-checkins')))
+        .toEqual([{ list_id: 1, item_id: null, poi_id: 1044, done_on: '2026-10-06' }]);
+      expect(fetchMock.mock.calls.some(([url]) => url === checkinUrl)).toBe(false);
+
+      await act(() => captured.current.removeListCheckin(1, null));
+      expect(captured.current.listCheckins).toEqual([]);
+      expect(JSON.parse(localStorage.getItem('rotv-list-checkins'))).toEqual([]);
+    });
+  });
 });

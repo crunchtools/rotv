@@ -333,16 +333,21 @@ export function AuthProvider({ children }) {
 
   // Log, or re-date, one check-in on a curated list (spec 050). `itemId` null
   // is the list's free choice, and `poiId` then the trail chosen. Resolves to
-  // an error message, or null when it was saved.
+  // an error message, or null when it was saved. Updates build on the latest
+  // state, so two hikes marked in quick succession both stay.
   const saveListCheckin = useCallback(async (listId, itemId, poiId, doneOn) => {
     const checkin = { list_id: listId, item_id: itemId ?? null, poi_id: poiId ?? null, done_on: doneOn };
-    const before = listCheckins;
-    setListCheckins([...before.filter(c => !sameCheckin(c, checkin)), checkin]);
+    const previous = listCheckins.find(c => sameCheckin(c, checkin));
+    setListCheckins(current => [...current.filter(c => !sameCheckin(c, checkin)), checkin]);
 
     if (!user) {
       putAnonListCheckin(checkin);
       return null;
     }
+    const undo = () => setListCheckins(current => [
+      ...current.filter(c => !sameCheckin(c, checkin)),
+      ...(previous ? [previous] : [])
+    ]);
     try {
       const res = await fetch(`/api/lists/${listId}/checkins`, {
         method: 'PUT',
@@ -351,20 +356,20 @@ export function AuthProvider({ children }) {
         body: JSON.stringify(checkin)
       });
       if (res.ok) return null;
-      setListCheckins(before);
+      undo();
       const problem = await res.json();
       return problem.error || 'Could not save that. Please try again.';
     } catch (err) {
       console.warn('Could not save the check-in:', err);
-      setListCheckins(before);
+      undo();
       return 'Could not save that. Please try again.';
     }
   }, [listCheckins, user]);
 
   const removeListCheckin = useCallback(async (listId, itemId) => {
     const gone = { list_id: listId, item_id: itemId ?? null };
-    const before = listCheckins;
-    setListCheckins(before.filter(c => !sameCheckin(c, gone)));
+    const previous = listCheckins.find(c => sameCheckin(c, gone));
+    setListCheckins(current => current.filter(c => !sameCheckin(c, gone)));
 
     if (!user) {
       removeAnonListCheckin(listId, itemId ?? null);
@@ -377,7 +382,8 @@ export function AuthProvider({ children }) {
       });
       if (!res.ok) throw new Error('Request failed');
     } catch (err) {
-      setListCheckins(before);
+      console.warn('Could not remove the check-in:', err);
+      if (previous) setListCheckins(current => [...current.filter(c => !sameCheckin(c, gone)), previous]);
     }
   }, [listCheckins, user]);
 
