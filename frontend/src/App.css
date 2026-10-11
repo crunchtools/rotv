@@ -8489,6 +8489,200 @@ body {
   background: #ef9a9a;
 }
 
+/* Settings › General: one card per subject, fields on a grid */
+.general-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 640px;
+}
+
+.general-settings .settings-card {
+  margin: 0;
+  padding: 1.25rem;
+  background: #fff;
+  border: 1px solid #e3e6e1;
+  border-radius: 12px;
+}
+
+.general-settings .settings-card h3,
+.general-settings .settings-card h4 {
+  margin: 0 0 1rem;
+  color: #1f2a1c;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.general-settings .settings-description {
+  margin: -0.5rem 0 1rem;
+  color: #5c5c5c;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.general-settings .settings-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.875rem 0.75rem;
+}
+
+.general-settings .settings-field {
+  grid-column: span 6;
+  margin: 0;
+}
+
+.general-settings .settings-field.half,
+.general-settings .settings-field.city {
+  grid-column: span 3;
+}
+
+.general-settings .settings-field.short {
+  grid-column: span 3;
+}
+
+@media (min-width: 560px) {
+  .general-settings .settings-field.city {
+    grid-column: span 3;
+  }
+
+  .general-settings .settings-field.short {
+    grid-column: span 1;
+  }
+
+  .general-settings .settings-field.short + .settings-field.short {
+    grid-column: span 2;
+  }
+}
+
+@media (max-width: 559px) {
+  .general-settings .settings-field.city {
+    grid-column: span 6;
+  }
+}
+
+.general-settings .settings-field label,
+.general-settings .auth-label,
+.account-email-label {
+  display: block;
+  margin: 0 0 0.3rem;
+  color: #3d453a;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.general-settings .settings-field input,
+.general-settings .auth-input,
+.general-settings .timezone-select {
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid #c4c9c1;
+  border-radius: 8px;
+  background-color: #fff;
+  color: #1f2a1c;
+  font-size: 1rem;
+}
+
+.general-settings .timezone-select {
+  padding-right: 2.5rem;
+}
+
+.general-settings .settings-field input:focus,
+.general-settings .auth-input:focus,
+.general-settings .timezone-select:focus {
+  outline: 2px solid #2d6a4f;
+  outline-offset: 1px;
+  border-color: #2d6a4f;
+  box-shadow: none;
+}
+
+.general-settings .field-hint {
+  margin: 0.5rem 0 0;
+  color: #5c5c5c;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.general-settings .account-email {
+  margin: 0 0 1rem;
+  color: #1f2a1c;
+  overflow-wrap: anywhere;
+}
+
+.general-settings .auth-fieldset {
+  margin: 1.25rem 0 0;
+  padding: 1.25rem 0 0;
+  border-top: 1px solid #eceeea;
+}
+
+.general-settings .auth-fieldset .auth-label {
+  margin-top: 0;
+}
+
+.general-settings .auth-radio-group {
+  margin-top: 1rem;
+}
+
+.general-settings .settings-actions {
+  flex-wrap: wrap;
+  margin-top: 1.25rem;
+}
+
+.general-settings .settings-actions .auth-status {
+  margin: 0;
+}
+
+.general-settings .save-settings-btn {
+  min-height: 44px;
+  box-shadow: none;
+}
+
+.general-settings .save-message {
+  padding: 0.5rem 0.75rem;
+}
+
+.general-settings .signin-methods {
+  margin: 0;
+}
+
+.general-settings .signin-method:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.general-settings .signin-method:last-of-type {
+  padding-bottom: 0;
+}
+
+.general-settings .danger-zone {
+  background: #fff;
+  border: 1px solid #e7b4b0;
+}
+
+.general-settings .danger-zone h3 {
+  color: #b3261e;
+}
+
+.general-settings .danger-warning {
+  color: #5c5c5c;
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.settings-legal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  padding: 0.5rem 0.25rem 1.5rem;
+}
+
+.settings-legal .settings-link {
+  color: #5c5c5c;
+  font-size: 0.85rem;
+}
+
 /* ============================================
    AI Integration Styles
    ============================================ */
@@ -14421,6 +14615,24 @@ button.feedback-link-inline {
     bottom: auto !important;
     top: var(--tour-top) !important;
   }
+
+  .guided-tour-tooltip.tour-with-image {
+    max-width: calc(100vw - 40px);
+  }
+}
+
+/* A tour step that shows a picture, such as a filled-in form */
+.guided-tour-tooltip.tour-with-image {
+  width: min(520px, calc(100vw - 40px));
+}
+
+.guided-tour-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-bottom: 0.75rem;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
 }
 
 /* ── POI subscriptions: favorite toggle, notification bell, favorites tab ── */
@@ -15202,7 +15414,28 @@ button.type-filter-chip {
 }
 
 .list-challenge-count {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
   font-size: 0.95rem;
+}
+
+.list-challenge-count > strong {
+  margin-right: 0.3em;
+}
+
+.list-challenge-percent {
+  margin-left: auto;
+  color: #2d6a4f;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.list-challenge-tour {
+  align-self: flex-start;
+  margin: 0.25rem 0 0.5rem;
+  font-size: 0.9rem;
 }
 
 .list-challenge-track {
@@ -15434,6 +15667,7 @@ button.type-filter-chip {
 .feature-banner {
   position: relative;
   margin-top: 0.75rem;
+  touch-action: pan-y;
 }
 
 .feature-banner-slide {

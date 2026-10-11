@@ -201,10 +201,19 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
 
   router.get('/user', async (req, res) => {
     if (process.env.NODE_ENV === 'test' && process.env.BYPASS_AUTH === 'true') {
+      // What the test admin saved in Settings, read for real so the hosted dev
+      // container shows it after a reload as production would.
+      let testAdmin = {};
+      try {
+        const saved = await pool.query('SELECT name, preferences FROM users WHERE id = 999');
+        testAdmin = saved.rows[0] || {};
+      } catch (err) {
+        logger.error('Failed to load the test admin for /auth/user, using defaults:', err);
+      }
       return res.json({
         id: 999,
         email: 'test-admin@rotv.local',
-        name: 'Test Admin',
+        name: testAdmin.name || 'Test Admin',
         username: null,
         displayPreference: 'name',
         displayName: 'Test Admin',
@@ -217,7 +226,7 @@ export function createAuthRouter(pool, { mailer = createMailer() } = {}) {
         visited: [],
         // Read for real, so a check-in made in the hosted dev container survives a reload.
         listCheckins: await loadListCheckins(999),
-        preferences: {}
+        preferences: testAdmin.preferences || {}
       });
     }
 

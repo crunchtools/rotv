@@ -13,8 +13,25 @@ const behindProxy = devHost
   ? { allowedHosts: [devHost], hmr: { path: '/__hmr', clientPort: 443 } }
   : {};
 
+// Hosted dev sits behind Cloudflare, which caches .js by extension and then hands
+// out stale modules beside current .jsx ones. Nothing from the dev server is cacheable.
+const neverCached = {
+  name: 'never-cached',
+  configureServer(server) {
+    server.middlewares.use((req, res, next) => {
+      delete req.headers['if-none-match'];
+      delete req.headers['if-modified-since'];
+      const setHeader = res.setHeader.bind(res);
+      res.setHeader = (name, value) => setHeader(name, /^cache-control$/i.test(name) ? 'no-store' : value);
+      setHeader('Cache-Control', 'no-store');
+      setHeader('CDN-Cache-Control', 'no-store');
+      next();
+    });
+  }
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), neverCached],
   cacheDir: process.env.VITE_CACHE_DIR || 'node_modules/.vite',
   server: {
     host: '0.0.0.0',

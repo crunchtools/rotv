@@ -39,11 +39,12 @@ import WelcomePage from './components/auth/WelcomePage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
 import FeedbackForm from './components/FeedbackForm';
 import AboutPage from './components/AboutPage';
-import GuidedTour, { TOUR_STEPS, TRIP_TOUR_STEPS } from './components/GuidedTour';
+import GuidedTour, { TOUR_STEPS, TRIP_TOUR_STEPS, listTourSteps } from './components/GuidedTour';
+import { useActiveLists } from './hooks/useActiveLists';
 import TourPrompt from './components/TourPrompt';
 import McpSettings from './components/McpSettings';
 import useIsMobile from './hooks/useIsMobile';
-import { parseTabPath } from './utils/tabPaths';
+import { parseTabPath, listPath } from './utils/tabPaths';
 import StatsSettings from './components/StatsSettings';
 import { handleRovingKeyDown } from './utils/a11yUtils';
 import { initAnalytics, excludeThisDevice, track, trackerVehicle } from './utils/analytics';
@@ -55,6 +56,12 @@ const DEFAULT_ICON_TYPES = new Set(['visitor-center', 'waterfall', 'trail', 'mtb
 // these must select as linear (highlighted path), even when the same POI also
 // carries the organization role. Boundaries are deliberately excluded — org
 // boundaries render as destinations (#412).
+// Tours with a fixed set of steps; the list tour's are built from the list.
+const TOUR_VARIANT_STEPS = { trips: TRIP_TOUR_STEPS };
+
+// Lists in Find that have a path of their own outside /find.
+const FIND_LIST_PATHS = ['/mtb-trail-status', '/organizations'];
+
 const ROUTE_ROLES = ['trail', 'river', 'water_taxi', 'railroad'];
 
 const DEFAULT_PARK_BOUNDS = [
@@ -349,7 +356,20 @@ function AppContent() {
   const prevPathnameRef = useRef(location.pathname);
 
   const [initialShowMtbOnly, setInitialShowMtbOnly] = useState(false);
-  const [findListSlug, setFindListSlug] = useState(null);
+  // The curated list Find shows is read from the URL, never kept beside it:
+  // a copy went stale whenever a tab change skipped the URL handling below.
+  const findListSlug = useMemo(() => {
+    const tabPath = parseTabPath(location.pathname.split('/').filter(Boolean));
+    return tabPath?.tab === 'find' ? tabPath.list || null : null;
+  }, [location.pathname]);
+  // Where Find was last: the Find tab reopens the list the person left, not always the same one.
+  const lastFindPathRef = useRef('/find');
+  useEffect(() => {
+    const tabPath = parseTabPath(location.pathname.split('/').filter(Boolean));
+    if (tabPath?.tab === 'find' || FIND_LIST_PATHS.includes(location.pathname)) {
+      lastFindPathRef.current = location.pathname;
+    }
+  }, [location.pathname]);
   const [isInMtbMode, setIsInMtbMode] = useState(false);
   const [selectedFromMtbList, setSelectedFromMtbList] = useState(false);
   const [mtbTrailsList, setMtbTrailsList] = useState([]);
@@ -470,6 +490,22 @@ function AppContent() {
     navigate('/');
   }, [navigate, tripClear, tripAddStop, tripSetShowBuilder]);
 
+  // The tour of the featured list in season (spec 050), e.g. the Fall Hiking Spree.
+  const featuredList = useActiveLists().find(list => list.featured) || null;
+  const listTour = useMemo(() => listTourSteps(featuredList), [featuredList]);
+  const startListTour = useCallback(() => {
+    if (!featuredList) return;
+    track('tour_start', { variant: 'list' });
+    setShowTourPrompt(false);
+    setTourStep(0);
+    setTourVariant('list');
+    setTourActive(true);
+    setSelectedDestination(null);
+    setSelectedLinearFeature(null);
+    setActiveTab('find');
+    navigate(listPath(featuredList.slug));
+  }, [featuredList, navigate]);
+
   useEffect(() => {
     if (tourActive) track('tour_step', { variant: tourVariant, step: tourStep });
   }, [tourActive, tourVariant, tourStep]);
@@ -478,16 +514,22 @@ function AppContent() {
     track('tour_end', { variant: tourVariant, last_step: tourStep });
     setTourActive(false);
     setTourStep(0);
-    setActiveTab('view');
+    if (tourVariant !== 'list') setActiveTab('view');
     setSelectedDestination(null);
     setSelectedLinearFeature(null);
     if (tourVariant === 'trips') {
       tripClear();
     }
     setTourVariant('default');
+    // The list's tour ends where it began, on the list.
+    if (tourVariant === 'list' && featuredList) {
+      setActiveTab('find');
+      navigate(listPath(featuredList.slug));
+      return;
+    }
     isProgrammaticNavigationRef.current = true;
     navigate('/');
-  }, [navigate, tourVariant, tourStep, tripClear]);
+  }, [navigate, tourVariant, tourStep, tripClear, featuredList]);
 
   const handleTourStepAction = useCallback((action) => {
     switch (action) {
@@ -560,6 +602,19 @@ function AppContent() {
         navigate('/settings/newsletter');
         break;
       }
+      case 'listTourOpen': {
+        if (!featuredList) break;
+        setActiveTab('find');
+        navigate(listPath(featuredList.slug));
+        break;
+      }
+      case 'listTourSettings': {
+        setActiveTab('settings');
+        setSettingsTab('general');
+        isProgrammaticNavigationRef.current = true;
+        navigate('/settings/general');
+        break;
+      }
       case 'tripTourAddDemoStop': {
         // Demo a stop so the Trip Builder appears for the next steps.
         // Coords are Boston Mill Visitor Center (picked by selectVisitorCenter).
@@ -597,7 +652,7 @@ function AppContent() {
         break;
       }
     }
-  }, [destinations, isAuthenticated, isAdmin, navigate, tripAddStop, tripSetShowBuilder]);
+  }, [destinations, isAuthenticated, isAdmin, navigate, tripAddStop, tripSetShowBuilder, featuredList]);
 
   // Switching tabs keeps whatever is selected (spec 048). The POI card shows
   // only on the map, so away from it the URL and title belong to the tab, and
@@ -608,14 +663,21 @@ function AppContent() {
     if (newTab !== previousActiveTab) track('tab_view', { tab: newTab });
 
     const selected = selectedDestination || selectedLinearFeature;
-    isProgrammaticNavigationRef.current = true;
+    // The flag tells the URL handling to skip the navigation made here. A tab
+    // tapped while already on its path navigates nowhere, and a flag raised
+    // for it would swallow the next real navigation instead.
+    const go = (path) => {
+      if (path === location.pathname) return;
+      isProgrammaticNavigationRef.current = true;
+      navigate(path);
+    };
 
     if (newTab === 'view') {
       if (selected) {
-        navigate(selectionPathRef.current || `/${generateSlug(selected.name)}`);
+        go(selectionPathRef.current || `/${generateSlug(selected.name)}`);
         document.title = `${selected.name} | Roots of The Valley`;
       } else {
-        navigate('/');
+        go('/');
       }
       return;
     }
@@ -625,13 +687,15 @@ function AppContent() {
     }
     document.title = 'Roots of The Valley';
     if (newTab === 'settings') {
-      navigate(`/settings/${settingsTab}`);
+      go(`/settings/${settingsTab}`);
     } else if (newTab === 'about') {
-      navigate(`/about/${aboutTab}`);
+      go(`/about/${aboutTab}`);
     } else if (newTab === 'happening' && happeningView === 'events') {
-      navigate('/happening/events');
+      go('/happening/events');
+    } else if (newTab === 'find') {
+      go(lastFindPathRef.current);
     } else {
-      navigate(`/${newTab}`);
+      go(`/${newTab}`);
     }
   }, [activeTab, location.pathname, navigate, selectedDestination, selectedLinearFeature, settingsTab, aboutTab, happeningView]);
 
@@ -810,7 +874,6 @@ function AppContent() {
     if (tabPath) {
       setActiveTab(tabPath.tab);
       if (tabPath.view) setHappeningView(tabPath.view);
-      if (tabPath.tab === 'find') setFindListSlug(tabPath.list || null);
       if (tabPath.redirectTo) navigate(tabPath.redirectTo, { replace: true });
     } else if (pathParts.length === 3 && (pathParts[1] === 'news' || pathParts[1] === 'events')) {
       poiSlug = pathParts[0];
@@ -908,7 +971,6 @@ function AppContent() {
     if (tabPath) {
       setActiveTab(tabPath.tab);
       if (tabPath.view) setHappeningView(tabPath.view);
-      if (tabPath.tab === 'find') setFindListSlug(tabPath.list || null);
       if (tabPath.redirectTo) navigate(tabPath.redirectTo, { replace: true });
       document.title = 'Roots of The Valley';
       return;
@@ -2326,6 +2388,7 @@ function AppContent() {
             initialShowMtbOnly={initialShowMtbOnly}
             initialShowOrganizationsOnly={isInOrganizationsMode}
             listSlug={findListSlug}
+            onStartListTour={startListTour}
             onFilterByTypes={handleFilterByTypes}
             iconConfig={iconConfig}
             editMode={editMode}
@@ -2361,7 +2424,7 @@ function AppContent() {
 
       {activeTab === 'about' && (
         <main id="main-content" className="main-content-full" tabIndex="-1">
-          <AboutPage onStartTour={startTour} onStartTripTour={startTripTour} aboutTab={aboutTab} onTabChange={handleAboutTabChange} isAdmin={isAdmin} editMode={editMode} />
+          <AboutPage onStartTour={startTour} onStartTripTour={startTripTour} onStartListTour={featuredList ? startListTour : null} listName={featuredList?.name} aboutTab={aboutTab} onTabChange={handleAboutTabChange} isAdmin={isAdmin} editMode={editMode} />
         </main>
       )}
 
@@ -2765,7 +2828,7 @@ function AppContent() {
           currentStep={tourStep}
           setCurrentStep={setTourStep}
           onStepAction={handleTourStepAction}
-          steps={tourVariant === 'trips' ? TRIP_TOUR_STEPS : undefined}
+          steps={TOUR_VARIANT_STEPS[tourVariant] || (tourVariant === 'list' ? listTour : undefined)}
         />
       )}
     </div>

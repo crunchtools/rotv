@@ -10,6 +10,9 @@ import pg from 'pg';
 const adminPool = new pg.Pool();
 const probe = new pg.Pool({ options: '-c search_path=contact_privacy_probe' });
 const migration = await readFile(new URL('../migrations/102_contact_details_privacy.sql', import.meta.url), 'utf8');
+// Migration 092's edit to the privacy policy, without the tables the rest of it makes.
+const emailSignIn = await readFile(new URL('../migrations/092_email_login_tokens.sql', import.meta.url), 'utf8');
+const [emailSignInEdit] = emailSignIn.match(/UPDATE admin_settings[\s\S]*?;/);
 
 const PRIVACY = `# Privacy Policy
 
@@ -97,5 +100,16 @@ describe('migration 102 (contact details in the privacy pages)', () => {
 
     expect(await page('about_privacy_md'))
       .toBe(`## What We Collect\n\n${account}${email}When you sign in with Google or Facebook, we receive:\n\n- Your name`);
+  });
+
+  // Fix: cover the guard that stops migration 092 adding its sentence on every boot (PR #768 review)
+  it('has migration 092 add its sentence once however often it runs', async () => {
+    await seed('## What We Collect\n\nWhen you sign in with Google or Facebook, we receive:\n\n- Your name', DELETION, TERMS);
+
+    await probe.query(emailSignInEdit);
+    await probe.query(emailSignInEdit);
+    await probe.query(emailSignInEdit);
+
+    expect(count(await page('about_privacy_md'), 'When you sign in with a link we email you')).toBe(1);
   });
 });

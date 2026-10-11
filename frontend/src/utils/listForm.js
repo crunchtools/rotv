@@ -27,6 +27,20 @@ export function splitName(fullName) {
 const DETAIL_FIELDS = ['lastName', 'firstName', 'address', 'city', 'state', 'zip', 'email', 'phone'];
 
 /**
+ * Whether a ZIP code is in the organizer's county, by the layout's lists.
+ * @param {{zips?: string[], zipPrefixes?: string[], unsureZips?: string[]}} resident From `form_layout.resident`
+ * @param {string} [zip] As the person typed it; ZIP+4 is fine
+ * @returns {'yes'|'no'|null} null when there is no ZIP, or it straddles the county line
+ */
+export function residentAnswer(resident, zip) {
+  const [zip5] = (zip || '').match(/\d{5}/) || [];
+  if (!zip5 || (resident.unsureZips || []).includes(zip5)) return null;
+  const inCounty = (resident.zips || []).includes(zip5)
+    || (resident.zipPrefixes || []).some(prefix => zip5.startsWith(prefix));
+  return inCounty ? 'yes' : 'no';
+}
+
+/**
  * What to write on the form, and where.
  *
  * @param {object} list A list from /api/lists, with `form_layout`
@@ -54,6 +68,9 @@ export function formEntries(list, checkins, details = {}) {
     if (details[field] && layout[field]) entries.push({ text: details[field], ...layout[field] });
   }
   if (returning) entries.push({ text: 'X', ...layout.returning });
+  // The county-resident box is ticked from the ZIP code; a ZIP on the county line is left to the person.
+  const resident = layout.resident && residentAnswer(layout.resident, details.zip);
+  if (resident) entries.push({ text: 'X', ...layout.resident[resident] });
 
   for (const checkin of checkinsForList(list, checkins)) {
     const date = formatFormDate(checkin.done_on);

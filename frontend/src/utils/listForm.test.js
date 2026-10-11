@@ -4,7 +4,7 @@ import { readFile, writeFile } from 'fs/promises';
 import process from 'node:process';
 import { Buffer } from 'node:buffer';
 import { PDFDocument } from 'pdf-lib';
-import { formatFormDate, splitName, formEntries, fillListForm } from './listForm';
+import { formatFormDate, splitName, formEntries, fillListForm, residentAnswer } from './listForm';
 
 const layout = {
   page: 0, fontSize: 9, dateX: 552,
@@ -18,7 +18,11 @@ const layout = {
   state: { x: 504, y: 467.5, maxWidth: 44 },
   zip: { x: 555.5, y: 467.5, maxWidth: 48 },
   phone: { x: 407, y: 446.5, maxWidth: 195 },
-  returning: { x: 509.8, y: 486.3 }
+  returning: { x: 509.8, y: 487.3 },
+  resident: {
+    yes: { x: 547.9, y: 487.3 }, no: { x: 575.1, y: 487.3 },
+    zipPrefixes: ['443'], zips: ['44224', '44236'], unsureZips: ['44685']
+  }
 };
 const list = {
   id: 1, choice_label: "Hiker's Choice", form_file: '/lists/fall-hiking-spree-2026-form.pdf', form_layout: layout,
@@ -74,10 +78,28 @@ describe('formEntries', () => {
       { text: '44313', ...layout.zip },
       { text: 'scott@example.com', ...layout.email },
       { text: '330-555-0100', ...layout.phone },
-      { text: 'X', ...layout.returning }
+      { text: 'X', ...layout.returning },
+      { text: 'X', ...layout.resident.yes }
     ]);
     expect(formEntries(list, [], { firstName: 'Scott', city: '' })).toEqual([{ text: 'Scott', ...layout.firstName }]);
     expect(formEntries(list, [])).toEqual([]);
+  });
+
+  it('ticks county resident Yes or No from the ZIP, and neither on the county line', () => {
+    expect(residentAnswer(layout.resident, '44313')).toBe('yes');
+    expect(residentAnswer(layout.resident, '44224-1234')).toBe('yes');
+    expect(residentAnswer(layout.resident, '44114')).toBe('no');
+    expect(residentAnswer(layout.resident, '44685')).toBeNull();
+    expect(residentAnswer(layout.resident, '')).toBeNull();
+    expect(residentAnswer(layout.resident, '443')).toBeNull();
+
+    expect(formEntries(list, [], { zip: '44114' })).toEqual([
+      { text: '44114', ...layout.zip },
+      { text: 'X', ...layout.resident.no }
+    ]);
+    expect(formEntries(list, [], { zip: '44685' })).toEqual([{ text: '44685', ...layout.zip }]);
+    const withoutBoxes = { ...layout, resident: undefined };
+    expect(formEntries({ ...list, form_layout: withoutBoxes }, [], { zip: '44313' })).toEqual([{ text: '44313', ...layout.zip }]);
   });
 
   it('skips a detail an older layout has no place for', () => {

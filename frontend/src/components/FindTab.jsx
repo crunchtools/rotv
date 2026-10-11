@@ -65,6 +65,7 @@ const poiRowKey = (poi) => {
  * @param {boolean} [props.initialShowMtbOnly=false] The URL asks for the MTB Trail Status list
  * @param {boolean} [props.initialShowOrganizationsOnly=false] The URL asks for the Organizations list
  * @param {string|null} [props.listSlug=null] The URL names a curated list (/find/<slug>)
+ * @param {() => void} [props.onStartListTour] Starts the guided tour of the curated list
  * @param {(types: string[]|null) => void} [props.onFilterByTypes] Tells the map which marker types
  *   the current list is about; null means all
  * @param {object[]} [props.iconConfig] Icon types, for the type chips and row icons
@@ -87,6 +88,7 @@ const FindTab = memo(function FindTab({
   initialShowMtbOnly = false,
   initialShowOrganizationsOnly = false,
   listSlug = null,
+  onStartListTour,
   onFilterByTypes,
   iconConfig,
   editMode = false,
@@ -501,6 +503,7 @@ const FindTab = memo(function FindTab({
         {curatedList && (
           <ListChallenge
             list={curatedList}
+            onStartTour={onStartListTour}
             choiceName={choiceCheckin ? (allLinearFeatures || []).find(f => f.id === choiceCheckin.poi_id)?.name || '' : ''}
           />
         )}

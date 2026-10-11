@@ -13,8 +13,9 @@ import ListBadge from './ListBadge';
  * @param {object} props
  * @param {object} props.list The list, from /api/lists
  * @param {string} [props.choiceName] The trail hiked as the free choice, for the completed form
+ * @param {() => void} [props.onStartTour] Starts the guided tour of the list; no button without it
  */
-export default function ListChallenge({ list, choiceName = '' }) {
+export default function ListChallenge({ list, choiceName = '', onStartTour }) {
   const { isAuthenticated, user, listCheckins, contact } = useAuth();
   const navigate = useNavigate();
   const [formState, setFormState] = useState('idle');
@@ -89,6 +90,7 @@ export default function ListChallenge({ list, choiceName = '' }) {
         <div className="list-challenge-tally">
           <div className="list-challenge-count">
             <strong>{progress.done} of {progress.goal}</strong> hikes
+            <span className="list-challenge-percent">{percent}%</span>
           </div>
           <div
             className="list-challenge-track"
@@ -138,6 +140,12 @@ export default function ListChallenge({ list, choiceName = '' }) {
         <p className="list-challenge-nudge">
           Your hikes are saved on this device. Sign in to keep them on your account, year after year.
         </p>
+      )}
+
+      {onStartTour && (
+        <button type="button" className="link-button list-challenge-tour" onClick={onStartTour}>
+          New here? Take the tour
+        </button>
       )}
 
       <details className="list-challenge-rules">

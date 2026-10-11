@@ -15,12 +15,10 @@ const auth = (overrides = {}) => {
 afterEach(cleanup);
 
 describe('ContactDetails', () => {
-  it('starts the name from the account and saves every field, trimmed', async () => {
-    const { setContact } = auth({ user: { fullName: 'Scott McCarty' } });
+  it('saves every field, trimmed', async () => {
+    const { setContact } = auth({ contact: { firstName: 'Scott', lastName: 'McCarty' } });
     render(<ContactDetails />);
 
-    expect(screen.getByLabelText('First name').value).toBe('Scott');
-    expect(screen.getByLabelText('Last name').value).toBe('McCarty');
     fireEvent.change(screen.getByLabelText('Mailing address'), { target: { value: ' 1 Main St ' } });
     fireEvent.change(screen.getByLabelText('Cell number'), { target: { value: '330-555-0100' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save details' }));
@@ -31,17 +29,16 @@ describe('ContactDetails', () => {
     expect((await screen.findByRole('status')).textContent).toContain('Details saved');
   });
 
-  it('shows saved details, and keeps a name the person cleared cleared', () => {
-    auth({ user: { fullName: 'Scott McCarty' }, contact: { firstName: '', lastName: 'M.', city: 'Akron' } });
+  it('shows saved details', () => {
+    auth({ contact: { firstName: '', lastName: 'M.', city: 'Akron' } });
     render(<ContactDetails />);
 
-    expect(screen.getByLabelText('First name').value).toBe('');
     expect(screen.getByLabelText('Last name').value).toBe('M.');
     expect(screen.getByLabelText('City').value).toBe('Akron');
   });
 
   it('saves a cleared name as blank instead of dropping it', async () => {
-    const { setContact } = auth({ user: { fullName: 'Scott McCarty' }, contact: { firstName: 'Scott', lastName: 'McCarty' } });
+    const { setContact } = auth({ contact: { firstName: 'Scott', lastName: 'McCarty' } });
     render(<ContactDetails />);
 
     fireEvent.change(screen.getByLabelText('First name'), { target: { value: '' } });
@@ -51,7 +48,7 @@ describe('ContactDetails', () => {
     expect(setContact.mock.calls[0][0]).toMatchObject({ firstName: '', lastName: 'McCarty' });
   });
 
-  it('tells a signed-out visitor the details stay on the device', () => {
+  it('tells the visitor the details stay on the device', () => {
     auth();
     render(<ContactDetails />);
 

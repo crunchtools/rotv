@@ -9,9 +9,10 @@ const USERNAME_PATTERN = /^[A-Za-z][A-Za-z0-9_-]{2,29}$/;
  * server as the person types.
  *
  * @param {{value: {name: string, username: string, displayPreference: 'name'|'username'},
- *   onChange: (next: object) => void, idPrefix: string}} props
+ *   onChange: (next: object) => void, idPrefix: string, nameField?: boolean}} props
+ *   `nameField` false leaves the name input out, where the caller asks for the name itself
  */
-function ProfileFields({ value, onChange, idPrefix }) {
+function ProfileFields({ value, onChange, idPrefix, nameField = true }) {
   const { checkUsername } = useAuth();
   const [usernameStatus, setUsernameStatus] = useState(null);
   const username = value.username.trim();
@@ -46,16 +47,20 @@ function ProfileFields({ value, onChange, idPrefix }) {
 
   return (
     <fieldset className="auth-fieldset">
-      <label className="auth-label" htmlFor={`${idPrefix}-name`}>Full name</label>
-      <input
-        id={`${idPrefix}-name`}
-        className="auth-input"
-        autoComplete="name"
-        value={value.name}
-        onChange={set('name')}
-        maxLength={100}
-        required
-      />
+      {nameField && (
+        <>
+          <label className="auth-label" htmlFor={`${idPrefix}-name`}>Full name</label>
+          <input
+            id={`${idPrefix}-name`}
+            className="auth-input"
+            autoComplete="name"
+            value={value.name}
+            onChange={set('name')}
+            maxLength={100}
+            required
+          />
+        </>
+      )}
 
       <label className="auth-label" htmlFor={`${idPrefix}-username`}>
         Username <span className="auth-optional">(optional)</span>

@@ -988,7 +988,7 @@ async function initDatabase() {
 app.get('/api/about-content', async (req, res) => {
   try {
     const aboutSettings = await pool.query(
-      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_trip_tutorial_md', 'about_privacy_md', 'about_data_deletion_md', 'about_terms_md')`
+      `SELECT key, value FROM admin_settings WHERE key IN ('about_story_md', 'about_tutorial_md', 'about_trip_tutorial_md', 'about_list_tutorial_md', 'about_privacy_md', 'about_data_deletion_md', 'about_terms_md')`
     );
     const content = {};
     for (const row of aboutSettings.rows) {

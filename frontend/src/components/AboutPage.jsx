@@ -54,7 +54,7 @@ function AboutTutorial({ onStartTour, content, contentKey, buttonLabel, isAdmin,
   );
 }
 
-function AboutPage({ onStartTour, onStartTripTour, aboutTab, onTabChange, isAdmin, editMode }) {
+function AboutPage({ onStartTour, onStartTripTour, onStartListTour, listName, aboutTab, onTabChange, isAdmin, editMode }) {
   const [aboutContent, setAboutContent] = useState({});
 
   useEffect(() => {
@@ -135,6 +135,17 @@ function AboutPage({ onStartTour, onStartTripTour, aboutTab, onTabChange, isAdmi
               isAdmin={isAdmin}
               editMode={editMode}
             />
+            {/* Only while the featured list is in season: its tour walks the live list. */}
+            {onStartListTour && (
+              <AboutTutorial
+                onStartTour={onStartListTour}
+                content={aboutContent.about_list_tutorial_md}
+                contentKey="about_list_tutorial_md"
+                buttonLabel={`Take the ${listName} Tour`}
+                isAdmin={isAdmin}
+                editMode={editMode}
+              />
+            )}
           </>
         )}
         {aboutTab === 'feedback' && <FeedbackForm inline />}

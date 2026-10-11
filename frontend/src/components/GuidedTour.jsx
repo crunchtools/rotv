@@ -71,6 +71,94 @@ export const TRIP_TOUR_STEPS = [
   }
 ];
 
+/**
+ * The tour of a curated list with a challenge, such as the Fall Hiking Spree
+ * (spec 050): checking trails off, dating them, the progress meter, the
+ * details that fill in the form, and the form itself.
+ *
+ * @param {object|null} list The list from /api/lists; null gives no steps
+ * @returns {object[]} Steps for GuidedTour
+ */
+export function listTourSteps(list) {
+  if (!list) return [];
+  const steps = [
+    {
+      selector: '.list-challenge',
+      spotlightSelector: '.list-hero',
+      title: list.name,
+      description: `Hike ${list.goal_count} of these ${list.items.length} trails this season and earn the badge. This tour shows how to keep track here.`,
+      position: 'bottom',
+      action: 'listTourOpen',
+      scrollIntoView: true,
+      delay: 500
+    },
+    {
+      selector: '.list-checkin-btn',
+      title: 'Check off a trail',
+      description: 'Hiked one? Tap Mark hiked on its tile. Tap Hiked again if you marked the wrong trail. Navigate takes you to the trailhead.',
+      position: 'top',
+      action: 'listTourOpen',
+      scrollIntoView: true,
+      delay: 400,
+      tooltipHeight: 235,
+      mobile: { mobilePositionAbove: true, tooltipHeight: 220 }
+    },
+    {
+      selector: '.list-checkin-date',
+      title: 'Set the date',
+      description: 'A hike is dated today when you mark it. Hiked it last week? Change the date beside the button to the day you were on the trail.',
+      position: 'top',
+      action: 'listTourOpen',
+      scrollIntoView: true,
+      delay: 400,
+      tooltipHeight: 235,
+      mobile: { mobilePositionAbove: true, tooltipHeight: 220 }
+    },
+    {
+      selector: '.list-challenge-progress',
+      title: 'Watch it fill up',
+      description: `The meter and the percent beside it climb with every hike. At ${list.goal_count} the badge lights up, and it stays in My Valley year after year.`,
+      position: 'bottom',
+      action: 'listTourOpen',
+      scrollIntoView: true,
+      delay: 400
+    }
+  ];
+  if (list.form_file && list.form_layout) {
+    steps.push(
+      {
+        selector: '.general-settings .settings-grid',
+        title: 'Add your details once',
+        description: 'In Settings, under General, enter your name, mailing address and cell number. They are used only to fill in the form for you.',
+        position: 'bottom',
+        action: 'listTourSettings',
+        delay: 500
+      },
+      {
+        selector: '.list-challenge-form',
+        title: 'Download your form',
+        description: 'Download completed form hands you the official form with your hike dates and your details already written in.',
+        position: 'bottom',
+        action: 'listTourOpen',
+        scrollIntoView: true,
+        delay: 500
+      },
+      {
+        selector: '.list-challenge-form',
+        title: 'Ready to turn in',
+        description: 'This is what you get: dates beside each trail you hiked and your details at the top. Print it, add anything still blank, and hand it in for your reward.',
+        image: list.form_file.replace(/\.pdf$/, '-sample.webp'),
+        imageAlt: `A ${list.name} form filled in with a hiker's details and hike dates`,
+        position: 'center',
+        action: 'listTourOpen',
+        tooltipHeight: 470,
+        delay: 300
+      }
+    );
+  }
+  return steps;
+}
+
 export const TOUR_STEPS = [
   {
     selector: '.leaflet-container',
@@ -253,9 +341,13 @@ function computePosition(step, el, isMobile) {
   }
 
   const elRect = el.getBoundingClientRect();
-  const isOffScreen = elRect.top < 0 || elRect.bottom > window.innerHeight;
+  // A step that scrolls to its target also keeps it clear of the tab bar along the bottom...
+  const bottomEdge = window.innerHeight - (step.scrollIntoView ? 90 : 0);
+  // ...and of the site header along the top.
+  const topEdge = step.scrollIntoView ? 110 : 0;
+  const isOffScreen = elRect.top < topEdge || elRect.bottom > bottomEdge;
   const isInSettingsPanel = el.closest('.settings-content');
-  if (isOffScreen && isInSettingsPanel) {
+  if (isOffScreen && (isInSettingsPanel || step.scrollIntoView)) {
     el.scrollIntoView({ behavior: 'instant', block: 'center' });
   }
 
@@ -272,9 +364,12 @@ function computePosition(step, el, isMobile) {
   const vh = window.innerHeight;
 
   if (step.position === 'center') {
+    // A step with a picture is taller and wider than the text-only card.
+    const cardWidth = step.image ? Math.min(520, vw - 40) : 300;
+    const cardHeight = step.tooltipHeight || 180;
     return {
-      spotlightRect: spotlight,
-      tooltipStyle: { top: `${vh / 2 - 90}px`, left: `${vw / 2 - 150}px` },
+      spotlightRect: step.image ? null : spotlight,
+      tooltipStyle: { top: `${Math.max(20, vh / 2 - cardHeight / 2)}px`, left: `${vw / 2 - cardWidth / 2}px` },
       mobilePositionAbove: false
     };
   }
@@ -506,7 +601,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
       )}
 
       <div
-        className={`guided-tour-tooltip ${stepReady ? 'tour-visible' : 'tour-hidden'} ${isMobile && mobilePositionAbove ? 'tour-position-above' : ''}`}
+        className={`guided-tour-tooltip ${stepReady ? 'tour-visible' : 'tour-hidden'} ${isMobile && mobilePositionAbove ? 'tour-position-above' : ''} ${step.image ? 'tour-with-image' : ''}`}
         style={{ ...tooltipStyle, '--tour-top': tooltipStyle.top }}
         role="alertdialog"
         aria-label={step.title}
@@ -515,6 +610,7 @@ function GuidedTour({ onEnd, currentStep, setCurrentStep, onStepAction, steps: s
           {currentStep + 1} of {activeSteps.length}
         </div>
         <h4 className="guided-tour-title">{step.title}</h4>
+        {step.image && <img className="guided-tour-image" src={step.image} alt={step.imageAlt || ''} />}
         <p className="guided-tour-description">{step.description}</p>
         <div className="guided-tour-actions">
           {currentStep > 0 && (

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useActiveLists } from '../hooks/useActiveLists';
@@ -15,6 +15,9 @@ const PREFERRED_PHOTOS = {
 };
 
 const MAX_PHOTOS = 6;
+
+// How far a finger must travel sideways, in pixels, to count as a swipe rather than a tap.
+const SWIPE_PX = 40;
 
 // Photos to try for a feature, best first: a place can be flagged as having a
 // photo the image server no longer holds, so the banner moves on to the next.
@@ -84,7 +87,8 @@ export function featureSlides({ list, listCheckins, destinations, mtb }) {
  * The rotating banner in Find's header: one other part of the site at a time,
  * each a way in. It is dark, photographic and labelled with where a tap goes,
  * so it reads as a door to somewhere else rather than as part of the list. It rotates on its own unless the person has asked for less
- * motion, is pointing at it, or has picked a slide themselves.
+ * motion, is pointing at it, or has picked a slide themselves. A sideways
+ * swipe moves to the next or previous one.
  *
  * @param {object} props
  * @param {object[]} props.destinations Every point POI
@@ -123,6 +127,30 @@ export default function FeatureBanner({ destinations }) {
     return () => clearInterval(timer);
   }, [paused, slides.length]);
 
+  // Where a touch began, and whether it became a swipe: a swipe must not also open the slide.
+  const touchStart = useRef(null);
+  const swiped = useRef(false);
+
+  const onTouchStart = (event) => {
+    const touch = event.touches[0];
+    touchStart.current = { x: touch.clientX, y: touch.clientY };
+    swiped.current = false;
+  };
+
+  const onTouchEnd = (event) => {
+    const start = touchStart.current;
+    touchStart.current = null;
+    if (!start || slides.length < 2) return;
+    const touch = event.changedTouches[0];
+    const across = touch.clientX - start.x;
+    if (Math.abs(across) < SWIPE_PX || Math.abs(across) < Math.abs(touch.clientY - start.y)) return;
+    swiped.current = true;
+    // Only the click that this touch itself produces is swallowed.
+    setTimeout(() => { swiped.current = false; }, 400);
+    setIndex(shown + (across < 0 ? 1 : slides.length - 1));
+    setPaused(true);
+  };
+
   const image = slide.images.find(url => !failedImages.has(url)) || null;
   const hasImage = Boolean(image);
 
@@ -138,12 +166,14 @@ export default function FeatureBanner({ destinations }) {
       onPointerLeave={() => setPaused(false)}
       onFocus={() => setPaused(true)}
       onBlur={() => setPaused(false)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
     >
       <button
         type="button"
         key={slide.id}
         className={`feature-banner-slide ${hasImage ? '' : 'plain'} ${titled ? 'titled' : ''}`}
-        onClick={() => navigate(slide.to)}
+        onClick={() => { if (!swiped.current) navigate(slide.to); }}
       >
         {hasImage && (
           <img
