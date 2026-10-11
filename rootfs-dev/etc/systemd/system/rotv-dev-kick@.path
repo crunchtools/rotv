@@ -1,0 +1,11 @@
+[Unit]
+Description=Restart "%i" when its control file is touched
+# The control directory is a bind mount shared with the container the code is
+# edited from. `touch control/%i` there is the whole interface.
+
+[Path]
+PathChanged=/var/lib/rotv-dev/control/%i
+Unit=rotv-dev-kick@%i.service
+
+[Install]
+WantedBy=multi-user.target

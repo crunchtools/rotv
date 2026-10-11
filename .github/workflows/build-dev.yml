@@ -1,19 +1,21 @@
 name: Build and Push Dev Image
 
-# quay.io/crunchtools/rotv-dev: the app image plus git, gh and Claude Code, for
-# dev.rootsofthevalley.org. Rebuilt whenever the app image is.
+# quay.io/crunchtools/rotv-dev: the app image plus the units that run a mounted
+# checkout, for dev.rootsofthevalley.org. Rebuilt whenever the app image is.
 on:
   push:
     branches: [main, master]
     paths:
       - Containerfile.dev
       - 'rootfs-dev/**'
+      - scripts/test-rotv-dev-kick.sh
       - .github/workflows/build-dev.yml
   pull_request:
     branches: [main, master]
     paths:
       - Containerfile.dev
       - 'rootfs-dev/**'
+      - scripts/test-rotv-dev-kick.sh
       - .github/workflows/build-dev.yml
   workflow_run:
     workflows: ["Build and Push Container Image"]

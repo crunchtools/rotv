@@ -22,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `digest_excluded` flag on news and events (migration 096).
 
 ### Changed
+- **The hosted dev container holds no agent (#779)**: Claude Code, gh, git, the ssh client and
+  the Remote Control unit are gone from `rotv-dev`. The agent runs in a container of its own
+  with the site's directory mounted, and drives the dev site through files: the backend runs
+  under `node --watch`, touching `data/control/{ui,backend,init,deps}` restarts the matching
+  units, a changed lockfile or migration triggers `deps` or `init` on its own, and each dev
+  unit's journal is mirrored to `data/logs/`. `node_modules` live in the checkout, so unit
+  tests run from outside the container. Production deploys from that session restart the
+  production unit through the MCP gateway's systemd tool; the forced-command SSH key and
+  `scripts/rotv-deploy.sh` are removed.
 - **The trip in progress is always in view**: on a phone the trip builder floated behind the
   full-height place card, so tapping Add to Trip there showed nothing, and at half height it covered
   the card's buttons. It is now a bar docked on the tab bar, visible on every tab and over the full

@@ -1,0 +1,11 @@
+[Unit]
+Description=Reinstall dependencies when a lockfile in the checkout changes
+ConditionPathExists=/work/rotv/backend/package-lock.json
+
+[Path]
+PathChanged=/work/rotv/backend/package-lock.json
+PathChanged=/work/rotv/frontend/package-lock.json
+Unit=rotv-dev-kick@deps.service
+
+[Install]
+WantedBy=multi-user.target

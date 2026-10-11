@@ -1,0 +1,13 @@
+[Unit]
+Description=Mirror the journal of %i to a file readable from outside the container
+# The journal stays the record. This copy is for whoever edits the checkout
+# from another container and cannot run journalctl here.
+After=systemd-journald.service
+
+[Service]
+ExecStart=/usr/local/bin/rotv-dev-log-mirror.sh %i
+Restart=always
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

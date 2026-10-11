@@ -159,31 +159,56 @@ Version bump (1.10.0 → 1.11.0):
 ## Hosted dev (dev.rootsofthevalley.org)
 
 A second container on the production host, for working when the laptop is off
-and for seeing changes on a real phone (#748). The checkout, the dev server and
-the Claude Code session that edits the code all live in it.
+and for seeing changes on a real phone (#748). It runs the app from a git
+checkout: the backend, a Vite dev server with hot reload, and its own
+PostgreSQL.
+
+Nothing in it edits the code (#779). The agent that does runs in a container of
+its own, with this site's directory bind-mounted into it, and the two meet only
+through files:
 
 ```
-phone / claude.ai ──Remote Control──▶ rotv-dev-claude.service ─ edits ─▶ /work/rotv
-                                                                            │
+agent container ── edits ──▶ /srv/dev.rootsofthevalley.org/data/checkout ◀── mounted at /work/rotv ── dev container
+                ── touch ──▶ .../data/control/<name>   ──▶ restarts a unit in the dev container
+                ◀── read ─── .../data/logs/<unit>.log  ◀── the dev units' journals
+
 phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev-ui (Vite :5173, HMR)
                                                         └─ /api /auth /stats /share ─▶ rotv-backend :8080
 ```
 
 - **Image:** `quay.io/crunchtools/rotv-dev`, built by `build-dev.yml` from
-  `Containerfile.dev`. It is the app image plus git, gh and Claude Code. `/app`
-  is a symlink to `/work/rotv/backend`, so `rotv-init` and `rotv-backend` run the
-  checkout's migrations and `server.js` unmodified.
-- **Units added** (`rootfs-dev/`): `rotv-dev-deps` (`npm ci` when a lockfile
-  changes), `rotv-dev-ui` (Vite), `rotv-dev-claude` (`claude remote-control`,
-  two sessions at most, sharing the one checkout because Vite serves one tree).
+  `Containerfile.dev`. It is the app image plus the units in `rootfs-dev/`.
+  `/app` is a symlink to `/work/rotv/backend`, so `rotv-init` and
+  `rotv-backend` run the checkout's migrations and `server.js` unmodified. It
+  holds no editor, no git, no agent and no credential for anything.
 - **Host layout**, under `/srv/dev.rootsofthevalley.org/`: `config/dev.env`
   (shape in `deploy/dev.env.example`); `data/checkout` is the git clone,
-  mounted read-write at `/work/rotv`; `data/pgdata`; `data/state` holds the
-  Claude and gh logins and the git identity. `node_modules` are named volumes.
-- **Connectors:** the session signs in with a personal claude.ai account and
-  would inherit that account's connectors. `managed-settings.json` in the image
-  denies Gmail, Google Drive and Google Calendar: a root session that reads web
-  pages and auto-accepts edits has no business holding a mailbox.
+  mounted at `/work/rotv`, with `node_modules` inside it; `data/pgdata`;
+  `data/control` and `data/logs` are the two directories below. The unit is
+  `deploy/dev.rootsofthevalley.org.service`. Every mount is shared (`:z`),
+  because a second container mounts the same tree.
+
+### The inner loop, from outside the container
+
+| To do this | Do this |
+|------------|---------|
+| See a frontend change | Save the file. Vite hot-reloads the page. |
+| Apply a backend change | Save the file. `rotv-backend` runs under `node --watch` and restarts itself. A file that does not parse leaves it waiting for the next save. |
+| Restart Vite | `touch data/control/ui` |
+| Restart the backend by hand | `touch data/control/backend` |
+| Run migrations again | `touch data/control/init`. Adding or editing a file in `backend/migrations/` does it on its own. Restarts the backend after. |
+| Reinstall dependencies | `touch data/control/deps`. A changed `package-lock.json` does it on its own. Restarts both servers after. |
+| Read a unit's log | `data/logs/rotv-backend.log`, `rotv-dev-ui.log`, `rotv-dev-deps.log`, `rotv-init.log`. Each holds the last 1,000 lines of that unit's journal, rewritten every five seconds (follow with `tail -F`). `control.log` records the last 500 kicks. |
+| Run unit tests | From the checkout: `cd backend && npx vitest run tests/<file>.unit.test.js`, or `cd frontend && npx vitest run`. |
+| Restart the whole container | Restart `dev.rootsofthevalley.org.service` on the host. Only a new image needs it. |
+
+The control names are a closed set (`ui`, `backend`, `init`, `deps`); a file
+with any other name does nothing. Each is a systemd path unit
+(`rotv-dev-kick@<name>.path`) watching one file, and `rotv-dev-kick.sh` maps
+the name to the units it restarts.
+
+### What the dev container is and is not
+
 - **Gate:** Cloudflare Access (application "ROTV dev", a 30-day session, an
   allow policy by email). Behind it the app runs `NODE_ENV=test` with
   `BYPASS_AUTH=true`, so every visitor is the test admin. Access alone would
@@ -195,47 +220,26 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
   loads it: account emails and names, sessions, login tokens, third-party API
   keys and queued jobs do not come across.
 - **Nothing here is backed up, on purpose.** The database is rebuilt by
-  `seed`, the checkout by `git clone`, and `data/state` by repeating the logins
-  below. Work that matters is on a pushed branch.
+  `seed` and the checkout by `git clone`. Work that matters is on a pushed
+  branch.
 - **It does not act on the world:** `SCHEDULED_JOBS_ENABLED=false` removes every
   cron schedule at boot (they arrive with the dump), `NEWSLETTER_SEND_ENABLED=false`,
   and no SMTP or image-server settings, so images are read from production and
   nothing is written to it.
 - **What it cannot do:** `./run.sh build` and `./run.sh test` need podman. Unit
   tests run in place; the full gate is the pull request.
-- **Deploying from here:** the session can ship what it merged. The project
-  skill `.claude/skills/deploy/` merges the PR, tags the release, waits for the
-  build and runs `ssh rotv-prod deploy`. That key is not a login: its
-  `authorized_keys` line forces `scripts/rotv-deploy.sh`, which accepts `deploy`,
-  `status` and `logs` and restarts only the production service. A session that
-  reads web pages as root does not get a shell on the host that runs everything
-  else. The script is installed under `/srv/rootsofthevalley.org/config/`, which
-  the dev container does not mount.
 
-First start needs three things done by hand in a terminal, once, because they
-are interactive and the logins are personal:
+### Deploying to production
 
-```bash
-podman exec -it dev.rootsofthevalley.org claude auth login    # claude.ai account, not an API key
-podman exec -it dev.rootsofthevalley.org gh auth login
-podman exec -it -w /work/rotv dev.rootsofthevalley.org claude remote-control   # answer the trust and enable questions, then Ctrl-C
-podman exec dev.rootsofthevalley.org systemctl restart rotv-dev-claude
-```
+A session working on this checkout can ship what it merged, without a login on
+the production host. The project skill `.claude/skills/deploy/` merges the PR,
+tags the release, waits for the build, then restarts the production unit
+through the MCP gateway's systemd tool and checks the health endpoint. The
+unit pulls `:latest` when it starts, so the restart is the deploy.
 
-The deploy key is made once too, on the production host:
-
-```bash
-install -m 0755 scripts/rotv-deploy.sh /srv/rootsofthevalley.org/config/rotv-deploy.sh
-podman exec dev.rootsofthevalley.org sh -c 'mkdir -p -m 700 /var/lib/rotv-dev/ssh && ssh-keygen -q -t ed25519 -N "" -C rotv-dev-deploy -f /var/lib/rotv-dev/ssh/id_ed25519'
-# known_hosts: the host's own key, under the name and port in ssh_config.d/rotv-prod.conf
-echo "[lotor.dc3.crunchtools.com]:22422 $(cat /etc/ssh/ssh_host_ed25519_key.pub)" > /srv/dev.rootsofthevalley.org/data/state/ssh/known_hosts
-echo "restrict,from=\"10.88.0.0/16\",command=\"/srv/rootsofthevalley.org/config/rotv-deploy.sh\" $(cat /srv/dev.rootsofthevalley.org/data/state/ssh/id_ed25519.pub)" >> /root/.ssh/authorized_keys
-```
-
-Sessions run in auto mode, whose classifier refuses to merge and deploy on its
-own. `data/state/claude/settings.json` carries the `autoMode` block that names
-this repository and `rotv-prod` as trusted; it is user settings, so it lives on
-the state volume rather than in the checkout.
+Until #779 this was an SSH key with a forced command on the production host.
+An agent container with no route to the host cannot use one, and does not need
+to: the gateway already holds the one permission the script granted.
 
 ## Key Technologies
 

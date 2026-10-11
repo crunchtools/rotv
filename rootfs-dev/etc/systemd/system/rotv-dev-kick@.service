@@ -1,0 +1,6 @@
+[Unit]
+Description=Restart the dev units behind the control name "%i"
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/rotv-dev-kick.sh %i
