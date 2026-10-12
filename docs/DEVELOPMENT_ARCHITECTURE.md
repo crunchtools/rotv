@@ -194,6 +194,7 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
 |------------|---------|
 | See a frontend change | Save the file. Vite hot-reloads the page. |
 | Apply a backend change | Save the file. `rotv-backend` runs under `node --watch` and restarts itself. A file that does not parse leaves it waiting for the next save. |
+| Fetch the running site | `curl http://10.89.14.20:5173/` (Vite) or `:8080` (the backend), over the private network the agent's container shares with this one. The public name sits behind a login the agent cannot pass. |
 | Restart Vite | `touch data/control/ui` |
 | Restart the backend by hand | `touch data/control/backend` |
 | Run migrations again | `touch data/control/init`. Adding or editing a file in `backend/migrations/` does it on its own. Restarts the backend after. |
