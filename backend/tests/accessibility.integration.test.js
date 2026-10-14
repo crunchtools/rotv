@@ -117,6 +117,36 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
     expect(critical).toHaveLength(0);
   }, 60000);
 
+  it('the Events date menu opens on a phone, fits on screen and passes axe (#778)', async () => {
+    await page.setViewportSize({ width: 375, height: 740 });
+    await page.goto(`${BASE_URL}/happening/events`, { waitUntil: 'domcontentloaded' });
+    const trigger = page.locator('button[aria-label^="Event dates:"]');
+    await trigger.waitFor({ timeout: 15000 });
+    await trigger.click();
+
+    const menu = page.locator('[role="menu"][aria-label="Event dates"]');
+    await menu.waitFor({ timeout: 5000 });
+    const box = await menu.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(375);
+    expect(box.y + box.height).toBeLessThanOrEqual(740);
+    for (const name of ['Today', 'This Weekend', 'Future', 'Past']) {
+      expect(await menu.getByRole('menuitemradio', { name }).isVisible()).toBe(true);
+    }
+
+    const results = await new AxeBuilder({ page })
+      .withTags(['wcag2a', 'wcag2aa'])
+      .include('.find-controls-row')
+      .analyze();
+    const critical = results.violations.filter(v => v.impact === 'critical' || v.impact === 'serious');
+    critical.forEach(v => console.log(`  [${v.impact}] ${v.id}: ${v.description}`));
+    expect(critical).toHaveLength(0);
+
+    await menu.getByRole('menuitemradio', { name: 'Past' }).click();
+    await page.waitForFunction(() => document.querySelector('button[aria-label^="Event dates:"]')?.getAttribute('aria-label') === 'Event dates: Past', null, { timeout: 5000 });
+  }, 60000);
+
   it('old tab links land on the renamed tabs', async () => {
     for (const [oldPath, newPath] of [['/results', '/find'], ['/news', '/happening'], ['/events', '/happening/events']]) {
       await page.goto(`${BASE_URL}${oldPath}`, { waitUntil: 'load' });

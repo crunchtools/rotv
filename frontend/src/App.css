@@ -3413,13 +3413,6 @@ body {
     text-align: center;
   }
 
-  .results-subtab {
-    flex: 1;
-    padding: 0.5rem 0.25rem;
-    font-size: 0.8rem;
-    text-align: center;
-  }
-
   .sidebar-header {
     flex-shrink: 0;
     padding: 0.75rem 1rem;
@@ -11560,45 +11553,6 @@ body {
   /* Styling is applied via .main-content-full .results-tab-wrapper rule */
 }
 
-/* Results sub-tabs */
-.results-subtabs {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  margin-bottom: 1rem;
-  border-bottom: 2px solid #e0e0e0;
-}
-
-.results-subtab {
-  padding: 0.75rem 1.5rem;
-  font-size: 0.95rem;
-  font-weight: 500;
-  color: #525252;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  position: relative;
-  transition: color 0.2s ease;
-}
-
-.results-subtab:hover {
-  color: #333;
-}
-
-.results-subtab.active {
-  color: #4CAF50;
-}
-
-.results-subtab.active::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #4CAF50;
-}
-
 /* New button in sub-tab bar (admin edit mode only) */
 .results-new-btn {
   margin-left: auto;
@@ -11617,21 +11571,6 @@ body {
 
 .results-new-btn:hover {
   background: #388E3C;
-}
-
-/* Responsive sub-tab labels: full text on desktop, abbreviated on mobile */
-.subtab-label-short {
-  display: none;
-}
-
-@media (max-width: 768px) {
-  .subtab-label-full {
-    display: none;
-  }
-
-  .subtab-label-short {
-    display: inline;
-  }
 }
 
 /* Results filters */
@@ -15325,11 +15264,6 @@ button.type-filter-chip {
   html:has(.sidebar.expanded),
   html:has(.sidebar.expanded) body {
     overscroll-behavior-y: none;
-  }
-
-  /* Four event ranges fit across a phone */
-  .results-subtab {
-    padding: 0.6rem 0.7rem;
   }
 
   /* Filters rise from the bottom on a phone */
