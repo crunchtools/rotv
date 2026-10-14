@@ -119,6 +119,8 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
 
   it('the Events date menu opens on a phone, fits on screen and passes axe (#778)', async () => {
     await page.setViewportSize({ width: 375, height: 740 });
+    // A first visit offers the tour over the page; this test is about the menu
+    await page.addInitScript(() => localStorage.setItem('rotv-tour-seen', 'true'));
     await page.goto(`${BASE_URL}/happening/events`, { waitUntil: 'domcontentloaded' });
     const trigger = page.locator('button[aria-label^="Event dates:"]');
     await trigger.waitFor({ timeout: 15000 });
