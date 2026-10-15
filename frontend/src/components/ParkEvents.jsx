@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import FilterSheet, { FilterChip } from './FilterSheet';
 import { EventCardBody } from './NewsEventsShared';
-import { handleRovingKeyDown } from '../utils/a11yUtils';
+import MenuPicker from './MenuPicker';
 import ContentFormModal from './ContentFormModal';
 import useModeration from '../hooks/useModeration';
 import ModerationExtras from './ModerationExtras';
@@ -16,6 +16,14 @@ function formatDateForCalendar(dateString) {
 const appTz = () => localStorage.getItem('app-timezone')
   || Intl.DateTimeFormat().resolvedOptions().timeZone
   || 'America/New_York';
+
+// The date ranges the menu beside Filters picks between (#778).
+const RANGES = [
+  { id: 'today', label: 'Today' },
+  { id: 'weekend', label: 'This Weekend' },
+  { id: 'future', label: 'Future' },
+  { id: 'past', label: 'Past' }
+];
 
 // Today / This Weekend windows (#436), fetched together.
 async function fetchEventWindows() {
@@ -69,13 +77,6 @@ function ParkEvents({ isAdmin, editMode, onSelectPoi, onEditEventItem, refreshTr
   const mod = useModeration({
     onItemsChanged: () => { fetchEvents(); fetchPastEvents(); }
   });
-
-  const SUBTABS = [
-    { key: 'today', label: 'Today' },
-    { key: 'weekend', label: 'This Weekend' },
-    { key: 'future', label: 'Future' },
-    { key: 'past', label: 'Past' }
-  ];
 
   const { items: events, loading, error, reload: fetchEvents } = useFetchedList(
     `/api/events/upcoming?tz=${encodeURIComponent(appTz())}`, 'Failed to load events'
@@ -250,44 +251,10 @@ END:VCALENDAR`;
     windowLoading;
   const tabLabel = 'News & Events';
 
-  const renderSubTabs = () => (
-    <div className="results-subtabs" onKeyDown={(e) => handleRovingKeyDown(e, '.results-subtab')}>
-      {SUBTABS.map(t => (
-        <button
-          key={t.key}
-          className={`results-subtab ${activeSubTab === t.key ? 'active' : ''}`}
-          onClick={() => { setActiveSubTab(t.key); setCurrentPage(1); }}
-          tabIndex={activeSubTab === t.key ? 0 : -1}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
-
-  if (isLoading) {
-    return (
-      <div className="park-events-tab">
-        <h2>{tabLabel}</h2>
-        {renderSubTabs()}
-        <div className="loading-indicator">Loading events...</div>
-      </div>
-    );
-  }
-
   const activeError =
     activeSubTab === 'future' ? error :
     activeSubTab === 'past' ? pastError :
     windowError;
-  if (activeError) {
-    return (
-      <div className="park-events-tab">
-        <h2>{tabLabel}</h2>
-        {renderSubTabs()}
-        <div className="error-message">{activeError}</div>
-      </div>
-    );
-  }
 
   return (
     <div className="park-events-tab">
@@ -321,8 +288,6 @@ END:VCALENDAR`;
         />
       )}
 
-      {renderSubTabs()}
-
       <div className="results-filters">
         <input
           type="text"
@@ -333,6 +298,12 @@ END:VCALENDAR`;
         />
         <div className="find-controls-row">
           {viewPicker}
+          <MenuPicker
+            label="Event dates"
+            options={RANGES}
+            value={activeSubTab}
+            onChange={(id) => { setActiveSubTab(id); setCurrentPage(1); }}
+          />
           <FilterSheet activeCount={Object.values(typeFilters).filter(on => !on).length}>
             <div className="results-type-filters">
               {[
@@ -354,14 +325,18 @@ END:VCALENDAR`;
             </div>
           </FilterSheet>
         </div>
-        <div className="results-count">
+        {!isLoading && !activeError && <div className="results-count">
           Showing {filteredEvents.length === 0 ? '0' : `${((currentPage - 1) * PAGE_SIZE) + 1}-${Math.min(currentPage * PAGE_SIZE, filteredEvents.length)}`} of {filteredEvents.length} events
-        </div>
+        </div>}
       </div>
 
       <div className="news-events-layout">
         <div className="news-events-content">
-          {filteredEvents.length === 0 ? (
+          {isLoading ? (
+            <div className="loading-indicator">Loading events...</div>
+          ) : activeError ? (
+            <div className="error-message">{activeError}</div>
+          ) : filteredEvents.length === 0 ? (
             <p className="no-content">
               {sourceEvents.length > 0
                 ? 'No events match the current filters. Try a different search, or open Filters.'
@@ -453,7 +428,7 @@ END:VCALENDAR`;
             ))}
           </div>
           )}
-          {totalPages > 1 && (
+          {!isLoading && !activeError && totalPages > 1 && (
             <div className="pagination-controls">
               <button
                 className="pagination-btn"
