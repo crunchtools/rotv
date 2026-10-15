@@ -2,11 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 
 /**
  * A button that names the current choice and opens a menu of the others: the
- * list Find is showing, or News and Events on Happening. It sits beside the
+ * list Find is showing, News and Events on Happening, or the dates Events shows. It sits beside the
  * Filters button and looks like it.
  *
  * @param {object} props
- * @param {string} props.label What the menu chooses between, for screen readers
+ * @param {string} props.label What the menu chooses between, for screen readers; the
+ *   button is named by it and the current choice ("Event dates: Today")
  * @param {{id: string, label: string}[]} props.options
  * @param {string} props.value The id of the current choice
  * @param {(id: string) => void} props.onChange Called with the id picked, the current one included
@@ -48,6 +49,7 @@ export default function MenuPicker({ label, options, value, onChange }) {
         className="find-list-btn"
         aria-haspopup="menu"
         aria-expanded={isOpen}
+        aria-label={`${label}: ${current?.label}`}
         onClick={() => setIsOpen(prev => !prev)}
       >
         <span className="find-list-btn-label">{current?.label}</span>

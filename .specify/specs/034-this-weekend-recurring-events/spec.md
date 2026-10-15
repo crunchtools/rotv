@@ -35,7 +35,8 @@ closures), plus occasional **special events**.
 
 Acceptance Criteria:
 - [ ] Events tab gains temporal subtabs: **Today | This Weekend | Future | Past**. Today and This
-      Weekend each show one-off events + recurring occurrences in their window.
+      Weekend each show one-off events + recurring occurrences in their window. Since #778 they are
+      picked from a menu beside the News/Events menu and Filters, not a row of tabs.
 - [ ] **Default subtab** = Today when today has any events, else This Weekend (so weekend visitors
       land on "happening today" and quiet weekdays show the richer weekend view). This is what makes
       the surface reachable for #436 — a Saturday visitor lands directly on today's events.
