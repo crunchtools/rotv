@@ -39,14 +39,7 @@ export async function stopJobLogger() {
 }
 
 // PostgreSQL refuses the NUL character in text and JSON, and scraped pages carry it.
-const withoutNul = (value) => {
-  if (typeof value === 'string') return value.replaceAll('\u0000', '');
-  if (Array.isArray(value)) return value.map(withoutNul);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, withoutNul(inner)]));
-  }
-  return value;
-};
+const withoutNul = (value) => (typeof value === 'string' ? value.replaceAll('\u0000', '') : value);
 
 // A value cut to its column's length, so one long news title cannot fail the batch.
 const fit = (value, length) => {
@@ -61,6 +54,10 @@ const fit = (value, length) => {
  *   level?: string, message?: string, details?: object}} entry
  */
 export function log(entry) {
+  // Details as JSONB will store them: serialized as usual (a Date becomes its
+  // ISO string), and rebuilt without NUL, keys included, only when one is there.
+  const json = entry.details == null ? null : JSON.stringify(entry.details);
+  const details = json?.includes('\\u0000') ? JSON.parse(json.replaceAll('\\u0000', '')) : (entry.details ?? null);
   buffer.push({
     jobId: entry.jobId || 0,
     jobType: fit(entry.jobType || 'unknown', 50),
@@ -68,7 +65,7 @@ export function log(entry) {
     poiName: fit(entry.poiName || null, 255),
     level: fit(entry.level || 'info', 10),
     message: withoutNul(entry.message || ''),
-    details: withoutNul(entry.details || null)
+    details
   });
 
   if (buffer.length >= BATCH_SIZE) {
