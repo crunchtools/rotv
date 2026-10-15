@@ -23,6 +23,7 @@ import { escapeHtml } from './utils/html.js';
 import { createFavoritesRouter } from './routes/favorites.js';
 import { createVisitedRouter } from './routes/visited.js';
 import { createNotificationsRouter } from './routes/notifications.js';
+import { createTrailShapesRouter } from './routes/adminTrailShapes.js';
 import { isAuthenticated } from './middleware/auth.js';
 import { resolveTimezone } from './utils/requestParams.js';
 import {
@@ -235,6 +236,7 @@ app.use('/stats', statsProxy);
 app.get('/api/analytics/config', async (req, res) => res.json({ websiteId: await analyticsWebsiteId() }));
 
 app.use('/auth', createAuthRouter(pool));
+app.use('/api/admin/trail-shapes', createTrailShapesRouter(pool));
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 app.use('/api/newsletter', createNewsletterRouter(pool));
 app.use('/api/feedback', createFeedbackRouter(pool));

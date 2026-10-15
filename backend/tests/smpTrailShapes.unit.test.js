@@ -79,6 +79,14 @@ describe('syncTrailShapes', () => {
     expect(query.mock.calls.some(([sql, params]) => sql.includes('admin_settings') && params[0] === SYNCED_SETTING)).toBe(true);
   });
 
+  it('leaves a trail edited since it was read, and does not report it redrawn', async () => {
+    const query = vi.fn(async (sql) => (sql.startsWith('SELECT') ? { rows: [ours] } : { rowCount: 0 }));
+    const result = await syncTrailShapes({ query }, { fetchImpl });
+
+    expect(result.updated).toEqual([]);
+    expect(query.mock.calls.filter(([sql]) => sql.startsWith('UPDATE pois'))).toHaveLength(1);
+  });
+
   it('reports without writing on a dry run', async () => {
     const query = vi.fn(async () => ({ rows: [ours] }));
     const result = await syncTrailShapes({ query }, { fetchImpl, dryRun: true });

@@ -17,7 +17,7 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('SmpTrailShapes');
 
-export const SMP_TRAILS_URL = 'https://services5.arcgis.com/gT94nvwhVWBDFu7Q/ArcGIS/rest/services/SMP_Trails_by_Name/FeatureServer/0/query';
+const SMP_TRAILS_URL = 'https://services5.arcgis.com/gT94nvwhVWBDFu7Q/ArcGIS/rest/services/SMP_Trails_by_Name/FeatureServer/0/query';
 export const SYNCED_SETTING = 'smp_trail_shapes_synced_at';
 
 // Ours is replaced only when it is under this share of the district's length.
@@ -58,17 +58,6 @@ export function lineMiles(geometry) {
   return total / 1609.344;
 }
 
-// Distance in metres from a point to a segment, on a flat local projection.
-function toSegment(point, a, b) {
-  const squash = Math.cos(toRadians(point[1]));
-  const ax = a[0] * squash, ay = a[1], bx = b[0] * squash, by = b[1];
-  const px = point[0] * squash, py = point[1];
-  const dx = bx - ax, dy = by - ay;
-  const lengthSq = dx * dx + dy * dy;
-  const t = lengthSq ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lengthSq)) : 0;
-  return meters(point, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
-}
-
 /**
  * The share of one line's points that lie on another.
  *
@@ -85,7 +74,16 @@ export function shareOnLine(ours, theirs, within = NEAR_METERS) {
   let tested = 0, near = 0;
   for (let i = 0; i < points.length; i += step) {
     tested++;
-    if (segments.some(([a, b]) => toSegment(points[i], a, b) <= within)) near++;
+    const point = points[i];
+    // Distance to each segment on a flat local projection, which is close enough at trail scale
+    const squash = Math.cos(toRadians(point[1]));
+    const onLine = segments.some(([a, b]) => {
+      const dx = (b[0] - a[0]) * squash, dy = b[1] - a[1];
+      const lengthSq = dx * dx + dy * dy;
+      const t = lengthSq ? Math.max(0, Math.min(1, ((point[0] - a[0]) * squash * dx + (point[1] - a[1]) * dy) / lengthSq)) : 0;
+      return meters(point, [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]) <= within;
+    });
+    if (onLine) near++;
   }
   return near / tested;
 }
