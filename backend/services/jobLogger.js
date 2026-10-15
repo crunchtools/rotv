@@ -39,6 +39,8 @@ export async function stopJobLogger() {
 }
 
 // PostgreSQL refuses the NUL character in text and JSON, and scraped pages carry it.
+const NUL_ESCAPE = /(?<!\\)(?:\\\\)*\\u0000/;
+const NUL_ESCAPE_ALL = /(?<!\\)((?:\\\\)*)\\u0000/g;
 const withoutNul = (value) => (typeof value === 'string' ? value.replaceAll('\u0000', '') : value);
 
 // A value cut to its column's length, so one long news title cannot fail the batch.
@@ -56,8 +58,12 @@ const fit = (value, length) => {
 export function log(entry) {
   // Details as JSONB will store them: serialized as usual (a Date becomes its
   // ISO string), and rebuilt without NUL, keys included, only when one is there.
+  // A NUL is the escape \u0000 after an even run of backslashes; text that merely
+  // reads "\u0000" is escaped as \\u0000 and is left alone.
   const json = entry.details == null ? null : JSON.stringify(entry.details);
-  const details = json?.includes('\\u0000') ? JSON.parse(json.replaceAll('\\u0000', '')) : (entry.details ?? null);
+  const details = json && NUL_ESCAPE.test(json)
+    ? JSON.parse(json.replace(NUL_ESCAPE_ALL, '$1'))
+    : (entry.details ?? null);
   buffer.push({
     jobId: entry.jobId || 0,
     jobType: fit(entry.jobType || 'unknown', 50),

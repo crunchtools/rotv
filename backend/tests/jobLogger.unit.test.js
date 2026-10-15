@@ -25,6 +25,17 @@ describe('jobLogger', () => {
     expect(values[13]).toEqual({ excerpt: ['xy'], key: 1, at: '2026-10-15T10:18:00.000Z' });
   });
 
+  it('keeps text that only reads "\\u0000", next to a real NUL', async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    initJobLogger({ query });
+
+    log({ jobId: 9, jobType: 'news', message: 'm', details: { source: 'a\\u0000b', page: 'c\u0000d', both: '\\\u0000' } });
+    await flush();
+    await stopJobLogger();
+
+    expect(query.mock.calls[0][1][6]).toEqual({ source: 'a\\u0000b', page: 'cd', both: '\\' });
+  });
+
   it('passes clean details through as they are', async () => {
     const query = vi.fn().mockResolvedValue({ rowCount: 1 });
     initJobLogger({ query });
