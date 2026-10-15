@@ -12,6 +12,9 @@ import {
   syncCheckins, CheckinError
 } from '../services/poiListService.js';
 import { refreshSpree } from '../services/listRefreshService.js';
+import express from 'express';
+import request from 'supertest';
+import { createAdminListsRouter } from '../routes/adminLists.js';
 
 const adminPool = new pg.Pool();
 // public stays on the path for the PostGIS types and functions the migration uses.
@@ -331,6 +334,27 @@ describe('refreshSpree (spec 052)', () => {
     expect(mailer.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'admin@example.com', subject: expect.stringContaining('2027') }));
     // Visitors still see only the published 2026 list
     expect((await getActiveLists(probe, '2027-10-10'))).toEqual([]);
+  });
+
+  it('saves only the fields an admin sends on a draft item, then publishes it', async () => {
+    await probe.query(migration);
+    const { listId } = await refreshSpree(probe, { edition: 2027, fetchImpl: district() });
+    const app = express();
+    app.use(express.json());
+    app.use((req, res, next) => { req.isAuthenticated = () => true; req.user = { id: 1, email: 'a@example.com', is_admin: true }; next(); });
+    app.use('/api/admin/lists', createAdminListsRouter(probe, { mailer: { enabled: false } }));
+    const { rows: [seneca] } = await probe.query(
+      `SELECT i.id, i.label, i.trailhead FROM poi_list_items i JOIN pois p ON p.id = i.poi_id
+        WHERE i.list_id = $1 AND p.name = 'Seneca Trail'`, [listId]
+    );
+
+    const res = await request(app).put(`/api/admin/lists/${listId}/items/${seneca.id}`).send({ miles: '1.5', trail_class: 'D' });
+
+    expect(res.status).toBe(200);
+    const saved = res.body.items.find(item => item.id === seneca.id);
+    expect(saved).toMatchObject({ miles: 1.5, trail_class: 'D', label: seneca.label, trailhead: seneca.trailhead });
+    expect((await request(app).post(`/api/admin/lists/${listId}/publish`)).body.status).toBe('published');
+    expect((await request(app).put(`/api/admin/lists/${listId}/items/${seneca.id}`).send({ miles: 2 })).status).toBe(409);
   });
 
   it('does nothing for a year that has a list, or the district has not published', async () => {
