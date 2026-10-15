@@ -43,7 +43,7 @@ async function loadLists(pool, onDate, ids) {
 
   const itemRows = await pool.query(
     `SELECT i.id, i.list_id, i.poi_id, i.position, i.label, i.note, i.miles, i.rating, i.trail_class,
-            i.trailhead, i.nav_latitude, i.nav_longitude
+            i.trailhead, i.nav_latitude, i.nav_longitude, i.geometry
        FROM poi_list_items i
        JOIN pois p ON p.id = i.poi_id
       WHERE i.list_id = ANY($1::int[])

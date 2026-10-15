@@ -15,7 +15,11 @@ import {
 const adminPool = new pg.Pool();
 // public stays on the path for the PostGIS types and functions the migration uses.
 const probe = new pg.Pool({ options: '-c search_path=poi_lists_probe,public' });
-const migration = await readFile(new URL('../migrations/101_poi_lists.sql', import.meta.url), 'utf8');
+// 101 seeds the spree; 104 corrects its ZIP lists and draws the Towpath hike, as on every boot.
+const migration = [
+  await readFile(new URL('../migrations/101_poi_lists.sql', import.meta.url), 'utf8'),
+  await readFile(new URL('../migrations/104_spree_data_checks.sql', import.meta.url), 'utf8')
+].join('\n');
 
 // Spree trails that had a POI before the migration; it adds the other five.
 const EXISTING_TRAILS = [
@@ -87,6 +91,40 @@ describe('migration 101 (curated lists, 2026 Fall Hiking Spree)', () => {
     expect(spree.items.map(i => i.position)).toEqual(Array.from({ length: 13 }, (_, i) => i + 1));
     expect(spree.items.every(i => Number.isFinite(i.nav_latitude) && Number.isFinite(i.nav_longitude))).toBe(true);
     expect(spree.items[0]).toMatchObject({ label: 'Towpath Trail from Wilbeth Road', miles: 2.2, rating: 'Easy' });
+  });
+
+  it('ticks county resident from the checked ZIP lists (migration 104)', async () => {
+    await probe.query(migration);
+
+    const [spree] = await getActiveLists(probe, '2026-10-10');
+    const { resident } = spree.form_layout;
+    expect(resident.zips).not.toContain('44278');
+    expect(resident.unsureZips).toEqual(expect.arrayContaining(['44141', '44278', '44321']));
+    expect(resident.zipPrefixes).toEqual(['443']);
+  });
+
+  it('leaves ZIP lists an admin has edited alone (migration 104)', async () => {
+    await probe.query(migration);
+    await probe.query(`UPDATE poi_lists SET form_layout = jsonb_set(form_layout, '{resident,zips}', '["44236"]')`);
+
+    await probe.query(migration);
+
+    const [spree] = await getActiveLists(probe, '2026-10-10');
+    expect(spree.form_layout.resident.zips).toEqual(['44236']);
+  });
+
+  it('draws the Towpath item as the hike from Wilbeth Road, not the whole trail (migration 104)', async () => {
+    await probe.query(migration);
+
+    const [spree] = await getActiveLists(probe, '2026-10-10');
+    const [towpath, ...rest] = spree.items;
+    expect(towpath.geometry.type).toBe('LineString');
+    const { rows: [{ miles }] } = await probe.query(
+      `SELECT ST_Length(ST_SetSRID(ST_GeomFromGeoJSON($1), 4326)::geography) / 1609.344 AS miles`,
+      [JSON.stringify(towpath.geometry)]
+    );
+    expect(miles).toBeCloseTo(1.09, 1);
+    expect(rest.every(item => item.geometry === null)).toBe(true);
   });
 
   it('leaves an edited list alone when it runs again', async () => {
