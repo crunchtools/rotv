@@ -245,7 +245,8 @@ export async function refreshSpree(pool, { edition, fetchImpl = fetch, mailer, a
     try {
       await mailer.send({ to: adminEmail, subject: `The ${year} Fall Hiking Spree is ready for review`, text });
     } catch (error) {
-      logger.error(`Could not mail the ${year} spree draft notice:`, error);
+      // The code and SMTP response say why, as for account mail, without the addresses or message
+      logger.error(`Could not mail the ${year} spree draft notice: ${error.code || error.name} ${error.responseCode || ''}`.trim());
     }
   }
   return { status: 'created', listId, report };
