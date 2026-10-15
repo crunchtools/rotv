@@ -38,15 +38,37 @@ export async function stopJobLogger() {
   logger.info('Stopped');
 }
 
+// PostgreSQL refuses the NUL character in text and JSON, and scraped pages carry it.
+const withoutNul = (value) => {
+  if (typeof value === 'string') return value.replaceAll('\u0000', '');
+  if (Array.isArray(value)) return value.map(withoutNul);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, inner]) => [key, withoutNul(inner)]));
+  }
+  return value;
+};
+
+// A value cut to its column's length, so one long news title cannot fail the batch.
+const fit = (value, length) => {
+  const text = withoutNul(value);
+  return typeof text === 'string' && text.length > length ? `${text.slice(0, length - 1)}…` : text;
+};
+
+/**
+ * Queue one entry for the next flush. Every field is made to fit job_logs, as
+ * one entry the table refuses would lose the whole batch it is flushed with.
+ * @param {{jobId?: number, jobType?: string, poiId?: number, poiName?: string,
+ *   level?: string, message?: string, details?: object}} entry
+ */
 export function log(entry) {
   buffer.push({
     jobId: entry.jobId || 0,
-    jobType: entry.jobType || 'unknown',
+    jobType: fit(entry.jobType || 'unknown', 50),
     poiId: entry.poiId || null,
-    poiName: entry.poiName || null,
-    level: entry.level || 'info',
-    message: entry.message || '',
-    details: entry.details || null
+    poiName: fit(entry.poiName || null, 255),
+    level: fit(entry.level || 'info', 10),
+    message: withoutNul(entry.message || ''),
+    details: withoutNul(entry.details || null)
   });
 
   if (buffer.length >= BATCH_SIZE) {
