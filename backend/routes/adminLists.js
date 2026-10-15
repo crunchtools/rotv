@@ -21,6 +21,9 @@ const ITEM_FIELDS = {
   nav_longitude: value => (value === '' || value == null ? null : Number.isFinite(Number(value)) ? Number(value) : undefined)
 };
 
+const ITEM_COLUMNS = Object.keys(ITEM_FIELDS);
+const EMPTY_ITEM = Object.fromEntries(ITEM_COLUMNS.map(column => [column, null]));
+
 // The fields of `body` an admin sent, read; a value that cannot be read is an error.
 function readItemFields(body) {
   const fields = {};
@@ -59,7 +62,9 @@ async function loadList(pool, listId) {
  * what an admin does to a draft before visitors see it.
  *
  * @param {import('pg').Pool} pool
- * @param {{mailer?: object}} [options] mailer override for tests
+ * @param {{mailer?: {enabled: boolean, send: (msg: {to: string, subject: string, text: string}) => Promise<string>}}} [options]
+ *   mailer override for tests; defaults to createMailer() from the environment
+ * @returns {import('express').Router}
  */
 export function createAdminListsRouter(pool, { mailer } = {}) {
   const router = express.Router();
@@ -122,12 +127,13 @@ export function createAdminListsRouter(pool, { mailer } = {}) {
       if (!list) return;
       const fields = readItemFields(req.body);
       if (!fields.poi_id) return res.status(400).json({ error: 'poi_id is required' });
-      const columns = Object.keys(fields);
+      const item = { ...EMPTY_ITEM, ...fields };
       await pool.query(
-        `INSERT INTO poi_list_items (list_id, position, ${columns.join(', ')})
+        `INSERT INTO poi_list_items (list_id, position, poi_id, label, note, miles, rating, trail_class,
+                                     trailhead, nav_latitude, nav_longitude)
          VALUES ($1, (SELECT COALESCE(MAX(position), 0) + 1 FROM poi_list_items WHERE list_id = $1),
-                 ${columns.map((_, i) => `$${i + 2}`).join(', ')})`,
-        [list.id, ...Object.values(fields)]
+                 $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [list.id, ...ITEM_COLUMNS.map(column => item[column])]
       );
       // The district's entry it answers is no longer unmatched.
       if (typeof req.body.entry === 'string') {
@@ -152,12 +158,16 @@ export function createAdminListsRouter(pool, { mailer } = {}) {
       if (!list) return;
       const itemId = parsePositiveId(req.params.itemId);
       const fields = readItemFields(req.body);
-      const columns = Object.keys(fields);
-      if (!itemId || columns.length === 0) return res.status(400).json({ error: 'Nothing to change' });
+      if (!itemId || Object.keys(fields).length === 0) return res.status(400).json({ error: 'Nothing to change' });
+      const current = list.items.find(row => row.id === itemId);
+      if (!current) return res.status(404).json({ error: 'Item not found' });
+      // The admin's changes over what the item holds, written back whole.
+      const item = { ...current, ...fields };
       const result = await pool.query(
-        `UPDATE poi_list_items SET ${columns.map((c, i) => `${c} = $${i + 3}`).join(', ')}
+        `UPDATE poi_list_items SET poi_id = $3, label = $4, note = $5, miles = $6, rating = $7, trail_class = $8,
+                trailhead = $9, nav_latitude = $10, nav_longitude = $11
           WHERE id = $1 AND list_id = $2`,
-        [itemId, list.id, ...Object.values(fields)]
+        [itemId, list.id, ...ITEM_COLUMNS.map(column => item[column] ?? null)]
       );
       if (result.rowCount === 0) return res.status(404).json({ error: 'Item not found' });
       res.json(await loadList(pool, list.id));

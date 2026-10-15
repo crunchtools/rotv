@@ -245,7 +245,7 @@ export async function refreshSpree(pool, { edition, fetchImpl = fetch, mailer, a
     try {
       await mailer.send({ to: adminEmail, subject: `The ${year} Fall Hiking Spree is ready for review`, text });
     } catch (error) {
-      logger.error(`Could not mail the ${year} spree draft notice:`, error.message);
+      logger.error(`Could not mail the ${year} spree draft notice:`, error);
     }
   }
   return { status: 'created', listId, report };

@@ -17,9 +17,9 @@ async function send(url, method, body) {
     headers: body ? { 'Content-Type': 'application/json' } : undefined,
     body: body ? JSON.stringify(body) : undefined
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-  return data;
+  const answer = await res.json().catch(parseError => ({ error: `HTTP ${res.status}: ${parseError.message}` }));
+  if (!res.ok) throw new Error(answer.error || `HTTP ${res.status}`);
+  return answer;
 }
 
 const STATUS_MESSAGES = {
@@ -41,7 +41,7 @@ function Report({ report }) {
   ].filter(([, list]) => list && list.length);
   return (
     <div className="settings-info-box">
-      <div className="info-box-header">From {report.field} in the district's Hiking Programs layer, based on {report.basedOn}</div>
+      <div className="info-box-header">From {report.field} in the district&apos;s Hiking Programs layer, based on {report.basedOn}</div>
       {rows.map(([title, list]) => (
         <div key={title}>
           <strong>{title}</strong>
@@ -129,7 +129,10 @@ export default function SeasonalListsSettings() {
 
   useEffect(() => {
     load();
-    send('/api/admin/lists/trails', 'GET').then(setTrails).catch(() => setTrails([]));
+    send('/api/admin/lists/trails', 'GET').then(setTrails).catch(err => {
+      setTrails([]);
+      setMessage({ type: 'error', text: `Could not load trails for the picker: ${err.message}` });
+    });
   }, []);
 
   const replace = (updated) => setLists(prev => prev.map(list => (list.id === updated.id ? updated : list)));
@@ -165,7 +168,7 @@ export default function SeasonalListsSettings() {
     <div className="settings-section seasonal-lists-settings">
       <h3>Seasonal Lists</h3>
       <p className="settings-description">
-        Each August the coming Fall Hiking Spree is drafted from Summit Metro Parks' own data. Fill in what it could not match, then publish it.
+        Each August the coming Fall Hiking Spree is drafted from Summit Metro Parks&apos; own data. Fill in what it could not match, then publish it.
       </p>
       <div className="settings-actions">
         <button type="button" className="save-settings-btn" onClick={check} disabled={checking}>

@@ -68,14 +68,26 @@ describe('admin lists routes', () => {
     const app = appAs(admin, pool);
     const res = await request(app).put('/api/admin/lists/9/items/31').send({ trailhead: ' Lot A ', miles: '2.4', position: 1 });
     expect(res.status).toBe(200);
+    // The changes go over what the item holds; position is not the admin's to set here
     const update = log.find(({ sql }) => sql.startsWith('UPDATE poi_list_items'));
-    expect(update.sql).toContain('miles = $3');
-    expect(update.sql).toContain('trailhead = $4');
     expect(update.sql).not.toContain('position');
-    expect(update.params).toEqual([31, 9, 2.4, 'Lot A']);
+    expect(update.params).toEqual([31, 9, 4, null, null, 2.4, null, null, 'Lot A', null, null]);
+    expect((await request(app).put('/api/admin/lists/9/items/99').send({ label: 'x' })).status).toBe(404);
 
     expect((await request(app).put('/api/admin/lists/9/items/31').send({ miles: 'far' })).status).toBe(400);
     expect((await request(app).post('/api/admin/lists/9/items').send({ label: 'No trail' })).status).toBe(400);
+  });
+
+  it('adds an unmatched entry\'s trail at the end and clears it from the report', async () => {
+    const { pool, log } = makePool();
+    const entry = 'Jogging Trail (Sand Run Metro Park, 3.5 miles, moderate)';
+    const res = await request(appAs(admin, pool)).post('/api/admin/lists/9/items').send({ poi_id: 77, label: 'Jogging Trail', entry });
+
+    expect(res.status).toBe(201);
+    const insert = log.find(({ sql }) => sql.startsWith('INSERT INTO poi_list_items'));
+    expect(insert.params).toEqual([9, 77, 'Jogging Trail', null, null, null, null, null, null, null]);
+    const cleared = log.find(({ sql }) => sql.includes("'{unmatched}'"));
+    expect(cleared.params).toEqual([9, entry]);
   });
 
   it('checks the year it is asked to refresh', async () => {
