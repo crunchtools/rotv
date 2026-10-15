@@ -23,7 +23,8 @@ const probe = new pg.Pool({ options: '-c search_path=poi_lists_probe,public' });
 const migration = [
   await readFile(new URL('../migrations/101_poi_lists.sql', import.meta.url), 'utf8'),
   await readFile(new URL('../migrations/104_spree_data_checks.sql', import.meta.url), 'utf8'),
-  await readFile(new URL('../migrations/105_list_refresh_report.sql', import.meta.url), 'utf8')
+  await readFile(new URL('../migrations/105_list_refresh_report.sql', import.meta.url), 'utf8'),
+  await readFile(new URL('../migrations/106_resident_zips_mostly_in_county.sql', import.meta.url), 'utf8')
 ].join('\n');
 
 // Spree trails that had a POI before the migration; it adds the other five.
@@ -98,13 +99,16 @@ describe('migration 101 (curated lists, 2026 Fall Hiking Spree)', () => {
     expect(spree.items[0]).toMatchObject({ label: 'Towpath Trail from Wilbeth Road', miles: 2.2, rating: 'Easy' });
   });
 
-  it('ticks county resident from the checked ZIP lists (migration 104)', async () => {
+  it('ticks county resident from the checked ZIP lists (migrations 104 and 106)', async () => {
     await probe.query(migration);
 
     const [spree] = await getActiveLists(probe, '2026-10-10');
     const { resident } = spree.form_layout;
-    expect(resident.zips).not.toContain('44278');
-    expect(resident.unsureZips).toEqual(expect.arrayContaining(['44141', '44278', '44321']));
+    // Mostly in the county is Yes; Brecksville, 8% in it, is left to the hiker
+    expect(resident.zips).toContain('44278');
+    expect(resident.unsureZips).toContain('44141');
+    expect(resident.unsureZips).not.toEqual(expect.arrayContaining(['44278']));
+    expect(resident.unsureZips).not.toEqual(expect.arrayContaining(['44321']));
     expect(resident.zipPrefixes).toEqual(['443']);
   });
 
