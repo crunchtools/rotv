@@ -163,15 +163,15 @@ export function createAdminListsRouter(pool, { mailer } = {}) {
       // different fields of one item do not undo each other.
       const result = await pool.query(
         `UPDATE poi_list_items
-            SET poi_id = CASE WHEN $3 THEN $4 ELSE poi_id END,
-                label = CASE WHEN $5 THEN $6 ELSE label END,
-                note = CASE WHEN $7 THEN $8 ELSE note END,
-                miles = CASE WHEN $9 THEN $10 ELSE miles END,
-                rating = CASE WHEN $11 THEN $12 ELSE rating END,
-                trail_class = CASE WHEN $13 THEN $14 ELSE trail_class END,
-                trailhead = CASE WHEN $15 THEN $16 ELSE trailhead END,
-                nav_latitude = CASE WHEN $17 THEN $18 ELSE nav_latitude END,
-                nav_longitude = CASE WHEN $19 THEN $20 ELSE nav_longitude END
+            SET poi_id = CASE WHEN $3::boolean THEN $4::int ELSE poi_id END,
+                label = CASE WHEN $5::boolean THEN $6::text ELSE label END,
+                note = CASE WHEN $7::boolean THEN $8::text ELSE note END,
+                miles = CASE WHEN $9::boolean THEN $10::numeric ELSE miles END,
+                rating = CASE WHEN $11::boolean THEN $12::text ELSE rating END,
+                trail_class = CASE WHEN $13::boolean THEN $14::text ELSE trail_class END,
+                trailhead = CASE WHEN $15::boolean THEN $16::text ELSE trailhead END,
+                nav_latitude = CASE WHEN $17::boolean THEN $18::numeric ELSE nav_latitude END,
+                nav_longitude = CASE WHEN $19::boolean THEN $20::numeric ELSE nav_longitude END
           WHERE id = $1 AND list_id = $2`,
         [itemId, list.id, ...ITEM_COLUMNS.flatMap(column => [column in fields, column in fields ? fields[column] : null])]
       );
