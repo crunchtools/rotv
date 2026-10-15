@@ -130,12 +130,24 @@ describe('Accessibility Tests (WCAG 2.1 AA)', () => {
     await menu.waitFor({ timeout: 5000 });
     const box = await menu.boundingBox();
     expect(box).not.toBeNull();
+    // It opens under its own button, not pinned under the header
+    const button = await trigger.boundingBox();
+    expect(box.y).toBeGreaterThanOrEqual(button.y + button.height - 1);
+    expect(box.y).toBeLessThan(button.y + button.height + 24);
+    expect(Math.abs(box.x - button.x)).toBeLessThan(2);
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(375);
     expect(box.y + box.height).toBeLessThanOrEqual(740);
     for (const name of ['Today', 'This Weekend', 'Future', 'Past']) {
       expect(await menu.getByRole('menuitemradio', { name }).isVisible()).toBe(true);
     }
+    // Nothing clips or covers the last choice: it is what a tap on it lands on
+    const last = await menu.getByRole('menuitemradio', { name: 'Past' }).boundingBox();
+    const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.textContent?.trim(), [last.x + last.width / 2, last.y + last.height / 2]);
+    expect(hit).toBe('Past');
+    // A choice that is not the current one reads as an option, not a warning
+    const unpicked = menu.locator('[role="menuitemradio"][aria-checked="false"]').first();
+    expect(await unpicked.evaluate(el => getComputedStyle(el).color)).toBe('rgb(51, 51, 51)');
 
     const results = await new AxeBuilder({ page })
       .withTags(['wcag2a', 'wcag2aa'])
