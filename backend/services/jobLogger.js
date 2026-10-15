@@ -38,15 +38,40 @@ export async function stopJobLogger() {
   logger.info('Stopped');
 }
 
+// PostgreSQL refuses the NUL character in text and JSON, and scraped pages carry it.
+const NUL_ESCAPE = /(?<!\\)(?:\\\\)*\\u0000/;
+const NUL_ESCAPE_ALL = /(?<!\\)((?:\\\\)*)\\u0000/g;
+const withoutNul = (value) => (typeof value === 'string' ? value.replaceAll('\u0000', '') : value);
+
+// A value cut to its column's length, so one long news title cannot fail the batch.
+const fit = (value, length) => {
+  const text = withoutNul(value);
+  return typeof text === 'string' && text.length > length ? `${text.slice(0, length - 1)}…` : text;
+};
+
+/**
+ * Queue one entry for the next flush. Every field is made to fit job_logs, as
+ * one entry the table refuses would lose the whole batch it is flushed with.
+ * @param {{jobId?: number, jobType?: string, poiId?: number, poiName?: string,
+ *   level?: string, message?: string, details?: object}} entry
+ */
 export function log(entry) {
+  // Details as JSONB will store them: serialized as usual (a Date becomes its
+  // ISO string), and rebuilt without NUL, keys included, only when one is there.
+  // A NUL is the escape \u0000 after an even run of backslashes; text that merely
+  // reads "\u0000" is escaped as \\u0000 and is left alone.
+  const json = entry.details == null ? null : JSON.stringify(entry.details);
+  const details = json && NUL_ESCAPE.test(json)
+    ? JSON.parse(json.replace(NUL_ESCAPE_ALL, '$1'))
+    : (entry.details ?? null);
   buffer.push({
     jobId: entry.jobId || 0,
-    jobType: entry.jobType || 'unknown',
+    jobType: fit(entry.jobType || 'unknown', 50),
     poiId: entry.poiId || null,
-    poiName: entry.poiName || null,
-    level: entry.level || 'info',
-    message: entry.message || '',
-    details: entry.details || null
+    poiName: fit(entry.poiName || null, 255),
+    level: fit(entry.level || 'info', 10),
+    message: withoutNul(entry.message || ''),
+    details
   });
 
   if (buffer.length >= BATCH_SIZE) {
