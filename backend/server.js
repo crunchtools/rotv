@@ -24,6 +24,7 @@ import { createFavoritesRouter } from './routes/favorites.js';
 import { createVisitedRouter } from './routes/visited.js';
 import { createNotificationsRouter } from './routes/notifications.js';
 import { createTrailShapesRouter } from './routes/adminTrailShapes.js';
+import { createAdminListsRouter } from './routes/adminLists.js';
 import { isAuthenticated } from './middleware/auth.js';
 import { resolveTimezone } from './utils/requestParams.js';
 import {
@@ -58,6 +59,8 @@ import {
   registerTrailShapeSyncHandler,
   scheduleTrailShapeSync,
   sendTrailShapeSync,
+  registerListRefreshHandler,
+  scheduleListRefresh,
   stopJobScheduler,
   withJitter
 } from './services/jobScheduler.js';
@@ -237,6 +240,7 @@ app.get('/api/analytics/config', async (req, res) => res.json({ websiteId: await
 
 app.use('/auth', createAuthRouter(pool));
 app.use('/api/admin/trail-shapes', createTrailShapesRouter(pool));
+app.use('/api/admin/lists', createAdminListsRouter(pool));
 app.use('/api/admin', createAdminRouter(pool, invalidateMosaicCache));
 app.use('/api/newsletter', createNewsletterRouter(pool));
 app.use('/api/feedback', createFeedbackRouter(pool));
@@ -686,6 +690,7 @@ async function initDatabase() {
         hero_credit TEXT,
         form_file TEXT,
         form_layout JSONB,
+        refresh_report JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (series, edition)
@@ -3240,6 +3245,16 @@ async function start() {
       const synced = await pool.query('SELECT 1 FROM admin_settings WHERE key = $1', [SYNCED_SETTING]);
       if (synced.rowCount === 0) await sendTrailShapeSync();
     }
+
+    // Each August, draft the coming season's spree once the district publishes it (spec 052).
+    await registerListRefreshHandler(async () => {
+      const [{ refreshSpree }, { createMailer }, { adminEmail }] = await Promise.all([
+        import('./services/listRefreshService.js'), import('./services/mailer.js'), import('./config/userAccount.js')
+      ]);
+      const result = await refreshSpree(pool, { mailer: createMailer(), adminEmail: adminEmail() });
+      logger.info(`List refresh: ${result.status}`);
+    });
+    await scheduleListRefresh();
 
     app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));
 

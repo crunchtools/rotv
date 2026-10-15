@@ -28,7 +28,8 @@ const JOB_NAMES = {
   IMAGE_BACKUP: 'image-backup',
   DATABASE_BACKUP: 'database-backup',
   UNCONFIRMED_CLEANUP: 'unconfirmed-account-cleanup',
-  SMP_TRAIL_SHAPES: 'smp-trail-shapes'
+  SMP_TRAIL_SHAPES: 'smp-trail-shapes',
+  LIST_REFRESH: 'list-refresh'
 };
 
 export async function initJobScheduler(connectionString) {
@@ -287,6 +288,24 @@ export async function scheduleTrailShapeSync(cronExpression = '0 6 * 8 1') {
  */
 export async function registerTrailShapeSyncHandler(handler) {
   await registerWorker(JOB_NAMES.SMP_TRAIL_SHAPES, 'trail shape sync', job => handler(job.data));
+}
+
+/**
+ * Schedule the look for next season's Fall Hiking Spree (spec 052).
+ * @param {string} [cronExpression='30 6 * 8 1'] - America/New_York; Mondays in August, after the trail shape sync
+ * @returns {Promise<void>}
+ */
+export async function scheduleListRefresh(cronExpression = '30 6 * 8 1') {
+  await scheduleCron(JOB_NAMES.LIST_REFRESH, cronExpression, 'List refresh');
+}
+
+/**
+ * Attach the worker for the list refresh.
+ * @param {(data: object) => Promise<void>} handler - called with the job's data; a throw lets pg-boss retry
+ * @returns {Promise<void>} once the worker is registered
+ */
+export async function registerListRefreshHandler(handler) {
+  await registerWorker(JOB_NAMES.LIST_REFRESH, 'list refresh', job => handler(job.data));
 }
 
 /**

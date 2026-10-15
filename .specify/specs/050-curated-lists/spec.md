@@ -95,8 +95,7 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 - The thirteen items, their miles, ratings and classes, the Hiker's Choice and the rewards are from the district's 2026 Fall Hiking Spree form. Each trailhead is the parking lot nearest the trail at the address the form prints.
 
 ### Yearly refresh (release 2)
-- Each August a job reads the district's spree page and form, matches each trail to a POI, and saves next season's list as a draft.
-- The admin is notified, sees the draft with anything that did not match, fixes it and publishes. Nothing reaches visitors unapproved.
+- Each August a job reads the district's spree data, matches each trail to a POI, and saves next season's list as a draft. The admin is notified, sees the draft with anything that did not match, fixes it and publishes. Nothing reaches visitors unapproved. See spec 052.
 
 ## API
 | Route | Change |
@@ -118,4 +117,4 @@ ROTV keeps the tally and awards its own badge. The staff and shield are the park
 ## Out of scope
 - Showing only a list's places on the map.
 - Enforcing on the server that the free choice is one of the organizer's trails: many of the district's trails carry no owner, so the menu narrows the choice and the server takes any trail.
-- An admin screen for editing lists by hand; release 2 brings the review screen.
+- An admin screen for editing a published list by hand; spec 052's review screen changes drafts only.

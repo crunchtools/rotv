@@ -11,6 +11,7 @@ const logger = createLogger('AdminTrailShapes');
  *
  * @param {import('pg').Pool} pool
  * @param {{sync?: typeof syncTrailShapes}} [options] sync override for tests
+ * @returns {import('express').Router}
  */
 export function createTrailShapesRouter(pool, { sync = syncTrailShapes } = {}) {
   const router = express.Router();

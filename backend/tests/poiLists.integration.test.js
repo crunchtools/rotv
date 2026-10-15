@@ -4,13 +4,17 @@
  * an admin's edits alone, a list is served only while it is published and in
  * season, and a check-in is kept only when the spree's rules allow it.
  */
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeEach, afterAll, vi } from 'vitest';
 import { readFile } from 'fs/promises';
 import pg from 'pg';
 import {
   getActiveLists, getListsByIds, checkinProblem, saveCheckin, removeCheckin, getUserCheckins,
   syncCheckins, CheckinError
 } from '../services/poiListService.js';
+import { refreshSpree } from '../services/listRefreshService.js';
+import express from 'express';
+import request from 'supertest';
+import { createAdminListsRouter } from '../routes/adminLists.js';
 
 const adminPool = new pg.Pool();
 // public stays on the path for the PostGIS types and functions the migration uses.
@@ -18,7 +22,8 @@ const probe = new pg.Pool({ options: '-c search_path=poi_lists_probe,public' });
 // 101 seeds the spree; 104 corrects its ZIP lists and draws the Towpath hike, as on every boot.
 const migration = [
   await readFile(new URL('../migrations/101_poi_lists.sql', import.meta.url), 'utf8'),
-  await readFile(new URL('../migrations/104_spree_data_checks.sql', import.meta.url), 'utf8')
+  await readFile(new URL('../migrations/104_spree_data_checks.sql', import.meta.url), 'utf8'),
+  await readFile(new URL('../migrations/105_list_refresh_report.sql', import.meta.url), 'utf8')
 ].join('\n');
 
 // Spree trails that had a POI before the migration; it adds the other five.
@@ -271,5 +276,93 @@ describe('check-ins', () => {
       hero_image: '/lists/fall-hiking-spree-2026.webp', hero_credit: 'Summit Metro Parks'
     });
     expect(await getUserCheckins(probe, HIKER)).toHaveLength(1);
+  });
+});
+
+describe('refreshSpree (spec 052)', () => {
+  // The district's 2026 entries, as if published for 2027: Chippewa grows, Downy Loop
+  // leaves, and Jogging Trail joins without a line on our map.
+  const ENTRIES_2027 = [
+    ['Towpath Trail', 'Towpath Trail - Between Wilbeth Road Trailhead & Summit Lake Nature Center (2.2 miles, easy)'],
+    ['Missing Link Trail', 'Missing Link Trail (Cascade Valley Metro Park, 1.1 miles, easy)'],
+    ['Quarry Trail', 'Quarry Trail (Deep Lock Quarry Metro Park, 1.4 miles, moderate)'],
+    ['Willow Trail', 'Willow Trail (Firestone Metro Park, 1.6 miles, easy)'],
+    ['Rock Creek Trail', 'Rock Creek Trail (Furnace Run Metro Park, 1.3 miles, easy)'],
+    ['Parcours Trail (Goodyear Heights)', 'Parcours Trail (Goodyear Heights Metro Park, 1.8 miles, difficult)'],
+    ['Adam Run Trail', 'Adam Run Trail (Hampton Hills Metro Park, 3.2 miles, difficult)'],
+    ['Black Bear Trail', 'Black Bear Trail (Liberty Park, 2.1 miles, moderate)'],
+    ['Firefly Trail', 'Firefly Trail (Munroe Falls Metro Park, 1.3 miles, easy)'],
+    ['Seneca Trail', 'Seneca Trail (F.A. Seiberling Nature Realm, 1.4 miles, moderate)'],
+    ['Nuthatch Trail', 'Nuthatch Trail (Sand Run Metro Park, 3.3 miles, difficult)'],
+    ['Chippewa Trail', 'Chippewa Trail (Silver Creek Metro Park, 2.4 miles, moderate)'],
+    ['Jogging Trail', 'Jogging Trail (Sand Run Metro Park, 3.5 miles, moderate)']
+  ];
+  const answer = (body) => ({ ok: true, json: async () => body });
+  const district = () => vi.fn()
+    .mockResolvedValueOnce(answer({ fields: [{ name: 'FHS_2026' }, { name: 'FHS_2027' }] }))
+    .mockResolvedValueOnce(answer({ features: ENTRIES_2027.map(([NAME, FHS_2027]) => ({ attributes: { NAME, FHS_2027 } })) }));
+
+  it('drafts next season from the district\'s entries and last year\'s list, and tells the admin', async () => {
+    await probe.query(migration);
+    const mailer = { enabled: true, send: vi.fn().mockResolvedValue('id') };
+
+    const result = await refreshSpree(probe, { edition: 2027, fetchImpl: district(), mailer, adminEmail: 'admin@example.com' });
+
+    expect(result.status).toBe('created');
+    const { rows: [draft] } = await probe.query(
+      `SELECT status, featured, description, to_char(starts_on, 'YYYY-MM-DD') AS starts_on, to_char(ends_on, 'YYYY-MM-DD') AS ends_on,
+              form_url, form_file, form_layout, refresh_report FROM poi_lists WHERE edition = 2027`
+    );
+    expect(draft).toMatchObject({ status: 'draft', starts_on: '2027-09-01', ends_on: '2027-11-30', form_file: null, form_layout: null });
+    expect(draft.description).toContain('64th annual');
+    expect(draft.form_url).toContain('2027-Fall-Hiking-Spree-Form.pdf');
+    expect(draft.refresh_report.unmatched.map(u => u.districtName)).toEqual(['Jogging Trail']);
+    expect(draft.refresh_report.dropped).toEqual(['Downy Loop Trail']);
+    expect(draft.refresh_report.changed).toEqual([{ label: 'Chippewa Trail', field: 'miles', from: 2, to: 2.4 }]);
+
+    const { rows: items } = await probe.query(
+      `SELECT i.position, i.label, i.miles::float AS miles, i.trailhead, i.geometry IS NOT NULL AS has_section, p.name
+         FROM poi_list_items i JOIN pois p ON p.id = i.poi_id JOIN poi_lists l ON l.id = i.list_id
+        WHERE l.edition = 2027 ORDER BY i.position`
+    );
+    expect(items).toHaveLength(12);
+    // The Towpath, outside any park, comes first and keeps last year's trailhead and section
+    expect(items[0]).toMatchObject({ name: 'Ohio & Erie Canal Towpath Trail', label: 'Towpath Trail from Wilbeth Road', has_section: true });
+    expect(items[0].trailhead).toContain('Wilbeth');
+    expect(items.find(i => i.name === 'Chippewa Trail').miles).toBe(2.4);
+
+    expect(mailer.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'admin@example.com', subject: expect.stringContaining('2027') }));
+    // Visitors still see only the published 2026 list
+    expect((await getActiveLists(probe, '2027-10-10'))).toEqual([]);
+  });
+
+  it('saves only the fields an admin sends on a draft item, then publishes it', async () => {
+    await probe.query(migration);
+    const { listId } = await refreshSpree(probe, { edition: 2027, fetchImpl: district() });
+    const app = express();
+    app.use(express.json());
+    app.use((req, res, next) => { req.isAuthenticated = () => true; req.user = { id: 1, email: 'a@example.com', is_admin: true }; next(); });
+    app.use('/api/admin/lists', createAdminListsRouter(probe, { mailer: { enabled: false } }));
+    const { rows: [seneca] } = await probe.query(
+      `SELECT i.id, i.label, i.trailhead FROM poi_list_items i JOIN pois p ON p.id = i.poi_id
+        WHERE i.list_id = $1 AND p.name = 'Seneca Trail'`, [listId]
+    );
+
+    const res = await request(app).put(`/api/admin/lists/${listId}/items/${seneca.id}`).send({ miles: '1.5', trail_class: 'D' });
+
+    expect(res.status).toBe(200);
+    const saved = res.body.items.find(item => item.id === seneca.id);
+    expect(saved).toMatchObject({ miles: 1.5, trail_class: 'D', label: seneca.label, trailhead: seneca.trailhead });
+    expect((await request(app).post(`/api/admin/lists/${listId}/publish`)).body.status).toBe('published');
+    expect((await request(app).put(`/api/admin/lists/${listId}/items/${seneca.id}`).send({ miles: 2 })).status).toBe(409);
+  });
+
+  it('does nothing for a year that has a list, or the district has not published', async () => {
+    await probe.query(migration);
+    expect((await refreshSpree(probe, { edition: 2026, fetchImpl: district() })).status).toBe('exists');
+    const unpublished = vi.fn().mockResolvedValue(answer({ fields: [{ name: 'FHS_2026' }] }));
+    expect((await refreshSpree(probe, { edition: 2028, fetchImpl: unpublished })).status).toBe('not-published-yet');
+    const { rows } = await probe.query('SELECT count(*)::int AS n FROM poi_lists');
+    expect(rows[0].n).toBe(1);
   });
 });

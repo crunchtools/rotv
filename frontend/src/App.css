@@ -15856,3 +15856,37 @@ button.type-filter-chip {
     display: none;
   }
 }
+
+/* Settings › Seasonal Lists (spec 052) */
+.seasonal-list-item,
+.seasonal-list-unmatched {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+
+.seasonal-list-unmatched {
+  border-color: #e0a800;
+  background: #fffbea;
+}
+
+.seasonal-list-item legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.seasonal-list-item .settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.seasonal-list-remove {
+  background: none;
+  border: none;
+  color: #c62828;
+  cursor: pointer;
+  padding: 0.75rem 0.5rem;
+}
