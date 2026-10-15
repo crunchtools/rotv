@@ -15041,6 +15041,18 @@ button.type-filter-chip {
   display: block;
   width: 100%;
   text-align: left;
+  color: #333;
+}
+
+/* A picker's menu hangs from its own button at every width. The phone rule that
+   pins .tab-dropdown under the header is for the account menu, which has no
+   room beside its button; a picker in the panel would open far above it. */
+.tab-dropdown.find-list-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: auto;
+  min-width: max(100%, 200px);
 }
 
 .find-list-item.active {
