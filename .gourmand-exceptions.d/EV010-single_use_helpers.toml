@@ -24,3 +24,8 @@ classification = "gourmand_bug"
 path = "backend/utils/authSession.js"
 justification = "stampLogin is imported by backend/routes/auth.js and called from the Google and Facebook OAuth callbacks, where passport has already run req.login, as well as from completeLogin. The detector does not count cross-file imports. Upstream: gitlab.com/mattdm/gourmand#24."
 classification = "gourmand_bug"
+
+[[locations]]
+path = "frontend/src/components/SeasonalListsSettings.jsx"
+justification = "Report, DraftItem and Unmatched are React components rendered from SeasonalListsSettings' JSX. DraftItem and Unmatched hold their own edit state (useState) per row, which cannot be inlined into the parent's map without lifting every row's edits into one object; Report keeps the draft's findings out of the render body."
+classification = "by_design"

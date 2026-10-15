@@ -25,6 +25,7 @@ import SurfacesSettings from './components/SurfacesSettings';
 import IconsSettings from './components/IconsSettings';
 import HappeningTab from './components/HappeningTab';
 import DataCollectionSettings from './components/DataCollectionSettings';
+import SeasonalListsSettings from './components/SeasonalListsSettings';
 import ModerationInbox from './components/ModerationInbox';
 import JobsDashboard from './components/JobsDashboard';
 import UsersSettings from './components/UsersSettings';
@@ -978,7 +979,7 @@ function AppContent() {
       return;
     }
 
-    const settingsSubTabs = ['general', 'newsletter', 'rss', 'mcp', 'users', 'themes', 'activities', 'eras', 'surfaces', 'icons', 'moderation', 'jobs', 'dataCollection', 'google', 'stats'];
+    const settingsSubTabs = ['general', 'newsletter', 'rss', 'mcp', 'users', 'themes', 'activities', 'eras', 'surfaces', 'icons', 'moderation', 'jobs', 'dataCollection', 'lists', 'google', 'stats'];
     if (pathParts.length === 2 && pathParts[0] === 'settings' && settingsSubTabs.includes(pathParts[1])) {
       setActiveTab('settings');
       setSettingsTab(pathParts[1]);
@@ -2567,6 +2568,13 @@ function AppContent() {
                 Data Collection
               </button>
               <button
+                className={`settings-tab-btn ${settingsTab === 'lists' ? 'active' : ''}`}
+                onClick={() => handleSettingsTabChange('lists')}
+                tabIndex={settingsTab === 'lists' ? 0 : -1}
+              >
+                Seasonal Lists
+              </button>
+              <button
                 className={`settings-tab-btn ${settingsTab === 'google' ? 'active' : ''}`}
                 onClick={() => handleSettingsTabChange('google')}
                 tabIndex={settingsTab === 'google' ? 0 : -1}
@@ -2591,6 +2599,7 @@ function AppContent() {
               {settingsTab === 'surfaces' && <SurfacesSettings />}
               {settingsTab === 'icons' && <IconsSettings />}
               {settingsTab === 'dataCollection' && <DataCollectionSettings />}
+              {settingsTab === 'lists' && <SeasonalListsSettings />}
               {settingsTab === 'stats' && <StatsSettings />}
               {settingsTab === 'moderation' && <ModerationInbox onCountChange={refreshModerationCount} focusItemId={moderationFocusId} focusItemTitle={moderationFocusTitle} onSelectPoi={(poiId) => {
                 const poi = destinations.find(d => d.id === poiId);
