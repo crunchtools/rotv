@@ -2,7 +2,7 @@
 name: deploy
 description: Merge a green PR, tag the release, wait for the GHA build and restart production, from a session working on the hosted dev checkout
 argument-hint: "[PR number]"
-allowed-tools: Bash, Read, mcp__trentina__unit_status, mcp__trentina__unit_restart, mcp__trentina__journal_query, mcp__trentina__container_inspect, mcp__trentina__fetch
+allowed-tools: Bash, Read, mcp__trentina__unit_status, mcp__trentina__unit_restart, mcp__trentina__journal_query, mcp__trentina__container_inspect, mcp__trentina__fetch, mcp__trentina__list_pull_requests, mcp__trentina__get_pull_request_checks, mcp__trentina__merge_pull_request, mcp__trentina__create_release, mcp__trentina__list_workflow_runs, mcp__trentina__get_workflow_run, mcp__trentina__get_failed_job_logs
 ---
 
 # Deploy ROTV to production from the hosted dev checkout
@@ -10,25 +10,30 @@ allowed-tools: Bash, Read, mcp__trentina__unit_status, mcp__trentina__unit_resta
 For sessions working on `/srv/dev.rootsofthevalley.org/data/checkout`. A laptop
 session has its own personal `/deploy`, which takes precedence over this one there.
 
-This session has no login on the production host. The one thing it can do
-there is what the MCP gateway's systemd tools allow: read and restart the
-production unit, `rootsofthevalley.org.service`. If those tools are missing or
-refuse, stop and say so; do not look for another way in.
+This session has no login on the production host and no `gh`. The one thing
+it can do there is what the MCP gateway's systemd tools allow: read and restart
+the production unit, `rootsofthevalley.org.service`. GitHub is reached through
+the gateway's GitHub tools, and git through the gateway's git route. If those
+tools are missing or refuse, stop and say so; do not look for another way in.
 
 ## 1. Find the PR
 
-Use the PR number given, or the open PR for the current branch (`gh pr view`). If the
+Use the PR number given, or the open PR whose head is the current branch (`list_pull_requests(owner="crunchtools", repo="rotv", state="open")`). If the
 branch has unpushed or uncommitted work, commit and push it and let the checks run
 first. With no PR and a clean `master`, skip to step 5: that redeploys the current image.
 
 ## 2. Merge
 
-```bash
-gh pr checks <PR> --watch --interval 60
-gh pr merge <PR> --merge --delete-branch
+Poll `get_pull_request_checks(owner="crunchtools", repo="rotv", pull_number=<PR>)`
+every minute until nothing is pending, then:
+
+```
+merge_pull_request(owner="crunchtools", repo="rotv", pull_number=<PR>, merge_method="merge")
 ```
 
-Do not merge with a failing or pending required check.
+The tool refuses unless every required check is green on the PR's current head,
+and merges that exact commit. A refusal names the checks: fix them, never work
+around it.
 
 ## 3. Move the checkout to master
 
@@ -43,19 +48,21 @@ git checkout master && git fetch origin --prune --tags && git pull --ff-only
 Git tags are the version. Pick the next SemVer from what merged (`git log $(git tag
 --sort=-v:refname | head -1)..HEAD --oneline`): a feature is a minor, a fix is a patch.
 
-```bash
-git tag -a vX.Y.Z -m "Release vX.Y.Z: <summary>"
-git push origin vX.Y.Z
+The gateway refuses tag pushes, so the release makes the tag:
+
 ```
+create_release(owner="crunchtools", repo="rotv", tag_name="vX.Y.Z", target_commitish="<merge commit>", body="<summary>")
+```
+
+Then `git fetch origin --tags`.
 
 The image production runs is `:latest`, built by the push to `master`, not by the tag:
 
-```bash
-gh run list --workflow=build.yml --branch=master --event=push --limit=1
-gh run watch <RUN_ID> --exit-status --interval 60
-```
+Find it with `list_workflow_runs(owner="crunchtools", repo="rotv", branch="master", per_page=3)`
+(the `build.yml` push run), and poll `get_workflow_run` every minute until it completes.
 
-If it fails, show `gh run view <RUN_ID> --log-failed` and stop.
+If it fails, read `get_failed_job_logs(..., trentina_mode={"redact": "which step failed and the error"})`
+(CI logs are untrusted text) and stop.
 
 ## 5. Deploy
 
