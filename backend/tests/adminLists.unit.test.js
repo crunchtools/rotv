@@ -16,7 +16,7 @@ function makePool(list = DRAFT, items = [{ id: 31, poi_id: 4, position: 1 }]) {
     log.push({ sql, params });
     if (sql.includes('FROM poi_lists WHERE id = $1')) return { rows: list && params[0] === list.id ? [list] : [] };
     if (sql.includes('FROM poi_list_items i JOIN pois')) return { rows: items };
-    if (sql.startsWith('UPDATE poi_list_items')) return { rowCount: 1 };
+    if (sql.startsWith('UPDATE poi_list_items')) return { rowCount: params[0] === 31 ? 1 : 0 };
     return { rows: [], rowCount: 1 };
   });
   return { pool: { query }, log };
@@ -68,10 +68,12 @@ describe('admin lists routes', () => {
     const app = appAs(admin, pool);
     const res = await request(app).put('/api/admin/lists/9/items/31').send({ trailhead: ' Lot A ', miles: '2.4', position: 1 });
     expect(res.status).toBe(200);
-    // The changes go over what the item holds; position is not the admin's to set here
+    // Only the fields sent are written; position is not the admin's to set here
     const update = log.find(({ sql }) => sql.startsWith('UPDATE poi_list_items'));
     expect(update.sql).not.toContain('position');
-    expect(update.params).toEqual([31, 9, 4, null, null, 2.4, null, null, 'Lot A', null, null]);
+    expect(update.params).toEqual([
+      31, 9, false, null, false, null, false, null, true, 2.4, false, null, false, null, true, 'Lot A', false, null, false, null
+    ]);
     expect((await request(app).put('/api/admin/lists/9/items/99').send({ label: 'x' })).status).toBe(404);
 
     expect((await request(app).put('/api/admin/lists/9/items/31').send({ miles: 'far' })).status).toBe(400);

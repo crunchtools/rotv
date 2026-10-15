@@ -159,15 +159,21 @@ export function createAdminListsRouter(pool, { mailer } = {}) {
       const itemId = parsePositiveId(req.params.itemId);
       const fields = readItemFields(req.body);
       if (!itemId || Object.keys(fields).length === 0) return res.status(400).json({ error: 'Nothing to change' });
-      const current = list.items.find(row => row.id === itemId);
-      if (!current) return res.status(404).json({ error: 'Item not found' });
-      // The admin's changes over what the item holds, written back whole.
-      const item = { ...current, ...fields };
+      // Only the fields sent change, in one statement, so two admins saving
+      // different fields of one item do not undo each other.
       const result = await pool.query(
-        `UPDATE poi_list_items SET poi_id = $3, label = $4, note = $5, miles = $6, rating = $7, trail_class = $8,
-                trailhead = $9, nav_latitude = $10, nav_longitude = $11
+        `UPDATE poi_list_items
+            SET poi_id = CASE WHEN $3 THEN $4 ELSE poi_id END,
+                label = CASE WHEN $5 THEN $6 ELSE label END,
+                note = CASE WHEN $7 THEN $8 ELSE note END,
+                miles = CASE WHEN $9 THEN $10 ELSE miles END,
+                rating = CASE WHEN $11 THEN $12 ELSE rating END,
+                trail_class = CASE WHEN $13 THEN $14 ELSE trail_class END,
+                trailhead = CASE WHEN $15 THEN $16 ELSE trailhead END,
+                nav_latitude = CASE WHEN $17 THEN $18 ELSE nav_latitude END,
+                nav_longitude = CASE WHEN $19 THEN $20 ELSE nav_longitude END
           WHERE id = $1 AND list_id = $2`,
-        [itemId, list.id, ...ITEM_COLUMNS.map(column => item[column] ?? null)]
+        [itemId, list.id, ...ITEM_COLUMNS.flatMap(column => [column in fields, column in fields ? fields[column] : null])]
       );
       if (result.rowCount === 0) return res.status(404).json({ error: 'Item not found' });
       res.json(await loadList(pool, list.id));
