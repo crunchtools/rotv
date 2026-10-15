@@ -27,7 +27,8 @@ const JOB_NAMES = {
   NEWSLETTER_PREVIEW: 'newsletter-preview',
   IMAGE_BACKUP: 'image-backup',
   DATABASE_BACKUP: 'database-backup',
-  UNCONFIRMED_CLEANUP: 'unconfirmed-account-cleanup'
+  UNCONFIRMED_CLEANUP: 'unconfirmed-account-cleanup',
+  SMP_TRAIL_SHAPES: 'smp-trail-shapes'
 };
 
 export async function initJobScheduler(connectionString) {
@@ -268,6 +269,32 @@ export async function scheduleUnconfirmedCleanup(cronExpression = '15 4 * * *') 
  */
 export async function registerUnconfirmedCleanupHandler(handler) {
   await registerWorker(JOB_NAMES.UNCONFIRMED_CLEANUP, 'unconfirmed account cleanup', job => handler(job.data));
+}
+
+/**
+ * Schedule the redraw of short trails from Summit Metro Parks' lines (#778).
+ * @param {string} [cronExpression='0 6 * 8 1'] - America/New_York; Mondays in August, before the fall spree
+ * @returns {Promise<void>}
+ */
+export async function scheduleTrailShapeSync(cronExpression = '0 6 * 8 1') {
+  await scheduleCron(JOB_NAMES.SMP_TRAIL_SHAPES, cronExpression, 'Trail shape sync');
+}
+
+/**
+ * Attach the worker for the trail shape sync.
+ * @param {(data: object) => Promise<void>} handler - called with the job's data; a throw lets pg-boss retry
+ * @returns {Promise<void>} once the worker is registered
+ */
+export async function registerTrailShapeSyncHandler(handler) {
+  await registerWorker(JOB_NAMES.SMP_TRAIL_SHAPES, 'trail shape sync', job => handler(job.data));
+}
+
+/**
+ * Run the trail shape sync once now, outside its schedule.
+ * @returns {Promise<string|null>} the job id
+ */
+export async function sendTrailShapeSync() {
+  return sendManualJob(JOB_NAMES.SMP_TRAIL_SHAPES);
 }
 
 /**

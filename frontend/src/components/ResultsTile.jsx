@@ -32,9 +32,10 @@ const ResultsTile = memo(function ResultsTile({ poi, poiKey, isLinear, isVirtual
   const getDefaultThumbnail = () => '/brand/rotv-logo.png';
 
   // A trail is shown as a drawing of its own line, not a photo: a small trail map.
+  // A list item that is only part of a trail (the Towpath from Wilbeth Road) draws its own part.
   const trailShape = useMemo(
-    () => (isLinear && poi.poi_roles?.includes('trail') ? trailShapePath(poi.geometry) : null),
-    [isLinear, poi.poi_roles, poi.geometry]
+    () => (isLinear && poi.poi_roles?.includes('trail') ? trailShapePath(listItem?.geometry || poi.geometry) : null),
+    [isLinear, poi.poi_roles, poi.geometry, listItem?.geometry]
   );
   const ratingClass = (listItem?.rating || poi.difficulty || '').toLowerCase();
 

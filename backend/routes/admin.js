@@ -1672,6 +1672,19 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  // Redraw short trails from Summit Metro Parks' own lines (#778); { dryRun: true } only reports
+  router.post('/trail-shapes/sync', isAdmin, async (req, res) => {
+    try {
+      const { syncTrailShapes } = await import('../services/smpTrailShapes.js');
+      const result = await syncTrailShapes(pool, { dryRun: req.body?.dryRun === true });
+      logger.info(`Admin ${req.user.email} ran the trail shape sync: ${result.updated.length} redrawn`);
+      res.json(result);
+    } catch (error) {
+      logger.error('Error syncing trail shapes:', error);
+      res.status(502).json({ error: 'Failed to sync trail shapes', message: error.message });
+    }
+  });
+
   router.post('/backup/trigger', isAdmin, async (req, res) => {
     try {
       const credentials = parseOAuthCredentials(req.user);

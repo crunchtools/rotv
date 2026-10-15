@@ -54,6 +54,9 @@ import {
   scheduleDatabaseBackup,
   registerUnconfirmedCleanupHandler,
   scheduleUnconfirmedCleanup,
+  registerTrailShapeSyncHandler,
+  scheduleTrailShapeSync,
+  sendTrailShapeSync,
   stopJobScheduler,
   withJitter
 } from './services/jobScheduler.js';
@@ -700,6 +703,7 @@ async function initDatabase() {
         trailhead TEXT,
         nav_latitude NUMERIC(10,8),
         nav_longitude NUMERIC(11,8),
+        geometry JSONB,
         UNIQUE (list_id, position)
       )
     `);
@@ -3221,6 +3225,19 @@ async function start() {
       await deleteStaleUnconfirmedAccounts(pool);
     });
     await scheduleUnconfirmedCleanup();
+
+    // Short trails are redrawn from Summit Metro Parks' own lines (#778): each
+    // August, and once on the first boot that has the job, unless jobs are off.
+    await registerTrailShapeSyncHandler(async () => {
+      const { syncTrailShapes } = await import('./services/smpTrailShapes.js');
+      await syncTrailShapes(pool);
+    });
+    await scheduleTrailShapeSync();
+    if (process.env.SCHEDULED_JOBS_ENABLED !== 'false') {
+      const { SYNCED_SETTING } = await import('./services/smpTrailShapes.js');
+      const synced = await pool.query('SELECT 1 FROM admin_settings WHERE key = $1', [SYNCED_SETTING]);
+      if (synced.rowCount === 0) await sendTrailShapeSync();
+    }
 
     app.set('boss', await import('./services/jobScheduler.js').then(m => m.getJobScheduler()));
 
