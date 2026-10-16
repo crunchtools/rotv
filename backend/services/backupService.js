@@ -161,6 +161,16 @@ export async function restoreBackup(pool, drive, fileId) {
   const runId = Math.floor(Date.now() / 1000);
   logInfo(runId, 'database_backup', null, null, 'Starting database restore from Drive');
 
+  // Whatever this downloads is piped into psql, so it must be one of the files
+  // listBackups offers: a rotv-backup-* dump in the backups folder. Any other
+  // Drive file the admin's token can read is not a backup.
+  const backupsFolderId = await getDriveSetting(pool, 'backups_folder_id');
+  const { data: meta } = await drive.files.get({ fileId, fields: 'name,parents,trashed' });
+  if (!backupsFolderId || meta.trashed || !meta.name?.startsWith('rotv-backup-')
+      || !meta.parents?.includes(backupsFolderId)) {
+    throw new Error('Not a ROTV backup in the backups folder');
+  }
+
   const response = await drive.files.get(
     { fileId, alt: 'media' },
     { responseType: 'text' }

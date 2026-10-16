@@ -11,6 +11,7 @@ vi.mock('child_process', () => ({
     const proc = new EventEmitter();
     proc.stdout = new PassThrough();
     proc.stderr = new PassThrough();
+    proc.stdin = new PassThrough();
     const database = args.at(-1);
     proc.kill = vi.fn(() => setImmediate(() => proc.emit('close', null)));
     spawned.push(proc);
@@ -33,7 +34,7 @@ vi.mock('../services/driveImageService.js', () => ({
 }));
 vi.mock('../services/jobLogger.js', () => ({ logInfo: vi.fn(), logError: vi.fn(), flush: vi.fn() }));
 
-const { triggerBackup, listBackups } = await import('../services/backupService.js');
+const { triggerBackup, listBackups, restoreBackup } = await import('../services/backupService.js');
 
 function fakeDrive() {
   const uploaded = [];
@@ -101,5 +102,36 @@ describe('database backup with analytics (#637)', () => {
     const drive = fakeDrive();
     await listBackups(drive, pool);
     expect(drive.files.list.mock.calls[0][0].q).toContain("name contains 'rotv-backup-'");
+  });
+});
+
+describe('database restore accepts only ROTV backups', () => {
+  function restoreDrive(meta) {
+    return {
+      files: {
+        get: vi.fn(async ({ alt }) => (alt === 'media'
+          ? { data: '-- dump of rotv\n' }
+          : { data: meta })),
+      },
+    };
+  }
+
+  beforeEach(() => { spawned.length = 0; });
+
+  it('restores a rotv-backup-* file from the backups folder', async () => {
+    const drive = restoreDrive({ name: 'rotv-backup-2026-10-16.sql', parents: ['folder-1'], trashed: false });
+    await restoreBackup(pool, drive, 'backup-1');
+    expect(spawned).toHaveLength(1);
+  });
+
+  it.each([
+    ['outside the backups folder', { name: 'rotv-backup-x.sql', parents: ['elsewhere'], trashed: false }],
+    ['not a rotv backup', { name: 'umami-backup-x.sql', parents: ['folder-1'], trashed: false }],
+    ['trashed', { name: 'rotv-backup-x.sql', parents: ['folder-1'], trashed: true }],
+  ])('refuses a file %s and never starts psql', async (_label, meta) => {
+    const drive = restoreDrive(meta);
+    await expect(restoreBackup(pool, drive, 'other-1')).rejects.toThrow('Not a ROTV backup');
+    expect(spawned).toHaveLength(0);
+    expect(drive.files.get).toHaveBeenCalledTimes(1);
   });
 });

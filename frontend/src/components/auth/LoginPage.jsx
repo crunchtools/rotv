@@ -32,6 +32,9 @@ function LoginPage() {
         if (err?.name !== 'AbortError') console.warn('Passkey autofill sign-in failed:', err);
       });
     return () => { active = false; };
+    // loginWithPasskey is a new function every render (AuthContext doesn't
+    // memoize it); re-running would start a second WebAuthn request that
+    // aborts the first. Only entering password mode should start one.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
