@@ -197,6 +197,8 @@ function AppContent() {
     track('poi_view', { poi_id: poi.id, name: poi.name, kind: selection.kind, source });
     const vehicle = trackerVehicle(poi);
     if (vehicle) track('tracker_route_open', { vehicle, source });
+    // One view per POI selected: selection is a new object on every update and
+    // kind travels with the id, so depending on more would count views twice.
   }, [selection.poi?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const setSelectedDestination = useCallback((value) => {
     setSelection((prev) => {
@@ -1249,6 +1251,9 @@ function AppContent() {
       console.warn('[Browser Nav Effect] POI not found for slug:', poiSlug);
       isLoadingFromUrlRef.current = false;
     }
+  // URL -> state only. Selection and activeTab are read just to compare with
+  // the URL; depending on them would re-run this sync on every click, which
+  // the state -> URL effect already handles, and the two would fight.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, loading, destinations, linearFeatures, virtualPois]);
   // NOTE: selectedDestination and selectedLinearFeature are intentionally NOT in dependencies
@@ -1309,6 +1314,8 @@ function AppContent() {
         localStorage.setItem('rotv-tour-seen', 'true');
       }
     }
+    // Starts the tour on arriving at a /tutorial URL. Depending on tourActive
+    // would restart it the moment the user exits while still on that URL.
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   // tourActive intentionally excluded — only react to URL path changes for /tutorial/stepN deep-links
 

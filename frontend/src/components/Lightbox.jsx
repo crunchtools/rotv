@@ -18,6 +18,7 @@ function Lightbox({ media, initialIndex = 0, onClose, poiId, user, onMediaUpdate
 
   useEffect(() => {
     track('media_view', { poi_id: poiId, count: media?.length });
+    // Once per open: media changes in place on upload or delete, which is not a new view.
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handlePrevious = useCallback(() => {

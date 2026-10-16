@@ -18,7 +18,7 @@ EV001-lint_suppression = false  # verified below: every suppression covered by t
 
 [[check_overrides]]
 check = "EV001-lint_suppression"
-justification = "Project policy permits eslint-disable-next-line react-hooks/exhaustive-deps suppressions when each carries an adjacent WHY-comment naming the excluded reference — verified all 8 current sites carry one; the documented suppressions are deliberate dependency-array decisions, not hidden lint debt"
+justification = "Project policy permits eslint-disable-next-line react-hooks/exhaustive-deps suppressions when each carries an adjacent WHY-comment naming the excluded reference — all 8 current sites carry one (re-verified 2026-10-16, when 5 that lacked one got it); the documented suppressions are deliberate dependency-array decisions, not hidden lint debt"
 classification = "by_design"
 
 [severity]

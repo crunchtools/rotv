@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+- **Restore accepts only ROTV backups**: the admin restore endpoint downloaded any Drive file id
+  the admin's token could read and piped it into `psql`. It now refuses anything that is not a
+  `rotv-backup-*` dump in the configured backups folder, before psql starts.
+
+### Fixed
+- **Gourmand exceptions that weren't true**: the EV001 override claimed every
+  `react-hooks/exhaustive-deps` suppression carried a WHY comment; 5 of 8 didn't. They do now. The
+  EV004 entry for `AccountBanner.jsx`, a file that no longer exists, is gone.
+
 ### Added
 - **One POI per park (#712)**: production had a content-less boundary and a separate point for the
   same park, so a search returned look-alike rows. Admin MCP tools `poi_merge_candidates` and
