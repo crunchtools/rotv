@@ -2101,20 +2101,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
-  router.get('/linear-features', isAdmin, async (req, res) => {
-    try {
-      const linearFeatureRows = await pool.query(`
-        SELECT * FROM pois
-        WHERE deleted IS NULL OR deleted = FALSE
-        ORDER BY feature_type, name
-      `);
-      res.json(linearFeatureRows.rows);
-    } catch (error) {
-      logger.error('Error fetching linear features:', error);
-      res.status(500).json({ error: 'Failed to fetch linear features' });
-    }
-  });
-
   router.post('/linear-features', isAdmin, guardPoiName, async (req, res) => {
     try {
       const {

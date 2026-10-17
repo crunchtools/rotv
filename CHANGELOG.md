@@ -13,6 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rotv-backup-*` dump in the configured backups folder, before psql starts.
 
 ### Fixed
+- **Setting a primary photo is atomic again**: the set-primary route sent `BEGIN` and `COMMIT`
+  through the pool, so its two updates could run on different connections. A failure between them
+  could leave a place with no primary. It now holds one connection for the whole transaction. The
+  media delete route, a single statement, drops its no-op transaction.
+- **Removed a broken admin endpoint**: `GET /api/admin/linear-features` sorted by a column `pois`
+  doesn't have and always returned 500. Nothing called it.
 - **Image-server primaries are filed in `poi_media` (#770)**: some places' photos lived only on
   the image server and reached the map through the thumbnail route's fallback. On boot, ROTV now
   files every such primary as an auto-approved `poi_media` row, skipping places that already have
