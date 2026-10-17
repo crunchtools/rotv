@@ -64,7 +64,7 @@ async function insertFixtures() {
 }
 
 async function row(id) {
-  return (await pool.query('SELECT * FROM pois WHERE id = $1', [id])).rows[0];
+  return (await pool.query('SELECT *, poi_has_primary_image(id) AS has_primary_image FROM pois WHERE id = $1', [id])).rows[0];
 }
 
 beforeAll(async () => {
@@ -210,9 +210,8 @@ describe('mergePois', () => {
     ]);
   });
 
-  describe('has_primary_image (#739)', () => {
-    it('drops a stale flag the point carried with no photo behind it', async () => {
-      await pool.query('UPDATE pois SET has_primary_image = TRUE WHERE id = $1', [POINT]);
+  describe('has_primary_image (#739, #770)', () => {
+    it('is false when neither place has a photo', async () => {
       await mergePois(pool, POINT, PARK);
       expect((await row(PARK)).has_primary_image).toBe(false);
     });
@@ -245,8 +244,12 @@ describe('mergePois', () => {
       expect((await row(PARK)).has_primary_image).toBe(true);
     });
 
-    it('keeps the flag the park already had', async () => {
-      await pool.query('UPDATE pois SET has_primary_image = TRUE WHERE id = $1', [PARK]);
+    it('keeps the photo the park already had', async () => {
+      await pool.query(
+        `INSERT INTO poi_media (poi_id, media_type, image_server_asset_id, role, moderation_status)
+         VALUES ($1, 'image', '_merge-park-primary', 'primary', 'published')`,
+        [PARK]
+      );
       await mergePois(pool, POINT, PARK);
       expect((await row(PARK)).has_primary_image).toBe(true);
     });

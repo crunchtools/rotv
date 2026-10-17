@@ -86,7 +86,6 @@ import {
   getGaugeReadings
 } from './services/riverLevelsService.js';
 import imageServerClient from './services/imageServerClient.js';
-import { backfillImageServerPrimaries } from './services/imageServerBackfill.js';
 import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
@@ -318,8 +317,6 @@ async function initDatabase() {
         length_miles DECIMAL(6, 2),
         difficulty VARCHAR(50),
 
-        -- Image storage
-        has_primary_image BOOLEAN DEFAULT FALSE,
 
         poi_roles TEXT[] DEFAULT '{}',
 
@@ -377,11 +374,11 @@ async function initDatabase() {
       const migrated = await client.query(`
         INSERT INTO pois (name, poi_roles, latitude, longitude, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
-                          cell_signal, more_info_link, has_primary_image,
+                          cell_signal, more_info_link,
                           deleted, created_at, updated_at)
         SELECT name, '{point}', latitude, longitude, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
-               cell_signal, more_info_link, has_primary_image,
+               cell_signal, more_info_link,
                COALESCE(deleted, FALSE),
                created_at, updated_at
         FROM destinations
@@ -405,12 +402,10 @@ async function initDatabase() {
         INSERT INTO pois (name, poi_roles, geometry, property_owner, brief_description,
                           era, historical_description, primary_activities, surface, pets,
                           cell_signal, more_info_link, length_miles, difficulty,
-                          has_primary_image,
                           deleted, created_at, updated_at)
         SELECT name, ARRAY[feature_type]::text[], geometry, property_owner, brief_description,
                era, historical_description, primary_activities, surface, pets,
                cell_signal, more_info_link, length_miles, difficulty,
-               has_primary_image,
                COALESCE(deleted, FALSE),
                created_at, updated_at
         FROM linear_features
@@ -1025,7 +1020,7 @@ app.get('/api/pois', async (req, res) => {
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
-             p.length_miles, p.difficulty, p.has_primary_image,
+             p.length_miles, p.difficulty, poi_has_primary_image(p.id) AS has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
              p.research_context,
@@ -1130,7 +1125,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.brief_description, p.era_id, e.name as era_name, p.historical_description,
              p.primary_activities, p.surface, p.pets, p.cell_signal, p.more_info_link,
              p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
-             p.length_miles, p.difficulty, p.has_primary_image,
+             p.length_miles, p.difficulty, poi_has_primary_image(p.id) AS has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
              p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
              p.research_context,
@@ -1529,20 +1524,6 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
 
     await pool.query('DELETE FROM poi_media WHERE id = $1', [mediaId]);
 
-    const remainingPrimary = await pool.query(
-      `SELECT id FROM poi_media
-       WHERE poi_id = $1
-         AND role = 'primary'
-         AND moderation_status IN ('published', 'auto_approved')
-       LIMIT 1`,
-      [poiId]
-    );
-
-    await pool.query(
-      'UPDATE pois SET has_primary_image = $1 WHERE id = $2',
-      [remainingPrimary.rows.length > 0, poiId]
-    );
-
     await pool.query('COMMIT');
 
     // DB transaction already committed; image-server delete failure leaves an orphaned asset (see #186)
@@ -1616,11 +1597,6 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
     await pool.query(
       `UPDATE poi_media SET role = 'primary' WHERE id = $1`,
       [mediaId]
-    );
-
-    await pool.query(
-      'UPDATE pois SET has_primary_image = true WHERE id = $1',
-      [poiId]
     );
 
     await pool.query('COMMIT');
@@ -1902,7 +1878,7 @@ app.get('/api/pois/virtual-in-viewport', async (req, res) => {
       SELECT DISTINCT vp.id, vp.name, vp.poi_roles, vp.property_owner,
              vp.brief_description, vp.era_id, e.name as era_name, vp.era, vp.historical_description,
              vp.primary_activities, vp.surface, vp.pets, vp.cell_signal,
-             vp.more_info_link, vp.has_primary_image,
+             vp.more_info_link, poi_has_primary_image(vp.id) AS has_primary_image,
              vp.deleted,
              vp.created_at, vp.updated_at
       FROM pois vp
@@ -3059,11 +3035,6 @@ async function start() {
   }
 
   imageServerClient.initialize();
-
-  // Not awaited: boot doesn't wait on the image server (#770).
-  backfillImageServerPrimaries(pool, imageServerClient)
-    // Fix: log the whole error, stack included (PR #794 review)
-    .catch(error => logger.error('Image-server primary backfill failed:', error));
 
   await ensureNewsJobCheckpointColumns(pool);
 

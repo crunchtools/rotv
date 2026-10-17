@@ -727,31 +727,12 @@ export async function processPendingItems(pool) {
   return { processed };
 }
 
-// Frontend gates the tooltip image request on pois.has_primary_image, so a published
-// photo must flip the flag true or the (now-available) gallery photo will never load.
-async function bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId) {
-  if (contentType !== 'photo') return;
-  await pool.query(`
-    UPDATE pois
-    SET has_primary_image = true,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE id = (
-      SELECT poi_id FROM poi_media
-      WHERE id = $1
-        AND media_type IN ('image', 'video')
-        AND moderation_status IN ('published', 'auto_approved')
-    )
-      AND has_primary_image = false
-  `, [contentId]);
-}
-
 async function markPublished(pool, contentType, contentId, adminUserId) {
   const table = tableFor(contentType);
   await pool.query(
     `UPDATE ${table} SET moderation_status = 'published', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP WHERE id = $2`,
     [adminUserId, contentId]
   );
-  await bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId);
 }
 
 export async function approveItem(pool, contentType, contentId, adminUserId) {
@@ -836,9 +817,6 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   if (setClauses.length === 0) return;
   logger.debug('editAndPublish SQL:', `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
   await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
-  if (publish) {
-    await bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId);
-  }
 }
 
 export async function createItem(pool, contentType, fields, adminUserId) {

@@ -214,7 +214,7 @@ async function existingColumns(client, table) {
 async function loadPair(client, loserId, winnerId) {
   const found = await client.query(
     `SELECT id, name, poi_roles, boundary_type, deleted, merged_into_id, osm_id,
-            latitude, longitude, has_primary_image,
+            latitude, longitude,
             geometry IS NOT NULL AS has_geometry,
             boundary_geom IS NOT NULL AS has_boundary_geom
        FROM pois WHERE id = ANY($1) FOR UPDATE`,
@@ -289,23 +289,6 @@ async function adoptImageServerAssets(client, assets, winnerId, counts) {
     ]
   );
   counts.image_server_assets = inserted.rowCount;
-}
-
-// The loser's has_primary_image is not copied: production points carried the
-// flag long after their photo was gone (#739). Once media and image-server
-// assets have moved, the park's flag says whether the thumbnail route can
-// serve it something, keeping a TRUE the park already had.
-async function refreshPrimaryImageFlag(client, winnerId) {
-  await client.query(
-    `UPDATE pois SET has_primary_image = COALESCE(has_primary_image, FALSE) OR EXISTS (
-        SELECT 1 FROM poi_media
-         WHERE poi_id = $1
-           AND role IN ('primary', 'gallery')
-           AND media_type IN ('image', 'video')
-           AND moderation_status IN ('published', 'auto_approved'))
-      WHERE id = $1`,
-    [winnerId]
-  );
 }
 
 async function moveMedia(client, loserId, winnerId, counts) {
@@ -419,7 +402,6 @@ export async function mergePois(pool, loserId, winnerId, { dryRun = false, image
     await copyContent(client, loserId, winnerId);
     await moveMedia(client, loserId, winnerId, counts);
     await adoptImageServerAssets(client, legacyAssets, winnerId, counts);
-    await refreshPrimaryImageFlag(client, winnerId);
     await repointReferences(client, loserId, winnerId, counts);
     await repointLooseReferences(client, loserId, winnerId, counts);
     await retireLoser(client, loser, winner);

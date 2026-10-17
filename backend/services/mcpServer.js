@@ -93,7 +93,7 @@ function registerTools(server, pool, boss, mcpUserId) {
     { id: z.number().describe('POI ID') },
     async ({ id }) => {
       const poiDetailRows = await pool.query(`
-        SELECT p.*, e.name as era_name, o.name as owner_name
+        SELECT p.*, poi_has_primary_image(p.id) AS has_primary_image, e.name as era_name, o.name as owner_name
         FROM pois p
         LEFT JOIN eras e ON p.era_id = e.id
         LEFT JOIN pois o ON p.owner_id = o.id AND 'organization' = ANY(o.poi_roles)
