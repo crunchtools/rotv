@@ -167,7 +167,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         `UPDATE pois
          SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3
-         RETURNING *`,
+         RETURNING *, poi_has_primary_image(id) AS has_primary_image`,
         [lat, lng, id]
       );
 
@@ -207,7 +207,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         `UPDATE pois
          SET latitude = $1, longitude = $2, updated_at = CURRENT_TIMESTAMP
          WHERE id = $3
-         RETURNING *`,
+         RETURNING *, poi_has_primary_image(id) AS has_primary_image`,
         [lat, lng, id]
       );
 
@@ -289,7 +289,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         `UPDATE pois
          SET ${setClause}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramIndex}
-         RETURNING *`,
+         RETURNING *, poi_has_primary_image(id) AS has_primary_image`,
         values
       );
 
@@ -344,7 +344,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         `UPDATE pois
          SET ${setClause}, updated_at = CURRENT_TIMESTAMP
          WHERE id = $${paramIndex}
-         RETURNING *`,
+         RETURNING *, poi_has_primary_image(id) AS has_primary_image`,
         values
       );
 
@@ -410,7 +410,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const newDestination = await pool.query(
         `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at)
          VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         RETURNING *`,
+         RETURNING *, poi_has_primary_image(id) AS has_primary_image`,
         values
       );
 
@@ -456,7 +456,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'poi_roles', 'navigation_latitude', 'navigation_longitude',
       'property_owner', 'owner_id', 'brief_description', 'era', 'era_id',
       'historical_description', 'primary_activities', 'surface', 'pets', 'cell_signal', 'more_info_link',
-      'events_url', 'news_url', 'has_primary_image',
+      'events_url', 'news_url',
       'collection_tier', 'news_score_threshold', 'events_score_threshold',
       'geometry', 'status_url', 'research_context'
     ];
@@ -483,7 +483,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       const newPoi = await pool.query(
         `INSERT INTO pois (${fields.join(', ')}, created_at, updated_at)
          VALUES (${placeholders}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         RETURNING *`,
+         RETURNING *, poi_has_primary_image(id) AS has_primary_image`,
         values
       );
 
@@ -1873,13 +1873,8 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         }
       }
 
-      // The flag follows the asset (#739): a failed upload leaves nothing to show.
       if (imageServerAssetId) {
         await swapPrimaryMedia(pool, id, imageServerAssetId, req.user.id);
-        await pool.query(
-          'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-          [id]
-        );
       }
 
       logger.info(`Admin ${req.user.email} uploaded image for POI ${id}`);
@@ -1954,10 +1949,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
 
       if (imageServerAssetId) {
         await swapPrimaryMedia(pool, id, imageServerAssetId, req.user.id);
-        await pool.query(
-          'UPDATE pois SET has_primary_image = TRUE, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-          [id]
-        );
       }
 
       logger.info(`Admin ${req.user.email} uploaded image for POI ${id}`);
@@ -1976,7 +1967,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     const { id } = req.params;
 
     try {
-      const poiCheck = await pool.query('SELECT id, name, has_primary_image FROM pois WHERE id = $1', [id]);
+      const poiCheck = await pool.query('SELECT id, name, poi_has_primary_image(id) AS has_primary_image FROM pois WHERE id = $1', [id]);
       if (poiCheck.rows.length === 0) {
         return res.status(404).json({ error: 'POI not found' });
       }
@@ -2006,20 +1997,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       if (!hasImageServerAsset && !poi.has_primary_image) {
         return res.status(400).json({ error: 'POI has no image' });
       }
-
-      // Gallery photos the thumbnail route can still serve keep the flag.
-      await pool.query(
-        `UPDATE pois
-         SET has_primary_image = EXISTS (
-               SELECT 1 FROM poi_media
-                WHERE poi_id = $1
-                  AND role IN ('primary', 'gallery')
-                  AND media_type IN ('image', 'video')
-                  AND moderation_status IN ('published', 'auto_approved')),
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-        [id]
-      );
 
       logger.info(`Admin ${req.user.email} deleted image for POI ${id}`);
       res.json({
@@ -2160,7 +2137,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
           era_id, historical_description, primary_activities, surface, pets,
           cell_signal, more_info_link, length_miles, difficulty
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-        RETURNING *
+        RETURNING *, poi_has_primary_image(id) AS has_primary_image
       `, [
         name, [feature_type], JSON.stringify(geometry), property_owner, owner_id, brief_description,
         era_id, historical_description, primary_activities, surface, pets,
@@ -2218,7 +2195,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         RETURNING id, name, poi_roles, latitude, longitude, property_owner,
                   brief_description, era_id, historical_description, primary_activities,
                   surface, pets, cell_signal, more_info_link, length_miles, difficulty,
-                  has_primary_image, geometry_drive_file_id,
+                  poi_has_primary_image(id) AS has_primary_image, geometry_drive_file_id,
                   boundary_type, boundary_color, status_url, news_url, events_url,
                   deleted, created_at, updated_at
       `, values);

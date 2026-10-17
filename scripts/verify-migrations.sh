@@ -170,10 +170,10 @@ echo ""
 echo "6. Data Population: Primary Images"
 echo "-----------------------------------"
 
-EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE has_primary_image = true;")
+EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE poi_has_primary_image(id);")
 ACTUAL_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM poi_media WHERE role='primary' AND moderation_status IN ('published', 'auto_approved');")
 
-echo "   POIs with has_primary_image=true: ${EXPECTED_PRIMARY}"
+echo "   POIs with a photo: ${EXPECTED_PRIMARY}"
 echo "   poi_media with role='primary': ${ACTUAL_PRIMARY}"
 
 if [ "$ACTUAL_PRIMARY" -eq 0 ]; then

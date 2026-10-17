@@ -88,7 +88,7 @@ echo ""
 # Step 3: Check if primary migration needed
 echo -e "${BLUE}Step 3: Checking primary image migration...${NC}"
 PRIMARY_COUNT=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM poi_media WHERE role='primary';")
-EXPECTED_COUNT=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE has_primary_image = true;")
+EXPECTED_COUNT=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE poi_has_primary_image(id);")
 
 echo "  Expected primary images: ${EXPECTED_COUNT}"
 echo "  Current primary images: ${PRIMARY_COUNT}"

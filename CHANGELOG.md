@@ -18,6 +18,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   files every such primary as an auto-approved `poi_media` row, skipping places that already have
   a primary and assets poi_media already knows (a rejected photo stays rejected). Safe to re-run.
   This comes before `has_primary_image` is derived from `poi_media`.
+- **`has_primary_image` can no longer drift (#770)**: 755 places were flagged with a photo and
+  143 had one; the rest asked for a thumbnail, got a 404 and showed the logo. Most of the drift
+  dated from migration 013, which turned every old Google Drive file id into TRUE. Migration 107
+  drops the stored column and adds `poi_has_primary_image(poi_id)`, which uses the thumbnail
+  route's own test: a published or auto-approved primary or gallery image or video. The API keeps
+  the `has_primary_image` key, admin saves return it too, and every writer of the old flag is
+  gone. So are the one-off scripts that set it (`fix-has-primary-image-flags.js`,
+  `sync-mtb-images.js`, `promote-orphaned-gallery-images.js`, `restore-from-immich.js`,
+  `scripts/migrate-primary-images.js`) and the boot backfill above, whose work is done.
 - **Gourmand exceptions that weren't true**: the EV001 override claimed every
   `react-hooks/exhaustive-deps` suppression carried a WHY comment; 5 of 8 didn't. They do now. The
   EV004 entry for `AccountBanner.jsx`, a file that no longer exists, is gone.

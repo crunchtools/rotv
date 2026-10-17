@@ -83,8 +83,8 @@ echo ""
 # 4. Check expected vs actual primary images
 echo "4. Database: Primary Image Consistency"
 echo "---------------------------------------"
-EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE has_primary_image = true;")
-echo "   POIs with has_primary_image=true: ${EXPECTED_PRIMARY}"
+EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE poi_has_primary_image(id);")
+echo "   POIs with a photo: ${EXPECTED_PRIMARY}"
 echo "   poi_media with role='primary': ${PRIMARY_COUNT}"
 
 if [ "$EXPECTED_PRIMARY" -eq "$PRIMARY_COUNT" ]; then

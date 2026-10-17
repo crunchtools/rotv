@@ -23,7 +23,7 @@ export function createFavoritesRouter(pool) {
     try {
       const tz = resolveTimezone(req.query.tz);
       const favorites = await pool.query(
-        `SELECT p.id, p.name, p.poi_roles, p.brief_description, p.has_primary_image,
+        `SELECT p.id, p.name, p.poi_roles, p.brief_description, poi_has_primary_image(p.id) AS has_primary_image,
                 f.created_at AS favorited_at,
                 ts.status AS trail_status,
                 COALESCE(nc.cnt, 0)::int AS news_count,

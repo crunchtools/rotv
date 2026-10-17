@@ -87,13 +87,13 @@ for (const feature of snapshot) {
          name, poi_roles, latitude, longitude,
          geom, primary_activities, brief_description, collection_tier,
          osm_id, more_info_link, opening_hours, wheelchair, fee,
-         has_primary_image, created_at, updated_at
+         created_at, updated_at
        )
        VALUES (
          $1, ARRAY['point']::text[], $2::double precision, $3::double precision,
          ST_SetSRID(ST_MakePoint($3::double precision, $2::double precision), 4326), $4, $5, 'monthly',
          $6, $7, $8, $9, $10,
-         FALSE, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+         CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
        )
        ON CONFLICT (osm_id) WHERE osm_id IS NOT NULL DO UPDATE SET
          latitude = EXCLUDED.latitude,

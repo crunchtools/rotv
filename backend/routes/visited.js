@@ -22,7 +22,7 @@ export function createVisitedRouter(pool) {
   router.get('/', isAuthenticated, async (req, res) => {
     try {
       const visited = await pool.query(
-        `SELECT p.id, p.name, p.poi_roles, p.brief_description, p.has_primary_image,
+        `SELECT p.id, p.name, p.poi_roles, p.brief_description, poi_has_primary_image(p.id) AS has_primary_image,
                 v.visited_at
            FROM user_visits v
            JOIN pois p ON p.id = v.poi_id

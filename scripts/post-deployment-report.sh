@@ -127,7 +127,7 @@ else
     log_item "❌ Migration 016: constraints **missing**"
 fi
 
-EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE has_primary_image = true;" 2>/dev/null || echo "0")
+EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE poi_has_primary_image(id);" 2>/dev/null || echo "0")
 ACTUAL_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM poi_media WHERE role='primary' AND moderation_status IN ('published', 'auto_approved');" 2>/dev/null || echo "0")
 
 if [ "$ACTUAL_PRIMARY" -eq 0 ]; then
