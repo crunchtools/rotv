@@ -23,7 +23,7 @@ Type=simple
 TimeoutStartSec=240
 ExecStartPre=/usr/bin/mkdir -p /srv/dev.rootsofthevalley.org/data/control /srv/dev.rootsofthevalley.org/data/logs
 ExecStart=/usr/bin/podman run --hostname dev.rootsofthevalley.org --tmpfs /var/lib/rsyslog:rw,size=8m --label io.containers.autoupdate=registry --label PODMAN_SYSTEMD_UNIT=dev.rootsofthevalley.org.service --systemd=always --memory=4g --memory-swap=4g --shm-size=256m -i --rm --name dev.rootsofthevalley.org --network podman --network crunchtools-josui-sites:ip=10.89.14.20 -p 127.0.0.1:18087:5173 -v /srv/dev.rootsofthevalley.org/data/checkout:/work/rotv:z -v /srv/dev.rootsofthevalley.org/data/control:/var/lib/rotv-dev/control:z -v /srv/dev.rootsofthevalley.org/data/logs:/var/lib/rotv-dev/logs:z -v /srv/dev.rootsofthevalley.org/data/pgdata:/data/pgdata:z -v /srv/dev.rootsofthevalley.org/config/dev.env:/etc/rotv/environment:z,ro quay.io/crunchtools/rotv-dev:latest
-ExecStartPost=/bin/sh -c 'for i in $$(seq 1 180); do curl -s -o /dev/null --max-time 2 http://127.0.0.1:18087/ && touch /run/dev.rootsofthevalley.org.active && exit 0; sleep 1; done; exit 1'
+ExecStartPost=/bin/sh -c 'for i in $$(seq 1 180); do curl -s -o /dev/null --max-time 2 http://127.0.0.1:18087/ && touch /run/dev.rootsofthevalley.org.active && exit 0; sleep 1; done; echo "Vite did not answer on 127.0.0.1:18087 within 180s" >&2; exit 1'
 ExecStop=/usr/bin/podman stop -t 3 dev.rootsofthevalley.org
 ExecStopPost=/usr/bin/podman rm -f dev.rootsofthevalley.org
 # Pull after stopping, not before starting: a cold start should not wait on
