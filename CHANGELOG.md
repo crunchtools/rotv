@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Hosted dev runs on demand**: dev.rootsofthevalley.org no longer runs at boot. A socket on
+  the proxy's port starts it on the first request, `data/control/wake` starts it for the agent,
+  and an idle timer stops it after 30 minutes with no client traffic. That frees about 840MB on
+  lotor while it is idle.
+
 ### Security
 - **Restore accepts only ROTV backups**: the admin restore endpoint downloaded any Drive file id
   the admin's token could read and piped it into `psql`. It now refuses anything that is not a

@@ -1,0 +1,16 @@
+[Unit]
+Description=Forward dev.rootsofthevalley.org connections to its container
+
+# Wants= starts the container on the first connection; After= holds the
+# connection until the container unit is up, which its ExecStartPost defines
+# as Vite answering. PartOf= stops this proxy when the container stops, so
+# the next connection comes back through the socket and starts both again.
+# The proxy never stops the container: only the idle timer does.
+Requires=dev.rootsofthevalley.org-proxy.socket
+After=dev.rootsofthevalley.org-proxy.socket
+Wants=dev.rootsofthevalley.org.service
+After=dev.rootsofthevalley.org.service
+PartOf=dev.rootsofthevalley.org.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd --exit-idle-time=5min 127.0.0.1:18087

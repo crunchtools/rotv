@@ -1,0 +1,13 @@
+[Unit]
+Description=On-demand front door for dev.rootsofthevalley.org
+
+# The proxy vhost points at 127.0.0.1:8087. Holding the port here instead of
+# in the container lets the first request start the container, so it does not
+# have to run while nobody is using it. The idle timer stops it again; see
+# dev.rootsofthevalley.org-idle.service.
+
+[Socket]
+ListenStream=127.0.0.1:8087
+
+[Install]
+WantedBy=sockets.target

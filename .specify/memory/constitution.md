@@ -100,9 +100,12 @@ against ephemeral tmpfs-backed databases only.
 Nagios: HTTP check of the backend on 8080, TCP check of PostgreSQL on 5432,
 `pg_isready`, and a process check for `weston` (`rotv-display.service`).
 
-dev.rootsofthevalley.org: container running, container memory, the vhost on
-the proxy, and the external HTTPS path expecting 302 (the Cloudflare Access
-login redirect). Its inner
+dev.rootsofthevalley.org runs on demand, so a stopped container is its idle
+state, not a fault. Covered: the on-demand check (the socket and wake path
+units active, the service not failed), container memory while it runs
+(absent-ok), the vhost on the proxy, and the external HTTPS path expecting 302
+(the Cloudflare Access login redirect). No check may connect to 127.0.0.1:8087
+or the dev servers: a connection starts the container. Its inner
 services are not paged on: it is a workbench, and a stopped unit there is
 often deliberate.
 
