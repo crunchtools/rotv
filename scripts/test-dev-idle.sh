@@ -19,7 +19,7 @@ cat > "$work/bin/podman" <<'FAKE'
 #!/bin/bash
 case "$1" in
   inspect) echo 4242 ;;
-  pull) echo "$*" >> "$FAKE_DIR/pulls" ;;
+  pull) echo "$*" >> "$FAKE_DIR/pulls"; [ "${FAKE_PULL_FAILS:-0}" = 0 ] ;;
 esac
 FAKE
 cat > "$work/bin/nsenter" <<'FAKE'
@@ -74,5 +74,10 @@ FAKE_ACTIVE=0 "$idle" > /dev/null
 touch -d "@$(( $(date +%s) - 7 * 3600 ))" "$work/pulled"
 FAKE_ACTIVE=0 "$idle" > /dev/null
 [ "$(pulls)" = 2 ] || fail "did not pull again after PULL_EVERY"
+rm -f "$work/pulls" "$work/pulled"
+FAKE_ACTIVE=0 FAKE_PULL_FAILS=1 "$idle" > /dev/null
+[ ! -f "$work/pulled" ] || fail "a failed pull was recorded as done"
+FAKE_ACTIVE=0 "$idle" > /dev/null
+[ "$(pulls)" = 2 ] || fail "a failed pull was not retried on the next run"
 
 echo "dev-idle: all cases passed"
