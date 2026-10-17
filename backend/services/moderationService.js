@@ -768,6 +768,24 @@ async function markRejected(pool, contentType, contentId, adminUserId, note) {
      WHERE id = $2`,
     [adminUserId, contentId, note]
   );
+  await clearHasPrimaryImageOnPhotoReject(pool, contentType, contentId);
+}
+
+// Fix: a rejected photo no longer backs the flag; leave it if other published media remain (#770)
+async function clearHasPrimaryImageOnPhotoReject(pool, contentType, contentId) {
+  if (contentType !== 'photo') return;
+  await pool.query(`
+    UPDATE pois p
+    SET has_primary_image = false,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE p.id = (SELECT poi_id FROM poi_media WHERE id = $1)
+      AND p.has_primary_image = true
+      AND NOT EXISTS (
+        SELECT 1 FROM poi_media m
+        WHERE m.poi_id = p.id
+          AND m.media_type IN ('image', 'video')
+          AND m.moderation_status IN ('published', 'auto_approved'))
+  `, [contentId]);
 }
 
 export async function rejectItem(pool, contentType, contentId, adminUserId, reason) {

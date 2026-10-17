@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Places no longer claim photos they don't have** (#770): on boot the backend reconciles
+  `pois.has_primary_image` against `poi_media` and the image server (idempotent; photos that
+  exist only on the image server keep their flag), and rejecting a photo clears the flag when
+  nothing else is published.
+
 ### Security
 - **Restore accepts only ROTV backups**: the admin restore endpoint downloaded any Drive file id
   the admin's token could read and piped it into `psql`. It now refuses anything that is not a

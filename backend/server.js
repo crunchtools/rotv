@@ -3061,6 +3061,15 @@ async function start() {
 
   await ensureNewsJobCheckpointColumns(pool);
 
+  // Idempotent: the flag follows what poi_media and the image server hold (#770)
+  try {
+    const { reconcilePrimaryImageFlags } = await import('./services/primaryImageFlags.js');
+    const flags = await reconcilePrimaryImageFlags(pool, imageServerClient, logger);
+    logger.info(`Primary image flags reconciled: ${flags.raised} set, ${flags.cleared} cleared, ${flags.kept} kept (image server only)`);
+  } catch (err) {
+    logger.error('Primary image flag reconcile failed:', err);
+  }
+
   // Before the scheduler starts: nothing in this process is running a job yet (#586)
   try {
     const abandonedNews = await failAbandonedNewsJobs(pool);
