@@ -17,6 +17,8 @@ Description=Podman container - dev.rootsofthevalley.org
 # minutes with no client traffic. Vite publishes on 18087, behind the socket.
 # ExecStartPost holds the unit in "activating" until Vite answers, which is
 # what lets the socket proxy wait out a cold start instead of refusing it.
+# Starts and stops never pull: dev-idle.sh refreshes the image while the
+# container is stopped, so neither waits on the registry.
 
 [Service]
 Type=simple
@@ -26,8 +28,5 @@ ExecStart=/usr/bin/podman run --hostname dev.rootsofthevalley.org --tmpfs /var/l
 ExecStartPost=/bin/sh -c 'for i in $$(seq 1 180); do curl -s -o /dev/null --max-time 2 http://127.0.0.1:18087/ && touch /run/dev.rootsofthevalley.org.active && exit 0; sleep 1; done; echo "Vite did not answer on 127.0.0.1:18087 within 180s" >&2; exit 1'
 ExecStop=/usr/bin/podman stop -t 3 dev.rootsofthevalley.org
 ExecStopPost=/usr/bin/podman rm -f dev.rootsofthevalley.org
-# Pull after stopping, not before starting: a cold start should not wait on
-# the registry or fail when it is down, and the next start gets the new image.
-ExecStopPost=-/usr/bin/podman pull -q quay.io/crunchtools/rotv-dev:latest
 RestartSec=3
 Restart=always

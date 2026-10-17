@@ -190,9 +190,10 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
 - **On demand:** the container does not run at boot. A socket
   (`deploy/dev.rootsofthevalley.org-proxy.socket`) holds the proxy's port and
   starts it on the first request; touching `data/control/wake` starts it for
-  the agent; `deploy/dev-idle.sh`, every five minutes, stops it after 30
-  minutes with no client traffic on :5173 or :8080. A cold start takes up to
-  a minute, and the first request waits for it rather than failing.
+  the agent; `scripts/dev-idle.sh` (installed as `config/dev-idle.sh`), every five minutes, stops it after 30
+  minutes with no client traffic on :5173 or :8080, and while it is stopped
+  pulls a new image at most every six hours. A cold start takes up to a
+  minute, and the first request waits for it rather than failing.
 
 ### The inner loop, from outside the container
 

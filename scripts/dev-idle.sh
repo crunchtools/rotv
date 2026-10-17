@@ -21,7 +21,19 @@ WAKE=${WAKE:-/srv/dev.rootsofthevalley.org/data/control/wake}
 IDLE_MIN=${IDLE_MIN:-30}
 WINDOW_MS=${WINDOW_MS:-360000}   # a little over the timer interval
 
-systemctl is-active -q "$UNIT" || exit 0
+IMAGE=quay.io/crunchtools/rotv-dev:latest
+PULLED=${PULLED:-/run/dev.rootsofthevalley.org.pulled}
+PULL_EVERY=${PULL_EVERY:-21600}
+
+# Stopped: refresh the image here, at most every PULL_EVERY seconds. Doing it
+# outside any start or stop means a cold start never waits on the registry and
+# a stop never hangs on one.
+if ! systemctl is-active -q "$UNIT"; then
+    if [ ! -f "$PULLED" ] || [ $(( $(date +%s) - $(stat -c %Y "$PULLED") )) -ge "$PULL_EVERY" ]; then
+        timeout 300 podman pull -q "$IMAGE" > /dev/null && touch "$PULLED"
+    fi
+    exit 0
+fi
 PID=$(podman inspect -f '{{.State.Pid}}' "$NAME" 2>/dev/null) || exit 0
 [ "${PID:-0}" -gt 0 ] || exit 0
 
