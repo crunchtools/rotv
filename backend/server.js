@@ -1520,13 +1520,9 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
       return res.status(403).json({ error: 'You can only delete your own media' });
     }
 
-    await pool.query('BEGIN');
-
     await pool.query('DELETE FROM poi_media WHERE id = $1', [mediaId]);
 
-    await pool.query('COMMIT');
-
-    // DB transaction already committed; image-server delete failure leaves an orphaned asset (see #186)
+    // Row already deleted; image-server delete failure leaves an orphaned asset (see #186)
     let imageServerDeleted = true;
     if (media.image_server_asset_id) {
       try {
@@ -1550,7 +1546,6 @@ app.delete('/api/pois/:poiId/media/:mediaId', isAuthenticated, async (req, res) 
 
     res.json({ success: true, message: 'Media deleted' });
   } catch (error) {
-    await pool.query('ROLLBACK');
     logger.error('Error deleting media:', error);
     res.status(500).json({ error: 'Failed to delete media' });
   }
@@ -1585,27 +1580,32 @@ app.patch('/api/pois/:poiId/media/:mediaId/set-primary', isAuthenticated, async 
       return res.json({ success: true, message: 'Already primary' });
     }
 
-    await pool.query('BEGIN');
-
-    await pool.query(
-      `UPDATE poi_media SET role = 'gallery'
-       WHERE poi_id = $1 AND role = 'primary'
-       AND moderation_status IN ('published', 'auto_approved')`,
-      [poiId]
-    );
-
-    await pool.query(
-      `UPDATE poi_media SET role = 'primary' WHERE id = $1`,
-      [mediaId]
-    );
-
-    await pool.query('COMMIT');
+    // One client: BEGIN and COMMIT sent through the pool can land on different connections.
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        `UPDATE poi_media SET role = 'gallery'
+         WHERE poi_id = $1 AND role = 'primary'
+         AND moderation_status IN ('published', 'auto_approved')`,
+        [poiId]
+      );
+      await client.query(
+        `UPDATE poi_media SET role = 'primary' WHERE id = $1`,
+        [mediaId]
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
 
     invalidateMosaicCache(poiId);
 
     res.json({ success: true, message: 'Primary image updated' });
   } catch (error) {
-    await pool.query('ROLLBACK');
     logger.error('Error setting primary media:', error);
     res.status(500).json({ error: 'Failed to set primary media' });
   }
