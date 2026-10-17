@@ -9,16 +9,24 @@ Description=Podman container - dev.rootsofthevalley.org
 # other member: the agent's container, which already has write access to
 # this checkout. It lets the agent fetch the site it edits. Nothing else
 # can reach the dev servers there; the public name stays behind its login.
+#
+# Runs on demand, not at boot. dev.rootsofthevalley.org-proxy.socket holds
+# 127.0.0.1:8087 for the proxy vhost and starts this unit on the first
+# request; dev.rootsofthevalley.org-wake.path starts it when the agent touches
+# data/control/wake; dev.rootsofthevalley.org-idle.timer stops it after 30
+# minutes with no client traffic. Vite publishes on 18087, behind the socket.
+# ExecStartPost holds the unit in "activating" until Vite answers, which is
+# what lets the socket proxy wait out a cold start instead of refusing it.
+# Starts and stops never pull: dev-idle.sh refreshes the image while the
+# container is stopped, so neither waits on the registry.
 
 [Service]
 Type=simple
+TimeoutStartSec=240
 ExecStartPre=/usr/bin/mkdir -p /srv/dev.rootsofthevalley.org/data/control /srv/dev.rootsofthevalley.org/data/logs
-ExecStartPre=/usr/bin/podman pull quay.io/crunchtools/rotv-dev:latest
-ExecStart=/usr/bin/podman run --hostname dev.rootsofthevalley.org --tmpfs /var/lib/rsyslog:rw,size=8m --label io.containers.autoupdate=registry --label PODMAN_SYSTEMD_UNIT=dev.rootsofthevalley.org.service --systemd=always --memory=4g --memory-swap=4g --shm-size=256m -i --rm --name dev.rootsofthevalley.org --network podman --network crunchtools-josui-sites:ip=10.89.14.20 -p 127.0.0.1:8087:5173 -v /srv/dev.rootsofthevalley.org/data/checkout:/work/rotv:z -v /srv/dev.rootsofthevalley.org/data/control:/var/lib/rotv-dev/control:z -v /srv/dev.rootsofthevalley.org/data/logs:/var/lib/rotv-dev/logs:z -v /srv/dev.rootsofthevalley.org/data/pgdata:/data/pgdata:z -v /srv/dev.rootsofthevalley.org/config/dev.env:/etc/rotv/environment:z,ro quay.io/crunchtools/rotv-dev:latest
+ExecStart=/usr/bin/podman run --hostname dev.rootsofthevalley.org --tmpfs /var/lib/rsyslog:rw,size=8m --label io.containers.autoupdate=registry --label PODMAN_SYSTEMD_UNIT=dev.rootsofthevalley.org.service --systemd=always --memory=4g --memory-swap=4g --shm-size=256m -i --rm --name dev.rootsofthevalley.org --network podman --network crunchtools-josui-sites:ip=10.89.14.20 -p 127.0.0.1:18087:5173 -v /srv/dev.rootsofthevalley.org/data/checkout:/work/rotv:z -v /srv/dev.rootsofthevalley.org/data/control:/var/lib/rotv-dev/control:z -v /srv/dev.rootsofthevalley.org/data/logs:/var/lib/rotv-dev/logs:z -v /srv/dev.rootsofthevalley.org/data/pgdata:/data/pgdata:z -v /srv/dev.rootsofthevalley.org/config/dev.env:/etc/rotv/environment:z,ro quay.io/crunchtools/rotv-dev:latest
+ExecStartPost=/bin/sh -c 'for i in $$(seq 1 180); do curl -s -o /dev/null --max-time 2 http://127.0.0.1:18087/ && touch /run/dev.rootsofthevalley.org.active && exit 0; sleep 1; done; echo "Vite did not answer on 127.0.0.1:18087 within 180s" >&2; exit 1'
 ExecStop=/usr/bin/podman stop -t 3 dev.rootsofthevalley.org
 ExecStopPost=/usr/bin/podman rm -f dev.rootsofthevalley.org
 RestartSec=3
 Restart=always
-
-[Install]
-WantedBy=multi-user.target

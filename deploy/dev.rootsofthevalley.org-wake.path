@@ -1,0 +1,14 @@
+[Unit]
+Description=Start dev.rootsofthevalley.org when the agent touches control/wake
+
+# The agent reaches the dev servers directly on the private network
+# (10.89.14.20), which the host has no address on, so the socket cannot catch
+# that traffic. The agent has data/ mounted, so it wakes the container with a
+# file instead. "wake" is not one of the in-container control names.
+
+[Path]
+PathModified=/srv/dev.rootsofthevalley.org/data/control/wake
+Unit=dev.rootsofthevalley.org.service
+
+[Install]
+WantedBy=paths.target

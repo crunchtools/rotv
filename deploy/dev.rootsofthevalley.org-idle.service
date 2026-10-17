@@ -1,0 +1,7 @@
+[Unit]
+Description=Stop dev.rootsofthevalley.org after 30 idle minutes
+
+[Service]
+Type=oneshot
+Environment=IDLE_MIN=30
+ExecStart=/srv/dev.rootsofthevalley.org/config/dev-idle.sh

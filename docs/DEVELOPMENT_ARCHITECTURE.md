@@ -187,6 +187,13 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
   `data/control` and `data/logs` are the two directories below. The unit is
   `deploy/dev.rootsofthevalley.org.service`. Every mount is shared (`:z`),
   because a second container mounts the same tree.
+- **On demand:** the container does not run at boot. A socket
+  (`deploy/dev.rootsofthevalley.org-proxy.socket`) holds the proxy's port and
+  starts it on the first request; touching `data/control/wake` starts it for
+  the agent; `scripts/dev-idle.sh` (installed as `config/dev-idle.sh`), every five minutes, stops it after 30
+  minutes with no client traffic on :5173 or :8080, and while it is stopped
+  pulls a new image at most every six hours. A cold start takes up to a
+  minute, and the first request waits for it rather than failing.
 
 ### The inner loop, from outside the container
 
@@ -194,7 +201,7 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
 |------------|---------|
 | See a frontend change | Save the file. Vite hot-reloads the page. |
 | Apply a backend change | Save the file. `rotv-backend` runs under `node --watch` and restarts itself. A file that does not parse leaves it waiting for the next save. |
-| Fetch the running site | `curl http://10.89.14.20:5173/` (Vite) or `:8080` (the backend), over the private network the agent's container shares with this one. The public name sits behind a login the agent cannot pass. |
+| Fetch the running site | `curl http://10.89.14.20:5173/` (Vite) or `:8080` (the backend), over the private network the agent's container shares with this one. The public name sits behind a login the agent cannot pass. If nothing answers, the container is idle: `touch data/control/wake` and retry for up to 90 seconds. |
 | Restart Vite | `touch data/control/ui` |
 | Restart the backend by hand | `touch data/control/backend` |
 | Run migrations again | `touch data/control/init`. Adding or editing a file in `backend/migrations/` does it on its own. Restarts the backend after. |
