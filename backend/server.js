@@ -3062,7 +3062,8 @@ async function start() {
 
   // Not awaited: boot doesn't wait on the image server (#770).
   backfillImageServerPrimaries(pool, imageServerClient)
-    .catch(error => logger.error('Image-server primary backfill failed:', error.message));
+    // Fix: log the whole error, stack included (PR #794 review)
+    .catch(error => logger.error('Image-server primary backfill failed:', error));
 
   await ensureNewsJobCheckpointColumns(pool);
 

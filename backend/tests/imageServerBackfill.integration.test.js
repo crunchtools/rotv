@@ -28,15 +28,6 @@ const client = {
   ]
 };
 
-async function mediaRows() {
-  const { rows } = await pool.query(
-    `SELECT poi_id, image_server_asset_id AS asset, role, moderation_status AS status
-       FROM poi_media WHERE poi_id = ANY($1) ORDER BY poi_id, image_server_asset_id`,
-    [IDS]
-  );
-  return rows;
-}
-
 beforeEach(async () => {
   await pool.query('DELETE FROM pois WHERE id = ANY($1)', [IDS]);
   for (const id of IDS) {
@@ -65,7 +56,12 @@ describe('backfillImageServerPrimaries (PostgreSQL)', () => {
 
     expect(first.inserted).toBe(1);
     expect(second.inserted).toBe(0);
-    expect(await mediaRows()).toEqual([
+    const { rows } = await pool.query(
+      `SELECT poi_id, image_server_asset_id AS asset, role, moderation_status AS status
+         FROM poi_media WHERE poi_id = ANY($1) ORDER BY poi_id, image_server_asset_id`,
+      [IDS]
+    );
+    expect(rows).toEqual([
       { poi_id: ORPHAN, asset: '9001', role: 'primary', status: 'auto_approved' },
       { poi_id: HAS_PRIMARY, asset: 'kept-primary', role: 'primary', status: 'auto_approved' },
       { poi_id: REJECTED, asset: '9003', role: 'primary', status: 'rejected' }
