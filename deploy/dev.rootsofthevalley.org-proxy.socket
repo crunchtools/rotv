@@ -5,6 +5,16 @@ Description=On-demand front door for dev.rootsofthevalley.org
 # in the container lets the first request start the container, so it does not
 # have to run while nobody is using it. The idle timer stops it again; see
 # dev.rootsofthevalley.org-idle.service.
+#
+# Host prerequisite: systemd binds this socket in the proxy's SELinux domain,
+# systemd_socket_proxyd_t, which by default may neither bind 8087 nor connect
+# to 18087. Both booleans are set persistently on lotor:
+#   setsebool -P systemd_socket_proxyd_bind_any=1 systemd_socket_proxyd_connect_any=1
+# Scope: the booleans widen only systemd_socket_proxyd_t, which on lotor runs
+# nothing but this proxy, and its target is fixed in this root-owned unit, so
+# changing where it binds or connects already takes root. A narrower port type
+# was not used: 18087 is also bound by podman for the published port, and
+# relabeling it risks the container start.
 
 [Socket]
 ListenStream=127.0.0.1:8087

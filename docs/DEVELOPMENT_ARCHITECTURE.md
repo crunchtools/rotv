@@ -193,7 +193,11 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
   the agent; `scripts/dev-idle.sh` (installed as `config/dev-idle.sh`), every five minutes, stops it after 30
   minutes with no client traffic on :5173 or :8080, and while it is stopped
   pulls a new image at most every six hours. A cold start takes up to a
-  minute, and the first request waits for it rather than failing.
+  minute, and the first request waits for it rather than failing. The host needs
+  the SELinux booleans `systemd_socket_proxyd_bind_any` and
+  `systemd_socket_proxyd_connect_any` on, or the socket fails with
+  "Permission denied" (the AVC is in `/var/log/audit/audit.log`, not the
+  journal).
 
 ### The inner loop, from outside the container
 
