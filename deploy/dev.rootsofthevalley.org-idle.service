@@ -4,4 +4,6 @@ Description=Stop dev.rootsofthevalley.org after 30 idle minutes
 [Service]
 Type=oneshot
 Environment=IDLE_MIN=30
-ExecStart=/srv/dev.rootsofthevalley.org/config/dev-idle.sh
+# Through bash, not exec: files under /srv are var_t, which systemd (init_t)
+# may read but not execute, so a direct ExecStart fails with 203/EXEC.
+ExecStart=/bin/bash /srv/dev.rootsofthevalley.org/config/dev-idle.sh
