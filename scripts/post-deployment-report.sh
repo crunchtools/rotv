@@ -127,19 +127,6 @@ else
     log_item "❌ Migration 016: constraints **missing**"
 fi
 
-EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE poi_has_primary_image(id);" 2>/dev/null || echo "0")
-ACTUAL_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM poi_media WHERE role='primary' AND moderation_status IN ('published', 'auto_approved');" 2>/dev/null || echo "0")
-
-if [ "$ACTUAL_PRIMARY" -eq 0 ]; then
-    log_item "❌ Migration script: **NOT RUN** (0 primary images)"
-elif [ "$ACTUAL_PRIMARY" -lt "$EXPECTED_PRIMARY" ]; then
-    log_item "⚠️  Migration script: **INCOMPLETE** (${ACTUAL_PRIMARY}/${EXPECTED_PRIMARY} primary images)"
-elif [ "$ACTUAL_PRIMARY" -eq "$EXPECTED_PRIMARY" ]; then
-    log_item "✅ Migration script: **COMPLETE** (${ACTUAL_PRIMARY}/${EXPECTED_PRIMARY} primary images)"
-else
-    log_item "⚠️  Migration script: **UNKNOWN** (${ACTUAL_PRIMARY}/${EXPECTED_PRIMARY} primary images - more than expected)"
-fi
-
 # 5. Recent Logs
 log_header "Recent Log Entries (Last 10 minutes)"
 
@@ -170,11 +157,6 @@ log_header "Recommendations"
 
 RECOMMENDATIONS=()
 
-# Check if migration script needs to run
-if [ "$ACTUAL_PRIMARY" -eq 0 ]; then
-    RECOMMENDATIONS+=("🔴 **CRITICAL**: Run migration script immediately: \`podman exec ${CONTAINER_NAME} node /app/scripts/migrate-primary-images.js\`")
-fi
-
 # Check if migration 016 needs to be applied
 if [ "$CAPTION_CHECK" -eq 0 ]; then
     RECOMMENDATIONS+=("🔴 **CRITICAL**: Apply migration 016: \`podman exec ${CONTAINER_NAME} psql -U postgres -d rotv -f /app/migrations/016_fix_poi_media_constraints.sql\`")
@@ -183,11 +165,6 @@ fi
 # Check for high error rates
 if [ "$ERRORS" -gt 20 ]; then
     RECOMMENDATIONS+=("⚠️  **WARNING**: High error rate detected (${ERRORS} errors in 10 minutes). Review logs: \`journalctl -u ${CONTAINER_NAME} --since '10 minutes ago'\`")
-fi
-
-# Check if POIs with primary images but no media records
-if [ "$EXPECTED_PRIMARY" -gt "$ACTUAL_PRIMARY" ] && [ "$ACTUAL_PRIMARY" -gt 0 ]; then
-    RECOMMENDATIONS+=("⚠️  **WARNING**: Some POIs missing primary images (${ACTUAL_PRIMARY}/${EXPECTED_PRIMARY}). Consider re-running migration script.")
 fi
 
 if [ ${#RECOMMENDATIONS[@]} -eq 0 ]; then

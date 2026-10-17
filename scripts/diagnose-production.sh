@@ -69,36 +69,10 @@ echo "   Total records: ${TOTAL_COUNT}"
 echo "   Primary images: ${PRIMARY_COUNT}"
 echo "   Published: ${PUBLISHED_COUNT}"
 
-if [ "$PRIMARY_COUNT" -eq 0 ]; then
-    check_fail "No primary images in poi_media table"
-    echo "   Migration script was NOT run"
-    echo "   Fix: podman exec ${CONTAINER_NAME} node /app/scripts/migrate-primary-images.js"
-    NEEDS_MIGRATION=true
-else
-    check_pass "Primary images found in poi_media"
-    NEEDS_MIGRATION=false
-fi
 echo ""
 
-# 4. Check expected vs actual primary images
-echo "4. Database: Primary Image Consistency"
-echo "---------------------------------------"
-EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE poi_has_primary_image(id);")
-echo "   POIs with a photo: ${EXPECTED_PRIMARY}"
-echo "   poi_media with role='primary': ${PRIMARY_COUNT}"
-
-if [ "$EXPECTED_PRIMARY" -eq "$PRIMARY_COUNT" ]; then
-    check_pass "Primary image counts match"
-elif [ "$PRIMARY_COUNT" -eq 0 ]; then
-    check_fail "Migration script needs to run"
-else
-    check_warn "Mismatch: Expected ${EXPECTED_PRIMARY}, got ${PRIMARY_COUNT}"
-    echo "   Some POIs may be missing primary images"
-fi
-echo ""
-
-# 5. Check Migration 016 constraints
-echo "5. Database: Migration 016 Constraints"
+# 4. Check Migration 016 constraints
+echo "4. Database: Migration 016 Constraints"
 echo "---------------------------------------"
 CAPTION_CHECK=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pg_constraint WHERE conrelid = 'poi_media'::regclass AND conname = 'poi_media_caption_length_check';")
 MODERATION_CHECK=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pg_constraint WHERE conrelid = 'poi_media'::regclass AND conname = 'poi_media_moderation_check';")
@@ -120,8 +94,8 @@ else
 fi
 echo ""
 
-# 6. Check IMAGE_SERVER_URL environment variable
-echo "6. Environment: IMAGE_SERVER_URL"
+# 5. Check IMAGE_SERVER_URL environment variable
+echo "5. Environment: IMAGE_SERVER_URL"
 echo "---------------------------------"
 IMAGE_SERVER_URL=$(podman exec ${CONTAINER_NAME} printenv IMAGE_SERVER_URL 2>/dev/null || echo "")
 
@@ -135,8 +109,8 @@ else
 fi
 echo ""
 
-# 7. Test image server connectivity
-echo "7. Network: Image Server Connectivity"
+# 6. Test image server connectivity
+echo "6. Network: Image Server Connectivity"
 echo "--------------------------------------"
 if [ -n "$IMAGE_SERVER_URL" ]; then
     if podman exec ${CONTAINER_NAME} curl -sf "${IMAGE_SERVER_URL}/api/health" > /dev/null 2>&1; then
@@ -153,8 +127,8 @@ else
 fi
 echo ""
 
-# 8. Check application logs for errors
-echo "8. Logs: Recent Errors"
+# 7. Check application logs for errors
+echo "7. Logs: Recent Errors"
 echo "----------------------"
 ERROR_COUNT=$(journalctl -u ${CONTAINER_NAME} --since "1 hour ago" --no-pager | grep -i "error" | wc -l)
 MEDIA_ERRORS=$(journalctl -u ${CONTAINER_NAME} --since "1 hour ago" --no-pager | grep -i "Failed to fetch media\|Image not found" | wc -l)
@@ -172,8 +146,8 @@ else
 fi
 echo ""
 
-# 9. Test API endpoint
-echo "9. API: Test Media Endpoint"
+# 8. Test API endpoint
+echo "8. API: Test Media Endpoint"
 echo "----------------------------"
 TEST_POI_ID=1
 if curl -sf "https://rootsofthevalley.org/api/pois/${TEST_POI_ID}/media" > /dev/null 2>&1; then
@@ -197,17 +171,6 @@ echo "SUMMARY AND RECOMMENDATIONS"
 echo "=========================================="
 echo ""
 
-if [ "$NEEDS_MIGRATION" = true ]; then
-    echo -e "${RED}ACTION REQUIRED:${NC} Run primary image migration"
-    echo ""
-    echo "  # Dry run first (see what will happen)"
-    echo "  podman exec ${CONTAINER_NAME} node /app/scripts/migrate-primary-images.js --dry-run"
-    echo ""
-    echo "  # Run migration for real"
-    echo "  podman exec ${CONTAINER_NAME} node /app/scripts/migrate-primary-images.js"
-    echo ""
-fi
-
 if [ "${NEEDS_016}" = true ]; then
     echo -e "${RED}ACTION REQUIRED:${NC} Apply migration 016"
     echo ""
@@ -215,7 +178,7 @@ if [ "${NEEDS_016}" = true ]; then
     echo ""
 fi
 
-if [ "$NEEDS_MIGRATION" = true ] || [ "${NEEDS_016}" = true ]; then
+if [ "${NEEDS_016}" = true ]; then
     echo -e "${YELLOW}After applying migrations:${NC}"
     echo ""
     echo "  # Restart service"

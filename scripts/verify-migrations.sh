@@ -166,32 +166,8 @@ else
 fi
 echo ""
 
-# 6. Check data population (Migration script)
-echo "6. Data Population: Primary Images"
-echo "-----------------------------------"
-
-EXPECTED_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM pois WHERE poi_has_primary_image(id);")
-ACTUAL_PRIMARY=$(podman exec ${CONTAINER_NAME} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM poi_media WHERE role='primary' AND moderation_status IN ('published', 'auto_approved');")
-
-echo "   POIs with a photo: ${EXPECTED_PRIMARY}"
-echo "   poi_media with role='primary': ${ACTUAL_PRIMARY}"
-
-if [ "$ACTUAL_PRIMARY" -eq 0 ]; then
-    check_fail "No primary images in poi_media (migration script NOT run)"
-    echo "   Fix: podman exec ${CONTAINER_NAME} node /app/scripts/migrate-primary-images.js"
-elif [ "$ACTUAL_PRIMARY" -lt "$EXPECTED_PRIMARY" ]; then
-    check_warn "Missing primary images (expected ${EXPECTED_PRIMARY}, got ${ACTUAL_PRIMARY})"
-    echo "   Some POIs may be missing primary images"
-elif [ "$ACTUAL_PRIMARY" -eq "$EXPECTED_PRIMARY" ]; then
-    check_pass "All primary images migrated (${ACTUAL_PRIMARY}/${EXPECTED_PRIMARY})"
-else
-    check_warn "More primary images than expected (expected ${EXPECTED_PRIMARY}, got ${ACTUAL_PRIMARY})"
-    echo "   May have duplicates or manual additions"
-fi
-echo ""
-
-# 7. Check admin settings
-echo "7. Admin Settings"
+# 6. Check admin settings
+echo "6. Admin Settings"
 echo "-----------------"
 
 SETTINGS=(
@@ -210,8 +186,8 @@ for SETTING in "${SETTINGS[@]}"; do
 done
 echo ""
 
-# 8. Check for data integrity issues
-echo "8. Data Integrity Checks"
+# 7. Check for data integrity issues
+echo "7. Data Integrity Checks"
 echo "------------------------"
 
 # Check for duplicate primary images
