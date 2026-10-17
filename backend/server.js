@@ -86,6 +86,7 @@ import {
   getGaugeReadings
 } from './services/riverLevelsService.js';
 import imageServerClient from './services/imageServerClient.js';
+import { backfillImageServerPrimaries } from './services/imageServerBackfill.js';
 import { isUsableSourceImage } from './utils/sourceImage.js';
 import { startSmtpServer, processNewsletterById } from './services/newsletterService.js';
 import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from './services/newsletterDigestService.js';
@@ -3058,6 +3059,11 @@ async function start() {
   }
 
   imageServerClient.initialize();
+
+  // Not awaited: boot doesn't wait on the image server (#770).
+  backfillImageServerPrimaries(pool, imageServerClient)
+    // Fix: log the whole error, stack included (PR #794 review)
+    .catch(error => logger.error('Image-server primary backfill failed:', error));
 
   await ensureNewsJobCheckpointColumns(pool);
 

@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rotv-backup-*` dump in the configured backups folder, before psql starts.
 
 ### Fixed
+- **Image-server primaries are filed in `poi_media` (#770)**: some places' photos lived only on
+  the image server and reached the map through the thumbnail route's fallback. On boot, ROTV now
+  files every such primary as an auto-approved `poi_media` row, skipping places that already have
+  a primary and assets poi_media already knows (a rejected photo stays rejected). Safe to re-run.
+  This comes before `has_primary_image` is derived from `poi_media`.
 - **Gourmand exceptions that weren't true**: the EV001 override claimed every
   `react-hooks/exhaustive-deps` suppression carried a WHY comment; 5 of 8 didn't. They do now. The
   EV004 entry for `AccountBanner.jsx`, a file that no longer exists, is gone.
