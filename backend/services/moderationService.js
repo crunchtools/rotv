@@ -727,21 +727,24 @@ export async function processPendingItems(pool) {
   return { processed };
 }
 
-// Frontend gates the tooltip image request on pois.has_primary_image, so a published
-// photo must flip the flag true or the (now-available) gallery photo will never load.
-async function bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId) {
+// Frontend gates the tooltip image request on pois.has_primary_image: a published photo
+// must flip it true, a rejected one clears it unless other published media remain (#770).
+async function syncHasPrimaryImageForPhoto(pool, contentType, contentId) {
   if (contentType !== 'photo') return;
   await pool.query(`
-    UPDATE pois
-    SET has_primary_image = true,
+    UPDATE pois p
+    SET has_primary_image = EXISTS (
+          SELECT 1 FROM poi_media m
+          WHERE m.poi_id = p.id
+            AND m.media_type IN ('image', 'video')
+            AND m.moderation_status IN ('published', 'auto_approved')),
         updated_at = CURRENT_TIMESTAMP
-    WHERE id = (
-      SELECT poi_id FROM poi_media
-      WHERE id = $1
-        AND media_type IN ('image', 'video')
-        AND moderation_status IN ('published', 'auto_approved')
-    )
-      AND has_primary_image = false
+    WHERE p.id = (SELECT poi_id FROM poi_media WHERE id = $1)
+      AND p.has_primary_image IS DISTINCT FROM EXISTS (
+          SELECT 1 FROM poi_media m
+          WHERE m.poi_id = p.id
+            AND m.media_type IN ('image', 'video')
+            AND m.moderation_status IN ('published', 'auto_approved'))
   `, [contentId]);
 }
 
@@ -751,7 +754,7 @@ async function markPublished(pool, contentType, contentId, adminUserId) {
     `UPDATE ${table} SET moderation_status = 'published', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP WHERE id = $2`,
     [adminUserId, contentId]
   );
-  await bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId);
+  await syncHasPrimaryImageForPhoto(pool, contentType, contentId);
 }
 
 export async function approveItem(pool, contentType, contentId, adminUserId) {
@@ -768,24 +771,7 @@ async function markRejected(pool, contentType, contentId, adminUserId, note) {
      WHERE id = $2`,
     [adminUserId, contentId, note]
   );
-  await clearHasPrimaryImageOnPhotoReject(pool, contentType, contentId);
-}
-
-// Fix: a rejected photo no longer backs the flag; leave it if other published media remain (#770)
-async function clearHasPrimaryImageOnPhotoReject(pool, contentType, contentId) {
-  if (contentType !== 'photo') return;
-  await pool.query(`
-    UPDATE pois p
-    SET has_primary_image = false,
-        updated_at = CURRENT_TIMESTAMP
-    WHERE p.id = (SELECT poi_id FROM poi_media WHERE id = $1)
-      AND p.has_primary_image = true
-      AND NOT EXISTS (
-        SELECT 1 FROM poi_media m
-        WHERE m.poi_id = p.id
-          AND m.media_type IN ('image', 'video')
-          AND m.moderation_status IN ('published', 'auto_approved'))
-  `, [contentId]);
+  await syncHasPrimaryImageForPhoto(pool, contentType, contentId);
 }
 
 export async function rejectItem(pool, contentType, contentId, adminUserId, reason) {
@@ -855,7 +841,7 @@ export async function editAndPublish(pool, contentType, contentId, edits, adminU
   logger.debug('editAndPublish SQL:', `UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
   await pool.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE id = $1`, values);
   if (publish) {
-    await bumpHasPrimaryImageOnPhotoPublish(pool, contentType, contentId);
+    await syncHasPrimaryImageForPhoto(pool, contentType, contentId);
   }
 }
 
