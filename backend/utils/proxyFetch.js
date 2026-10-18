@@ -46,6 +46,7 @@ export async function proxyFetch(url, init = {}) {
 }
 
 const MAX_DIRECT_REDIRECTS = 5;
+const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]); // fetch's redirect statuses
 const CROSS_ORIGIN_DROPPED = ['authorization', 'cookie', 'proxy-authorization'];
 
 /**
@@ -88,7 +89,7 @@ async function fetchDirect(url, init) {
     if (hop > 0 && !(await isPublicUrl(current))) throw new Error(`direct route refused a non-public address: ${current}`);
     const response = await undiciFetch(current, { ...request, redirect: 'manual', dispatcher: directAgent });
     const location = response.headers.get('location');
-    const redirected = response.status >= 300 && response.status < 400 && location;
+    const redirected = REDIRECT_STATUSES.has(response.status) && location;
     if (redirected && init.redirect === 'error') throw new TypeError(`fetch failed: redirect from ${current} with redirect: 'error'`);
     if (init.redirect === 'manual' || !redirected) {
       if (current !== url) Object.defineProperty(response, 'url', { value: current });

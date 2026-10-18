@@ -82,6 +82,11 @@ describe('proxyFetch', () => {
     expect(undiciFetch.mock.calls[1][1]).toMatchObject({ method: 'POST', body: 'a=1' });
 
     undiciFetch.mockReset();
+    undiciFetch.mockResolvedValueOnce(hop(304, 'https://newfranklin.org/elsewhere'));
+    expect((await proxyFetch('https://newfranklin.org/cached')).status).toBe(304);
+    expect(undiciFetch).toHaveBeenCalledTimes(1);
+
+    undiciFetch.mockReset();
     undiciFetch.mockResolvedValueOnce(hop(301, 'https://newfranklin.org/moved'));
     await expect(proxyFetch('https://newfranklin.org/x', { redirect: 'error' })).rejects.toThrow(/redirect: 'error'/);
 

@@ -65,4 +65,25 @@ describe('browserPool keys', () => {
     releaseBrowser(fresh.acquisitionId);
     releaseBrowser(again.acquisitionId);
   });
+
+  it('launches a fresh browser when an acquire races an idle close', async () => {
+    vi.useFakeTimers();
+    try {
+      let finishClose;
+      const first = await acquireBrowser('direct');
+      first.browser.close.mockImplementation(() => new Promise(resolve => { finishClose = resolve; }));
+      releaseBrowser(first.acquisitionId);
+
+      await vi.advanceTimersByTimeAsync(30_000); // idle close starts and is still pending
+      expect(first.browser.close).toHaveBeenCalled();
+      const second = await acquireBrowser('direct');
+      expect(second.browser).not.toBe(first.browser);
+      expect(launch).toHaveBeenCalledTimes(2);
+
+      finishClose();
+      releaseBrowser(second.acquisitionId);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
