@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import PoiSearchSelect from './PoiSearchSelect';
 import FilterList, { FilterChip, FILTER_COLORS } from './FilterList';
 import RemoteLoginModal from './RemoteLoginModal';
+import NetworkRoutesSettings from './NetworkRoutesSettings';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const MASKED_SECRET = '••••••••••••••••••••••••';
@@ -638,6 +639,8 @@ function DataCollectionSettings() {
           </div>
         ) : <span style={{ color: '#6c757d', fontSize: '0.9rem' }}>Status unknown</span>}
       </div>
+
+      <NetworkRoutesSettings />
 
 
       <div className="ai-config-section">

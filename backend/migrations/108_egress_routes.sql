@@ -1,11 +1,8 @@
 -- Migration 108: per-domain scraper egress (egress_routes)
 --
--- JSON object of domain to route: direct (lotor's IP), expressvpn (the default for
--- unlisted domains) or residential (RESIDENTIAL_PROXY; expressvpn while unset).
--- See backend/services/egressRoutes.js and docs/NEWS_EVENTS_ARCHITECTURE.md.
--- newfranklin.org resets every ExpressVPN exit but serves lotor (issue #800).
--- cvsr.org blocks both lotor and ExpressVPN; it waits for a residential proxy.
+-- Superseded by 109: the egress_routes JSON setting moved to the
+-- egress_domain_routes table. Migrations re-run on every start, so this file no
+-- longer seeds the setting (109 would copy it back after an admin deleted a
+-- domain). Kept as a no-op so the numbering stays intact.
 
-INSERT INTO admin_settings (key, value) VALUES
-('egress_routes', '{"newfranklin.org": "direct", "cvsr.org": "residential"}')
-ON CONFLICT (key) DO NOTHING;
+SELECT 1;

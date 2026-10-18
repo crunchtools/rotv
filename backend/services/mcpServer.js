@@ -51,6 +51,7 @@ import {
 } from './jobScheduler.js';
 
 import { getDigestDraft, setDigestExcluded } from './newsletterDigestService.js';
+import { getEgressOverview, setDomainRoute, EgressValidationError } from './egressAdmin.js';
 
 const logger = createLogger('MCP');
 
@@ -755,6 +756,31 @@ function registerTools(server, pool, boss, mcpUserId) {
   );
 
   server.tool(
+    'egress_routes_list',
+    'Network routes for the scrapers: default route, IPRoyal status and usage, and per-domain routes (manual or auto-learned) with last OK/blocked times',
+    {},
+    async () => ({ content: [{ type: 'text', text: JSON.stringify(await getEgressOverview(pool), null, 2) }] })
+  );
+
+  server.tool(
+    'egress_route_set',
+    'Pin a domain to a network route (manual), or reset it to the default so failover can learn one',
+    {
+      domain: z.string().describe('Domain, e.g. newfranklin.org (covers its subdomains)'),
+      route: z.enum(['expressvpn', 'direct', 'residential', 'default']).describe('expressvpn, direct (lotor IP), residential (IPRoyal, paid), or default to remove the entry')
+    },
+    async ({ domain, route }) => {
+      try {
+        const saved = await setDomainRoute(pool, domain, route, mcpUserId);
+        return { content: [{ type: 'text', text: `Network route ${saved.domain} → ${saved.route}` }] };
+      } catch (error) {
+        if (error instanceof EgressValidationError) return { content: [{ type: 'text', text: error.message }], isError: true };
+        throw error;
+      }
+    }
+  );
+
+  server.tool(
     'poi_update_urls',
     'Update news_url, events_url, or status_url for a POI',
     {
@@ -964,9 +990,16 @@ function extractToken(req) {
   return null;
 }
 
-async function resolveUser(pool, token) {
+/**
+ * The admin user an MCP token belongs to. Every tool here is an admin tool, so
+ * only an admin's own token, or MCP_ADMIN_TOKEN, opens a session.
+ * @param {import('pg').Pool} pool
+ * @param {string} token
+ * @returns {Promise<number|null>} The admin's user id, or null to refuse the session
+ */
+export async function resolveUser(pool, token) {
   const userResult = await pool.query(
-    'SELECT id, is_admin FROM users WHERE mcp_token = $1', [token]
+    'SELECT id FROM users WHERE mcp_token = $1 AND is_admin = TRUE', [token]
   );
   if (userResult.rows.length > 0) return userResult.rows[0].id;
 
