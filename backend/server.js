@@ -96,6 +96,7 @@ import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from 
 import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import { resolveMergedIds, originalMergedName } from './services/poiMergeService.js';
+import { loadEgressRoutes } from './services/egressRoutes.js';
 import { createListsRouter } from './routes/lists.js';
 import {
   getAllActiveSeries,
@@ -3273,6 +3274,10 @@ async function start() {
   // Materialize recurring-event series into poi_events so they appear everywhere regular
   // events do (#436). Idempotent: regenerates future occurrences, keeps past as history.
   await materializeAllSeries(pool);
+
+  // Prime the scraper egress routes so proxyFetch follows them before the first
+  // render; renderPage refreshes them from then on.
+  await loadEgressRoutes(pool);
 
   const mcpHandler = mcpMiddleware(pool, app.get('boss'));
   app.all('/mcp/:token', mcpHandler);
