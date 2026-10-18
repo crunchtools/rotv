@@ -35,7 +35,7 @@ export async function proxyFetch(url, init = {}) {
   // Direct leaves from lotor itself: public addresses only (SSRF). The guarded agent
   // checks every connection it makes, redirects included; a non-public IP literal
   // (which skips DNS) keeps going through the scraper proxy.
-  if (route === 'direct' && proxy && await isPublicUrl(String(url))) return fetchDirect(String(url), init);
+  if (route === 'direct' && await isPublicUrl(String(url))) return fetchDirect(String(url), init);
   if (!proxy) return fetch(url, init);
   // Fix: create once instead of swapping agents (and leaking the old one's pool) on a proxy change (PR #676 review)
   // proxyTunnel:false sends http:// as a plain forward-proxy request: tinyproxy
@@ -88,7 +88,9 @@ async function fetchDirect(url, init) {
     if (hop > 0 && !(await isPublicUrl(current))) throw new Error(`direct route refused a non-public address: ${current}`);
     const response = await undiciFetch(current, { ...request, redirect: 'manual', dispatcher: directAgent });
     const location = response.headers.get('location');
-    if (init.redirect === 'manual' || response.status < 300 || response.status >= 400 || !location) {
+    const redirected = response.status >= 300 && response.status < 400 && location;
+    if (redirected && init.redirect === 'error') throw new TypeError(`fetch failed: redirect from ${current} with redirect: 'error'`);
+    if (init.redirect === 'manual' || !redirected) {
       if (current !== url) Object.defineProperty(response, 'url', { value: current });
       return response;
     }

@@ -42,19 +42,6 @@ export function isRoute(route) {
 }
 
 /**
- * The domain a URL's entry is filed under: its hostname without a leading www.
- * @param {string} url
- * @returns {string|null}
- */
-export function domainOf(url) {
-  try {
-    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Normalize an admin-typed domain ("https://www.Example.org/x" → "example.org").
  * @param {string} raw
  * @returns {string|null} null when it is not a plausible hostname
@@ -130,43 +117,30 @@ export function resetEgressConfig() {
   loadedAt = 0;
 }
 
-function matchEntry(url, entries) {
-  let host;
-  try {
-    host = new URL(url).hostname.toLowerCase();
-  } catch {
-    return null;
-  }
-  // Walk the host's suffixes, longest first: the most specific entry wins, and a
-  // lookup costs the host's depth, not the number of entries.
-  const labels = host.split('.');
-  for (let i = 0; i < labels.length - 1; i++) {
-    const domain = labels.slice(i).join('.');
-    if (Object.hasOwn(entries, domain)) return { domain, ...entries[domain] };
-  }
-  return null;
-}
-
-function entryRoute(entry, now) {
-  if (!entry) return null;
-  if (entry.source === 'auto' && entry.route === 'residential' && now - entry.updatedAt > RESIDENTIAL_AUTO_TTL_MS) return null;
-  return entry.route;
-}
-
 /**
  * The routes to try for a URL, in order.
  * @param {string} url
  * @param {EgressConfig} [cfg] - Defaults to the cached config
  * @param {number} [now] - epoch ms, for the IPRoyal expiry (tests)
  * @returns {{domain: string|null, pinned: boolean, entry: (EgressEntry & {domain: string})|null, chain: string[]}}
- *   domain: where an outcome is filed (the matched entry, else the host without www);
- *   pinned: a manual entry, so chain has only its route
+ *   domain: where an outcome is filed (the matched entry, else the host without
+ *   www; null for an unparseable URL); pinned: a manual entry, so chain has only its route
  */
 export function routePlan(url, cfg = config, now = Date.now()) {
-  const entry = matchEntry(url, cfg.entries);
-  const domain = entry?.domain ?? domainOf(url);
+  const host = URL.canParse(url) ? new URL(url).hostname.toLowerCase() : null;
+  // Walk the host's suffixes, longest first: the most specific entry wins, and a
+  // lookup costs the host's depth, not the number of entries.
+  let entry = null;
+  const labels = host ? host.split('.') : [];
+  for (let i = 0; i < labels.length - 1 && !entry; i++) {
+    const candidate = labels.slice(i).join('.');
+    if (Object.hasOwn(cfg.entries, candidate)) entry = { domain: candidate, ...cfg.entries[candidate] };
+  }
+  const domain = entry?.domain ?? host?.replace(/^www\./, '') ?? null;
   if (entry?.source === 'manual') return { domain, pinned: true, entry, chain: [entry.route] };
-  const start = entryRoute(entry, now) ?? cfg.defaultRoute;
+  // A learned IPRoyal route expires so the free routes get another try.
+  const expired = entry?.source === 'auto' && entry.route === 'residential' && now - entry.updatedAt > RESIDENTIAL_AUTO_TTL_MS;
+  const start = entry && !expired ? entry.route : cfg.defaultRoute;
   return { domain, pinned: false, entry, chain: [start, ...ROUTES.filter(r => r !== start)] };
 }
 
@@ -195,17 +169,18 @@ export function isBlocked(result) {
  * statement, so concurrent renders can't all slip under the cap. A reserved render
  * is already counted (don't countRender it again).
  * @param {import('pg').Pool} pool
+ * @param {number} [cap] - Renders allowed today; defaults to the cached egress_residential_daily_cap
  * @returns {Promise<boolean>} false when unconfigured, at the cap, or usage can't be read
  */
-export async function reserveResidential(pool) {
-  if (!process.env.RESIDENTIAL_PROXY || config.cap <= 0) return false;
+export async function reserveResidential(pool, cap = config.cap) {
+  if (!process.env.RESIDENTIAL_PROXY || cap <= 0) return false;
   try {
     const res = await pool.query(
       `INSERT INTO egress_usage (day, route, renders) VALUES (CURRENT_DATE, 'residential', 1)
        ON CONFLICT (day, route) DO UPDATE SET renders = egress_usage.renders + 1
        WHERE egress_usage.renders < $1
        RETURNING renders`,
-      [config.cap]
+      [cap]
     );
     return res.rows.length > 0;
   } catch (err) {

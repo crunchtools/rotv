@@ -196,3 +196,15 @@ check = "DB002-unsafe_sql_construction"
 path = "backend/services/poiMergeService.js"
 justification = "mergePois repoints a fixed list of tables and copies a fixed list of columns; the interpolated identifiers come only from the module constants FILL_COLUMNS, LOSER_WINS_COLUMNS, PLAIN_REPOINTS and COLLIDING_REPOINTS, never from input. Identifiers cannot be bound as parameters, and every value (the two POI ids) is a $n parameter"
 classification = "by_design"
+
+[[exceptions]]
+check = "EV010-single_use_helpers"
+path = "backend/services/egressRoutes.js"
+justification = "routePlan is exported and is the failover entry point renderPage.js calls for every render; Gourmand counts only same-file callers (currentRoute)"
+classification = "by_design"
+
+[[exceptions]]
+check = "EV010-single_use_helpers"
+path = "backend/utils/publicAddress.js"
+justification = "publicLookup is a dns.lookup-compatible function passed as the socket lookup in proxyFetch.js and directEgressProxy.js; it must stay a named, exported function"
+classification = "by_design"

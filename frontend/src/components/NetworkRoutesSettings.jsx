@@ -24,9 +24,9 @@ async function send(method, path, body) {
     method, headers: JSON_HEADERS, credentials: 'include',
     ...(body !== undefined && { body: JSON.stringify(body) })
   });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Request failed');
-  return data;
+  const payload = await response.json();
+  if (!response.ok) throw new Error(payload.error || 'Request failed');
+  return payload;
 }
 
 export default function NetworkRoutesSettings() {
@@ -38,9 +38,9 @@ export default function NetworkRoutesSettings() {
   const [newRoute, setNewRoute] = useState('direct');
   const [capDraft, setCapDraft] = useState('');
 
-  const apply = useCallback((data) => {
-    setOverview(data);
-    setCapDraft(String(data.residentialCap));
+  const apply = useCallback((nextOverview) => {
+    setOverview(nextOverview);
+    setCapDraft(String(nextOverview.residentialCap));
   }, []);
 
   useEffect(() => {

@@ -36,12 +36,6 @@ export function isPublicAddress(address) {
   return false;
 }
 
-function refuse(hostname) {
-  const err = new Error(`refused a non-public address for ${hostname}`);
-  err.code = 'ENOTPUBLIC';
-  return err;
-}
-
 /**
  * A dns.lookup replacement for net/tls/http sockets: resolves like dns.lookup and
  * fails with ENOTPUBLIC if any address is not public.
@@ -56,38 +50,27 @@ export function publicLookup(hostname, options, callback) {
   }
   dns.lookup(hostname, { ...options, all: true }, (err, addresses) => {
     if (err) return callback(err);
-    if (!addresses.length || addresses.some(a => !isPublicAddress(a.address))) return callback(refuse(hostname));
+    if (!addresses.length || addresses.some(a => !isPublicAddress(a.address))) {
+      return callback(Object.assign(new Error(`refused a non-public address for ${hostname}`), { code: 'ENOTPUBLIC' }));
+    }
     if (options.all) return callback(null, addresses);
     return callback(null, addresses[0].address, addresses[0].family);
   });
 }
 
 /**
- * Whether a host is safe to dial directly: a public IP literal, or a name that
- * resolves only to public addresses. Sockets skip the lookup for IP literals, so
- * callers check those here before connecting.
- * @param {string} hostname
- * @returns {Promise<boolean>}
- */
-export function isPublicHost(hostname) {
-  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
-  if (!host || host === 'localhost' || host.endsWith('.localhost')) return Promise.resolve(false);
-  if (isIP(host)) return Promise.resolve(isPublicAddress(host));
-  return new Promise(resolve => publicLookup(host, {}, err => resolve(!err)));
-}
-
-/**
- * isPublicHost for a URL: http(s) only.
+ * Whether a URL is safe to fetch directly: http(s), and its host a public IP
+ * literal or a name that resolves only to public addresses. Sockets skip the
+ * lookup for IP literals, so callers check those here before connecting.
  * @param {string} url
  * @returns {Promise<boolean>}
  */
 export function isPublicUrl(url) {
-  let parsed;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return Promise.resolve(false);
-  }
+  if (!URL.canParse(url)) return Promise.resolve(false);
+  const parsed = new URL(url);
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return Promise.resolve(false);
-  return isPublicHost(parsed.hostname);
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host || host === 'localhost' || host.endsWith('.localhost')) return Promise.resolve(false);
+  if (isIP(host)) return Promise.resolve(isPublicAddress(host));
+  return new Promise(resolve => publicLookup(host, {}, err => resolve(!err)));
 }

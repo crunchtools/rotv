@@ -19,7 +19,7 @@ vi.mock('node:dns', () => ({
   }
 }));
 
-const { isPublicAddress, isPublicHost, isPublicUrl, publicLookup } = await import('../utils/publicAddress.js');
+const { isPublicAddress, isPublicUrl, publicLookup } = await import('../utils/publicAddress.js');
 
 describe('isPublicAddress', () => {
   it('rejects loopback, private, link-local, CGNAT and metadata ranges', () => {
@@ -35,13 +35,13 @@ describe('isPublicAddress', () => {
   });
 });
 
-describe('isPublicHost / isPublicUrl', () => {
+describe('isPublicUrl', () => {
   it('needs every resolved address to be public', async () => {
-    expect(await isPublicHost('newfranklin.org')).toBe(true);
-    expect(await isPublicHost('v6.example')).toBe(true);
-    expect(await isPublicHost('rebind.example')).toBe(false);
-    expect(await isPublicHost('mapped.example')).toBe(false);
-    expect(await isPublicHost('nxdomain.example')).toBe(false);
+    expect(await isPublicUrl('https://newfranklin.org/')).toBe(true);
+    expect(await isPublicUrl('https://v6.example/')).toBe(true);
+    expect(await isPublicUrl('https://rebind.example/')).toBe(false);
+    expect(await isPublicUrl('https://mapped.example/')).toBe(false);
+    expect(await isPublicUrl('https://nxdomain.example/')).toBe(false);
   });
 
   it('refuses local names, private literals and non-http schemes', async () => {

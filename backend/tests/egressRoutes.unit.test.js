@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import {
-  routePlan, currentRoute, isBlocked, normalizeDomain, domainOf, residentialProxy, reserveResidential,
+  routePlan, currentRoute, isBlocked, normalizeDomain, residentialProxy, reserveResidential,
   recordOutcome, loadEgressConfig, setEgressConfig, resetEgressConfig
 } from '../services/egressRoutes.js';
 
@@ -83,8 +83,8 @@ describe('domains', () => {
     expect(normalizeDomain(' https://www.NewFranklin.org/1222/x ')).toBe('newfranklin.org');
     expect(normalizeDomain('*.cvsr.org')).toBe('cvsr.org');
     expect(normalizeDomain('not a domain')).toBeNull();
-    expect(domainOf('https://www.cvsr.org/excursions')).toBe('cvsr.org');
-    expect(domainOf('nope')).toBeNull();
+    expect(routePlan('https://www.cvsr.org/excursions', cfg()).domain).toBe('cvsr.org');
+    expect(routePlan('nope', cfg())).toMatchObject({ domain: null, chain: ['expressvpn', 'direct', 'residential'] });
   });
 });
 

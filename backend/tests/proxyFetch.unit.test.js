@@ -71,9 +71,33 @@ describe('proxyFetch', () => {
     expect(second.get('user-agent')).toBe('UA');
 
     undiciFetch.mockReset();
+    undiciFetch.mockResolvedValueOnce(hop(302, 'https://newfranklin.org/thanks')).mockResolvedValueOnce(hop(200, null));
+    await proxyFetch('https://newfranklin.org/form', { method: 'POST', body: 'a=1' });
+    expect(undiciFetch.mock.calls[1][1].method).toBe('GET');
+    expect(undiciFetch.mock.calls[1][1]).not.toHaveProperty('body');
+
+    undiciFetch.mockReset();
+    undiciFetch.mockResolvedValueOnce(hop(307, 'https://newfranklin.org/again')).mockResolvedValueOnce(hop(200, null));
+    await proxyFetch('https://newfranklin.org/form', { method: 'POST', body: 'a=1' });
+    expect(undiciFetch.mock.calls[1][1]).toMatchObject({ method: 'POST', body: 'a=1' });
+
+    undiciFetch.mockReset();
+    undiciFetch.mockResolvedValueOnce(hop(301, 'https://newfranklin.org/moved'));
+    await expect(proxyFetch('https://newfranklin.org/x', { redirect: 'error' })).rejects.toThrow(/redirect: 'error'/);
+
+    undiciFetch.mockReset();
     undiciFetch.mockResolvedValueOnce(hop(302, 'http://127.0.0.1:8019/health'));
     await expect(proxyFetch('https://www.newfranklin.org/x')).rejects.toThrow(/non-public address/);
     expect(undiciFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('guards a direct route even without PLAYWRIGHT_PROXY', async () => {
+    delete process.env.PLAYWRIGHT_PROXY;
+    setEgressConfig({ entries: { 'newfranklin.org': { route: 'direct', source: 'manual', updatedAt: 0 } } });
+    undiciFetch.mockResolvedValueOnce({ status: 200, headers: { get: () => null } });
+    await proxyFetch('https://newfranklin.org/');
+    expect(undiciFetch.mock.calls[0][1].dispatcher.direct).toBe(true);
+    expect(globalFetch).not.toHaveBeenCalled();
   });
 
   it('keeps a non-public address on the proxy even when routed direct', async () => {

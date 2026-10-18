@@ -6,16 +6,6 @@ import { describe, it, expect } from 'vitest';
 import http from 'node:http';
 import { directEgressProxyUrl } from '../services/directEgressProxy.js';
 
-function connectStatus(proxyUrl, authority) {
-  const { hostname, port } = new URL(proxyUrl);
-  return new Promise((resolve, reject) => {
-    const req = http.request({ host: hostname, port, method: 'CONNECT', path: authority });
-    req.on('connect', (res, socket) => { socket.destroy(); resolve(res.statusCode); });
-    req.on('error', reject);
-    req.end();
-  });
-}
-
 function getStatus(proxyUrl, target) {
   const { hostname, port } = new URL(proxyUrl);
   return new Promise((resolve, reject) => {
@@ -34,8 +24,15 @@ describe('directEgressProxy', () => {
 
   it('refuses HTTPS tunnels to loopback, private and metadata addresses', async () => {
     const url = await directEgressProxyUrl();
+    const { hostname, port } = new URL(url);
     for (const authority of ['127.0.0.1:8019', '[::1]:443', '10.89.1.10:25', '169.254.169.254:80', 'localhost:8082']) {
-      expect(await connectStatus(url, authority), authority).toBe(403);
+      const status = await new Promise((resolve, reject) => {
+        const req = http.request({ host: hostname, port, method: 'CONNECT', path: authority });
+        req.on('connect', (res, socket) => { socket.destroy(); resolve(res.statusCode); });
+        req.on('error', reject);
+        req.end();
+      });
+      expect(status, authority).toBe(403);
     }
   });
 

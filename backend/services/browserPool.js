@@ -210,8 +210,10 @@ export function releaseBrowser(acquisitionId, key = 'vpn') {
   if (slot.refCount === 0) {
     slot.closeTimer = setTimeout(async () => {
       if (slot.refCount === 0 && slot.browser) {
-        await slot.browser.close().catch(err => logger.warn(`Idle close failed: ${err.message}`));
+        // Clear the slot first, so an acquire during the close launches a new browser.
+        const idle = slot.browser;
         slot.browser = null;
+        await idle.close().catch(err => logger.warn(`Idle close failed: ${err.message}`));
       }
     }, IDLE_CLOSE_MS);
   }
