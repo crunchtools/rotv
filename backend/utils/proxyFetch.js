@@ -16,6 +16,11 @@ let directAgent = null;
  * OpenRouter, ...) keep using the global fetch directly.
  * Without PLAYWRIGHT_PROXY (dev/CI) it is the global fetch, except for a
  * residential route when RESIDENTIAL_PROXY is set.
+ *
+ * The direct route leaves from lotor itself, so it reaches public addresses only:
+ * a non-public target stays on the scraper proxy, and redirects are followed
+ * here, up to five, with every hop checked. It rejects with an Error on a
+ * redirect to a non-public address or on more than five redirects.
  * @param {string|URL} url
  * @param {RequestInit} [init]
  * @returns {Promise<Response>}
