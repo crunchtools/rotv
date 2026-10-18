@@ -18,16 +18,21 @@
  * Idle behaviour: the browser closes 30 s after the last context is
  * released, freeing memory between collection runs.
  *
+ * Egress: launched through PLAYWRIGHT_PROXY (ExpressVPN), bypassing it for the
+ * domains egress_routes sends direct (see egressRoutes.js).
+ *
  * Watchdog: 90 s per-acquisition timeout force-kills the browser if
  * releaseBrowser() is never called (above jsRenderer's 60 s hard timeout).
  */
 
 import { chromium } from 'playwright';
 import { createLogger } from '../utils/logger.js';
+import { directBypassList } from './egressRoutes.js';
 
 const logger = createLogger('BrowserPool');
 
 let sharedBrowser = null;
+let launchedBypass = ''; // egress_routes 'direct' domains the running browser was launched with
 let browserRefCount = 0;
 let browserCloseTimer = null;
 let launchPromise = null; // Prevents concurrent launches (race condition fix)
@@ -123,14 +128,25 @@ export async function acquireBrowser() {
     clearTimeout(browserCloseTimer);
     browserCloseTimer = null;
   }
+  // The direct routes are a launch-time bypass list (a context can't opt out of the
+  // browser's proxy), so a changed list relaunches the browser once it is idle.
+  const bypass = directBypassList();
+  if (sharedBrowser && browserRefCount === 0 && !launchPromise && bypass !== launchedBypass) {
+    logger.info('egress_routes direct domains changed; relaunching the browser');
+    const stale = sharedBrowser;
+    sharedBrowser = null;
+    await stale.close().catch(err => logger.warn(`Relaunch close failed: ${err.message}`));
+  }
   if (!sharedBrowser || !sharedBrowser.isConnected()) {
     if (!launchPromise) {
       launchPromise = (async () => {
         const opts = { ...LAUNCH_OPTIONS };
         if (process.env.PLAYWRIGHT_PROXY) {
           opts.proxy = { server: process.env.PLAYWRIGHT_PROXY };
+          if (bypass) opts.proxy.bypass = bypass;
         }
         sharedBrowser = await chromium.launch(opts);
+        launchedBypass = bypass;
       })().finally(() => { launchPromise = null; });
     }
     await launchPromise;

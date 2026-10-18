@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Per-domain scraper egress**: the `egress_routes` admin setting sends a domain `direct`
+  (lotor's IP), through `expressvpn` (the default), or through a `residential` proxy
+  (`RESIDENTIAL_PROXY`, not configured yet). It's seeded with newfranklin.org set to direct:
+  that site resets every ExpressVPN exit but serves lotor, which unblocks the Tudor House events
+  (#800). cvsr.org, which blocks both addresses, is listed as residential for later.
+
 ### Changed
 - **Hosted dev runs on demand**: dev.rootsofthevalley.org no longer runs at boot. A socket on
   the proxy's port starts it on the first request, `data/control/wake` starts it for the agent,

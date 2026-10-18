@@ -114,6 +114,18 @@ Everything that touches a site ROTV scrapes leaves through the ExpressVPN proxy 
 
 Official APIs (Serper, OpenRouter, USGS, Bluesky's API, the trackers, Buttondown, GitHub, Wayback) use the global `fetch` directly.
 
+### Per-domain routes (`egress_routes`)
+
+Some sites reset every connection from ExpressVPN's address range (`net::ERR_CONNECTION_CLOSED`, or `ERR_HTTP2_PROTOCOL_ERROR` from the McClatchy papers), at any exit. The `egress_routes` admin setting routes such domains another way. It's a JSON object of domain to route; an entry covers the domain and its subdomains, and the longest match wins:
+
+| Route | Egress | How |
+|---|---|---|
+| `expressvpn` | ExpressVPN (default for unlisted domains) | The browser's launch proxy |
+| `direct` | lotor's own IP | Chromium's proxy bypass list, set when the shared browser launches. A changed list relaunches it once it's idle. |
+| `residential` | A residential proxy, `RESIDENTIAL_PROXY` in rotv.env (`http://user:pass@host:port`) | A per-context proxy. While the variable is unset, the route falls back to `expressvpn` with one warning. |
+
+To route a blocked site, test which address it accepts first: `curl` from lotor gives the direct result, and `podman exec rootsofthevalley.org curl -x $PLAYWRIGHT_PROXY` gives the ExpressVPN result. Then update the setting with the MCP `settings_update` tool (key `egress_routes`). `renderPage` reloads it at most once a minute (`backend/services/egressRoutes.js`). The Facebook browser (`humanBrowser.js`) always uses ExpressVPN.
+
 ## Key Files
 
 | File | Purpose |

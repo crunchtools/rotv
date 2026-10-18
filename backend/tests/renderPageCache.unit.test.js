@@ -9,6 +9,7 @@ vi.mock('../services/contentExtractor.js', () => ({ extractPageContent: vi.fn() 
 
 import { isCacheFresh, renderPage } from '../services/renderPage.js';
 import { extractPageContent } from '../services/contentExtractor.js';
+import { resetEgressRoutes } from '../services/egressRoutes.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const renderedDaysAgo = (days, fields = {}) => ({
@@ -68,6 +69,19 @@ describe('renderPage', () => {
     expect(page.reachable).toBe(false);
     expect(page.reason).toBe('blocked by site security');
     expect(pool.query.mock.calls.some(([sql]) => sql.includes('INSERT INTO rendered_page_cache'))).toBe(false);
+  });
+
+  it('loads egress_routes before a fresh render, so the browser launches with them', async () => {
+    resetEgressRoutes();
+    extractPageContent.mockResolvedValue({ reachable: false, reason: 'timeout' });
+    const pool = { query: vi.fn(async () => ({ rows: [] })) };
+
+    await renderPage(pool, 'https://newfranklin.org/1222/Community-Events', {});
+
+    const egressCall = pool.query.mock.invocationCallOrder[
+      pool.query.mock.calls.findIndex(([sql]) => sql.includes("key = 'egress_routes'"))
+    ];
+    expect(egressCall).toBeLessThan(extractPageContent.mock.invocationCallOrder.at(-1));
   });
 
   it('does not mistake a long article that mentions being blocked for a block page', async () => {

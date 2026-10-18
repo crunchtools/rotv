@@ -1,4 +1,5 @@
 import { extractPageContent } from './contentExtractor.js';
+import { loadEgressRoutes } from './egressRoutes.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Cache');
@@ -82,6 +83,7 @@ export async function renderPage(pool, url, options = {}) {
     };
   }
 
+  await loadEgressRoutes(pool);
   const rendered = await extractPageContent(url, extractOptions);
 
   if (rendered.reachable && isBlockPage(rendered)) {
