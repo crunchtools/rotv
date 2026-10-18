@@ -46,6 +46,31 @@ export async function proxyFetch(url, init = {}) {
 }
 
 const MAX_DIRECT_REDIRECTS = 5;
+const CROSS_ORIGIN_DROPPED = ['authorization', 'cookie', 'proxy-authorization'];
+
+/**
+ * The request for the next redirect hop, per the Fetch standard: 303 (and 301/302
+ * after a POST) becomes a bodyless GET, and credentials don't follow a redirect
+ * to another origin.
+ * @param {RequestInit} request
+ * @param {number} status
+ * @param {boolean} crossOrigin
+ * @returns {RequestInit}
+ */
+function redirectedRequest(request, status, crossOrigin) {
+  const next = { ...request };
+  const method = (request.method || 'GET').toUpperCase();
+  if (status === 303 ? method !== 'HEAD' : (status === 301 || status === 302) && method === 'POST') {
+    next.method = 'GET';
+    delete next.body;
+  }
+  if (crossOrigin && request.headers) {
+    const headers = new Headers(request.headers);
+    for (const name of CROSS_ORIGIN_DROPPED) headers.delete(name);
+    next.headers = headers;
+  }
+  return next;
+}
 
 /**
  * The direct route's fetch: connections go through publicLookup, and redirects
@@ -58,15 +83,18 @@ const MAX_DIRECT_REDIRECTS = 5;
 async function fetchDirect(url, init) {
   directAgent ??= new Agent({ connect: { lookup: publicLookup } });
   let current = url;
+  let request = init;
   for (let hop = 0; hop <= MAX_DIRECT_REDIRECTS; hop++) {
     if (hop > 0 && !(await isPublicUrl(current))) throw new Error(`direct route refused a non-public address: ${current}`);
-    const response = await undiciFetch(current, { ...init, redirect: 'manual', dispatcher: directAgent });
+    const response = await undiciFetch(current, { ...request, redirect: 'manual', dispatcher: directAgent });
     const location = response.headers.get('location');
     if (init.redirect === 'manual' || response.status < 300 || response.status >= 400 || !location) {
       if (current !== url) Object.defineProperty(response, 'url', { value: current });
       return response;
     }
-    current = new URL(location, current).href;
+    const next = new URL(location, current).href;
+    request = redirectedRequest(request, response.status, new URL(current).origin !== new URL(next).origin);
+    current = next;
   }
   throw new Error(`direct route: more than ${MAX_DIRECT_REDIRECTS} redirects from ${url}`);
 }

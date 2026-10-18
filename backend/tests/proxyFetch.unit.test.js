@@ -64,6 +64,13 @@ describe('proxyFetch', () => {
     expect(globalFetch).not.toHaveBeenCalled();
 
     undiciFetch.mockReset();
+    undiciFetch.mockResolvedValueOnce(hop(302, 'https://other.example.org/landing')).mockResolvedValueOnce(hop(200, null));
+    await proxyFetch('https://www.newfranklin.org/y', { method: 'GET', headers: { Cookie: 'a=1', 'User-Agent': 'UA' } });
+    const second = new Headers(undiciFetch.mock.calls[1][1].headers);
+    expect(second.get('cookie')).toBeNull();
+    expect(second.get('user-agent')).toBe('UA');
+
+    undiciFetch.mockReset();
     undiciFetch.mockResolvedValueOnce(hop(302, 'http://127.0.0.1:8019/health'));
     await expect(proxyFetch('https://www.newfranklin.org/x')).rejects.toThrow(/non-public address/);
     expect(undiciFetch).toHaveBeenCalledTimes(1);

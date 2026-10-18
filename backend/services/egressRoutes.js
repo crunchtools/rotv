@@ -66,9 +66,23 @@ export function normalizeDomain(raw) {
 }
 
 /**
+ * @typedef {object} EgressEntry
+ * @property {'expressvpn'|'direct'|'residential'} route
+ * @property {'manual'|'auto'} source - manual is pinned; auto was learned by failover
+ * @property {number} updatedAt - epoch ms of the last change (drives IPRoyal expiry)
+ */
+/**
+ * @typedef {object} EgressConfig
+ * @property {'expressvpn'|'direct'|'residential'} defaultRoute
+ * @property {number} cap - IPRoyal renders allowed per day
+ * @property {Record<string, EgressEntry>} entries - by domain
+ */
+
+/**
  * Refresh the cached routes from the database (at most once a minute). A read
  * failure keeps the last good config and waits out the same minute.
  * @param {import('pg').Pool} pool
+ * @returns {Promise<EgressConfig>}
  */
 export async function loadEgressConfig(pool) {
   if (Date.now() - loadedAt < CACHE_MS) return config;
@@ -142,8 +156,11 @@ function entryRoute(entry, now) {
 /**
  * The routes to try for a URL, in order.
  * @param {string} url
- * @param {object} [cfg] - Defaults to the cached config
- * @returns {{domain: string|null, pinned: boolean, entry: object|null, chain: string[]}}
+ * @param {EgressConfig} [cfg] - Defaults to the cached config
+ * @param {number} [now] - epoch ms, for the IPRoyal expiry (tests)
+ * @returns {{domain: string|null, pinned: boolean, entry: (EgressEntry & {domain: string})|null, chain: string[]}}
+ *   domain: where an outcome is filed (the matched entry, else the host without www);
+ *   pinned: a manual entry, so chain has only its route
  */
 export function routePlan(url, cfg = config, now = Date.now()) {
   const entry = matchEntry(url, cfg.entries);
