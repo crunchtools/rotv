@@ -742,6 +742,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'event_content_blocklist',
       'news_topic_blocklist',
       'trusted_content_paths',
+      'egress_routes',
       'github_api_token',
       'about_story_md',
       'about_tutorial_md',

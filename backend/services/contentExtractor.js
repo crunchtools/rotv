@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import { EXPIRING_HOST } from '../utils/sourceImage.js';
 import { acquireBrowser, releaseBrowser, chromeUserAgent } from './browserPool.js';
+import { routeFor, effectiveRoute, residentialProxy } from './egressRoutes.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('ContentExtractor');
@@ -98,10 +99,14 @@ export async function extractPageContent(url, options = {}) {
       const browser = acquired.browser;
       acquisitionId = acquired.acquisitionId;
 
+      // egress_routes: 'direct' is the browser's bypass list; 'residential' is a
+      // per-context proxy; everything else inherits the browser's ExpressVPN proxy.
+      const residential = effectiveRoute(routeFor(url)) === 'residential';
       context = await browser.newContext({
         ...STEALTH_CONTEXT,
         userAgent: chromeUserAgent(browser),
-        ignoreHTTPSErrors: true
+        ignoreHTTPSErrors: true,
+        ...(residential ? { proxy: residentialProxy() } : {})
       });
       await context.addInitScript(STEALTH_INIT_SCRIPT);
 
