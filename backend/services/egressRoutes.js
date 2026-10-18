@@ -17,7 +17,7 @@ const logger = createLogger('Egress');
  * covers the domain and its subdomains; the longest matching entry wins.
  */
 
-export const ROUTES = ['direct', 'expressvpn', 'residential'];
+const ROUTES = ['direct', 'expressvpn', 'residential'];
 const DEFAULT_ROUTE = 'expressvpn';
 const CACHE_MS = 60 * 1000;
 
