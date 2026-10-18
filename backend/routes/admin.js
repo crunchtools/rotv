@@ -7,6 +7,7 @@ import { isAdmin, isAuthenticated } from '../middleware/auth.js';
 import { isSecretSetting } from '../utils/settingsRedaction.js';
 import { consolidateFeatures } from '../utils/geojson.js';
 import { TTL_MIN_MINUTES, TTL_MAX_MINUTES } from '../services/emailLogin.js';
+import { getEgressOverview, setDomainRoute, setEgressSettings, EgressValidationError } from '../services/egressAdmin.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -567,6 +568,53 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
     }
   });
 
+  // Network Routes (Settings › Data Collection): how each scraped site's requests
+  // leave lotor. Validation and writes live in egressAdmin.js, shared with MCP.
+  router.get('/egress', isAdmin, async (req, res) => {
+    try {
+      res.json(await getEgressOverview(pool));
+    } catch (error) {
+      logger.error('Error loading network routes:', error);
+      res.status(500).json({ error: 'Failed to load network routes' });
+    }
+  });
+
+  router.put('/egress/settings', isAdmin, async (req, res) => {
+    try {
+      await setEgressSettings(pool, req.body || {}, req.user.id);
+      logger.info(`Admin ${req.user.email} updated network route settings`);
+      res.json(await getEgressOverview(pool));
+    } catch (error) {
+      if (error instanceof EgressValidationError) return res.status(400).json({ error: error.message });
+      logger.error('Error updating network route settings:', error);
+      res.status(500).json({ error: 'Failed to update network route settings' });
+    }
+  });
+
+  router.put('/egress/routes/:domain', isAdmin, async (req, res) => {
+    try {
+      const saved = await setDomainRoute(pool, req.params.domain, req.body?.route, req.user.id);
+      logger.info(`Admin ${req.user.email} set network route ${saved.domain} → ${saved.route}`);
+      res.json(await getEgressOverview(pool));
+    } catch (error) {
+      if (error instanceof EgressValidationError) return res.status(400).json({ error: error.message });
+      logger.error('Error setting network route:', error);
+      res.status(500).json({ error: 'Failed to set network route' });
+    }
+  });
+
+  router.delete('/egress/routes/:domain', isAdmin, async (req, res) => {
+    try {
+      const saved = await setDomainRoute(pool, req.params.domain, 'default', req.user.id);
+      logger.info(`Admin ${req.user.email} reset network route ${saved.domain}`);
+      res.json(await getEgressOverview(pool));
+    } catch (error) {
+      if (error instanceof EgressValidationError) return res.status(400).json({ error: error.message });
+      logger.error('Error resetting network route:', error);
+      res.status(500).json({ error: 'Failed to reset network route' });
+    }
+  });
+
   // Recurring event series CRUD (spec 034, #436). Series store a rule + explicit
   // season range and are expanded at read time by eventSeriesService.js.
   router.get('/event-series', isAdmin, async (req, res) => {
@@ -742,7 +790,6 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'event_content_blocklist',
       'news_topic_blocklist',
       'trusted_content_paths',
-      'egress_routes',
       'github_api_token',
       'about_story_md',
       'about_tutorial_md',

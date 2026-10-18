@@ -107,24 +107,37 @@ The Friday digest (`newsletterDigestService.js`) is built from live data at send
 
 ## Egress
 
-Everything that touches a site ROTV scrapes leaves through the ExpressVPN proxy (`PLAYWRIGHT_PROXY`, pinned to `usa-chicago` on lotor):
-- the Playwright pool (`browserPool.js`)
-- the Facebook browser (`humanBrowser.js`)
-- plain HTTP requests through `utils/proxyFetch.js`: the Wix probe in `jsRenderer.js`, redirect resolution in `newsService.js`
+Every page ROTV scrapes leaves lotor over a **network route** (`backend/services/egressRoutes.js`):
 
-Official APIs (Serper, OpenRouter, USGS, Bluesky's API, the trackers, Buttondown, GitHub, Wayback) use the global `fetch` directly.
+| Route | UI label | Egress | How |
+|---|---|---|---|
+| `expressvpn` | ExpressVPN | `PLAYWRIGHT_PROXY`, pinned to `usa-chicago` on lotor | The `vpn` shared browser, launched through the proxy |
+| `direct` | No proxy | lotor's own IP, public addresses only | The `direct` shared browser, which launches only when needed, through `directEgressProxy.js` |
+| `residential` | IPRoyal (paid) | `RESIDENTIAL_PROXY` in rotv.env, `http://user:pass_country-us@geo.iproyal.com:12321` | A per-context proxy on the `direct` browser |
 
-### Per-domain routes (`egress_routes`)
+Chromium can't take a single context off its browser's proxy, so each route gets its own browser (`browserPool.js`, `acquireBrowser(key)`). That lets failover switch routes in the middle of a crawl.
 
-Some sites reset every connection from ExpressVPN's address range (`net::ERR_CONNECTION_CLOSED`, or `ERR_HTTP2_PROTOCOL_ERROR` from the McClatchy papers), at any exit. The `egress_routes` admin setting routes such domains another way. It's a JSON object of domain to route; an entry covers the domain and its subdomains, and the longest match wins:
+**Direct never reaches lotor's internals (SSRF).** A crawled link can point anywhere, including `127.0.0.1` or the podman networks, and a refused ExpressVPN attempt (`ERR_TUNNEL_CONNECTION_FAILED`) counts as a block. So direct traffic is limited to public addresses where the connection is made:
+- The direct browser goes through `directEgressProxy.js`, a CONNECT/HTTP proxy on 127.0.0.1 inside the backend. It resolves each host with `publicLookup` (`utils/publicAddress.js`) and dials only the address it checked. Subresources and redirect hops go through it too.
+- Every browser proxy, ExpressVPN and IPRoyal included, sets `bypass: '<-loopback>'`. Without it, Chromium sends `localhost` and `127.0.0.1` around the proxy.
+- `proxyFetch`'s direct path uses a `publicLookup` agent and follows redirects itself, checking each hop.
+- `renderPage` skips the direct route for a non-public target and doesn't file it as a route.
 
-| Route | Egress | How |
-|---|---|---|
-| `expressvpn` | ExpressVPN (default for unlisted domains) | The browser's launch proxy |
-| `direct` | lotor's own IP | Chromium's proxy bypass list, set when the shared browser launches. A changed list relaunches it once it's idle. |
-| `residential` | A residential proxy, `RESIDENTIAL_PROXY` in rotv.env (`http://user:pass@host:port`) | A per-context proxy. While the variable is unset, the route falls back to `expressvpn` with one warning. |
+**Routes per site** (Settings › Data Collection › Network Routes, or the MCP `egress_routes_list` and `egress_route_set` tools):
+- The default route is the `egress_default_route` setting (`expressvpn`).
+- Per-domain entries are rows in `egress_domain_routes`. An entry covers the domain and its subdomains, and the longest match wins.
+- **Manual** entries are an admin's choice and are pinned: no failover. When a pinned route gets blocked, the UI flags the domain.
+- **Auto** entries are learned by the crawler. Reset an entry to send the domain back to the default.
 
-To route a blocked site, test which address it accepts first: `curl` from lotor gives the direct result, and `podman exec rootsofthevalley.org curl -x $PLAYWRIGHT_PROXY` gives the ExpressVPN result. Then update the setting with the MCP `settings_update` tool (key `egress_routes`). `renderPage` reloads it at most once a minute (`backend/services/egressRoutes.js`). The Facebook browser (`humanBrowser.js`) always uses ExpressVPN.
+**Failover** (`renderPage` → `renderWithFailover`):
+- When a render is blocked, the crawler tries the domain's current route, then the others cheapest first: ExpressVPN → No proxy → IPRoyal.
+- "Blocked" means `ERR_CONNECTION_CLOSED`, `RESET`, `EMPTY_RESPONSE`, `HTTP2_PROTOCOL_ERROR`, `SSL_PROTOCOL_ERROR`, `TUNNEL_CONNECTION_FAILED`, `CONNECTION_TIMED_OUT` or `TIMED_OUT`, or a WAF block page. DNS errors and missing pages don't fail over.
+- A fallback that works is saved as the domain's auto route. A success on the default deletes the auto entry. If every route is blocked, the domain is flagged with `last_blocked_at` and `last_error`.
+- IPRoyal is used only while it's configured and today's render count is under `egress_residential_daily_cap` (default 100). Every attempt is counted in `egress_usage`.
+- An auto IPRoyal entry expires after 7 days, so the free routes get tried again.
+- syslog lines are tagged `[Egress]`.
+
+Plain HTTP requests through `utils/proxyFetch.js` (the Wix probe in `jsRenderer.js`, redirect resolution in `newsService.js`) follow the domain's current route with no failover. The Facebook browser (`humanBrowser.js`) always uses ExpressVPN. Official APIs (Serper, OpenRouter, USGS, Bluesky's API, the trackers, Buttondown, GitHub, Wayback) use the global `fetch` directly.
 
 ## Key Files
 

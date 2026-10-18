@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import { EXPIRING_HOST } from '../utils/sourceImage.js';
 import { acquireBrowser, releaseBrowser, chromeUserAgent } from './browserPool.js';
-import { routeFor, effectiveRoute, residentialProxy } from './egressRoutes.js';
+import { residentialProxy } from './egressRoutes.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('ContentExtractor');
@@ -69,6 +69,21 @@ export function toPlaywrightCookies(cookies) {
   });
 }
 
+/**
+ * Render a page in the shared browser and extract its readable content.
+ * @param {string} url
+ * @param {object} [options]
+ * @param {number} [options.timeout=15000] - Navigation timeout (ms)
+ * @param {number} [options.hardTimeout=45000] - Whole-extraction timeout (ms)
+ * @param {number} [options.maxLength=100000] - Markdown length cap
+ * @param {boolean} [options.extractLinks=false] - Also return the page's links
+ * @param {number} [options.dynamicContentWait=2000] - Wait after load for scripts (ms)
+ * @param {object[]|null} [options.cookies] - Cookies to seed the context with
+ * @param {'expressvpn'|'direct'|'residential'} [options.egress='expressvpn'] - Network
+ *   route (egressRoutes.js): ExpressVPN browser, the direct browser (public
+ *   addresses only), or the direct browser with an IPRoyal context proxy
+ * @returns {Promise<object>} markdown, title, excerpt, reachable, reason, ...
+ */
 export async function extractPageContent(url, options = {}) {
   const {
     timeout = 15000,
@@ -76,7 +91,8 @@ export async function extractPageContent(url, options = {}) {
     maxLength = 100000,
     extractLinks = false,
     dynamicContentWait = 2000,
-    cookies = null
+    cookies = null,
+    egress = 'expressvpn'
   } = options;
 
   if (!url || !url.trim()) {
@@ -95,18 +111,19 @@ export async function extractPageContent(url, options = {}) {
     });
 
     const extractionPromise = (async () => {
-      const acquired = await acquireBrowser();
+      // Network route (egressRoutes.js): 'direct' renders on the unproxied browser,
+      // 'residential' on the same browser through a per-context IPRoyal proxy, and
+      // everything else on the ExpressVPN browser.
+      const residential = egress === 'residential' && residentialProxy();
+      const acquired = await acquireBrowser(egress === 'direct' || residential ? 'direct' : 'vpn');
       const browser = acquired.browser;
       acquisitionId = acquired.acquisitionId;
 
-      // egress_routes: 'direct' is the browser's bypass list; 'residential' is a
-      // per-context proxy; everything else inherits the browser's ExpressVPN proxy.
-      const residential = effectiveRoute(routeFor(url)) === 'residential';
       context = await browser.newContext({
         ...STEALTH_CONTEXT,
         userAgent: chromeUserAgent(browser),
         ignoreHTTPSErrors: true,
-        ...(residential ? { proxy: residentialProxy() } : {})
+        ...(residential ? { proxy: residential } : {})
       });
       await context.addInitScript(STEALTH_INIT_SCRIPT);
 
@@ -295,7 +312,10 @@ export async function extractPageContent(url, options = {}) {
 
       await context.close();
       context = null;
-      releaseBrowser(acquisitionId);
+      if (acquisitionId != null) {
+        releaseBrowser(acquisitionId);
+        acquisitionId = null;
+      }
 
       const dom = new JSDOM(html, { url });
 
@@ -359,7 +379,11 @@ export async function extractPageContent(url, options = {}) {
     clearTimeout(hardTimeoutId);
     if (context) {
       await context.close().catch(err => logger.debug(`Context close failed for ${url}: ${err.message}`));
+    }
+    // Released even when newContext() threw, so the browser isn't held until the watchdog.
+    if (acquisitionId != null) {
       releaseBrowser(acquisitionId);
+      acquisitionId = null;
     }
   }
 }

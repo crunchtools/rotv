@@ -1,5 +1,6 @@
 import { extractPageContent } from './contentExtractor.js';
-import { loadEgressRoutes } from './egressRoutes.js';
+import { loadEgressConfig, routePlan, isBlocked, reserveResidential, countRender, recordOutcome } from './egressRoutes.js';
+import { isPublicUrl } from '../utils/publicAddress.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Cache');
@@ -22,6 +23,48 @@ const BLOCK_PAGE_RE = /why have i been blocked\?|sorry, you have been blocked|ac
 function isBlockPage(rendered) {
   const text = rendered.markdown || '';
   return text.length < 2000 && BLOCK_PAGE_RE.test(`${rendered.title || ''}\n${text}`);
+}
+
+/**
+ * Render a page over its network route, failing over to the next route when the
+ * site refuses the egress (egressRoutes.js): the domain's current route first,
+ * then the others cheapest first, IPRoyal last and only within its daily cap.
+ * A manually pinned domain gets its own route only. The outcome is recorded so
+ * the next crawl starts on the route that worked.
+ * @returns {Promise<object>} The last render attempted
+ */
+async function renderWithFailover(pool, url, extractOptions) {
+  await loadEgressConfig(pool);
+  const plan = routePlan(url);
+  const attempts = [];
+  let rendered = null;
+  for (const route of plan.chain) {
+    if (route === 'direct' && !(await isPublicUrl(url))) {
+      attempts.push({ route, reason: 'not a public address' });
+      continue;
+    }
+    if (route === 'residential') {
+      if (!(await reserveResidential(pool))) {
+        attempts.push({ route, reason: process.env.RESIDENTIAL_PROXY ? 'daily cap reached' : 'not configured' });
+        continue;
+      }
+    }
+    const result = await extractPageContent(url, { ...extractOptions, egress: route });
+    if (route !== 'residential') await countRender(pool, route);
+    const blocked = isBlocked(result) || (result.reachable && isBlockPage(result));
+    rendered = result;
+    if (!blocked) {
+      if (attempts.length) logger.info(`[Egress] ${plan.domain} ${route}: ok after ${attempts.map(a => a.route).join(', ')} blocked`);
+      if (attempts.length || plan.entry) await recordOutcome(pool, plan, { route, attempts });
+      return rendered;
+    }
+    const reason = result.reachable ? 'block page' : result.reason;
+    logger.warn(`[Egress] ${plan.domain} ${route}: blocked (${reason})`);
+    attempts.push({ route, reason });
+  }
+  // A non-public target isn't a site being blocked; don't file it as a route.
+  if (!attempts.some(a => a.reason === 'not a public address')) await recordOutcome(pool, plan, { route: null, attempts });
+  return rendered ?? { markdown: null, title: null, excerpt: null, reachable: false, reason: `no network route available (${attempts.map(a => `${a.route}: ${a.reason}`).join('; ')})` };
 }
 
 /**
@@ -83,8 +126,7 @@ export async function renderPage(pool, url, options = {}) {
     };
   }
 
-  await loadEgressRoutes(pool);
-  const rendered = await extractPageContent(url, extractOptions);
+  const rendered = await renderWithFailover(pool, url, extractOptions);
 
   if (rendered.reachable && isBlockPage(rendered)) {
     logger.warn(`Blocked by site security: ${url}`);

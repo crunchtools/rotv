@@ -8,11 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Per-domain scraper egress**: the `egress_routes` admin setting sends a domain `direct`
-  (lotor's IP), through `expressvpn` (the default), or through a `residential` proxy
-  (`RESIDENTIAL_PROXY`, not configured yet). It's seeded with newfranklin.org set to direct:
-  that site resets every ExpressVPN exit but serves lotor, which unblocks the Tudor House events
-  (#800). cvsr.org, which blocks both addresses, is listed as residential for later.
+- **Network Routes**: Settings › Data Collection has a Network Routes section with a default
+  route (ExpressVPN) and per-domain routes: ExpressVPN, No proxy, or IPRoyal (residential, paid).
+  When a site blocks a render, the crawler fails over cheapest first (ExpressVPN → No proxy →
+  IPRoyal) and remembers the route that worked. Domains an admin pins are left alone. IPRoyal
+  has a daily render cap and per-day usage, and learned IPRoyal routes expire after a week so
+  the free routes get another try. Per-domain routes moved from the `egress_routes` setting into
+  the `egress_domain_routes` table. New MCP tools: `egress_routes_list`, `egress_route_set`.
+  This unblocks newfranklin.org (Tudor House events, #800), which resets every ExpressVPN exit.
+  Direct traffic only reaches public internet addresses (a guard proxy checks every connection),
+  so a crawled link can't reach lotor's own services. Every browser proxy now also covers
+  localhost, which Chromium used to send around the proxy.
 
 ### Changed
 - **Hosted dev runs on demand**: dev.rootsofthevalley.org no longer runs at boot. A socket on
@@ -21,6 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   lotor while it is idle.
 
 ### Security
+- **MCP is admin-only**: any signed-in user could mint an MCP token from their settings, and the
+  MCP server accepted it without checking for admin, which opened every admin tool (settings,
+  moderation, POI edits) to them. Tokens are now issued to admins only, the MCP tab is hidden
+  for everyone else, and a non-admin's existing token no longer opens a session.
 - **Restore accepts only ROTV backups**: the admin restore endpoint downloaded any Drive file id
   the admin's token could read and piped it into `psql`. It now refuses anything that is not a
   `rotv-backup-*` dump in the configured backups folder, before psql starts.

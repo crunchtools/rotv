@@ -1,6 +1,6 @@
 import express from 'express';
 import crypto from 'crypto';
-import { isAuthenticated } from '../middleware/auth.js';
+import { isAuthenticated, isAdmin } from '../middleware/auth.js';
 import { validateStops, insertStops, insertTripWithSlugRetry, rollbackQuietly } from './trips.js';
 import { addSubscriber } from '../services/buttondownClient.js';
 import { createLogger } from '../utils/logger.js';
@@ -226,7 +226,7 @@ export function createUserSettingsRouter(pool) {
     }
   });
 
-  router.get('/mcp-token', isAuthenticated, async (req, res) => {
+  router.get('/mcp-token', isAdmin, async (req, res) => {
     try {
       const tokenRow = await pool.query(
         'SELECT mcp_token FROM users WHERE id = $1', [req.user.id]
@@ -245,7 +245,7 @@ export function createUserSettingsRouter(pool) {
     }
   });
 
-  router.post('/mcp-token/regenerate', isAuthenticated, async (req, res) => {
+  router.post('/mcp-token/regenerate', isAdmin, async (req, res) => {
     try {
       const token = crypto.randomBytes(32).toString('base64url');
       await pool.query(

@@ -1,44 +1,47 @@
 /**
  * Shared Chromium browser pool.
  *
- * One long-lived Chromium process is reused across all render calls in both
- * jsRenderer and contentExtractor. Each render gets its own BrowserContext
- * for full cookie/session isolation — only the expensive OS-level browser
- * process is shared.
+ * One long-lived Chromium process per egress is reused across all render calls
+ * in both jsRenderer and contentExtractor. Each render gets its own
+ * BrowserContext for full cookie/session isolation — only the expensive
+ * OS-level browser process is shared.
  *
  * Memory profile:
- *   - 1 shared Chromium process  ≈ 200-300 MB base
- *   - Each concurrent context    ≈ 50-100 MB
+ *   - Each shared Chromium process ≈ 200-300 MB base; up to two run (vpn and
+ *     direct), the second only while a crawl renders a direct or IPRoyal site
+ *   - Each concurrent context      ≈ 50-100 MB, whichever browser holds it
  *   vs. previous model:
  *   - Each render spawned its own Chromium ≈ 300-400 MB
  *
- * With MAX_CONCURRENCY=10 the old model peaked at ~4 GB; the new model
- * peaks at ~1.2 GB under the same load.
+ * With MAX_CONCURRENCY=10 the old model peaked at ~4 GB; the pool peaks at
+ * ~1.2 GB with one browser and ~1.5 GB with both under the same load.
  *
- * Idle behaviour: the browser closes 30 s after the last context is
+ * Idle behaviour: each browser closes 30 s after its last context is
  * released, freeing memory between collection runs.
  *
- * Egress: launched through PLAYWRIGHT_PROXY (ExpressVPN), bypassing it for the
- * domains egress_routes sends direct (see egressRoutes.js).
+ * Egress (see egressRoutes.js): the 'vpn' browser launches through
+ * PLAYWRIGHT_PROXY (ExpressVPN); the 'direct' browser goes through
+ * directEgressProxy.js, which dials only public addresses from lotor's own IP,
+ * and also carries IPRoyal renders, whose proxy is set per context. Chromium can't take
+ * a context off its browser's proxy, so a route needs its own browser for
+ * failover to switch mid-crawl. The 'direct' browser only launches when a
+ * site needs it.
  *
- * Watchdog: 90 s per-acquisition timeout force-kills the browser if
+ * Watchdog: 90 s per-acquisition timeout force-kills that browser if
  * releaseBrowser() is never called (above jsRenderer's 60 s hard timeout).
  */
 
 import { chromium } from 'playwright';
 import { createLogger } from '../utils/logger.js';
-import { directBypassList } from './egressRoutes.js';
+import { directEgressProxyUrl } from './directEgressProxy.js';
 
 const logger = createLogger('BrowserPool');
 
-let sharedBrowser = null;
-let launchedBypass = ''; // egress_routes 'direct' domains the running browser was launched with
-let browserRefCount = 0;
-let browserCloseTimer = null;
-let launchPromise = null; // Prevents concurrent launches (race condition fix)
-
 const WATCHDOG_TIMEOUT_MS = 90_000;
-const watchdogTimers = new Map(); // acquisitionId → timeoutId
+const IDLE_CLOSE_MS = 30_000;
+const KILLED_GRACE_MS = 2 * WATCHDOG_TIMEOUT_MS; // how long a killed acquisition's late release is ignored
+const slots = new Map(); // key → { browser, refCount, closeTimer, launchPromise }
+const watchdogTimers = new Map(); // acquisitionId → { timer, key }
 let nextAcquisitionId = 0;
 
 // Exported for callers that launch their own browser (humanBrowser.js).
@@ -74,37 +77,64 @@ export function chromeUserAgent(browser) {
   return `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${major}.0.0.0 Safari/537.36`;
 }
 
-/**
- * Force-kill the shared browser, clearing all watchdog timers and resetting state.
- * Used by the watchdog and the circuit breaker health check.
- */
-export async function forceKill(reason = 'unknown') {
-  logger.error(`Force-kill: ${reason} (refCount was ${browserRefCount})`);
-  const browser = sharedBrowser;
-  sharedBrowser = null;
-  browserRefCount = 0;
-  launchPromise = null;
-  if (browserCloseTimer) {
-    clearTimeout(browserCloseTimer);
-    browserCloseTimer = null;
+function slotFor(key) {
+  if (!slots.has(key)) slots.set(key, { browser: null, refCount: 0, closeTimer: null, launchPromise: null });
+  return slots.get(key);
+}
+
+async function killSlot(key, slot) {
+  const browser = slot.browser;
+  slot.browser = null;
+  slot.refCount = 0;
+  slot.launchPromise = null;
+  if (slot.closeTimer) {
+    clearTimeout(slot.closeTimer);
+    slot.closeTimer = null;
   }
-  for (const [, t] of watchdogTimers) clearTimeout(t);
-  watchdogTimers.clear();
-  if (browser) await browser.close().catch(err => logger.warn(`Force-kill: browser close failed: ${err.message}`));
+  // Keep the ids as killed: a late releaseBrowser() for one must not count
+  // against the relaunched browser (or another key's).
+  // Dropped after a grace period so acquisitions that never release don't pile up.
+  for (const [id, w] of watchdogTimers) {
+    if (w.key === key && !w.killed) {
+      clearTimeout(w.timer);
+      w.killed = true;
+      setTimeout(() => watchdogTimers.delete(id), KILLED_GRACE_MS).unref?.();
+    }
+  }
+  if (browser) await browser.close().catch(err => logger.warn(`Force-kill: ${key} browser close failed: ${err.message}`));
+}
+
+/**
+ * Force-kill shared browsers, clearing their watchdog timers and resetting state.
+ * Used by the watchdog and the circuit breaker health check.
+ * @param {string} [reason]
+ * @param {string} [key] - One browser ('vpn' or 'direct'); all of them when omitted
+ */
+export async function forceKill(reason = 'unknown', key) {
+  const keys = key ? [key] : [...slots.keys()];
+  for (const k of keys) {
+    const slot = slots.get(k);
+    if (!slot) continue;
+    logger.error(`Force-kill ${k}: ${reason} (refCount was ${slot.refCount})`);
+    await killSlot(k, slot);
+  }
 }
 
 /**
  * Health check: render a trivial data URI to test browser responsiveness.
  * Returns true if the browser responds within timeoutMs, false if overloaded.
  * If no browser is running, returns true (a fresh launch will be healthy).
+ * @param {number} [timeoutMs]
+ * @param {string} [key] - Which browser; the ExpressVPN one by default
  */
-export async function healthCheck(timeoutMs = 1000) {
-  if (!sharedBrowser || !sharedBrowser.isConnected()) return true;
+export async function healthCheck(timeoutMs = 1000, key = 'vpn') {
+  const browser = slots.get(key)?.browser;
+  if (!browser || !browser.isConnected()) return true;
 
   const check = (async () => {
     let ctx;
     try {
-      ctx = await sharedBrowser.newContext();
+      ctx = await browser.newContext();
       const page = await ctx.newPage();
       await page.goto('data:text/html,<h1>ok</h1>', { timeout: timeoutMs });
       return true;
@@ -121,68 +151,70 @@ export async function healthCheck(timeoutMs = 1000) {
 }
 
 /**
+ * @param {'vpn'|'direct'} [key] - 'vpn' egresses through PLAYWRIGHT_PROXY, 'direct' from lotor's IP (public addresses only)
  * @returns {Promise<{browser: import('playwright').Browser, acquisitionId: number}>}
  */
-export async function acquireBrowser() {
-  if (browserCloseTimer) {
-    clearTimeout(browserCloseTimer);
-    browserCloseTimer = null;
+export async function acquireBrowser(key = 'vpn') {
+  const slot = slotFor(key);
+  if (slot.closeTimer) {
+    clearTimeout(slot.closeTimer);
+    slot.closeTimer = null;
   }
-  // The direct routes are a launch-time bypass list (a context can't opt out of the
-  // browser's proxy), so a changed list relaunches the browser once it is idle.
-  const bypass = directBypassList();
-  if (sharedBrowser && browserRefCount === 0 && !launchPromise && bypass !== launchedBypass) {
-    logger.info('egress_routes direct domains changed; relaunching the browser');
-    const stale = sharedBrowser;
-    sharedBrowser = null;
-    await stale.close().catch(err => logger.warn(`Relaunch close failed: ${err.message}`));
-  }
-  if (!sharedBrowser || !sharedBrowser.isConnected()) {
-    if (!launchPromise) {
-      launchPromise = (async () => {
+  if (!slot.browser || !slot.browser.isConnected()) {
+    if (!slot.launchPromise) {
+      slot.launchPromise = (async () => {
         const opts = { ...LAUNCH_OPTIONS };
-        if (process.env.PLAYWRIGHT_PROXY) {
-          opts.proxy = { server: process.env.PLAYWRIGHT_PROXY };
-          if (bypass) opts.proxy.bypass = bypass;
+        // '<-loopback>' drops Chromium's built-in proxy bypass for localhost, so a
+        // crawled link to 127.0.0.1 goes to the proxy instead of lotor's loopback.
+        if (key === 'direct') {
+          opts.proxy = { server: await directEgressProxyUrl(), bypass: '<-loopback>' };
+        } else if (process.env.PLAYWRIGHT_PROXY) {
+          opts.proxy = { server: process.env.PLAYWRIGHT_PROXY, bypass: '<-loopback>' };
         }
-        sharedBrowser = await chromium.launch(opts);
-        launchedBypass = bypass;
-      })().finally(() => { launchPromise = null; });
+        slot.browser = await chromium.launch(opts);
+      })().finally(() => { slot.launchPromise = null; });
     }
-    await launchPromise;
+    await slot.launchPromise;
   }
-  browserRefCount++;
+  slot.refCount++;
 
   const id = nextAcquisitionId++;
   const timer = setTimeout(async () => {
-    await forceKill(`Watchdog: acquisition ${id} held browser for >${WATCHDOG_TIMEOUT_MS / 1000}s without release`);
+    await forceKill(`Watchdog: acquisition ${id} held browser for >${WATCHDOG_TIMEOUT_MS / 1000}s without release`, key);
   }, WATCHDOG_TIMEOUT_MS);
-  watchdogTimers.set(id, timer);
+  watchdogTimers.set(id, { timer, key });
 
-  return { browser: sharedBrowser, acquisitionId: id };
+  return { browser: slot.browser, acquisitionId: id };
 }
 
 /**
  * Release a browser reference acquired with acquireBrowser().
- * Schedules the browser to close after 30 s of full idle.
+ * Schedules that browser to close after 30 s of full idle.
  * @param {number} [acquisitionId] - The id returned by acquireBrowser(). Clears the watchdog.
+ * @param {'vpn'|'direct'} [key] - Only needed without an acquisitionId; defaults to 'vpn'
  */
-export function releaseBrowser(acquisitionId) {
-  if (acquisitionId != null && watchdogTimers.has(acquisitionId)) {
-    clearTimeout(watchdogTimers.get(acquisitionId));
+export function releaseBrowser(acquisitionId, key = 'vpn') {
+  const watchdog = acquisitionId != null ? watchdogTimers.get(acquisitionId) : null;
+  if (watchdog) {
+    clearTimeout(watchdog.timer);
     watchdogTimers.delete(acquisitionId);
+    if (watchdog.killed) return; // its browser was force-killed and its count reset
+    key = watchdog.key;
   }
-  browserRefCount--;
-  if (browserRefCount < 0) {
+  const slot = slotFor(key);
+  slot.refCount--;
+  if (slot.refCount < 0) {
     logger.error('BUG: releaseBrowser() called more times than acquireBrowser() — resetting to 0');
-    browserRefCount = 0;
+    slot.refCount = 0;
   }
-  if (browserRefCount === 0) {
-    browserCloseTimer = setTimeout(async () => {
-      if (browserRefCount === 0 && sharedBrowser) {
-        await sharedBrowser.close().catch(err => logger.warn(`Idle close failed: ${err.message}`));
-        sharedBrowser = null;
+  if (slot.refCount === 0) {
+    slot.closeTimer = setTimeout(async () => {
+      if (slot.refCount === 0 && slot.browser) {
+        // Clear the slot first, so an acquire during the close launches a new browser.
+        const idle = slot.browser;
+        slot.browser = null;
+        await idle.close().catch(err => logger.warn(`Idle close failed: ${err.message}`));
       }
-    }, 30000);
+    }, IDLE_CLOSE_MS);
   }
 }

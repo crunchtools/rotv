@@ -75,7 +75,7 @@ function UserSettings({ user, initialTab }) {
         >
           Newsletter
         </button>
-        {user && (
+        {user?.isAdmin && (
           <button
             className={`settings-tab-btn ${activeTab === 'mcp' ? 'active' : ''}`}
             onClick={() => setActiveTab('mcp')}
@@ -199,7 +199,7 @@ function UserSettings({ user, initialTab }) {
             </div>
           </div>
         )}
-        {activeTab === 'mcp' && (
+        {activeTab === 'mcp' && user?.isAdmin && (
           <McpSettings />
         )}
       </div>
