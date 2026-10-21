@@ -1023,7 +1023,7 @@ app.get('/api/pois', async (req, res) => {
              p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, poi_has_primary_image(p.id) AS has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.webcam_url, p.stops,
              p.research_context,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p
@@ -1128,7 +1128,7 @@ app.get('/api/pois/:id', async (req, res) => {
              p.opening_hours, p.wheelchair, p.fee, p.has_parking, p.has_restrooms,
              p.length_miles, p.difficulty, poi_has_primary_image(p.id) AS has_primary_image,
              p.boundary_type, p.boundary_color, p.news_url, p.events_url, p.status_url,
-             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.stops,
+             p.is_seasonal, p.is_ada_accessible, p.is_bike_friendly, p.live_tracker_url, p.webcam_url, p.stops,
              p.research_context,
              p.collection_tier, p.deleted, p.created_at, p.updated_at
       FROM pois p

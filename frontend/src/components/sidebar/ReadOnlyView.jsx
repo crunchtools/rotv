@@ -13,6 +13,10 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
   const liveTrackerUrl = /^https?:\/\//i.test(destination.live_tracker_url || '')
     ? destination.live_tracker_url
     : null;
+  // Fix: same http(s)-only guard for webcam links (#791)
+  const webcamUrl = /^https?:\/\//i.test(destination.webcam_url || '')
+    ? destination.webcam_url
+    : null;
   const { label: boatStatusLabel, className: boatStatusClass } = getBoatStatus(boatPosition);
   return (
     <div className="view-container">
@@ -107,6 +111,14 @@ function ReadOnlyView({ destination, isLinearFeature, isAdmin, editMode, onShare
                 <path fill="currentColor" d="M12,8A4,4 0 0,0 8,12A4,4 0 0,0 12,16A4,4 0 0,0 16,12A4,4 0 0,0 12,8M12,14A2,2 0 0,1 10,12A2,2 0 0,1 12,10A2,2 0 0,1 14,12A2,2 0 0,1 12,14M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z" />
               </svg>
               Live tracker
+            </a>
+          )}
+          {webcamUrl && (
+            <a href={webcamUrl} target="_blank" rel="noopener noreferrer" className="poi-action webcam-link">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+                <path fill="currentColor" d="M17,10.5V7A1,1 0 0,0 16,6H4A1,1 0 0,0 3,7V17A1,1 0 0,0 4,18H16A1,1 0 0,0 17,17V13.5L21,17.5V6.5L17,10.5Z" />
+              </svg>
+              Live webcam
             </a>
           )}
           <AddToTripButton poi={destination} stops={getNavigationStops(destination, isLinearFeature)} />

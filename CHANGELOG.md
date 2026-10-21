@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Live webcam button**: POIs with a `webcam_url` show a "Live webcam" button that opens the
+  stream in a new tab. The Cuyahoga River and The Foundry link to the Flats river cam. Admins
+  can set the URL when editing a POI (#791).
 - **Network Routes**: Settings › Data Collection has a Network Routes section with a default
   route (ExpressVPN) and per-domain routes: ExpressVPN, No proxy, or IPRoyal (residential, paid).
   When a site blocks a render, the crawler fails over cheapest first (ExpressVPN → No proxy →
