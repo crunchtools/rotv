@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the proxy's port starts it on the first request, `data/control/wake` starts it for the agent,
   and an idle timer stops it after 30 minutes with no client traffic. That frees about 840MB on
   lotor while it is idle.
+- **Backend dependencies**: the minor-and-patch group, including `@modelcontextprotocol/sdk`
+  1.32.1, which clears this week's high-severity advisories. The container's global Playwright
+  pin moves to 1.64.1 with it, so the Chromium build matches the one the tests expect.
 
 ### Security
 - **Restore accepts only ROTV backups**: the admin restore endpoint downloaded any Drive file id
