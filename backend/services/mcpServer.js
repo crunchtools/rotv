@@ -62,6 +62,43 @@ const POI_CREATE_COLUMNS = [
   'news_url', 'events_url', 'status_url', 'more_info_link', 'owner_id'
 ];
 
+// Fields poi_update may write: descriptions and visitor info (#709). Name,
+// roles and geometry stay with the admin UI, which has the name guard and the
+// map editor. null clears a field; undefined leaves it alone.
+const nullableText = z.string().nullable().optional();
+export const POI_UPDATE_FIELDS = {
+  brief_description: nullableText.describe('Short description'),
+  historical_description: nullableText.describe('Long historical description'),
+  property_owner: nullableText.describe('Owner name as free text'),
+  owner_id: z.number().int().nullable().optional().describe('ID of the organization POI that owns this POI'),
+  era_id: z.number().int().nullable().optional().describe('Era ID'),
+  primary_activities: nullableText.describe('Comma-separated activities'),
+  surface: nullableText.describe('Trail surface'),
+  pets: nullableText.describe('Pet policy'),
+  cell_signal: z.number().int().min(0).max(5).nullable().optional().describe('Cell signal, 0-5'),
+  opening_hours: nullableText.describe('OSM opening_hours string'),
+  wheelchair: z.enum(['yes', 'limited', 'no', 'designated']).nullable().optional().describe('Wheelchair access'),
+  fee: z.enum(['yes', 'no', 'conditional']).nullable().optional().describe('Entry fee'),
+  more_info_link: z.string().url().nullable().optional().describe('External link for more info'),
+  has_parking: z.boolean().optional().describe('Has parking'),
+  has_restrooms: z.boolean().optional().describe('Has restrooms'),
+  research_context: nullableText.describe('Notes that steer the research pipeline')
+};
+
+// Build the UPDATE for poi_update. Column names come from POI_UPDATE_FIELDS,
+// never from the argument object's keys. Returns null when nothing would change.
+export function buildPoiUpdate(id, args) {
+  const columns = Object.keys(POI_UPDATE_FIELDS).filter(column => args[column] !== undefined);
+  if (columns.length === 0) return null;
+  const sets = columns.map((column, i) => `${column} = $${i + 2}`);
+  return {
+    sql: `UPDATE pois SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1 AND (deleted IS NULL OR deleted = FALSE) RETURNING id, name`,
+    values: [id, ...columns.map(column => args[column])],
+    columns
+  };
+}
+
 function registerTools(server, pool, boss, mcpUserId) {
 
   server.tool(
@@ -805,6 +842,24 @@ function registerTools(server, pool, boss, mcpUserId) {
       setClauses.push('updated_at = CURRENT_TIMESTAMP');
       await pool.query(`UPDATE pois SET ${setClauses.join(', ')} WHERE id = $1`, values);
       return { content: [{ type: 'text', text: `Updated URLs for POI #${id}` }] };
+    }
+  );
+
+  server.tool(
+    'poi_update',
+    'Correct a POI\'s descriptions and visitor info. Pass only the fields to change; null clears a field. Name, roles and geometry are edited in the admin UI.',
+    { id: z.number().int().describe('POI ID'), ...POI_UPDATE_FIELDS },
+    async ({ id, ...fields }) => {
+      const update = buildPoiUpdate(id, fields);
+      if (!update) {
+        return { content: [{ type: 'text', text: 'No fields provided to update' }], isError: true };
+      }
+      const updated = await pool.query(update.sql, update.values);
+      if (updated.rows.length === 0) {
+        return { content: [{ type: 'text', text: `POI #${id} not found` }], isError: true };
+      }
+      logger.info(`MCP updated POI ${id}: ${update.columns.join(', ')}`);
+      return { content: [{ type: 'text', text: `Updated POI #${id} (${updated.rows[0].name}): ${update.columns.join(', ')}` }] };
     }
   );
 
