@@ -80,6 +80,7 @@ export const POI_UPDATE_FIELDS = {
   wheelchair: z.enum(['yes', 'limited', 'no', 'designated']).nullable().optional().describe('Wheelchair access'),
   fee: z.enum(['yes', 'no', 'conditional']).nullable().optional().describe('Entry fee'),
   more_info_link: z.string().url().nullable().optional().describe('External link for more info'),
+  webcam_url: z.string().url().max(500).nullable().optional().describe('Live webcam page, shown as a Live webcam button'),
   has_parking: z.boolean().optional().describe('Has parking'),
   has_restrooms: z.boolean().optional().describe('Has restrooms'),
   research_context: nullableText.describe('Notes that steer the research pipeline')
