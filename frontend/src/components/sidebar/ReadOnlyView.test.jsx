@@ -80,6 +80,21 @@ describe('ReadOnlyView labels and actions', () => {
     expect(container.querySelector('.visited-toggle-btn').getAttribute('aria-pressed')).toBe('false');
   });
 
+  it('shows Live webcam only when the POI has an http(s) webcam_url', () => {
+    const { container, rerender } = renderView();
+    expect(container.querySelector('.webcam-link')).toBeNull();
+
+    rerender(<ReadOnlyView destination={{ ...trailhead, webcam_url: 'javascript:alert(1)' }} trailStatus={trailStatus} />);
+    expect(container.querySelector('.webcam-link')).toBeNull();
+
+    rerender(<ReadOnlyView destination={{ ...trailhead, webcam_url: 'https://example.org/cam' }} trailStatus={trailStatus} />);
+    const link = container.querySelector('.poi-actions a.webcam-link');
+    expect(link.textContent).toBe('Live webcam');
+    expect(link.getAttribute('href')).toBe('https://example.org/cam');
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
   it('puts More info in the actions as an external link', () => {
     const { container } = renderView();
 

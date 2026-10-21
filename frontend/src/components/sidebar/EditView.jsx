@@ -679,6 +679,16 @@ function EditView({ destination, editedData, setEditedData, onSave, onCancel, on
       </div>
 
       <div className="edit-section">
+        <label title="Live webcam page. If set, a Live webcam button opens it in a new tab.">Live Webcam URL</label>
+        <input
+          type="text"
+          value={editedData.webcam_url || ''}
+          onChange={(e) => handleChange('webcam_url', e.target.value)}
+          placeholder="https://example.com/webcam"
+        />
+      </div>
+
+      <div className="edit-section">
         <label title="How often this POI is included in scheduled news and events collection">Collection Tier</label>
         <select
           value={editedData.collection_tier || 'weekly'}

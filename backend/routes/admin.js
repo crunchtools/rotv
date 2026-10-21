@@ -314,7 +314,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
       'name', 'latitude', 'longitude', 'navigation_latitude', 'navigation_longitude',
       'property_owner', 'owner_id', 'brief_description',
       'era', 'era_id', 'historical_description', 'primary_activities', 'surface',
-      'pets', 'cell_signal', 'opening_hours', 'wheelchair', 'fee', 'more_info_link', 'events_url', 'news_url', 'research_context', 'status_url',
+      'pets', 'cell_signal', 'opening_hours', 'wheelchair', 'fee', 'more_info_link', 'events_url', 'news_url', 'research_context', 'status_url', 'webcam_url',
       'has_parking', 'has_restrooms',
       'collection_tier', 'news_score_threshold', 'events_score_threshold'
     ];
