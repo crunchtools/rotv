@@ -85,8 +85,8 @@ export const POI_UPDATE_FIELDS = {
   research_context: nullableText.describe('Notes that steer the research pipeline')
 };
 
-// Build the UPDATE for poi_update. Column names come from POI_UPDATE_FIELDS,
-// never from the argument object's keys. Returns null when nothing would change.
+// Column names come from POI_UPDATE_FIELDS, never from the argument object's
+// keys, so a client can't name a column. Returns null when nothing would change.
 export function buildPoiUpdate(id, args) {
   const columns = Object.keys(POI_UPDATE_FIELDS).filter(column => args[column] !== undefined);
   if (columns.length === 0) return null;
