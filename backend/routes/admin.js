@@ -2199,7 +2199,7 @@ export function createAdminRouter(pool, invalidateMosaicCache) {
         'name', 'poi_roles', 'geometry', 'property_owner', 'owner_id', 'brief_description',
         'era_id', 'historical_description', 'primary_activities', 'surface', 'pets',
         'cell_signal', 'more_info_link', 'length_miles', 'difficulty',
-        'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url',
+        'boundary_type', 'boundary_color', 'status_url', 'news_url', 'events_url', 'webcam_url',
         'collection_tier', 'news_score_threshold', 'events_score_threshold'
       ];
 
