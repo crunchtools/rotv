@@ -6,9 +6,10 @@ cd "$(dirname "$0")"
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-# git stub prints whatever head the case sets; docker stub logs each tag
+# git stub prints whatever head the case sets; docker stub logs each
+# destination tag and the source it was copied from
 printf '#!/bin/sh\necho "$STUB_HEAD\trefs/heads/master"\n' > "$work/git"
-printf '#!/bin/sh\necho "$5" >> "$STUB_LOG"\n' > "$work/docker"
+printf '#!/bin/sh\necho "$5 $6" >> "$STUB_LOG"\n' > "$work/docker"
 chmod +x "$work/git" "$work/docker"
 
 src=quay.io/x/y@sha256:abc
@@ -21,8 +22,11 @@ run() {  # run <name> <ref_type> <head> <expected tags, space separated>
   GIT="$work/git" DOCKER="$work/docker" STUB_HEAD=$head STUB_LOG="$work/log" \
     GITHUB_REF_TYPE=$ref_type GITHUB_REF=refs/heads/master GITHUB_SHA=1a2b3c4 \
     GITHUB_REPOSITORY=x/y TAGS=$tags ./promote.sh "$src" >/dev/null
-  got=$(tr '\n' ' ' < "$work/log" | sed 's/ $//')
-  if [ "$got" = "$want" ]; then echo "ok   $name"; else echo "FAIL $name: got '$got' want '$want'"; fail=1; fi
+  got=$(cut -d' ' -f1 "$work/log" | tr '\n' ' ' | sed 's/ $//')
+  if [ "$got" != "$want" ]; then echo "FAIL $name: got '$got' want '$want'"; fail=1; return; fi
+  # Every copy must come from the tested digest, never anything else
+  if cut -d' ' -f2 "$work/log" | grep -qvx "$src"; then echo "FAIL $name: copied from something other than $src"; fail=1; return; fi
+  echo "ok   $name"
 }
 
 run "current branch head promotes every tag" branch 1a2b3c4 \
