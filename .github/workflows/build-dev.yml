@@ -106,6 +106,9 @@ jobs:
       contents: read
       packages: write
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
@@ -140,17 +143,4 @@ jobs:
         env:
           SRC: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push-quay.outputs.digest }}
           TAGS: ${{ steps.meta.outputs.tags }}
-        run: |
-          # The concurrency group orders runs, not commits: an older run that
-          # reaches here late must not move :latest back over a newer commit
-          if [ "$GITHUB_REF_TYPE" = branch ]; then
-            head=$(git ls-remote "https://github.com/$GITHUB_REPOSITORY" "$GITHUB_REF" | cut -f1)
-            if [ "$head" != "$GITHUB_SHA" ]; then
-              echo "::warning::$GITHUB_REF is at $head now; leaving :latest alone for $GITHUB_SHA"
-              TAGS=$(grep -v ':latest$' <<<"$TAGS" || true)
-            fi
-          fi
-          for t in $TAGS; do
-            echo "promote $SRC -> $t"
-            docker buildx imagetools create -t "$t" "$SRC"
-          done
+        run: tests/image/promote.sh "$SRC"

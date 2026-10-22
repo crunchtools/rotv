@@ -19,7 +19,8 @@ case "$profile" in
     pg_check="pg_isready -h localhost -p 5432"
     procs="weston"
     urls="/api/health /"
-    mounts=(--tmpfs /data/pgdata:rw,size=1G,mode=0700)
+    # The production unit mounts the same tmpfs for rsyslog's state
+    mounts=(--tmpfs /data/pgdata:rw,size=1G,mode=0700 --tmpfs /var/lib/rsyslog:rw,size=8m)
     ;;
   images)
     port=8000
@@ -82,6 +83,9 @@ done
 
 if [ "$fail" -ne 0 ]; then
   echo "=== failed units ==="; in_ctr systemctl list-units --state=failed --no-pager || true
+  for u in $units; do
+    in_ctr systemctl is-active --quiet "$u" || in_ctr systemctl status "$u" --no-pager -n 20 || true
+  done
   echo "=== journal (errors) ==="; in_ctr journalctl -p err --no-pager -n 60 || true
   echo "boot: FAIL"; exit 1
 fi

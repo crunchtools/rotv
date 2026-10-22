@@ -7,7 +7,7 @@ on:
 
 jobs:
   containerfile-lint:
-    name: Containerfile lint
+    name: Containerfile lint and promote tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -15,6 +15,9 @@ jobs:
 
       - name: No unbraced || true inside RUN chains
         run: tests/image/lint-containerfiles.sh
+
+      - name: Promotion tag selection
+        run: tests/image/test-promote.sh
 
   test:
     name: Application Tests
