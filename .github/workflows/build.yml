@@ -146,7 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-and-push-quay, image-gate]
     if: github.event_name != 'pull_request'
-    # Promotions land in run order, so a slow older run cannot overwrite a newer one mid-copy
+    # One promotion at a time; promote.sh keeps an older commit off :latest
     concurrency:
       group: promote-${{ github.workflow }}-${{ github.ref }}
       cancel-in-progress: false
