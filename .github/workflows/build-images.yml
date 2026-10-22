@@ -42,10 +42,8 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Only the immutable sha tag here; :latest moves in promote, after the gate
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
 
       - name: Build and push
@@ -68,7 +66,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
@@ -109,20 +107,40 @@ jobs:
           sarif_file: trivy.sarif
           category: trivy-images-rotv
 
-  build-and-push-ghcr:
-    runs-on: ubuntu-latest
+  image-gate:
     needs: build-and-push-quay
     if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/image-gate.yml
+    with:
+      image: quay.io/crunchtools/images-rotv@${{ needs.build-and-push-quay.outputs.digest }}
+      profile: images
+      boot: true
+    secrets: inherit
+
+  # Copies the tested digest to :latest on Quay and GHCR. Nothing is rebuilt.
+  promote:
+    runs-on: ubuntu-latest
+    needs: [build-and-push-quay, image-gate]
+    if: github.event_name != 'pull_request'
+    concurrency:
+      group: promote-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -131,26 +149,23 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Compute promoted tags
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.GHCR_IMAGE }}
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
+          flavor: |
+            latest=false
 
-      - name: Build and push container image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Containerfile.images
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          secrets: |
-            activation_key=${{ secrets.RHSM_ACTIVATION_KEY }}
-            org_id=${{ secrets.RHSM_ORG_ID }}
-          cache-from: type=gha
+      - name: Promote tested digest
+        env:
+          SRC: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push-quay.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: tests/image/promote.sh "$SRC"

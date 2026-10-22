@@ -32,6 +32,15 @@ repos:
   # Local hooks
   - repo: local
     hooks:
+      # An unbraced `|| true` in a RUN chain swallowed a failed dnf and
+      # shipped an image without PostgreSQL (2026-10-22)
+      - id: containerfile-lint
+        name: Containerfile lint
+        entry: tests/image/lint-containerfiles.sh
+        language: system
+        files: ^Containerfile
+        pass_filenames: false
+
       # JavaScript/React linting with ESLint, in the base image (see run.sh)
       - id: eslint
         name: ESLint JavaScript Linting

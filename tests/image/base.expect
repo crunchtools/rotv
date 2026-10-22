@@ -1,0 +1,13 @@
+# quay.io/crunchtools/rotv-base (Containerfile.base)
+include rhsm-clean
+exec /usr/pgsql-17/bin/pg_ctl
+exec /usr/pgsql-17/bin/postgres
+exec /usr/pgsql-17/bin/initdb
+exec /usr/pgsql-17/bin/psql
+exec /usr/pgsql-17/bin/pg_isready
+exec /usr/local/bin/pg_ctl
+exec /usr/local/bin/pg_isready
+exec /usr/bin/node
+exec /usr/bin/npm
+exec /root/.cache/ms-playwright/chromium-*/chrome-linux*/chrome
+enabled postgresql

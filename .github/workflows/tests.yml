@@ -6,6 +6,19 @@ on:
   workflow_dispatch:
 
 jobs:
+  containerfile-lint:
+    name: Containerfile lint and promote tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: No unbraced || true inside RUN chains
+        run: tests/image/lint-containerfiles.sh
+
+      - name: Promotion tag selection
+        run: tests/image/test-promote.sh
+
   test:
     name: Application Tests
     runs-on: ubuntu-latest

@@ -56,14 +56,11 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Only immutable tags here. :latest and the semver tags move in the
+          # promote job, after the image gate has passed on this digest.
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
             type=ref,event=pr
             type=sha,prefix=
-          # Fix: metadata-action's default latest=auto also tags semver builds as latest, so a tag
-          # build racing the same-commit master build strips master's manifest before trivy-scan pulls it
           flavor: |
             latest=false
 
@@ -89,7 +86,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
@@ -132,20 +129,43 @@ jobs:
           sarif_file: trivy.sarif
           category: trivy-rotv
 
-  build-and-push-ghcr:
-    runs-on: ubuntu-latest
+  # The digest under test is the digest that ships
+  image-gate:
     needs: build-and-push-quay
+    if: needs.build-and-push-quay.outputs.pushed == 'true'
+    uses: ./.github/workflows/image-gate.yml
+    with:
+      image: quay.io/crunchtools/rotv@${{ needs.build-and-push-quay.outputs.digest }}
+      profile: app
+      boot: true
+    secrets: inherit
+
+  # Copies the tested digest to :latest (default branch) or the semver tags
+  # (v* tags) on Quay and GHCR. Nothing is rebuilt, so GHCR gets the same bytes.
+  promote:
+    runs-on: ubuntu-latest
+    needs: [build-and-push-quay, image-gate]
     if: github.event_name != 'pull_request'
+    # One promotion at a time; promote.sh keeps an older commit off :latest
+    concurrency:
+      group: promote-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
@@ -154,33 +174,24 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Compute promoted tags
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.GHCR_IMAGE }}
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.GHCR_IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=ref,event=pr
             type=sha,prefix=
-          # Fix: metadata-action's default latest=auto also tags semver builds as latest, so a tag
-          # build racing the same-commit master build strips master's manifest before trivy-scan pulls it
+          # metadata-action's default latest=auto also tags semver builds as latest
           flavor: |
             latest=false
 
-      - name: Build and push container image
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Containerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            BASE_IMAGE=quay.io/crunchtools/rotv-base:latest
-          secrets: |
-            activation_key=${{ secrets.RHSM_ACTIVATION_KEY }}
-            org_id=${{ secrets.RHSM_ORG_ID }}
-          cache-from: type=gha
+      - name: Promote tested digest
+        env:
+          SRC: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push-quay.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: tests/image/promote.sh "$SRC"

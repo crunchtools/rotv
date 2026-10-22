@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -39,12 +41,12 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          # Only the immutable sha tag here; :latest moves in promote, after the gate
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -54,10 +56,7 @@ jobs:
           # This workflow hand-rolls the OCI labels rather than using
           # docker/metadata-action's, so Section III's required labels stay
           # exact. image.source is what auto-links the GHCR package to the
-          # repo and grants github.token write access to it. Tags now come
-          # from metadata-action above (bare :latest plus, on a vX.Y.Z tag
-          # push, the matching semver tags) so a release tag actually lands
-          # a versioned rotv-base image alongside :latest.
+          # repo and grants github.token write access to it.
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.description=Base image for rootsofthevalley.org
@@ -73,10 +72,71 @@ jobs:
         continue-on-error: true
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: "table"
           exit-code: "0"
           severity: "CRITICAL,HIGH"
+
+  image-gate:
+    needs: build-and-push-quay
+    uses: ./.github/workflows/image-gate.yml
+    with:
+      image: quay.io/crunchtools/rotv-base@${{ needs.build-and-push-quay.outputs.digest }}
+      profile: base
+    secrets: inherit
+
+  # Copies the tested digest to :latest / semver tags on Quay and GHCR, then
+  # tells the app to rebuild on it. An untested base never reaches the app.
+  promote:
+    runs-on: ubuntu-latest
+    needs: [build-and-push-quay, image-gate]
+    concurrency:
+      group: promote-${{ github.workflow }}-${{ github.ref }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ github.token }}
+
+      - name: Compute promoted tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            ${{ env.GHCR_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+          flavor: |
+            latest=false
+
+      - name: Promote tested digest
+        env:
+          SRC: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push-quay.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: tests/image/promote.sh "$SRC"
 
       # The crunchtools-ci App's token, not a personal one: it has its own rate
       # limit, so a throttled account can't stop this step.
@@ -96,51 +156,3 @@ jobs:
         run: |
           gh api repos/crunchtools/rotv/dispatches \
             -f event_type=rotv-base-updated
-
-  build-and-push-ghcr:
-    runs-on: ubuntu-latest
-    needs: build-and-push-quay
-    permissions:
-      contents: read
-      packages: write
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ github.token }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.GHCR_IMAGE }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: Containerfile.base
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.description=Base image for rootsofthevalley.org
-            org.opencontainers.image.licenses=AGPL-3.0-or-later
-            org.opencontainers.image.revision=${{ github.sha }}
-          secrets: |
-            activation_key=${{ secrets.RHSM_ACTIVATION_KEY }}
-            org_id=${{ secrets.RHSM_ORG_ID }}
-          cache-from: type=gha
