@@ -27,7 +27,9 @@ RUN npm install -g playwright@1.64.1 && npx playwright install chromium
 # The same entitlement provides the virtual display for the headed Facebook
 # browser: RHEL 10 has no Xvfb, so headless Weston (EPEL, needs CRB's turbojpeg)
 # runs Xwayland (AppStream). See rootfs/etc/systemd/system/rotv-display.service.
-# `exit 1` because the trailing `|| true` would otherwise swallow a failed install.
+# The `|| true` on unregister must stay braced: unbraced, it binds to the whole
+# && chain and a failed dnf (e.g. an EPEL mirror outage) ships an image with no
+# PostgreSQL. The test -x asserts the install actually landed.
 RUN --mount=type=secret,id=activation_key \
     --mount=type=secret,id=org_id \
     if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
@@ -43,7 +45,8 @@ RUN --mount=type=secret,id=activation_key \
             --enablerepo=codeready-builder-for-rhel-10-x86_64-rpms \
             weston xorg-x11-server-Xwayland || exit 1; \
     fi && \
-    subscription-manager unregister 2>/dev/null || true && \
+    { subscription-manager unregister 2>/dev/null || true; } && \
+    test -x /usr/pgsql-17/bin/pg_ctl && \
     dnf clean all
 
 # Create symlinks for PostgreSQL commands
