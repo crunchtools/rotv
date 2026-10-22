@@ -6,6 +6,16 @@ on:
   workflow_dispatch:
 
 jobs:
+  containerfile-lint:
+    name: Containerfile lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: No unbraced || true inside RUN chains
+        run: tests/image/lint-containerfiles.sh
+
   test:
     name: Application Tests
     runs-on: ubuntu-latest

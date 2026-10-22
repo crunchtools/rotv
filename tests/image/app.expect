@@ -1,0 +1,8 @@
+# quay.io/crunchtools/rotv (Containerfile): everything the Nagios checks
+# on ctr-rootsofthevalley.org depend on.
+include runtime
+file /app/server.js
+# Dev-only units and drop-ins must never ship in production
+absent /etc/systemd/system/rotv-backend.service.d/dev.conf
+absent /etc/systemd/system/rotv-dev-deps.service
+absent /etc/systemd/system/rotv-dev-ui.service

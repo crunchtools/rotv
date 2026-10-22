@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Image gate before `:latest`**: every image build (app, base, image server, dev) pushes
+  only an immutable sha tag. `image-gate.yml` tests that exact digest, and a promote job then
+  copies it to `:latest` on Quay and GHCR without rebuilding. The gate has a contract test
+  (`tests/image/*.expect`: binaries, enabled units, no dev files, no RHSM certs), and for the
+  app and image server a systemd boot test that makes the production Nagios checks. Nightly
+  parent-image rebuilds go through the same gate. A Containerfile lint rejects an unbraced
+  `|| true` inside a RUN chain. Prompted by the 2026-10-22 outage, when an EPEL mirror failure
+  was swallowed and an image with no PostgreSQL reached production.
 - **Live webcam button**: POIs with a `webcam_url` show a "Live webcam" button that opens the
   stream in a new tab. The Cuyahoga River and The Foundry link to the Flats river cam. Admins
   can set the URL when editing a POI (#791).

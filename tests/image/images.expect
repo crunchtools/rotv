@@ -1,0 +1,10 @@
+# quay.io/crunchtools/images-rotv (Containerfile.images)
+include rhsm-clean
+exec /usr/bin/pg_ctl
+exec /usr/bin/postgres
+exec /usr/bin/initdb
+exec /usr/bin/python3.12
+file /usr/lib64/pgsql/vector.so
+enabled postgresql
+enabled imageserver-db-init
+enabled image-server

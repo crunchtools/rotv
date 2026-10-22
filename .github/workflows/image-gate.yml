@@ -1,0 +1,54 @@
+name: Image gate
+
+# Tests the exact pushed digest before anything moves :latest to it.
+# Called by every build workflow, on every trigger: push, PR, tag, and the
+# nightly parent-image rebuilds that nothing used to test. On 2026-10-22 one of
+# those shipped an image with no PostgreSQL and production served 503.
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: Image reference by digest (registry/name@sha256:...)
+        required: true
+        type: string
+      profile:
+        description: tests/image/<profile>.expect, and the boot profile when boot is true
+        required: true
+        type: string
+      boot:
+        description: Also start the image under systemd and check its services
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Image gate (${{ inputs.profile }})
+    runs-on: ubuntu-latest
+    env:
+      IMAGE: ${{ inputs.image }}
+      PROFILE: ${{ inputs.profile }}
+      CONTAINER_ENGINE: docker
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Log in to Quay.io
+        uses: docker/login-action@v4
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Pull image under test
+        run: docker pull "$IMAGE"
+
+      - name: Contract test
+        run: tests/image/contract.sh "$IMAGE" "$PROFILE"
+
+      - name: Boot test
+        if: inputs.boot
+        run: tests/image/boot.sh "$IMAGE" "$PROFILE"

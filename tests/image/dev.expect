@@ -1,0 +1,6 @@
+# quay.io/crunchtools/rotv-dev (Containerfile.dev): the app image plus the
+# units that run a mounted checkout
+include runtime
+file /etc/systemd/system/rotv-backend.service.d/dev.conf
+enabled rotv-dev-deps
+enabled rotv-dev-ui

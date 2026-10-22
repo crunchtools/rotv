@@ -1,0 +1,5 @@
+# A build that registers with RHSM must unregister before the layer is
+# committed. A skipped unregister publishes a consumer cert and entitlement.
+absent /etc/pki/consumer/cert.pem
+absent /etc/pki/consumer/key.pem
+absent /etc/pki/entitlement/*.pem
