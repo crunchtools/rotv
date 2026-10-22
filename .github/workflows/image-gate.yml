@@ -3,8 +3,9 @@ name: Image gate
 # Tests the exact pushed digest before anything moves :latest to it.
 # Called by every build workflow whenever it pushes an image: pushes, tags,
 # app PRs, and the nightly parent-image rebuilds that nothing used to test.
-# Dev and image-server PRs build without pushing, so they have nothing to gate. On 2026-10-22 one of
-# those shipped an image with no PostgreSQL and production served 503.
+# On 2026-10-22 one of those rebuilds shipped an image with no PostgreSQL and
+# production served 503. Dev and image-server PRs build without pushing, so
+# they have nothing to gate.
 on:
   workflow_call:
     inputs:
