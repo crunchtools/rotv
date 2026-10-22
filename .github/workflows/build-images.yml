@@ -9,6 +9,9 @@ on:
       - 'Containerfile.images'
   repository_dispatch:
     types: [parent-image-updated]
+  # Weekly errata pickup even when no parent image changed
+  schedule:
+    - cron: '0 6 * * 1'
   workflow_dispatch:
 env:
   REGISTRY: quay.io
@@ -60,6 +63,9 @@ jobs:
             org_id=${{ secrets.RHSM_ORG_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Rebuilds without a commit must not reuse the dnf layer, or they ship
+          # no errata (Container Image profile V)
+          no-cache: ${{ github.event_name != 'push' && github.event_name != 'pull_request' }}
 
       - name: Run Trivy vulnerability scanner
         continue-on-error: true
