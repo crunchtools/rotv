@@ -5,15 +5,7 @@
 // real venue as Event.location on every event page; prefer it.
 
 // WordPress JSON-LD carries HTML entities ("Let&#8217;s", "Kayak &amp; Canoe")
-const NAMED_ENTITIES = { amp: '&', quot: '"', apos: "'", lt: '<', gt: '>', nbsp: ' ' };
-// Fix: out-of-range numeric entities left as-is instead of throwing (PR #619 review)
-const fromCode = (entity, code) => (code <= 0x10FFFF ? String.fromCodePoint(code) : entity);
-function decodeEntities(text) {
-  return (text || '')
-    .replace(/&#(\d+);/g, (entity, code) => fromCode(entity, Number(code)))
-    .replace(/&#x([0-9a-f]+);/gi, (entity, code) => fromCode(entity, parseInt(code, 16)))
-    .replace(/&([a-z]+);/gi, (entity, name) => NAMED_ENTITIES[name.toLowerCase()] ?? entity);
-}
+import { decodeEntities, normalizeTitle } from './dedup/normalize.js';
 
 function formatPlace(place) {
   if (!place) return null;
@@ -43,8 +35,6 @@ function formatPlace(place) {
   if (!name || nameIsAddress || addressText.toLowerCase().includes(name.toLowerCase())) return addressText;
   return `${name}, ${addressText}`;
 }
-
-const normalizeTitle = (title) => decodeEntities(title).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // Pick the JSON-LD event this extracted item came from: a title match, or the
 // page's only event. Listing pages with several events and no title match

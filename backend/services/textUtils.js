@@ -2,6 +2,7 @@
  * Text Utilities
  * Shared text comparison functions used by news collection, deep crawling, and moderation.
  */
+import { jaccard } from './dedup/similarity.js';
 
 /**
  * Calculate simple string similarity (0-1) using Jaccard word overlap
@@ -18,13 +19,7 @@ export function calculateSimilarity(str1, str2) {
 
   if (s1 === s2) return 1;
 
-  const words1 = new Set(s1.split(/\s+/));
-  const words2 = new Set(s2.split(/\s+/));
-
-  const intersection = new Set([...words1].filter(word => words2.has(word)));
-  const union = new Set([...words1, ...words2]);
-
-  return union.size > 0 ? intersection.size / union.size : 0;
+  return jaccard(new Set(s1.split(/\s+/)), new Set(s2.split(/\s+/)));
 }
 
 /**

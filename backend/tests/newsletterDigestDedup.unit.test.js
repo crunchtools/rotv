@@ -54,6 +54,18 @@ describe('dedupeDigestEvents', () => {
     expect(dedupeDigestEvents([steamTimed, otherPoi], TZ)).toHaveLength(2);
   });
 
+  it('collapses one event listed by two organizers at the same venue and time', () => {
+    const byParks = { id: 7, poi_id: 7, poi_name: 'Summit Metro Parks', venue_poi_id: 300, title: 'Fall Color Hike', start_date: '2026-10-17T14:00:00Z' };
+    const byFriends = { id: 8, poi_id: 55, poi_name: 'Friends of the Parks', venue_poi_id: 300, title: 'Fall Colour Hike', start_date: '2026-10-17T14:00:00Z' };
+    expect(dedupeDigestEvents([byParks, byFriends], TZ).map(e => e.id)).toEqual([7]);
+  });
+
+  it('keeps two sessions of one program on the same day', () => {
+    const morning = { id: 9, poi_id: 7, poi_name: 'Summit Metro Parks', title: 'Paddleboard Tour', start_date: '2026-09-06T14:00:00Z' };
+    const afternoon = { id: 10, poi_id: 7, poi_name: 'Summit Metro Parks', title: 'Paddleboard Lake Tour', start_date: '2026-09-06T17:00:00Z' };
+    expect(dedupeDigestEvents([morning, afternoon], TZ)).toHaveLength(2);
+  });
+
   it('compares days in the digest timezone, not UTC', () => {
     // 11 PM Friday Eastern is 3 AM Saturday UTC — still the same Friday event
     const lateNight = { ...steamTimed, id: 5, start_date: '2026-06-06T03:00:00Z' };
@@ -92,6 +104,22 @@ describe('dedupeDigestNews', () => {
 
   it('keeps unrelated stories from the same POI', () => {
     expect(dedupeDigestNews([derbyFromParks, mothNight])).toHaveLength(2);
+  });
+
+  it('collapses one story filed under two POIs when a distinctive name links them', () => {
+    const underZoo = {
+      id: 40, poi_id: 88, poi_name: 'Cleveland Metroparks Zoo',
+      title: 'Cleveland Metroparks Zoo extends Asian Lantern Festival',
+      summary: 'The Asian Lantern Festival at Cleveland Metroparks Zoo will run through September 12 with a drone show finale.',
+      source_url: 'https://www.wkyc.com/article/lantern'
+    };
+    const underParks = {
+      id: 41, poi_id: 8, poi_name: 'Cleveland Metroparks',
+      title: 'Asian Lantern Festival Extended Through September 12',
+      summary: 'Cleveland Metroparks Zoo extended its Asian Lantern Festival through September 12, ending with a drone show.',
+      source_url: 'https://www.cleveland.com/lantern'
+    };
+    expect(dedupeDigestNews([underZoo, underParks]).map(n => n.id)).toEqual([40]);
   });
 
   it('keeps similar-vocabulary stories from different POIs', () => {

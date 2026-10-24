@@ -111,6 +111,29 @@ describe('getDigestDraft', () => {
     expect(pool.queries.find(q => q.sql.includes('JOIN pois p ON e.poi_id')).sql).toContain('NOT e.digest_excluded');
   });
 
+  it('lists the excluded items separately, from the same window', async () => {
+    const pool = fakePool({ news: [newsRow(0)] });
+    const draft = await getDigestDraft(pool, { tz: TZ, asOf: sendsAt });
+
+    const excludedNews = pool.queries.find(q => /AND n\.digest_excluded/.test(q.sql));
+    const excludedEvents = pool.queries.find(q => /AND e\.digest_excluded/.test(q.sql));
+    expect(excludedNews.params).toEqual([sendsAt]);
+    expect(excludedEvents.params).toEqual([TZ, sendsAt]);
+    expect(draft.news_excluded.map(n => n.id)).toEqual([100]);
+  });
+
+  it('shows which items were folded into which, and why', async () => {
+    const copy = { ...newsRow(0), id: 199, source_url: 'https://outlet9.example.org/story', alt_urls: ['https://outlet0.example.org/story/'] };
+    const pool = fakePool({ news: [newsRow(0), copy, newsRow(1)] });
+    const draft = await getDigestDraft(pool, { tz: TZ, asOf: sendsAt });
+
+    expect(draft.news.map(n => n.id)).toEqual([100, 101]);
+    expect(draft.news_collapsed).toEqual([
+      { id: 199, title: copy.title, into: 100, matched: 100, reason: 'url' }
+    ]);
+    expect(draft.events_collapsed).toEqual([]);
+  });
+
   it('leaves out news rows whose URL is a stored event (#585)', async () => {
     const pool = fakePool();
     await getDigestDraft(pool, { tz: TZ, asOf: sendsAt });

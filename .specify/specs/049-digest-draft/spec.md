@@ -11,6 +11,8 @@ Nobody could ask the app what Friday's digest would send. The editor read the Th
 ## Behavior
 - The draft is built by `fetchDigestContent`, the call the email renders from: same queries, same host filter, same dedup, same caps (5 news, 15 events).
 - `news_bench` holds up to 5 news items past the cap; `events_overflow` holds events past the cap.
+- `news_collapsed` and `events_collapsed` list each duplicate the dedup folded away: `{ id, title, into, matched, reason }`, where `into` is the item kept, `matched` the item it matched directly, and `reason` the signal (spec 054).
+- `news_excluded` and `events_excluded` list the items an editor held out that would otherwise qualify for this send.
 - Previews and the draft are built as of the send instant: the coming Friday (today, on a Friday) at 08:00 in the digest timezone. The live send still uses the moment it runs.
 - `digest_excluded` on `poi_news` and `poi_events` defaults to false. A flagged item is left out of the broadcast digest, the personalized digests and the draft. Nothing else reads the flag; moderation status and the news lane are untouched.
 - Excluding an item is reversible.
@@ -18,12 +20,11 @@ Nobody could ask the app what Friday's digest would send. The editor read the Th
 ## MCP tools
 | Tool | Arguments | Returns |
 |---|---|---|
-| `digest_draft` | `as_of` (ISO 8601, optional) | `{ sends_at, timezone, greeting, news, news_bench, events, events_overflow }` |
+| `digest_draft` | `as_of` (ISO 8601, optional) | `{ sends_at, timezone, greeting, news, news_bench, events, events_overflow, news_collapsed, events_collapsed, news_excluded, events_excluded }` |
 | `digest_exclude` | `content_type` (`news` \| `event`), `id`, `excluded` (default true) | confirmation with the item's title, or an error when the id does not exist |
 
 News items carry `id, title, summary, source_url, source_host, poi_id, poi_name, publication_date, collection_date`. Events carry `id, title, description, start_date, end_date, location, poi_id, poi_name, source_url`, where `location` is the line the email prints.
 
 ## Out of scope
 - An admin UI for the draft or the flag. The consumer is the `/rotv-editor newsletter` skill.
-- Cross-POI dedup of one story filed under two POIs, and of one event listed by two organizers.
 - A record of which items each past issue contained.
