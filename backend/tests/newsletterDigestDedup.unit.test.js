@@ -219,6 +219,13 @@ describe('dedupeDigestNews', () => {
     }]);
   });
 
+  it('labels another outlet by its name only when the name matches the link', () => {
+    const named = { ...booSpectrum, source_name: 'Spectrum News 1' };
+    const misnamed = { ...booSpectrum, source_name: 'Cleveland.com' };
+    expect(dedupeDigestNews([booIdeastream, named])[0].also_covered_by[0].source_name).toBe('Spectrum News 1');
+    expect(dedupeDigestNews([booIdeastream, misnamed])[0].also_covered_by[0].source_name).toBe('spectrumnews1.com');
+  });
+
   it('does not offer a same-outlet repeat as another outlet', () => {
     const [kept] = dedupeDigestNews([johnBrownGallery, johnBrownStory]);
     expect(kept.also_covered_by).toEqual([]);

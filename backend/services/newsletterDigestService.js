@@ -73,6 +73,16 @@ export function dedupeDigestNews(news, ctx = DEFAULT_MATCH_CONTEXT) {
 // Same-outlet repeats are not a choice and stay hidden.
 const MAX_ALSO_COVERED = 3;
 
+// Collected source_name values are unreliable ("Cleveland.com" on an
+// ideastream.org link), so a name is shown only when it matches the link's host
+// ("Akron Beacon Journal" on beaconjournal.com); otherwise the host is.
+function outletLabel(sourceName, host) {
+  const compact = (text) => (text || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const name = compact(sourceName);
+  const site = compact(host.replace(/\.[a-z]+$/, ''));
+  return name && site && (name.includes(site) || site.includes(name)) ? sourceName : host;
+}
+
 /**
  * The kept stories of a dedup result, each with also_covered_by: up to three
  * other outlets' articles that were folded into it.
@@ -90,7 +100,7 @@ function withAlsoCoveredBy(result, rows) {
       const host = row && sourceHost(row.source_url);
       if (!host || hosts.has(host) || alsoCoveredBy.length >= MAX_ALSO_COVERED) continue;
       hosts.add(host);
-      alsoCoveredBy.push({ id: row.id, source_name: row.source_name || host, source_url: row.source_url, source_host: host });
+      alsoCoveredBy.push({ id: row.id, source_name: outletLabel(row.source_name, host), source_url: row.source_url, source_host: host });
     }
     return { ...story, also_covered_by: alsoCoveredBy };
   });
