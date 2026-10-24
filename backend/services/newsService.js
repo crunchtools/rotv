@@ -14,6 +14,7 @@ import { jsonLdVenueFor, chooseEventVenue } from './eventVenue.js';
 import { buildNewsPrompt, newsPipelineFor, isDueForCurrentNews, PIPELINE_DEFAULTS } from './newsPipelines.js';
 import { createLogger } from '../utils/logger.js';
 import { proxyFetch } from '../utils/proxyFetch.js';
+import { titleKey as normalizeTitle } from './dedup/normalize.js';
 
 const logger = createLogger('News');
 const searchLogger = createLogger('Search');
@@ -1282,10 +1283,8 @@ async function resolveTrackerLinks(urls) {
   }));
 }
 
-export function normalizeTitle(title) {
-  if (!title) return '';
-  return title.toLowerCase().replace(/^the\s+/i, '').trim();
-}
+// The title key SQL_NORMALIZE_TITLE mirrors; services/dedup/normalize.js owns it
+export { normalizeTitle };
 
 const SQL_NORMALIZE_TITLE = `TRIM(LOWER(REGEXP_REPLACE(title, '^[Tt]he\\s+', '')))`;
 

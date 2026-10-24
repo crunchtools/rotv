@@ -1,0 +1,174 @@
+[
+ {
+  "expected": "same",
+  "reason": "venue",
+  "why": "Nature Rx at the Octagon Shelter, listed under a trailhead and a lock",
+  "items": [
+   {
+    "id": 606,
+    "poi_id": 5569,
+    "poi_name": "Lock 29 Peninsula",
+    "title": "Nature Rx: Caregiver Mindfulness Experience",
+    "start_date": "2026-05-17T13:00:00+00:00",
+    "location_details": "Octagon Shelter, Peninsula, OH (801 Truxell Road, Cuyahoga Falls 44264). Meet at the trailhead kiosk.",
+    "source_url": "https://www.eventbrite.com/e/nature-rx-the-caregiver-manifesto-tickets-1986572580064?aff=ebdssbpointsofinterest"
+   },
+   {
+    "id": 576,
+    "poi_id": 5530,
+    "poi_name": "Everett Trailhead",
+    "title": "Nature Rx: Caregiver Manifesto",
+    "start_date": "2026-05-17T13:00:00+00:00",
+    "location_details": "Octagon Shelter, 801 Truxell Road, Peninsula, OH 44264. Meet at the trailhead kiosk.",
+    "source_url": "https://www.eventbrite.com/e/nature-rx-the-caregiver-manifesto-tickets-1986572580064?aff=ebdsoporgprofile"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "venue",
+  "why": "Nature Rx listed by the Conservancy and under a trailhead",
+  "items": [
+   {
+    "id": 899,
+    "poi_id": 5653,
+    "poi_name": "Conservancy for Cuyahoga Valley National Park",
+    "title": "Nature Rx: The Caregiver Manifesto",
+    "start_date": "2026-05-17T13:00:00+00:00",
+    "location_details": "Octagon Shelter, 801 Truxell Road, Cuyahoga Falls 44264 (meeting at the trailhead kiosk) in Cuyahoga Valley National Park.",
+    "source_url": "https://www.conservancyforcvnp.org/event/nature-rx-the-caregiver-manifesto/"
+   },
+   {
+    "id": 576,
+    "poi_id": 5530,
+    "poi_name": "Everett Trailhead",
+    "title": "Nature Rx: Caregiver Manifesto",
+    "start_date": "2026-05-17T13:00:00+00:00",
+    "location_details": "Octagon Shelter, 801 Truxell Road, Peninsula, OH 44264. Meet at the trailhead kiosk.",
+    "source_url": "https://www.eventbrite.com/e/nature-rx-the-caregiver-manifesto-tickets-1986572580064?aff=ebdsoporgprofile"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "slot",
+  "why": "One organizer lists one birding hike twice",
+  "items": [
+   {
+    "id": 1085,
+    "poi_id": 5654,
+    "poi_name": "Open Trail Collective",
+    "title": "Birding Hike to Spot Bobolinks",
+    "start_date": "2026-06-07T12:30:00+00:00",
+    "location_details": "UA Field Station, 4240 Ira Rd, Akron, OH 44333, USA",
+    "source_url": "https://www.opentrailcollective.org/events/bath-oh-birding-bobolinks"
+   },
+   {
+    "id": 1038,
+    "poi_id": 5654,
+    "poi_name": "Open Trail Collective",
+    "title": "Bobolink Birding Hike",
+    "start_date": "2026-06-07T12:30:00+00:00",
+    "location_details": "UA Field Station, 4240 Ira Rd, Akron, OH 44333, USA",
+    "source_url": "https://www.opentrailcollective.org/events/bath-oh-bobolink-hike"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "slot",
+  "why": "NEO Adventure Fest, first and second listing",
+  "items": [
+   {
+    "id": 430,
+    "poi_id": 5654,
+    "poi_name": "Open Trail Collective",
+    "title": "Second Annual NEO Adventure Fest",
+    "start_date": "2026-05-16T14:00:00+00:00",
+    "location_details": "Downtown Cuyahoga Falls Pavillion and Amphitheater",
+    "source_url": "https://www.opentrailcollective.org/neo-adventure-fest"
+   },
+   {
+    "id": 427,
+    "poi_id": 5654,
+    "poi_name": "Open Trail Collective",
+    "title": "NEO Adventure Fest",
+    "start_date": "2026-05-16T14:00:00+00:00",
+    "location_details": "Cuyahoga Falls Amphitheater, 2050 Riverfront Pkwy, Cuyahoga Falls, OH 44221, USA",
+    "source_url": "https://www.opentrailcollective.org/events/neo-adventure-festival-2"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Two paddleboard sessions at one venue, 10 AM and 1 PM",
+  "items": [
+   {
+    "id": 9695,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Paddleboard Program",
+    "start_date": "2026-09-06T17:00:00+00:00",
+    "location_details": "SLNC, 411 Ira Ave., Akron, OH",
+    "source_url": "https://www.summitmetroparks.org/program-events/intro-to-stand-up-paddleboarding-30/"
+   },
+   {
+    "id": 9694,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Paddleboard Tour",
+    "start_date": "2026-09-06T14:00:00+00:00",
+    "location_details": "SLNC, 411 Ira Ave., Akron, OH",
+    "source_url": "https://www.summitmetroparks.org/program-events/intro-to-stand-up-paddleboarding-26/"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Paddleboard lake tour at 1 PM vs a 10 AM tour",
+  "items": [
+   {
+    "id": 2030,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Paddleboard Lake Tour",
+    "start_date": "2026-06-21T17:00:00+00:00",
+    "location_details": "NR/Lot C4, 5550 Christman Rd., Green, OH",
+    "source_url": "https://www.summitmetroparks.org/program-events/intro-to-stand-up-paddleboarding-25/"
+   },
+   {
+    "id": 1609,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Paddleboard Tour",
+    "start_date": "2026-06-21T14:00:00+00:00",
+    "location_details": "NR/Lot C4, 5550 Christman Rd., Green, OH",
+    "source_url": "https://www.summitmetroparks.org/program-events/intro-to-stand-up-paddleboarding-24/"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Two activities listed on one farm events page",
+  "items": [
+   {
+    "id": 376,
+    "poi_id": 5673,
+    "poi_name": "Szalay Family",
+    "title": "Szalay Family Corn Maze",
+    "start_date": "2026-09-19T14:00:00+00:00",
+    "location_details": "Szalay Family Farm",
+    "source_url": "https://szalaysfarm.com/?page_id=19"
+   },
+   {
+    "id": 375,
+    "poi_id": 5673,
+    "poi_name": "Szalay Family",
+    "title": "Fall Fun On The Farm",
+    "start_date": "2026-09-19T14:00:00+00:00",
+    "location_details": "Szalay Family Farm",
+    "source_url": "https://szalaysfarm.com/?page_id=19"
+   }
+  ]
+ }
+]

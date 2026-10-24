@@ -1,0 +1,661 @@
+[
+ {
+  "expected": "same",
+  "reason": "entity",
+  "why": "Oct 23 digest: the zoo release and a TV story whose summary is the headline plus a dateline",
+  "items": [
+   {
+    "id": 8088,
+    "poi_id": 5754,
+    "poi_name": "Cleveland Metroparks Zoo",
+    "title": "Cleveland Metroparks Zoo Unveils First Phase of Primate Forest",
+    "summary": "Cleveland Metroparks Zoo is opening the first phase of Primate Forest, its largest capital project ever, on October 22. The new experience features expanded orangutan habitats, a central gathering space with immersive technology, and new interactive learning areas, all designed to emphasize animal wellbeing and conservation. Entry is included with general admission, though timed entry is required.",
+    "source_url": "https://www.clevelandmetroparks.com/news-press/cleveland-metroparks-zoo-unveils-primate-forest-welcomes-public-to-its-largest-capital-project",
+    "source_name": "Cleveland Metroparks",
+    "publication_date": "2026-10-22T16:00:00+00:00",
+    "collection_date": "2026-10-22T10:04:28.576189+00:00"
+   },
+   {
+    "id": 8090,
+    "poi_id": 5754,
+    "poi_name": "Cleveland Metroparks Zoo",
+    "title": "Largest project in zoo history: Cleveland Metroparks Zoo to open new Primate Forest",
+    "summary": "Largest project in zoo history: Cleveland Metroparks Zoo to open new Primate Forest. Published: Oct. 21, 2026 at 9:26 AM PDT|Updated: 16 hours ago.",
+    "source_url": "https://www.cleveland19.com/video/2026/10/21/largest-project-zoo-history-cleveland-metroparks-zoo-open-new-primate-forest/",
+    "source_name": "cleveland19.com",
+    "publication_date": "2026-10-21T16:00:00+00:00",
+    "collection_date": "2026-10-22T10:04:28.586682+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "entity",
+  "why": "Primate Forest opening from two outlets, Oct 16",
+  "items": [
+   {
+    "id": 7978,
+    "poi_id": 5754,
+    "poi_name": "Cleveland Metroparks Zoo",
+    "title": "Cleveland Metroparks Zoo's Primate Forest Opens to the Public",
+    "summary": "After over two years of construction, the Cleveland Metroparks Zoo's new Primate Forest opens Thursday, Oct. 22 at noon. The $60 million, 140,000-square-foot facility houses about 65 species and features new habitats, interactive displays, and a conservation area. Visitors must use a timed ticketing system via QR code to manage entry.",
+    "source_url": "https://fox8.com/news/cleveland-metroparks-zoo-announces-opening-date-for-primate-forest/",
+    "source_name": "FOX 8",
+    "publication_date": "2026-10-15T12:31:34+00:00",
+    "collection_date": "2026-10-16T10:03:01.476759+00:00"
+   },
+   {
+    "id": 7980,
+    "poi_id": 5754,
+    "poi_name": "Cleveland Metroparks Zoo",
+    "title": "Cleveland Metroparks Zoo Unveils First Phase of $120 Million Primate Forest",
+    "summary": "The Cleveland Metroparks Zoo opens the first phase of its $120 million Primate Forest project on Oct. 22, giving orangutans a new outdoor habitat for the first time. This is the largest capital improvement in the zoo's history, and the full project will be completed by 2032, transforming the former Rainforest building into a 140,000-square-foot indoor-outdoor campus with three sections. For visitors, the opening adds new experiences like an orangutan-shaped playground, a design lab, a theater, and views into animal healthcare, while also expanding conservation efforts.",
+    "source_url": "https://clevelandmagazine.com/articles/the-primate-forest-is-a-centerpiece-of-the-cleveland-metroparks-zoo-s-longtime-transformation/",
+    "publication_date": "2026-10-15T16:00:00+00:00",
+    "collection_date": "2026-10-16T10:03:01.50118+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "outlet",
+  "why": "One outlet, Ride the Beach fundraiser, two pieces two days apart",
+  "items": [
+   {
+    "id": 7701,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks hosts horseback riding event at Edgewater Beach",
+    "summary": "Cleveland Metroparks held an event allowing visitors to ride horses along Edgewater Beach. The event is part of ongoing recreational programming at the park. No permanent changes or closures were announced.",
+    "source_url": "https://fox8.com/video/cleveland-metroparks-mounted-unit-hosts-9th-annual-fundraiser/12257715/",
+    "source_name": "FOX 8 News",
+    "publication_date": "2026-10-09T16:00:00+00:00",
+    "collection_date": "2026-10-12T10:02:05.62746+00:00"
+   },
+   {
+    "id": 7700,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks hosts ninth annual 'Ride the Beach' fundraiser",
+    "summary": "This weekend, Cleveland Metroparks' Mounted Unit opened Edgewater Beach to horseback riders for its ninth annual 'Ride the Beach' fundraiser. Participants rode along the Lake Erie shoreline and into the cold October water, with proceeds supporting equipment and training for the Mounted Unit.",
+    "source_url": "https://fox8.com/news/cleveland-metroparks-hosts-ride-the-beach-fundraiser/",
+    "source_name": "FOX 8 Cleveland",
+    "publication_date": "2026-10-11T21:19:40+00:00",
+    "collection_date": "2026-10-12T10:02:05.618329+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "title",
+  "why": "Identical headline filed under Cuyahoga River and Cleveland Metroparks",
+  "items": [
+   {
+    "id": 7675,
+    "poi_id": 959,
+    "poi_name": "Cuyahoga River",
+    "title": "Cleveland Metroparks stream restoration expands fish migration",
+    "summary": "The Wood Creek Fish Passage Project was completed this past summer in Cleveland Metroparks, restoring a section of the Cuyahoga River watershed that had been cut off by human intrusion. The restoration allows fish to return to the previously blocked stream section, improving aquatic habitat and ecosystem health. For visitors, this means a healthier natural environment in the park, with potential for increased wildlife viewing and improved water quality.",
+    "source_url": "https://www.glc.org/dailynews/20261009-cleveland",
+    "source_name": "Cleveland.com",
+    "publication_date": "2026-10-09T16:17:32+00:00",
+    "collection_date": "2026-10-10T10:02:44.89263+00:00"
+   },
+   {
+    "id": 7690,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks stream restoration expands fish migration",
+    "summary": "A cement conduit was removed from Wood Creek, also known as Hemlock Creek, so fish can migrate futher upstream.",
+    "source_url": "https://www.cleveland.com/news/2026/10/cleveland-metroparks-stream-restoration-expands-fish-migration.html",
+    "source_name": "cleveland.com",
+    "publication_date": "2026-10-10T16:00:00+00:00",
+    "collection_date": "2026-10-11T10:01:33.913675+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "entity",
+  "why": "Asian Lantern Festival extension under the zoo and under Cleveland Metroparks",
+  "items": [
+   {
+    "id": 6129,
+    "poi_id": 5754,
+    "poi_name": "Cleveland Metroparks Zoo",
+    "title": "Cleveland Metroparks Zoo extends Asian Lantern Festival ...",
+    "summary": "Cleveland Metroparks Zoo extends Asian Lantern Festival until Sept. 12, adds new drone show finale.",
+    "source_url": "https://www.youtube.com/watch?v=ELbGy5uXM_E",
+    "source_name": "youtube.com",
+    "publication_date": "2026-08-18T16:00:00+00:00",
+    "collection_date": "2026-08-19T10:01:01.358437+00:00"
+   },
+   {
+    "id": 6227,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Asian Lantern Festival Extended Through September 12 at Cleveland Metroparks Zoo, Featuring Spectacular Drone Show Finale",
+    "summary": "Cleveland Metroparks Zoo today announced the popular Asian Lantern Festival presented by Meijer(Opens in a new window) is extended through...",
+    "source_url": "https://www.google.com/goto?url=CAESwgEB6zswFaJEjOj1nffMziTfyXIep22116yqDcneFezYOMzMgUosUU1K0Ni_zG4hz4QnwtevOsnIfTA21xxoinSXL5wXXOV3MlICLzfv9x_Tp9-u7qKdmypgqYyTq4SdS3OaIZ7rdfscxEN8Y3NfIEYFVzJCsJFngF5c7t0TDj0qSbTmnroXVBHxwXMNp7JxGn88GhQozbH4IHsTlN6QXqEYbO2uwuzWqwFmzgyTRERYgoUV4JbV6nBF2MbQqy0LcVwWTg",
+    "source_name": "google.com",
+    "publication_date": "2026-08-18T16:00:00+00:00",
+    "collection_date": "2026-08-21T10:01:28.987126+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "entity",
+  "why": "Veterans Memorial Bridge tours under two bridge POIs",
+  "items": [
+   {
+    "id": 5047,
+    "poi_id": 5523,
+    "poi_name": "Detroit Superior Bridge",
+    "title": "History reaches new heights at the Veterans Memorial Bridge public ...",
+    "summary": "The Veterans Memorial Bridge opens its historic streetcar level to visitors on Saturday, June 27, offering a rare opportunity to explore one ...",
+    "source_url": "https://www.freshwatercleveland.com/breaking-ground/History-Reaches-New-Heights-At-The-Veterans-Memorial-Bridge-Public-Tours_062326.aspx",
+    "source_name": "freshwatercleveland.com",
+    "publication_date": "2026-06-23T16:00:00+00:00",
+    "collection_date": "2026-07-02T09:07:03.944879+00:00"
+   },
+   {
+    "id": 5000,
+    "poi_id": 5553,
+    "poi_name": "Hope Memorial Bridge Cleveland",
+    "title": "Veterans Memorial Bridge Streetcar Level Opens for Tours and Future Park Plans",
+    "summary": "The Veterans Memorial Bridge (formerly Detroit Superior Bridge) in Cleveland is opening its historic streetcar level for free self-guided walking tours on Saturday, June 27th, from 10 a.m. to 5 p.m., to celebrate America's 250th anniversary. This year's event includes live music, a 'Picnic in the Park' celebration, and an opportunity for visitors to engage with conceptual plans for transforming the streetcar level into a future park for bikers and pedestrians, a project that has already secured $7 million in federal funds.",
+    "source_url": "https://clevelandmagazine.com/articles/streetcar-level-of-veterans-memorial-bridge-opens-to-the-public/",
+    "source_name": "Cleveland Magazine",
+    "publication_date": "2026-06-26T16:00:00+00:00",
+    "collection_date": "2026-07-02T09:04:45.122248+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "title",
+  "why": "Wire rewrite whose headline is cut short with an ellipsis",
+  "items": [
+   {
+    "id": 5880,
+    "poi_id": 5653,
+    "poi_name": "Conservancy for Cuyahoga Valley National Park",
+    "title": "After federal cuts, here's how Conservancy for Cuyahoga Valley ...",
+    "summary": "Cuyahoga Valley National Park staff has not recovered from last year's federal budget cuts and layoffs, according to Greg Peckham, ...",
+    "source_url": "https://www.ideastream.org/environment-energy/2026-08-03/after-federal-cuts-heres-how-conservancy-for-cuyahoga-valley-national-park-supports-understaffed-park",
+    "source_name": "ideastream.org",
+    "publication_date": "2026-08-03T16:00:00+00:00",
+    "collection_date": "2026-08-04T10:02:18.089922+00:00"
+   },
+   {
+    "id": 5871,
+    "poi_id": 5653,
+    "poi_name": "Conservancy for Cuyahoga Valley National Park",
+    "title": "After federal cuts, here's how Conservancy for Cuyahoga Valley National Park supports understaffed park",
+    "summary": "The Cuyahoga Valley National Park staff has not recovered from last year's budget cuts and layoffs, so Conservancy has taken on new roles to...",
+    "source_url": "https://www.wvxu.org/2026-08-03/after-federal-cuts-heres-how-conservancy-for-cuyahoga-valley-national-park-supports-understaffed-park",
+    "source_name": "wvxu.org",
+    "publication_date": "2026-08-03T16:00:00+00:00",
+    "collection_date": "2026-08-03T10:02:04.07813+00:00",
+    "alt_urls": [
+     "https://www.google.com/goto?url=CAES1wEB6zswFSIvWTaHf-3f_HoKj0fDktekOgwaxz2ZxSILW8xy4xzl8qkbX5uWWnHsWwq44AqZgs36M6Erb4pdBZx9ZyLyddQjgUfxXP2_5ow00SA7wpqv4UPamVj_v-H3dqY7CjBw6vQOJCNvcPZozixcn58LBDmJyeoVKW2Om5u99Z3-BUZWFCvkQKTBV48942y-vWOjr1XPz_bMwhAp_3swAhN1d5Z3GqiaaI3NI23o074l2cf7XriDiy2FNCyHSXbPyqw-vSLSVTc6w2v7WgFgbzqpVWss9Q",
+     "https://www.google.com/goto?url=CAES1wEB7keqTRNu_c82EB0ZHDifiuJmZe-7L3kSlJvIX8Fkms9tRaWALndlceEezomvFUjZu-bZRC-ptkIGxW2V_I_ZRplR8I-25OAPK3fPBCmsQpsPz8JoOTIJcSQN4e68rNKJrGMfDFVdgNMp17K6OrFGO-mGnI9J0CvT9WN_jXEIEtynE0Wnpn7i5C1HnyYoouo-69Rq_Gj8Pxx_wyUPEbASAVqTkyf_pkmJcKPeJjM8s01widhj1yXcjEkiZb9n9yCsrLCMuQ52jiNbyNOV2GjvnBtWDxq5QQ==",
+     "https://www.google.com/goto?url=CAES1wEB7keqTT_SQbggZXJGS9xhf-AoxnTXG2xp0cPdLthPM72wI4C7GPQn9fga-MTsM0IvCpqViH47Jb2ELrR0ps7r51xBaeDBLJq29Edcq3SdcT00brBix-EgAGfrzE9JSD0uhhgGwWo-t19RWNwpwTM5w7g_zlt_DmRkl2WKvkzjjnov8C-ukTmOCz1VzihM4qP4Foz9ttqmBYDz_qI9vCeLEi8sAo4uov3HfvW6A9HNuUSUqKCV37wWtFPCqANPAAsrfZB-0y7UBvKak8q64MzdAC_q8yQqJw==",
+     "https://www.google.com/goto?url=CAESvgEB7keqTYATTGgoWJCxfsKelArXLHEuRqgIGfylNmbX6zGF7R27gsec2nXjhOBjHkqlmT6xTetgNN8PNsopswLFe2HkxDOOHI5Rnn2bk6-hwodMHJXdIehzYb7NqvjHeD9_lIlgnpDCXAf-USSUS3fggK0jN6DyK4h-nSNdd14S2lYbX92FQs9hOn3XRfr8JQg0ifEhBk0UFJcNAo6RSs66U3lgHDnXy5pM67nrIBvGCFhMKxBjS9E64NW-_Py-"
+    ]
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "entity",
+  "why": "Boo at the Zoo return from two outlets",
+  "items": [
+   {
+    "id": 6880,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Boo at the Zoo is back this year; here’s what’s new",
+    "summary": "One of Northeast Ohio's favorite Halloween traditions is returning to the Cleveland Metroparks Zoo.",
+    "source_url": "https://fox8.com/news/boo-at-the-zoo-is-back-this-year-heres-whats-new/",
+    "source_name": "fox8.com",
+    "publication_date": "2026-09-08T16:00:00+00:00",
+    "collection_date": "2026-09-09T10:01:45.222519+00:00"
+   },
+   {
+    "id": 6881,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Zoo Announces Return of 'Boo at the Zoo' and Halloween 5K",
+    "summary": "Cleveland Metroparks Zoo is bringing back its \"Boo at the Zoo\" event, running Thursday through Sunday evenings from October 1-25, featuring Halloween displays, trick-or-treating, character meet-and-greets, a dance party, and a new VIP experience. Additionally, the zoo will host a Halloween 5K on October 24, encouraging participants to run or walk in costume.",
+    "source_url": "https://www.wfmj.com/news/local-news/boo-at-the-zoo-coming-back-to-cleveland-metroparks-zoo/article_c9f2ed87-07e8-44fb-a310-eca1037e71be.html",
+    "source_name": "WFMJ",
+    "publication_date": "2026-09-08T16:00:00+00:00",
+    "collection_date": "2026-09-09T10:01:45.228467+00:00",
+    "alt_urls": [
+     "https://www.northeastohioparent.com/worth-noting/cleveland-metroparks-boo-at-the-zoo-returns/"
+    ]
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "text",
+  "why": "Coyote den warning: a full story and a one-line TV item",
+  "items": [
+   {
+    "id": 2400,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Summit Metro Parks Warns Public About Coyote Den Near Firestone Metro Park",
+    "summary": "Summit Metro Parks has issued a wildlife notice warning the public about a temporary coyote den located near Firestone Metro Park, advising people to avoid a specific park access point from Harrington Road. The parks department emphasizes that coyote parents are highly protective of their young and may become defensive, but the family will abandon the den once the pups mature. Visitors are advised to stay calm and move slowly away if they encounter a coyote.",
+    "source_url": "https://www.aol.com/articles/summit-metro-parks-warns-coyote-002702000.html",
+    "source_name": "Fox 8 Cleveland WJW",
+    "publication_date": "2026-05-24T16:00:00+00:00",
+    "collection_date": "2026-05-28T10:04:00.494012+00:00"
+   },
+   {
+    "id": 1593,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Summit Metro Parks warns about coyote den",
+    "summary": "The Summit Metro Parks is warning people about a group of coyotes that have set up a den near the Firestone Metro Park.",
+    "source_url": "https://fox8.com/news/summit-metro-parks-warns-about-coyote-den/",
+    "source_name": "fox8.com",
+    "publication_date": "2026-05-19T16:00:00+00:00",
+    "collection_date": "2026-05-22T13:19:57.037683+00:00",
+    "alt_urls": [
+     "http://www.msn.com/en-us/news/us/summit-metro-parks-warns-about-coyote-den/ar-AA23wvlj?ocid=BingNewsVerp&apiversion=v2&domshim=1&noservercache=1&noservertelemetry=1&batchservertelemetry=1&renderwebcomponents=1&wcseo=1",
+     "https://fox8.com/video/summit-metro-parks-warns-about-coyote-den/11806443/",
+     "https://www.wkbn.com/news/ohio/summit-metro-parks-warns-about-coyote-den/"
+    ]
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "text",
+  "why": "Quarry acquisition: a full story and a photo caption",
+  "items": [
+   {
+    "id": 5623,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Summit Metro Parks Acquires Historic Quarry Site",
+    "summary": "Summit Metro Parks has acquired the 85-acre former Quarry swimming hole and a portion of the Heritage tree farm in Peninsula for $2.75 million, with assistance from the West Creek Conservancy and a Clean Ohio grant. The property, which includes a rare cold-water creek vital for species like the southern redbelly dace fish, will remain closed to the public for now while officials evaluate its future use, with potential for trails but unlikely reopening for swimming. This acquisition aims to preserve a unique habitat adjacent to the Cuyahoga Valley National Park.",
+    "source_url": "https://www.aol.com/articles/summit-metro-parks-acquires-historic-100511000.html",
+    "source_name": "Akron Beacon Journal",
+    "publication_date": "2026-07-27T16:00:00+00:00",
+    "collection_date": "2026-07-28T10:05:34.590738+00:00"
+   },
+   {
+    "id": 5613,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Summit Metro Parks acquisition of old swimming Quarry in Peninsula",
+    "summary": "The Summit Metro Parks have acquired the old swimming Quarry in Peninsula and part of the Heritage Christmas Tree Farm.",
+    "source_url": "https://www.beaconjournal.com/picture-gallery/news/local/2026/07/24/photos-summit-metro-parks-swimming-quarry-peninsula/91042592007/",
+    "source_name": "beaconjournal.com",
+    "publication_date": "2026-07-24T16:00:00+00:00",
+    "collection_date": "2026-07-25T10:03:58.209259+00:00",
+    "alt_urls": [
+     "https://www.google.com/goto?url=CAESvQEB7keqTXWbG5N0w0gX88WbJHtCc9f2cD8oeZM4JuOPfuaovNxCQKNhBKBtd3MHzyT2B8dYQB83ZQlht0xoThhUbdVUuum-WPAONwANvni5xWqKohu8nllUNN7kyVjr7owLBvOYsN9SwM5RW0QrGxbgzSjYYWBM7t0V88a7MJpfKK-vFaDogljASgLgLm0CIXxSVPFygAFhW0Sku58ouKZ5RPv4LPgXuoVz0leaQNRXlvfs81EJOOx3ud-rdBE="
+    ]
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "entity",
+  "why": "Sailing center opening from two outlets",
+  "items": [
+   {
+    "id": 4142,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Patrick S. Parker Community Sailing Center now open in Cleveland: New year-round destination includes waterfront dining at The Galley restaurant",
+    "summary": "CLEVELAND — Described as a “first of its kind along Lake Erie,” the Cleveland Metroparks has announced the Patrick S. Parker Community...",
+    "source_url": "https://www.wkyc.com/article/news/local/cleveland/cleveland-metroparks-patrick-parker-community-sailing-center-galley-restaurant-menu-waterfront-dining-east-55th-street-marina-video/95-9731ee7f-6144-4d9c-ac3d-dc47bfe33b07",
+    "source_name": "wkyc.com",
+    "publication_date": "2026-06-13T16:00:00+00:00",
+    "collection_date": "2026-06-14T10:03:19.822761+00:00"
+   },
+   {
+    "id": 4170,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "$18.5M sailing center opening on Cleveland's lakefront as development surges",
+    "summary": "The $18.5 million Patrick S. Parker Community Sailing Center opens June 23 at Cleveland's East 55th Street Marina, expanding the Foundry's...",
+    "source_url": "https://www.bizjournals.com/cleveland/news/2026/06/16/metroparks-parker-community-sailing.html",
+    "source_name": "bizjournals.com",
+    "publication_date": "2026-06-16T16:00:00+00:00",
+    "collection_date": "2026-06-17T10:05:09.581894+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "text",
+  "why": "Fishing derbies, the park release and a TV story",
+  "items": [
+   {
+    "id": 3866,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Summit Metro Parks Promotes Native Fish Conservation and Fishing Programs",
+    "summary": "Summit Metro Parks is promoting its free fishing programs, including Kids' and Special Needs Fishing Derbies, which will take place in June. The park district has prioritized stocking native fish in its inland lakes and ponds since 2025, aiming to conserve biodiversity and improve aquatic ecosystems. This initiative is supported by partners like the Ohio Department of Natural Resources and the Summit Metro Parks Foundation.",
+    "source_url": "https://www.summitmetroparks.org/news-and-publications/news-updates/fin-tastic-native-fish/",
+    "source_name": "Summit Metro Parks",
+    "publication_date": "2026-06-04T16:00:00+00:00",
+    "collection_date": "2026-06-05T10:02:35.557486+00:00"
+   },
+   {
+    "id": 3857,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Summit Metro Parks to host annual fishing derbies",
+    "summary": "Summit Metro Parks will hold its annual Kids' Fishing Derby on June 20 and a Special Needs Fishing Derby on June 23 at Little Turtle Pond in Firestone Metro Park. The parks are also enhancing their fish stocking with native species, aiming for larger catches in the derbies.",
+    "source_url": "https://spectrumnews1.com/oh/columbus/news/2026/06/03/summit-metro-parks-to-hold-kids-s-fishing-derby",
+    "source_name": "Spectrum News 1",
+    "publication_date": "2026-06-03T16:00:00+00:00",
+    "collection_date": "2026-06-04T10:02:57.997298+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "outlet",
+  "why": "Two parts of one TV segment",
+  "items": [
+   {
+    "id": 7232,
+    "poi_id": 5653,
+    "poi_name": "Conservancy for Cuyahoga Valley National Park",
+    "title": "New Day Cleveland: Conservancy for Cuyahoga Valley National Park 2",
+    "summary": "The latest videos from Fox 8 Cleveland WJW.",
+    "source_url": "https://fox8.com/video/new-day-cleveland-conservancy-for-cuyahoga-valley-national-park-2/12202917/",
+    "source_name": "fox8.com",
+    "publication_date": "2026-09-24T16:00:00+00:00",
+    "collection_date": "2026-09-25T10:01:57.998982+00:00"
+   },
+   {
+    "id": 7233,
+    "poi_id": 5653,
+    "poi_name": "Conservancy for Cuyahoga Valley National Park",
+    "title": "New Day Cleveland: Conservancy for Cuyahoga Valley National Park 1",
+    "summary": "The latest videos from Fox 8 Cleveland WJW.",
+    "source_url": "https://fox8.com/video/new-day-cleveland-conservancy-for-cuyahoga-valley-national-park-1/12202858/",
+    "source_name": "fox8.com",
+    "publication_date": "2026-09-24T16:00:00+00:00",
+    "collection_date": "2026-09-25T10:01:58.004307+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "outlet",
+  "why": "One outlet, several Big Boy locomotive pieces the same day",
+  "items": [
+   {
+    "id": 5758,
+    "poi_id": 5586,
+    "poi_name": "Nickel Plate Railroad Bridge",
+    "title": "Big Boy’s westbound Ohio route: See where it will travel in Northeast Ohio and beyond",
+    "summary": "See Big Boy No. 4014's westbound route across Ohio, including its path through Northeast Ohio, Cleveland bridge crossing and whistle stops.",
+    "source_url": "https://www.cleveland.com/news/2026/07/big-boys-westbound-ohio-route-see-where-it-will-travel-in-northeast-ohio-and-beyond.html",
+    "source_name": "cleveland.com",
+    "publication_date": "2026-07-18T16:00:00+00:00",
+    "collection_date": "2026-08-01T05:06:48.547618+00:00"
+   },
+   {
+    "id": 5759,
+    "poi_id": 5586,
+    "poi_name": "Nickel Plate Railroad Bridge",
+    "title": "Big Boy returns to Ohio: Where to see the world’s largest operating steam locomotive",
+    "summary": "CLEVELAND, Ohio — The world's largest operating steam locomotive is heading back to Ohio, bringing four consecutive days of public viewing...",
+    "source_url": "https://www.cleveland.com/news/2026/07/big-boy-returns-to-ohio-where-to-see-the-worlds-largest-operating-steam-locomotive.html",
+    "source_name": "cleveland.com",
+    "publication_date": "2026-07-18T16:00:00+00:00",
+    "collection_date": "2026-08-01T05:06:48.55566+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "same",
+  "reason": "title",
+  "why": "The same segment, once with a \" - YouTube\" suffix",
+  "items": [
+   {
+    "id": 1974,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "New Day Cleveland: Cleveland Metroparks",
+    "summary": "New Day Cleveland: Cleveland Metroparks Toggle header content. Genre. New Day Cleveland/FOX 8 News at Noon...",
+    "source_url": "https://fox8.com/video/new-day-cleveland-cleveland-metroparks/11817026/",
+    "source_name": "fox8.com",
+    "publication_date": "2026-05-22T16:00:00+00:00",
+    "collection_date": "2026-05-23T10:01:57.332785+00:00"
+   },
+   {
+    "id": 2052,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "New Day Cleveland: Cleveland Metroparks - YouTube",
+    "summary": "New Day Cleveland: Cleveland Metroparks. 312 views · 1 day ago ...more. FOX 8 News Cleveland. 148K. Subscribe.",
+    "source_url": "https://www.youtube.com/watch?v=C_egIyeHI60",
+    "source_name": "youtube.com",
+    "publication_date": "2026-05-22T16:00:00+00:00",
+    "collection_date": "2026-05-25T10:02:56.659608+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Same outlet, same day, different releases (concert series vs summer openings)",
+  "items": [
+   {
+    "id": 1462,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Announces Return of Summer Concert Series",
+    "summary": "Cleveland Metroparks is bringing back its popular Summer Concert Series, featuring eight weeks of free Thursday evening concerts at Euclid Beach and Edgewater Beach starting June 11. The series offers live music, a happy hour beer garden, and food trucks, with additional live music events planned throughout the summer at various park locations.",
+    "source_url": "https://www.clevelandmetroparks.com/news-press/cleveland-metroparks-announces-2026-summer-concert-series-along-lakefront",
+    "source_name": "Cleveland Metroparks",
+    "publication_date": "2026-05-18T16:00:00+00:00",
+    "collection_date": "2026-05-19T10:03:22.37773+00:00"
+   },
+   {
+    "id": 1473,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Prepares for High Visitation and Summer Openings",
+    "summary": "Cleveland Metroparks anticipates high visitation at lakefront parks this weekend and encourages early arrival, with vehicular access closing when parking lots reach capacity. The Metroparks also announced the opening of seasonal dining, concessions, marinas, the Edgewater Nature Shop, and the return of the eLCee2 Water Taxi and water rentals at various locations. Additionally, they provided information on swim safety, boating access, and reminded visitors to keep parks clean.",
+    "source_url": "https://www.clevelandmetroparks.com/news-press/celebrate-the-start-of-the-summer-season-in-cleveland-metroparks",
+    "source_name": "Cleveland Metroparks",
+    "publication_date": "2026-05-18T16:00:00+00:00",
+    "collection_date": "2026-05-20T10:02:17.619982+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Same TV station; its own name in both texts is not a shared story",
+  "items": [
+   {
+    "id": 7233,
+    "poi_id": 5653,
+    "poi_name": "Conservancy for Cuyahoga Valley National Park",
+    "title": "New Day Cleveland: Conservancy for Cuyahoga Valley National Park 1",
+    "summary": "The latest videos from Fox 8 Cleveland WJW.",
+    "source_url": "https://fox8.com/video/new-day-cleveland-conservancy-for-cuyahoga-valley-national-park-1/12202858/",
+    "source_name": "fox8.com",
+    "publication_date": "2026-09-24T16:00:00+00:00",
+    "collection_date": "2026-09-25T10:01:58.004307+00:00"
+   },
+   {
+    "id": 7222,
+    "poi_id": 959,
+    "poi_name": "Cuyahoga River",
+    "title": "Lake sturgeon release in Cuyahoga River - Fox 8 Cleveland WJW",
+    "summary": "The Cuyahoga Valley National Park is inviting the public to help release young lake sturgeon into the Cuyahoga River, as part of an ongoing effort to repopulate the giant fish into Ohio waterways.",
+    "source_url": "https://fox8.com/news/look-giant-fish-making-comeback-in-ohio-waterways/",
+    "source_name": "fox8.com",
+    "publication_date": "2026-09-09T16:00:00+00:00",
+    "collection_date": "2026-09-24T09:06:14.775488+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Two travel features on train rides, different stories",
+  "items": [
+   {
+    "id": 7527,
+    "poi_id": 5660,
+    "poi_name": "Cuyahoga Valley Scenic Railroad",
+    "title": "Vintage Train Rides Deliver Fall Foliage and Holiday Cheer",
+    "summary": "Leaf peepers in Northeast Ohio can leave the car keys at home this fall and watch the color change from a vintage rail car. Cuyahoga Valley National Park is...",
+    "source_url": "https://www.nbcrightnow.com/yakima/news/syndicated/vintage-train-rides-deliver-fall-foliage-and-holiday-cheer/article_e6c8296b-ac4f-5544-88a5-59577c9f1155.html",
+    "source_name": "nbcrightnow.com",
+    "publication_date": "2026-10-01T16:00:00+00:00",
+    "collection_date": "2026-10-02T10:01:41.596751+00:00",
+    "alt_urls": [
+     "https://travel.yahoo.com/guides/articles/vintage-train-rides-deliver-fall-233007049.html",
+     "https://www.caledonianrecord.com/news/national/vintage-train-rides-deliver-fall-foliage-and-holiday-cheer/article_6233153f-8a9d-53a1-ba38-74f888cb36d5.html",
+     "https://www.djournal.com/news/national/vintage-train-rides-deliver-fall-foliage-and-holiday-cheer/article_96d08a51-3253-533b-bcb2-c6a212055769.html",
+     "https://www.jambalayanews.com/news/national/vintage-train-rides-deliver-fall-foliage-and-holiday-cheer/article_4c639228-f0ff-5092-af6b-782d748a4040.html",
+     "https://www.pmg-ky1.com/news/national/vintage-train-rides-deliver-fall-foliage-and-holiday-cheer/article_011b30c5-2fb2-58de-b8cb-7b23045542d5.html",
+     "https://www.themountaineer.com/news/national/vintage-train-rides-deliver-fall-foliage-and-holiday-cheer/article_3c4d47cb-b0a1-56e1-b374-336de303f950.html",
+     "https://www.westcentralsbest.com/news/national/vintage-train-rides-deliver-fall-foliage-and-holiday-cheer/article_5331a596-6ffa-527c-aed6-dbac24fb9424.html"
+    ]
+   },
+   {
+    "id": 7337,
+    "poi_id": 5660,
+    "poi_name": "Cuyahoga Valley Scenic Railroad",
+    "title": "You Can Take a Train to Ohio’s Best Fall Hike",
+    "summary": "Some of the people on this trail arrived by train. The Cuyahoga Valley Scenic Railroad runs through Ohio's only national park, and hikers ride it in from...",
+    "source_url": "https://www.onlyinyourstate.com/ohio/best-fall-hike-peninsula-oh",
+    "source_name": "onlyinyourstate.com",
+    "publication_date": "2026-09-26T16:00:00+00:00",
+    "collection_date": "2026-09-27T10:02:37.573242+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "End-of-summer events vs fall events lineup",
+  "items": [
+   {
+    "id": 6276,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Announces Lineup of End-of-Summer Family Events",
+    "summary": "Touch-a-Truck Returns to Brookside Reservation. The 15th annual Touch-a-Truck presented by CrossCountry Mortgage(Opens in a new window)...",
+    "source_url": "https://www.google.com/goto?url=CAESqwEB6zswFSqjV_yXt8xLUCueZtq_hRNkCLEjQg-BkSJTSMorVv-X3ek1hP5nyonxg8sNzpsmnN5metNx1VZ8MgTMD_s8TvpYbP6BWM9CwsrcI7g-5nD5p941oz56xuN_f3kW9iR_6Ag7cLqoQhXcW2U-m2OmWZQdKlSMCEPgMRkPHJtPLGbNVpcLHp8z44SJQEYBRpaX84-bpv26ICd_hLT-vHxq68xjFce57c8",
+    "source_name": "google.com",
+    "publication_date": "2026-08-24T16:00:00+00:00",
+    "collection_date": "2026-08-25T10:02:56.039801+00:00"
+   },
+   {
+    "id": 6253,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Announces Fall Events: Touch-a-Truck, Nature at Night, and Sturgeon Fest",
+    "summary": "Cleveland Metroparks is hosting three free events in September: the 15th annual Touch-a-Truck at Brookside Reservation on September 20, Nature at Night at North Chagrin Nature Center on September 12, and the second annual Sturgeon Fest at Rivergate Park on September 19. These events offer opportunities for families to explore vehicles, discover nocturnal wildlife, and learn about lake sturgeon restoration efforts.",
+    "source_url": "https://www.clevelandmetroparks.com/news-press/cleveland-metroparks-announces-lineup-of-end-of-summer-family-events",
+    "source_name": "Cleveland Metroparks",
+    "publication_date": "2026-08-24T16:00:00+00:00",
+    "collection_date": "2026-08-24T10:02:55.571842+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Boo at the Zoo vs the season-wide fall events release",
+  "items": [
+   {
+    "id": 6881,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Zoo Announces Return of 'Boo at the Zoo' and Halloween 5K",
+    "summary": "Cleveland Metroparks Zoo is bringing back its \"Boo at the Zoo\" event, running Thursday through Sunday evenings from October 1-25, featuring Halloween displays, trick-or-treating, character meet-and-greets, a dance party, and a new VIP experience. Additionally, the zoo will host a Halloween 5K on October 24, encouraging participants to run or walk in costume.",
+    "source_url": "https://www.wfmj.com/news/local-news/boo-at-the-zoo-coming-back-to-cleveland-metroparks-zoo/article_c9f2ed87-07e8-44fb-a310-eca1037e71be.html",
+    "source_name": "WFMJ",
+    "publication_date": "2026-09-08T16:00:00+00:00",
+    "collection_date": "2026-09-09T10:01:45.228467+00:00",
+    "alt_urls": [
+     "https://www.northeastohioparent.com/worth-noting/cleveland-metroparks-boo-at-the-zoo-returns/"
+    ]
+   },
+   {
+    "id": 6999,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Announces Fall Events and Activities",
+    "summary": "Cleveland Metroparks is hosting a variety of fall-themed events and activities for all ages, including seasonal clambakes, FallFest, Oktoberfest, a Fall Family Fishing Fest, and Curiosities at the Castle. Additionally, Moonlight Golf will return with special Halloween-themed nights. These events offer opportunities for live music, food, family fun, and experiencing the changing season.",
+    "source_url": "https://www.clevelandmetroparks.com/news-press/fall",
+    "source_name": "Cleveland Metroparks",
+    "publication_date": "2026-09-10T16:00:00+00:00",
+    "collection_date": "2026-09-11T10:02:11.781269+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "A travel feature and a one-line POI blurb from different outlets",
+  "items": [
+   {
+    "id": 6434,
+    "poi_id": 5723,
+    "poi_name": "Jaite Mill Historic District",
+    "title": "This Quiet Town Near Cuyahoga Valley Is the Weekend Escape You Need",
+    "summary": "Looking for a quiet weekend getaway in Ohio? Brecksville offers small-town charm and easy access to Cuyahoga Valley National Park.",
+    "source_url": "https://www.google.com/goto?url=CAESfwHrOzAVXquar4iw12oBosyETkCsQ5AxVefFBnPrQcnnMDPYHTNL_AdtQm06nKG9EHfkHEPuRqtcOwRx4enOEzUNTInMbhFhpLrpUXxBYds30scJ-etkFgNqz9liv6KCHPBgAo17x87GXe4MkJeuLJ3aM9xI361hpi6qcHjUKTU",
+    "source_name": "google.com",
+    "publication_date": "2026-08-25T16:00:00+00:00",
+    "collection_date": "2026-08-27T09:08:43.131227+00:00"
+   },
+   {
+    "id": 6238,
+    "poi_id": 5747,
+    "poi_name": "Ohio & Erie Canalway Heritage Area",
+    "title": "Lock 30",
+    "summary": "Lock 30 along the Ohio & Erie Canal in Cuyahoga Valley National Park.",
+    "source_url": "https://www.nps.gov/places/000/lock-30.htm",
+    "source_name": "nps.gov",
+    "publication_date": "2026-08-21T16:00:00+00:00",
+    "collection_date": "2026-08-22T10:02:47.016314+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "different",
+  "why": "Weekend roundup vs a fishing feature",
+  "items": [
+   {
+    "id": 5670,
+    "poi_id": 5771,
+    "poi_name": "Greater Cleveland Acquarium",
+    "title": "Things to Do This Weekend In Cleveland: June 18-21",
+    "summary": "Find some fun this Father's Day weekend in Northeast Ohio.",
+    "source_url": "https://clevelandmagazine.com/articles/things-to-do-this-weekend-in-cleveland-june-18-21/",
+    "source_name": "clevelandmagazine.com",
+    "publication_date": "2026-06-30T16:00:00+00:00",
+    "collection_date": "2026-07-30T09:04:46.429274+00:00"
+   },
+   {
+    "id": 5637,
+    "poi_id": 5769,
+    "poi_name": "Parma Heights Reservoir",
+    "title": "The best Father’s Day gift this year doesn’t cost a thing — and it involves fishing: NE Ohio fishing report",
+    "summary": "Ohio offers free fishing this Father's Day weekend, with stocked lakes and local events like Vermilion's Festival of the Fish.",
+    "source_url": "https://www.cleveland.com/outdoors/2026/06/the-best-fathers-day-gift-this-year-doesnt-cost-a-thing-and-it-involves-fishing-ne-ohio-fishing-report.html",
+    "source_name": "cleveland.com",
+    "publication_date": "2026-06-30T16:00:00+00:00",
+    "collection_date": "2026-07-30T09:01:45.447736+00:00"
+   }
+  ]
+ }
+]

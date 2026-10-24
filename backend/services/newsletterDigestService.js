@@ -1,5 +1,9 @@
 import { sendEmail, sendDraftToRecipients } from './buttondownClient.js';
 import { createLogger } from '../utils/logger.js';
+import { createMatchContext, dedupeNews, dedupeEvents, urlHost as sourceHost } from './dedup/index.js';
+import { loadMatchContext } from './dedup/candidates.js';
+
+export { stripDateline } from './dedup/index.js';
 
 const logger = createLogger('NewsletterDigest');
 
@@ -26,11 +30,6 @@ const DIGEST_EXCLUDED_NEWS_HOSTS = [
   'grokipedia.com'
 ];
 
-function sourceHost(sourceUrl) {
-  if (!sourceUrl || !URL.canParse(sourceUrl)) return null;
-  return new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./, '');
-}
-
 // Host-boundary match so 'x.com' excludes x.com and m.x.com but not phoenix.com.
 export function isDigestNewsSource(sourceUrl) {
   const host = sourceHost(sourceUrl);
@@ -39,164 +38,34 @@ export function isDigestNewsSource(sourceUrl) {
   return !DIGEST_EXCLUDED_NEWS_HOSTS.some(h => host === h || host.endsWith(`.${h}`));
 }
 
-// Mirrors normalizeTitle in newsService.js (kept local so this module stays
-// importable without pulling in the whole collection pipeline).
-function normalizeEventTitle(title) {
-  if (!title) return '';
-  return title.toLowerCase().replace(/^the\s+/i, '').trim();
-}
-
-function dayInTimezone(date, tz) {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit'
-  }).format(new Date(date));
-}
-
-// Collapse rows that are the same event on the same calendar day at the same
-// POI. Save-time dedup now catches these going forward, but rows collected
-// before that fix (and any that slip through) must not reach subscribers.
-// Input is sorted by start_date ASC, so the variant with a real start time
-// wins over a bare-date noon fallback.
-export function dedupeDigestEvents(events, tz = 'America/New_York') {
-  const seen = new Set();
-  return events.filter(event => {
-    const key = `${event.poi_id}|${normalizeEventTitle(event.title)}|${dayInTimezone(event.start_date, tz)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-const NEWS_STOPWORDS = new Set([
-  'the', 'and', 'for', 'are', 'will', 'with', 'its', 'has', 'have', 'had',
-  'this', 'that', 'these', 'those', 'from', 'they', 'their', 'been', 'was',
-  'were', 'which', 'also', 'more', 'than', 'into', 'about', 'after', 'before',
-  'host', 'hosts', 'hosting', 'held', 'hold', 'holds', 'new', 'news',
-  'announce', 'announces', 'announced', 'including', 'include', 'includes'
-]);
-
-// A scraped summary can end in the page's dateline ("Published: <date> at
-// 9:26 AM PDT|Updated: 16 hours ago"). Its words say when, not what, and they
-// pushed the Oct 23 Primate Forest pair under the overlap ratio. Only the
-// dateline phrase is dropped; dates and numbers in the story itself still count.
-const DATELINE_RE = /\b(?:published|updated|posted)\s*:[^|]*?(?:\bago\b|\b[ap]\.?m\.?\s+[a-z]{2,4}\b|(?=\|)|$)/gi;
+// Fallback match context for callers without a pool: the region words plus
+// each item's own POI name. The digest itself loads every POI name.
+const DEFAULT_MATCH_CONTEXT = createMatchContext();
 
 /**
- * Remove "Published:/Updated:/Posted:" dateline phrases from a summary. Each
- * phrase ends at "ago", a time with its zone (9:26 AM PDT), a "|" separator,
- * or the end of the text. Other dates and numbers are left alone.
- * @param {string|null|undefined} text Summary text
- * @returns {string} The text with dateline phrases replaced by a space; '' when text is missing
+ * Collapse rows that are one event: the same event on the same day under one
+ * organizer or venue, or two organizers' listings at one venue and start time.
+ * Input is sorted by start_date ASC, so a real start time wins over a bare-date
+ * noon fallback.
+ * @param {object[]} events event rows, sorted by start
+ * @param {string} [tz] IANA timezone for calendar days
+ * @param {ReturnType<typeof createMatchContext>} [ctx] match context
+ * @returns {object[]} one row per event, in input order
  */
-export function stripDateline(text) {
-  return (text || '').replace(DATELINE_RE, ' ');
+export function dedupeDigestEvents(events, tz = 'America/New_York', ctx = DEFAULT_MATCH_CONTEXT) {
+  return dedupeEvents(events, { ...ctx, tz }).kept;
 }
 
-function newsTokens(item) {
-  const poiTokens = new Set(
-    (item.poi_name || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
-  );
-  const stem = (word) => word.replace(/ies$/, 'y').replace(/(ing|ed|es|s)$/, '');
-  return new Set(
-    `${item.title || ''} ${stripDateline(item.summary)}`
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w) && !poiTokens.has(w))
-      .map(stem)
-  );
-}
-
-function titleTokens(item) {
-  const stem = (word) => word.replace(/ies$/, 'y').replace(/(ing|ed|es|s)$/, '');
-  return new Set(
-    (item.title || '')
-      .toLowerCase()
-      .split(/[^a-z0-9]+/)
-      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w))
-      .map(stem)
-  );
-}
-
-// Headline vocabulary without the POI's own name, so two unrelated stories
-// about "Akron Zoo" don't match on the name alone.
-function headlineTokens(item) {
-  const poiTokens = titleTokens({ title: item.poi_name });
-  return new Set([...titleTokens(item)].filter(t => !poiTokens.has(t)));
-}
-
-const SAME_OUTLET_WINDOW_MS = 48 * 60 * 60 * 1000;
-
-function newsTimestamp(item) {
-  const date = item.publication_date || item.collection_date;
-  return date ? new Date(date).getTime() : null;
-}
-
-function sharesEnough(a, b, minShared, minRatio) {
-  let shared = 0;
-  for (const t of a) if (b.has(t)) shared++;
-  const smaller = Math.min(a.size, b.size);
-  return smaller > 0 && shared >= minShared && shared / smaller >= minRatio;
-}
-
-// One outlet covering one event twice (a photo gallery and the story, a day
-// apart) often lands on two sibling POIs (John Brown Monument vs John Brown
-// House, in the Sept 25 preview), and a caption-length summary shares almost no
-// vocabulary with the article. Match on outlet + time window + headline
-// instead, ignoring POI.
-function isSameOutletRepeat(a, b) {
-  const hostA = sourceHost(a.source_url);
-  if (!hostA || hostA !== sourceHost(b.source_url)) return false;
-  const timeA = newsTimestamp(a);
-  const timeB = newsTimestamp(b);
-  if (timeA === null || timeB === null || Math.abs(timeA - timeB) > SAME_OUTLET_WINDOW_MS) return false;
-  return sharesEnough(titleTokens(a), titleTokens(b), 4, 0.5);
-}
-
-const summaryLength = (item) => (item.summary || '').length;
-
-// Two stories about the same POI count as one when their significant vocabulary
-// (title + summary, minus stopwords and the POI's name) mostly overlaps. Two
-// outlets' long summaries of one event can diverge past that ratio, so a strong
-// headline match also counts, but only with some summary overlap behind it;
-// templated headlines ("opens a new exhibit" vs "event") share no story. Input
-// is sorted most-recent-first, so the freshest copy wins, except for same-outlet
-// repeats, where the fuller summary wins.
-export function dedupeDigestNews(news) {
-  const kept = [];
-  const tokenCache = new Map();
-  const tokensFor = (item) => {
-    if (!tokenCache.has(item)) {
-      tokenCache.set(item, { text: newsTokens(item), headline: headlineTokens(item) });
-    }
-    return tokenCache.get(item);
-  };
-  for (const item of news) {
-    const mine = tokensFor(item);
-    const samePoiIndex = kept.findIndex(other => {
-      if (other.poi_id !== item.poi_id) return false;
-      const theirs = tokensFor(other);
-      // Fix: headline matches need summary corroboration, and tokens are computed once per item (PR #694 review)
-      return sharesEnough(mine.text, theirs.text, 4, 0.4) || (
-        sharesEnough(mine.headline, theirs.headline, 3, 0.6) &&
-        sharesEnough(mine.text, theirs.text, 4, 0.2)
-      );
-    });
-    if (samePoiIndex !== -1) {
-      // Fix: a same-outlet repeat keeps the fuller summary on this path too (PR #694 review)
-      const other = kept[samePoiIndex];
-      if (isSameOutletRepeat(other, item) && summaryLength(item) > summaryLength(other)) {
-        kept[samePoiIndex] = item;
-      }
-      continue;
-    }
-    const outletDupIndex = kept.findIndex(other => isSameOutletRepeat(other, item));
-    if (outletDupIndex === -1) {
-      kept.push(item);
-    } else if (summaryLength(item) > summaryLength(kept[outletDupIndex])) {
-      kept[outletDupIndex] = item;
-    }
-  }
-  return kept;
+/**
+ * One item per story. Input is sorted most-recent-first, so the freshest copy
+ * wins, except that a same-outlet copy with a fuller summary replaces it.
+ * Matching rules live in services/dedup/.
+ * @param {object[]} news news rows, most recent first
+ * @param {ReturnType<typeof createMatchContext>} [ctx] match context
+ * @returns {object[]} one row per story, in input order
+ */
+export function dedupeDigestNews(news, ctx = DEFAULT_MATCH_CONTEXT) {
+  return dedupeNews(news, ctx).kept;
 }
 
 // Events are usually attached to the organizing POI ("Summit Metro Parks"),
@@ -269,31 +138,38 @@ async function fetchDigestGreeting(pool) {
   }
 }
 
-async function fetchDigestContent(pool, tz, asOfDate) {
-  const eventsQuery = `
+// The digest's window, for rows still eligible to send or (excluded = true) for
+// the ones an editor held out, which the draft lists separately.
+function digestEventsSql(excluded) {
+  return `
     SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-           e.location_details, e.source_url, p.id as poi_id, p.name as poi_name, p.poi_roles
+           e.location_details, e.source_url, e.venue_poi_id,
+           p.id as poi_id, p.name as poi_name, p.poi_roles
     FROM poi_events e
     JOIN pois p ON e.poi_id = p.id
     WHERE (e.start_date AT TIME ZONE $1)::date >= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date
       AND (e.start_date AT TIME ZONE $1)::date <= (COALESCE($2::timestamptz, CURRENT_TIMESTAMP) AT TIME ZONE $1)::date + 2
       AND e.moderation_status IN ('published', 'auto_approved')
-      AND NOT e.digest_excluded
+      AND ${excluded ? '' : 'NOT '}e.digest_excluded
     ORDER BY e.start_date ASC, e.id ASC
     LIMIT ${DIGEST_EVENT_LIMIT * 2}
   `;
+}
 
-  // Current News collected in the week before the send (spec 044); Historical News never
-  // reaches subscribers. The publication_date upper bound still matters: a date parsed off
-  // an event page can land in the future and would sort above genuine news.
-  const newsQuery = `
+// Current News collected in the week before the send (spec 044); Historical News never
+// reaches subscribers. The publication_date upper bound still matters: a date parsed off
+// an event page can land in the future and would sort above genuine news.
+// alt_urls are the other links a story was collected under, which dedup matches on.
+function digestNewsSql(excluded) {
+  return `
     SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles
+           n.publication_date, n.collection_date, p.id as poi_id, p.name as poi_name, p.poi_roles,
+           (SELECT ARRAY_AGG(u.url) FROM poi_news_urls u WHERE u.news_id = n.id) AS alt_urls
     FROM poi_news n
     JOIN pois p ON n.poi_id = p.id
     WHERE n.moderation_status IN ('published', 'auto_approved')
       AND n.pipeline = 'current'
-      AND NOT n.digest_excluded
+      AND ${excluded ? '' : 'NOT '}n.digest_excluded
       AND n.collection_date > COALESCE($1::timestamptz, NOW()) - INTERVAL '7 days'
       AND n.collection_date <= COALESCE($1::timestamptz, NOW())
       AND COALESCE(n.publication_date, n.collection_date) <= COALESCE($1::timestamptz, NOW())
@@ -305,19 +181,25 @@ async function fetchDigestContent(pool, tz, asOfDate) {
     ORDER BY COALESCE(n.publication_date, n.collection_date) DESC, n.id DESC
     LIMIT ${DIGEST_NEWS_LIMIT * DIGEST_NEWS_FETCH_MULTIPLIER}
   `;
+}
 
-  const [eventsResult, newsResult] = await Promise.all([
-    pool.query(eventsQuery, [tz, asOfDate]),
-    pool.query(newsQuery, [asOfDate])
+async function fetchDigestContent(pool, tz, asOfDate) {
+  const [eventsResult, newsResult, ctx] = await Promise.all([
+    pool.query(digestEventsSql(false), [tz, asOfDate]),
+    pool.query(digestNewsSql(false), [asOfDate]),
+    loadMatchContext(pool, { tz })
   ]);
 
-  const events = dedupeDigestEvents(eventsResult.rows, tz);
-  const news = dedupeDigestNews(newsResult.rows.filter(n => isDigestNewsSource(n.source_url)));
+  const events = dedupeEvents(eventsResult.rows, ctx);
+  const news = dedupeNews(newsResult.rows.filter(n => isDigestNewsSource(n.source_url)), ctx);
   return {
-    events: events.slice(0, DIGEST_EVENT_LIMIT),
-    news: news.slice(0, DIGEST_NEWS_LIMIT),
-    eventsOverflow: events.slice(DIGEST_EVENT_LIMIT),
-    newsBench: news.slice(DIGEST_NEWS_LIMIT, DIGEST_NEWS_LIMIT + DIGEST_NEWS_BENCH)
+    events: events.kept.slice(0, DIGEST_EVENT_LIMIT),
+    news: news.kept.slice(0, DIGEST_NEWS_LIMIT),
+    eventsOverflow: events.kept.slice(DIGEST_EVENT_LIMIT),
+    newsBench: news.kept.slice(DIGEST_NEWS_LIMIT, DIGEST_NEWS_LIMIT + DIGEST_NEWS_BENCH),
+    eventsCollapsed: events.collapsed,
+    newsCollapsed: news.collapsed,
+    ctx
   };
 }
 
@@ -356,15 +238,21 @@ const draftEventItem = (e) => ({
  * @param {string|null} [options.asOf] ISO 8601 instant to build the digest as of.
  *   Default: the upcoming send (upcomingSendISO).
  * @returns {Promise<{sends_at: string, timezone: string, greeting: string|null,
- *   news: object[], news_bench: object[], events: object[], events_overflow: object[]}>}
+ *   news: object[], news_bench: object[], events: object[], events_overflow: object[],
+ *   news_collapsed: object[], events_collapsed: object[],
+ *   news_excluded: object[], events_excluded: object[]}>}
  *   news and events are what sends, in send order; news_bench and events_overflow
- *   are the items past the caps. Item fields are listed in the spec.
+ *   are the items past the caps. *_collapsed are duplicates folded into a kept item
+ *   ({id, title, into, matched, reason}); *_excluded are items an editor held out
+ *   that would otherwise qualify. Item fields are listed in the spec.
  */
 export async function getDigestDraft(pool, { tz = 'America/New_York', asOf = null } = {}) {
   const sendsAt = asOf || upcomingSendISO(tz);
-  const [content, greeting] = await Promise.all([
+  const [content, greeting, excludedNews, excludedEvents] = await Promise.all([
     fetchDigestContent(pool, tz, sendsAt),
-    fetchDigestGreeting(pool)
+    fetchDigestGreeting(pool),
+    pool.query(digestNewsSql(true), [sendsAt]),
+    pool.query(digestEventsSql(true), [tz, sendsAt])
   ]);
   return {
     sends_at: sendsAt,
@@ -373,7 +261,13 @@ export async function getDigestDraft(pool, { tz = 'America/New_York', asOf = nul
     news: content.news.map(draftNewsItem),
     news_bench: content.newsBench.map(draftNewsItem),
     events: content.events.map(draftEventItem),
-    events_overflow: content.eventsOverflow.map(draftEventItem)
+    events_overflow: content.eventsOverflow.map(draftEventItem),
+    news_collapsed: content.newsCollapsed,
+    events_collapsed: content.eventsCollapsed,
+    // Filtered and deduped like the sendable rows, so each one listed could really send
+    news_excluded: dedupeNews(excludedNews.rows.filter(n => isDigestNewsSource(n.source_url)), content.ctx)
+      .kept.map(draftNewsItem),
+    events_excluded: dedupeEvents(excludedEvents.rows, content.ctx).kept.map(draftEventItem)
   };
 }
 
@@ -854,10 +748,11 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
   const greeting = await fetchDigestGreeting(pool);
   const allPoiIds = [...new Set(targets.rows.flatMap(t => t.poi_ids))];
 
-  const [newsResult, eventsResult] = await Promise.all([
+  const [newsResult, eventsResult, matchCtx] = await Promise.all([
     pool.query(
       `SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.news_type,
-              n.publication_date, n.collection_date, p.id AS poi_id, p.name AS poi_name, p.poi_roles
+              n.publication_date, n.collection_date, p.id AS poi_id, p.name AS poi_name, p.poi_roles,
+              (SELECT ARRAY_AGG(u.url) FROM poi_news_urls u WHERE u.news_id = n.id) AS alt_urls
          FROM poi_news n
          JOIN pois p ON p.id = n.poi_id
         WHERE n.poi_id = ANY($1::int[])
@@ -875,7 +770,8 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
     ),
     pool.query(
       `SELECT e.id, e.title, e.description, e.start_date, e.end_date, e.event_type,
-              e.location_details, e.source_url, p.id AS poi_id, p.name AS poi_name, p.poi_roles
+              e.location_details, e.source_url, e.venue_poi_id,
+              p.id AS poi_id, p.name AS poi_name, p.poi_roles
          FROM poi_events e
          JOIN pois p ON p.id = e.poi_id
         WHERE e.poi_id = ANY($1::int[])
@@ -885,7 +781,8 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
           AND e.start_date <= NOW() + INTERVAL '4 days'
         ORDER BY e.start_date ASC`,
       [allPoiIds]
-    )
+    ),
+    loadMatchContext(pool)
   ]);
 
   let sent = 0;
@@ -904,7 +801,8 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
     const userNews = dedupeDigestNews(
       newsResult.rows
         .filter(n => poiSet.has(n.poi_id))
-        .filter(n => isDigestNewsSource(n.source_url))
+        .filter(n => isDigestNewsSource(n.source_url)),
+      matchCtx
     ).slice(0, 5);
     const userEvents = dedupeDigestEvents(
       eventsResult.rows
@@ -913,7 +811,8 @@ export async function sendPersonalizedDigests(pool, pgBossJobId = null) {
           const day = dayInTz(e.start_date);
           return day >= friday && day <= sunday;
         }),
-      tz
+      tz,
+      matchCtx
     ).slice(0, 10);
 
     const html = renderDigestHtml(userEvents, userNews, tz, greeting);
