@@ -19,6 +19,7 @@ The Oct 23, 2026 digest ran the Primate Forest opening twice. Four places decide
   - `url`: the same URL with alike titles.
   - `slot`: the same POI or venue POI, alike titles, and start times within 30 minutes. Times may differ when the titles are identical or one start is the bare-date noon fallback.
   - `venue`: the same venue (by `venue_poi_id` or venue text), starts within 30 minutes, and alike titles.
+- The digest keeps one entry per story but lists up to three other outlets' articles under it ("Also covered by:"). Two outlets' articles are a reader's choice, not a duplicate (Scott, Oct 24 2026); a same-outlet repeat is not listed.
 - `canonicalUrl` is applied in memory only. It is a superset of the SQL identity `LOWER(REGEXP_REPLACE(url, '/+$', ''))`, which the unique index and save-time lookup keep using.
 - Thresholds live in `context.js`. A caller can pass stricter ones.
 - A headline that names a date only matches a headline naming the same date ("Fishing Report: October 1" vs "October 8"). A shared URL also needs alike headlines when the caller asks (`urlTitle`), because some URLs are living pages.

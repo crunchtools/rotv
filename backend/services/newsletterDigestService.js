@@ -65,7 +65,35 @@ export function dedupeDigestEvents(events, tz = 'America/New_York', ctx = DEFAUL
  * @returns {object[]} one row per story, in input order
  */
 export function dedupeDigestNews(news, ctx = DEFAULT_MATCH_CONTEXT) {
-  return dedupeNews(news, ctx).kept;
+  return withAlsoCoveredBy(dedupeNews(news, ctx), news);
+}
+
+// Another outlet's article is a reader's choice (a paywall, a preferred writer),
+// so the copies folded into a story are listed under it instead of dropped.
+// Same-outlet repeats are not a choice and stay hidden.
+const MAX_ALSO_COVERED = 3;
+
+/**
+ * The kept stories of a dedup result, each with also_covered_by: up to three
+ * other outlets' articles that were folded into it.
+ * @param {{kept: object[], collapsed: {id: number, into: number}[]}} result dedupeNews output
+ * @param {object[]} rows the rows dedupeNews was given
+ * @returns {object[]} kept rows plus also_covered_by: {id, source_name, source_url, source_host}[]
+ */
+function withAlsoCoveredBy(result, rows) {
+  const byId = new Map(rows.map(row => [row.id, row]));
+  return result.kept.map(story => {
+    const hosts = new Set([sourceHost(story.source_url)]);
+    const alsoCoveredBy = [];
+    for (const { id, into } of result.collapsed) {
+      const row = into === story.id ? byId.get(id) : null;
+      const host = row && sourceHost(row.source_url);
+      if (!host || hosts.has(host) || alsoCoveredBy.length >= MAX_ALSO_COVERED) continue;
+      hosts.add(host);
+      alsoCoveredBy.push({ id: row.id, source_name: row.source_name || host, source_url: row.source_url, source_host: host });
+    }
+    return { ...story, also_covered_by: alsoCoveredBy };
+  });
 }
 
 // Events are usually attached to the organizing POI ("Summit Metro Parks"),
@@ -191,12 +219,14 @@ async function fetchDigestContent(pool, tz, asOfDate) {
   ]);
 
   const events = dedupeEvents(eventsResult.rows, ctx);
-  const news = dedupeNews(newsResult.rows.filter(n => isDigestNewsSource(n.source_url)), ctx);
+  const newsRows = newsResult.rows.filter(n => isDigestNewsSource(n.source_url));
+  const news = dedupeNews(newsRows, ctx);
+  const stories = withAlsoCoveredBy(news, newsRows);
   return {
     events: events.kept.slice(0, DIGEST_EVENT_LIMIT),
-    news: news.kept.slice(0, DIGEST_NEWS_LIMIT),
+    news: stories.slice(0, DIGEST_NEWS_LIMIT),
     eventsOverflow: events.kept.slice(DIGEST_EVENT_LIMIT),
-    newsBench: news.kept.slice(DIGEST_NEWS_LIMIT, DIGEST_NEWS_LIMIT + DIGEST_NEWS_BENCH),
+    newsBench: stories.slice(DIGEST_NEWS_LIMIT, DIGEST_NEWS_LIMIT + DIGEST_NEWS_BENCH),
     eventsCollapsed: events.collapsed,
     newsCollapsed: news.collapsed,
     ctx
@@ -212,7 +242,8 @@ const draftNewsItem = (n) => ({
   poi_id: n.poi_id,
   poi_name: n.poi_name,
   publication_date: n.publication_date,
-  collection_date: n.collection_date
+  collection_date: n.collection_date,
+  also_covered_by: n.also_covered_by || []
 });
 
 const draftEventItem = (e) => ({
@@ -418,6 +449,12 @@ ${greeting ? `
       }
       if (item.source_url) {
         html += `      <p><a href="${escapeHtml(item.source_url)}" style="${linkStyle}">Read full article →</a></p>\n`;
+      }
+      if (item.also_covered_by?.length) {
+        const links = item.also_covered_by
+          .map(other => `<a href="${escapeHtml(other.source_url)}" style="${linkStyle}">${escapeHtml(other.source_name)}</a>`)
+          .join(', ');
+        html += `      <p class="also-covered" style="font-size: 0.9em; color: #555;">Also covered by: ${links}</p>\n`;
       }
       html += `    </div>\n`;
     });

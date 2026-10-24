@@ -23,7 +23,7 @@ Nobody could ask the app what Friday's digest would send. The editor read the Th
 | `digest_draft` | `as_of` (ISO 8601, optional) | `{ sends_at, timezone, greeting, news, news_bench, events, events_overflow, news_collapsed, events_collapsed, news_excluded, events_excluded }` |
 | `digest_exclude` | `content_type` (`news` \| `event`), `id`, `excluded` (default true) | confirmation with the item's title, or an error when the id does not exist |
 
-News items carry `id, title, summary, source_url, source_host, poi_id, poi_name, publication_date, collection_date`. Events carry `id, title, description, start_date, end_date, location, poi_id, poi_name, source_url`, where `location` is the line the email prints.
+News items carry `id, title, summary, source_url, source_host, poi_id, poi_name, publication_date, collection_date, also_covered_by`. `also_covered_by` lists up to three other outlets' articles folded into the story (`{ id, source_name, source_url, source_host }`); the email prints them as "Also covered by:" links under the story. Events carry `id, title, description, start_date, end_date, location, poi_id, poi_name, source_url`, where `location` is the line the email prints.
 
 ## Out of scope
 - An admin UI for the draft or the flag. The consumer is the `/rotv-editor newsletter` skill.
