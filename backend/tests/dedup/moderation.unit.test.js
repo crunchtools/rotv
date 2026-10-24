@@ -20,6 +20,15 @@ describe('moderation duplicate bar', () => {
     });
   }
 
+  it('still rejects across outlets when the items share a link', () => {
+    // An aggregator copy whose alternate links include the original article
+    const original = { id: 1, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo opens $10 million animal hospital',
+      summary: 'The hospital expands in-house care.', source_url: 'https://www.cleveland.com/zoo-hospital' };
+    const copy = { ...original, id: 2, title: 'Akron Zoo Opens $10 Million Animal Hospital',
+      source_url: 'https://hoodline.com/akron-zoo-hospital', alt_urls: ['https://www.cleveland.com/zoo-hospital/'] };
+    expect(bestNewsMatch(copy, [original], strict)).toMatchObject({ reason: 'url', of: { id: 1 } });
+  });
+
   it('picks the closest of several candidates', () => {
     const [{ items: [item, copy] }] = fixture('moderation-pairs.json');
     const other = { ...copy, id: 1, title: 'Unrelated trail news', summary: 'Crews repaved a parking lot.', source_url: 'https://x.org/1', alt_urls: [] };
