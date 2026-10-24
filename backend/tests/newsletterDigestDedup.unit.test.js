@@ -12,7 +12,7 @@ vi.mock('../services/buttondownClient.js', () => ({
   sendDraftToRecipients: vi.fn()
 }));
 
-const { dedupeDigestEvents, dedupeDigestNews, isDigestNewsSource, digestEventLocation } = await import('../services/newsletterDigestService.js');
+const { dedupeDigestEvents, dedupeDigestNews, isDigestNewsSource, digestEventLocation, stripDateline } = await import('../services/newsletterDigestService.js');
 
 const TZ = 'America/New_York';
 
@@ -233,6 +233,35 @@ describe('dedupeDigestNews', () => {
       publication_date: '2026-10-21T16:00:00Z'
     };
     expect(dedupeDigestNews([zooRelease, tvStory]).map(i => i.id)).toEqual([8088]);
+  });
+});
+
+describe('stripDateline', () => {
+  const words = (text) => stripDateline(text).split(/\s+/).filter(Boolean).join(' ');
+
+  it('drops a dateline that ends in a time and zone', () => {
+    expect(words('Trail reopens. Published: Oct. 21, 2026 at 9:26 AM PDT')).toBe('Trail reopens.');
+  });
+
+  it('drops a relative "ago" dateline', () => {
+    expect(words('Trail reopens. Updated: 16 hours ago.')).toBe('Trail reopens. .');
+  });
+
+  it('drops a date-only dateline that runs into a pipe, and the one after it', () => {
+    expect(words('Trail reopens. Published: Oct. 21, 2026 | Updated: 16 hours ago')).toBe('Trail reopens. |');
+  });
+
+  it('drops a dateline at the end of the text', () => {
+    expect(words('Trail reopens. Posted: October 21')).toBe('Trail reopens.');
+  });
+
+  it('keeps dates and numbers in the story itself', () => {
+    const story = 'The 2026 race on October 21 drew 1,200 runners to the Towpath.';
+    expect(stripDateline(story)).toBe(story);
+  });
+
+  it('handles a missing summary', () => {
+    expect(stripDateline(null)).toBe('');
   });
 });
 

@@ -79,16 +79,26 @@ const NEWS_STOPWORDS = new Set([
 // 9:26 AM PDT|Updated: 16 hours ago"). Its words say when, not what, and they
 // pushed the Oct 23 Primate Forest pair under the overlap ratio. Only the
 // dateline phrase is dropped; dates and numbers in the story itself still count.
-const DATELINE_RE = /\b(?:published|updated|posted)\s*:[^|]*?(?:\bago\b|\b[ap]\.?m\.?\s+[a-z]{2,4}\b|$)/gi;
+const DATELINE_RE = /\b(?:published|updated|posted)\s*:[^|]*?(?:\bago\b|\b[ap]\.?m\.?\s+[a-z]{2,4}\b|(?=\|)|$)/gi;
+
+/**
+ * Remove "Published:/Updated:/Posted:" dateline phrases from a summary. Each
+ * phrase ends at "ago", a time with its zone (9:26 AM PDT), a "|" separator,
+ * or the end of the text. Other dates and numbers are left alone.
+ * @param {string|null|undefined} text Summary text
+ * @returns {string} The text with dateline phrases replaced by a space; '' when text is missing
+ */
+export function stripDateline(text) {
+  return (text || '').replace(DATELINE_RE, ' ');
+}
 
 function newsTokens(item) {
   const poiTokens = new Set(
     (item.poi_name || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
   );
   const stem = (word) => word.replace(/ies$/, 'y').replace(/(ing|ed|es|s)$/, '');
-  const summary = (item.summary || '').replace(DATELINE_RE, ' ');
   return new Set(
-    `${item.title || ''} ${summary}`
+    `${item.title || ''} ${stripDateline(item.summary)}`
       .toLowerCase()
       .split(/[^a-z0-9]+/)
       .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w) && !poiTokens.has(w))
