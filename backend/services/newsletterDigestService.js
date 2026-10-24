@@ -75,6 +75,18 @@ const NEWS_STOPWORDS = new Set([
   'announce', 'announces', 'announced', 'including', 'include', 'includes'
 ]);
 
+// Page boilerplate a scraped summary can carry ("Published: Oct. 21, 2026 at
+// 9:26 AM PDT | Updated: 16 hours ago"). These words say when, not what, and
+// they diluted the Primate Forest pair under the overlap ratio (Oct 23 digest).
+const DATELINE_WORDS = new Set([
+  'published', 'updated', 'posted', 'ago', 'minute', 'minutes', 'hour', 'hours',
+  'day', 'days', 'week', 'weeks', 'edt', 'est', 'cdt', 'cst', 'mdt', 'mst',
+  'pdt', 'pst', 'utc', 'gmt',
+  'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
+  'january', 'february', 'march', 'april', 'june', 'july', 'august',
+  'september', 'october', 'november', 'december'
+]);
+
 function newsTokens(item) {
   const poiTokens = new Set(
     (item.poi_name || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
@@ -84,7 +96,8 @@ function newsTokens(item) {
     `${item.title || ''} ${item.summary || ''}`
       .toLowerCase()
       .split(/[^a-z0-9]+/)
-      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w) && !poiTokens.has(w))
+      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w) && !DATELINE_WORDS.has(w) &&
+        !poiTokens.has(w) && !/^\d+$/.test(w))
       .map(stem)
   );
 }
