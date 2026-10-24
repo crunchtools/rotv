@@ -1,6 +1,7 @@
 /**
  * Moderation rejects only copies (spec 054). A rejected story leaves the site,
- * so a later update, another edition of a series, or a second take must stay.
+ * so a later update, another edition of a series, or another outlet's article
+ * on the same news must stay.
  * Pairs are real items from the May–Oct replay.
  */
 import { describe, it, expect, vi } from 'vitest';

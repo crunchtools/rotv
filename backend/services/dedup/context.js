@@ -42,17 +42,21 @@ export const NEWS_THRESHOLDS = Object.freeze({
   // Shared names count as evidence at all (moderation turns them off)
   useEntities: true,
   // A shared URL also needs headlines this alike (Dice)
-  urlTitle: 0
+  urlTitle: 0,
+  // Items from different outlets can match on more than a shared URL
+  crossOutlet: true
 });
 
 /**
- * Moderation rejects on a match, and a rejected story leaves the site, where a
- * second outlet's take or a later update still has value. So it only rejects
- * copies: the same link with a like headline, the same headline, one outlet's
- * near-identical headlines, or near-identical text. Shared names never count here: a replay rejected the
- * second week's Fishing Report and later Szalay's Farm updates on them.
+ * Moderation rejects on a match, and a rejected story leaves the site. Two
+ * outlets reporting the same news are two articles a reader may choose between
+ * (a paywall, a preferred writer), not a duplicate, so moderation rejects only
+ * copies: the same link with a like headline, or one outlet running the same
+ * story twice. Shared names never count: a replay rejected the next week's
+ * Fishing Report and later Szalay's Farm updates on them.
  */
 export const MODERATION_NEWS_THRESHOLDS = Object.freeze({
+  crossOutlet: false,
   useEntities: false,
   urlTitle: 0.6,
   text: 0.8,
