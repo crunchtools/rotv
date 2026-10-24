@@ -25,7 +25,7 @@ The Oct 23, 2026 digest ran the Primate Forest opening twice. Four places decide
 
 ## Moderation
 - The duplicate check runs first in `processItem`, before the LLM votes. `findNewsCandidates` and `findEventCandidates` fetch published items at any POI with a trigram-similar title (pg_trgm `%`, migration 011's index) or the same URL, within 14 days for news and 1 day for events.
-- News is rejected only as a copy under `MODERATION_NEWS_THRESHOLDS`: the same link with a like headline, the same headline, one outlet's near-identical headlines, or near-identical text. Shared names never reject. A rejected story leaves the site, and a later update or a second outlet's take belongs there.
+- News is rejected only as a copy under `MODERATION_NEWS_THRESHOLDS`: the same link with a like headline, or one outlet running the same story twice (same headline, near-identical headlines, or near-identical text). Two outlets reporting the same news are two articles, not a duplicate: a reader may not have one outlet's subscription or may prefer a writer (Scott, Oct 24 2026). Shared names never reject. A rejected story leaves the site.
 - A news match only under the digest's thresholds is recorded as `moderation_gates.duplicate` (`{ verdict: 'info', of, reason, score }`) and noted in `ai_reasoning`. It does not change the outcome: the digest folds it at send time, and on the site a second take is fine. Holding these would add about five items a week to the queue (replay: 143 of 989).
 - An event match rejects.
 - `forceStatus` skips the rejection.

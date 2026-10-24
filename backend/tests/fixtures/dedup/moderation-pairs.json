@@ -1,7 +1,7 @@
 [
  {
   "expected": "reject",
-  "why": "The same death notice from two outlets",
+  "why": "The same death notice run twice by one outlet",
   "items": [
    {
     "id": 7003,
@@ -28,8 +28,8 @@
   ]
  },
  {
-  "expected": "reject",
-  "why": "Identical headline",
+  "expected": "keep",
+  "why": "Identical headline from a different outlet: a second article, not a copy",
   "items": [
    {
     "id": 6995,
@@ -57,7 +57,7 @@
  },
  {
   "expected": "reject",
-  "why": "Identical headline, a week of syndication later",
+  "why": "One outlet reran its own story a week later",
   "items": [
    {
     "id": 7509,
@@ -84,8 +84,8 @@
   ]
  },
  {
-  "expected": "reject",
-  "why": "Near-identical rewrite of the animal hospital release",
+  "expected": "keep",
+  "why": "Another outlet’s rewrite of the animal hospital story: a reader may prefer either",
   "items": [
    {
     "id": 8133,

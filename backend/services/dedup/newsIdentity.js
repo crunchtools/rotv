@@ -101,6 +101,9 @@ export function matchNewsFeatures(fa, fb, ctx, entityDf = null, batchSize = 0) {
   const t = ctx.news;
   // A URL can be a living page (a trail status page that said closed, then reopened)
   if (shares(fa.urls, fb.urls) && dice(fa.titleGrams, fb.titleGrams) >= t.urlTitle) return matched('url', 1);
+  // When the caller treats each outlet's article as its own (moderation), only a
+  // shared URL can make two outlets' items one
+  if (!t.crossOutlet && fa.host !== fb.host) return { match: false, reason: null, score: 0 };
   // Headlines dated on different days are different editions of a series
   if (fa.titleDays.size && fb.titleDays.size && !shares(fa.titleDays, fb.titleDays)) {
     return { match: false, reason: null, score: 0 };

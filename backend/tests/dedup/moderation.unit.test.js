@@ -1,6 +1,7 @@
 /**
  * Moderation rejects only copies (spec 054). A rejected story leaves the site,
- * so a later update, another edition of a series, or a second take must stay.
+ * so a later update, another edition of a series, or another outlet's article
+ * on the same news must stay.
  * Pairs are real items from the May–Oct replay.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -18,6 +19,15 @@ describe('moderation duplicate bar', () => {
       expect(Boolean(bestNewsMatch(item, [published], strict))).toBe(expected === 'reject');
     });
   }
+
+  it('still rejects across outlets when the items share a link', () => {
+    // An aggregator copy whose alternate links include the original article
+    const original = { id: 1, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo opens $10 million animal hospital',
+      summary: 'The hospital expands in-house care.', source_url: 'https://www.cleveland.com/zoo-hospital' };
+    const copy = { ...original, id: 2, title: 'Akron Zoo Opens $10 Million Animal Hospital',
+      source_url: 'https://hoodline.com/akron-zoo-hospital', alt_urls: ['https://www.cleveland.com/zoo-hospital/'] };
+    expect(bestNewsMatch(copy, [original], strict)).toMatchObject({ reason: 'url', of: { id: 1 } });
+  });
 
   it('picks the closest of several candidates', () => {
     const [{ items: [item, copy] }] = fixture('moderation-pairs.json');
