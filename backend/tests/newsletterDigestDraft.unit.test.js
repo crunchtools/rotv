@@ -128,6 +128,9 @@ describe('getDigestDraft', () => {
     const draft = await getDigestDraft(pool, { tz: TZ, asOf: sendsAt });
 
     expect(draft.news.map(n => n.id)).toEqual([100, 101]);
+    expect(draft.news[0].also_covered_by).toEqual([
+      { id: 199, source_name: 'outlet9.example.org', source_url: copy.source_url, source_host: 'outlet9.example.org' }
+    ]);
     expect(draft.news_collapsed).toEqual([
       { id: 199, title: copy.title, into: 100, matched: 100, reason: 'url' }
     ]);

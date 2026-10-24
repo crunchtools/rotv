@@ -211,6 +211,19 @@ describe('dedupeDigestNews', () => {
     expect(dedupeDigestNews([booIdeastream, booSpectrum]).map(n => n.id)).toEqual([7382]);
   });
 
+  it('lists the other outlets folded into a story so readers can pick one', () => {
+    const [kept] = dedupeDigestNews([booIdeastream, booSpectrum]);
+    expect(kept.id).toBe(7382);
+    expect(kept.also_covered_by).toEqual([{
+      id: 7381, source_name: 'spectrumnews1.com', source_url: booSpectrum.source_url, source_host: 'spectrumnews1.com'
+    }]);
+  });
+
+  it('does not offer a same-outlet repeat as another outlet', () => {
+    const [kept] = dedupeDigestNews([johnBrownGallery, johnBrownStory]);
+    expect(kept.also_covered_by).toEqual([]);
+  });
+
   it('keeps the fuller summary when one outlet repeats a story on the same POI', () => {
     const shortRepeat = {
       ...booIdeastream, id: 7390,
