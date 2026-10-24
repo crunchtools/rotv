@@ -38,7 +38,28 @@ export const NEWS_THRESHOLDS = Object.freeze({
   outletText: 0.4,
   outletDays: 2,
   // Any POI: identical headlines need at least this many content words
-  titleMinTokens: 4
+  titleMinTokens: 4,
+  // Shared names count as evidence at all (moderation turns them off)
+  useEntities: true,
+  // A shared URL also needs headlines this alike (Dice)
+  urlTitle: 0
+});
+
+/**
+ * Moderation rejects on a match, and a rejected story leaves the site, where a
+ * second outlet's take or a later update still has value. So it only rejects
+ * copies: the same link with a like headline, the same headline, one outlet's
+ * near-identical headlines, or near-identical text. Shared names never count here: a replay rejected the
+ * second week's Fishing Report and later Szalay's Farm updates on them.
+ */
+export const MODERATION_NEWS_THRESHOLDS = Object.freeze({
+  useEntities: false,
+  urlTitle: 0.6,
+  text: 0.8,
+  shortText: 0.9,
+  dateBand: 0,
+  outletText: 2,
+  outletStrongTitle: 0.8
 });
 
 export const EVENT_THRESHOLDS = Object.freeze({
@@ -74,6 +95,17 @@ export function createMatchContext({ poiNames = [], news = {}, events = {}, tz =
     events: { ...EVENT_THRESHOLDS, ...events },
     tz
   };
+}
+
+/**
+ * The same context with other thresholds, so a caller can match at two bars
+ * without loading POI names twice.
+ * @param {ReturnType<typeof createMatchContext>} ctx
+ * @param {{news?: Partial<typeof NEWS_THRESHOLDS>, events?: Partial<typeof EVENT_THRESHOLDS>}} overrides
+ * @returns {ReturnType<typeof createMatchContext>}
+ */
+export function withThresholds(ctx, { news = {}, events = {} } = {}) {
+  return { ...ctx, news: { ...NEWS_THRESHOLDS, ...news }, events: { ...EVENT_THRESHOLDS, ...events } };
 }
 
 /**

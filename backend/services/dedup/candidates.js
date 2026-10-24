@@ -1,6 +1,7 @@
 /**
- * The database side of duplicate detection: loading a match context. The
- * matchers themselves stay pure so they can run on fixtures and replays.
+ * The database side of duplicate detection: loading a match context and finding
+ * candidate rows to compare. The matchers themselves stay pure so they can run
+ * on fixtures and replays.
  */
 import { createMatchContext } from './context.js';
 
@@ -25,4 +26,84 @@ export async function loadMatchContext(pool, { now = Date.now(), ...options } = 
     poiNamesCache.set(pool, cached);
   }
   return createMatchContext({ ...options, poiNames: cached.names });
+}
+
+// URLs compare on the SQL identity LOWER(REGEXP_REPLACE(url, '/+$', '')) (see
+// normalize.js); canonicalUrl refines it in memory. Exact URL matches sort first
+// so the limit can never push one out behind look-alike titles.
+const urlKey = (url) => (url ? url.toLowerCase().replace(/\/+$/, '') : null);
+const CANDIDATE_LIMIT = 20;
+
+const NEWS_CANDIDATES_SQL = `
+  WITH c AS (
+    SELECT n.id, n.title, n.summary, n.source_url, n.source_name, n.publication_date, n.collection_date,
+           n.moderation_status, p.id AS poi_id, p.name AS poi_name,
+           (SELECT ARRAY_AGG(u.url) FROM poi_news_urls u WHERE u.news_id = n.id) AS alt_urls,
+           (LOWER(REGEXP_REPLACE(n.source_url, '/+$', '')) = $3
+            OR EXISTS (SELECT 1 FROM poi_news_urls u
+                       WHERE u.news_id = n.id AND LOWER(REGEXP_REPLACE(u.url, '/+$', '')) = $3)) AS url_match
+    FROM poi_news n
+    JOIN pois p ON p.id = n.poi_id
+    WHERE n.id != COALESCE($1::int, -1)
+      AND n.moderation_status = ANY($5::text[])
+      AND COALESCE(n.publication_date, n.collection_date)
+          BETWEEN COALESCE($4::timestamptz, NOW()) - make_interval(days => $6)
+              AND COALESCE($4::timestamptz, NOW()) + make_interval(days => $6)
+  )
+  SELECT * FROM c
+  WHERE url_match OR title % $2
+  ORDER BY url_match DESC, similarity(title, $2) DESC
+  LIMIT $7`;
+
+const EVENT_CANDIDATES_SQL = `
+  WITH c AS (
+    SELECT e.id, e.title, e.description, e.start_date, e.location_details, e.source_url, e.venue_poi_id,
+           e.moderation_status, p.id AS poi_id, p.name AS poi_name,
+           (SELECT ARRAY_AGG(u.url) FROM poi_event_urls u WHERE u.event_id = e.id) AS alt_urls,
+           (LOWER(REGEXP_REPLACE(e.source_url, '/+$', '')) = $3
+            OR EXISTS (SELECT 1 FROM poi_event_urls u
+                       WHERE u.event_id = e.id AND LOWER(REGEXP_REPLACE(u.url, '/+$', '')) = $3)) AS url_match
+    FROM poi_events e
+    JOIN pois p ON p.id = e.poi_id
+    WHERE e.id != COALESCE($1::int, -1)
+      AND e.moderation_status = ANY($5::text[])
+      AND e.start_date BETWEEN $4::timestamptz - INTERVAL '1 day' AND $4::timestamptz + INTERVAL '1 day'
+  )
+  SELECT * FROM c
+  WHERE url_match OR title % $2
+  ORDER BY url_match DESC, similarity(title, $2) DESC
+  LIMIT $6`;
+
+/**
+ * Published news that might be the same story as `item`, at any POI: a title
+ * similar by trigram (pg_trgm's % operator) or the same URL, including the
+ * alternate URLs merged into a story. Rows carry the fields newsPairMatch reads.
+ * @param {import('pg').Pool} pool
+ * @param {{id?: number, title: string, source_url?: string, publication_date?: string,
+ *   collection_date?: string}} item
+ * @param {{days?: number, statuses?: string[]}} [options] days: window around the item's date
+ * @returns {Promise<object[]>}
+ */
+export async function findNewsCandidates(pool, item, { days = 14, statuses = ['published', 'auto_approved'] } = {}) {
+  const result = await pool.query(NEWS_CANDIDATES_SQL, [
+    item.id ?? null, item.title || '', urlKey(item.source_url),
+    item.publication_date || item.collection_date || null, statuses, days, CANDIDATE_LIMIT
+  ]);
+  return result.rows;
+}
+
+/**
+ * Published events within a day of `item` that might be the same event, at any
+ * POI: a trigram-similar title or the same URL, including alternate URLs.
+ * @param {import('pg').Pool} pool
+ * @param {{id?: number, title: string, source_url?: string, start_date: string}} item
+ * @param {{statuses?: string[]}} [options]
+ * @returns {Promise<object[]>}
+ */
+export async function findEventCandidates(pool, item, { statuses = ['published', 'auto_approved'] } = {}) {
+  if (!item.start_date) return [];
+  const result = await pool.query(EVENT_CANDIDATES_SQL, [
+    item.id ?? null, item.title || '', urlKey(item.source_url), item.start_date, statuses, CANDIDATE_LIMIT
+  ]);
+  return result.rows;
 }

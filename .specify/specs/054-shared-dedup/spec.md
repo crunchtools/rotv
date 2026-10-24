@@ -21,9 +21,19 @@ The Oct 23, 2026 digest ran the Primate Forest opening twice. Four places decide
   - `venue`: the same venue (by `venue_poi_id` or venue text), starts within 30 minutes, and alike titles.
 - `canonicalUrl` is applied in memory only. It is a superset of the SQL identity `LOWER(REGEXP_REPLACE(url, '/+$', ''))`, which the unique index and save-time lookup keep using.
 - Thresholds live in `context.js`. A caller can pass stricter ones.
+- A headline that names a date only matches a headline naming the same date ("Fishing Report: October 1" vs "October 8"). A shared URL also needs alike headlines when the caller asks (`urlTitle`), because some URLs are living pages.
+
+## Moderation
+- The duplicate check runs first in `processItem`, before the LLM votes. `findNewsCandidates` and `findEventCandidates` fetch published items at any POI with a trigram-similar title (pg_trgm `%`, migration 011's index) or the same URL, within 14 days for news and 1 day for events.
+- News is rejected only as a copy under `MODERATION_NEWS_THRESHOLDS`: the same link with a like headline, the same headline, one outlet's near-identical headlines, or near-identical text. Shared names never reject. A rejected story leaves the site, and a later update or a second outlet's take belongs there.
+- A news match only under the digest's thresholds is recorded as `moderation_gates.duplicate` (`{ verdict: 'info', of, reason, score }`) and noted in `ai_reasoning`. It does not change the outcome: the digest folds it at send time, and on the site a second take is fine. Holding these would add about five items a week to the queue (replay: 143 of 989).
+- An event match rejects.
+- `forceStatus` skips the rejection.
+- Merge suggestions (`getMergeCandidates`) list likely duplicates at any POI first, with `match_reason` and `poi_name`, then the item's own POI's recent items.
+- Save-time dedup is unchanged: an exact URL, or an exact title at the same POI, merges the link into the existing row. Fuzzy and cross-POI decisions belong to moderation, which runs on every saved item and whose rejections can be requeued. A save-time merge cannot be undone and would discard the incoming title and summary.
 
 ## Tests
-- `tests/fixtures/dedup/*.json`: real pairs from the May–Oct 2026 digests, each with `expected`, `why` and, for a match, the `reason`.
+- `tests/fixtures/dedup/*.json`: real pairs from the May–Oct 2026 digests, each with `expected`, `why` and, for a match, the `reason`. `moderation-pairs.json` holds copies that must reject and related stories that must stay.
 - Property tests:
   - the matcher gives the same verdict in both directions
   - the grouping is the same for any input order
@@ -31,5 +41,4 @@ The Oct 23, 2026 digest ran the Primate Forest opening twice. Four places decide
   - appending page chrome never splits a story
 
 ## Out of scope
-- Save-time and moderation use of the matcher (next change).
 - Embeddings or an LLM judge.

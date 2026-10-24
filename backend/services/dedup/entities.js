@@ -21,7 +21,7 @@ const CALENDAR = new Set([
   'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september',
   'october', 'november', 'december', 'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep',
   'sept', 'oct', 'nov', 'dec', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday',
-  'saturday', 'sunday', 'am', 'pm', 'est', 'edt'
+  'saturday', 'sunday', 'am', 'pm', 'est', 'edt', 'day', 'days', 'week', 'weekend', 'year'
 ]);
 const TITLE_CASE_RATIO = 0.7;
 

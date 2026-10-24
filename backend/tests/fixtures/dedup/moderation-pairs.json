@@ -1,0 +1,260 @@
+[
+ {
+  "expected": "reject",
+  "why": "The same death notice from two outlets",
+  "items": [
+   {
+    "id": 7003,
+    "poi_id": 5753,
+    "poi_name": "Akron Zoo",
+    "title": "Akron Zoo’s elderly porcupine dies",
+    "summary": "Forest, the Akron Zoo's North American porcupine, has died. Photo courtesy of the Akron Zoo AKRON — The Akron Zoo's elderly North American...",
+    "source_url": "https://www.akron.com/articles/akron-zoos-elderly-porcupine-dies/",
+    "source_name": "akron.com",
+    "publication_date": "2026-09-05T16:00:00+00:00",
+    "collection_date": "2026-09-12T10:02:05.08349+00:00"
+   },
+   {
+    "id": 6996,
+    "poi_id": 5753,
+    "poi_name": "Akron Zoo",
+    "title": "Elderly Akron Zoo porcupine dies",
+    "summary": "Photo courtesy of the Akron Zoo AKRON — The Akron Zoo's elderly North American porcupine, Forest, has died, zoo officials reported Sept. 1.",
+    "source_url": "https://www.akron.com/articles/elderly-akron-zoo-porcupine-dies/",
+    "source_name": "akron.com",
+    "publication_date": "2026-09-10T16:00:00+00:00",
+    "collection_date": "2026-09-11T10:01:54.88294+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "reject",
+  "why": "Identical headline",
+  "items": [
+   {
+    "id": 6995,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Zoo Announces Return of \"Boo at the Zoo\" and Halloween 5K",
+    "summary": "Cleveland Metroparks Zoo is bringing back its popular \"Boo at the Zoo\" Halloween celebration, running Thursday through Sunday evenings from October 1-25, featuring trick-or-treating, character meet-and-greets, a dance party, and more. New this year is a VIP experience. Additionally, the Zoo will host a Halloween 5K race on October 24, inviting participants to run in costume.",
+    "source_url": "https://www.northeastohioparent.com/worth-noting/cleveland-metroparks-boo-at-the-zoo-returns/",
+    "source_name": "Cleveland Metroparks",
+    "publication_date": "2026-09-08T14:03:51+00:00",
+    "collection_date": "2026-09-10T10:01:42.843899+00:00"
+   },
+   {
+    "id": 6873,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Zoo Announces Return of Boo at the Zoo and Halloween 5K",
+    "summary": "Cleveland Metroparks Zoo is bringing back its popular 'Boo at the Zoo' Halloween celebration, running Thursday through Sunday evenings from October 1st to October 25th. The event features trick-or-treating, character meet-and-greets, a dance party, and a new VIP experience. Additionally, the Zoo will host a Halloween 5K race on October 24th, inviting participants to run in costume.",
+    "source_url": "https://www.clevelandmetroparks.com/news-press/boo-at-the-zoo-returns-to-cleveland-metroparks-zoo-for-four-weeks-of-halloween-fun",
+    "source_name": "Cleveland Metroparks",
+    "publication_date": "2026-09-08T16:00:00+00:00",
+    "collection_date": "2026-09-08T10:02:16.083571+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "reject",
+  "why": "Identical headline, a week of syndication later",
+  "items": [
+   {
+    "id": 7509,
+    "poi_id": 5658,
+    "poi_name": "Cleveland Metroparks",
+    "title": "Cleveland Metroparks Zoo's Historic Amur Leopard Cub Is a Boy — Public Can Vote on Name",
+    "summary": "The Cleveland Metroparks Zoo announced that its first-ever Amur leopard cub, born July 1, is male. The zoo is asking the public to vote on one of three names (Boris, Igor, or Nikolai) via a donation, with proceeds supporting conservation in Russia. Voting ends Sept. 28 at midnight.",
+    "source_url": "https://spectrumlocalnews.com/nys/rochester/news/2026/09/15/cleveland-metroparks-zoo-to-name-amur-leopard-cub",
+    "source_name": "Spectrum News 1",
+    "publication_date": "2026-09-15T16:00:00+00:00",
+    "collection_date": "2026-10-01T10:05:37.959147+00:00"
+   },
+   {
+    "id": 7377,
+    "poi_id": 5754,
+    "poi_name": "Cleveland Metroparks Zoo",
+    "title": "Cleveland Metroparks Zoo's Historic Amur Leopard Cub Is a Boy — Public Can Vote on Name",
+    "summary": "The Cleveland Metroparks Zoo announced its first-ever Amur leopard cub, born July 1, is male and is now asking the public to vote on a name (Boris, Igor, or Nikolai) via donation. The critically endangered cub is also the first of its species born in Ohio zoos. Voting runs until Sept. 28, with donations supporting conservation in Russia.",
+    "source_url": "https://spectrumlocalnews.com/product-pages/nyc/news/2026/09/15/cleveland-metroparks-zoo-to-name-amur-leopard-cub",
+    "source_name": "Spectrum News 1",
+    "publication_date": "2026-09-15T16:00:00+00:00",
+    "collection_date": "2026-09-30T10:01:45.821345+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "reject",
+  "why": "Near-identical rewrite of the animal hospital release",
+  "items": [
+   {
+    "id": 8133,
+    "poi_id": 5753,
+    "poi_name": "Akron Zoo",
+    "title": "Akron Zoo Opens $10 Million Veterinary Hospital for Expanded In-House Animal Care",
+    "summary": "The Akron Zoo opened its new Tom and Shelley Koutnik Center for Veterinary Care, a $10 million, 11,949-square-foot hospital that brings nearly all daily animal care in-house, including surgeries, quarantine, and specialized enclosures. The facility replaces the outdated Sherman Center veterinary space and supports the zoo's growing population of over 2,000 animals. For visitors, this means improved animal health and welfare, though the hospital itself is not a public exhibit.",
+    "source_url": "https://hoodline.com/2026/10/akron-zoo-opens-10m-hospital-built-to-handle-even-grizzly-sized-patients/",
+    "source_name": "Cleveland.com",
+    "publication_date": "2026-10-16T12:37:20+00:00",
+    "collection_date": "2026-10-24T10:01:16.828051+00:00"
+   },
+   {
+    "id": 7972,
+    "poi_id": 5753,
+    "poi_name": "Akron Zoo",
+    "title": "Akron Zoo opens $10 million animal hospital for expanded in-house care",
+    "summary": "AKRON, Ohio – The Akron Zoo on Thursday opened the Tom and Shelley Koutnik Center for Veterinary Care. The $10-million animal hospital will allow the zoo's...",
+    "source_url": "https://www.cleveland.com/akron/2026/10/akron-zoo-opens-10-million-animal-hospital-for-expanded-in-house-care.html",
+    "source_name": "cleveland.com",
+    "publication_date": "2026-10-15T16:00:00+00:00",
+    "collection_date": "2026-10-16T10:01:55.465973+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "keep",
+  "why": "Two weekly Fishing Reports, dated a week apart in the headline",
+  "items": [
+   {
+    "id": 7656,
+    "poi_id": 5835,
+    "poi_name": "Ohio & Erie Canal Reservation",
+    "title": "Cleveland Metroparks Fishing Report: October 1, 2026",
+    "summary": "NOTE: The Fishing Report Blog is updated monthly between June-August and weekly on Thursdays between September-May*** Anglers are pursuing steelhead and...",
+    "source_url": "https://www.clevelandmetroparks.com/parks/recreation/fishing-report/october-1-2026",
+    "source_name": "clevelandmetroparks.com",
+    "publication_date": "2026-10-03T16:00:00+00:00",
+    "collection_date": "2026-10-10T10:01:28.672992+00:00"
+   },
+   {
+    "id": 7655,
+    "poi_id": 5835,
+    "poi_name": "Ohio & Erie Canal Reservation",
+    "title": "Cleveland Metroparks Fishing Report: October 8, 2026",
+    "summary": "NOTE: The Fishing Report Blog is updated monthly between June-August and weekly on Thursdays between September-May*** Anglers are pursuing steelhead and...",
+    "source_url": "https://www.clevelandmetroparks.com/parks/recreation/fishing-report/october-8-2026",
+    "source_name": "clevelandmetroparks.com",
+    "publication_date": "2026-10-09T16:00:00+00:00",
+    "collection_date": "2026-10-10T10:01:28.669231+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "keep",
+  "why": "Later update in the Szalay farmland story: a new story, not a copy",
+  "items": [
+   {
+    "id": 7993,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Summit Metro Parks extends final offer in Szalay farmland negotiations",
+    "summary": "Summit Metro Parks has extended its final offer in negotiations with the Szalay family over farmland where Native American relics were discovered. The extension gives both parties more time to reach an agreement, and the outcome will determine whether the park system can preserve the culturally significant site. For visitors, this could affect future access to the land and any planned archaeological or educational programs.",
+    "source_url": "https://www.yahoo.com/news/videos/native-american-relics-found-summit-230327150.html",
+    "source_name": "WKYC",
+    "publication_date": "2026-10-07T16:00:00+00:00",
+    "collection_date": "2026-10-17T10:02:27.192711+00:00"
+   },
+   {
+    "id": 7562,
+    "poi_id": 5672,
+    "poi_name": "Summit Metro Parks",
+    "title": "Native American relics found by Summit Metro Parks complicate future of Szalay's farmland",
+    "summary": "Summit Metro Parks has extended its final offer in negotiations with the Szalay family over farmland where park officials found Native American relics.",
+    "source_url": "https://www.wkyc.com/video/news/local/summit-county/native-american-relics-found-by-summit-county-metroparks-complicate-future-of-szalays-farmland/95-03ec748a-a78e-4018-8608-2c39ceceeb35",
+    "source_name": "wkyc.com",
+    "publication_date": "2026-10-07T16:00:00+00:00",
+    "collection_date": "2026-10-07T10:01:29.48022+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "keep",
+  "why": "One trail status URL that said closed, then reopened",
+  "items": [
+   {
+    "id": 6591,
+    "poi_id": 5690,
+    "poi_name": "Sand Run Metro Park - Treaty Line Area",
+    "title": "Sand Run Metro Park Jogging Trail Reopens",
+    "summary": "The jogging trail in the Treaty Line Area of Sand Run Metro Park has reopened. This update follows a previous alert regarding its closure.",
+    "source_url": "https://www.facebook.com/summitmetroparks/posts/update-8-10-26-the-jogging-trail-is-open-alert-the-jogging-trail-in-sand-run-met/1511308231028530/",
+    "source_name": "Facebook (Summit Metro Parks)",
+    "publication_date": "2026-08-05T16:00:00+00:00",
+    "collection_date": "2026-09-01T05:05:21.468432+00:00"
+   },
+   {
+    "id": 6082,
+    "poi_id": 5702,
+    "poi_name": "Sand Run Metro Park - Revere Road Lot",
+    "title": "The Jogging Trail in Sand Run Metro Park is closed between Revere ...",
+    "summary": "ALERT: The Jogging Trail in Sand Run Metro Park is closed between Revere Road and Sand Run Road for culvert replacement through August 7.",
+    "source_url": "https://www.facebook.com/summitmetroparks/posts/alert-the-jogging-trail-in-sand-run-metro-park-is-closed-between-revere-road-and/1511308231028530/",
+    "source_name": "facebook.com",
+    "publication_date": "2026-08-05T16:00:00+00:00",
+    "collection_date": "2026-08-13T09:05:10.210384+00:00",
+    "alt_urls": [
+     "https://www.facebook.com/summitmetroparks/posts/update-8-10-26-the-jogging-trail-is-open-alert-the-jogging-trail-in-sand-run-met/1511308231028530/"
+    ]
+   }
+  ]
+ },
+ {
+  "expected": "keep",
+  "why": "Two different events by one performer",
+  "items": [
+   {
+    "id": 6735,
+    "poi_id": 5840,
+    "poi_name": "Cascade Locks Park",
+    "title": "Candace Campana: Music Festival",
+    "summary": "Candace Campana is a bold burst of fresh air with an edge all her own. Her sound pulls from heavy metal and hard rock, giving her music a gritty,...",
+    "source_url": "https://www.beaconjournal.com/things-to-do/events/?_evDiscoveryPath=/event%2F108747163n-candace-campana-music-festival",
+    "source_name": "beaconjournal.com",
+    "publication_date": "2026-08-13T16:00:00+00:00",
+    "collection_date": "2026-09-03T09:04:08.76407+00:00"
+   },
+   {
+    "id": 5951,
+    "poi_id": 5756,
+    "poi_name": "Porthouse Theater",
+    "title": "Candace Campana: Summer Bash",
+    "summary": "Candace Campana is a bold burst of fresh air with an edge all her own. Her sound pulls from heavy metal and hard rock, giving her music a gritty,...",
+    "source_url": "https://www.beaconjournal.com/things-to-do/events/?_evDiscoveryPath=/event%2F108611317n-candace-campana-summer-bash",
+    "source_name": "beaconjournal.com",
+    "publication_date": "2026-07-30T16:00:00+00:00",
+    "collection_date": "2026-08-06T09:05:48.986524+00:00"
+   }
+  ]
+ },
+ {
+  "expected": "keep",
+  "why": "Two weeks of fundraiser roundups",
+  "items": [
+   {
+    "id": 6115,
+    "poi_id": 5480,
+    "poi_name": "Blossom Music Center",
+    "title": "Walk, dinner, golf, bourbon tasting among fundraisers in Akron area",
+    "summary": "Lifebanc Gift of Life Walk & Run: 9 a.m. Aug. 23, registration at 7:30 a.m. at Blossom Music Center, 1145 W. Steels Corners Road, Cuyahoga...",
+    "source_url": "https://www.beaconjournal.com/story/lifestyle/things-to-do/2026/08/16/walk-dinner-golf-bourbon-tasting-among-upcoming-fundraisers-in-akron-area-the-scene/91104212007/",
+    "source_name": "beaconjournal.com",
+    "publication_date": "2026-08-16T16:00:00+00:00",
+    "collection_date": "2026-08-17T10:00:44.698683+00:00",
+    "alt_urls": [
+     "https://www.google.com/goto?url=CAES3wEB7keqTWxdtpZQU-T_H72vEXliqgq3dGIP3EWuFEWmAqDEKI-YwOzH-w44Wosa26bAbyuXnj5Lqa09Di_xn61UJd29Y7oyhgGEHG3fEX5yQPqf_fMf8Ldusx1gQ2CBEMU23FK1mOjtCapBbdZuFuUMo4LOfCue0BeSkfRArGrHBhEyPiwNOgoDTCrIUJtkOFrcjyonaPmS8vfsdxQv4e9EMJhU4fgiwvae6GfDpFX4ZeS3UNn_1VTdiaEDqXNRGIDwlxrocJ2aEWmLP1U524pq7a8rF91MupUj_Wri-dmf"
+    ]
+   },
+   {
+    "id": 5972,
+    "poi_id": 5480,
+    "poi_name": "Blossom Music Center",
+    "title": "Charity walks, 'Growing Up Akron' dinner, casino night and raffles",
+    "summary": "Lifebanc Gift of Life Walk & Run: 9 a.m. Aug. 23, registration at 7:30 a.m. at Blossom Music Center, 1145 W. Steels Corners Road, Cuyahoga...",
+    "source_url": "https://www.beaconjournal.com/story/lifestyle/things-to-do/2026/08/09/charity-walks-growing-up-akron-dinner-casino-night-raffles-the-scene/91019980007/",
+    "source_name": "beaconjournal.com",
+    "publication_date": "2026-08-09T16:00:00+00:00",
+    "collection_date": "2026-08-10T10:01:02.569813+00:00"
+   }
+  ]
+ }
+]

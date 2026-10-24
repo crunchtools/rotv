@@ -17,7 +17,7 @@ function isLocalNoon(date, tz) {
 
 /**
  * Precompute what the matcher compares.
- * @param {object} event event row: title, start_date, source_url, poi_id, venue_poi_id, location_details
+ * @param {object} event event row: title, start_date, source_url, alt_urls, poi_id, venue_poi_id, location_details
  * @param {ReturnType<import('./context.js').createMatchContext>} ctx
  * @returns {object} opaque features for matchEventFeatures
  */
@@ -29,7 +29,7 @@ export function eventFeatures(event, ctx) {
     id: event.id,
     poiId: event.poi_id,
     venueId: event.venue_poi_id ?? null,
-    url: canonicalUrl(event.source_url),
+    urls: new Set([event.source_url, ...(event.alt_urls || [])].map(canonicalUrl).filter(Boolean)),
     title,
     titleGrams: charNgrams(titleWords),
     venueGrams: charNgrams(contentTokens(foldCase(event.location_details))),
@@ -56,7 +56,7 @@ export function matchEventFeatures(fa, fb, ctx) {
   const title = sameTitle ? 1 : dice(fa.titleGrams, fb.titleGrams);
   // One URL can be a calendar page listing many events, so the URL alone is not
   // enough: the titles must still look alike
-  if (fa.url && fa.url === fb.url && title >= t.venueTitle) return matched('url', title);
+  if ([...fa.urls].some(url => fb.urls.has(url)) && title >= t.venueTitle) return matched('url', title);
 
   const sameVenue = fa.venueId != null && fa.venueId === fb.venueId;
   const sameOrganizer = fa.poiId != null && fa.poiId === fb.poiId;

@@ -16,7 +16,7 @@ import { eventFeatures, matchEventFeatures } from './eventIdentity.js';
 export * from './normalize.js';
 export * from './similarity.js';
 export { clusterBy } from './clusters.js';
-export { createMatchContext, withItemPlaces, NEWS_THRESHOLDS, EVENT_THRESHOLDS } from './context.js';
+export { createMatchContext, withItemPlaces, withThresholds, NEWS_THRESHOLDS, EVENT_THRESHOLDS, MODERATION_NEWS_THRESHOLDS } from './context.js';
 export { extractEntities, isTitleCase } from './entities.js';
 export { newsFeatures, matchNewsFeatures, newsPairMatch } from './newsIdentity.js';
 export { eventFeatures, matchEventFeatures, eventPairMatch } from './eventIdentity.js';
@@ -103,4 +103,37 @@ export function dedupeEvents(items, ctx, { pick = pickFirst } = {}) {
   const features = items.map(item => eventFeatures(item, ctx));
   // Events only match on the same calendar day, so only same-day pairs are compared
   return groupBatch(items, features, (a, b) => matchEventFeatures(a, b, ctx), pick, i => features[i].day);
+}
+
+function bestMatch(item, candidates, ctx, features, match) {
+  const mine = features(item, ctx);
+  let best = null;
+  for (const candidate of candidates) {
+    const result = match(mine, features(candidate, ctx), ctx);
+    if (result.match && (!best || result.score > best.score)) best = { ...result, of: candidate };
+  }
+  return best;
+}
+
+/**
+ * The candidate `item` most likely duplicates, if any matches.
+ * @param {object} item news row
+ * @param {object[]} candidates news rows (findNewsCandidates)
+ * @param {ReturnType<import('./context.js').createMatchContext>} ctx
+ * @returns {{match: true, reason: string, score: number, of: object}|null}
+ */
+export function bestNewsMatch(item, candidates, ctx) {
+  const local = withItemPlaces(ctx, [item, ...candidates]);
+  return bestMatch(item, candidates, local, newsFeatures, matchNewsFeatures);
+}
+
+/**
+ * The candidate `event` most likely duplicates, if any matches.
+ * @param {object} event event row
+ * @param {object[]} candidates event rows (findEventCandidates)
+ * @param {ReturnType<import('./context.js').createMatchContext>} ctx
+ * @returns {{match: true, reason: string, score: number, of: object}|null}
+ */
+export function bestEventMatch(event, candidates, ctx) {
+  return bestMatch(event, candidates, ctx, eventFeatures, matchEventFeatures);
 }
