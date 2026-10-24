@@ -28,7 +28,7 @@ export { eventFeatures, matchEventFeatures, eventPairMatch } from './eventIdenti
  * @param {object[]} items the group, in input order
  * @returns {object} the item to keep
  */
-export function pickFreshestOrFuller(items) {
+function pickFreshestOrFuller(items) {
   // Fix: a same-outlet repeat keeps the fuller summary (PR #694 review)
   const [first] = items;
   const length = (item) => (item.summary || '').length;
@@ -43,7 +43,7 @@ export function pickFreshestOrFuller(items) {
  * @param {object[]} items
  * @returns {object}
  */
-export const pickFirst = (items) => items[0];
+const pickFirst = (items) => items[0];
 
 function groupBatch(items, features, isSame, pick, block = null) {
   const edges = new Map();
