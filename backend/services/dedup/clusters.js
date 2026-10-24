@@ -27,9 +27,9 @@ export function clusterBy(count, isSame, { block = null } = {}) {
     blocks.get(key).push(i);
   }
   for (const members of blocks.values()) {
-    for (let x = 0; x < members.length; x++) {
-      for (let y = x + 1; y < members.length; y++) {
-        const [i, j] = [members[x], members[y]];
+    for (let outer = 0; outer < members.length; outer++) {
+      for (let inner = outer + 1; inner < members.length; inner++) {
+        const [i, j] = [members[outer], members[inner]];
         if (isSame(i, j)) {
           const [a, b] = [find(i), find(j)];
           if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);

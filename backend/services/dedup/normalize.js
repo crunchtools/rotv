@@ -82,7 +82,7 @@ export function titleKey(title) {
   return title.toLowerCase().replace(/^the\s+/i, '').trim();
 }
 
-// "| 2026-10-21", "| October 21, 2026": collection appends the listing date to some titles
+// "| YYYY-MM-DD", "| Month D, YYYY": collection appends the listing date to some titles
 const TITLE_DATE_SUFFIX = /\s*\|\s*(?:\d{4}-\d{2}-\d{2}|[A-Z][a-z]+\s+\d{1,2}(?:,\s*\d{4})?)\s*$/i;
 // A tail after " | " or " - " is a site name when it is short and digit-free
 // ("Fall Hike | Summit Metro Parks"), or when it spells the outlet's host

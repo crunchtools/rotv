@@ -26,7 +26,7 @@ export function charNgrams(tokens, n = 4) {
 function intersectionSize(a, b) {
   const [small, big] = a.size <= b.size ? [a, b] : [b, a];
   let shared = 0;
-  for (const x of small) if (big.has(x)) shared++;
+  for (const value of small) if (big.has(value)) shared++;
   return shared;
 }
 

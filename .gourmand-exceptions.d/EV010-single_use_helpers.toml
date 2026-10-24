@@ -29,3 +29,13 @@ classification = "gourmand_bug"
 path = "frontend/src/components/SeasonalListsSettings.jsx"
 justification = "Report, DraftItem and Unmatched are React components rendered from SeasonalListsSettings' JSX. DraftItem and Unmatched hold their own edit state (useState) per row, which cannot be inlined into the parent's map without lifting every row's edits into one object; Report keeps the draft's findings out of the render body."
 classification = "by_design"
+
+[[locations]]
+path = "backend/services/dedup/normalize.js"
+justification = "titleSiteSuffix is also imported by dedup/newsIdentity.js (outletWords drops the outlet's own name from story names), and stripDateline is re-exported by newsletterDigestService.js for its callers and tests. Both are public parts of the shared dedup module (spec 054). The detector does not count cross-file imports. Upstream: gitlab.com/mattdm/gourmand#24."
+classification = "gourmand_bug"
+
+[[locations]]
+path = "backend/services/dedup/entities.js"
+justification = "isTitleCase is part of the dedup module's public surface (re-exported from dedup/index.js) and exercised directly by tests/dedup/normalize.unit.test.js; it names the rule that Title Case headlines carry no name evidence. The detector does not count cross-file imports. Upstream: gitlab.com/mattdm/gourmand#24."
+classification = "gourmand_bug"

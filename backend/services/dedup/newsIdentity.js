@@ -73,7 +73,7 @@ function sameHeadline(fa, fb) {
 }
 
 const dayGap = (a, b) => Math.abs(Date.parse(a) - Date.parse(b)) / DAY_MS;
-const shares = (a, b) => [...a].some(x => b.has(x));
+const shares = (a, b) => [...a].some(value => b.has(value));
 const matched = (reason, score) => ({ match: true, reason, score });
 
 function sharedEntity(fa, fb, entityDf, limit) {
