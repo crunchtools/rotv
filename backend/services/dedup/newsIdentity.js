@@ -55,7 +55,9 @@ export function newsFeatures(item, ctx) {
     day: when ? dayInTimezone(when, ctx.tz) : null,
     // The outlet's own name ("Fox 8 Cleveland WJW") is no more a story than a place is
     entities: extractEntities({ title: item.title, summary }, outletWords(item, ctx.placeWords)),
-    days: mentionedDays(summary, when ? new Date(when) : new Date(), ctx.tz)
+    days: mentionedDays(summary, when ? new Date(when) : new Date(), ctx.tz),
+    // "Fishing Report: October 1" and "Fishing Report: October 8" are two reports
+    titleDays: mentionedDays(item.title, when ? new Date(when) : new Date(), ctx.tz)
   };
 }
 
@@ -97,7 +99,12 @@ function sharedEntity(fa, fb, entityDf, limit) {
  */
 export function matchNewsFeatures(fa, fb, ctx, entityDf = null, batchSize = 0) {
   const t = ctx.news;
-  if (shares(fa.urls, fb.urls)) return matched('url', 1);
+  // A URL can be a living page (a trail status page that said closed, then reopened)
+  if (shares(fa.urls, fb.urls) && dice(fa.titleGrams, fb.titleGrams) >= t.urlTitle) return matched('url', 1);
+  // Headlines dated on different days are different editions of a series
+  if (fa.titleDays.size && fb.titleDays.size && !shares(fa.titleDays, fb.titleDays)) {
+    return { match: false, reason: null, score: 0 };
+  }
 
   const samePoi = fa.poiId != null && fa.poiId === fb.poiId;
   if (sameHeadline(fa, fb) && (samePoi || Math.min(fa.titleTokenCount, fb.titleTokenCount) >= t.titleMinTokens)) {
@@ -106,7 +113,7 @@ export function matchNewsFeatures(fa, fb, ctx, entityDf = null, batchSize = 0) {
 
   const text = overlap(fa.textGrams, fb.textGrams);
   const dfLimit = Math.max(t.entityMinDf, Math.floor(batchSize * t.entityMaxShare));
-  const entity = sharedEntity(fa, fb, entityDf, dfLimit);
+  const entity = t.useEntities ? sharedEntity(fa, fb, entityDf, dfLimit) : null;
 
   // One outlet, two pieces on one event a day apart (a gallery and the article):
   // the headlines carry it, and the summaries may share little

@@ -278,7 +278,7 @@ export default function ModerationExtras({
           </div>
           {mergeCandidates.length === 0 ? (
             <div style={{ fontSize: '0.78rem', color: '#666' }}>
-              {mergingItem ? 'Loading candidates...' : 'No other items found for this POI.'}
+              {mergingItem ? 'Loading candidates...' : 'No likely duplicates or other items for this POI.'}
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
@@ -292,6 +292,8 @@ export default function ModerationExtras({
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#888', display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                       <span>#{c.id}</span>
+                      {c.match_reason && <span style={{ color: '#1565c0', fontWeight: 'bold' }}>likely duplicate ({c.match_reason})</span>}
+                      {c.poi_name && <span>{c.poi_name}</span>}
                       <span>{c.moderation_status}</span>
                       {c.publication_date && <span>{new Date(c.publication_date + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })}</span>}
                       {c.additional_url_count > 0 && <span>+{c.additional_url_count} URLs</span>}

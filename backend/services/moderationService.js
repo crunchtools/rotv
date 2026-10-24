@@ -3,7 +3,9 @@ import { renderPage } from './renderPage.js';
 import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate, easternDay, publicationJsonLdDates } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
-import { scoreDate, normalizeRenderUrl, normalizeTitle } from './newsService.js';
+import { scoreDate, normalizeRenderUrl } from './newsService.js';
+import { bestNewsMatch, bestEventMatch, newsPairMatch, eventPairMatch, MODERATION_NEWS_THRESHOLDS } from './dedup/index.js';
+import { loadMatchContext, findNewsCandidates, findEventCandidates } from './dedup/candidates.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
 import { getReassignmentCandidates } from './geoService.js';
 import { getNamedPoiCandidates } from './poiNameMatch.js';
@@ -364,6 +366,31 @@ async function evaluatePoiGate(pool, row, votes, deniedPoiIds = new Set()) {
   return { verdict: 'review', tier: 3, reason: 'Not confidently about the assigned POI or any candidate', ...noChange };
 }
 
+/**
+ * The published item this one most likely duplicates, at any POI. A news match
+ * under moderation's strict thresholds, or any event match, is `strict` and
+ * rejects; a news match only under the digest's looser thresholds is recorded
+ * on the item for the editor.
+ * @param {import('pg').Pool} pool
+ * @param {'news'|'event'} contentType
+ * @param {object} row the item, with its summary or description in `description`
+ * @returns {Promise<{strict: boolean, reason: string, score: number, of: object}|null>}
+ */
+async function findDuplicate(pool, contentType, row) {
+  if (contentType === 'event') {
+    const candidates = await findEventCandidates(pool, row);
+    const match = bestEventMatch(row, candidates, await loadMatchContext(pool));
+    return match && { ...match, strict: true };
+  }
+  const item = { ...row, summary: row.description };
+  const candidates = await findNewsCandidates(pool, item);
+  if (!candidates.length) return null;
+  const strict = bestNewsMatch(item, candidates, await loadMatchContext(pool, { news: MODERATION_NEWS_THRESHOLDS }));
+  if (strict) return { ...strict, strict: true };
+  const loose = bestNewsMatch(item, candidates, await loadMatchContext(pool));
+  return loose && { ...loose, strict: false };
+}
+
 export async function processItem(pool, contentType, contentId, { forceStatus = null, runId = null } = {}) {
   const itemRunId = runId || Math.floor(Date.now() / 1000);
   logger.info(`Processing ${contentType} #${contentId}${forceStatus ? ` (forced → ${forceStatus})` : ''}`);
@@ -382,7 +409,9 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
   if (contentType === 'news' || contentType === 'event') {
     const table = contentType === 'news' ? 'poi_news' : 'poi_events';
     const descField = contentType === 'news' ? 'summary' : 'description';
-    const extraFields = contentType === 'event' ? ', t.start_date, t.content_source' : ', t.pipeline, t.from_snippet';
+    const extraFields = contentType === 'event'
+      ? ', t.start_date, t.content_source, t.location_details, t.venue_poi_id'
+      : ', t.pipeline, t.from_snippet, t.collection_date, t.source_name';
 
     const itemQuery = await pool.query(
       `SELECT t.id, t.poi_id, t.title, t.${descField} AS description, t.source_url, t.publication_date,
@@ -395,30 +424,18 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
     if (!itemQuery.rows.length) return;
     const row = itemQuery.rows[0];
 
-    // Strip leading "The" so "The David Mayfield Parade" matches "David Mayfield Parade"
-    const titleNorm = `TRIM(LOWER(REGEXP_REPLACE(title, '^[Tt]he\\s+', '')))`;
-    const paramNorm = normalizeTitle(row.title);
-    // Same POI only, matching save-time dedup: two parks can publish the same headline.
-    // Events also match on the Eastern calendar day, not the exact timestamp. (spec 044)
-    const dupWhere = contentType === 'news'
-      ? `${titleNorm} = $1 AND id != $2 AND poi_id = $3`
-      : `${titleNorm} = $1 AND id != $2 AND poi_id = $3
-         AND (start_date AT TIME ZONE 'America/New_York')::date = ($4::timestamptz AT TIME ZONE 'America/New_York')::date`;
-    const dupParams = contentType === 'news'
-      ? [paramNorm, contentId, row.poi_id]
-      : [paramNorm, contentId, row.poi_id, row.start_date];
-    const dupCheck = await pool.query(
-      `SELECT id FROM ${table} WHERE ${dupWhere}
-       AND moderation_status IN ('published', 'auto_approved') LIMIT 1`,
-      dupParams
-    );
-    if (dupCheck.rows.length) {
+    // Duplicate check (spec 054), before the LLM votes so a duplicate costs nothing.
+    // It runs on the item's current POI; the signals that match across POIs (link,
+    // headline, outlet, name) do not depend on where the POI gate puts it.
+    const duplicate = await findDuplicate(pool, contentType, row);
+    if (duplicate?.strict && !forceStatus) {
+      const of = duplicate.of;
       await pool.query(
         `UPDATE ${table} SET moderation_processed = true, ai_reasoning = $1, moderation_status = 'rejected' WHERE id = $2`,
-        [`Rejected: duplicate of approved ${contentType} #${dupCheck.rows[0].id}`, contentId]
+        [`Rejected: duplicate of approved ${contentType} #${of.id} (${duplicate.reason})`, contentId]
       );
-      logger.info(`${contentType} #${contentId}: rejected (duplicate of #${dupCheck.rows[0].id})`);
-      logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: duplicate of #${dupCheck.rows[0].id}`, { completed: true });
+      logger.info(`${contentType} #${contentId}: rejected (duplicate of #${of.id}, ${duplicate.reason})`);
+      logInfo(itemRunId, 'moderation', null, row.title, `Rejected ${contentType} #${contentId}: duplicate of #${of.id} (${duplicate.reason})`, { completed: true });
       return;
     }
 
@@ -603,13 +620,16 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
       date: { verdict: dateGate.verdict, reason: dateGate.reason },
       relevance: { verdict: relevanceGate.verdict, reason: relevanceGate.reason, yes: yesCount, total: relevanceVotes.length },
       region: { verdict: regionGate.verdict, reason: regionGate.reason, in_region: inRegionCount, total: regionVotes.length },
-      poi: { verdict: poiGate.verdict, tier: poiGate.tier, reason: poiGate.reason, reassigned_from: poiGate.reassigned_from, reassigned_to: poiGate.reassigned_to }
+      poi: { verdict: poiGate.verdict, tier: poiGate.tier, reason: poiGate.reason, reassigned_from: poiGate.reassigned_from, reassigned_to: poiGate.reassigned_to },
+      // A likely duplicate under the digest's looser bar: recorded for the editor, not blocking.
+      // The digest folds it at send time; on the site a second outlet's take is fine.
+      ...(duplicate && { duplicate: { verdict: 'review', of: duplicate.of.id, reason: duplicate.reason, score: Number(duplicate.score.toFixed(2)) } })
     };
     const snippetHold = contentType === 'news' && row.pipeline === 'current' && row.from_snippet && resolvedStatus === 'pending'
       ? ' (snippet only, needs review)' : '';
     const reasoning = forceStatus
       ? `Forced to ${forceStatus}`
-      : `${resolvedStatus}${snippetHold} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); region: ${regionGate.verdict} (${inRegionCount}/${regionVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
+      : `${resolvedStatus}${snippetHold}${duplicate ? ` (possible duplicate of #${duplicate.of.id}, ${duplicate.reason})` : ''} — date: ${dateGate.verdict}; relevance: ${relevanceGate.verdict} (${yesCount}/${relevanceVotes.length}); region: ${regionGate.verdict} (${inRegionCount}/${regionVotes.length}); poi: ${poiGate.verdict}${poiGate.reassigned_to ? ` → #${poiGate.reassigned_to}` : ''}`;
 
     const autoModeratedBy = resolvedStatus !== 'pending' ? AUTO_PUBLISHER_USER_ID : null;
     const newPoiId = poiGate.newPoiId; // Tier-2 reassignment target, or null to keep current poi_id
@@ -1133,6 +1153,15 @@ export async function mergeItems(pool, contentType, sourceId, targetId) {
   return { merged: true, sourceId, targetId, movedUrls };
 }
 
+/**
+ * Items an editor might merge this one into: likely duplicates at any POI,
+ * ranked by the shared matcher with its reason, then the rest of this POI's items.
+ * @param {import('pg').Pool} pool
+ * @param {'news'|'event'} contentType
+ * @param {number} contentId
+ * @returns {Promise<object[]>} candidates; match_reason is set when the matcher calls it a duplicate
+ * @throws {Error} for another content type or a missing item
+ */
 export async function getMergeCandidates(pool, contentType, contentId) {
   if (!['news', 'event'].includes(contentType)) {
     throw new Error('Merge is only supported for news and event items');
@@ -1141,24 +1170,49 @@ export async function getMergeCandidates(pool, contentType, contentId) {
   const table = contentType === 'news' ? 'poi_news' : 'poi_events';
   const urlTable = contentType === 'news' ? 'poi_news_urls' : 'poi_event_urls';
   const fkColumn = contentType === 'news' ? 'news_id' : 'event_id';
+  const fields = contentType === 'news'
+    ? 't.summary, t.source_name, t.collection_date'
+    : 't.description, t.start_date, t.location_details, t.venue_poi_id';
 
-  const item = await pool.query(`SELECT poi_id FROM ${table} WHERE id = $1`, [contentId]);
+  const item = await pool.query(
+    `SELECT t.id, t.poi_id, t.title, t.source_url, t.publication_date, ${fields}, p.name AS poi_name
+     FROM ${table} t LEFT JOIN pois p ON p.id = t.poi_id WHERE t.id = $1`, [contentId]);
   if (item.rows.length === 0) throw new Error(`${contentType} #${contentId} not found`);
-  const poiId = item.rows[0].poi_id;
+  const row = item.rows[0];
 
-  const candidatesQuery = await pool.query(`
-    SELECT t.id, t.title, t.source_url, t.moderation_status, t.collection_date,
-           t.publication_date,
-           COUNT(u.id)::int AS additional_url_count
-    FROM ${table} t
-    LEFT JOIN ${urlTable} u ON u.${fkColumn} = t.id
-    WHERE t.poi_id = $1 AND t.id != $2
-    GROUP BY t.id
-    ORDER BY t.collection_date DESC
-    LIMIT 50
-  `, [poiId, contentId]);
+  // Likely duplicates at any POI first (spec 054), then the rest of this POI's items
+  const statuses = ['published', 'auto_approved', 'pending'];
+  const [similar, samePoi, ctx] = await Promise.all([
+    contentType === 'news'
+      ? findNewsCandidates(pool, row, { days: 60, statuses })
+      : findEventCandidates(pool, row, { statuses }),
+    pool.query(`
+      SELECT t.id, t.title, t.source_url, t.moderation_status, t.collection_date,
+             t.publication_date, t.poi_id,
+             COUNT(u.id)::int AS additional_url_count
+      FROM ${table} t
+      LEFT JOIN ${urlTable} u ON u.${fkColumn} = t.id
+      WHERE t.poi_id = $1 AND t.id != $2
+      GROUP BY t.id
+      ORDER BY t.collection_date DESC
+      LIMIT 50
+    `, [row.poi_id, contentId]),
+    loadMatchContext(pool)
+  ]);
 
-  return candidatesQuery.rows;
+  const pairMatch = contentType === 'news' ? newsPairMatch : eventPairMatch;
+  const likely = similar
+    .map(c => ({ candidate: c, result: pairMatch(row, c, ctx) }))
+    .sort((a, b) => Number(b.result.match) - Number(a.result.match) || b.result.score - a.result.score)
+    .map(({ candidate: c, result }) => ({
+      id: c.id, title: c.title, source_url: c.source_url, moderation_status: c.moderation_status,
+      collection_date: c.collection_date ?? null, publication_date: c.publication_date ?? null,
+      poi_id: c.poi_id, poi_name: c.poi_name,
+      additional_url_count: (c.alt_urls || []).length,
+      match_reason: result.match ? result.reason : null
+    }));
+  const listed = new Set(likely.map(c => c.id));
+  return [...likely, ...samePoi.rows.filter(c => !listed.has(c.id)).map(c => ({ ...c, match_reason: null }))];
 }
 
 export async function addItemUrl(pool, contentType, contentId, url, sourceName) {
