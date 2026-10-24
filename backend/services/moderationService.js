@@ -4,7 +4,7 @@ import { logInfo, logError, flush as flushJobLogs } from './jobLogger.js';
 import { parseDateTime, localToUTC, scoreDateConsensus, extractUrlDate, easternDay, publicationJsonLdDates } from './dateExtractor.js';
 import { AUTO_PUBLISHER_USER_ID } from '../utils/systemUsers.js';
 import { scoreDate, normalizeRenderUrl } from './newsService.js';
-import { bestNewsMatch, bestEventMatch, newsPairMatch, eventPairMatch, MODERATION_NEWS_THRESHOLDS } from './dedup/index.js';
+import { bestNewsMatch, bestEventMatch, newsPairMatch, eventPairMatch, withThresholds, MODERATION_NEWS_THRESHOLDS } from './dedup/index.js';
 import { loadMatchContext, findNewsCandidates, findEventCandidates } from './dedup/candidates.js';
 import { denyReason, sweepDenyLists, loadListSetting } from './filterLists.js';
 import { getReassignmentCandidates } from './geoService.js';
@@ -385,9 +385,10 @@ async function findDuplicate(pool, contentType, row) {
   const item = { ...row, summary: row.description };
   const candidates = await findNewsCandidates(pool, item);
   if (!candidates.length) return null;
-  const strict = bestNewsMatch(item, candidates, await loadMatchContext(pool, { news: MODERATION_NEWS_THRESHOLDS }));
+  const ctx = await loadMatchContext(pool);
+  const strict = bestNewsMatch(item, candidates, withThresholds(ctx, { news: MODERATION_NEWS_THRESHOLDS }));
   if (strict) return { ...strict, strict: true };
-  const loose = bestNewsMatch(item, candidates, await loadMatchContext(pool));
+  const loose = bestNewsMatch(item, candidates, ctx);
   return loose && { ...loose, strict: false };
 }
 

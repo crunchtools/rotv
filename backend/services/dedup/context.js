@@ -98,6 +98,17 @@ export function createMatchContext({ poiNames = [], news = {}, events = {}, tz =
 }
 
 /**
+ * The same context with other thresholds, so a caller can match at two bars
+ * without loading POI names twice.
+ * @param {ReturnType<typeof createMatchContext>} ctx
+ * @param {{news?: Partial<typeof NEWS_THRESHOLDS>, events?: Partial<typeof EVENT_THRESHOLDS>}} overrides
+ * @returns {ReturnType<typeof createMatchContext>}
+ */
+export function withThresholds(ctx, { news = {}, events = {} } = {}) {
+  return { ...ctx, news: { ...NEWS_THRESHOLDS, ...news }, events: { ...EVENT_THRESHOLDS, ...events } };
+}
+
+/**
  * The context plus the POI names carried on the items themselves, so a caller
  * with no POI list still treats each item's own place name as a place.
  * @param {ReturnType<typeof createMatchContext>} ctx

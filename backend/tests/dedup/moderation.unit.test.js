@@ -33,9 +33,16 @@ describe('candidate queries', () => {
     const p = pool();
     await findNewsCandidates(p, { id: 5, title: 'Primate Forest opens', source_url: 'https://A.org/x/', publication_date: '2026-10-21T16:00:00Z' });
     const [sql, params] = p.query.mock.calls[0];
-    expect(sql).toContain('n.title % $2');
+    expect(sql).toContain('title % $2');
+    expect(sql).toContain('ORDER BY url_match DESC');
     expect(sql).not.toMatch(/poi_id\s*=/);
-    expect(params).toEqual([5, 'Primate Forest opens', 'https://a.org/x', '2026-10-21T16:00:00Z', ['published', 'auto_approved'], 14]);
+    expect(params).toEqual([5, 'Primate Forest opens', 'https://a.org/x', '2026-10-21T16:00:00Z', ['published', 'auto_approved'], 14, 20]);
+  });
+
+  it('match events on alternate URLs too', async () => {
+    const p = pool();
+    await findEventCandidates(p, { title: 'Fall Hike', source_url: 'https://a.org/e', start_date: '2026-10-24T14:00:00Z' });
+    expect(p.query.mock.calls[0][0]).toContain('FROM poi_event_urls u');
   });
 
   it('skip an event with no start date', async () => {

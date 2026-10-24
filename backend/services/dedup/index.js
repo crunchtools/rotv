@@ -16,7 +16,7 @@ import { eventFeatures, matchEventFeatures } from './eventIdentity.js';
 export * from './normalize.js';
 export * from './similarity.js';
 export { clusterBy } from './clusters.js';
-export { createMatchContext, withItemPlaces, NEWS_THRESHOLDS, EVENT_THRESHOLDS, MODERATION_NEWS_THRESHOLDS } from './context.js';
+export { createMatchContext, withItemPlaces, withThresholds, NEWS_THRESHOLDS, EVENT_THRESHOLDS, MODERATION_NEWS_THRESHOLDS } from './context.js';
 export { extractEntities, isTitleCase } from './entities.js';
 export { newsFeatures, matchNewsFeatures, newsPairMatch } from './newsIdentity.js';
 export { eventFeatures, matchEventFeatures, eventPairMatch } from './eventIdentity.js';
