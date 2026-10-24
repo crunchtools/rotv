@@ -7,10 +7,10 @@
 # never pay for a Next.js build. Mirrors upstream's Dockerfile (builder +
 # runner stages) at the pinned tag. BASE_PATH is baked in at build time.
 # sharp is floored at 0.35.5 (GHSA-wq5f-xc86-pv6w, librsvg RCE): Umami 3.4.0
-# locks 0.35.4, so the install can't be frozen while the override is in place.
+# locked 0.35.4, so the install can't be frozen while the override is in place.
 # Drop the override and restore --frozen-lockfile when Umami ships sharp >= 0.35.5.
 FROM quay.io/crunchtools/ubi10-core:latest AS umami
-ARG UMAMI_VERSION=3.4.0
+ARG UMAMI_VERSION=3.4.1
 ARG PNPM_VERSION=12.3.4
 ARG PRISMA_VERSION=7.10.0
 RUN dnf install -y nodejs npm tar gzip && dnf clean all && \
