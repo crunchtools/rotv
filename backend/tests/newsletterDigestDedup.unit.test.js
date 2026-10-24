@@ -12,7 +12,7 @@ vi.mock('../services/buttondownClient.js', () => ({
   sendDraftToRecipients: vi.fn()
 }));
 
-const { dedupeDigestEvents, dedupeDigestNews, isDigestNewsSource, digestEventLocation } = await import('../services/newsletterDigestService.js');
+const { dedupeDigestEvents, dedupeDigestNews, isDigestNewsSource, digestEventLocation, stripDateline } = await import('../services/newsletterDigestService.js');
 
 const TZ = 'America/New_York';
 
@@ -212,6 +212,56 @@ describe('dedupeDigestNews', () => {
     const exhibit = { id: 33, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo announces a new exhibit opening this summer', summary: 'Snow leopards move into a rebuilt mountain habitat near the main gate.' };
     const event = { id: 34, poi_id: 5753, poi_name: 'Akron Zoo', title: 'Akron Zoo announces a new event opening this summer', summary: 'Friday evening concerts with food trucks run through August on the lawn.' };
     expect(dedupeDigestNews([exhibit, event])).toHaveLength(2);
+  });
+
+  // Oct 23 2026 digest ran the Primate Forest opening twice: one summary was the
+  // headline plus a "Published ... Updated ... ago" dateline, whose tokens pushed
+  // the overlap under the ratio.
+  it('ignores dateline boilerplate in a scraped summary', () => {
+    const zooRelease = {
+      id: 8088, poi_id: 88, poi_name: 'Cleveland Metroparks Zoo',
+      title: 'Cleveland Metroparks Zoo Unveils First Phase of Primate Forest',
+      summary: 'Cleveland Metroparks Zoo is opening the first phase of Primate Forest, its largest capital project ever, on October 22. The new experience features expanded orangutan habitats, a central gathering space with immersive technology, and new interactive learning areas, all designed to emphasize animal welfare.',
+      source_url: 'https://www.clevelandmetroparks.com/about/news/primate-forest',
+      publication_date: '2026-10-22T16:00:00Z'
+    };
+    const tvStory = {
+      id: 8090, poi_id: 88, poi_name: 'Cleveland Metroparks Zoo',
+      title: 'Largest project in zoo history: Cleveland Metroparks Zoo to open new Primate Forest',
+      summary: 'Largest project in zoo history: Cleveland Metroparks Zoo to open new Primate Forest. Published: Oct. 21, 2026 at 9:26 AM PDT|Updated: 16 hours ago.',
+      source_url: 'https://www.cleveland19.com/2026/10/21/primate-forest/',
+      publication_date: '2026-10-21T16:00:00Z'
+    };
+    expect(dedupeDigestNews([zooRelease, tvStory]).map(i => i.id)).toEqual([8088]);
+  });
+});
+
+describe('stripDateline', () => {
+  const words = (text) => stripDateline(text).split(/\s+/).filter(Boolean).join(' ');
+
+  it('drops a dateline that ends in a time and zone', () => {
+    expect(words('Trail reopens. Published: Oct. 21, 2026 at 9:26 AM PDT')).toBe('Trail reopens.');
+  });
+
+  it('drops a relative "ago" dateline', () => {
+    expect(words('Trail reopens. Updated: 16 hours ago.')).toBe('Trail reopens. .');
+  });
+
+  it('drops a date-only dateline that runs into a pipe, and the one after it', () => {
+    expect(words('Trail reopens. Published: Oct. 21, 2026 | Updated: 16 hours ago')).toBe('Trail reopens. |');
+  });
+
+  it('drops a dateline at the end of the text', () => {
+    expect(words('Trail reopens. Posted: October 21')).toBe('Trail reopens.');
+  });
+
+  it('keeps dates and numbers in the story itself', () => {
+    const story = 'The 2026 race on October 21 drew 1,200 runners to the Towpath.';
+    expect(stripDateline(story)).toBe(story);
+  });
+
+  it('handles a missing summary', () => {
+    expect(stripDateline(null)).toBe('');
   });
 });
 
