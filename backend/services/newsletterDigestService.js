@@ -75,29 +75,23 @@ const NEWS_STOPWORDS = new Set([
   'announce', 'announces', 'announced', 'including', 'include', 'includes'
 ]);
 
-// Page boilerplate a scraped summary can carry ("Published: Oct. 21, 2026 at
-// 9:26 AM PDT | Updated: 16 hours ago"). These words say when, not what, and
-// they diluted the Primate Forest pair under the overlap ratio (Oct 23 digest).
-const DATELINE_WORDS = new Set([
-  'published', 'updated', 'posted', 'ago', 'minute', 'minutes', 'hour', 'hours',
-  'day', 'days', 'week', 'weeks', 'edt', 'est', 'cdt', 'cst', 'mdt', 'mst',
-  'pdt', 'pst', 'utc', 'gmt',
-  'jan', 'feb', 'mar', 'apr', 'jun', 'jul', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec',
-  'january', 'february', 'march', 'april', 'june', 'july', 'august',
-  'september', 'october', 'november', 'december'
-]);
+// A scraped summary can end in the page's dateline ("Published: <date> at
+// 9:26 AM PDT|Updated: 16 hours ago"). Its words say when, not what, and they
+// pushed the Oct 23 Primate Forest pair under the overlap ratio. Only the
+// dateline phrase is dropped; dates and numbers in the story itself still count.
+const DATELINE_RE = /\b(?:published|updated|posted)\s*:[^|]*?(?:\bago\b|\b[ap]\.?m\.?\s+[a-z]{2,4}\b|$)/gi;
 
 function newsTokens(item) {
   const poiTokens = new Set(
     (item.poi_name || '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean)
   );
   const stem = (word) => word.replace(/ies$/, 'y').replace(/(ing|ed|es|s)$/, '');
+  const summary = (item.summary || '').replace(DATELINE_RE, ' ');
   return new Set(
-    `${item.title || ''} ${item.summary || ''}`
+    `${item.title || ''} ${summary}`
       .toLowerCase()
       .split(/[^a-z0-9]+/)
-      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w) && !DATELINE_WORDS.has(w) &&
-        !poiTokens.has(w) && !/^\d+$/.test(w))
+      .filter(w => w.length >= 3 && !NEWS_STOPWORDS.has(w) && !poiTokens.has(w))
       .map(stem)
   );
 }
