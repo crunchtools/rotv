@@ -11,7 +11,6 @@ The Nagios checks for the CVSR train and Harbor Hopper trackers hit `/api/health
   - `unreachable` (alert): no successful USFT poll in 5 min
   - `no_vehicle` (ok): USFT lists no device. An empty list now counts as a successful poll.
   - `parked` (ok): ignition off, however old the fix. This covers nights and the off-season.
-  - `silent` (alert): ignition on but the device's own fix is more than 15 min old
   - `in_service` (ok)
 - Water taxi: `route-code-details` is polled every 2 min instead of only at startup. Its on-duty list is the schedule.
   - `disabled` (ok): turned off in admin, or `DISABLE_LIVE_BOAT_TRACKER`
@@ -32,3 +31,4 @@ The Nagios checks for the CVSR train and Harbor Hopper trackers hit `/api/health
 ## Out of scope
 - Map behavior (`/api/train/position`, `/api/water-taxi/position`) is unchanged.
 - If the GPS unit dies while the vehicle is off duty, it looks the same as off duty. Riders see the same thing either way.
+- The train has no GPS-silent alert. Its unit reports on movement, so a train idling at a station with ignition on looks the same as a dead GPS; the first version alerted on a fix older than 15 min and paged during a normal stop on 2026-10-29.

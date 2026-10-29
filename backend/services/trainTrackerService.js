@@ -32,9 +32,6 @@ const JWT_REFRESH_MS = 24 * 60 * 60 * 1000;
 // above the poll interval so a couple of transient failures don't blank the
 // train, but low enough that a dead poller is caught quickly by monitoring.
 const STALE_MS = parseInt(process.env.USFT_STALE_MS, 10) || 5 * 60 * 1000;
-// With ignition on the GPS reports every few minutes; a fix older than this
-// means the unit went dark in service (#055).
-const GPS_SILENT_MS = 15 * 60 * 1000;
 
 let jwt = null;
 let pollTimer = null;
@@ -306,7 +303,7 @@ export function getTrainStatus() {
  * @param {number} [now=Date.now()] Evaluation time in epoch ms (tests pass one).
  * @returns {{ok: boolean, state: string, reason?: string}} state is one of
  *   disabled, starting, no_vehicle, parked, in_service (ok) or
- *   unreachable, silent (alert, with a reason).
+ *   unreachable (alert, with a reason).
  */
 export function getTrainVerdict(now = Date.now()) {
   if (!enabled) return { ok: true, state: 'disabled' };
@@ -320,9 +317,8 @@ export function getTrainVerdict(now = Date.now()) {
   }
   if (!position) return { ok: true, state: 'no_vehicle' };
   if (position.status === 'parked') return { ok: true, state: 'parked' };
-  const fixAgeMs = now - Date.parse(position.updatedAt);
-  if (fixAgeMs > GPS_SILENT_MS) {
-    return { ok: false, state: 'silent', reason: `ignition on but last GPS fix is ${Math.round(fixAgeMs / 60000)} min old` };
-  }
+  // No alert on the age of the device's own fix: the unit reports on
+  // movement, so a train idling at a station with ignition on looks the same
+  // as a dead GPS. That paged on 2026-10-29 during a normal stop.
   return { ok: true, state: 'in_service' };
 }

@@ -164,9 +164,9 @@ describe('getTrainVerdict', () => {
     expect(getTrainVerdict(at(1).getTime())).toEqual({ ok: true, state: 'in_service' });
   });
 
-  it('alerts when ignition is on but the GPS has gone silent', async () => {
-    const stale = { ...DEVICE.location, lastUpdated: at(-20).toISOString() };
+  it('is ok idling at a station with ignition on and an old fix', async () => {
+    const stale = { ...DEVICE.location, velocity: 0, lastUpdated: at(-40).toISOString() };
     await startAt({ devices: [{ ...DEVICE, location: stale }] });
-    expect(getTrainVerdict(at(1).getTime())).toMatchObject({ ok: false, state: 'silent' });
+    expect(getTrainVerdict(at(1).getTime())).toEqual({ ok: true, state: 'in_service' });
   });
 });
