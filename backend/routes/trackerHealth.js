@@ -12,6 +12,7 @@ import express from 'express';
  *
  * @param {{train: {status: Function, verdict: Function}, waterTaxi: {status: Function, verdict: Function}}} trackers
  *   The service functions, injected so tests can drive any verdict.
+ * @returns {import('express').Router} The router for /api/health/trackers.
  */
 export function createTrackerHealthRouter({ train, waterTaxi }) {
   const router = express.Router();
