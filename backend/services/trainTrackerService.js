@@ -32,11 +32,15 @@ const JWT_REFRESH_MS = 24 * 60 * 60 * 1000;
 // above the poll interval so a couple of transient failures don't blank the
 // train, but low enough that a dead poller is caught quickly by monitoring.
 const STALE_MS = parseInt(process.env.USFT_STALE_MS, 10) || 5 * 60 * 1000;
+// With ignition on the GPS reports every few minutes; a fix older than this
+// means the unit went dark in service (#055).
+const GPS_SILENT_MS = 15 * 60 * 1000;
 
 let jwt = null;
 let pollTimer = null;
 let jwtTimer = null;
 let position = null;
+let startedAt = 0;
 let lastPollOkAt = 0;   // server clock (ms) of the last successful device fetch
 let lastError = null;
 let pool = null;
@@ -151,8 +155,16 @@ export async function pollOnce() {
     }
 
     const devices = await res.json();
-    if (!Array.isArray(devices) || devices.length === 0) {
-      lastError = 'no devices returned';
+    if (!Array.isArray(devices)) {
+      lastError = 'malformed devices response';
+      return;
+    }
+    // USFT answered but lists no vehicle: the poll worked, there is just no
+    // train to show. Not a tracker fault.
+    if (devices.length === 0) {
+      position = null;
+      lastPollOkAt = Date.now();
+      lastError = null;
       return;
     }
 
@@ -220,6 +232,7 @@ export async function startTrainTracker(dbPool) {
   // Start the poll loop unconditionally. pollOnce() authenticates lazily and
   // retries every cycle, so no single startup failure can kill the tracker.
   if (pollTimer) clearInterval(pollTimer);
+  startedAt = Date.now();
   pollTimer = setInterval(pollOnce, POLL_INTERVAL_MS);
   pollOnce();
 
@@ -237,6 +250,7 @@ export function stopTrainTracker() {
   if (jwtTimer) { clearInterval(jwtTimer); jwtTimer = null; }
   jwt = null;
   position = null;
+  startedAt = 0;
   lastPollOkAt = 0;
   lastError = null;
   enabled = false;
@@ -281,4 +295,34 @@ export function getTrainStatus() {
     ageSeconds,
     lastError,
   };
+}
+
+/**
+ * Monitoring verdict (#055): is something broken right now? Driven by what the
+ * feed says the train is doing, not by a timetable, so nights, DST and the
+ * season change need no schedule. GET /api/health/trackers/train turns
+ * ok=false into a 503 for Nagios, which checks it around the clock.
+ *
+ * @param {number} [now=Date.now()] Evaluation time in epoch ms (tests pass one).
+ * @returns {{ok: boolean, state: string, reason?: string}} state is one of
+ *   disabled, starting, no_vehicle, parked, in_service (ok) or
+ *   unreachable, silent (alert, with a reason).
+ */
+export function getTrainVerdict(now = Date.now()) {
+  if (!enabled) return { ok: true, state: 'disabled' };
+  if (!lastPollOkAt) {
+    return now - startedAt <= STALE_MS
+      ? { ok: true, state: 'starting' }
+      : { ok: false, state: 'unreachable', reason: `no successful USFT poll since start: ${lastError || 'unknown'}` };
+  }
+  if (now - lastPollOkAt > STALE_MS) {
+    return { ok: false, state: 'unreachable', reason: `no successful USFT poll in ${Math.round((now - lastPollOkAt) / 60000)} min: ${lastError || 'unknown'}` };
+  }
+  if (!position) return { ok: true, state: 'no_vehicle' };
+  if (position.status === 'parked') return { ok: true, state: 'parked' };
+  const fixAgeMs = now - Date.parse(position.updatedAt);
+  if (fixAgeMs > GPS_SILENT_MS) {
+    return { ok: false, state: 'silent', reason: `ignition on but last GPS fix is ${Math.round(fixAgeMs / 60000)} min old` };
+  }
+  return { ok: true, state: 'in_service' };
 }

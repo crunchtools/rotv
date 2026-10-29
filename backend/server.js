@@ -92,8 +92,8 @@ import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from '
 import { mcpMiddleware } from './services/mcpServer.js';
 import { statsProxy, analyticsWebsiteId } from './services/analyticsService.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
-import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from './services/waterTaxiTrackerService.js';
-import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
+import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus, getWaterTaxiVerdict } from './services/waterTaxiTrackerService.js';
+import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus, getTrainVerdict } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import { resolveMergedIds, originalMergedName } from './services/poiMergeService.js';
 import { loadEgressConfig } from './services/egressRoutes.js';
@@ -2183,16 +2183,21 @@ app.get('/api/train/position', (_req, res) => {
   res.json(getTrainPositions());
 });
 
-// Liveness for the live trackers, for external monitoring (Nagios). Reports
-// per-tracker running/healthy state so a check can tell "tracker dead" from
-// "vehicle simply parked/off" — a parked train still returns a fresh position.
+// Live tracker state for humans and debugging. Always 200; `verdict` is the
+// same call the per-tracker monitoring endpoints below make.
 app.get('/api/health/trackers', (_req, res) => {
-  // Always 200 so a monitoring probe never reads an off-hours/parked tracker as
-  // "app down"; the per-tracker `healthy`/`running` fields carry the signal and
-  // the Nagios check decides (e.g. running=false is a real bug; stale during
-  // operating hours is worth an alert).
-  res.json({ train: getTrainStatus(), waterTaxi: getWaterTaxiStatus() });
+  res.json({
+    train: { ...getTrainStatus(), verdict: getTrainVerdict() },
+    waterTaxi: { ...getWaterTaxiStatus(), verdict: getWaterTaxiVerdict() },
+  });
 });
+
+// Per-tracker monitoring endpoints (#055), checked by Nagios 24x7. 503 only
+// when something is broken; a parked train or an off-duty boat (night, off
+// season) is 200, so there is no timetable to keep in the monitor.
+const sendVerdict = (res, verdict) => res.status(verdict.ok ? 200 : 503).json(verdict);
+app.get('/api/health/trackers/train', (_req, res) => sendVerdict(res, getTrainVerdict()));
+app.get('/api/health/trackers/water-taxi', (_req, res) => sendVerdict(res, getWaterTaxiVerdict()));
 
 app.get('/api/trails/mtb', async (req, res) => {
   try {

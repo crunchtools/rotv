@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Tracker alerts without a timetable** (spec 055): `/api/health/trackers/train` and
+  `/api/health/trackers/water-taxi` return 503 only when a tracker is actually broken. A parked
+  train or an off-duty boat is fine at any hour. The water taxi now polls TrackMyShuttle's
+  on-duty list every 2 minutes, and that list is the schedule, so nights, DST and the off-season
+  need no monitoring changes. The old Nagios checks hit an always-200 endpoint and never caught a
+  dead tracker.
 - **Image gate before `:latest`**: every image build (app, base, image server, dev) pushes
   only an immutable sha tag. `image-gate.yml` tests that exact digest, and a promote job then
   copies it to `:latest` on Quay and GHCR without rebuilding. The gate has a contract test
