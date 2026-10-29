@@ -20,7 +20,9 @@ case "$profile" in
     units="postgresql rotv-init rotv-backend rotv-display umami"
     pg_check="pg_isready -h localhost -p 5432"
     procs="weston"
-    urls="/api/health /"
+    # The tracker endpoints are what the Nagios tracker checks hit; with no
+    # network they answer 200 as disabled or starting, and must not 404/500
+    urls="/api/health / /api/health/trackers/train /api/health/trackers/water-taxi"
     # The production unit mounts the same tmpfs for rsyslog's state
     mounts=(--tmpfs /data/pgdata:rw,size=1G,mode=0700 --tmpfs /var/lib/rsyslog:rw,size=8m)
     ;;

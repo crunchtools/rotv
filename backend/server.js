@@ -16,6 +16,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createNewsletterRouter } from './routes/newsletter.js';
 import { createFeedbackRouter } from './routes/feedback.js';
+import { createTrackerHealthRouter } from './routes/trackerHealth.js';
 import { createTripsRouter } from './routes/trips.js';
 import { createUserSettingsRouter } from './routes/userSettings.js';
 import { renderLegalMarkdown } from './utils/legalMarkdown.js';
@@ -92,8 +93,8 @@ import { sendWeeklyDigest, sendDigestPreviewTo, sendPersonalizedDigests } from '
 import { mcpMiddleware } from './services/mcpServer.js';
 import { statsProxy, analyticsWebsiteId } from './services/analyticsService.js';
 import { initJobLogger, stopJobLogger } from './services/jobLogger.js';
-import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus } from './services/waterTaxiTrackerService.js';
-import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus } from './services/trainTrackerService.js';
+import { startTracker, stopTracker, getBoatPositions, getWaterTaxiStatus, getWaterTaxiVerdict } from './services/waterTaxiTrackerService.js';
+import { startTrainTracker, stopTrainTracker, getTrainPositions, getTrainStatus, getTrainVerdict } from './services/trainTrackerService.js';
 import { getRollupPoiIds } from './services/geoService.js';
 import { resolveMergedIds, originalMergedName } from './services/poiMergeService.js';
 import { loadEgressConfig } from './services/egressRoutes.js';
@@ -2183,16 +2184,12 @@ app.get('/api/train/position', (_req, res) => {
   res.json(getTrainPositions());
 });
 
-// Liveness for the live trackers, for external monitoring (Nagios). Reports
-// per-tracker running/healthy state so a check can tell "tracker dead" from
-// "vehicle simply parked/off" — a parked train still returns a fresh position.
-app.get('/api/health/trackers', (_req, res) => {
-  // Always 200 so a monitoring probe never reads an off-hours/parked tracker as
-  // "app down"; the per-tracker `healthy`/`running` fields carry the signal and
-  // the Nagios check decides (e.g. running=false is a real bug; stale during
-  // operating hours is worth an alert).
-  res.json({ train: getTrainStatus(), waterTaxi: getWaterTaxiStatus() });
-});
+// Live tracker health (spec 055): a summary for people, and per-tracker
+// 200/503 verdicts that Nagios checks around the clock.
+app.use('/api/health/trackers', createTrackerHealthRouter({
+  train: { status: getTrainStatus, verdict: getTrainVerdict },
+  waterTaxi: { status: getWaterTaxiStatus, verdict: getWaterTaxiVerdict },
+}));
 
 app.get('/api/trails/mtb', async (req, res) => {
   try {

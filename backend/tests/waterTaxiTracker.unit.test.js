@@ -1,13 +1,26 @@
 /**
- * Unit tests for the water taxi startup seed (waterTaxiTrackerService, #701).
- * The seed must put the last known position in the cache when a shuttle is on
+ * Unit tests for the water taxi duty poll (waterTaxiTrackerService, #701, #055).
+ * The poll must put the last known position in the cache when a shuttle is on
  * duty, and must never throw or warn on the normal off-duty state — the socket
- * connect runs after it either way. Only seedFromApi() is exercised; nothing
- * here opens a socket or needs a database. Fetch is mocked via the global.
+ * connect runs after it either way. The monitoring verdict must follow the
+ * operator's on-duty list, not a timetable. socket.io-client is mocked, so
+ * nothing here opens a socket or needs a database. Fetch is mocked via the global.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+// A stand-in socket: records handlers so a test can deliver a feed event.
+const fakeSocket = vi.hoisted(() => ({
+  handlers: {},
+  connected: true,
+  on(event, fn) { this.handlers[event] = fn; },
+  removeAllListeners() { this.handlers = {}; },
+  close() {},
+}));
+vi.mock('socket.io-client', () => ({ default: vi.fn(() => fakeSocket) }));
+
 import {
-  seedFromApi, getBoatPositions, getWaterTaxiStatus, stopTracker
+  pollDuty, getBoatPositions, getWaterTaxiStatus, stopTracker,
+  startTracker, getWaterTaxiVerdict
 } from '../services/waterTaxiTrackerService.js';
 
 const SERIAL = '78W113620299';
@@ -47,10 +60,10 @@ afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers();
 
 const warnings = () => warn.mock.calls.map(([line]) => line).join('\n');
 
-describe('seedFromApi — on-duty shuttle', () => {
+describe('pollDuty — on-duty shuttle', () => {
   it('seeds a docked position from last_known_data and reports healthy', async () => {
     const fn = mockFetch({ body: routeBody([shuttle()]) });
-    await seedFromApi();
+    await pollDuty();
 
     expect(fn).toHaveBeenCalledTimes(1);
     const [url, opts] = fn.mock.calls[0];
@@ -65,12 +78,12 @@ describe('seedFromApi — on-duty shuttle', () => {
     expect(status.healthy).toBe(true);
     expect(status.connected).toBe(false);
     expect(warn).not.toHaveBeenCalled();
-    expect(info.mock.calls.map(([l]) => l).join('\n')).toMatch(/Seeded from API.*78W113620299/);
+    expect(info.mock.calls.map(([l]) => l).join('\n')).toMatch(/On duty, seeded from API.*78W113620299/);
   });
 
   it('marks the boat active when the last event was a moving one', async () => {
     mockFetch({ body: routeBody([shuttle({ last_known_data: { ...LAST_KNOWN, event_reason: 'ON_PERIODIC' } })]) });
-    await seedFromApi();
+    await pollDuty();
     expect(getBoatPositions().harbor_hopper.status).toBe('active');
   });
 
@@ -78,7 +91,7 @@ describe('seedFromApi — on-duty shuttle', () => {
     mockFetch({ body: routeBody([shuttle({
       last_known_data: { last_latitude: 41.5, last_longitude: -81.7, last_heading: 90 },
     })]) });
-    await seedFromApi();
+    await pollDuty();
     expect(getBoatPositions().harbor_hopper).toMatchObject({ latitude: 41.5, longitude: -81.7, heading: 90 });
   });
 
@@ -87,7 +100,7 @@ describe('seedFromApi — on-duty shuttle', () => {
       shuttle({ serial_number: 'NEWSERIAL1', last_known_data: { ...LAST_KNOWN, latitude: '41.4' } }),
       shuttle({ serial_number: undefined, vin_no: 'VIN2' }),
     ]) });
-    await seedFromApi();
+    await pollDuty();
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(warnings()).toMatch(/78W113620299 not on duty/);
     expect(warnings()).toMatch(/NEWSERIAL1, VIN2/);
@@ -95,16 +108,16 @@ describe('seedFromApi — on-duty shuttle', () => {
 
   it('warns and leaves no position when the shuttle has no coordinates', async () => {
     mockFetch({ body: routeBody([shuttle({ last_known_data: { shuttle_data: {} } })]) });
-    await seedFromApi();
+    await pollDuty();
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(warnings()).toMatch(/no coordinates/);
   });
 });
 
-describe('seedFromApi — nothing to seed', () => {
+describe('pollDuty — nothing to seed', () => {
   it('treats an empty shuttle list as off duty: info, not warn, no position', async () => {
     mockFetch({ body: routeBody([]) });
-    await expect(seedFromApi()).resolves.toBeUndefined();
+    await expect(pollDuty()).resolves.toBeUndefined();
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(getWaterTaxiStatus()).toMatchObject({ hasPosition: false, healthy: false, updatedAt: null });
     expect(warn).not.toHaveBeenCalled();
@@ -113,28 +126,37 @@ describe('seedFromApi — nothing to seed', () => {
 
   it('warns on HTTP 401 without throwing', async () => {
     mockFetch({ status: 401 });
-    await expect(seedFromApi()).resolves.toBeUndefined();
+    await expect(pollDuty()).resolves.toBeUndefined();
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(warnings()).toMatch(/HTTP 401/);
   });
 
   it('warns on a non-200 body code without throwing', async () => {
     mockFetch({ body: { code: 204, message: 'No Data Found', response: { route: [] } } });
-    await expect(seedFromApi()).resolves.toBeUndefined();
+    await expect(pollDuty()).resolves.toBeUndefined();
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(warnings()).toMatch(/code 204/);
   });
 
   it('warns on a rejected fetch without throwing', async () => {
     mockFetch({ reject: new Error('fetch failed') });
-    await expect(seedFromApi()).resolves.toBeUndefined();
+    await expect(pollDuty()).resolves.toBeUndefined();
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(warnings()).toMatch(/fetch failed/);
   });
 
+  it('does not count a body without a shuttle list as a good poll', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    mockFetch({ body: { code: 200, message: 'Success', response: { route: {} } } });
+    await startTracker(POOL);
+    expect(warnings()).toMatch(/no shuttle_details list/);
+    expect(getWaterTaxiVerdict(at(11))).toMatchObject({ ok: false, state: 'unreachable' });
+  });
+
   it('warns on a malformed body without throwing', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad json'); } })));
-    await expect(seedFromApi()).resolves.toBeUndefined();
+    await expect(pollDuty()).resolves.toBeUndefined();
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(warnings()).toMatch(/bad json/);
   });
@@ -145,7 +167,7 @@ describe('getBoatPositions — staleness guard on a seeded position', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-10-10T12:00:00Z'));
     mockFetch({ body: routeBody([shuttle()]) });
-    await seedFromApi();
+    await pollDuty();
     expect(getBoatPositions().harbor_hopper).not.toBeNull();
 
     vi.setSystemTime(new Date('2026-10-11T11:59:00Z'));
@@ -155,5 +177,105 @@ describe('getBoatPositions — staleness guard on a seeded position', () => {
     expect(getBoatPositions()).toEqual({ harbor_hopper: null });
     expect(getWaterTaxiStatus().healthy).toBe(false);
     vi.useRealTimers();
+  });
+});
+
+const POOL = { query: async () => ({ rows: [] }) };
+const T0 = new Date('2026-07-10T21:00:00Z');
+const at = (min) => new Date(T0.getTime() + min * 60000).getTime();
+
+async function startAt(fetchOpts) {
+  vi.useFakeTimers();
+  vi.setSystemTime(T0);
+  mockFetch(fetchOpts);
+  await startTracker(POOL);
+}
+
+describe('getWaterTaxiVerdict', () => {
+  it('is ok while disabled', () => {
+    expect(getWaterTaxiVerdict()).toEqual({ ok: true, state: 'disabled' });
+  });
+
+  it('is ok while disabled by the admin setting', async () => {
+    mockFetch();
+    await startTracker({ query: async () => ({ rows: [{ value: 'false' }] }) });
+    expect(getWaterTaxiVerdict()).toEqual({ ok: true, state: 'disabled' });
+  });
+
+  it('is ok off duty, and stays ok across polls (night, off season)', async () => {
+    await startAt({ body: routeBody([]) });
+    expect(getWaterTaxiVerdict(at(1))).toEqual({ ok: true, state: 'off_duty' });
+    await vi.advanceTimersByTimeAsync(60 * 60000);
+    expect(getWaterTaxiVerdict(Date.now())).toEqual({ ok: true, state: 'off_duty' });
+  });
+
+  it('is ok while starting, then alerts if the rider API never answers', async () => {
+    await startAt({ status: 500 });
+    expect(getWaterTaxiVerdict(at(5))).toMatchObject({ ok: true, state: 'starting' });
+    expect(getWaterTaxiVerdict(at(11))).toMatchObject({ ok: false, state: 'unreachable' });
+  });
+
+  it('alerts when the rider API stops answering', async () => {
+    await startAt({ body: routeBody([]) });
+    mockFetch({ reject: new Error('fetch failed') });
+    await vi.advanceTimersByTimeAsync(12 * 60000);
+    expect(getWaterTaxiVerdict(Date.now())).toMatchObject({ ok: false, state: 'unreachable' });
+  });
+
+  it('alerts when another serial is on duty instead of ours', async () => {
+    await startAt({ body: routeBody([shuttle({ serial_number: 'NEWSERIAL1' })]) });
+    expect(getWaterTaxiVerdict(at(1))).toMatchObject({ ok: false, state: 'wrong_serial' });
+    expect(getWaterTaxiVerdict(at(1)).reason).toMatch(/NEWSERIAL1/);
+  });
+
+  it('is ok on duty while socket events arrive', async () => {
+    await startAt({ body: routeBody([shuttle()]) });
+    await vi.advanceTimersByTimeAsync(10 * 60000);
+    fakeSocket.handlers['78W113620299']({ code: 200, response: { latitude: '41.5', longitude: '-81.7', event_reason: 'ON_PERIODIC' } });
+    await vi.advanceTimersByTimeAsync(10 * 60000);
+    expect(getWaterTaxiVerdict(Date.now())).toEqual({ ok: true, state: 'in_service' });
+  });
+
+  it('alerts when on duty but the socket has gone silent', async () => {
+    await startAt({ body: routeBody([shuttle()]) });
+    expect(getWaterTaxiVerdict(at(9))).toEqual({ ok: true, state: 'in_service' });
+    await vi.advanceTimersByTimeAsync(16 * 60000);
+    expect(getWaterTaxiVerdict(Date.now())).toMatchObject({ ok: false, state: 'silent' });
+  });
+
+  it('gives a boat coming on duty a grace period, whatever the socket did before', async () => {
+    await startAt({ body: routeBody([]) });
+    await vi.advanceTimersByTimeAsync(5 * 60 * 60000);   // off duty all afternoon
+    mockFetch({ body: routeBody([shuttle()]) });
+    await vi.advanceTimersByTimeAsync(2 * 60000);        // next poll: on duty
+    expect(getWaterTaxiVerdict(Date.now())).toEqual({ ok: true, state: 'in_service' });
+  });
+
+  it('logs an unchanged duty state once, not every poll', async () => {
+    await startAt({ body: routeBody([]) });
+    await vi.advanceTimersByTimeAsync(30 * 60000);
+    const offDutyLogs = info.mock.calls.filter(([l]) => /No shuttles on duty/.test(l));
+    expect(offDutyLogs).toHaveLength(1);
+  });
+
+  it('starts anyway when the admin setting cannot be read', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    mockFetch({ body: routeBody([]) });
+    await startTracker({ query: async () => { throw new Error('db down'); } });
+    expect(getWaterTaxiVerdict(at(1))).toEqual({ ok: true, state: 'off_duty' });
+    expect(warnings()).toMatch(/db down/);
+  });
+});
+
+describe('pollDuty — does not clobber a live socket fix', () => {
+  it('keeps a fresh socket position, and seeds again once the socket is quiet', async () => {
+    await startAt({ body: routeBody([shuttle()]) });
+    fakeSocket.handlers['78W113620299']({ code: 200, response: { latitude: '41.6', longitude: '-81.8', event_reason: 'ON_PERIODIC' } });
+    await pollDuty();
+    expect(getBoatPositions().harbor_hopper).toMatchObject({ latitude: 41.6, longitude: -81.8 });
+
+    await vi.advanceTimersByTimeAsync(2 * 60000);
+    expect(getBoatPositions().harbor_hopper).toMatchObject({ latitude: 41.49707, longitude: -81.70679 });
   });
 });
