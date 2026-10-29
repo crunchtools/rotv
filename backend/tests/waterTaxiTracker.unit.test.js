@@ -145,6 +145,15 @@ describe('pollDuty — nothing to seed', () => {
     expect(warnings()).toMatch(/fetch failed/);
   });
 
+  it('does not count a body without a shuttle list as a good poll', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(T0);
+    mockFetch({ body: { code: 200, message: 'Success', response: { route: {} } } });
+    await startTracker(POOL);
+    expect(warnings()).toMatch(/no shuttle_details list/);
+    expect(getWaterTaxiVerdict(at(11))).toMatchObject({ ok: false, state: 'unreachable' });
+  });
+
   it('warns on a malformed body without throwing', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, status: 200, json: async () => { throw new Error('bad json'); } })));
     await expect(pollDuty()).resolves.toBeUndefined();

@@ -92,7 +92,8 @@ function snapshotToResponse(shuttle) {
  * startup and every DUTY_POLL_MS. Exported for tests.
  *
  * @returns {Promise<void>} Never rejects: connect() must run regardless, so
- *   every failure is logged and leaves the position unset.
+ *   every failure is logged, leaves the cached position and duty state as they
+ *   were, and does not count as a successful poll.
  */
 export async function pollDuty() {
   try {
@@ -123,9 +124,17 @@ export async function pollDuty() {
       return;
     }
 
+    // Off duty is an empty array; anything else is a broken response, and
+    // must not read as "off duty" to monitoring.
+    const details = body.response?.shuttle_details;
+    if (!Array.isArray(details)) {
+      logOnChange('warn', 'Duty poll rejected: response has no shuttle_details list');
+      return;
+    }
+
     const now = Date.now();
     lastDutyPollOkAt = now;
-    const shuttles = (body.response?.shuttle_details || []).filter(Boolean);
+    const shuttles = details.filter(Boolean);
     const serials = shuttles.map(shuttleSerial);
     // Another boat's position would sit on the map as the Harbor Hopper, and the socket
     // only listens for SERIAL_NUMBER, so nothing would correct it.

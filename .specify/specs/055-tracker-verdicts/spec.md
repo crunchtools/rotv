@@ -21,11 +21,12 @@ The Nagios checks for the CVSR train and Harbor Hopper trackers hit `/api/health
   - `wrong_serial` (alert): a shuttle is on duty but not `TMS_SERIAL`
   - `silent` (alert): on duty with no socket event for 15 min, timed from the later of the last event or coming on duty
   - `in_service` (ok)
+- A duty poll whose body has no `shuttle_details` array is a failed poll, not off duty.
 - The duty poll seeds the map position only when the socket has been quiet for a full poll interval, so a live socket fix is never overwritten by a snapshot. It logs a duty state once, when it changes.
 - A DB error reading the boat's admin setting no longer stops the tracker; it starts, as the train already does.
 
 ## Tests
-- Unit: `trainTracker.unit.test.js` and `waterTaxiTracker.unit.test.js` cover every state. Time is faked and socket.io is mocked.
+- Unit: `trainTracker.unit.test.js` and `waterTaxiTracker.unit.test.js` cover every state. Time is faked and socket.io is mocked. `trackerHealthRoutes.unit.test.js` covers the 200/503 mapping in `routes/trackerHealth.js`.
 - Image boot test: both endpoints return 200 with no network.
 
 ## Out of scope

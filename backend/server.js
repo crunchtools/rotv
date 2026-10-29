@@ -16,6 +16,7 @@ import { createAuthRouter } from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
 import { createNewsletterRouter } from './routes/newsletter.js';
 import { createFeedbackRouter } from './routes/feedback.js';
+import { createTrackerHealthRouter } from './routes/trackerHealth.js';
 import { createTripsRouter } from './routes/trips.js';
 import { createUserSettingsRouter } from './routes/userSettings.js';
 import { renderLegalMarkdown } from './utils/legalMarkdown.js';
@@ -2183,21 +2184,12 @@ app.get('/api/train/position', (_req, res) => {
   res.json(getTrainPositions());
 });
 
-// Live tracker state for humans and debugging. Always 200; `verdict` is the
-// same call the per-tracker monitoring endpoints below make.
-app.get('/api/health/trackers', (_req, res) => {
-  res.json({
-    train: { ...getTrainStatus(), verdict: getTrainVerdict() },
-    waterTaxi: { ...getWaterTaxiStatus(), verdict: getWaterTaxiVerdict() },
-  });
-});
-
-// Per-tracker monitoring endpoints (#055), checked by Nagios 24x7. 503 only
-// when something is broken; a parked train or an off-duty boat (night, off
-// season) is 200, so there is no timetable to keep in the monitor.
-const sendVerdict = (res, verdict) => res.status(verdict.ok ? 200 : 503).json(verdict);
-app.get('/api/health/trackers/train', (_req, res) => sendVerdict(res, getTrainVerdict()));
-app.get('/api/health/trackers/water-taxi', (_req, res) => sendVerdict(res, getWaterTaxiVerdict()));
+// Live tracker health (spec 055): a summary for people, and per-tracker
+// 200/503 verdicts that Nagios checks around the clock.
+app.use('/api/health/trackers', createTrackerHealthRouter({
+  train: { status: getTrainStatus, verdict: getTrainVerdict },
+  waterTaxi: { status: getWaterTaxiStatus, verdict: getWaterTaxiVerdict },
+}));
 
 app.get('/api/trails/mtb', async (req, res) => {
   try {
