@@ -14,6 +14,7 @@ import { useTrip } from '../hooks/useTrip';
 import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
 import { frameBounds } from '../utils/mapFrame';
+import { trailLabelPosition } from '../utils/trailLabel';
 
 // Escape user-supplied POI fields before interpolating them into tooltip HTML
 // strings passed to Leaflet's bindTooltip (which sets innerHTML). Prevents XSS
@@ -219,6 +220,7 @@ const PARK_CENTER = [41.26, -81.55];
 const DEFAULT_ZOOM = 11;
 
 const TOOLTIP_HOVER_DELAY = 250; // ms
+const TRAIL_LABEL_MIN_ZOOM = 16; // close enough that trail names don't crowd each other
 
 // All park boundaries render in CVNP's forest green for a consistent "park" look;
 // municipal/county/state keep their own per-row boundary_color. (#396 follow-up)
@@ -721,6 +723,19 @@ function MapMoveTracker({ onMapMove }) {
 
   return null;
 }
+
+// Memoized: the map re-renders on every tracker animation frame, and a new
+// divIcon on each render would rebuild the label's DOM.
+const TrailNameLabel = React.memo(function TrailNameLabel({ name, geometry }) {
+  const position = useMemo(() => trailLabelPosition(geometry), [geometry]);
+  const icon = useMemo(() => L.divIcon({
+    className: 'trail-name-label',
+    html: `<span>${escapeHtml(name)}</span>`,
+    iconSize: null,
+  }), [name]);
+  if (!position) return null;
+  return <Marker position={position} icon={icon} interactive={false} keyboard={false} zIndexOffset={-1000} />;
+});
 
 function ZoomReporter({ onZoomChange }) {
   const map = useMap();
@@ -2087,6 +2102,9 @@ function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPo
                   });
                 }}
               />
+              {feature.poi_roles?.includes('trail') && mapZoom >= TRAIL_LABEL_MIN_ZOOM && (
+                <TrailNameLabel name={feature.name} geometry={feature.geometry} />
+              )}
             </React.Fragment>
           );
         })}

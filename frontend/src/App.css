@@ -11216,6 +11216,24 @@ body {
   display: none !important;
 }
 
+/* Trail name printed on the map when zoomed in; taps pass through to the line */
+.trail-name-label {
+  width: 0;
+  height: 0;
+}
+
+.trail-name-label span {
+  display: inline-block;
+  transform: translate(-50%, -50%);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #2d5016;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* Trail/river hover effect on map (applied via Leaflet) */
 .leaflet-interactive.trail-hover,
 .leaflet-interactive.river-hover {
