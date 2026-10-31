@@ -20,6 +20,14 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Serper');
 
+// Serper returns real URLs for only the top 3 web results; the rest
+// are Google redirects that can't be followed for about 30s (serper.dev/google-links).
+function isGoogleGotoLink(url) {
+  if (!URL.canParse(url)) return false;
+  const { hostname, pathname } = new URL(url);
+  return /(^|\.)google\.com$/i.test(hostname) && pathname.replace(/\/+$/, '') === '/goto';
+}
+
 
 /**
  * Search for news or events about a POI using Serper with geographic grounding
@@ -95,8 +103,12 @@ export async function searchNewsUrls(pool, poi, { contentType = 'news', pipeline
     }
     const searchResults = await response.json();
     const rawResults = endpoint === 'news' ? (searchResults.news || []) : (searchResults.organic || []);
+    const realResults = rawResults.filter(r => !isGoogleGotoLink(r.link));
+    if (realResults.length < rawResults.length) {
+      logger.info(`Dropped ${rawResults.length - realResults.length} Google redirect links from ${endpoint}`);
+    }
     return {
-      items: rawResults.map(r => ({ url: r.link, title: r.title, snippet: r.snippet, date: r.date || null })),
+      items: realResults.map(r => ({ url: r.link, title: r.title, snippet: r.snippet, date: r.date || null })),
       credits: searchResults.credits || 1
     };
   }));

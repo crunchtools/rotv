@@ -32,6 +32,8 @@ Both pipelines use the same crawl, render, and extraction machinery. Everything 
 | Date gate | Required (see Moderation) | Not required; the date only orders items |
 | Published to | POI pages, `/news`, notifications, newsletter | POI pages only, labeled "History" |
 
+Serper `/search` returns real URLs for only the top 3 results; the rest are `google.com/goto` redirects, which `serperService.js` drops. Historical News and POI research work from those 3. Serper's `/resolve` would recover the rest but adds about 30s per search, so it is deliberately unused.
+
 **Labels come from age, not from the search.** When an item is saved, `newsPipelineFor()` sets `poi_news.pipeline`: an item published within `news_current_window_days` (default 30) of when it was found is `current`; older or undated items are `historical`. A Google News hit can be old and a web-search hit can be fresh, so the search that found it doesn't decide.
 
 **Historical News stops on its own.** After each POI, if the search returned no URL that isn't already in `poi_news`, `pois.history_dry_runs` increments; otherwise it resets to 0. At `news_history_dry_run_limit` (default 3) the POI is skipped. The query angle rotates every run (`history_query_index`). Reset one POI or all with `POST /api/admin/news/historical/reset`.
