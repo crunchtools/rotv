@@ -103,6 +103,32 @@ describe('Serper Service', () => {
       expect(result.boundaries).toEqual(['Akron']);
     });
 
+    it('drops Google redirect links from web search and keeps the real results', async () => {
+      const real = ['https://example.com/1', 'https://example.org/2', 'https://example.net/3'];
+      const redirects = Array.from({ length: 7 }, (_, i) => `https://www.google.com/goto?url=CAES${i}`);
+      fetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ organic: [...real, ...redirects].map(link => ({ link, title: link })), credits: 1 })
+      });
+
+      const result = await searchNewsUrls(groundedPool(), mockPoi, { pipeline: 'historical' });
+
+      expect(result.urls.map(u => u.url)).toEqual(real);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps a link that only looks like a Google redirect', async () => {
+      const links = ['https://example.com/goto?url=a', 'https://www.google.com/gotofoo', 'https://notgoogle.com/goto?url=b'];
+      fetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ organic: links.map(link => ({ link, title: link })), credits: 1 })
+      });
+
+      const result = await searchNewsUrls(groundedPool(), mockPoi, { pipeline: 'historical' });
+
+      expect(result.urls.map(u => u.url)).toEqual(links);
+    });
+
     it('should dedupe a URL returned twice', async () => {
       fetch.mockResolvedValue({
         ok: true,
