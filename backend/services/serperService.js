@@ -20,7 +20,7 @@ import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('Serper');
 
-// Since 2026-10-30 Serper returns real URLs for only the top 3 web results; the rest
+// Serper returns real URLs for only the top 3 web results; the rest
 // are Google redirects that can't be followed for about 30s (serper.dev/google-links).
 function isGoogleGotoLink(url) {
   if (!URL.canParse(url)) return false;
