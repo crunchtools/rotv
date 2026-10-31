@@ -15,6 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import { generateSlug } from './sidebar/helpers';
 import { frameBounds } from '../utils/mapFrame';
 import TrailNameLabel from './TrailNameLabel';
+import { showsTrailLabel } from '../utils/trailLabel';
 
 // Escape user-supplied POI fields before interpolating them into tooltip HTML
 // strings passed to Leaflet's bindTooltip (which sets innerHTML). Prevents XSS
@@ -2088,7 +2089,9 @@ function Map({ destinations, parkPins, selectedPoi, selectedIsLinear, onSelectPo
                   });
                 }}
               />
-              <TrailNameLabel feature={feature} zoom={mapZoom} />
+              {showsTrailLabel(feature, mapZoom) && (
+                <TrailNameLabel name={feature.name} geometry={feature.geometry} />
+              )}
             </React.Fragment>
           );
         })}

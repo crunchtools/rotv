@@ -40,3 +40,11 @@ export function trailLabelPosition(geometry) {
   }
   return null;
 }
+
+const TRAIL_LABEL_MIN_ZOOM = 16; // close enough that trail names don't crowd each other
+
+// True when `feature` (a POI with poi_roles) is a trail and the map's `zoom` is
+// close enough to print its name.
+export function showsTrailLabel(feature, zoom) {
+  return !!feature.poi_roles?.includes('trail') && zoom >= TRAIL_LABEL_MIN_ZOOM;
+}

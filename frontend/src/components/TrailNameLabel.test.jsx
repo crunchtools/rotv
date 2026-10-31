@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import TrailNameLabel, { TRAIL_LABEL_MIN_ZOOM } from './TrailNameLabel';
+import TrailNameLabel from './TrailNameLabel';
 
 vi.mock('react-leaflet', () => ({
   Marker: ({ position, icon, interactive }) => (
@@ -12,33 +12,24 @@ vi.mock('react-leaflet', () => ({
 
 afterEach(cleanup);
 
-const trail = {
-  name: 'West Creek Skills Area',
-  poi_roles: ['trail'],
-  geometry: { type: 'LineString', coordinates: [[-81, 41], [-81, 43]] },
-};
+const geometry = { type: 'LineString', coordinates: [[-81, 41], [-81, 43]] };
 
 describe('TrailNameLabel', () => {
-  it('labels a trail at the threshold zoom, at its midpoint, without catching taps', () => {
-    render(<TrailNameLabel feature={trail} zoom={TRAIL_LABEL_MIN_ZOOM} />);
+  it('labels the trail at its midpoint without catching taps', () => {
+    render(<TrailNameLabel name="West Creek Skills Area" geometry={geometry} />);
     const label = screen.getByTestId('label');
     expect(label.getAttribute('data-position')).toBe('42,-81');
     expect(label.getAttribute('data-interactive')).toBe('false');
     expect(label.textContent).toContain('West Creek Skills Area');
   });
 
-  it('stays off the map below the threshold zoom', () => {
-    render(<TrailNameLabel feature={trail} zoom={TRAIL_LABEL_MIN_ZOOM - 1} />);
-    expect(screen.queryByTestId('label')).toBeNull();
-  });
-
-  it('does not label other linear features', () => {
-    render(<TrailNameLabel feature={{ ...trail, poi_roles: ['river'] }} zoom={18} />);
+  it('renders nothing without a usable line', () => {
+    render(<TrailNameLabel name="No line" geometry={{ type: 'Point', coordinates: [-81, 41] }} />);
     expect(screen.queryByTestId('label')).toBeNull();
   });
 
   it('renders the name as text, not markup', () => {
-    render(<TrailNameLabel feature={{ ...trail, name: '<img src=x>' }} zoom={18} />);
+    render(<TrailNameLabel name="<img src=x>" geometry={geometry} />);
     expect(screen.getByTestId('label').textContent).toContain('&lt;img src=x&gt;');
   });
 });

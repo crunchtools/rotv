@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { trailLabelPosition } from './trailLabel';
+import { trailLabelPosition, showsTrailLabel } from './trailLabel';
 
 describe('trailLabelPosition', () => {
   it('returns the midpoint of a LineString as [lat, lng]', () => {
@@ -19,5 +19,17 @@ describe('trailLabelPosition', () => {
     expect(trailLabelPosition(null)).toBeNull();
     expect(trailLabelPosition({ type: 'Point', coordinates: [-81, 41] })).toBeNull();
     expect(trailLabelPosition({ type: 'LineString', coordinates: [[-81, 41], [-81, 41]] })).toBeNull();
+  });
+});
+
+describe('showsTrailLabel', () => {
+  it('shows trails from zoom 16 in', () => {
+    expect(showsTrailLabel({ poi_roles: ['trail'] }, 16)).toBe(true);
+    expect(showsTrailLabel({ poi_roles: ['trail'] }, 15)).toBe(false);
+  });
+
+  it('skips other linear features', () => {
+    expect(showsTrailLabel({ poi_roles: ['river'] }, 18)).toBe(false);
+    expect(showsTrailLabel({}, 18)).toBe(false);
   });
 });
