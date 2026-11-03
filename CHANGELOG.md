@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `rotv-backup-*` dump in the configured backups folder, before psql starts.
 
 ### Fixed
+- **admin@ forward goes through the mail relay**: mail to admin@rootsofthevalley.org was
+  forwarded straight to Gmail's MX on port 25, which the new host blocks, so every forward timed
+  out and the sender was told to retry. It now uses the same `SMTP_HOST` relay and DKIM signing as
+  sign-in mail, and still answers 451 when the relay is unavailable (RT #1546).
 - **Setting a primary photo is atomic again**: the set-primary route sent `BEGIN` and `COMMIT`
   through the pool, so its two updates could run on different connections. A failure between them
   could leave a place with no primary. It now holds one connection for the whole transaction. The

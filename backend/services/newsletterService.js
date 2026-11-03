@@ -11,6 +11,7 @@ import { simpleParser } from 'mailparser';
 import { JSDOM } from 'jsdom';
 import TurndownService from 'turndown';
 import nodemailer from 'nodemailer';
+import { transportOptions } from './mailer.js';
 import { collectPoi, saveNewsItems, saveEventItems } from './newsService.js';
 import { queueNewsletterJob } from './jobScheduler.js';
 import { logInfo, flush as flushJobLogs } from './jobLogger.js';
@@ -241,6 +242,36 @@ export async function processNewsletterById(pool, emailId) {
   }
 }
 
+const ADMIN_FORWARD_TO = 'scott.mccarty@gmail.com';
+
+/**
+ * Forward a message sent to admin@ to the operator's inbox through the same
+ * relay as transactional mail (SMTP_HOST). Sending straight to Gmail's MX
+ * needs outbound port 25, which the host may block. Throws when outbound mail
+ * is not configured or the relay refuses, so the sending MTA gets a 451 and
+ * retries.
+ * @param {Buffer} raw - the message as received
+ * @param {{env?: object, createTransport?: Function}} [deps] - injectable for tests
+ */
+export async function forwardAdminEmail(raw, { env = process.env, createTransport = nodemailer.createTransport } = {}) {
+  const options = transportOptions(env);
+  if (!options) {
+    throw new Error('Outbound mail is not configured (SMTP_HOST unset)');
+  }
+  const parsed = await simpleParser(raw);
+  const originalFrom = parsed.from?.text || 'unknown sender';
+  await createTransport(options).sendMail({
+    envelope: { from: 'admin@rootsofthevalley.org', to: ADMIN_FORWARD_TO },
+    from: '"ROTV Admin Forward" <admin@rootsofthevalley.org>',
+    to: ADMIN_FORWARD_TO,
+    subject: `[ROTV] ${parsed.subject || '(no subject)'}`,
+    replyTo: parsed.from?.value?.[0]?.address || undefined,
+    text: `--- Forwarded from ${originalFrom} ---\n\n${parsed.text || ''}`,
+    html: parsed.html ? `<p><em>Forwarded from ${originalFrom}</em></p><hr>${parsed.html}` : undefined
+  });
+  smtpLogger.info(`Forwarded admin email to ${ADMIN_FORWARD_TO} via ${options.host}:${options.port}: "${parsed.subject}" from ${originalFrom}`);
+}
+
 /**
  * Start an SMTP server to receive inbound newsletter emails.
  * Stores raw email in newsletter_emails, queues a pg-boss job for
@@ -274,25 +305,7 @@ export function startSmtpServer(pool, { port = 25, host = '::' } = {}) {
           const recipient = session.envelope.rcptTo[0]?.address?.toLowerCase();
 
           if (recipient === 'admin@rootsofthevalley.org') {
-            const transporter = nodemailer.createTransport({
-              host: 'gmail-smtp-in.l.google.com',
-              port: 25,
-              secure: false,
-              tls: { rejectUnauthorized: false },
-              name: 'rootsofthevalley.org'
-            });
-            const parsed = await simpleParser(raw);
-            const originalFrom = parsed.from?.text || 'unknown sender';
-            await transporter.sendMail({
-              envelope: { from: 'admin@rootsofthevalley.org', to: 'scott.mccarty@gmail.com' },
-              from: `"ROTV Admin Forward" <admin@rootsofthevalley.org>`,
-              to: 'scott.mccarty@gmail.com',
-              subject: `[ROTV] ${parsed.subject || '(no subject)'}`,
-              replyTo: parsed.from?.value?.[0]?.address || undefined,
-              text: `--- Forwarded from ${originalFrom} ---\n\n${parsed.text || ''}`,
-              html: parsed.html ? `<p><em>Forwarded from ${originalFrom}</em></p><hr>${parsed.html}` : undefined
-            });
-            smtpLogger.info(`Forwarded admin email to scott.mccarty@gmail.com: "${parsed.subject}" from ${originalFrom}`);
+            await forwardAdminEmail(raw);
             callback();
             return;
           }
