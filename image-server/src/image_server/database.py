@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import psycopg
 from pgvector.psycopg import register_vector
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from .config import get_config
 
@@ -169,15 +171,11 @@ def get_asset(asset_id: int) -> dict[str, Any] | None:
     """Get an asset by ID."""
     pool = get_pool()
     with pool.connection() as conn:
-        row = conn.execute(
-            "SELECT * FROM assets WHERE id = %s", (asset_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM assets WHERE id = %s", (asset_id,)).fetchone()
         return dict(row) if row else None
 
 
-def get_assets_for_poi(
-    poi_id: int, *, role: str | None = None
-) -> list[dict[str, Any]]:
+def get_assets_for_poi(poi_id: int, *, role: str | None = None) -> list[dict[str, Any]]:
     """Get all assets for a POI, optionally filtered by role."""
     pool = get_pool()
     with pool.connection() as conn:
@@ -194,15 +192,15 @@ def get_assets_for_poi(
         return [dict(r) for r in rows]
 
 
-_UPDATE_FIELD_FORMATTERS = {
+# Annotated so the lambdas are typed: each takes the column name and returns
+# its SET clause plus whether the value needs json.dumps first.
+_UPDATE_FIELD_FORMATTERS: dict[str, Callable[[str], tuple[str, bool]]] = {
     "tags": lambda key: (f"{key} = %({key})s::jsonb", True),
     "embedding": lambda key: (f"{key} = %({key})s", False),
 }
 
 
-def update_asset(
-    asset_id: int, **updates: Any
-) -> dict[str, Any] | None:
+def update_asset(asset_id: int, **updates: Any) -> dict[str, Any] | None:
     """Update an asset's metadata fields."""
     import json
 
@@ -258,9 +256,7 @@ def get_all_assets() -> list[dict[str, Any]]:
     """Get all assets across all POIs."""
     pool = get_pool()
     with pool.connection() as conn:
-        rows = conn.execute(
-            "SELECT * FROM assets ORDER BY id"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM assets ORDER BY id").fetchall()
         return [dict(r) for r in rows]
 
 
@@ -268,9 +264,7 @@ def delete_asset(asset_id: int) -> bool:
     """Delete an asset. Returns True if deleted."""
     pool = get_pool()
     with pool.connection() as conn:
-        delete_result = conn.execute(
-            "DELETE FROM assets WHERE id = %s", (asset_id,)
-        )
+        delete_result = conn.execute("DELETE FROM assets WHERE id = %s", (asset_id,))
         conn.commit()
         return (delete_result.rowcount or 0) > 0
 

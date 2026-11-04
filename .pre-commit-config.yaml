@@ -1,75 +1,18 @@
-# Pre-commit hooks configuration
-# The host needs only git, podman, pre-commit and gh. Hooks run from container
-# images or pre-commit's own environments, never from host npm, pip or uv installs.
-# Install: pre-commit install
-# Run manually: pre-commit run --all-files
+# Every check runs from python-sdlc, pinned here once (constitution XII,
+# v1.30.0). This `rev:` fixes the launcher, the image and every tool inside it,
+# for this laptop and for CI, which reads the same line.
+#
+# What each hook runs is configured in pyproject.toml: [tool.sdlc.commit],
+# [tool.sdlc.push], [tool.sdlc.ci]. `sdlc tiers` prints it.
+#
+# `default_install_hook_types` must name both: without pre-push, `pre-commit
+# install` wires only the commit hook and every verdict silently stops running.
+
+default_install_hook_types: [pre-commit, pre-push]
 
 repos:
-  # Standard pre-commit hooks
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.5.0
+  - repo: https://github.com/crunchtools/python-sdlc
+    rev: v0.3.7
     hooks:
-      - id: trailing-whitespace
-        exclude: ^(frontend/dist/|\.specify/)
-      - id: end-of-file-fixer
-        exclude: ^(frontend/dist/)
-      - id: check-yaml
-      - id: check-json
-        exclude: ^(package-lock\.json)
-      - id: check-added-large-files
-        args: ['--maxkb=1000']
-      - id: check-merge-conflict
-      - id: detect-private-key
-
-  # Python linting with ruff (for scripts/get_google_token.py)
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.9
-    hooks:
-      - id: ruff-check
-        args: [--fix]
-        stages: [pre-commit, pre-merge-commit]
-
-  # Local hooks
-  - repo: local
-    hooks:
-      # An unbraced `|| true` in a RUN chain swallowed a failed dnf and
-      # shipped an image without PostgreSQL (2026-10-22)
-      - id: containerfile-lint
-        name: Containerfile lint
-        entry: tests/image/lint-containerfiles.sh
-        language: system
-        files: ^Containerfile
-        pass_filenames: false
-
-      # JavaScript/React linting with ESLint, in the base image (see run.sh)
-      - id: eslint
-        name: ESLint JavaScript Linting
-        entry: ./run.sh lint --fix
-        language: system
-        files: \.(js|jsx)$
-        pass_filenames: false
-        stages: [pre-commit, pre-merge-commit]
-
-      # Gourmand runs from its container: the PyPI package of the same name
-      # shadows the real binary on PATH, so a bare `gourmand` is the wrong tool.
-      - id: gourmand
-        name: Gourmand (AI slop detection)
-        entry: podman --events-backend=none run --rm --log-driver=none -v .:/src:Z -w /src quay.io/crunchtools/gourmand:latest check --full --cache-dir /tmp/gourmand-cache
-        language: system
-        pass_filenames: false
-        always_run: true
-        # Manual, not blocking: the tracked tree is at zero (#612) and CI's full scan
-        # is the gate. Locally, --full also scans untracked working directories, and
-        # 0.16.5's `--diff-source staged` misreports imported exports (CH022) when an
-        # export line is in the diff. Run: pre-commit run gourmand --hook-stage manual
-        stages: [manual]
-  # Constitution XII gates, from crunchtools/gatehouse examples/pre-commit.yaml
-  - repo: local
-    hooks:
-      - id: gatehouse
-        name: Gatehouse (AI code review, staged diff)
-        entry: bash -c 'git diff --cached | podman --events-backend=none run --rm --log-driver=none -i --env-file "$HOME/.config/mcp-env/gatehouse.env" -v .:/src:ro,Z -w /src quay.io/crunchtools/gatehouse:latest --stdin'
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit, pre-merge-commit]
+      - id: sdlc-commit
+      - id: sdlc-push

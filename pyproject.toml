@@ -1,7 +1,12 @@
-# This file exists to satisfy Gourmand linter_configuration checks
-# This is a Node.js/JavaScript project and does not use Python tooling
-# However, Gourmand (a Rust tool) expects either clippy.toml or pyproject.toml
-# See gourmand-exceptions.toml for JavaScript-specific linting configuration
+# rotv is mostly JavaScript, but it is not true that it "does not use Python
+# tooling" -- that comment was written before image-server/ existed. There are
+# 24 Python files here: a deployed service under image-server/ with its own
+# pyproject.toml, plus loose scripts under data/ and scripts/.
+#
+# So this file does two jobs. The [tool.ruff] settings below are what
+# `ruff check .` applies to those loose scripts (ruff's config is hierarchical,
+# so files under image-server/ get ITS pyproject instead). And [tool.sdlc]
+# below is how the repo is gated under constitution XII (v1.30.0).
 
 [tool.ruff.lint]
 select = ["PLR", "C901"]
@@ -12,3 +17,22 @@ max-statements = 50
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
+
+# The Python the gate checks is image-server/, not this directory: that is where
+# the [project] table, the dependencies and the tests are. mypy, pytest and
+# pip-audit run there (python-sdlc >= v0.3.7). Everything repo-wide -- the
+# constitution validator, Gourmand, Gatehouse, CodeQL and `ruff check .` --
+# still runs from here.
+[tool.sdlc]
+project = "image-server"
+
+[tool.sdlc.push]
+# No in-repo Semgrep rules: the check exits 2 when .semgrep is absent rather
+# than scanning nothing and calling it a pass.
+skip = ["semgrep"]
+
+[tool.sdlc.ci]
+# The CodeQL Action job in dependency-scan.yml uploads to the Security tab and
+# annotates new alerts on the pull request, so CI does not analyse a second
+# time. The push tier still gates on it.
+skip = ["codeql"]

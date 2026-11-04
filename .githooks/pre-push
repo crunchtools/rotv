@@ -1,50 +1,11 @@
 #!/bin/bash
-# Gatehouse AI code review — runs before push
-# Uses the containerized version with diff piped via stdin
-# to avoid worktree .git mount issues.
-
-set -e
-
-GATEHOUSE_IMAGE="quay.io/crunchtools/gatehouse:latest"
-ENV_FILE="$HOME/.config/mcp-env/gatehouse.env"
-
-# Load API key from env file
-OPENROUTER_API_KEY=""
-if [ -f "$ENV_FILE" ]; then
-    OPENROUTER_API_KEY=$(grep '^OPENROUTER_API_KEY=' "$ENV_FILE" | cut -d= -f2-)
-fi
-
-if [ -z "$OPENROUTER_API_KEY" ]; then
-    echo "Warning: OPENROUTER_API_KEY not found in $ENV_FILE, skipping gatehouse"
-    exit 0
-fi
-
-# Detect the default branch
-BASE=$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|refs/remotes/origin/||')
-if [ -z "$BASE" ]; then
-    if git rev-parse --verify main >/dev/null 2>&1; then
-        BASE="main"
-    else
-        BASE="master"
-    fi
-fi
-
-# Generate diff on the host (works in worktrees)
-DIFF=$(git diff "${BASE}...HEAD" 2>/dev/null)
-
-if [ -z "$DIFF" ]; then
-    echo "Gatehouse: no changes to review"
-    exit 0
-fi
-
-echo "Running Gatehouse AI code review..."
-
-# Pipe the host-side diff in on stdin; the container never runs git, so this
-# works from a worktree, whose .git file points outside the mount.
-REPO_ROOT=$(git rev-parse --show-toplevel)
-
-printf '%s\n' "$DIFF" | podman run --rm -i \
-    -e "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
-    -v "${REPO_ROOT}:/repo:ro,Z" \
-    -w /repo \
-    "$GATEHOUSE_IMAGE" --stdin --advisory
+# Constitution XII (v1.30.0): every verdict comes from python-sdlc's `sdlc push`,
+# wired as the `sdlc-push` pre-push hook in .pre-commit-config.yaml. This repo
+# keeps its git hooks in .githooks via core.hooksPath, where `pre-commit install`
+# refuses to write, so this wrapper hands the push to it -- the same shape as
+# .githooks/pre-commit beside it.
+#
+# What used to be here was a bespoke Gatehouse invocation. Gatehouse is one of
+# the checks `sdlc push` runs now, at the version the release pins, so keeping a
+# second copy here would be the two-versions problem XII exists to end.
+exec pre-commit run --hook-stage pre-push

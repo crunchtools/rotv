@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from .config import get_config
 
@@ -19,7 +19,10 @@ def get_model() -> TextEmbedding:
         from fastembed import TextEmbedding
 
         cfg = get_config()
-        kwargs: dict[str, str] = {"model_name": cfg.embedding_model}
+        # Not dict[str, str]: TextEmbedding's parameters are variously int,
+        # bool and Device, so splatting a str-valued dict makes mypy check
+        # every one of them against str.
+        kwargs: dict[str, Any] = {"model_name": cfg.embedding_model}
         if cfg.embedding_cache_dir:
             kwargs["cache_dir"] = cfg.embedding_cache_dir
         _model = TextEmbedding(**kwargs)
@@ -39,4 +42,5 @@ def embed_query(text: str) -> list[float]:
     """Generate an embedding for a single query text."""
     model = get_model()
     embeddings = list(model.query_embed(text))
-    return embeddings[0].tolist()
+    # numpy's tolist() is typed Any; this one is a 1-D float array.
+    return cast("list[float]", embeddings[0].tolist())

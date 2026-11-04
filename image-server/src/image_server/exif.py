@@ -26,11 +26,13 @@ def extract_exif(image_bytes: bytes) -> dict[str, Any]:
             tag_name = TAGS.get(tag_id, str(tag_id))
             match value:
                 case tuple() | list():
-                    sanitized = []
+                    sanitized: list[str | int | float | bool] = []
                     for item in value:
                         match item:
                             case bytes():
-                                sanitized.append(item.decode("utf-8", errors="replace").replace("\x00", ""))
+                                sanitized.append(
+                                    item.decode("utf-8", errors="replace").replace("\x00", "")
+                                )
                             case str():
                                 sanitized.append(item.replace("\x00", ""))
                             case int() | float() | bool():
@@ -39,7 +41,9 @@ def extract_exif(image_bytes: bytes) -> dict[str, Any]:
                                 sanitized.append(str(item).replace("\x00", ""))
                     exif_tags[tag_name] = sanitized
                 case bytes():
-                    exif_tags[tag_name] = value.decode("utf-8", errors="replace").replace("\x00", "")
+                    exif_tags[tag_name] = value.decode("utf-8", errors="replace").replace(
+                        "\x00", ""
+                    )
                 case str():
                     exif_tags[tag_name] = value.replace("\x00", "")
                 case int() | float() | bool():

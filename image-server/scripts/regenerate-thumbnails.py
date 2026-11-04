@@ -32,8 +32,7 @@ def main() -> None:
 
     image_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".heic", ".heif"}
     originals = [
-        f for f in originals_dir.iterdir()
-        if f.is_file() and f.suffix.lower() in image_extensions
+        f for f in originals_dir.iterdir() if f.is_file() and f.suffix.lower() in image_extensions
     ]
 
     print(f"Found {len(originals)} original images")
