@@ -65,8 +65,9 @@ def generate_all_thumbnails_from_bytes(image_bytes: bytes, file_uuid: str) -> No
     cfg = get_config()
     base = Path(cfg.media_path) / "thumbnails"
 
-    with Image.open(io.BytesIO(image_bytes)) as img:
-        img = _normalize_orientation(img)
+    with Image.open(io.BytesIO(image_bytes)) as opened:
+        # ImageFile on the way in, Image after a transpose or a convert.
+        img: Image.Image = _normalize_orientation(opened)
         if img.mode in RGBA_MODES:
             img = img.convert("RGB")
 
@@ -82,7 +83,10 @@ def generate_all_thumbnails_from_bytes(image_bytes: bytes, file_uuid: str) -> No
             thumb.save(dest, "JPEG", quality=JPEG_QUALITY, optimize=True)
             logger.info(
                 "Generated %s thumbnail: %s (%dx%d)",
-                size_name, dest.name, thumb.width, thumb.height,
+                size_name,
+                dest.name,
+                thumb.width,
+                thumb.height,
             )
 
 
@@ -95,6 +99,6 @@ def generate_all_thumbnails_from_path(source_path: Path, file_uuid: str) -> None
 
 def get_image_dimensions(image_bytes: bytes) -> tuple[int, int]:
     """Get display width and height from image bytes, honoring EXIF orientation."""
-    with Image.open(io.BytesIO(image_bytes)) as img:
-        img = _normalize_orientation(img)
+    with Image.open(io.BytesIO(image_bytes)) as opened:
+        img: Image.Image = _normalize_orientation(opened)
         return img.width, img.height

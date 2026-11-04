@@ -8,7 +8,10 @@ import mimetypes
 import shutil
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -17,7 +20,11 @@ from . import database as db
 from .config import get_config
 from .embedder import embed_query, embed_texts
 from .exif import extract_exif
-from .thumbnails import generate_all_thumbnails_from_bytes, generate_thumbnail_from_bytes, get_image_dimensions
+from .thumbnails import (
+    generate_all_thumbnails_from_bytes,
+    generate_thumbnail_from_bytes,
+    get_image_dimensions,
+)
 from .vision import get_backend
 
 logger = logging.getLogger(__name__)
@@ -25,8 +32,14 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Image Server", version="0.1.0")
 
 IMAGE_MIMES = {
-    "image/jpeg", "image/png", "image/gif", "image/webp",
-    "image/bmp", "image/tiff", "image/heic", "image/heif",
+    "image/jpeg",
+    "image/png",
+    "image/gif",
+    "image/webp",
+    "image/bmp",
+    "image/tiff",
+    "image/heic",
+    "image/heif",
 }
 VIDEO_MIMES = {"video/mp4", "video/quicktime", "video/webm", "video/x-matroska"}
 
@@ -200,9 +213,7 @@ async def serve_original(asset_id: int) -> FileResponse:
 
 
 @app.get("/api/assets/{asset_id}/thumbnail")
-async def serve_thumbnail(
-    asset_id: int, size: str | None = Query(None)
-) -> FileResponse:
+async def serve_thumbnail(asset_id: int, size: str | None = Query(None)) -> FileResponse:
     """Serve a thumbnail for an asset.
 
     Optional size parameter: small (100px), medium (600px), large (1200px).
@@ -375,8 +386,14 @@ async def search(body: dict[str, Any]) -> list[dict[str, Any]]:
 async def serve_theme_video(theme: str) -> FileResponse:
     """Serve a theme background video."""
     valid_themes = {
-        "winter", "spring", "summer", "fall",
-        "night", "christmas", "halloween", "newyears",
+        "winter",
+        "spring",
+        "summer",
+        "fall",
+        "night",
+        "christmas",
+        "halloween",
+        "newyears",
     }
     if theme not in valid_themes:
         raise HTTPException(status_code=404, detail=f"Unknown theme: {theme}")
@@ -467,7 +484,9 @@ async def backup_db() -> StreamingResponse:
     env = _pg_env()
     try:
         proc = await asyncio.create_subprocess_exec(
-            "pg_dump", "--clean", "--if-exists",
+            "pg_dump",
+            "--clean",
+            "--if-exists",
             env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -475,7 +494,7 @@ async def backup_db() -> StreamingResponse:
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail="pg_dump not found on server") from exc
 
-    async def _stream() -> asyncio.AsyncIterator[bytes]:
+    async def _stream() -> AsyncIterator[bytes]:
         assert proc.stdout is not None
         while True:
             chunk = await proc.stdout.read(64 * 1024)
@@ -543,12 +562,14 @@ async def list_media_files() -> list[dict[str, Any]]:
             if not file_path.is_file():
                 continue
             stat = file_path.stat()
-            files.append({
-                "subdir": subdir,
-                "filename": file_path.name,
-                "size": stat.st_size,
-                "modified": stat.st_mtime,
-            })
+            files.append(
+                {
+                    "subdir": subdir,
+                    "filename": file_path.name,
+                    "size": stat.st_size,
+                    "modified": stat.st_mtime,
+                }
+            )
     return files
 
 

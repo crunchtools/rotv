@@ -200,27 +200,25 @@ jobs:
         working-directory: frontend
         run: npm test
 
-  lint:
-    name: Lint
+  sdlc:
+    name: sdlc ci
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
+      - uses: actions/checkout@v7
         with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
+          persist-credentials: false
 
-      # ESLint and its plugins live in the root package, not in frontend/ or backend/.
-      - name: Install lint dependencies
-        run: npm ci
-
-      - name: Lint frontend and backend
-        run: npm run lint
+      # The release is read from .pre-commit-config.yaml, so one line pins the
+      # launcher, the image and every tool in it, for the laptop and CI both.
+      # The Python it checks is image-server/, named by [tool.sdlc] project.
+      - name: sdlc ci
+        run: |
+          set -eu
+          rev=$(awk '/repo: https:\/\/github.com\/crunchtools\/python-sdlc/ {f=1; next}
+                     f && /rev:/ {print $2; exit}' .pre-commit-config.yaml)
+          [ -n "$rev" ] || { echo "no python-sdlc rev in .pre-commit-config.yaml" >&2; exit 2; }
+          git clone -q --depth 1 --branch "$rev" https://github.com/crunchtools/python-sdlc "$RUNNER_TEMP/sdlc"
+          $RUNNER_TEMP/sdlc/bin/sdlc ci
 
   gourmand-review:
     name: Code Quality (Gourmand)

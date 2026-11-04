@@ -1,7 +1,5 @@
 """Test fixtures for image server."""
 
-import os
-
 import pytest
 
 

@@ -1,7 +1,6 @@
 """Tests for thumbnail generation."""
 
 import io
-from pathlib import Path
 
 from PIL import Image
 
