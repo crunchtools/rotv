@@ -60,6 +60,41 @@ def test_media_path_rejects_absolute():
     assert excinfo.value.status_code == 400
 
 
+def test_media_path_rejects_symlink_escape(test_env, tmp_path):
+    """A symlink inside the media root that points outside it is rejected.
+
+    This is the case the string guard on `filename` cannot catch -- the name
+    holds no separator and no `..` -- so it is what `resolve()` buys beyond it.
+    """
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("not for the web")
+
+    originals = test_env["media_path"] / "originals"
+    originals.mkdir()
+    (originals / "escape.txt").symlink_to(outside / "secret.txt")
+
+    with pytest.raises(HTTPException) as excinfo:
+        _media_path("originals", "escape.txt")
+    assert excinfo.value.status_code == 400
+
+
+def test_serve_media_file_rejects_symlink_escape(test_env, tmp_path):
+    """The endpoint refuses a symlinked file rather than serving what it targets."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("not for the web")
+
+    originals = test_env["media_path"] / "originals"
+    originals.mkdir()
+    (originals / "escape.txt").symlink_to(outside / "secret.txt")
+
+    client = TestClient(app)
+    response = client.get("/api/media/originals/escape.txt")
+    assert response.status_code == 400
+    assert "not for the web" not in response.text
+
+
 def test_serve_media_file_rejects_encoded_dots():
     """Percent-encoded dots are decoded before the filename guard runs."""
     client = TestClient(app)
