@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Get Google OAuth refresh token for Google Workspace MCP."""
 
+import os
 from pathlib import Path
 
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -32,8 +33,11 @@ def main():
     print(f"GOOGLE_WORKSPACE_REFRESH_TOKEN={creds.refresh_token}")
     print("\n" + "=" * 60)
 
-    # Save to file
-    with open(TOKEN_ENV_FILE, "w") as f:
+    # Save to file. 0o600 before anything is written, not after: a file created
+    # with the default mask is world-readable for as long as it takes to chmod
+    # it, and what lands in it is a refresh token.
+    fd = os.open(TOKEN_ENV_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
         f.write(f"GOOGLE_WORKSPACE_CLIENT_ID={creds.client_id}\n")
         f.write(f"GOOGLE_WORKSPACE_CLIENT_SECRET={creds.client_secret}\n")
         f.write(f"GOOGLE_WORKSPACE_REFRESH_TOKEN={creds.refresh_token}\n")
