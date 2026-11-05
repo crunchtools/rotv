@@ -1,10 +1,5 @@
 [
   {
-    "rule": "py/clear-text-logging-sensitive-data",
-    "path": "scripts/get_google_token.py",
-    "fingerprint": "3f8500d1b1543294:1"
-  },
-  {
     "rule": "py/log-injection",
     "path": "image-server/src/image_server/api.py",
     "fingerprint": "5b022dc0b30831ac:1"

@@ -25,23 +25,24 @@ def main():
     flow = InstalledAppFlow.from_client_secrets_file(str(CREDENTIALS_FILE), SCOPES)
     creds = flow.run_local_server(port=OAUTH_CALLBACK_PORT)
 
-    print("\n" + "=" * 60)
-    print("Add these to your MCP server configuration:")
-    print("=" * 60)
-    print(f"\nGOOGLE_WORKSPACE_CLIENT_ID={creds.client_id}")
-    print(f"GOOGLE_WORKSPACE_CLIENT_SECRET={creds.client_secret}")
-    print(f"GOOGLE_WORKSPACE_REFRESH_TOKEN={creds.refresh_token}")
-    print("\n" + "=" * 60)
-
-    # Save to file. 0o600 before anything is written, not after: a file created
-    # with the default mask is world-readable for as long as it takes to chmod
-    # it, and what lands in it is a refresh token.
+    # The credentials go to one place: a 0600 file. They used to be printed as
+    # well, which put a client secret and a refresh token into the terminal
+    # scrollback, the shell's session log and anything collecting this script's
+    # stdout -- for no gain, since the file already holds all three.
+    #
+    # 0o600 is set before anything is written, not chmod-ed afterwards: a file
+    # created under the default mask is world-readable for as long as that
+    # takes.
     fd = os.open(TOKEN_ENV_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w") as f:
         f.write(f"GOOGLE_WORKSPACE_CLIENT_ID={creds.client_id}\n")
         f.write(f"GOOGLE_WORKSPACE_CLIENT_SECRET={creds.client_secret}\n")
         f.write(f"GOOGLE_WORKSPACE_REFRESH_TOKEN={creds.refresh_token}\n")
-    print(f"Saved to {TOKEN_ENV_FILE}")
+
+    print("\n" + "=" * 60)
+    print(f"Wrote GOOGLE_WORKSPACE_CLIENT_ID, _CLIENT_SECRET and _REFRESH_TOKEN to\n  {TOKEN_ENV_FILE}")
+    print("Copy them into your MCP server configuration from there.")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
