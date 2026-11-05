@@ -1,6 +1,13 @@
 name: Run Tests
 
 on:
+  # `push` as well as `pull_request`, so `sdlc ci` reports on the default
+  # branch and not only on the way in. Without it the gate is a required check
+  # that has never once run on master -- so a commit that reaches master by any
+  # route other than a reviewed pull request is simply unchecked, and nothing
+  # says so. Every other converted repo reports on both.
+  push:
+    branches: [main, master]
   pull_request:
     branches: [main, master]
   workflow_dispatch:
