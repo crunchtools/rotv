@@ -139,6 +139,34 @@ describe('Region gate (spec 041)', () => {
     expect(evaluateRegionGate([outRegion, outRegion]).verdict).toBe('review');
     expect(evaluateRegionGate([]).verdict).toBe('review');
   });
+
+  // An out-of-region verdict auto-rejects, so absence of a local anchor must not be
+  // treated as evidence of being elsewhere. Cleveland Metroparks' own posts often say
+  // just "Metroparks" with no city; those must reach a human, not get dropped.
+  test('unanimous out-of-region on an ambiguous agency name -> review, not fail', () => {
+    const ambiguous = { in_region: false, ambiguous_agency: true, reasoning: 'only "MetroParks" named, no city' };
+    const g = evaluateRegionGate([ambiguous, ambiguous, ambiguous]);
+    expect(g.verdict).toBe('review');
+    expect(g.reason).toMatch(/[Aa]mbiguous agency/);
+  });
+
+  test('a minority ambiguity flag still fails when the rest saw real evidence', () => {
+    const votes = [
+      { in_region: false, ambiguous_agency: true, reasoning: 'no city named' },
+      { in_region: false, ambiguous_agency: false, reasoning: 'West Chester, Butler County' },
+      { in_region: false, ambiguous_agency: false, reasoning: 'southwest Ohio' }
+    ];
+    expect(evaluateRegionGate(votes).verdict).toBe('fail');
+  });
+
+  test('the Coast Guard case still fails once ambiguity is in play', () => {
+    const votes = [
+      { in_region: false, ambiguous_agency: false, reasoning: 'ceremony in Portsmouth, VA' },
+      { in_region: false, ambiguous_agency: false, reasoning: 'located in Virginia' },
+      { in_region: false, ambiguous_agency: false, reasoning: 'outside NE Ohio' }
+    ];
+    expect(evaluateRegionGate(votes).verdict).toBe('fail');
+  });
 });
 
 describe('Region prompt guardrails', () => {
@@ -163,7 +191,14 @@ describe('Region prompt guardrails', () => {
     const prompt = buildRegionPrompt(butlerCounty);
     expect(prompt).toMatch(/lean-IN does NOT apply to a generically named public agency/);
     expect(prompt).toMatch(/Butler County/);
-    expect(prompt).toMatch(/A regional-sounding name is not a location/);
+    expect(prompt).toMatch(/A regional-sounding name is\s+not a location/);
+  });
+
+  test('asks for ambiguous_agency so the gate can route it to review, not reject', () => {
+    const prompt = buildRegionPrompt(butlerCounty);
+    expect(prompt).toMatch(/"ambiguous_agency"/);
+    expect(prompt).toMatch(/ambiguous_agency": true\b/);
+    expect(prompt).toMatch(/sends the item to a human instead of rejecting it/);
   });
 
   test('lean-IN default survives for content with no signal placing it outside', () => {

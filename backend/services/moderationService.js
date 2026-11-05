@@ -163,7 +163,10 @@ Return ONLY valid JSON: {"relevant": true, "about_poi": true, "reasoning": "one 
  * @param {string|null} [item.description] - Summary or snippet; "(none)" when absent.
  * @param {string|null} [item.poiName] - POI the item was filed under, labelled in the
  *   prompt as a search guess rather than evidence of location; "(unknown)" when absent.
- * @returns {string} Prompt instructing the voter to return {"in_region", "reasoning"}.
+ * @returns {string} Prompt instructing the voter to return {"in_region",
+ *   "ambiguous_agency", "reasoning"}. ambiguous_agency marks a generically named
+ *   agency with no geographic anchor, which evaluateRegionGate routes to review
+ *   rather than letting it auto-reject.
  */
 export function buildRegionPrompt({ title, description, poiName }) {
   return `You are checking the GEOGRAPHY of content for "Roots of The Valley," a guide to the Cuyahoga Valley region of Northeast Ohio — Cuyahoga and Summit counties and the immediately adjacent counties (Medina, Lorain, Lake, Geauga, Portage, Stark, Wayne). The core is Cuyahoga Valley National Park, Cleveland Metroparks, Summit Metro Parks, and the cities of Cleveland and Akron.
@@ -192,9 +195,16 @@ Butler County, Toledo, Mahoning County, Lorain County, Lake, Cleveland or Summit
 and the same holds for a bare "Park District", "Metro Parks" or "County Parks".
 When the subject is an agency of that kind and NO city, county, park, trail or
 street address anywhere in the content places it inside the counties listed above,
-answer OUT of region. A regional-sounding name is not a location.
+set "in_region": false and "ambiguous_agency": true. A regional-sounding name is
+not a location, but it is not proof of being elsewhere either — that combination
+sends the item to a human instead of rejecting it.
 
-Return ONLY valid JSON: {"in_region": true, "reasoning": "one sentence why"}`;
+Set "ambiguous_agency": true ONLY for that case: an agency name that could belong
+to several Ohio regions with nothing in the content to place it. When you can see
+the subject is elsewhere — another city, county or state is named, or the agency is
+unmistakably out of region — set "in_region": false and leave "ambiguous_agency" false.
+
+Return ONLY valid JSON: {"in_region": true, "ambiguous_agency": false, "reasoning": "one sentence why"}`;
 }
 
 async function runRegionVotes(pool, { title, description, poiName }, numVotes = 3) {
@@ -207,7 +217,11 @@ async function runRegionVotes(pool, { title, description, poiName }, numVotes = 
           const raw = (r || '').trim().replace(/^```json\s*/, '').replace(/\s*```$/, '');
           try {
             const parsed = JSON.parse(raw);
-            return { in_region: !!parsed.in_region, reasoning: parsed.reasoning || '' };
+            return {
+              in_region: !!parsed.in_region,
+              ambiguous_agency: !!parsed.ambiguous_agency,
+              reasoning: parsed.reasoning || ''
+            };
           } catch (err) {
             logger.debug(`Discarding unparseable region vote (${err.message}): ${raw.slice(0, 200)}`);
             return null;
@@ -340,6 +354,15 @@ export function evaluateRegionGate(regionVotes) {
     return { verdict: 'pass', reason: `Region ${inCount}/${total} in` };
   }
   if (inCount === 0) {
+    // An out-of-region verdict auto-rejects, so it needs positive evidence the subject
+    // is elsewhere. When the voters only saw an agency name that could belong to several
+    // Ohio regions (news #8309, a bare "MetroParks"), absence of a local anchor is not
+    // that evidence: route it to a human rather than silently dropping local content
+    // whose own post never named a city.
+    const ambiguous = regionVotes.filter(v => v.ambiguous_agency).length;
+    if (ambiguous * 2 > total) {
+      return { verdict: 'review', reason: `Ambiguous agency name, no location given (${ambiguous}/${total}): ${regionVotes.map(v => v.reasoning).filter(Boolean).join('; ')}` };
+    }
     return { verdict: 'fail', reason: `Unanimous out of region (${regionVotes.map(v => v.reasoning).filter(Boolean).join('; ')})` };
   }
   return { verdict: 'review', reason: `Region split ${inCount}/${total} in` };
