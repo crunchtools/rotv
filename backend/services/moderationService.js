@@ -154,8 +154,19 @@ Return ONLY valid JSON: {"relevant": true, "about_poi": true, "reasoning": "one 
 // about_poi — the voters correctly saw it was out of region, but that judgment had
 // nowhere to bind. Now it is its own gate. Mirrors the relevance voter: 3 votes,
 // consensus decided by the caller.
-async function runRegionVotes(pool, { title, description, poiName }, numVotes = 3) {
-  const prompt = `You are checking the GEOGRAPHY of content for "Roots of The Valley," a guide to the Cuyahoga Valley region of Northeast Ohio — Cuyahoga and Summit counties and the immediately adjacent counties (Medina, Lorain, Lake, Geauga, Portage, Stark, Wayne). The core is Cuyahoga Valley National Park, Cleveland Metroparks, Summit Metro Parks, and the cities of Cleveland and Akron.
+/**
+ * Build the geography-voting prompt for one queue item. Exported so the prompt's
+ * guardrails can be unit-tested without an LLM call.
+ *
+ * @param {object} item
+ * @param {string} item.title - The item's title, shown to the voter verbatim.
+ * @param {string|null} [item.description] - Summary or snippet; "(none)" when absent.
+ * @param {string|null} [item.poiName] - POI the item was filed under, labelled in the
+ *   prompt as a search guess rather than evidence of location; "(unknown)" when absent.
+ * @returns {string} Prompt instructing the voter to return {"in_region", "reasoning"}.
+ */
+export function buildRegionPrompt({ title, description, poiName }) {
+  return `You are checking the GEOGRAPHY of content for "Roots of The Valley," a guide to the Cuyahoga Valley region of Northeast Ohio — Cuyahoga and Summit counties and the immediately adjacent counties (Medina, Lorain, Lake, Geauga, Portage, Stark, Wayne). The core is Cuyahoga Valley National Park, Cleveland Metroparks, Summit Metro Parks, and the cities of Cleveland and Akron.
 
 Title: "${title}"
 Summary: "${description || '(none)'}"
@@ -175,7 +186,19 @@ Wilmington area") places the subject there: OUT of region, whatever it was filed
 When the location is genuinely unclear and there is no signal placing the subject
 outside the region, lean IN — regional collection already scoped the source.
 
+That lean-IN does NOT apply to a generically named public agency. Ohio has many
+similarly named park districts: "MetroParks" or "Metroparks" on its own could be
+Butler County, Toledo, Mahoning County, Lorain County, Lake, Cleveland or Summit,
+and the same holds for a bare "Park District", "Metro Parks" or "County Parks".
+When the subject is an agency of that kind and NO city, county, park, trail or
+street address anywhere in the content places it inside the counties listed above,
+answer OUT of region. A regional-sounding name is not a location.
+
 Return ONLY valid JSON: {"in_region": true, "reasoning": "one sentence why"}`;
+}
+
+async function runRegionVotes(pool, { title, description, poiName }, numVotes = 3) {
+  const prompt = buildRegionPrompt({ title, description, poiName });
 
   const results = await Promise.all(
     Array.from({ length: numVotes }, () =>

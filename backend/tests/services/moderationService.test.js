@@ -4,7 +4,7 @@
  */
 
 import { describe, test, expect } from 'vitest';
-import { getDomainReputation, evaluateDateGate, evaluateRegionGate, rescoreFromSignals } from '../../services/moderationService.js';
+import { getDomainReputation, evaluateDateGate, evaluateRegionGate, rescoreFromSignals, buildRegionPrompt } from '../../services/moderationService.js';
 
 // Test domain lists (mirrors production config from migration 019)
 const TRUSTED_DOMAINS = [
@@ -138,6 +138,48 @@ describe('Region gate (spec 041)', () => {
   test('fewer than 3 votes (LLM failures) -> review, never fail', () => {
     expect(evaluateRegionGate([outRegion, outRegion]).verdict).toBe('review');
     expect(evaluateRegionGate([]).verdict).toBe('review');
+  });
+});
+
+describe('Region prompt guardrails', () => {
+  const butlerCounty = {
+    title: 'MetroParks officially has two new GRIT All-Terrain Wheelchairs available for public use',
+    description: 'MetroParks believes parks and green spaces should be accessible for all.',
+    poiName: 'Open Trail Collective'
+  };
+
+  test('names the in-region counties so the voter has a geographic anchor', () => {
+    const prompt = buildRegionPrompt(butlerCounty);
+    for (const county of ['Cuyahoga', 'Summit', 'Medina', 'Lorain', 'Lake', 'Geauga', 'Portage', 'Stark', 'Wayne']) {
+      expect(prompt).toContain(county);
+    }
+  });
+
+  // Regression: news #8309 — an Instagram post saying only "MetroParks" passed the
+  // region gate 3/3 and turned out to be MetroParks of Butler County in West Chester,
+  // southwest Ohio. The voters were following the lean-IN rule correctly; the rule
+  // itself was wrong for an agency name that is ambiguous across Ohio.
+  test('generically named agencies are carved out of the lean-IN default (Butler County regression)', () => {
+    const prompt = buildRegionPrompt(butlerCounty);
+    expect(prompt).toMatch(/lean-IN does NOT apply to a generically named public agency/);
+    expect(prompt).toMatch(/Butler County/);
+    expect(prompt).toMatch(/A regional-sounding name is not a location/);
+  });
+
+  test('lean-IN default survives for content with no signal placing it outside', () => {
+    expect(buildRegionPrompt(butlerCounty)).toMatch(/genuinely unclear[\s\S]*lean IN/);
+  });
+
+  test('labels the filed-under POI as a search guess, not evidence of location', () => {
+    const prompt = buildRegionPrompt(butlerCounty);
+    expect(prompt).toContain('Open Trail Collective');
+    expect(prompt).toMatch(/a guess, not evidence/);
+  });
+
+  test('tolerates a missing description and POI name', () => {
+    const prompt = buildRegionPrompt({ title: 'Untitled', description: null, poiName: null });
+    expect(prompt).toContain('(none)');
+    expect(prompt).toContain('(unknown)');
   });
 });
 
