@@ -8,45 +8,5 @@
     "rule": "py/log-injection",
     "path": "image-server/src/image_server/api.py",
     "fingerprint": "98f51b16acd1b04f:1"
-  },
-  {
-    "rule": "py/path-injection",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "1ec8e95a98ea491b:1"
-  },
-  {
-    "rule": "py/path-injection",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "2c6448a246eaab8f:1"
-  },
-  {
-    "rule": "py/path-injection",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "44451891334d3ac9:1"
-  },
-  {
-    "rule": "py/path-injection",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "45c17534d9b253ff:1"
-  },
-  {
-    "rule": "py/path-injection",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "cb810ed0ca6cc80f:1"
-  },
-  {
-    "rule": "py/path-injection",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "d339b26444ff9f08:1"
-  },
-  {
-    "rule": "py/path-injection",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "ec6f1371b8b5dc6e:1"
-  },
-  {
-    "rule": "py/stack-trace-exposure",
-    "path": "image-server/src/image_server/api.py",
-    "fingerprint": "ec2c5609c7407175:1"
   }
 ]

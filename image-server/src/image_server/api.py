@@ -59,6 +59,40 @@ MIME_TO_EXT = {
 }
 
 
+MEDIA_SUBDIRS = {"originals", "thumbnails", "videos", "theme-videos"}
+
+
+def _media_path(*parts: str) -> Path:
+    """Join parts under the media root and assert the result stays inside it.
+
+    Callers already allowlist `subdir` against MEDIA_SUBDIRS and reject a
+    `filename` containing a separator, so this cannot currently fail. It is
+    here so the guarantee is stated where the path is built, instead of having
+    to be reconstructed from pathlib's absolute-path semantics and FastAPI's
+    percent-decoding order -- which is also what makes it legible to CodeQL
+    (py/path-injection).
+    """
+    root = Path(get_config().media_path).resolve()
+    candidate = root.joinpath(*parts).resolve()
+    if not candidate.is_relative_to(root):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    return candidate
+
+
+def _as_asset_id(raw: object) -> int:
+    """Return `raw` as an asset id, rejecting anything that is not an integer.
+
+    Handlers that take a `dict[str, Any]` body get the ids as whatever JSON
+    held, so an annotation alone would be a claim rather than a check. Nothing
+    is coerced: `1.9` and `"1"` are refused rather than quietly becoming 1, and
+    `True` is refused despite being an `int` in Python. The conversion on the
+    way out is what keeps request text out of the log (py/log-injection).
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise HTTPException(status_code=400, detail="asset_ids must be integers")
+    return int(raw)
+
+
 def _serialize_asset(asset: dict[str, Any]) -> dict[str, Any]:
     """Convert asset dict for JSON response (handle non-serializable types)."""
     serialized = {}
@@ -398,14 +432,13 @@ async def serve_theme_video(theme: str) -> FileResponse:
     if theme not in valid_themes:
         raise HTTPException(status_code=404, detail=f"Unknown theme: {theme}")
 
-    cfg = get_config()
-    video_path = Path(cfg.media_path) / "theme-videos" / f"{theme}.mp4"
+    video_path = _media_path("theme-videos", f"{theme}.mp4")
 
     if not video_path.exists():
         assets = db.get_assets_for_poi(0, role="theme_video")
         for asset in assets:
             if asset.get("theme") == theme:
-                alt_path = Path(cfg.media_path) / "theme-videos" / asset["filename"]
+                alt_path = _media_path("theme-videos", asset["filename"])
                 if alt_path.exists():
                     return FileResponse(path=str(alt_path), media_type="video/mp4")
 
@@ -417,9 +450,11 @@ async def serve_theme_video(theme: str) -> FileResponse:
 @app.post("/api/bulk/caption")
 async def bulk_caption(body: dict[str, Any]) -> dict[str, Any]:
     """Batch AI captioning for multiple assets."""
-    asset_ids: list[int] = body.get("asset_ids", [])
-    if not asset_ids:
+    raw_ids = body.get("asset_ids", [])
+    if not isinstance(raw_ids, list) or not raw_ids:
         raise HTTPException(status_code=400, detail="asset_ids list required")
+
+    asset_ids: list[int] = [_as_asset_id(raw) for raw in raw_ids]
 
     backend = get_backend()
     if not backend:
@@ -456,14 +491,15 @@ async def bulk_caption(body: dict[str, Any]) -> dict[str, Any]:
                 updates["embedding"] = embedding
             db.update_asset(asset_id, **updates)
             caption_results["captioned"] += 1
-        except Exception as exc:
+        except Exception:
+            # The traceback goes to the log; the caller gets a fixed string, so
+            # an internal exception message never reaches the API client
+            # (py/stack-trace-exposure).
+            logger.exception("Captioning failed for asset %d", asset_id)
             caption_results["failed"] += 1
-            caption_results["errors"].append({"id": asset_id, "error": str(exc)})
+            caption_results["errors"].append({"id": asset_id, "error": "Captioning failed"})
 
     return caption_results
-
-
-MEDIA_SUBDIRS = {"originals", "thumbnails", "videos", "theme-videos"}
 
 
 def _pg_env() -> dict[str, str]:
@@ -585,8 +621,7 @@ async def serve_media_file(subdir: str, filename: str) -> FileResponse:
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    cfg = get_config()
-    file_path = Path(cfg.media_path) / subdir / filename
+    file_path = _media_path(subdir, filename)
 
     if not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
@@ -606,11 +641,10 @@ async def upload_media_file(
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    cfg = get_config()
-    dir_path = Path(cfg.media_path) / subdir
+    dir_path = _media_path(subdir)
     dir_path.mkdir(parents=True, exist_ok=True)
 
-    file_path = dir_path / filename
+    file_path = _media_path(subdir, filename)
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
 
