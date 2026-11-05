@@ -97,9 +97,50 @@ def test_bulk_caption_requires_asset_ids():
     assert client.post("/api/bulk/caption", json={"asset_ids": "7"}).status_code == 400
 
 
-def test_bulk_caption_rejects_non_integer_ids():
-    """Ids that are not integers are rejected rather than reaching the log."""
+@pytest.mark.parametrize("bad_id", ["7\ninjected", "7", 1.9, 1.0, True, None, [7]])
+def test_bulk_caption_rejects_non_integer_ids(bad_id):
+    """Anything that is not an integer is refused, not coerced.
+
+    `1.9` must not quietly become asset 1, and `True` must not become asset 1
+    either -- both would caption the wrong asset. A string id is refused rather
+    than parsed, which is also what keeps request text out of the log
+    (py/log-injection).
+    """
     client = TestClient(app)
-    response = client.post("/api/bulk/caption", json={"asset_ids": ["7\ninjected"]})
+    response = client.post("/api/bulk/caption", json={"asset_ids": [bad_id]})
     assert response.status_code == 400
     assert response.json()["detail"] == "asset_ids must be integers"
+
+
+def test_bulk_caption_hides_exception_text(test_env, monkeypatch):
+    """A captioning failure is logged, and the caller gets a fixed string."""
+    from image_server import api
+
+    media = test_env["media_path"] / "originals"
+    media.mkdir(parents=True)
+    (media / "a.jpg").write_bytes(b"not really a jpeg")
+
+    secret = "psycopg: connection to host=db user=imageserver failed"
+
+    class _ExplodingBackend:
+        def caption(self, path):
+            raise RuntimeError(secret)
+
+    monkeypatch.setattr(api, "get_backend", _ExplodingBackend)
+    monkeypatch.setattr(
+        api.db,
+        "get_asset",
+        lambda asset_id: {"id": asset_id, "asset_type": "image", "filename": "a.jpg"},
+    )
+
+    client = TestClient(app)
+    response = client.post("/api/bulk/caption", json={"asset_ids": [7]})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == {
+        "captioned": 0,
+        "failed": 1,
+        "errors": [{"id": 7, "error": "Captioning failed"}],
+    }
+    assert secret not in response.text

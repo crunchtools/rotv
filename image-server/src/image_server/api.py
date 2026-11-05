@@ -79,6 +79,20 @@ def _media_path(*parts: str) -> Path:
     return candidate
 
 
+def _as_asset_id(raw: object) -> int:
+    """Return `raw` as an asset id, rejecting anything that is not an integer.
+
+    Handlers that take a `dict[str, Any]` body get the ids as whatever JSON
+    held, so an annotation alone would be a claim rather than a check. Nothing
+    is coerced: `1.9` and `"1"` are refused rather than quietly becoming 1, and
+    `True` is refused despite being an `int` in Python. The conversion on the
+    way out is what keeps request text out of the log (py/log-injection).
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        raise HTTPException(status_code=400, detail="asset_ids must be integers")
+    return int(raw)
+
+
 def _serialize_asset(asset: dict[str, Any]) -> dict[str, Any]:
     """Convert asset dict for JSON response (handle non-serializable types)."""
     serialized = {}
@@ -440,13 +454,7 @@ async def bulk_caption(body: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(raw_ids, list) or not raw_ids:
         raise HTTPException(status_code=400, detail="asset_ids list required")
 
-    # `body` is an unvalidated dict, so the ids arrive as whatever JSON held --
-    # an annotation alone would just be a claim. Convert them, which is also
-    # what keeps request text out of the log below (py/log-injection).
-    try:
-        asset_ids: list[int] = [int(raw) for raw in raw_ids]
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="asset_ids must be integers") from exc
+    asset_ids: list[int] = [_as_asset_id(raw) for raw in raw_ids]
 
     backend = get_backend()
     if not backend:

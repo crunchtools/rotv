@@ -40,7 +40,9 @@ def main():
         f.write(f"GOOGLE_WORKSPACE_REFRESH_TOKEN={creds.refresh_token}\n")
 
     print("\n" + "=" * 60)
-    print(f"Wrote GOOGLE_WORKSPACE_CLIENT_ID, _CLIENT_SECRET and _REFRESH_TOKEN to\n  {TOKEN_ENV_FILE}")
+    print(
+        f"Wrote GOOGLE_WORKSPACE_CLIENT_ID, _CLIENT_SECRET and _REFRESH_TOKEN to\n  {TOKEN_ENV_FILE}"
+    )
     print("Copy them into your MCP server configuration from there.")
     print("=" * 60)
 
