@@ -90,15 +90,7 @@ ignore = [
 "tests/*" = ["S105", "PLC0415", "PLR2004", "ARG002"]
 
 [tool.mypy]
-# Without `files` mypy has no target and exits 2, which is why `strict = true`
-# below had never actually run against these modules. It runs now, and the 11
-# errors it found in src/ on its first pass are fixed in the same change.
-#
-# tests/ is left out for the moment: it adds 30 more, all `no-untyped-def` --
-# the suite is simply unannotated, which is what `strict = true` demands and
-# what nothing has ever enforced here. Annotating it is its own job, tracked
-# separately, rather than 30 signature edits inside a pull request about CI.
-files = ["src"]
+files = ["src", "tests"]
 python_version = "3.12"
 strict = true
 warn_return_any = true

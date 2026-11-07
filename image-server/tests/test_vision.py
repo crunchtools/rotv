@@ -1,9 +1,11 @@
 """Tests for vision backend."""
 
+import pytest
+
 from image_server.vision import get_backend, reset_backend
 
 
-def test_vision_disabled_by_default(monkeypatch):
+def test_vision_disabled_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default config has vision disabled."""
     monkeypatch.setenv("VISION_BACKEND", "none")
     reset_backend()
@@ -11,7 +13,7 @@ def test_vision_disabled_by_default(monkeypatch):
     assert backend is None
 
 
-def test_gemini_backend_created(monkeypatch):
+def test_gemini_backend_created(monkeypatch: pytest.MonkeyPatch) -> None:
     """Gemini backend is created when configured."""
     monkeypatch.setenv("VISION_BACKEND", "gemini")
     monkeypatch.setenv("VISION_MODEL", "gemini-2.5-flash")
@@ -21,7 +23,7 @@ def test_gemini_backend_created(monkeypatch):
     assert backend._model == "gemini-2.5-flash"
 
 
-def test_unknown_backend(monkeypatch):
+def test_unknown_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     """Unknown backend returns None."""
     monkeypatch.setenv("VISION_BACKEND", "unknown")
     reset_backend()

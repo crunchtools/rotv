@@ -1,7 +1,9 @@
 """Tests for thumbnail generation."""
 
 import io
+from pathlib import Path
 
+import pytest
 from PIL import Image
 
 from image_server.thumbnails import (
@@ -25,7 +27,9 @@ def _landscape_jpeg_tagged_portrait() -> bytes:
     return buf.getvalue()
 
 
-def test_generate_thumbnail(sample_jpeg, tmp_path, monkeypatch):
+def test_generate_thumbnail(
+    sample_jpeg: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Thumbnail is generated at configured size."""
     monkeypatch.setenv("THUMBNAIL_SIZE", "50")
 
@@ -40,7 +44,9 @@ def test_generate_thumbnail(sample_jpeg, tmp_path, monkeypatch):
         assert img.format == "JPEG"
 
 
-def test_generate_thumbnail_from_bytes(sample_jpeg_bytes, tmp_path, monkeypatch):
+def test_generate_thumbnail_from_bytes(
+    sample_jpeg_bytes: bytes, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Thumbnail from bytes works the same as from file."""
     monkeypatch.setenv("THUMBNAIL_SIZE", "80")
 
@@ -52,7 +58,7 @@ def test_generate_thumbnail_from_bytes(sample_jpeg_bytes, tmp_path, monkeypatch)
     assert h <= 80
 
 
-def test_rgba_conversion(sample_png, tmp_path, monkeypatch):
+def test_rgba_conversion(sample_png: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """RGBA images are converted to RGB for JPEG output."""
     monkeypatch.setenv("THUMBNAIL_SIZE", "100")
 
@@ -64,21 +70,23 @@ def test_rgba_conversion(sample_png, tmp_path, monkeypatch):
         assert img.mode == "RGB"
 
 
-def test_get_image_dimensions(sample_jpeg_bytes):
+def test_get_image_dimensions(sample_jpeg_bytes: bytes) -> None:
     """Dimensions are correctly extracted."""
     w, h = get_image_dimensions(sample_jpeg_bytes)
     assert w == 100
     assert h == 80
 
 
-def test_get_image_dimensions_honors_exif_orientation():
+def test_get_image_dimensions_honors_exif_orientation() -> None:
     """A landscape buffer tagged Orientation=6 reports portrait dimensions (#393)."""
     w, h = get_image_dimensions(_landscape_jpeg_tagged_portrait())
     # Without exif_transpose this would be (100, 50).
     assert (w, h) == (50, 100)
 
 
-def test_thumbnail_applies_exif_orientation(tmp_path, monkeypatch):
+def test_thumbnail_applies_exif_orientation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Thumbnail of an Orientation=6 image comes out portrait, not sideways (#393)."""
     monkeypatch.setenv("THUMBNAIL_SIZE", "100")
 
@@ -91,7 +99,9 @@ def test_thumbnail_applies_exif_orientation(tmp_path, monkeypatch):
         assert img.height > img.width
 
 
-def test_thumbnail_from_file_applies_exif_orientation(tmp_path, monkeypatch):
+def test_thumbnail_from_file_applies_exif_orientation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The file entry point shares _write_thumbnail, so #393 must hold there too."""
     monkeypatch.setenv("THUMBNAIL_SIZE", "100")
 
