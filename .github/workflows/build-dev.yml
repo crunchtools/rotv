@@ -134,7 +134,10 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
             ${{ env.GHCR_IMAGE }}
           tags: |
-            type=raw,value=latest
+            # The dev container tracks the default branch and is never
+            # released, so it has no newest release for `latest` to name
+            # (constitution 1.33.0). The unit names the branch tag.
+            type=ref,event=branch
             type=sha,prefix=
           flavor: |
             latest=false
