@@ -1,10 +1,13 @@
 """Test fixtures for image server."""
 
+from collections.abc import Iterator
+from pathlib import Path
+
 import pytest
 
 
 @pytest.fixture(autouse=True)
-def _reset_singletons():
+def _reset_singletons() -> Iterator[None]:
     """Reset module-level singletons between tests."""
     from image_server.config import reset_config
     from image_server.vision import reset_backend
@@ -17,7 +20,7 @@ def _reset_singletons():
 
 
 @pytest.fixture
-def test_env(tmp_path, monkeypatch):
+def test_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]:
     """Set up test environment variables."""
     media_path = tmp_path / "media"
     media_path.mkdir()
@@ -34,7 +37,7 @@ def test_env(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def sample_jpeg(tmp_path):
+def sample_jpeg(tmp_path: Path) -> Path:
     """Create a minimal valid JPEG file."""
     from PIL import Image
 
@@ -45,13 +48,13 @@ def sample_jpeg(tmp_path):
 
 
 @pytest.fixture
-def sample_jpeg_bytes(sample_jpeg):
+def sample_jpeg_bytes(sample_jpeg: Path) -> bytes:
     """Return bytes of a minimal valid JPEG."""
     return sample_jpeg.read_bytes()
 
 
 @pytest.fixture
-def sample_png(tmp_path):
+def sample_png(tmp_path: Path) -> Path:
     """Create a minimal valid PNG file with RGBA mode."""
     from PIL import Image
 

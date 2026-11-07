@@ -1,9 +1,13 @@
 """Tests for configuration module."""
 
+from pathlib import Path
+
+import pytest
+
 from image_server.config import Config, get_config, reset_config
 
 
-def test_defaults():
+def test_defaults() -> None:
     """Config has sensible defaults."""
     reset_config()
     cfg = Config()
@@ -17,7 +21,7 @@ def test_defaults():
     assert cfg.port == 8000
 
 
-def test_env_override(monkeypatch):
+def test_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
     """Environment variables override defaults."""
     monkeypatch.setenv("PGHOST", "db.example.com")
     monkeypatch.setenv("PGPORT", "5433")
@@ -35,7 +39,7 @@ def test_env_override(monkeypatch):
     assert cfg.vision_model == "gemini-2.5-flash"
 
 
-def test_dsn():
+def test_dsn() -> None:
     """DSN string is properly formatted."""
     reset_config()
     cfg = Config()
@@ -45,7 +49,7 @@ def test_dsn():
     assert "dbname=imageserver" in dsn
 
 
-def test_singleton():
+def test_singleton() -> None:
     """get_config returns the same instance."""
     reset_config()
     c1 = get_config()
@@ -53,7 +57,7 @@ def test_singleton():
     assert c1 is c2
 
 
-def test_ensure_media_dirs(tmp_path, monkeypatch):
+def test_ensure_media_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """ensure_media_dirs creates expected subdirectories."""
     monkeypatch.setenv("MEDIA_PATH", str(tmp_path / "media"))
     reset_config()

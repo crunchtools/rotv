@@ -3,7 +3,7 @@
 import pytest
 
 
-def test_embed_texts_empty():
+def test_embed_texts_empty() -> None:
     """Empty list returns empty list."""
     from image_server.embedder import embed_texts
 
@@ -12,7 +12,7 @@ def test_embed_texts_empty():
 
 
 @pytest.mark.slow
-def test_embed_texts_single():
+def test_embed_texts_single() -> None:
     """Single text produces a 384-dim vector."""
     from image_server.embedder import embed_texts
 
@@ -23,7 +23,7 @@ def test_embed_texts_single():
 
 
 @pytest.mark.slow
-def test_embed_query():
+def test_embed_query() -> None:
     """Query embedding produces a 384-dim vector."""
     from image_server.embedder import embed_query
 
