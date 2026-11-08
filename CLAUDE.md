@@ -74,7 +74,7 @@ Before making any changes, read these documents in order:
 5. git commit
 6. User verification in browser
 7. git push + gh pr create
-8. After merge: git tag vX.Y.Z, clean up branch
+8. After merge: clean up branch (Ashigaru cuts the release)
 ```
 
 **Full workflow details:** See `.specify/memory/constitution.md` Section III.
@@ -83,7 +83,7 @@ Before making any changes, read these documents in order:
 
 ## Version Tracking
 
-Git tags are the single source of truth for versioning. Use `git tag --sort=-v:refname | head -1` to find the current version. Do not track versions in `package.json` or other code files.
+Ashigaru cuts releases (repo topic `ashigaru-release-auto`). Its hourly sweep reads the bump from `CHANGELOG.md` `[Unreleased]`, moves the version in `CHANGELOG.md` and `package.json`, and tags. Add every change to `[Unreleased]`; do not tag by hand or edit the version yourself.
 
 ---
 
@@ -170,7 +170,7 @@ so no `./run.sh`. `D` below is `/srv/dev.rootsofthevalley.org/data`.
 - Unit tests: `cd backend && npx vitest run tests/<file>.unit.test.js`, or `cd frontend && npx vitest run`.
 - The full gate is the PR: branch, commit, `git push`, `gh pr create`, and let GHA build and test.
 - The database is a copy of production. Scheduled jobs and mail are off; leave them off.
-- Shipping: `/deploy` (`.claude/skills/deploy/`) merges, tags, waits for the build and restarts the production unit through the gateway's systemd tool.
+- Shipping: `/deploy` (`.claude/skills/deploy/`) merges, waits for the build and restarts the production unit through the gateway's systemd tool.
 
 ### Gotchas
 - `CREATE OR REPLACE VIEW` fails if columns changed — must DROP first
@@ -196,6 +196,6 @@ so no `./run.sh`. `D` below is `/srv/dev.rootsofthevalley.org/data`.
 
 ## Recent Changes
 
-- See `git tag --sort=-v:refname` for version history
+- See `CHANGELOG.md` for version history
 - See git log for recent commits
 - See `.specify/specs/` for feature specifications
