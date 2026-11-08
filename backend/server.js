@@ -2923,7 +2923,9 @@ app.use(async (req, res, next) => {
 // Serve static files (after OG middlewares)
 app.use(express.static(staticPath));
 
-app.get('*', (req, res, next) => {
+// Express 5 (path-to-regexp 8) rejects a bare '*'; '/{*splat}' is the SPA
+// catch-all, root included.
+app.get('/{*splat}', (req, res, next) => {
   if (req.path.startsWith('/api') || req.path.startsWith('/auth') || req.path.startsWith('/share')) {
     return res.status(404).json({ error: 'Not found', path: req.path });
   }
