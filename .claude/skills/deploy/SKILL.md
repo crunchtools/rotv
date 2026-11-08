@@ -1,8 +1,8 @@
 ---
 name: deploy
-description: Merge a green PR, tag the release, wait for the GHA build and restart production, from a session working on the hosted dev checkout
+description: Merge a green PR, wait for the GHA build and restart production, from a session working on the hosted dev checkout
 argument-hint: "[PR number]"
-allowed-tools: Bash, Read, mcp__trentina__unit_status, mcp__trentina__unit_restart, mcp__trentina__journal_query, mcp__trentina__container_inspect, mcp__trentina__fetch, mcp__trentina__list_pull_requests, mcp__trentina__get_pull_request_checks, mcp__trentina__merge_pull_request, mcp__trentina__create_release, mcp__trentina__list_workflow_runs, mcp__trentina__get_workflow_run, mcp__trentina__get_failed_job_logs
+allowed-tools: Bash, Read, mcp__trentina__unit_status, mcp__trentina__unit_restart, mcp__trentina__journal_query, mcp__trentina__container_inspect, mcp__trentina__fetch, mcp__trentina__list_pull_requests, mcp__trentina__get_pull_request_checks, mcp__trentina__merge_pull_request, mcp__trentina__list_workflow_runs, mcp__trentina__get_workflow_run, mcp__trentina__get_failed_job_logs
 ---
 
 # Deploy ROTV to production from the hosted dev checkout
@@ -43,18 +43,10 @@ The dev site serves this checkout, so it follows the merge:
 git checkout master && git fetch origin --prune --tags && git pull --ff-only
 ```
 
-## 4. Tag the release and wait for the build
+## 4. Wait for the build
 
-Git tags are the version. Pick the next SemVer from what merged (`git log $(git tag
---sort=-v:refname | head -1)..HEAD --oneline`): a feature is a minor, a fix is a patch.
-
-The gateway refuses tag pushes, so the release makes the tag:
-
-```
-create_release(owner="crunchtools", repo="rotv", tag_name="vX.Y.Z", target_commitish="<merge commit>", body="<summary>")
-```
-
-Then `git fetch origin --tags`.
+Do not tag. Ashigaru cuts the release on its hourly sweep from `CHANGELOG.md`
+`[Unreleased]`, so the merged PR must have added its entry there.
 
 The image production runs is `:latest`, built by the push to `master`, not by the tag:
 
@@ -82,5 +74,5 @@ and report what it says. Do not restart it again blindly.
 
 ## 6. Verify and report
 
-Check the thing that shipped is actually there. Report the PR, the tag, the build
+Check the thing that shipped is actually there. Report the PR, the build
 run and the deployed commit in a few lines.

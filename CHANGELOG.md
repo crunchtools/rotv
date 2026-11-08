@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.69.0] - 2026-11-07
+
+Everything shipped in v1.39.0 through v1.69.0. Those releases were tagged by hand
+without changelog sections, so their entries are collected here.
+
 ### Added
 - **Tracker alerts without a timetable** (spec 055): `/api/health/trackers/train` and
   `/api/health/trackers/water-taxi` return 503 only when a tracker is actually broken. A parked
