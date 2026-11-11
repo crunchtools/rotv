@@ -109,32 +109,7 @@ RUN mkdir -p /var/lib/pgsql/data && \
     chown -R postgres:postgres /var/lib/pgsql
 
 # Custom postgresql service with first-boot initdb (handles empty volume mounts)
-RUN cat > /etc/systemd/system/postgresql.service << 'EOF'
-[Unit]
-Description=PostgreSQL Database Server
-After=syslog.target network.target
-
-[Service]
-Type=forking
-User=postgres
-Group=postgres
-
-Environment=PGDATA=/var/lib/pgsql/data
-
-# Fix permissions and initdb on first boot
-ExecStartPre=+/bin/bash -c 'mkdir -p /var/lib/pgsql/data && chown -R postgres:postgres /var/lib/pgsql && chmod 700 /var/lib/pgsql/data'
-ExecStartPre=/bin/bash -c 'if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then /usr/bin/initdb -D /var/lib/pgsql/data; fi'
-
-ExecStart=/usr/bin/pg_ctl start -D /var/lib/pgsql/data -l /tmp/postgresql.log -o "-p 5432"
-ExecStop=/usr/bin/pg_ctl stop -D /var/lib/pgsql/data -m fast
-ExecReload=/usr/bin/pg_ctl reload -D /var/lib/pgsql/data
-
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-EOF
+COPY image-server/rootfs/etc/systemd/system/postgresql.service /etc/systemd/system/postgresql.service
 
 # Create image-server user and media directories
 RUN useradd -r -s /bin/false image-server && \
@@ -142,81 +117,17 @@ RUN useradd -r -s /bin/false image-server && \
     chown -R image-server:image-server /data/media
 
 # Database initialization script
-RUN cat > /usr/local/bin/init-imageserver-db.sh << 'DBEOF'
-#!/bin/bash
-set -e
-
-until pg_isready -U postgres > /dev/null 2>&1; do
-  sleep 1
-done
-
-sudo -u postgres psql -tc "SELECT 1 FROM pg_database WHERE datname = 'imageserver'" | grep -q 1 || \
-  sudo -u postgres createdb imageserver
-
-sudo -u postgres psql -tc "SELECT 1 FROM pg_user WHERE usename = 'imageserver'" | grep -q 1 || \
-  sudo -u postgres psql -c "CREATE USER imageserver WITH PASSWORD 'imageserver';"
-
-sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE imageserver TO imageserver;"
-sudo -u postgres psql -d imageserver -c "GRANT ALL ON SCHEMA public TO imageserver;"
-sudo -u postgres psql -d imageserver -c "ALTER DATABASE imageserver OWNER TO imageserver;"
-sudo -u postgres psql -d imageserver -c "CREATE EXTENSION IF NOT EXISTS vector;"
-
-echo "Image server database initialized with pgvector"
-DBEOF
+COPY image-server/rootfs/usr/local/bin/init-imageserver-db.sh /usr/local/bin/init-imageserver-db.sh
 RUN chmod +x /usr/local/bin/init-imageserver-db.sh
 
 # Create environment file
-RUN cat > /etc/image-server.env << 'ENVEOF'
-PGHOST=localhost
-PGPORT=5432
-PGDATABASE=imageserver
-PGUSER=imageserver
-PGPASSWORD=imageserver
-MEDIA_PATH=/data/media
-THUMBNAIL_SIZE=250
-VISION_BACKEND=none
-EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
-EMBEDDING_CACHE_DIR=/opt/fastembed-cache
-HOST=0.0.0.0
-PORT=8000
-ENVEOF
+COPY image-server/rootfs/etc/image-server.env /etc/image-server.env
 
 # Database init service (oneshot, runs after postgresql)
-RUN cat > /etc/systemd/system/imageserver-db-init.service << 'EOF'
-[Unit]
-Description=Initialize Image Server Database
-After=postgresql.service
-Requires=postgresql.service
-Before=image-server.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/bin/init-imageserver-db.sh
-
-[Install]
-WantedBy=multi-user.target
-EOF
+COPY image-server/rootfs/etc/systemd/system/imageserver-db-init.service /etc/systemd/system/imageserver-db-init.service
 
 # FastAPI server service
-RUN cat > /etc/systemd/system/image-server.service << 'EOF'
-[Unit]
-Description=Image Server (FastAPI)
-After=network.target postgresql.service imageserver-db-init.service
-Requires=postgresql.service imageserver-db-init.service
-
-[Service]
-Type=simple
-User=image-server
-EnvironmentFile=/etc/image-server.env
-ExecStartPre=+/bin/bash -c 'mkdir -p /data/media/originals /data/media/thumbnails /data/media/videos /data/media/theme-videos && chown -R image-server:image-server /data/media'
-ExecStart=/usr/bin/python3.12 -m image_server
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
+COPY image-server/rootfs/etc/systemd/system/image-server.service /etc/systemd/system/image-server.service
 
 # Enable services
 RUN systemctl enable postgresql && \

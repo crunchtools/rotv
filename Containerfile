@@ -30,6 +30,8 @@ RUN npm install -g playwright@1.64.1 && npx playwright install chromium
 # The `|| true` on unregister must stay braced: unbraced, it binds to the whole
 # && chain and a failed dnf (e.g. an EPEL mirror outage) ships an image with no
 # PostgreSQL. The test -x asserts the install actually landed.
+# PGDG publishes per RHEL minor and lags the base: UBI 10 is 10.3, PGDG stops
+# at rhel-10.2 (404). The sed pins its repos to 10.2 until it catches up.
 RUN --mount=type=secret,id=activation_key \
     --mount=type=secret,id=org_id \
     if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
@@ -39,6 +41,7 @@ RUN --mount=type=secret,id=activation_key \
     fi && \
     dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
     dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
+    sed -i 's/\$releasever_major\.\$releasever_minor/10.2/g' /etc/yum.repos.d/pgdg-redhat-all.repo && \
     dnf install -y postgresql17-server postgresql17 postgis35_17 && \
     if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
         dnf install -y --setopt=install_weak_deps=False \
