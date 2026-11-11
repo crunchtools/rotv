@@ -1,0 +1,37 @@
+# Container release (constitution III, Container Image VII): build once per
+# change, gate the digest with tests/image/contract.sh and boot.sh, promote
+# what was tested by digest copy. Quay.io only. The hosted dev image (dev.rootsofthevalley.org), rebuilt on each app build; its unit runs :main.
+
+name: Container (dev)
+
+on:
+  pull_request:
+    paths: [Containerfile.dev, 'rootfs-dev/**', scripts/test-rotv-dev-kick.sh]
+  push:
+    branches: [master]
+    paths: [Containerfile.dev, 'rootfs-dev/**', scripts/test-rotv-dev-kick.sh]
+  workflow_run:
+    workflows: [Container]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  dev:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@8652adb816093e50f3cd6da87e19644efdb5d28b
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      image: quay.io/crunchtools/rotv-dev
+      containerfile: Containerfile.dev
+      default-branch: master
+      boot: command
+      boot-command: tests/image/contract.sh "$IMAGE" dev
+      constitution-ref: 8652adb816093e50f3cd6da87e19644efdb5d28b
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}

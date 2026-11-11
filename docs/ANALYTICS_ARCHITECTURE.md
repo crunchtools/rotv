@@ -27,7 +27,8 @@ as the runtime, and mirrors upstream's Dockerfile builder and runner stages.
 `BASE_PATH=/stats` is baked into the Next.js build. The output lands in `/opt/umami`
 of `rotv-base`, so ordinary app builds never rebuild it. Upgrading Umami means
 changing the ARGs in `Containerfile.base`. Merging that change triggers
-`build-base.yml`, and its `rotv-base-updated` dispatch then rebuilds the app.
+`container-base.yml`, and its `parent-image-updated` dispatch then rebuilds the
+app, gated before the app moves.
 
 Local builds from plain `ubi10-core` have no `/opt/umami`.
 `umami.service` has `ConditionPathExists=/opt/umami/server.js` and simply

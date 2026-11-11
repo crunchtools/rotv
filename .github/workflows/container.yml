@@ -1,0 +1,40 @@
+# Container release (constitution III, Container Image VII): build once per
+# change, gate the digest with tests/image/contract.sh and boot.sh, promote
+# what was tested by digest copy. Quay.io only. :latest moves on a v* tag only.
+
+name: Container
+
+on:
+  pull_request:
+    paths-ignore: ['image-server/**', Containerfile.images]
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths-ignore: ['image-server/**', Containerfile.images]
+  repository_dispatch:
+    types: [parent-image-updated, rotv-base-updated]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  container:
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@8652adb816093e50f3cd6da87e19644efdb5d28b
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      image: quay.io/crunchtools/rotv
+      default-branch: master
+      build-args: |
+        BASE_IMAGE=quay.io/crunchtools/rotv-base:latest
+      rhsm: true
+      boot: command
+      boot-command: tests/image/contract.sh "$IMAGE" app && tests/image/boot.sh "$IMAGE" app
+      contract-test: tests/image/cve-gate.sh
+      constitution-ref: 8652adb816093e50f3cd6da87e19644efdb5d28b
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+      RHSM_ACTIVATION_KEY: ${{ secrets.RHSM_ACTIVATION_KEY }}
+      RHSM_ORG_ID: ${{ secrets.RHSM_ORG_ID }}

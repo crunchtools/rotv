@@ -176,7 +176,7 @@ phone browser ─▶ Cloudflare Access ─▶ proxy (origin key) ─▶ rotv-dev
                                                         └─ /api /auth /stats /share ─▶ rotv-backend :8080
 ```
 
-- **Image:** `quay.io/crunchtools/rotv-dev`, built by `build-dev.yml` from
+- **Image:** `quay.io/crunchtools/rotv-dev:main`, built by `container-dev.yml` from
   `Containerfile.dev`. It is the app image plus the units in `rootfs-dev/`.
   `/app` is a symlink to `/work/rotv/backend`, so `rotv-init` and
   `rotv-backend` run the checkout's migrations and `server.js` unmodified. It

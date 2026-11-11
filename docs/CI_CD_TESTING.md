@@ -304,11 +304,11 @@ Findings from everything below land in **Security → Code scanning** (SARIF) or
 |------|-------|--------------|
 | CVE Lite CLI (OSV) on `/`, `backend/`, `frontend/` lockfiles | `dependency-scan.yml` | Yes, required checks `CVE Lite (.)`, `(backend)`, `(frontend)` — new findings at high+ only |
 | CVE Lite full scan, SARIF upload | `dependency-scan.yml`, weekly + manual | No |
-| Trivy on the pushed rotv image (fixable CRITICAL/HIGH) | `build.yml` → `Trivy image scan` | Yes on PRs; report-only on master |
-| Trivy on images-rotv | `build-images.yml` → `Trivy image scan` | No (push-only workflow) |
+| Trivy on the gated rotv digest (fixable CRITICAL/HIGH) | `container.yml` → gates → `tests/image/cve-gate.sh` | Yes on PRs; never on master |
+| Trivy on every gated digest (rotv, rotv-base, images-rotv, rotv-dev) | constitution `container-release.yml` → gates | No (advisory, constitution VII) |
 | Dependabot alerts + security PRs, secret scanning + push protection | repo settings | Push protection blocks pushes containing secrets |
 
-The in-job Trivy step in `build-and-push-quay` stays report-only because the org constitution requires it. The separate `trivy-scan` job does the gating.
+The release workflow's own Trivy step stays report-only because the org constitution requires it; the PR-only `cve-gate.sh` contract test does the gating.
 
 CVE Lite uses OSV rather than the npm registry. npm audit misses advisories on prerelease-tagged versions (multer `1.4.5-lts.2`, #640).
 
