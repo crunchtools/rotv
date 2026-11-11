@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.69.1] - 2026-11-11
+
 ### Fixed
 - images-rotv builds under podman: its five config files (the postgresql,
   imageserver-db-init and image-server units, the db init script and the env
@@ -380,7 +382,8 @@ without changelog sections, so their entries are collected here.
 - **MINOR** (1.X.0) - New features, backwards-compatible functionality
 - **PATCH** (1.0.X) - Bug fixes, backwards-compatible improvements
 
-[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.31.0...HEAD
+[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.69.1...HEAD
+[1.69.1]: https://github.com/crunchtools/rotv/releases/tag/v1.69.1
 [1.31.0]: https://github.com/crunchtools/rotv/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/crunchtools/rotv/compare/v1.30.0...v1.30.1
 [1.30.0]: https://github.com/crunchtools/rotv/compare/v1.29.2...v1.30.0
