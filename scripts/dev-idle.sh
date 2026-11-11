@@ -21,7 +21,7 @@ WAKE=${WAKE:-/srv/dev.rootsofthevalley.org/data/control/wake}
 IDLE_MIN=${IDLE_MIN:-30}
 WINDOW_MS=${WINDOW_MS:-360000}   # a little over the timer interval
 
-IMAGE=quay.io/crunchtools/rotv-dev:latest
+IMAGE=quay.io/crunchtools/rotv-dev:main
 PULLED=${PULLED:-/run/dev.rootsofthevalley.org.pulled}
 PULL_EVERY=${PULL_EVERY:-21600}
 
