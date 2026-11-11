@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   [UNIT]"); they now live in `image-server/rootfs/` and are COPYed, byte for
   byte as before. The build moved from docker buildx to container-release's
   podman in RT#1550, and the path filter meant no build had run since.
+- rotv and rotv-base build again: UBI 10 moved to RHEL 10.3 and PGDG
+  publishes no `rhel-10.3` repositories yet (404), so `dnf install
+  postgresql17-server` failed. The PGDG repos are pinned to 10.2, its newest
+  minor, until it catches up.
 
 ## [1.69.0] - 2026-11-07
 
