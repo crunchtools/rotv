@@ -25,6 +25,7 @@ case "$profile" in
     urls="/api/health / /api/health/trackers/train /api/health/trackers/water-taxi"
     # The production unit mounts the same tmpfs for rsyslog's state
     mounts=(--tmpfs /data/pgdata:rw,size=1G,mode=0700 --tmpfs /var/lib/rsyslog:rw,size=8m)
+    runflags=(--privileged --cgroupns=host)
     ;;
   images)
     port=8000
@@ -33,6 +34,10 @@ case "$profile" in
     procs=""
     urls="/api/health"
     mounts=(--tmpfs /var/lib/pgsql/data:rw,size=1G --tmpfs /data/media:rw,size=256m)
+    # As production runs it (images.rootsofthevalley.org.service). Under
+    # --privileged, systemd here tries the kernel config/debug/tracing mounts,
+    # they fail, and the failed-unit check stops the boot at second one.
+    runflags=(--systemd=always)
     ;;
   *) echo "boot: no boot profile '$profile'" >&2; exit 2 ;;
 esac
@@ -44,10 +49,10 @@ printf '%s\n' "DISABLE_LIVE_BOAT_TRACKER=true" \
   "PGPASSWORD=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')" > "$envfile"
 trap '"$engine" rm -f "$name" >/dev/null 2>&1 || true; rm -f "$envfile"' EXIT
 
-# systemd as PID 1: same flags tests.yml has used since it was written.
+# systemd as PID 1, with the profile's flags.
 # No network: the image must come up on its own, and nothing it schedules
 # at boot can reach a real API or mail server.
-"$engine" run -d --name "$name" --privileged --cgroupns=host --network none \
+"$engine" run -d --name "$name" "${runflags[@]}" --network none \
   --memory 3g \
   --tmpfs /run --tmpfs /run/lock "${mounts[@]}" \
   -v "$envfile:/etc/rotv/environment:ro" \
