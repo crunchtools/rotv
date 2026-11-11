@@ -1,0 +1,13 @@
+[Unit]
+Description=Initialize Image Server Database
+After=postgresql.service
+Requires=postgresql.service
+Before=image-server.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/init-imageserver-db.sh
+
+[Install]
+WantedBy=multi-user.target

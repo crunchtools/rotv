@@ -1,0 +1,24 @@
+[Unit]
+Description=PostgreSQL Database Server
+After=syslog.target network.target
+
+[Service]
+Type=forking
+User=postgres
+Group=postgres
+
+Environment=PGDATA=/var/lib/pgsql/data
+
+# Fix permissions and initdb on first boot
+ExecStartPre=+/bin/bash -c 'mkdir -p /var/lib/pgsql/data && chown -R postgres:postgres /var/lib/pgsql && chmod 700 /var/lib/pgsql/data'
+ExecStartPre=/bin/bash -c 'if [ ! -f /var/lib/pgsql/data/PG_VERSION ]; then /usr/bin/initdb -D /var/lib/pgsql/data; fi'
+
+ExecStart=/usr/bin/pg_ctl start -D /var/lib/pgsql/data -l /tmp/postgresql.log -o "-p 5432"
+ExecStop=/usr/bin/pg_ctl stop -D /var/lib/pgsql/data -m fast
+ExecReload=/usr/bin/pg_ctl reload -D /var/lib/pgsql/data
+
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
