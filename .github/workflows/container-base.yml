@@ -1,0 +1,43 @@
+# Container release (constitution III, Container Image VII): build once per
+# change, gate the digest with tests/image/contract.sh and boot.sh, promote
+# what was tested by digest copy. Quay.io only. A cascade image: :latest tracks :main, and promotion dispatches rotv-base-updated to the app.
+
+name: Container (base)
+
+on:
+  pull_request:
+    paths: [Containerfile.base]
+  push:
+    branches: [master]
+    paths: [Containerfile.base]
+  repository_dispatch:
+    types: [parent-image-updated]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  base:
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.1
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      image: quay.io/crunchtools/rotv-base
+      containerfile: Containerfile.base
+      default-branch: master
+      rhsm: true
+      boot: command
+      boot-command: tests/image/contract.sh "$IMAGE" base
+      cascade: true
+      downstream: rotv
+      # Its own repo: a distinct event, or this workflow would fire itself.
+      downstream-event: rotv-base-updated
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+      RHSM_ACTIVATION_KEY: ${{ secrets.RHSM_ACTIVATION_KEY }}
+      RHSM_ORG_ID: ${{ secrets.RHSM_ORG_ID }}
+      CRUNCHTOOLS_CI_APP_KEY: ${{ secrets.CRUNCHTOOLS_CI_APP_KEY }}

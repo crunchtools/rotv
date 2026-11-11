@@ -1,0 +1,39 @@
+# Container release (constitution III, Container Image VII): build once per
+# change, gate the digest with tests/image/contract.sh and boot.sh, promote
+# what was tested by digest copy. Quay.io only. The image server (images.rootsofthevalley.org); :latest moves on a v* tag only.
+
+name: Container (image server)
+
+on:
+  pull_request:
+    paths: ['image-server/**', Containerfile.images]
+  push:
+    branches: [master]
+    tags: ["v*"]
+    paths: ['image-server/**', Containerfile.images]
+  repository_dispatch:
+    types: [parent-image-updated]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  images:
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.1
+    permissions:
+      contents: read
+      pull-requests: read
+    with:
+      image: quay.io/crunchtools/images-rotv
+      containerfile: Containerfile.images
+      default-branch: master
+      rhsm: true
+      boot: command
+      boot-command: tests/image/contract.sh "$IMAGE" images && tests/image/boot.sh "$IMAGE" images
+    secrets:
+      QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
+      RHSM_ACTIVATION_KEY: ${{ secrets.RHSM_ACTIVATION_KEY }}
+      RHSM_ORG_ID: ${{ secrets.RHSM_ORG_ID }}

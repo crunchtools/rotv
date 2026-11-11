@@ -4,7 +4,7 @@
 > **Ratified:** 2026-03-10
 > **Amended:** 2026-10-10
 > **Status:** Active
-> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.31.0
+> **Inherits:** [crunchtools/constitution](https://github.com/crunchtools/constitution) v1.39.1
 > **Profile:** Web Application
 
 Roots of The Valley: an interactive map exploring Cuyahoga Valley National
@@ -48,7 +48,11 @@ storage or sync mechanism. The recipe is in `docs/USER_DATA_FRAMEWORK.md`.
 - `Containerfile` builds `quay.io/crunchtools/rotv`. CI passes
   `BASE_IMAGE=quay.io/crunchtools/rotv-base:latest` for fast builds; the
   default, `ubi10-core`, builds everything from scratch for local dev. The app
-  build listens for `parent-image-updated` and `rotv-base-updated`.
+  build listens for `rotv-base-updated` only: ubi10-core's
+  `parent-image-updated` rebuilds `rotv-base` (and `images-rotv`), and
+  rotv-base's promotion then sends `rotv-base-updated`. A base that sent
+  `parent-image-updated` to its own repo would rebuild itself forever
+  (constitution `downstream-event`, RT#1550).
 - `Containerfile.dev` builds `quay.io/crunchtools/rotv-dev` on top of the app
   image, for dev.rootsofthevalley.org: the `rootfs-dev/` units that run a
   mounted checkout (`rotv-dev-deps`, `rotv-dev-ui`) and let it be driven from
