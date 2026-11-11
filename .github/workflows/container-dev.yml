@@ -21,7 +21,7 @@ permissions: {}
 jobs:
   dev:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    uses: crunchtools/constitution/.github/workflows/container-release.yml@8652adb816093e50f3cd6da87e19644efdb5d28b
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.1
     permissions:
       contents: read
       pull-requests: read
@@ -31,7 +31,6 @@ jobs:
       default-branch: master
       boot: command
       boot-command: tests/image/contract.sh "$IMAGE" dev
-      constitution-ref: 8652adb816093e50f3cd6da87e19644efdb5d28b
     secrets:
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}

@@ -12,14 +12,15 @@ on:
     tags: ["v*"]
     paths-ignore: ['image-server/**', Containerfile.images]
   repository_dispatch:
-    types: [parent-image-updated, rotv-base-updated]
+    # rotv-base was promoted (ubi10-core's parent-image-updated rebuilds the base).
+    types: [rotv-base-updated]
   workflow_dispatch:
 
 permissions: {}
 
 jobs:
   container:
-    uses: crunchtools/constitution/.github/workflows/container-release.yml@8652adb816093e50f3cd6da87e19644efdb5d28b
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.1
     permissions:
       contents: read
       pull-requests: read
@@ -32,7 +33,6 @@ jobs:
       boot: command
       boot-command: tests/image/contract.sh "$IMAGE" app && tests/image/boot.sh "$IMAGE" app
       contract-test: tests/image/cve-gate.sh
-      constitution-ref: 8652adb816093e50f3cd6da87e19644efdb5d28b
     secrets:
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
