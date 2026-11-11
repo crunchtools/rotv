@@ -29,6 +29,9 @@ jobs:
       image: quay.io/crunchtools/rotv-dev
       containerfile: Containerfile.dev
       default-branch: master
+      # rotv-dev cuts no release and its unit runs :main, so :latest tracks
+      # main, as rotv-base's does (RT#1550).
+      cascade: true
       boot: command
       boot-command: tests/image/contract.sh "$IMAGE" dev
     secrets:
