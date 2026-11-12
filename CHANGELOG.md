@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `rotv-dev:latest` follows the gated `:main` (`cascade: true`) instead of
+  staying on the last image built before build-once (RT#1550).
+
 ## [1.69.2] - 2026-11-11
 
 ### Changed

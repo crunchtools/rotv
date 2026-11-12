@@ -27,6 +27,9 @@ jobs:
       pull-requests: read
     with:
       image: quay.io/crunchtools/rotv-dev
+      # :main-only image; :latest follows the gated :main so it never freezes
+      # on a pre-build-once image (RT#1550, cto ruling).
+      cascade: true
       containerfile: Containerfile.dev
       default-branch: master
       boot: command
