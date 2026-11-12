@@ -21,7 +21,7 @@ permissions: {}
 jobs:
   dev:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
-    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.1
+    uses: crunchtools/constitution/.github/workflows/container-release.yml@v1.39.5
     permissions:
       contents: read
       pull-requests: read

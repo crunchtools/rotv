@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.69.2] - 2026-11-11
+
+### Changed
+- No functional change. This release moves images-rotv's `:latest` onto a
+  gated digest (RT#1550).
+
 ## [1.69.1] - 2026-11-11
 
 ### Fixed
