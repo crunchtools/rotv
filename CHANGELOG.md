@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.69.3] - 2026-11-12
+
 ### Fixed
 
 - `rotv-dev:latest` follows the gated `:main` (`cascade: true`) instead of
@@ -393,7 +395,8 @@ without changelog sections, so their entries are collected here.
 - **MINOR** (1.X.0) - New features, backwards-compatible functionality
 - **PATCH** (1.0.X) - Bug fixes, backwards-compatible improvements
 
-[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.69.1...HEAD
+[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.69.3...HEAD
+[1.69.3]: https://github.com/crunchtools/rotv/releases/tag/v1.69.3
 [1.69.1]: https://github.com/crunchtools/rotv/releases/tag/v1.69.1
 [1.31.0]: https://github.com/crunchtools/rotv/compare/v1.30.1...v1.31.0
 [1.30.1]: https://github.com/crunchtools/rotv/compare/v1.30.0...v1.30.1
