@@ -27,30 +27,32 @@ RUN npm install -g playwright@1.64.1 && npx playwright install chromium
 # The same entitlement provides the virtual display for the headed Facebook
 # browser: RHEL 10 has no Xvfb, so headless Weston (EPEL, needs CRB's turbojpeg)
 # runs Xwayland (AppStream). See rootfs/etc/systemd/system/rotv-display.service.
-# The `|| true` on unregister must stay braced: unbraced, it binds to the whole
-# && chain and a failed dnf (e.g. an EPEL mirror outage) ships an image with no
-# PostgreSQL. The test -x asserts the install actually landed.
+# Register, install and unregister in one RUN with a trap so unregister+clean
+# run on any exit (constitution II) — a failed dnf no longer skips unregister,
+# and the test -x asserts PostgreSQL actually landed.
 # PGDG publishes per RHEL minor and lags the base: UBI 10 is 10.3, PGDG stops
 # at rhel-10.2 (404). The sed pins its repos to 10.2 until it catches up.
 RUN --mount=type=secret,id=activation_key \
-    --mount=type=secret,id=org_id \
-    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
-        subscription-manager register \
-            --activationkey="$(cat /run/secrets/activation_key)" \
-            --org="$(cat /run/secrets/org_id)"; \
-    fi && \
-    dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm && \
-    dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm && \
-    sed -i 's/\$releasever_major\.\$releasever_minor/10.2/g' /etc/yum.repos.d/pgdg-redhat-all.repo && \
-    dnf install -y postgresql17-server postgresql17 postgis35_17 && \
-    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
-        dnf install -y --setopt=install_weak_deps=False \
-            --enablerepo=codeready-builder-for-rhel-10-x86_64-rpms \
-            weston xorg-x11-server-Xwayland || exit 1; \
-    fi && \
-    { subscription-manager unregister 2>/dev/null || true; } && \
-    test -x /usr/pgsql-17/bin/pg_ctl && \
-    dnf clean all
+    --mount=type=secret,id=org_id <<'EOF'
+set -euo pipefail
+if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then
+    subscription-manager register \
+        --activationkey="$(cat /run/secrets/activation_key)" \
+        --org="$(cat /run/secrets/org_id)"
+    trap 'subscription-manager unregister || true; subscription-manager clean || true' EXIT
+fi
+dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-10.noarch.rpm
+dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-10-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+sed -i 's/\$releasever_major\.\$releasever_minor/10.2/g' /etc/yum.repos.d/pgdg-redhat-all.repo
+dnf install -y postgresql17-server postgresql17 postgis35_17
+if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then
+    dnf install -y --setopt=install_weak_deps=False \
+        --enablerepo=codeready-builder-for-rhel-10-x86_64-rpms \
+        weston xorg-x11-server-Xwayland
+fi
+test -x /usr/pgsql-17/bin/pg_ctl
+dnf clean all
+EOF
 
 # Create symlinks for PostgreSQL commands
 RUN ln -sf /usr/pgsql-17/bin/initdb /usr/local/bin/initdb && \

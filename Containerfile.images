@@ -18,40 +18,44 @@
 # Stage 1: Build pgvector from source — postgresql-server-devel requires RHSM
 FROM registry.access.redhat.com/ubi10/ubi-init:latest AS pgvector-build
 RUN --mount=type=secret,id=activation_key \
-    --mount=type=secret,id=org_id \
-    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
+    --mount=type=secret,id=org_id <<'EOF'
+set -euo pipefail
+if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then
     subscription-manager register \
-      --activationkey="$(cat /run/secrets/activation_key)" \
-      --org="$(cat /run/secrets/org_id)"; \
-    fi \
-    && dnf install -y \
+        --activationkey="$(cat /run/secrets/activation_key)" \
+        --org="$(cat /run/secrets/org_id)"
+    trap 'subscription-manager unregister || true; subscription-manager clean || true' EXIT
+fi
+dnf install -y \
     gcc gcc-c++ make wget \
     redhat-rpm-config \
-    postgresql-server-devel \
-    && dnf clean all \
-    && subscription-manager unregister \
-    && cd /tmp \
-    && wget https://github.com/pgvector/pgvector/archive/refs/tags/v0.7.4.tar.gz \
-    && tar xf v0.7.4.tar.gz \
-    && cd pgvector-0.7.4 \
-    && make OPTFLAGS="-march=x86-64-v3" \
-    && make install DESTDIR=/pgvector-install
+    postgresql-server-devel
+dnf clean all
+cd /tmp
+wget https://github.com/pgvector/pgvector/archive/refs/tags/v0.7.4.tar.gz
+tar xf v0.7.4.tar.gz
+cd pgvector-0.7.4
+make OPTFLAGS="-march=x86-64-v3"
+make install DESTDIR=/pgvector-install
+EOF
 
 # Stage 2: Build Python wheels — python3.12-devel requires RHSM
 FROM registry.access.redhat.com/ubi10/ubi-init:latest AS python-build
 RUN --mount=type=secret,id=activation_key \
-    --mount=type=secret,id=org_id \
-    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
+    --mount=type=secret,id=org_id <<'EOF'
+set -euo pipefail
+if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then
     subscription-manager register \
-      --activationkey="$(cat /run/secrets/activation_key)" \
-      --org="$(cat /run/secrets/org_id)"; \
-    fi \
-    && dnf install -y \
+        --activationkey="$(cat /run/secrets/activation_key)" \
+        --org="$(cat /run/secrets/org_id)"
+    trap 'subscription-manager unregister || true; subscription-manager clean || true' EXIT
+fi
+dnf install -y \
     python3.12 python3.12-pip python3.12-devel \
     gcc gcc-c++ make \
-    postgresql-devel \
-    && dnf clean all \
-    && subscription-manager unregister
+    postgresql-devel
+dnf clean all
+EOF
 
 WORKDIR /build
 COPY image-server/pyproject.toml image-server/README.md ./
@@ -73,21 +77,23 @@ LABEL version="0.1.0"
 
 # postgresql-server requires RHSM
 RUN --mount=type=secret,id=activation_key \
-    --mount=type=secret,id=org_id \
-    if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then \
+    --mount=type=secret,id=org_id <<'EOF'
+set -euo pipefail
+if [ -s /run/secrets/activation_key ] && [ -s /run/secrets/org_id ]; then
     subscription-manager register \
-      --activationkey="$(cat /run/secrets/activation_key)" \
-      --org="$(cat /run/secrets/org_id)"; \
-    fi \
-    && dnf install -y \
-      postgresql-server \
-      postgresql-contrib \
-      python3.12 \
-      python3.12-pip \
-      sudo \
-      ca-certificates \
-    && dnf clean all \
-    && subscription-manager unregister
+        --activationkey="$(cat /run/secrets/activation_key)" \
+        --org="$(cat /run/secrets/org_id)"
+    trap 'subscription-manager unregister || true; subscription-manager clean || true' EXIT
+fi
+dnf install -y \
+    postgresql-server \
+    postgresql-contrib \
+    python3.12 \
+    python3.12-pip \
+    sudo \
+    ca-certificates
+dnf clean all
+EOF
 
 # Copy pgvector from build stage
 COPY --from=pgvector-build /pgvector-install/usr/ /usr/
