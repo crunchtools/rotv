@@ -304,11 +304,8 @@ Findings from everything below land in **Security → Code scanning** (SARIF) or
 |------|-------|--------------|
 | CVE Lite CLI (OSV) on `/`, `backend/`, `frontend/` lockfiles | `dependency-scan.yml` | Yes, required checks `CVE Lite (.)`, `(backend)`, `(frontend)` — new findings at high+ only |
 | CVE Lite full scan, SARIF upload | `dependency-scan.yml`, weekly + manual | No |
-| Trivy on the gated rotv digest (fixable CRITICAL/HIGH) | `container.yml` → gates → `tests/image/cve-gate.sh` | Yes on PRs; never on master |
-| Trivy on every gated digest (rotv, rotv-base, images-rotv, rotv-dev) | constitution `container-release.yml` → gates | No (advisory, constitution VII) |
+| Fleet image CVE scan (grype, every 6 h, published images) | gloval `grype.crunchtools.com` → Nagios `Fleet image CVEs` | Pages on a new fixable Critical; not a PR check (constitution 1.40.0, RT #1551) |
 | Dependabot alerts + security PRs, secret scanning + push protection | repo settings | Push protection blocks pushes containing secrets |
-
-The release workflow's own Trivy step stays report-only because the org constitution requires it; the PR-only `cve-gate.sh` contract test does the gating.
 
 CVE Lite uses OSV rather than the npm registry. npm audit misses advisories on prerelease-tagged versions (multer `1.4.5-lts.2`, #640).
 
@@ -324,9 +321,9 @@ git add backend/.cve-lite/baseline.json
 
 The PR gate compares against the **base branch's** baseline, so a PR that edits its own baseline changes nothing. Fixing a dependency is always the first answer. To accept new debt, a maintainer adds the `security-debt-accepted` label, and the gate then uses the PR's baseline.
 
-### Accepting a Trivy finding
+### Accepting a CVE in the image
 
-Add the CVE ID to `.trivyignore` with a comment giving the reason, owner, and a review-by date.
+There is no per-repo ignore file. A fixable Critical you accept is an (image, CVE) entry in the fleet CVE check's baseline on gloval (RT #1551); anything else is reported, not gated.
 
 ## Troubleshooting
 

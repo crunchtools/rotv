@@ -32,7 +32,6 @@ jobs:
       rhsm: true
       boot: command
       boot-command: tests/image/contract.sh "$IMAGE" app && tests/image/boot.sh "$IMAGE" app
-      contract-test: tests/image/cve-gate.sh
     secrets:
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
