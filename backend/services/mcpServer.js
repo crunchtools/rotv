@@ -62,11 +62,12 @@ const POI_CREATE_COLUMNS = [
   'news_url', 'events_url', 'status_url', 'more_info_link', 'owner_id'
 ];
 
-// Fields poi_update may write: descriptions and visitor info (#709). Name,
-// roles and geometry stay with the admin UI, which has the name guard and the
-// map editor. null clears a field; undefined leaves it alone.
+// Fields poi_update may write: name, descriptions and visitor info (#709, #887).
+// Roles and geometry stay with the admin UI's map editor. null clears a field
+// (except name, which is required); undefined leaves it alone.
 const nullableText = z.string().nullable().optional();
 export const POI_UPDATE_FIELDS = {
+  name: z.string().trim().min(1).max(200).optional().describe('POI name; must not match another live POI'),
   brief_description: nullableText.describe('Short description'),
   historical_description: nullableText.describe('Long historical description'),
   property_owner: nullableText.describe('Owner name as free text'),
@@ -98,6 +99,20 @@ export function buildPoiUpdate(id, args) {
     values: [id, ...columns.map(column => args[column])],
     columns
   };
+}
+
+// Returns { error, oldName }: error is a message when `name` can't be given to POI `id`, else null.
+export async function checkPoiRename(pool, id, name) {
+  const current = await pool.query('SELECT name FROM pois WHERE id = $1 AND deleted IS NOT TRUE', [id]);
+  if (current.rows.length === 0) return { error: `POI #${id} not found`, oldName: null };
+  const oldName = current.rows[0].name;
+  try {
+    await assertPoiNameAvailable(pool, { name, id, currentName: oldName });
+  } catch (err) {
+    if (err instanceof PoiNameConflictError) return { error: err.message, oldName };
+    throw err;
+  }
+  return { error: null, oldName };
 }
 
 function registerTools(server, pool, boss, mcpUserId) {
@@ -848,17 +863,27 @@ function registerTools(server, pool, boss, mcpUserId) {
 
   server.tool(
     'poi_update',
-    'Correct a POI\'s descriptions and visitor info. Pass only the fields to change; null clears a field. Name, roles and geometry are edited in the admin UI.',
+    'Correct a POI\'s descriptions and visitor info. Pass only the fields to change; null clears a field. Roles and geometry are edited in the admin UI.',
     { id: z.number().int().describe('POI ID'), ...POI_UPDATE_FIELDS },
     async ({ id, ...fields }) => {
       const update = buildPoiUpdate(id, fields);
       if (!update) {
         return { content: [{ type: 'text', text: 'No fields provided to update' }], isError: true };
       }
+      let oldName = null;
+      if (fields.name !== undefined) {
+        // Fix: reuse the name checkPoiRename already fetched (PR #889 review)
+        const rename = await checkPoiRename(pool, id, fields.name);
+        if (rename.error) {
+          return { content: [{ type: 'text', text: rename.error }], isError: true };
+        }
+        oldName = rename.oldName;
+      }
       const updated = await pool.query(update.sql, update.values);
       if (updated.rows.length === 0) {
         return { content: [{ type: 'text', text: `POI #${id} not found` }], isError: true };
       }
+      if (oldName !== null) logger.info(`MCP renamed POI ${id}: "${oldName}" -> "${fields.name}"`);
       logger.info(`MCP updated POI ${id}: ${update.columns.join(', ')}`);
       return { content: [{ type: 'text', text: `Updated POI #${id} (${updated.rows[0].name}): ${update.columns.join(', ')}` }] };
     }
