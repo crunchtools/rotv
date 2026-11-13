@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `GET /api/health/collection` reports news and events collection health for
+  Nagios: 503 (CRITICAL) when Serper or OpenRouter is out of credits or
+  rejects the key, or most searches failed; 409 (WARNING) when no run in 26h.
+  Provider failures are tagged `error_class` in `job_logs` (#888). The Nagios
+  service on the monitoring host still needs adding.
 - The admin MCP `poi_update` tool accepts `name` (trimmed, 1–200 chars, not
   nullable) and refuses a name another live POI already holds, so typos can be
   fixed without SQL (#887).

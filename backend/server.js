@@ -17,6 +17,7 @@ import { createAdminRouter } from './routes/admin.js';
 import { createNewsletterRouter } from './routes/newsletter.js';
 import { createFeedbackRouter } from './routes/feedback.js';
 import { createTrackerHealthRouter } from './routes/trackerHealth.js';
+import { createCollectionHealthRouter } from './routes/collectionHealth.js';
 import { createTripsRouter } from './routes/trips.js';
 import { createUserSettingsRouter } from './routes/userSettings.js';
 import { renderLegalMarkdown } from './utils/legalMarkdown.js';
@@ -2190,6 +2191,9 @@ app.use('/api/health/trackers', createTrackerHealthRouter({
   train: { status: getTrainStatus, verdict: getTrainVerdict },
   waterTaxi: { status: getWaterTaxiStatus, verdict: getWaterTaxiVerdict },
 }));
+
+// Collection health for Nagios: CRITICAL when a paid provider is out of credits.
+app.use('/api/health/collection', createCollectionHealthRouter(pool));
 
 app.get('/api/trails/mtb', async (req, res) => {
   try {

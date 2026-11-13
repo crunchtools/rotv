@@ -4,6 +4,7 @@ import { parseDate, parseDateTime, extractUrlDate, extractWebTracDates, easternD
 import { renderPage, setCachePageType, setCacheItemCount } from './renderPage.js';
 import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
+import { classifyProviderError } from './providerErrors.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
 import { searchNewsUrls } from './serperService.js';
 import { getDomainReputation } from './moderationService.js';
@@ -1176,7 +1177,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       } catch (serperError) {
         if (serperError.message === 'Collection cancelled by user') throw serperError;
         searchFailed = true;
-        logWarn(jobId, jobType, poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`);
+        logWarn(jobId, jobType, poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`, classifyProviderError(serperError));
       }
     }
 
@@ -1216,7 +1217,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       }
     };
   } catch (error) {
-    logError(jobId, jobType, poi.id, poi.name, `Error collecting news: ${error.message}`);
+    logError(jobId, jobType, poi.id, poi.name, `Error collecting news: ${error.message}`, classifyProviderError(error));
 
     updateProgress(poi.id, {
       phase: 'error',
