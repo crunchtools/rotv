@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The admin MCP `poi_update` tool accepts `name` (trimmed, 1–200 chars, not
+  nullable) and refuses a name another live POI already holds, so typos can be
+  fixed without SQL (#887).
+
 ## [1.69.3] - 2026-11-12
 
 ### Fixed

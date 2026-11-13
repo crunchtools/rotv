@@ -2,10 +2,10 @@
  * poi_update (#709): an agent corrects a POI's descriptions without SQL.
  * Column names come from the allowlist, never from argument keys.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 
-const { buildPoiUpdate, POI_UPDATE_FIELDS } = await import('../services/mcpServer.js');
+const { buildPoiUpdate, POI_UPDATE_FIELDS, checkPoiRename } = await import('../services/mcpServer.js');
 
 describe('buildPoiUpdate', () => {
   it('updates only the fields passed, in allowlist order', () => {
@@ -22,9 +22,15 @@ describe('buildPoiUpdate', () => {
   });
 
   it('ignores keys outside the allowlist', () => {
-    const update = buildPoiUpdate(1, { name: 'Renamed', 'id = 1; DROP TABLE pois; --': 'x', surface: 'gravel' });
+    const update = buildPoiUpdate(1, { 'id = 1; DROP TABLE pois; --': 'x', surface: 'gravel' });
     expect(update.columns).toEqual(['surface']);
-    expect(update.sql).not.toMatch(/name =|DROP/);
+    expect(update.sql).not.toMatch(/DROP/);
+  });
+
+  it('renames a POI through the name column (#887)', () => {
+    const update = buildPoiUpdate(1056, { name: 'Nature Play Area' });
+    expect(update.columns).toEqual(['name']);
+    expect(update.values).toEqual([1056, 'Nature Play Area']);
   });
 
   it('returns null when nothing would change', () => {
@@ -43,5 +49,36 @@ describe('POI_UPDATE_FIELDS schema', () => {
     expect(schema.safeParse({ wheelchair: 'sometimes' }).success).toBe(false);
     expect(schema.safeParse({ cell_signal: 9 }).success).toBe(false);
     expect(schema.safeParse({ more_info_link: 'not a url' }).success).toBe(false);
+  });
+
+  it('trims name and rejects empty, null or over-long names (#887)', () => {
+    expect(schema.parse({ name: '  Nature Play Area ' }).name).toBe('Nature Play Area');
+    expect(schema.safeParse({ name: '   ' }).success).toBe(false);
+    expect(schema.safeParse({ name: '' }).success).toBe(false);
+    expect(schema.safeParse({ name: null }).success).toBe(false);
+    expect(schema.safeParse({ name: 'x'.repeat(201) }).success).toBe(false);
+  });
+});
+
+describe('checkPoiRename', () => {
+  const poolWith = (...results) => {
+    const query = vi.fn();
+    results.forEach(rows => query.mockResolvedValueOnce({ rows }));
+    return { query };
+  };
+
+  it('allows a rename to a free name', async () => {
+    const pool = poolWith([{ name: 'Nature PLay Area' }], []);
+    expect(await checkPoiRename(pool, 1056, 'Nature Play Area')).toBeNull();
+  });
+
+  it('refuses a name another live POI holds', async () => {
+    const pool = poolWith([{ name: 'Old Name' }], [{ id: 7, name: 'Taken Place' }]);
+    expect(await checkPoiRename(pool, 1056, 'Taken Place')).toMatch(/Taken Place.*#7/);
+  });
+
+  it('reports a missing POI', async () => {
+    const pool = poolWith([]);
+    expect(await checkPoiRename(pool, 999, 'Anything')).toBe('POI #999 not found');
   });
 });
