@@ -26,7 +26,11 @@ export function pipelineVerdict(pipeline, run, providerError, searchFailures, no
   if (total > 0 && searchFailures / total > FAILURE_SHARE) {
     return { pipeline, status: 'CRITICAL', message: `${pipeline}: search failed for ${searchFailures} of ${total} POIs` };
   }
+  // Fix: unparseable completed_at means freshness is unknown (PR #890 review)
   const ageHours = (now - new Date(run.completed_at)) / 3600000;
+  if (!Number.isFinite(ageHours)) {
+    return { pipeline, status: 'WARNING', message: `${pipeline}: last run has no valid completion time` };
+  }
   if (ageHours > STALE_HOURS) {
     return { pipeline, status: 'WARNING', message: `${pipeline}: no run in ${Math.floor(ageHours)}h` };
   }
@@ -76,7 +80,9 @@ export function createCollectionHealthRouter(pool) {
       res.status(worst === 'OK' ? 200 : worst === 'WARNING' ? 409 : 503)
         .json({ status: worst, message, pipelines: verdicts });
     } catch (error) {
-      res.status(503).json({ status: 'CRITICAL', message: `collection health check failed: ${error.message}` });
+      // Fix: log details server-side, return generic message (PR #890 review)
+      console.error('Collection health check failed:', error);
+      res.status(503).json({ status: 'CRITICAL', message: 'collection health check failed' });
     }
   });
   return router;
