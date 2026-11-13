@@ -2050,6 +2050,17 @@ export async function getPoisForPipeline(pool, pipeline, now = new Date()) {
 // Per-POI state after a pipeline visit. Historical News stops visiting a POI once
 // news_history_dry_run_limit runs in a row find no URL we don't already have, and
 // rotates its search angle every run.
+/**
+ * Record the outcome of one pipeline visit to a POI.
+ * @param {import('pg').Pool} pool - database pool
+ * @param {'current_news'|'historical_news'} pipeline - pipeline that visited the POI
+ * @param {{id: number}} poi - the POI visited
+ * @param {Object} [metadata] - run outcome
+ * @param {boolean} [metadata.searchFailed] - if true, nothing is recorded (cadence and dry-run counters untouched)
+ * @param {number} [metadata.freshUrlCount] - historical only: URLs found that we did not already have;
+ *   0 increments history_dry_runs, anything else resets it. Required for historical_news to record.
+ * @returns {Promise<void>} resolves once state is updated; no value returned
+ */
 export async function recordPipelineRun(pool, pipeline, poi, metadata = {}) {
   // Fix: a failed search leaves cadence and dry-run counters alone (issue #891)
   if (metadata.searchFailed) return;
