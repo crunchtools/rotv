@@ -13,6 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nullable) and refuses a name another live POI already holds, so typos can be
   fixed without SQL (#887).
 
+### Fixed
+
+- A failed search (e.g. provider out of credits) no longer marks a POI as
+  collected or bumps its historical dry-run count (#891).
+- Editor approve/reject now marks the item moderated, and the AI moderator
+  only writes to items still pending and unmoderated, so human decisions stick
+  (#891).
+
 ## [1.69.3] - 2026-11-12
 
 ### Fixed

@@ -904,6 +904,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
 
   const allEvents = [];
   const allNews = [];
+  // Fix: a failed search must not advance the POI's cadence (issue #891)
+  let searchFailed = false;
   let usedDedicatedNewsUrl = false;
   // Serper URLs not already in poi_news; Historical News uses it to tell a dry run.
   let freshUrlCount = 0;
@@ -1173,6 +1175,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
         }
       } catch (serperError) {
         if (serperError.message === 'Collection cancelled by user') throw serperError;
+        searchFailed = true;
         logWarn(jobId, jobType, poi.id, poi.name, `Phase II: Search failed: ${serperError.message}`);
       }
     }
@@ -1208,7 +1211,8 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
         usedDedicatedNewsUrl,
         provider: 'openrouter',
         pipeline,
-        freshUrlCount
+        freshUrlCount,
+        searchFailed
       }
     };
   } catch (error) {
@@ -1222,7 +1226,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       error: error.message
     });
 
-    return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false, provider: 'openrouter' } };
+    return { news: [], events: [], metadata: { usedDedicatedNewsUrl: false, provider: 'openrouter', searchFailed: true } };
   }
 }
 
@@ -2046,7 +2050,9 @@ export async function getPoisForPipeline(pool, pipeline, now = new Date()) {
 // Per-POI state after a pipeline visit. Historical News stops visiting a POI once
 // news_history_dry_run_limit runs in a row find no URL we don't already have, and
 // rotates its search angle every run.
-async function recordPipelineRun(pool, pipeline, poi, metadata = {}) {
+export async function recordPipelineRun(pool, pipeline, poi, metadata = {}) {
+  // Fix: a failed search leaves cadence and dry-run counters alone (issue #891)
+  if (metadata.searchFailed) return;
   if (pipeline === 'current_news') {
     await pool.query('UPDATE pois SET last_current_news_collection = NOW() WHERE id = $1', [poi.id]);
   } else if (pipeline === 'historical_news' && Number.isInteger(metadata.freshUrlCount)) {

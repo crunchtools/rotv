@@ -691,7 +691,7 @@ export async function processItem(pool, contentType, contentId, { forceStatus = 
               poi_id = COALESCE($7, poi_id), moderation_date = CURRENT_TIMESTAMP,
               moderated_by = COALESCE($8, moderated_by),
               moderated_at = CASE WHEN $8 IS NOT NULL THEN CURRENT_TIMESTAMP ELSE moderated_at END
-       WHERE id = $9`,
+       WHERE id = $9${forceStatus ? '' : " AND moderation_status = 'pending' AND moderated_at IS NULL"}`,
       [resolvedStatus, pubDateUpdate, newScore, reasoning,
        relevanceVotes.length > 0 ? JSON.stringify(relevanceVotes) : null,
        gatesJson, newPoiId, autoModeratedBy, contentId]
@@ -797,7 +797,7 @@ export async function processPendingItems(pool) {
 async function markPublished(pool, contentType, contentId, adminUserId) {
   const table = tableFor(contentType);
   await pool.query(
-    `UPDATE ${table} SET moderation_status = 'published', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+    `UPDATE ${table} SET moderation_status = 'published', moderation_processed = true, moderated_by = $1, moderated_at = CURRENT_TIMESTAMP WHERE id = $2`,
     [adminUserId, contentId]
   );
 }
@@ -811,7 +811,7 @@ async function markRejected(pool, contentType, contentId, adminUserId, note) {
   const table = tableFor(contentType);
   await pool.query(
     `UPDATE ${table}
-     SET moderation_status = 'rejected', moderated_by = $1, moderated_at = CURRENT_TIMESTAMP,
+     SET moderation_status = 'rejected', moderation_processed = true, moderated_by = $1, moderated_at = CURRENT_TIMESTAMP,
          ai_reasoning = COALESCE(ai_reasoning, '') || E'\n--- ' || $3
      WHERE id = $2`,
     [adminUserId, contentId, note]
