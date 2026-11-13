@@ -69,16 +69,16 @@ describe('checkPoiRename', () => {
 
   it('allows a rename to a free name', async () => {
     const pool = poolWith([{ name: 'Nature PLay Area' }], []);
-    expect(await checkPoiRename(pool, 1056, 'Nature Play Area')).toBeNull();
+    expect(await checkPoiRename(pool, 1056, 'Nature Play Area')).toEqual({ error: null, oldName: 'Nature PLay Area' });
   });
 
   it('refuses a name another live POI holds', async () => {
     const pool = poolWith([{ name: 'Old Name' }], [{ id: 7, name: 'Taken Place' }]);
-    expect(await checkPoiRename(pool, 1056, 'Taken Place')).toMatch(/Taken Place.*#7/);
+    expect((await checkPoiRename(pool, 1056, 'Taken Place')).error).toMatch(/Taken Place.*#7/);
   });
 
   it('reports a missing POI', async () => {
     const pool = poolWith([]);
-    expect(await checkPoiRename(pool, 999, 'Anything')).toBe('POI #999 not found');
+    expect((await checkPoiRename(pool, 999, 'Anything')).error).toBe('POI #999 not found');
   });
 });

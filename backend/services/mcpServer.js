@@ -101,17 +101,18 @@ export function buildPoiUpdate(id, args) {
   };
 }
 
-// Returns an error message when `name` can't be given to POI `id`, else null.
+// Returns { error, oldName }: error is a message when `name` can't be given to POI `id`, else null.
 export async function checkPoiRename(pool, id, name) {
   const current = await pool.query('SELECT name FROM pois WHERE id = $1 AND deleted IS NOT TRUE', [id]);
-  if (current.rows.length === 0) return `POI #${id} not found`;
+  if (current.rows.length === 0) return { error: `POI #${id} not found`, oldName: null };
+  const oldName = current.rows[0].name;
   try {
-    await assertPoiNameAvailable(pool, { name, id, currentName: current.rows[0].name });
+    await assertPoiNameAvailable(pool, { name, id, currentName: oldName });
   } catch (err) {
-    if (err instanceof PoiNameConflictError) return err.message;
+    if (err instanceof PoiNameConflictError) return { error: err.message, oldName };
     throw err;
   }
-  return null;
+  return { error: null, oldName };
 }
 
 function registerTools(server, pool, boss, mcpUserId) {
@@ -871,11 +872,12 @@ function registerTools(server, pool, boss, mcpUserId) {
       }
       let oldName = null;
       if (fields.name !== undefined) {
-        const renameError = await checkPoiRename(pool, id, fields.name);
-        if (renameError) {
-          return { content: [{ type: 'text', text: renameError }], isError: true };
+        // Fix: reuse the name checkPoiRename already fetched (PR #889 review)
+        const rename = await checkPoiRename(pool, id, fields.name);
+        if (rename.error) {
+          return { content: [{ type: 'text', text: rename.error }], isError: true };
         }
-        oldName = (await pool.query('SELECT name FROM pois WHERE id = $1', [id])).rows[0]?.name;
+        oldName = rename.oldName;
       }
       const updated = await pool.query(update.sql, update.values);
       if (updated.rows.length === 0) {
