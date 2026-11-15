@@ -1,7 +1,7 @@
 // Run: node --test tests/migrations/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BASELINE, checkSql, selectFiles, statements } from '../../scripts/check-migrations.mjs';
+import { BASELINE, checkSql, parseDiff, selectFiles, statements } from '../../scripts/check-migrations.mjs';
 
 const why = (sql) => checkSql(sql).map((p) => p.why);
 
@@ -13,7 +13,8 @@ test('additive migrations pass', () => {
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS runs INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE pois ALTER COLUMN code_hash DROP NOT NULL;
       CREATE INDEX IF NOT EXISTS pois_name ON pois (name);
-      DROP INDEX IF EXISTS pois_old_name;
+      DROP INDEX IF EXISTS pois_name_old;
+      CREATE INDEX IF NOT EXISTS pois_name_old ON pois (lower(name));
       UPDATE pois SET name = 'Drop Table Rock' WHERE id = 1;
     `),
     []
@@ -92,6 +93,149 @@ test('files above the baseline and changed files are selected', () => {
   const old = `backend/migrations/${String(BASELINE).padStart(3, '0')}_old.sql`;
   const next = `backend/migrations/${BASELINE + 1}_new.sql`;
   const edited = 'backend/migrations/050_edited.sql';
-  assert.deepEqual(selectFiles([old, next, edited], []), [next]);
-  assert.deepEqual(selectFiles([old, next, edited], [edited]), [edited, next]);
+  assert.deepEqual(selectFiles([old, next, edited], new Map()), [[next, null]]);
+  assert.deepEqual(selectFiles([old, next, edited], new Map([[edited, [[3, 4]]]])), [
+    [edited, [[3, 4]]],
+    [next, null],
+  ]);
+});
+
+// Review items from PR #898, one block each.
+
+test('1: DROP without COLUMN is a column drop, DROP CONSTRAINT is not', () => {
+  assert.deepEqual(why('ALTER TABLE pois DROP legacy_flag;'), ['drops a column']);
+  assert.deepEqual(why('ALTER TABLE pois DROP IF EXISTS legacy_flag;'), ['drops a column']);
+  assert.deepEqual(why('ALTER TABLE pois DROP CONSTRAINT IF EXISTS pois_chk;'), ['drops a constraint']);
+  assert.deepEqual(why('ALTER TABLE pois ALTER COLUMN c DROP NOT NULL, ALTER c DROP DEFAULT;'), []);
+});
+
+test('2: COLUMN is optional and quoted names count for TYPE and SET NOT NULL', () => {
+  assert.deepEqual(why('ALTER TABLE t ALTER c TYPE TEXT;'), ["changes a column's type"]);
+  assert.deepEqual(why('ALTER TABLE t ALTER "my col" TYPE TEXT;'), ["changes a column's type"]);
+  assert.deepEqual(why('ALTER TABLE t ALTER COLUMN "my col" SET DATA TYPE TEXT;'), ["changes a column's type"]);
+  assert.deepEqual(why('ALTER TABLE t ALTER c SET NOT NULL;'), ['tightens a column to NOT NULL']);
+  assert.deepEqual(why('ALTER TABLE t ALTER "my col" SET NOT NULL;'), ['tightens a column to NOT NULL']);
+});
+
+test('3: ADD without COLUMN, and DEFAULT NULL is no default', () => {
+  const noDefault = ['adds a NOT NULL column with no DEFAULT'];
+  assert.deepEqual(why('ALTER TABLE t ADD c INTEGER NOT NULL;'), noDefault);
+  assert.deepEqual(why('ALTER TABLE t ADD IF NOT EXISTS c INTEGER NOT NULL;'), noDefault);
+  assert.deepEqual(why('ALTER TABLE t ADD COLUMN c TEXT NOT NULL DEFAULT NULL;'), noDefault);
+  assert.deepEqual(why('ALTER TABLE t ADD c TEXT NOT NULL DEFAULT NULL::text;'), noDefault);
+  assert.deepEqual(why("ALTER TABLE t ADD c TEXT NOT NULL DEFAULT 'x';"), []);
+  assert.deepEqual(why('ALTER TABLE t ADD c INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL;'), []);
+  assert.deepEqual(why('ALTER TABLE t ADD PRIMARY KEY (id);'), []);
+  assert.deepEqual(why('ALTER TABLE t ADD EXCLUDE USING gist (r WITH &&);'), []);
+});
+
+test('4: index and constraint drops pass only when the file re-creates the name', () => {
+  assert.deepEqual(why('DROP INDEX IF EXISTS pois_old_name;'), ['drops an index']);
+  assert.deepEqual(why('DROP INDEX a, b; CREATE INDEX a ON t (x);'), ['drops an index']);
+  assert.deepEqual(why('DROP INDEX CONCURRENTLY IF EXISTS a; CREATE INDEX CONCURRENTLY a ON t (x);'), []);
+  // 016's pattern: widen a CHECK by dropping it and adding it back by name.
+  assert.deepEqual(
+    why(`ALTER TABLE poi_media DROP CONSTRAINT IF EXISTS poi_media_moderation_check;
+      ALTER TABLE poi_media ADD CONSTRAINT poi_media_moderation_check
+        CHECK (moderation_status IN ('pending', 'published', 'rejected'));`),
+    []
+  );
+});
+
+test('4: other drops and renames are refused', () => {
+  assert.deepEqual(why('DROP FUNCTION IF EXISTS f(int);'), ['drops a function']);
+  assert.deepEqual(why('DROP TYPE mood;'), ['drops a type']);
+  assert.deepEqual(why('DROP SEQUENCE s;'), ['drops a sequence']);
+  assert.deepEqual(why('DROP TRIGGER IF EXISTS trg ON t;'), ['drops a trigger']);
+  assert.deepEqual(why("ALTER TYPE mood RENAME VALUE 'sad' TO 'blue';"), ['renames a type or its values']);
+  assert.deepEqual(why('ALTER INDEX i RENAME TO j;'), ['renames an index or its values']);
+  assert.deepEqual(why('ALTER FUNCTION f(int) RENAME TO g;'), ['renames a function or its values']);
+  assert.deepEqual(why('ALTER SEQUENCE s RENAME TO s2;'), ['renames a sequence or its values']);
+  assert.deepEqual(why("ALTER TYPE mood ADD VALUE IF NOT EXISTS 'blue';"), []);
+});
+
+test('5: E-strings with backslash escapes do not derail the scan', () => {
+  assert.deepEqual(why("UPDATE t SET s = E'it\\'s; DROP TABLE x'; DROP TABLE y;"), ['drops a table']);
+  assert.equal(statements("SELECT E'a\\'b'; SELECT 2;").length, 2);
+  // A plain string ending in a backslash is not an escape.
+  assert.deepEqual(why("SELECT 'C:\\'; DROP TABLE y;"), ['drops a table']);
+});
+
+test('6: a marker covers the next statement only', () => {
+  const sql = `
+    -- contract: v1.71.0 stopped reading both
+    DO $$ BEGIN
+      ALTER TABLE pois DROP COLUMN IF EXISTS a;
+      ALTER TABLE pois DROP COLUMN IF EXISTS b;
+    END $$;
+  `;
+  const problems = checkSql(sql);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].code, /DROP COLUMN IF EXISTS b/);
+  assert.equal(problems[0].line, 5);
+});
+
+test('6: each statement in a DO block can carry its own marker', () => {
+  const sql = `DO $$ BEGIN
+      -- contract: v1.71.0 stopped reading a
+      ALTER TABLE pois DROP COLUMN IF EXISTS a;
+      -- contract: v1.71.0 stopped reading b
+      ALTER TABLE pois DROP COLUMN IF EXISTS b;
+    END $$;`;
+  assert.deepEqual(why(sql), []);
+});
+
+test('6: a marker after a semicolon belongs to that statement, not the next', () => {
+  const sql = 'DROP TABLE a; -- contract: v1.71.0 stopped reading a\nDROP TABLE b;';
+  const problems = checkSql(sql);
+  assert.equal(problems.length, 1);
+  assert.match(problems[0].code, /DROP TABLE b/);
+  assert.equal(problems[0].line, 2);
+});
+
+test('7: -- inside a string in a body does not hide the rest of the line', () => {
+  const sql = "DO $$ BEGIN RAISE NOTICE 'a -- b'; DROP TABLE x; END $$;";
+  assert.deepEqual(why(sql), ['drops a table']);
+  assert.deepEqual(why("DO $$ BEGIN PERFORM 'it''s -- fine'; DROP VIEW v; END $$;"), ['drops a view']);
+});
+
+test('8: adding a UNIQUE, CHECK or FOREIGN KEY constraint is refused', () => {
+  assert.deepEqual(why('ALTER TABLE t ADD CONSTRAINT t_u UNIQUE (email);'), ['adds a UNIQUE constraint']);
+  assert.deepEqual(why('ALTER TABLE t ADD CHECK (n > 0);'), ['adds a CHECK constraint']);
+  assert.deepEqual(why('ALTER TABLE t ADD CONSTRAINT fk FOREIGN KEY (u) REFERENCES u (id);'), [
+    'adds a FOREIGN KEY constraint',
+  ]);
+  assert.deepEqual(why('ALTER TABLE t ADD COLUMN n INT, ADD CONSTRAINT c CHECK (n > 0) NOT VALID;'), [
+    'adds a CHECK constraint',
+  ]);
+});
+
+test('9: an edited old migration is judged on the statements it touches', () => {
+  const sql = 'DROP TABLE a;\nDROP TABLE b;\nSELECT 1;\nSELECT\n  2;';
+  assert.equal(checkSql(sql).length, 2);
+  assert.deepEqual(checkSql(sql, [[3, 3]]), []);
+  assert.deepEqual(checkSql(sql, [[2, 2]]).map((p) => p.line), [2]);
+  assert.deepEqual(checkSql(sql, [[5, 5]]), []);
+});
+
+test('9: changed lines come from a zero-context diff', () => {
+  const diff = [
+    'diff --git a/backend/migrations/008_x.sql b/backend/migrations/008_x.sql',
+    '--- a/backend/migrations/008_x.sql',
+    '+++ b/backend/migrations/008_x.sql',
+    '@@ -4 +4 @@',
+    '@@ -10,2 +10,3 @@',
+    '@@ -20,2 +21,0 @@',
+    'diff --git a/backend/migrations/120_new.sql b/backend/migrations/120_new.sql',
+    '--- /dev/null',
+    '+++ b/backend/migrations/120_new.sql',
+    '@@ -0,0 +1,5 @@',
+  ].join('\n');
+  assert.deepEqual(
+    [...parseDiff(diff)],
+    [
+      ['backend/migrations/008_x.sql', [[4, 4], [10, 12], [21, 22]]],
+      ['backend/migrations/120_new.sql', null],
+    ]
+  );
 });
