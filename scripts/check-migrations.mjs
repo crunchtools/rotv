@@ -43,10 +43,16 @@ const RULES = [
 const CONTRACT = /--\s*contract:\s*\S/i;
 
 /**
- * Split SQL into top-level statements, each with its code (comments and
- * quoted literals blanked) and its comments. The body of a dollar-quoted block
- * is scanned as code, so DDL inside a DO block or EXECUTE string is still seen,
+ * Split SQL into top-level statements. The body of a dollar-quoted block is
+ * scanned as code, so DDL inside a DO block or EXECUTE string is still seen,
  * and an apostrophe inside it cannot derail the scan.
+ *
+ * @param {string} sql the text of one migration file
+ * @returns {{code: string, comments: string, line: number}[]} one entry per
+ *   statement: `code` is the statement with comments removed, string literals
+ *   blanked to `''` and whitespace collapsed; `comments` is every comment in
+ *   it, one per line, where a `-- contract:` marker is looked for; `line` is
+ *   the 1-based line its first comment or code is on.
  */
 export function statements(sql) {
   const out = [];
@@ -55,24 +61,29 @@ export function statements(sql) {
   let line = 1;
   let startLine = 1;
   let dollar = null;
+  let started = false;
   let i = 0;
   const flush = () => {
     if (code.trim()) out.push({ code: code.replace(/\s+/g, ' ').trim(), comments, line: startLine });
     code = '';
     comments = '';
+    started = false;
   };
+  const dollarTag = /\$([A-Za-z_][A-Za-z0-9_]*)?\$/y;
   while (i < sql.length) {
     const ch = sql[i];
-    const rest = sql.slice(i);
-    if (!code.trim() && !comments) startLine = line;
-    if (rest.startsWith('--')) {
+    if (!started && !/\s/.test(ch)) {
+      started = true;
+      startLine = line;
+    }
+    if (sql.startsWith('--', i)) {
       const end = sql.indexOf('\n', i);
       const stop = end === -1 ? sql.length : end;
       comments += sql.slice(i, stop) + '\n';
       i = stop;
       continue;
     }
-    if (rest.startsWith('/*')) {
+    if (sql.startsWith('/*', i)) {
       const end = sql.indexOf('*/', i + 2);
       const stop = end === -1 ? sql.length : end + 2;
       const text = sql.slice(i, stop);
@@ -82,7 +93,8 @@ export function statements(sql) {
       i = stop;
       continue;
     }
-    const tag = rest.match(/^\$([A-Za-z_][A-Za-z0-9_]*)?\$/);
+    dollarTag.lastIndex = i;
+    const tag = dollarTag.exec(sql);
     if (tag) {
       dollar = dollar === tag[0] ? null : dollar ?? tag[0];
       code += ' ';
