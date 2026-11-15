@@ -187,8 +187,17 @@ function alterTableActions(code) {
 const CONSTRAINT_WORDS = /^(CONSTRAINT|PRIMARY|FOREIGN|UNIQUE|CHECK|EXCLUDE)$/i;
 
 /**
+ * @typedef {{indexes: Set<string>, constraints: Set<string>}} Made
+ *   names a file creates, as ident() normalises them
+ * @typedef {[number, number]} Range first and last changed line, 1-based
+ */
+
+/**
  * Names this file creates: indexes, and constraints it adds. A drop of one of
  * these names is a replacement, not a removal.
+ *
+ * @param {{code: string}[]} stmts the file's statements, from statements()
+ * @returns {Made} the index and constraint names it creates
  */
 export function recreated(stmts) {
   const indexes = new Set();
@@ -236,8 +245,12 @@ function actionViolation(action, made, dropped) {
 }
 
 /**
- * What is wrong with one statement, or [] if nothing is. `made` is what the
- * file re-creates (see recreated()); `dropped` the constraint names it drops.
+ * What is wrong with one statement, or [] if nothing is.
+ *
+ * @param {string} code one statement's code, from statements()
+ * @param {Made} [made] what the file re-creates, from recreated()
+ * @param {Set<string>} [dropped] the constraint names the file drops
+ * @returns {string[]} one description per violation, e.g. 'drops a column'
  */
 export function violations(code, made = { indexes: new Set(), constraints: new Set() }, dropped = new Set()) {
   const upper = code.toUpperCase();
@@ -259,9 +272,13 @@ export function violations(code, made = { indexes: new Set(), constraints: new S
 }
 
 /**
- * Every problem in one file's SQL, as { line, why, code }. With `ranges`, a
- * list of [first, last] changed lines, only statements overlapping one are
- * judged.
+ * Every problem in one file's SQL.
+ *
+ * @param {string} sql the text of one migration file
+ * @param {Range[] | null} [ranges] judge only statements overlapping one of
+ *   these changed-line ranges; null judges every statement
+ * @returns {{line: number, why: string, code: string}[]} one entry per
+ *   refused statement: where it starts, what is wrong, and its first 100 chars
  */
 export function checkSql(sql, ranges = null) {
   const stmts = statements(sql);
@@ -290,8 +307,12 @@ function number(file) {
 }
 
 /**
- * The migrations that differ from `base`, mapped to the lines changed in each,
- * or to null for a new file. A pure deletion marks the lines either side of it.
+ * The migrations a diff touches, and the lines it changes in each. A pure
+ * deletion marks the lines either side of it.
+ *
+ * @param {string} diff output of `git diff -U0`
+ * @returns {Map<string, Range[] | null>} path to its changed-line ranges in
+ *   the new version, or to null for a file the diff adds
  */
 export function parseDiff(diff) {
   const changed = new Map();
@@ -322,9 +343,14 @@ function changedSince(base) {
 }
 
 /**
- * The migration files this run judges, as [file, ranges] pairs: ranges is
- * null to judge the whole file, else the changed lines of an edited file at or
- * below BASELINE.
+ * The migration files this run judges.
+ *
+ * @param {string[]} all every migration path under MIGRATIONS_DIR
+ * @param {Map<string, Range[] | null>} changed paths differing from the base,
+ *   from parseDiff()
+ * @returns {[string, Range[] | null][]} sorted [path, ranges] pairs: ranges is
+ *   null to judge the whole file (numbered above BASELINE, or new), else the
+ *   changed lines of an edited file at or below BASELINE
  */
 export function selectFiles(all, changed) {
   const picked = new Map();
