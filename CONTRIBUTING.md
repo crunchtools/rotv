@@ -67,14 +67,21 @@ A migration must not, on anything the previous release still reads or writes:
 - drop a table, view, materialized view, schema, column, function, type,
   sequence or trigger;
 - drop an index or a constraint, unless the same file creates it again under
-  the same name (dropping a `CHECK` and adding it back wider is fine);
+  the same name, as the same kind of object, on the same table, and at least
+  as unique (a unique index comes back unique). CI checks the name, kind,
+  table and uniqueness; whether a re-added `CHECK` is really wider is the
+  reviewer's job to confirm, not CI's. CI learns what a dropped name was from
+  earlier migrations, or Postgres's default suffixes (`_pkey`, `_key`,
+  `_fkey`, `_check`, `_excl`, `_idx`); a name it cannot place is never a
+  replacement;
 - rename a table, view, column, index, function, sequence, type or enum value;
 - change a column's type, or tighten it with `SET NOT NULL`;
 - add a `NOT NULL` column without a `DEFAULT` (the old code's `INSERT`s omit
   it; `DEFAULT NULL` is no default);
-- add a `UNIQUE`, `CHECK` or `FOREIGN KEY` constraint (the old code may write
-  rows that violate it), unless it replaces one of the same name dropped in
-  the same file.
+- add a `UNIQUE`, `CHECK`, `FOREIGN KEY`, `PRIMARY KEY` or `EXCLUDE`
+  constraint, or a unique index (`CREATE UNIQUE INDEX`): the old code may
+  write rows that violate it. Exempt are a replacement as above, and a unique
+  index on a table the same file creates.
 
 To remove or rename something, ship the new shape and the code that uses it in
 one release, and the removal in a later one, once the release before it no
@@ -89,7 +96,8 @@ ALTER TABLE pois DROP COLUMN IF EXISTS legacy_flag;
 The `Migration compatibility` CI job enforces this with
 `scripts/check-migrations.mjs`, over every migration numbered above 112 and any
 existing migration a PR edits. An edit to a migration numbered 112 or below is
-judged only on the statements it touches.
+judged only on the statements it touches, plus any drop whose re-create it
+touches: deleting or weakening the re-create brings the drop back into scope.
 
 A marker opts out exactly one statement: the next one, or the one it sits
 inside. A marker after a statement's semicolon on the same line belongs to that

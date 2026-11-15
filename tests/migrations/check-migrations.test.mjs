@@ -1,7 +1,7 @@
 // Run: node --test tests/migrations/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BASELINE, checkSql, parseDiff, selectFiles, statements } from '../../scripts/check-migrations.mjs';
+import { BASELINE, checkSql, emptyKnown, parseDiff, selectFiles, statements } from '../../scripts/check-migrations.mjs';
 
 const why = (sql) => checkSql(sql).map((p) => p.why);
 
@@ -13,8 +13,8 @@ test('additive migrations pass', () => {
       ALTER TABLE pois ADD COLUMN IF NOT EXISTS runs INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE pois ALTER COLUMN code_hash DROP NOT NULL;
       CREATE INDEX IF NOT EXISTS pois_name ON pois (name);
-      DROP INDEX IF EXISTS pois_name_old;
-      CREATE INDEX IF NOT EXISTS pois_name_old ON pois (lower(name));
+      DROP INDEX IF EXISTS pois_name_idx;
+      CREATE INDEX IF NOT EXISTS pois_name_idx ON pois (lower(name));
       UPDATE pois SET name = 'Drop Table Rock' WHERE id = 1;
     `),
     []
@@ -94,8 +94,9 @@ test('files above the baseline and changed files are selected', () => {
   const next = `backend/migrations/${BASELINE + 1}_new.sql`;
   const edited = 'backend/migrations/050_edited.sql';
   assert.deepEqual(selectFiles([old, next, edited], new Map()), [[next, null]]);
-  assert.deepEqual(selectFiles([old, next, edited], new Map([[edited, [[3, 4]]]])), [
-    [edited, [[3, 4]]],
+  const changes = { ranges: [[3, 4]], removed: '' };
+  assert.deepEqual(selectFiles([old, next, edited], new Map([[edited, changes]])), [
+    [edited, changes],
     [next, null],
   ]);
 });
@@ -125,14 +126,12 @@ test('3: ADD without COLUMN, and DEFAULT NULL is no default', () => {
   assert.deepEqual(why('ALTER TABLE t ADD c TEXT NOT NULL DEFAULT NULL::text;'), noDefault);
   assert.deepEqual(why("ALTER TABLE t ADD c TEXT NOT NULL DEFAULT 'x';"), []);
   assert.deepEqual(why('ALTER TABLE t ADD c INTEGER GENERATED ALWAYS AS IDENTITY NOT NULL;'), []);
-  assert.deepEqual(why('ALTER TABLE t ADD PRIMARY KEY (id);'), []);
-  assert.deepEqual(why('ALTER TABLE t ADD EXCLUDE USING gist (r WITH &&);'), []);
 });
 
 test('4: index and constraint drops pass only when the file re-creates the name', () => {
   assert.deepEqual(why('DROP INDEX IF EXISTS pois_old_name;'), ['drops an index']);
   assert.deepEqual(why('DROP INDEX a, b; CREATE INDEX a ON t (x);'), ['drops an index']);
-  assert.deepEqual(why('DROP INDEX CONCURRENTLY IF EXISTS a; CREATE INDEX CONCURRENTLY a ON t (x);'), []);
+  assert.deepEqual(why('DROP INDEX CONCURRENTLY IF EXISTS a_idx; CREATE INDEX CONCURRENTLY a_idx ON t (x);'), []);
   // 016's pattern: widen a CHECK by dropping it and adding it back by name.
   assert.deepEqual(
     why(`ALTER TABLE poi_media DROP CONSTRAINT IF EXISTS poi_media_moderation_check;
@@ -212,10 +211,11 @@ test('8: adding a UNIQUE, CHECK or FOREIGN KEY constraint is refused', () => {
 
 test('9: an edited old migration is judged on the statements it touches', () => {
   const sql = 'DROP TABLE a;\nDROP TABLE b;\nSELECT 1;\nSELECT\n  2;';
+  const at = (...ranges) => ({ ranges, removed: '' });
   assert.equal(checkSql(sql).length, 2);
-  assert.deepEqual(checkSql(sql, [[3, 3]]), []);
-  assert.deepEqual(checkSql(sql, [[2, 2]]).map((p) => p.line), [2]);
-  assert.deepEqual(checkSql(sql, [[5, 5]]), []);
+  assert.deepEqual(checkSql(sql, at([3, 3])), []);
+  assert.deepEqual(checkSql(sql, at([2, 2])).map((p) => p.line), [2]);
+  assert.deepEqual(checkSql(sql, at([5, 5])), []);
 });
 
 test('9: changed lines come from a zero-context diff', () => {
@@ -226,6 +226,8 @@ test('9: changed lines come from a zero-context diff', () => {
     '@@ -4 +4 @@',
     '@@ -10,2 +10,3 @@',
     '@@ -20,2 +21,0 @@',
+    '-CREATE UNIQUE INDEX x ON t (a);',
+    '-SELECT 1;',
     'diff --git a/backend/migrations/120_new.sql b/backend/migrations/120_new.sql',
     '--- /dev/null',
     '+++ b/backend/migrations/120_new.sql',
@@ -234,8 +236,62 @@ test('9: changed lines come from a zero-context diff', () => {
   assert.deepEqual(
     [...parseDiff(diff)],
     [
-      ['backend/migrations/008_x.sql', [[4, 4], [10, 12], [21, 22]]],
+      [
+        'backend/migrations/008_x.sql',
+        { ranges: [[4, 4], [10, 12], [21, 22]], removed: 'CREATE UNIQUE INDEX x ON t (a);\nSELECT 1;\n' },
+      ],
       ['backend/migrations/120_new.sql', null],
     ]
   );
+});
+
+// Re-review items from PR #898, one block each.
+
+test('re-review 1: a re-create excuses a drop only as the same kind, table and uniqueness', () => {
+  assert.deepEqual(why('DROP INDEX pois_slug_key; CREATE INDEX pois_slug_key ON pois(slug);'), ['drops an index']);
+  assert.deepEqual(
+    why('ALTER TABLE pois DROP CONSTRAINT pois_slug_key; ALTER TABLE pois ADD CONSTRAINT pois_slug_key CHECK (true);'),
+    ['drops a constraint', 'adds a CHECK constraint']
+  );
+  assert.deepEqual(why('ALTER TABLE a DROP CONSTRAINT k; ALTER TABLE b ADD CONSTRAINT k CHECK (x > 0);'), [
+    'drops a constraint',
+    'adds a CHECK constraint',
+  ]);
+  // Same kind, same table: a unique index re-created unique, and 016's CHECK.
+  assert.deepEqual(why('DROP INDEX pois_slug_key; CREATE UNIQUE INDEX pois_slug_key ON pois (lower(slug));'), []);
+  assert.deepEqual(
+    why(`ALTER TABLE poi_media DROP CONSTRAINT poi_media_moderation_check;
+      ALTER TABLE poi_media ADD CONSTRAINT poi_media_moderation_check CHECK (moderation_status IS NOT NULL);`),
+    []
+  );
+  // An earlier migration says what a name was, whatever its suffix.
+  const known = emptyKnown();
+  known.indexes.set('idx_slug', { table: 'pois', unique: true });
+  assert.deepEqual(
+    checkSql('DROP INDEX idx_slug; CREATE INDEX idx_slug ON pois (slug);', null, known).map((p) => p.why),
+    ['drops an index']
+  );
+  // A name nothing describes is never a replacement.
+  assert.deepEqual(why('DROP INDEX mystery; CREATE INDEX mystery ON pois (slug);'), ['drops an index']);
+});
+
+test('re-review 2: PRIMARY KEY, EXCLUDE and unique indexes are refused', () => {
+  assert.deepEqual(why('ALTER TABLE t ADD PRIMARY KEY (id);'), ['adds a PRIMARY KEY constraint']);
+  assert.deepEqual(why('ALTER TABLE t ADD CONSTRAINT t_pk PRIMARY KEY (id);'), ['adds a PRIMARY KEY constraint']);
+  assert.deepEqual(why('ALTER TABLE t ADD EXCLUDE USING gist (r WITH &&);'), ['adds an EXCLUDE constraint']);
+  assert.deepEqual(why('CREATE UNIQUE INDEX IF NOT EXISTS t_email ON t (email);'), ['adds a unique index']);
+  assert.deepEqual(why('CREATE UNIQUE INDEX t_email ON public.t (email);'), ['adds a unique index']);
+  // A unique index on a table this file creates has no old rows or writers.
+  assert.deepEqual(why('CREATE TABLE IF NOT EXISTS t (email TEXT); CREATE UNIQUE INDEX t_email ON t (email);'), []);
+});
+
+test('re-review 4: removing the re-create that excused an old drop is judged', () => {
+  const before = 'DROP INDEX x_key;\nSELECT 1;\nSELECT 2;\nSELECT 3;\nCREATE UNIQUE INDEX x_key ON t (a);\n';
+  const after = 'DROP INDEX x_key;\nSELECT 1;\nSELECT 2;\nSELECT 3;\n';
+  assert.deepEqual(why(before), []);
+  const changes = { ranges: [[4, 5]], removed: 'CREATE UNIQUE INDEX x_key ON t (a);\n' };
+  assert.deepEqual(checkSql(after, changes).map((p) => p.line), [1]);
+  // Weakening the re-create in place is judged the same way.
+  const weaker = before.replace('CREATE UNIQUE INDEX', 'CREATE INDEX');
+  assert.deepEqual(checkSql(weaker, { ranges: [[5, 5]], removed: '' }).map((p) => p.line), [1]);
 });

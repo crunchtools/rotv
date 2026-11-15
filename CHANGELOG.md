@@ -14,7 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tables, views, columns, functions, types, sequences and triggers, index and
   constraint drops that the file does not re-create, renames, column type
   changes, `SET NOT NULL`, a `NOT NULL` column with no default, and new
-  `UNIQUE`/`CHECK`/`FOREIGN KEY` constraints, in any new migration and in the
+  `UNIQUE`/`CHECK`/`FOREIGN KEY`/`PRIMARY KEY`/`EXCLUDE` constraints and
+  unique indexes, in any new migration and in the
   edited statements of an old one. The deliberate contract step opts out with
   `-- contract: <reason>` above the statement, one marker per statement (#897).
 
