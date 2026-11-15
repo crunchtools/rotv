@@ -474,23 +474,29 @@ export function selectFiles(all, changed) {
 }
 
 /**
- * What earlier migrations created, as seen by each migration: one ordered pass
- * over the files, a snapshot taken before each one, later names overwriting
+ * What earlier migrations created, as each checked file sees it: one ordered
+ * pass over the migrations, with a snapshot taken only for a checked file, of
+ * every migration sorting strictly before its basename. Later names overwrite
  * earlier ones.
  *
- * @param {string[]} files migration paths
+ * @param {string[]} all every migration path
+ * @param {string[]} checked the paths being judged, in `all` or not
  * @param {(file: string) => string} [read] returns a file's SQL
- * @returns {Map<string, Known>} each file's basename to what the files
- *   sorting before it create
+ * @returns {Map<string, Known>} each checked path to what came before it
  */
-export function histories(files, read = (f) => readFileSync(f, 'utf8')) {
+export function histories(all, checked, read = (f) => readFileSync(f, 'utf8')) {
+  const byBase = (x, y) => (basename(x) < basename(y) ? -1 : basename(x) > basename(y) ? 1 : 0);
+  const order = [...all].sort(byBase);
   const known = emptyKnown();
   const out = new Map();
-  for (const f of [...files].sort((x, y) => (basename(x) < basename(y) ? -1 : 1))) {
-    out.set(basename(f), { indexes: new Map(known.indexes), constraints: new Map(known.constraints) });
-    const made = catalog(statements(read(f)));
-    for (const [n, info] of made.indexes) known.indexes.set(n, info);
-    for (const [n, info] of made.constraints) known.constraints.set(n, info);
+  let i = 0;
+  for (const file of [...checked].sort(byBase)) {
+    for (; i < order.length && basename(order[i]) < basename(file); i += 1) {
+      const made = catalog(statements(read(order[i])));
+      for (const [n, info] of made.indexes) known.indexes.set(n, info);
+      for (const [n, info] of made.constraints) known.constraints.set(n, info);
+    }
+    out.set(file, { indexes: new Map(known.indexes), constraints: new Map(known.constraints) });
   }
   return out;
 }
@@ -511,14 +517,11 @@ function main(argv) {
   let files = named.map((f) => [f, null]);
   if (!files.length) files = selectFiles(all, base ? changedSince(base) : new Map());
 
-  // Files named on the command line join the pass, so each sees what sorts before it.
-  const outside = files.map(([f]) => f).filter((f) => existsSync(f) && !all.includes(f));
-  const shadowed = new Set(outside.map((f) => basename(f)));
-  const before = histories([...all.filter((f) => !shadowed.has(basename(f))), ...outside]);
+  files = files.filter(([f]) => existsSync(f));
+  const before = histories(all, files.map(([f]) => f));
   let bad = 0;
   for (const [file, changes] of files) {
-    if (!existsSync(file)) continue;
-    const known = before.get(basename(file)) ?? emptyKnown();
+    const known = before.get(file);
     for (const p of checkSql(readFileSync(file, 'utf8'), changes, known)) {
       console.log(`${file}:${p.line}: ${p.why}: ${p.code}`);
       bad += 1;

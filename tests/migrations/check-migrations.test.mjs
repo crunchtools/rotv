@@ -304,7 +304,9 @@ test('re-review 1: earlier migrations tell a later one what a dropped name was',
     '002_more.sql': 'ALTER TABLE pois ADD CONSTRAINT chk_slug CHECK (slug <> \'\');',
     '003_later.sql': '',
   };
-  const seen = histories(Object.keys(files).reverse(), (f) => files[f]);
+  const all = Object.keys(files).reverse();
+  const seen = histories(all, ['001_tables.sql', '003_later.sql'], (f) => files[f]);
+  assert.deepEqual([...seen.keys()].sort(), ['001_tables.sql', '003_later.sql']);
   assert.deepEqual([...seen.get('001_tables.sql').constraints], []);
   const known = seen.get('003_later.sql');
   assert.deepEqual(known.constraints.get('pois_one_slug'), { table: 'pois', kind: 'UNIQUE' });
@@ -329,4 +331,22 @@ test('re-review 4: removing a constraint re-create judges its drop, and only its
   // Weakening a constraint re-create into another kind brings the drop in too.
   const weaker = after.replace('ADD CONSTRAINT u_n_check CHECK (n >= 0)', 'ADD CONSTRAINT u_n_check UNIQUE (n)');
   assert.deepEqual(checkSql(weaker, { ranges: [[3, 3]], removed: '' }).map((p) => p.line), [2, 3]);
+});
+
+test('re-review 1: a file named from outside the directory sees what sorts before it', () => {
+  const files = {
+    'm/001_a.sql': "ALTER TABLE t ADD CONSTRAINT t_a CHECK (a > 0);",
+    'm/002_b.sql': 'CREATE UNIQUE INDEX t_b ON t (b);',
+    'm/003_c.sql': 'CREATE INDEX t_c ON t (c);',
+    'elsewhere/002_b.sql': '',
+    'elsewhere/010_z.sql': '',
+  };
+  const all = ['m/001_a.sql', 'm/002_b.sql', 'm/003_c.sql'];
+  const seen = histories(all, ['elsewhere/002_b.sql', 'm/002_b.sql', 'elsewhere/010_z.sql'], (f) => files[f]);
+  // Each path keeps its own snapshot; a shared basename sees only what sorts before it, never itself.
+  for (const f of ['elsewhere/002_b.sql', 'm/002_b.sql']) {
+    assert.deepEqual([...seen.get(f).constraints.keys()], ['t_a']);
+    assert.deepEqual([...seen.get(f).indexes.keys()], []);
+  }
+  assert.deepEqual([...seen.get('elsewhere/010_z.sql').indexes.keys()].sort(), ['t_b', 't_c']);
 });
