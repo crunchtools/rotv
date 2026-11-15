@@ -23,6 +23,38 @@ jobs:
       - name: No unbraced || true inside RUN chains
         run: tests/image/lint-containerfiles.sh
 
+  migration-compat:
+    # A rollback swaps the image and keeps the database, so the previous
+    # release must still run on the schema this one migrates to (#897).
+    name: Migration compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # The whole history, so an edit to an existing migration can be
+          # found by diffing against the base.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: Checker tests
+        run: node --test tests/migrations/*.test.mjs
+
+      - name: Migrations keep the previous release working
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && git rev-parse -q --verify "$BASE^{commit}" >/dev/null; then
+            node scripts/check-migrations.mjs --base "$BASE"
+          else
+            node scripts/check-migrations.mjs
+          fi
+
   test:
     name: Application Tests
     runs-on: ubuntu-latest
