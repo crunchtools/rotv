@@ -1,7 +1,7 @@
 // Run: node --test tests/migrations/*.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BASELINE, checkSql, emptyKnown, parseDiff, selectFiles, statements } from '../../scripts/check-migrations.mjs';
+import { BASELINE, checkSql, emptyKnown, histories, parseDiff, selectFiles, statements } from '../../scripts/check-migrations.mjs';
 
 const why = (sql) => checkSql(sql).map((p) => p.why);
 
@@ -294,4 +294,39 @@ test('re-review 4: removing the re-create that excused an old drop is judged', (
   // Weakening the re-create in place is judged the same way.
   const weaker = before.replace('CREATE UNIQUE INDEX', 'CREATE INDEX');
   assert.deepEqual(checkSql(weaker, { ranges: [[5, 5]], removed: '' }).map((p) => p.line), [1]);
+});
+
+test('re-review 1: earlier migrations tell a later one what a dropped name was', () => {
+  const files = {
+    '001_tables.sql': `CREATE TABLE IF NOT EXISTS pois (
+        id SERIAL, slug TEXT, CONSTRAINT pois_one_slug UNIQUE (slug));
+      CREATE UNIQUE INDEX idx_pois_name ON pois (name);`,
+    '002_more.sql': 'ALTER TABLE pois ADD CONSTRAINT chk_slug CHECK (slug <> \'\');',
+    '003_later.sql': '',
+  };
+  const seen = histories(Object.keys(files).reverse(), (f) => files[f]);
+  assert.deepEqual([...seen.get('001_tables.sql').constraints], []);
+  const known = seen.get('003_later.sql');
+  assert.deepEqual(known.constraints.get('pois_one_slug'), { table: 'pois', kind: 'UNIQUE' });
+  assert.deepEqual(known.constraints.get('chk_slug'), { table: 'pois', kind: 'CHECK' });
+  assert.deepEqual(known.indexes.get('idx_pois_name'), { table: 'pois', unique: true });
+  // The UNIQUE named in CREATE TABLE cannot come back as a CHECK.
+  const swap = 'ALTER TABLE pois DROP CONSTRAINT pois_one_slug; ALTER TABLE pois ADD CONSTRAINT pois_one_slug CHECK (true);';
+  assert.equal(checkSql(swap, null, known).length, 2);
+  assert.deepEqual(checkSql('ALTER TABLE pois DROP CONSTRAINT chk_slug; ALTER TABLE pois ADD CONSTRAINT chk_slug CHECK (slug IS NOT NULL);', null, known), []);
+  assert.deepEqual(checkSql('DROP INDEX idx_pois_name; CREATE INDEX idx_pois_name ON pois (name);', null, known).length, 1);
+});
+
+test('re-review 4: removing a constraint re-create judges its drop, and only its drop', () => {
+  const after = [
+    'ALTER TABLE t DROP CONSTRAINT t_n_check;',
+    'ALTER TABLE u DROP CONSTRAINT u_n_check;',
+    'ALTER TABLE u ADD CONSTRAINT u_n_check CHECK (n >= 0);',
+    'SELECT 1;',
+  ].join('\n');
+  const changes = { ranges: [[4, 5]], removed: 'ALTER TABLE t ADD CONSTRAINT t_n_check CHECK (n >= 0);\n' };
+  assert.deepEqual(checkSql(after, changes).map((p) => p.line), [1]);
+  // Weakening a constraint re-create into another kind brings the drop in too.
+  const weaker = after.replace('ADD CONSTRAINT u_n_check CHECK (n >= 0)', 'ADD CONSTRAINT u_n_check UNIQUE (n)');
+  assert.deepEqual(checkSql(weaker, { ranges: [[3, 3]], removed: '' }).map((p) => p.line), [2, 3]);
 });

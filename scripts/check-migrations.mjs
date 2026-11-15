@@ -474,20 +474,25 @@ export function selectFiles(all, changed) {
 }
 
 /**
- * The indexes and constraints a run of migrations creates, later names
- * overwriting earlier ones.
+ * What earlier migrations created, as seen by each migration: one ordered pass
+ * over the files, a snapshot taken before each one, later names overwriting
+ * earlier ones.
  *
- * @param {string[]} files migration paths, in the order they run
- * @returns {Known} what they create, by name
+ * @param {string[]} files migration paths
+ * @param {(file: string) => string} [read] returns a file's SQL
+ * @returns {Map<string, Known>} each file's basename to what the files
+ *   sorting before it create
  */
-function history(files) {
+export function histories(files, read = (f) => readFileSync(f, 'utf8')) {
   const known = emptyKnown();
-  for (const f of files) {
-    const made = catalog(statements(readFileSync(f, 'utf8')));
+  const out = new Map();
+  for (const f of [...files].sort((x, y) => (basename(x) < basename(y) ? -1 : 1))) {
+    out.set(basename(f), { indexes: new Map(known.indexes), constraints: new Map(known.constraints) });
+    const made = catalog(statements(read(f)));
     for (const [n, info] of made.indexes) known.indexes.set(n, info);
     for (const [n, info] of made.constraints) known.constraints.set(n, info);
   }
-  return known;
+  return out;
 }
 
 function main(argv) {
@@ -506,10 +511,14 @@ function main(argv) {
   let files = named.map((f) => [f, null]);
   if (!files.length) files = selectFiles(all, base ? changedSince(base) : new Map());
 
+  // Files named on the command line join the pass, so each sees what sorts before it.
+  const outside = files.map(([f]) => f).filter((f) => existsSync(f) && !all.includes(f));
+  const shadowed = new Set(outside.map((f) => basename(f)));
+  const before = histories([...all.filter((f) => !shadowed.has(basename(f))), ...outside]);
   let bad = 0;
   for (const [file, changes] of files) {
     if (!existsSync(file)) continue;
-    const known = history(all.filter((f) => basename(f) < basename(file)));
+    const known = before.get(basename(file)) ?? emptyKnown();
     for (const p of checkSql(readFileSync(file, 'utf8'), changes, known)) {
       console.log(`${file}:${p.line}: ${p.why}: ${p.code}`);
       bad += 1;
