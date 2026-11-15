@@ -121,7 +121,7 @@ cp .specify/templates/plan-template.md .specify/specs/XXX-feature/plan.md
 
 ### Database (PostgreSQL 17 + PostGIS)
 - Schema created by `backend/server.js` initDatabase() on first run
-- Migrations in `backend/migrations/*.sql` — run by rotv-init.service on every container boot, so they must be idempotent
+- Migrations in `backend/migrations/*.sql` — run by rotv-init.service on every container boot, so they must be idempotent and backward-compatible with the previous release
 - Seed data: `backend/tests/fixtures/test-seed-data.sql` (INSERT-only, no schema, no poi_media rows)
 
 ### Tests
@@ -173,7 +173,9 @@ so no `./run.sh`. `D` below is `/srv/dev.rootsofthevalley.org/data`.
 - Shipping: `/deploy` (`.claude/skills/deploy/`) merges, waits for the build and restarts the production unit through the gateway's systemd tool.
 
 ### Gotchas
-- `CREATE OR REPLACE VIEW` fails if columns changed — must DROP first
+- `CREATE OR REPLACE VIEW` that only appends columns at the end is compatible; any other column change fails in place, and dropping the view breaks the previous release, so create a new view name instead
+- After a rollback the old image re-runs its own `/app/migrations` on the newer schema (rotv-init.sh, no `ON_ERROR_STOP`, failures only logged), so an old `DROP ... IF EXISTS` can delete what a later release re-added. Keep old migrations idempotent and non-destructive
+- Migrations must keep the previous release working (a rollback swaps only the image): no drops, renames, type changes, `SET NOT NULL` or new `UNIQUE`/`CHECK`/`FOREIGN KEY`/`PRIMARY KEY` constraints or unique indexes on anything it still uses. The contract step ships a release later behind `-- contract: <reason>`, one marker per statement (inside a `DO` block too). No DDL built at run time with `EXECUTE`. See CONTRIBUTING.md "Database migrations"; CI enforces it
 - Migrations re-run on every boot (rotv-init.sh runs all of them in order) — write them idempotent and guard one-time backfills
 - Test seed data is INSERT-only with no schema (server creates schema)
 - Multiple Claude Code sessions clobber each other's containers (same name/port)

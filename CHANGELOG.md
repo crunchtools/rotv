@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Migrations must keep the previous release working, so the deployer can roll
+  back by image alone. A `Migration compatibility` CI job refuses drops of
+  tables, views, columns, functions, types, sequences and triggers, index and
+  constraint drops that the file does not re-create, renames, column type
+  changes, `SET NOT NULL`, a `NOT NULL` column with no default, and new
+  `UNIQUE`/`CHECK`/`FOREIGN KEY`/`PRIMARY KEY`/`EXCLUDE` constraints and
+  unique indexes, in any new migration and in the
+  edited statements of an old one. The deliberate contract step opts out with
+  `-- contract: <reason>` above the statement, one marker per statement (#897).
+
 ## [1.70.0] - 2026-11-13
 
 ### Added
