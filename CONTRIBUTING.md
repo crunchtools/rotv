@@ -64,10 +64,17 @@ produces: expand now, contract in a later release
 
 A migration must not, on anything the previous release still reads or writes:
 
-- drop a table, view, materialized view, schema or column;
-- rename a table, view or column;
+- drop a table, view, materialized view, schema, column, function, type,
+  sequence or trigger;
+- drop an index or a constraint, unless the same file creates it again under
+  the same name (dropping a `CHECK` and adding it back wider is fine);
+- rename a table, view, column, index, function, sequence, type or enum value;
 - change a column's type, or tighten it with `SET NOT NULL`;
-- add a `NOT NULL` column without a `DEFAULT` (the old code's `INSERT`s omit it).
+- add a `NOT NULL` column without a `DEFAULT` (the old code's `INSERT`s omit
+  it; `DEFAULT NULL` is no default);
+- add a `UNIQUE`, `CHECK` or `FOREIGN KEY` constraint (the old code may write
+  rows that violate it), unless it replaces one of the same name dropped in
+  the same file.
 
 To remove or rename something, ship the new shape and the code that uses it in
 one release, and the removal in a later one, once the release before it no
@@ -81,9 +88,27 @@ ALTER TABLE pois DROP COLUMN IF EXISTS legacy_flag;
 
 The `Migration compatibility` CI job enforces this with
 `scripts/check-migrations.mjs`, over every migration numbered above 112 and any
-existing migration a PR edits. The marker opts out one statement, not the file.
-A view whose columns change is replaced with a new view name, not dropped and
-recreated in place.
+existing migration a PR edits. An edit to a migration numbered 112 or below is
+judged only on the statements it touches.
+
+A marker opts out exactly one statement: the next one, or the one it sits
+inside. A marker after a statement's semicolon on the same line belongs to that
+statement, not the next. Inside a `DO` block or function body every statement
+counts on its own, so each contract statement there needs its own marker.
+
+The checker reads the SQL as written, so do not build DDL at run time
+(`EXECUTE` of a concatenated or `format()`ed string): it cannot be judged.
+
+`CREATE OR REPLACE VIEW` that only appends new columns at the end of the select
+list is compatible. Postgres refuses any other column change in place, and
+dropping the view breaks the previous release, so a view whose existing columns
+change gets a new view name instead.
+
+After a rollback, the old image runs its own `/app/migrations` on the newer
+schema at boot (`rotv-init.sh` runs them with no `ON_ERROR_STOP` and only logs
+failures). An old `DROP ... IF EXISTS` then runs again, and deletes anything a
+later release added back under that name. Keep every migration idempotent and
+non-destructive on re-run.
 
 ## Code Style
 
