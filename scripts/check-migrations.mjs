@@ -151,8 +151,11 @@ export function statements(sql) {
         else j += 1;
       }
       const body = sql.slice(i + 1, j).replaceAll("''", "'");
+      // Fix: pick a delimiter the body cannot contain, so it never closes early (PR #901 review)
+      let tagName = '__body';
+      while (body.includes(`$${tagName}$`)) tagName += '_';
       resume = { sql, i: j + 1 };
-      sql = `$__body$${body}$__body$`;
+      sql = `$${tagName}$${body}$${tagName}$`;
       i = 0;
       continue;
     }
