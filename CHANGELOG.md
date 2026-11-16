@@ -13,6 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `DEFAULT(NULL)` written without a space, DDL inside an `AS E'…'` function
   body, and every `DROP DOMAIN` / `DROP EXTENSION`, not only those with
   `CASCADE` (#899 follow-up to #901).
+- An OpenRouter credit or key failure during news and events collection now
+  turns `/api/health/collection` CRITICAL. Pages that failed on the provider
+  were dropped without a trace, so a run with an exhausted OpenRouter key
+  ended "completed" with zero items. The first such failure in each batch is
+  now logged with its `error_class`. A missing Serper or OpenRouter key counts
+  as an auth failure, and an OpenRouter 403 for a moderation-flagged page does
+  not page anyone (#888).
 
 ## [1.71.0] - 2026-11-15
 
