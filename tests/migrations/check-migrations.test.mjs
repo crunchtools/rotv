@@ -421,6 +421,11 @@ test('#901 follow-up 2: an E-string body is code, escapes and all', () => {
     ['drops a column']
   );
   assert.deepEqual(why("DO E'BEGIN RAISE NOTICE \\'it\\'\\'s\\'; DROP TABLE x; END';"), ['drops a table']);
+  // A quote written as \\x27, \\047 or \\u0027 is a quote: the -- inside it is not a comment.
+  for (const quote of ['\\x27', '\\047', '\\u0027']) {
+    const sql = `DO E'BEGIN RAISE NOTICE ${quote}-- x${quote}; DROP TABLE x; END';`;
+    assert.deepEqual(why(sql), ['drops a table'], sql);
+  }
   // Scanning resumes after the body, and an e that is part of a word is not a prefix.
   assert.deepEqual(why("DO E'BEGIN NULL; END'; ALTER TABLE t DROP COLUMN c;"), ['drops a column']);
   assert.deepEqual(why("SELECT 1 AS e, 'DROP TABLE z' AS note;"), []);

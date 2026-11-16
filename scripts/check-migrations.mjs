@@ -151,11 +151,9 @@ export function statements(sql) {
         else if (sql[j] === "'") break;
         else j += 1;
       }
-      let body = sql.slice(i + 1, j).replaceAll("''", "'");
-      if (escapes) {
-        body = body.replace(/\\(.)/gs, '$1');
-        code = code.slice(0, -1);
-      }
+      const raw = sql.slice(i + 1, j);
+      const body = escapes ? decodeEscapes(raw) : raw.replaceAll("''", "'");
+      if (escapes) code = code.slice(0, -1);
       // Fix: pick a delimiter the body cannot contain, so it never closes early (PR #901 review)
       let tagName = '__body';
       while (body.includes(`$${tagName}$`)) tagName += '_';
@@ -195,6 +193,27 @@ export function statements(sql) {
   }
   flush();
   return out;
+}
+
+const LETTER_ESCAPES = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+
+/**
+ * The text of an E'...' string, decoded in one left-to-right pass, so an
+ * escaped quote (\', \x27, \047, \u0027) is a quote in the body it scans.
+ *
+ * @param {string} raw the characters between the quotes, as written
+ * @returns {string} the string's value
+ */
+function decodeEscapes(raw) {
+  return raw.replace(
+    /''|\\(x[0-9A-Fa-f]{1,2}|[0-7]{1,3}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[\s\S])/g,
+    (all, esc) => {
+      if (all === "''") return "'";
+      if (/^[0-7]/.test(esc)) return String.fromCodePoint(parseInt(esc, 8));
+      if (/^[xuU]./.test(esc)) return String.fromCodePoint(parseInt(esc.slice(1), 16));
+      return LETTER_ESCAPES[esc] ?? esc;
+    }
+  );
 }
 
 /** A name as Postgres resolves it: quoted kept as written, unquoted folded. */
