@@ -100,7 +100,15 @@ export function statements(sql) {
     else comments += text + '\n';
   };
   const dollarTag = /\$([A-Za-z_][A-Za-z0-9_]*)?\$/y;
-  while (i < sql.length) {
+  // A single-quoted body is scanned as a dollar-quoted one: the text to resume
+  // afterwards is parked here, so the source is never copied.
+  let resume = null;
+  while (i < sql.length || resume) {
+    if (i >= sql.length) {
+      ({ sql, i } = resume);
+      resume = null;
+      continue;
+    }
     const ch = sql[i];
     if (ch === '\n') trailing = false;
     const isComment = sql.startsWith('--', i) || sql.startsWith('/*', i);
@@ -143,7 +151,9 @@ export function statements(sql) {
         else j += 1;
       }
       const body = sql.slice(i + 1, j).replaceAll("''", "'");
-      sql = `${sql.slice(0, i)}$__body$${body}$__body$${sql.slice(j + 1)}`;
+      resume = { sql, i: j + 1 };
+      sql = `$__body$${body}$__body$`;
+      i = 0;
       continue;
     }
     if (ch === "'" || ch === '"') {
