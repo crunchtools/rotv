@@ -41,6 +41,13 @@ describe('classifyProviderError', () => {
     expect(classifyProviderError(flagged('Error: invalid api key for the park camera feed'))).toBeNull();
   });
 
+  it('names the provider from the error prefix, not from text the body quotes', () => {
+    expect(classifyProviderError(new Error('OpenRouter returned 402: {"error":{"message":"Serper-style quota, out of credits"}}')))
+      .toEqual({ provider: 'openrouter', error_class: 'quota_exhausted' });
+    expect(classifyProviderError(new Error('Serper API error (news): 401 - {"message":"OpenRouter proxy said no"}')))
+      .toEqual({ provider: 'serper', error_class: 'auth_failed' });
+  });
+
   it('ignores other errors', () => {
     expect(classifyProviderError(new Error('Serper API error (news): 500 - oops'))).toBeNull();
     expect(classifyProviderError(new Error('OpenRouter returned 503'))).toBeNull();

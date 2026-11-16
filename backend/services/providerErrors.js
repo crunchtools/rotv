@@ -10,9 +10,10 @@ export function classifyProviderError(error) {
   const message = typeof error === 'string' ? error : error?.message;
   if (!message) return null;
 
-  const serper = /Serper/i.test(message);
-  const openrouter = /OpenRouter/i.test(message);
-  const provider = serper ? 'serper' : openrouter ? 'openrouter' : 'unknown';
+  // By the prefix serperService and llmService put on their own errors: a body
+  // further along can quote either name (#902 review)
+  const provider = /^Serper API /.test(message) ? 'serper'
+    : /^(?:OpenRouter |Invalid OpenRouter API key)/.test(message) ? 'openrouter' : 'unknown';
   const status = message.match(/\b(?:returned|\)\:) ?(\d{3})\b/)?.[1];
 
   // OpenRouter also answers 403 when a moderated model flags one input. That is
