@@ -41,7 +41,8 @@ export function firstProviderFailure(results) {
   for (const result of results) {
     if (!(result instanceof Error)) continue;
     const details = classifyProviderError(result);
-    if (details) return { message: result.message, details };
+    // Fix: a non-provider Error quoting "returned 403" must not page (#904)
+    if (details && details.provider !== 'unknown') return { message: result.message, details };
   }
   return null;
 }
