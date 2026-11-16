@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The migration compatibility check now also refuses `SET GENERATED ALWAYS`,
+  `DEFAULT(NULL)` written without a space, DDL inside an `AS E'…'` function
+  body, and every `DROP DOMAIN` / `DROP EXTENSION`, not only those with
+  `CASCADE` (#899 follow-up to #901).
+
 ## [1.71.0] - 2026-11-15
 
 ### Added

@@ -65,7 +65,7 @@ produces: expand now, contract in a later release
 A migration must not, on anything the previous release still reads or writes:
 
 - drop a table, view, materialized view, schema, column, function, type,
-  sequence or trigger;
+  sequence, trigger, domain or extension, with or without `CASCADE`;
 - drop an index or a constraint, unless the same file creates it again under
   the same name, as the same kind of object, on the same table, and at least
   as unique (a unique index comes back unique). CI checks the name, kind,
@@ -77,9 +77,8 @@ A migration must not, on anything the previous release still reads or writes:
 - rename a table, view, column, index, function, sequence, type or enum value;
 - change a column's type, or tighten it with `SET NOT NULL`;
 - add a `NOT NULL` column without a `DEFAULT` (the old code's `INSERT`s omit
-  it; `DEFAULT NULL` is no default);
-- drop a column's `DEFAULT`, make it `GENERATED ALWAYS`, or `DROP DOMAIN` /
-  `DROP EXTENSION` with `CASCADE`;
+  it; `DEFAULT NULL` or `DEFAULT (NULL)` is no default);
+- drop a column's `DEFAULT`, or make it `GENERATED ALWAYS` (`ADD` or `SET`);
 - add a `UNIQUE`, `CHECK`, `FOREIGN KEY`, `PRIMARY KEY` or `EXCLUDE`
   constraint, or a unique index (`CREATE UNIQUE INDEX`): the old code may
   write rows that violate it. Exempt are a replacement as above, and a unique
