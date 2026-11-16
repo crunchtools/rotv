@@ -799,7 +799,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       }
     }
 
-    await runConcurrent(toProcess.map(url => async () => {
+    const levelResults = await runConcurrent(toProcess.map(url => async () => {
       checkCancellation();
       if (totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
       totalPagesRendered++;
@@ -842,6 +842,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Skip] Not a ${contentType} page: ${url} (${classification.reasoning})`);
       }
     }), 3, 2000);
+    logProviderFailure(levelResults, jobId, jobType, poi, phase);
   }
 
   await processLevel([startUrl], 0);
