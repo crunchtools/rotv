@@ -78,6 +78,8 @@ A migration must not, on anything the previous release still reads or writes:
 - change a column's type, or tighten it with `SET NOT NULL`;
 - add a `NOT NULL` column without a `DEFAULT` (the old code's `INSERT`s omit
   it; `DEFAULT NULL` is no default);
+- drop a column's `DEFAULT`, make it `GENERATED ALWAYS`, or `DROP DOMAIN` /
+  `DROP EXTENSION` with `CASCADE`;
 - add a `UNIQUE`, `CHECK`, `FOREIGN KEY`, `PRIMARY KEY` or `EXCLUDE`
   constraint, or a unique index (`CREATE UNIQUE INDEX`): the old code may
   write rows that violate it. Exempt are a replacement as above, and a unique

@@ -16,6 +16,8 @@
 //     CONSTRAINT),
 //   ALTER [COLUMN] ... TYPE, ALTER [COLUMN] ... SET NOT NULL,
 //   ADD [COLUMN] ... NOT NULL with no DEFAULT (the old code's INSERTs omit it),
+//   ALTER [COLUMN] ... DROP DEFAULT, ALTER [COLUMN] ... ADD GENERATED ALWAYS,
+//   DROP DOMAIN / DROP EXTENSION ... CASCADE,
 //   ADD [CONSTRAINT x] UNIQUE / CHECK / FOREIGN KEY / PRIMARY KEY / EXCLUDE and
 //     CREATE UNIQUE INDEX (old writes may violate it), unless it is such a
 //     replacement, or the index is on a table the file creates.
@@ -52,6 +54,7 @@ const RULES = [
   [/\bDROP\s+(TABLE|VIEW|MATERIALIZED\s+VIEW|SCHEMA|FUNCTION|TYPE|SEQUENCE|TRIGGER)\b/, 'drops $1'],
   [/\bALTER\s+(TABLE|VIEW|MATERIALIZED\s+VIEW)\b.*\bRENAME\b(?!\s+CONSTRAINT\b)/, 'renames a table, view or column'],
   [/\bALTER\s+(TYPE|INDEX|FUNCTION|SEQUENCE)\b.*\bRENAME\b/, 'renames $1 or its values'],
+  [/\bDROP\s+(DOMAIN|EXTENSION)\b.*\bCASCADE\b/, 'drops $1 with CASCADE'],
 ];
 
 /** `index` -> `an index`. */
@@ -70,7 +73,7 @@ const CONTRACT = /--\s*contract:\s*\S/i;
  *   one entry per statement: `code` is the statement with comments removed and
  *   whitespace collapsed; `comments` is every comment before or in it, plus a
  *   comment trailing its semicolon on the same line, one per line; `line` and
- *   `end` are the 1-based lines its first comment or code and its end are on.
+ *   `end` are the 1-based lines its first code and its end are on.
  */
 export function statements(sql) {
   const out = [];
@@ -101,7 +104,7 @@ export function statements(sql) {
     const ch = sql[i];
     if (ch === '\n') trailing = false;
     const isComment = sql.startsWith('--', i) || sql.startsWith('/*', i);
-    if (!started && !/\s/.test(ch) && !(trailing && isComment)) {
+    if (!started && !/\s/.test(ch) && !isComment) {
       started = true;
       trailing = false;
       startLine = line;
@@ -129,6 +132,18 @@ export function statements(sql) {
       dollar = dollar === tag[0] ? null : dollar ?? tag[0];
       code += ' ';
       i += tag[0].length;
+      continue;
+    }
+    // A single-quoted body (DO '...', AS '...') is code, like a dollar-quoted one.
+    if (ch === "'" && !dollar && /\b(?:DO(?:\s+LANGUAGE\s+\w+)?|AS)\s*$/i.test(code)) {
+      let j = i + 1;
+      while (j < sql.length) {
+        if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
+        else if (sql[j] === "'") break;
+        else j += 1;
+      }
+      const body = sql.slice(i + 1, j).replaceAll("''", "'");
+      sql = `${sql.slice(0, i)}$__body$${body}$__body$${sql.slice(j + 1)}`;
       continue;
     }
     if (ch === "'" || ch === '"') {
@@ -325,6 +340,12 @@ function actionViolation(action, table, file, known) {
   if (new RegExp(`^ALTER\\s+(?:COLUMN\\s+)?${IDENT}\\s+SET\\s+NOT\\s+NULL\\b`, 'i').test(action)) {
     return 'tightens a column to NOT NULL';
   }
+  if (new RegExp(`^ALTER\\s+(?:COLUMN\\s+)?${IDENT}\\s+DROP\\s+DEFAULT\\b`, 'i').test(action)) {
+    return 'drops a column DEFAULT';
+  }
+  if (new RegExp(`^ALTER\\s+(?:COLUMN\\s+)?${IDENT}\\s+ADD\\s+GENERATED\\s+ALWAYS\\b`, 'i').test(action)) {
+    return 'makes a column GENERATED ALWAYS';
+  }
   if ((m = action.match(ADD_CONSTRAINT))) {
     if (m[1] && replacesConstraint(ident(m[1]), table, file, known)) return null;
     const what = kind(m[2]);
@@ -332,7 +353,7 @@ function actionViolation(action, table, file, known) {
   }
   m = action.match(new RegExp(`^ADD\\s+(?:COLUMN\\s+)?(?:IF\\s+NOT\\s+EXISTS\\s+)?${IDENT}`, 'i'));
   if (m && !CONSTRAINT_WORDS.test(m[1])) {
-    const rest = action.slice(m[0].length).replace(/\bDEFAULT\s+NULL\b(\s*::\s*[\w.]+)?/gi, ' ');
+    const rest = action.slice(m[0].length).replace(/\bDEFAULT\s+\(*\s*NULL\b(?:\s*::\s*[\w.]+)?\s*\)*(?:\s*::\s*[\w.]+)?/gi, ' ');
     if (/\bNOT\s+NULL\b/i.test(rest) && !/\b(DEFAULT|GENERATED)\b/i.test(rest)) {
       return 'adds a NOT NULL column with no DEFAULT';
     }
