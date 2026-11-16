@@ -9,15 +9,14 @@
 //
 // Refused, per statement:
 //   DROP TABLE / VIEW / MATERIALIZED VIEW / SCHEMA / FUNCTION / TYPE /
-//     SEQUENCE / TRIGGER, ALTER TABLE ... DROP [COLUMN],
+//     SEQUENCE / TRIGGER / DOMAIN / EXTENSION, ALTER TABLE ... DROP [COLUMN],
 //   DROP INDEX and DROP CONSTRAINT, unless the same file re-creates the name
 //     as the same kind of object, on the same table, at least as unique,
 //   ALTER TABLE|VIEW|TYPE|INDEX|FUNCTION|SEQUENCE ... RENAME (not RENAME
 //     CONSTRAINT),
 //   ALTER [COLUMN] ... TYPE, ALTER [COLUMN] ... SET NOT NULL,
 //   ADD [COLUMN] ... NOT NULL with no DEFAULT (the old code's INSERTs omit it),
-//   ALTER [COLUMN] ... DROP DEFAULT, ALTER [COLUMN] ... ADD GENERATED ALWAYS,
-//   DROP DOMAIN / DROP EXTENSION ... CASCADE,
+//   ALTER [COLUMN] ... DROP DEFAULT, ALTER [COLUMN] ... ADD|SET GENERATED ALWAYS,
 //   ADD [CONSTRAINT x] UNIQUE / CHECK / FOREIGN KEY / PRIMARY KEY / EXCLUDE and
 //     CREATE UNIQUE INDEX (old writes may violate it), unless it is such a
 //     replacement, or the index is on a table the file creates.
@@ -51,10 +50,9 @@ export const MIGRATIONS_DIR = 'backend/migrations';
 const IDENT = '((?:"[^"]+"|[^\\s,()"])+)';
 
 const RULES = [
-  [/\bDROP\s+(TABLE|VIEW|MATERIALIZED\s+VIEW|SCHEMA|FUNCTION|TYPE|SEQUENCE|TRIGGER)\b/, 'drops $1'],
+  [/\bDROP\s+(TABLE|VIEW|MATERIALIZED\s+VIEW|SCHEMA|FUNCTION|TYPE|SEQUENCE|TRIGGER|DOMAIN|EXTENSION)\b/, 'drops $1'],
   [/\bALTER\s+(TABLE|VIEW|MATERIALIZED\s+VIEW)\b.*\bRENAME\b(?!\s+CONSTRAINT\b)/, 'renames a table, view or column'],
   [/\bALTER\s+(TYPE|INDEX|FUNCTION|SEQUENCE)\b.*\bRENAME\b/, 'renames $1 or its values'],
-  [/\bDROP\s+(DOMAIN|EXTENSION)\b.*\bCASCADE\b/, 'drops $1 with CASCADE'],
 ];
 
 /** `index` -> `an index`. */
@@ -142,15 +140,20 @@ export function statements(sql) {
       i += tag[0].length;
       continue;
     }
-    // A single-quoted body (DO '...', AS '...') is code, like a dollar-quoted one.
-    if (ch === "'" && !dollar && /\b(?:DO(?:\s+LANGUAGE\s+\w+)?|AS)\s*$/i.test(code)) {
+    // A single-quoted body (DO '...', AS '...', AS E'...') is code, like a dollar-quoted one.
+    const quotedBody = ch === "'" && !dollar && code.match(/\b(?:DO(?:\s+LANGUAGE\s+\w+)?|AS)(?:\s*|\s+(E))$/i);
+    if (quotedBody) {
+      const escapes = Boolean(quotedBody[1]);
       let j = i + 1;
       while (j < sql.length) {
-        if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
+        if (escapes && sql[j] === '\\') j += 2;
+        else if (sql[j] === "'" && sql[j + 1] === "'") j += 2;
         else if (sql[j] === "'") break;
         else j += 1;
       }
-      const body = sql.slice(i + 1, j).replaceAll("''", "'");
+      const raw = sql.slice(i + 1, j);
+      const body = escapes ? decodeEscapes(raw) : raw.replaceAll("''", "'");
+      if (escapes) code = code.slice(0, -1);
       // Fix: pick a delimiter the body cannot contain, so it never closes early (PR #901 review)
       let tagName = '__body';
       while (body.includes(`$${tagName}$`)) tagName += '_';
@@ -190,6 +193,27 @@ export function statements(sql) {
   }
   flush();
   return out;
+}
+
+const LETTER_ESCAPES = { b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
+
+/**
+ * The text of an E'...' string, decoded in one left-to-right pass, so an
+ * escaped quote (\', \x27, \047, \u0027) is a quote in the body it scans.
+ *
+ * @param {string} raw the characters between the quotes, as written
+ * @returns {string} the string's value
+ */
+function decodeEscapes(raw) {
+  return raw.replace(
+    /''|\\(x[0-9A-Fa-f]{1,2}|[0-7]{1,3}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|[\s\S])/g,
+    (all, esc) => {
+      if (all === "''") return "'";
+      if (/^[0-7]/.test(esc)) return String.fromCodePoint(parseInt(esc, 8));
+      if (/^[xuU]./.test(esc)) return String.fromCodePoint(parseInt(esc.slice(1), 16));
+      return LETTER_ESCAPES[esc] ?? esc;
+    }
+  );
 }
 
 /** A name as Postgres resolves it: quoted kept as written, unquoted folded. */
@@ -356,7 +380,7 @@ function actionViolation(action, table, file, known) {
   if (new RegExp(`^ALTER\\s+(?:COLUMN\\s+)?${IDENT}\\s+DROP\\s+DEFAULT\\b`, 'i').test(action)) {
     return 'drops a column DEFAULT';
   }
-  if (new RegExp(`^ALTER\\s+(?:COLUMN\\s+)?${IDENT}\\s+ADD\\s+GENERATED\\s+ALWAYS\\b`, 'i').test(action)) {
+  if (new RegExp(`^ALTER\\s+(?:COLUMN\\s+)?${IDENT}\\s+(?:ADD|SET)\\s+GENERATED\\s+ALWAYS\\b`, 'i').test(action)) {
     return 'makes a column GENERATED ALWAYS';
   }
   if ((m = action.match(ADD_CONSTRAINT))) {
@@ -366,7 +390,7 @@ function actionViolation(action, table, file, known) {
   }
   m = action.match(new RegExp(`^ADD\\s+(?:COLUMN\\s+)?(?:IF\\s+NOT\\s+EXISTS\\s+)?${IDENT}`, 'i'));
   if (m && !CONSTRAINT_WORDS.test(m[1])) {
-    const rest = action.slice(m[0].length).replace(/\bDEFAULT\s+\(*\s*NULL\b(?:\s*::\s*[\w.]+)?\s*\)*(?:\s*::\s*[\w.]+)?/gi, ' ');
+    const rest = action.slice(m[0].length).replace(/\bDEFAULT\s*\(*\s*NULL\b(?:\s*::\s*[\w.]+)?\s*\)*(?:\s*::\s*[\w.]+)?/gi, ' ');
     if (/\bNOT\s+NULL\b/i.test(rest) && !/\b(DEFAULT|GENERATED)\b/i.test(rest)) {
       return 'adds a NOT NULL column with no DEFAULT';
     }
