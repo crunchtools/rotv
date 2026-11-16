@@ -33,6 +33,14 @@ describe('classifyProviderError', () => {
       .toBeNull();
   });
 
+  it('ignores credit and key words that a flagged 403 quotes from the page', () => {
+    const flagged = (text) => new Error(
+      `OpenRouter returned 403: {"error":{"message":"Input was flagged","metadata":{"flagged_input":"${text}"}}}`
+    );
+    expect(classifyProviderError(flagged('Payment required to view this story'))).toBeNull();
+    expect(classifyProviderError(flagged('Error: invalid api key for the park camera feed'))).toBeNull();
+  });
+
   it('ignores other errors', () => {
     expect(classifyProviderError(new Error('Serper API error (news): 500 - oops'))).toBeNull();
     expect(classifyProviderError(new Error('OpenRouter returned 503'))).toBeNull();

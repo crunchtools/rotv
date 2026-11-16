@@ -15,13 +15,15 @@ export function classifyProviderError(error) {
   const provider = serper ? 'serper' : openrouter ? 'openrouter' : 'unknown';
   const status = message.match(/\b(?:returned|\)\:) ?(\d{3})\b/)?.[1];
 
+  // OpenRouter also answers 403 when a moderated model flags one input. That is
+  // about the page being summarized, not the key, and the body quotes the page,
+  // so nothing in it may be matched as a credit or key failure (#888)
+  if (status === '403' && /moderation|flagged/i.test(message)) return null;
+
   if (/not enough credits|insufficient credits|out of credits|payment required/i.test(message) || status === '402') {
     return { provider, error_class: 'quota_exhausted' };
   }
-  // OpenRouter also answers 403 when a moderated model flags one input; that is
-  // about the page being summarized, not the key (#888)
-  const flagged = /moderation|flagged/i.test(message);
-  if (/invalid .*api key|api key not configured/i.test(message) || status === '401' || (status === '403' && !flagged)) {
+  if (/invalid .*api key|api key not configured/i.test(message) || status === '401' || status === '403') {
     return { provider, error_class: 'auth_failed' };
   }
   return null;
