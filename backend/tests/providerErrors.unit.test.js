@@ -68,6 +68,10 @@ describe('firstProviderFailure', () => {
     });
   });
 
+  it('ignores a non-provider Error that mentions a 403', () => {
+    expect(firstProviderFailure([new Error('fetch of example.org returned 403')])).toBeNull();
+  });
+
   it('is null when no page failed on a provider', () => {
     expect(firstProviderFailure([{ news: [] }, new Error('render timed out'), null])).toBeNull();
   });

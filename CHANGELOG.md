@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Collection health no longer pages on a dropped page Error from an unknown
+  (non-provider) source that merely mentions "returned 403" (#904).
 - The migration compatibility check now also refuses `SET GENERATED ALWAYS`,
   `DEFAULT(NULL)` written without a space, DDL inside an `AS E'…'` function
   body, and every `DROP DOMAIN` / `DROP EXTENSION`, not only those with
