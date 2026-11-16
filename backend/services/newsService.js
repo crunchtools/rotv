@@ -4,7 +4,7 @@ import { parseDate, parseDateTime, extractUrlDate, extractWebTracDates, easternD
 import { renderPage, setCachePageType, setCacheItemCount } from './renderPage.js';
 import { healthCheck, forceKill } from './browserPool.js';
 import { logInfo, logWarn, logError, flush as flushJobLogs } from './jobLogger.js';
-import { classifyProviderError } from './providerErrors.js';
+import { classifyProviderError, firstProviderFailure } from './providerErrors.js';
 import { CollectionTracker, runBatch } from './collection/index.js';
 import { searchNewsUrls } from './serperService.js';
 import { getDomainReputation } from './moderationService.js';
@@ -178,6 +178,17 @@ async function generateTextWithCustomPrompt(pool, prompt, options = {}) {
   llmCallCount++;
   const text = await llmGenerateText(pool, prompt, options);
   return { response: text, provider: 'openrouter' };
+}
+
+/**
+ * Log the first credit or auth failure among a batch's page results, with its
+ * class, so /api/health/collection sees it. Other page errors stay dropped.
+ */
+function logProviderFailure(results, jobId, jobType, poi, phase) {
+  const failure = firstProviderFailure(results);
+  if (failure) {
+    logError(jobId, jobType, poi.id, poi.name, `${phase}: Page processing failed: ${failure.message}`, failure.details);
+  }
 }
 
 class BrowserOverloadError extends Error {
@@ -788,7 +799,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
       }
     }
 
-    await runConcurrent(toProcess.map(url => async () => {
+    const levelResults = await runConcurrent(toProcess.map(url => async () => {
       checkCancellation();
       if (totalPagesRendered >= maxPages || collectedPages.length >= maxDetailPages) return;
       totalPagesRendered++;
@@ -831,6 +842,7 @@ async function crawlPage(pool, startUrl, contentType, poi, sheets, checkCancella
         logInfo(jobId, jobType, poi.id, poi.name, `${phase}: [Skip] Not a ${contentType} page: ${url} (${classification.reasoning})`);
       }
     }), 3, 2000);
+    logProviderFailure(levelResults, jobId, jobType, poi, phase);
   }
 
   await processLevel([startUrl], 0);
@@ -960,10 +972,11 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       for (const items of eventResults) {
         if (items && !(items instanceof Error)) allEvents.push(...(items.events || []));
       }
+      logProviderFailure(eventResults, jobId, jobType, poi, 'Phase I');
     } catch (err) {
       if (err.message === 'Collection cancelled by user') throw err;
       reportProgress(`Phase I: Events crawl failed: ${err.message}`);
-      logWarn(jobId, jobType, poi.id, poi.name, `Phase I: Events classification failed: ${err.message}`);
+      logWarn(jobId, jobType, poi.id, poi.name, `Phase I: Events classification failed: ${err.message}`, classifyProviderError(err));
     }
   }
 
@@ -995,10 +1008,11 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
       for (const items of newsResults) {
         if (items && !(items instanceof Error)) allNews.push(...(items.news || []));
       }
+      logProviderFailure(newsResults, jobId, jobType, poi, 'Phase I');
     } catch (err) {
       if (err.message === 'Collection cancelled by user') throw err;
       reportProgress(`Phase I: News crawl failed: ${err.message}`);
-      logWarn(jobId, jobType, poi.id, poi.name, `Phase I: News classification failed: ${err.message}`);
+      logWarn(jobId, jobType, poi.id, poi.name, `Phase I: News classification failed: ${err.message}`, classifyProviderError(err));
     }
   }
 
@@ -1157,6 +1171,7 @@ export async function collectPoi(pool, poi, sheets = null, timezone = 'America/N
             return pageItems;
           }), pageConcurrency, pageDelayMs);
 
+          logProviderFailure(phase2Results, jobId, jobType, poi, 'Phase II');
           for (const itemsOrError of phase2Results) {
             if (!itemsOrError || itemsOrError instanceof Error) continue;
             const newNews = itemsOrError.filter(item => {

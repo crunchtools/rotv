@@ -10,16 +10,38 @@ export function classifyProviderError(error) {
   const message = typeof error === 'string' ? error : error?.message;
   if (!message) return null;
 
-  const serper = /Serper API error/i.test(message);
-  const openrouter = /OpenRouter/i.test(message);
-  const provider = serper ? 'serper' : openrouter ? 'openrouter' : 'unknown';
+  // By the prefix serperService and llmService put on their own errors: a body
+  // further along can quote either name (#902 review)
+  const provider = /^Serper API /.test(message) ? 'serper'
+    : /^(?:OpenRouter |Invalid OpenRouter API key)/.test(message) ? 'openrouter' : 'unknown';
   const status = message.match(/\b(?:returned|\)\:) ?(\d{3})\b/)?.[1];
+
+  // OpenRouter also answers 403 when a moderated model flags one input. That is
+  // about the page being summarized, not the key, and the body quotes the page,
+  // so nothing in it may be matched as a credit or key failure (#888)
+  if (status === '403' && /moderation|flagged/i.test(message)) return null;
 
   if (/not enough credits|insufficient credits|out of credits|payment required/i.test(message) || status === '402') {
     return { provider, error_class: 'quota_exhausted' };
   }
-  if (/invalid .*api key/i.test(message) || status === '401' || status === '403') {
+  if (/invalid .*api key|api key not configured/i.test(message) || status === '401' || status === '403') {
     return { provider, error_class: 'auth_failed' };
+  }
+  return null;
+}
+
+/**
+ * The first credit or auth failure among runConcurrent results, which hold an
+ * Error for every page that threw. Those pages are otherwise dropped, so an
+ * exhausted OpenRouter key would end the run with zero items and no trace (#888).
+ * @param {Array<unknown>} results
+ * @returns {{message: string, details: {provider: string, error_class: string}}|null}
+ */
+export function firstProviderFailure(results) {
+  for (const result of results) {
+    if (!(result instanceof Error)) continue;
+    const details = classifyProviderError(result);
+    if (details) return { message: result.message, details };
   }
   return null;
 }
