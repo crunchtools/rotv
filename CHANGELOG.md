@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.71.1] - 2026-11-16
+
 ### Fixed
 
 - Collection health no longer pages on a dropped page Error from an unknown
@@ -446,7 +448,8 @@ without changelog sections, so their entries are collected here.
 - **MINOR** (1.X.0) - New features, backwards-compatible functionality
 - **PATCH** (1.0.X) - Bug fixes, backwards-compatible improvements
 
-[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.71.0...HEAD
+[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.71.1...HEAD
+[1.71.1]: https://github.com/crunchtools/rotv/releases/tag/v1.71.1
 [1.71.0]: https://github.com/crunchtools/rotv/releases/tag/v1.71.0
 [1.70.0]: https://github.com/crunchtools/rotv/releases/tag/v1.70.0
 [1.69.3]: https://github.com/crunchtools/rotv/releases/tag/v1.69.3
