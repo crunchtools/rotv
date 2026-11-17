@@ -244,15 +244,14 @@ jobs:
         with:
           persist-credentials: false
 
-      # The release is read from .pre-commit-config.yaml, so one line pins the
-      # launcher, the image and every tool in it, for the laptop and CI both.
-      # The Python it checks is image-server/, named by [tool.sdlc] project.
+      # .sdlc/bin/sdlc is python-sdlc's bin/sdlc-bootstrap: it asks the image
+      # for its launcher and runs it, as the hooks do. The run line must be
+      # exactly `.sdlc/bin/sdlc ci` (constitution XII). The Python it checks
+      # is image-server/, named by [tool.sdlc] project.
       - name: sdlc ci
         env:
           SDLC_IMAGE: ${{ vars.SDLC_IMAGE }}
-        run: |
-          set -eu
-          .sdlc/bin/sdlc ci
+        run: .sdlc/bin/sdlc ci
 
   gourmand-review:
     name: Code Quality (Gourmand)
