@@ -219,3 +219,12 @@ path = ".pre-commit-config.yaml"
 pattern = "ruff-check"
 justification = "ruff runs inside the sdlc-commit hook from python-sdlc (constitution XII v1.30.0), configured by [tool.ruff] in pyproject.toml; Gourmand looks for a literal ruff hook id"
 classification = "by_design"
+
+# The #920 regression test must boot the real server.js in a child process to
+# observe its exit code; it runs the current node binary with a fixed argv and
+# no shell, so there is no injection surface.
+[[exceptions]]
+check = "SE001-security_practices"
+path = "backend/tests/pgpasswordRequired.unit.test.js"
+justification = "Spawns process.execPath with the fixed argv ['server.js'] and no shell to assert the startup exit path (#922); no external input reaches the command"
+classification = "by_design"
