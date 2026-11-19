@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- The container releases run constitution v1.51.0's `container-release.yml`
+  (was v1.46.0) and grant it `issues: write`, so a failed scheduled rebuild
+  opens an issue instead of only warning.
+
 ## [1.71.1] - 2026-11-16
 
 ### Fixed
