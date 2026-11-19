@@ -28,6 +28,7 @@ import { createNotificationsRouter } from './routes/notifications.js';
 import { createTrailShapesRouter } from './routes/adminTrailShapes.js';
 import { createAdminListsRouter } from './routes/adminLists.js';
 import { isAuthenticated } from './middleware/auth.js';
+import { sessionSecret } from './utils/authSession.js';
 import { resolveTimezone } from './utils/requestParams.js';
 import {
   initJobScheduler,
@@ -222,6 +223,10 @@ app.use((req, res, next) => {
   express.urlencoded({ limit: '50mb', extended: true })(req, res, next);
 });
 
+if (!process.env.SESSION_SECRET) {
+  console.warn('SESSION_SECRET is not set; sessions will not survive a restart.');
+}
+
 const PgSession = connectPgSimple(session);
 app.use(session({
   store: new PgSession({
@@ -229,7 +234,7 @@ app.use(session({
     tableName: 'sessions',
     createTableIfMissing: true
   }),
-  secret: process.env.SESSION_SECRET || 'change-this-in-production',
+  secret: sessionSecret(process.env),
   resave: false,
   saveUninitialized: false,
   cookie: {

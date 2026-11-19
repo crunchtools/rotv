@@ -38,7 +38,7 @@ class Config:
         self.pg_port: int = int(os.environ.get("PGPORT", "5432"))
         self.pg_database: str = os.environ.get("PGDATABASE", "imageserver")
         self.pg_user: str = os.environ.get("PGUSER", "imageserver")
-        self.pg_password: str = os.environ.get("PGPASSWORD", "imageserver")
+        self.pg_password: str = os.environ.get("PGPASSWORD", "")
 
         self.vision_backend: str = os.environ.get("VISION_BACKEND", "none").lower()
         self.vision_model: str = os.environ.get(
@@ -63,11 +63,13 @@ class Config:
     @property
     def dsn(self) -> str:
         """PostgreSQL connection string."""
-        return (
-            f"host={self.pg_host} port={self.pg_port} "
-            f"dbname={self.pg_database} user={self.pg_user} "
-            f"password={self.pg_password}"
+        dsn = (
+            f"host={self.pg_host} port={self.pg_port} dbname={self.pg_database} user={self.pg_user}"
         )
+        # The bundled Postgres trusts local connections, so no password is the default.
+        if self.pg_password:
+            dsn += f" password={self.pg_password}"
+        return dsn
 
     def ensure_media_dirs(self) -> None:
         """Create media directories if they don't exist."""

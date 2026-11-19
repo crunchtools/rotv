@@ -16,6 +16,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   revoked or confirmed dead before this change; history is not rewritten.
 - The backend no longer falls back to the dev database password `rotv` when
   `PGPASSWORD` is unset; it exits at startup with a clear error instead (#920).
+- No committed secret literal is left for the Gourmand secret scan to refuse
+  (a525). The images and `rotv-backend.service` no longer set
+  `PGPASSWORD=rotv` (the bundled Postgres trusts local connections), so the
+  password comes only from `/etc/rotv/environment`; `./run.sh` dev and test and
+  the Application Tests job write a throwaway one there. `SESSION_SECRET`
+  falls back to a random per-start key, not `change-this-in-production`; the
+  image server and `cleanup-failed-urls.js` take their database password from
+  the environment with no default.
 
 ### Added
 - A backend unit test starts `server.js` without `PGPASSWORD` and asserts it
