@@ -2,8 +2,18 @@
  * Shared pieces of the /auth routes: rate limiters and session login.
  */
 
+import { randomBytes } from 'node:crypto';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { normalizeEmail } from '../services/emailLogin.js';
+
+/**
+ * The key express-session signs cookies with: SESSION_SECRET, or a random key
+ * per start, so sessions only last until a restart. Never a committed default.
+ * @param {NodeJS.ProcessEnv} env
+ */
+export function sessionSecret(env) {
+  return env.SESSION_SECRET || randomBytes(32).toString('hex');
+}
 
 /** How recently someone must have signed in to change how they sign in. */
 const FRESH_LOGIN_MS = 15 * 60 * 1000;

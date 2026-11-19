@@ -11,7 +11,6 @@ import fs from 'fs/promises';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
 import { Readable } from 'node:stream';
-import { randomBytes } from 'node:crypto';
 import { configurePassport } from './config/passport.js';
 import { createAuthRouter } from './routes/auth.js';
 import { createAdminRouter } from './routes/admin.js';
@@ -29,6 +28,7 @@ import { createNotificationsRouter } from './routes/notifications.js';
 import { createTrailShapesRouter } from './routes/adminTrailShapes.js';
 import { createAdminListsRouter } from './routes/adminLists.js';
 import { isAuthenticated } from './middleware/auth.js';
+import { sessionSecret } from './utils/authSession.js';
 import { resolveTimezone } from './utils/requestParams.js';
 import {
   initJobScheduler,
@@ -223,9 +223,6 @@ app.use((req, res, next) => {
   express.urlencoded({ limit: '50mb', extended: true })(req, res, next);
 });
 
-// No committed default: without SESSION_SECRET each start signs with a random
-// key, so sessions only last until the next restart.
-const sessionSecret = process.env.SESSION_SECRET || randomBytes(32).toString('hex');
 if (!process.env.SESSION_SECRET) {
   console.warn('SESSION_SECRET is not set; sessions will not survive a restart.');
 }
@@ -237,7 +234,7 @@ app.use(session({
     tableName: 'sessions',
     createTableIfMissing: true
   }),
-  secret: sessionSecret,
+  secret: sessionSecret(process.env),
   resave: false,
   saveUninitialized: false,
   cookie: {
