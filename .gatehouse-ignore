@@ -8,3 +8,5 @@ data/boundaries/insert_*.sql
 # Icon and brand artwork
 frontend/public/icons/
 frontend/public/brand/
+# Database dumps (deleted in a497; never reviewable)
+backup/
