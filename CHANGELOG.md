@@ -30,6 +30,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exits 1 with the FATAL message (#922).
 
 ### Changed
+- Promote signs the `rotv` and `images-rotv` images with the fleet cosign key
+  (`sign: true`), because bootc hosts are moving to trust only signed
+  `quay.io/crunchtools` images
+  (crunchtools/rhel10-bootc-server#47). Needs the repo's `cosign-signing`
+  environment to hold `COSIGN_PRIVATE_KEY` and `COSIGN_PASSWORD`.
 - The container releases run constitution v1.51.0's `container-release.yml`
   (was v1.46.0) and grant it `issues: write`, so a failed scheduled rebuild
   opens an issue instead of only warning.
