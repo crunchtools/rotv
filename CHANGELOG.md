@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   never run against the schema they read: a wrong column or `job_type` filter
   would have left the check green right through an outage, which is the one
   thing it exists to prevent (#888).
+- Six integration tests no longer carry a plaintext `|| 'rotv'` fallback for
+  the test database password; they read `PGPASSWORD` from the environment
+  only, as the test image already sets it (#918).
 
 ## [1.71.1] - 2026-11-16
 

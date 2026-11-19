@@ -8,12 +8,15 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { readFile } from 'fs/promises';
 import pg from 'pg';
 
+// The password comes from the environment with no inline fallback: the test
+// image sets PGPASSWORD, and a committed default would be a plaintext
+// credential (constitution XVII, web-application profile) (#918).
 const pool = new pg.Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT || 5432,
   database: process.env.PGDATABASE || 'rotv_test',
   user: process.env.PGUSER || 'rotv',
-  password: process.env.PGPASSWORD || 'rotv'
+  password: process.env.PGPASSWORD
 });
 
 const migrationSql = await readFile(new URL('../migrations/022_migrate_boundary_geometry.sql', import.meta.url), 'utf8');
