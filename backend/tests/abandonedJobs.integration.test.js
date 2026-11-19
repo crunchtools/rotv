@@ -8,12 +8,15 @@ import pg from 'pg';
 import { failAbandonedJobs as failAbandonedNewsJobs } from '../services/newsService.js';
 import { failAbandonedJobs as failAbandonedTrailJobs } from '../services/trailStatusService.js';
 
+// The password comes from the environment with no inline fallback: the test
+// image sets PGPASSWORD, and a committed default would be a plaintext
+// credential (constitution XVII, web-application profile) (#918).
 const pool = new pg.Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT || 5432,
   database: process.env.PGDATABASE || 'rotv_test',
   user: process.env.PGUSER || 'rotv',
-  password: process.env.PGPASSWORD || 'rotv'
+  password: process.env.PGPASSWORD
 });
 
 afterAll(() => pool.end());

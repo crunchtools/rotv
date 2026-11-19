@@ -13,12 +13,15 @@ import pg from 'pg';
 const { Pool } = pg;
 
 // Connect to test database
+// The password comes from the environment with no inline fallback: the test
+// image sets PGPASSWORD, and a committed default would be a plaintext
+// credential (constitution XVII, web-application profile) (#918).
 const pool = new Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT || 5432,
   database: process.env.PGDATABASE || 'rotv_test',
   user: process.env.PGUSER || 'rotv',
-  password: process.env.PGPASSWORD || 'rotv'
+  password: process.env.PGPASSWORD
 });
 
 let dbAccessible = false;
