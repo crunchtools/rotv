@@ -131,6 +131,24 @@ describe('GET /api/health/collection against the real schema', () => {
     });
   });
 
+  it('stays OK when the search failed for exactly half the POIs', async () => {
+    await inTransaction(async (client) => {
+      const jobId = await seedRun(client, 'current_news', 4);
+      await seedRun(client, 'events', 4);
+
+      // The threshold is strictly more than half, so 2 of 4 must not page.
+      initJobLogger(client);
+      for (const poiId of [101, 102]) {
+        logWarn(jobId, 'news', poiId, `POI ${poiId}`, 'Phase II: Search failed: socket hang up', null);
+      }
+      await flush();
+
+      const res = await get(client);
+      expect(res.status).toBe(200);
+      expect(res.body.status).toBe('OK');
+    });
+  });
+
   it('is OK when both pipelines ran cleanly', async () => {
     await inTransaction(async (client) => {
       await seedRun(client, 'current_news', 10);
