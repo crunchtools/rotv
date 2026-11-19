@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The backend no longer falls back to the dev database password `rotv` when
   `PGPASSWORD` is unset; it exits at startup with a clear error instead (#920).
 
+### Added
+- A backend unit test starts `server.js` without `PGPASSWORD` and asserts it
+  exits 1 with the FATAL message (#922).
+
 ### Changed
 - The container releases run constitution v1.51.0's `container-release.yml`
   (was v1.46.0) and grant it `issues: write`, so a failed scheduled rebuild
