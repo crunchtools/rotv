@@ -257,7 +257,7 @@ async function renderJavaScriptPageInternal(url, options) {
           user: process.env.PGUSER || 'postgres',
           host: process.env.PGHOST || 'localhost',
           database: process.env.PGDATABASE || 'rotv',
-          password: process.env.PGPASSWORD || 'rotv',
+          password: process.env.PGPASSWORD,
           port: process.env.PGPORT || 5432,
         });
 
