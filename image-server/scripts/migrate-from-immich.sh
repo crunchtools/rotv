@@ -7,12 +7,12 @@
 # Prerequisites:
 #   - Both containers running on Lotor
 #   - image-server health endpoint responds
-#   - Immich API key available
+#   - IMMICH_API_KEY exported in the environment (never committed)
 
 set -uo pipefail
 
 IMMICH_URL="http://127.0.0.1:8088"
-IMMICH_API_KEY="MosNnoHDjChjHA5y6v86HOFNmwZKFRB0zZakM4oy4"
+IMMICH_API_KEY="${IMMICH_API_KEY:?set IMMICH_API_KEY to an Immich API key; it is never committed}"
 IMAGE_SERVER_URL="http://127.0.0.1:8094"
 ROTV_DB_CONTAINER="rootsofthevalley.org"
 TMPDIR="/tmp/immich-migration"
