@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exits 1 with the FATAL message (#922).
 
 ### Changed
+- Gatehouse triage now receives `review_result`, so a PR whose review job died before posting is held instead of passing.
 - Promote signs the `rotv` and `images-rotv` images with the fleet cosign key
   (`sign: true`), because bootc hosts are moving to trust only signed
   `quay.io/crunchtools` images
