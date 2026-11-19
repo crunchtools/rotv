@@ -182,12 +182,19 @@ types.setTypeParser(1082, (val) => val);
 types.setTypeParser(1114, (val) => val);
 types.setTypeParser(1184, (val) => val);
 
+// No default password: a missing PGPASSWORD is a deployment error, not a cue to
+// fall back to the well-known dev credential (#920).
+if (!process.env.PGPASSWORD) {
+  console.error('FATAL: PGPASSWORD is not set. Set it in the rotv environment file and restart.');
+  process.exit(1);
+}
+
 const pool = new Pool({
   host: process.env.PGHOST || 'localhost',
   port: process.env.PGPORT || 5432,
   database: process.env.PGDATABASE || 'rotv',
   user: process.env.PGUSER || 'postgres',
-  password: process.env.PGPASSWORD || 'rotv',
+  password: process.env.PGPASSWORD,
   // Background jobs use up to 10 concurrent connections; reserve headroom for API requests
   max: 20,
   connectionTimeoutMillis: 10000,
@@ -3055,7 +3062,7 @@ async function start() {
 
   await setupAiSearchDefaults();
 
-  const connectionString = `postgresql://${process.env.PGUSER || 'rotv'}:${process.env.PGPASSWORD || 'rotv'}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'rotv'}`;
+  const connectionString = `postgresql://${process.env.PGUSER || 'rotv'}:${process.env.PGPASSWORD}@${process.env.PGHOST || 'localhost'}:${process.env.PGPORT || 5432}/${process.env.PGDATABASE || 'rotv'}`;
 
   try {
     await initJobScheduler(connectionString);

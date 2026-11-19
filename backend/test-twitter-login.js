@@ -7,11 +7,16 @@ import pkg from 'pg';
 const { Pool } = pkg;
 import { chromium } from 'playwright';
 
+if (!process.env.PGPASSWORD) {
+  console.error('PGPASSWORD is not set');
+  process.exit(1);
+}
+
 const pool = new Pool({
   user: process.env.PGUSER || 'postgres',
   host: process.env.PGHOST || 'localhost',
   database: process.env.PGDATABASE || 'rotv',
-  password: process.env.PGPASSWORD || 'rotv',
+  password: process.env.PGPASSWORD,
   port: process.env.PGPORT || 5432,
 });
 
