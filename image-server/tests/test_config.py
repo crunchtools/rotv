@@ -49,6 +49,15 @@ def test_dsn() -> None:
     assert "dbname=imageserver" in dsn
 
 
+def test_dsn_without_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With PGPASSWORD unset the DSN carries no password, and no default."""
+    monkeypatch.delenv("PGPASSWORD", raising=False)
+    reset_config()
+    cfg = Config()
+    assert cfg.pg_password == ""
+    assert "password" not in cfg.dsn
+
+
 def test_singleton() -> None:
     """get_config returns the same instance."""
     reset_config()

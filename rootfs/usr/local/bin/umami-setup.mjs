@@ -16,7 +16,7 @@ const WEBSITE_ID = '804a81bc-5731-4028-bd22-2aa2f2b159c2';
 const SHARE_SLUG = 'rotv';
 // Umami's first-boot login. It is never a deployed credential: setup rotates
 // it on first start, and stops Umami if it can't.
-const DEFAULT_PASSWORD = 'umami';
+const DEFAULT_PASSWORD = 'umami'; // gatehouse: allow-secret
 const configuredPassword = process.env.UMAMI_ADMIN_PASSWORD;
 
 async function api(path, { token, method = 'GET', body } = {}) {

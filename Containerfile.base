@@ -116,7 +116,6 @@ ENV PGHOST=localhost
 ENV PGPORT=5432
 ENV PGDATABASE=rotv
 ENV PGUSER=postgres
-ENV PGPASSWORD=rotv
 
 # Create systemd unit file for PostgreSQL
 RUN mkdir -p /etc/systemd/system && \

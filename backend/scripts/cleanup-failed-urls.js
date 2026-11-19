@@ -7,13 +7,8 @@ const CONCURRENT_REQUESTS = 5;
 const REQUEST_TIMEOUT = 30000;
 const DRY_RUN = process.argv.includes('--dry-run');
 
-const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: process.env.POSTGRES_PORT || 5432,
-  database: process.env.POSTGRES_DB || 'rotv',
-  user: process.env.POSTGRES_USER || 'postgres',
-  password: process.env.POSTGRES_PASSWORD || 'postgres'
-});
+/** Reads standard PG* env vars (PGHOST/PGUSER/PGPASSWORD/...); no hardcoded credentials. */
+const pool = new Pool();
 
 const BROKEN_URL_PATTERNS = [
   'vertexaisearch.cloud.google.com/grounding-api-redirect',

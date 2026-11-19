@@ -14,7 +14,6 @@ Environment=PGHOST=localhost
 Environment=PGPORT=5432
 Environment=PGDATABASE=rotv
 Environment=PGUSER=postgres
-Environment=PGPASSWORD=rotv
 # X display from rotv-display.service, for the headed browser in humanBrowser.js
 Environment=DISPLAY=:0
 EnvironmentFile=-/etc/rotv/environment

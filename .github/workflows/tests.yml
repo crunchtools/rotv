@@ -123,9 +123,13 @@ jobs:
           docker rm rotv 2>/dev/null || true
 
           # Write environment file on host BEFORE container starts
-          # Mounted into the container so systemd reads it on first boot
+          # Mounted into the container so systemd reads it on first boot.
+          # The bundled Postgres trusts local connections, so PGPASSWORD only
+          # has to be set: a throwaway one, never a committed default.
+          PGPASSWORD=$(head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n')
           printf '%s\n' \
             "OPENROUTER_API_KEY=${OPENROUTER_API_KEY}" \
+            "PGPASSWORD=${PGPASSWORD}" \
             "DISABLE_LIVE_BOAT_TRACKER=true" \
             > ~/.rotv/environment
           echo "✓ Environment file written"
@@ -225,7 +229,7 @@ jobs:
 
           # Run the tests inside container
           echo "Running tests inside container..."
-          docker exec rotv sh -c "cd /app && npm test"
+          docker exec -e PGPASSWORD="$PGPASSWORD" rotv sh -c "cd /app && npm test"
 
       - name: Cleanup
         if: always()

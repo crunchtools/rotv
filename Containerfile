@@ -70,7 +70,9 @@ RUN mkdir -p /data/pgdata && chown postgres:postgres /data/pgdata
 
 # Environment
 ENV NODE_ENV=development PORT=8080 STATIC_PATH=/app/public
-ENV PGHOST=localhost PGPORT=5432 PGDATABASE=rotv PGUSER=postgres PGPASSWORD=rotv
+# No PGPASSWORD: the bundled Postgres trusts local connections, and the
+# backend takes its password from /etc/rotv/environment (#920).
+ENV PGHOST=localhost PGPORT=5432 PGDATABASE=rotv PGUSER=postgres
 
 WORKDIR /app
 

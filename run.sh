@@ -83,6 +83,13 @@ run_gatehouse() {
         -v "$PWD":/src:ro -w /src "$GATEHOUSE_IMAGE" --stdin
 }
 
+# The bundled Postgres trusts local connections, so a dev or test container's
+# PGPASSWORD only has to be set (server.js refuses to start without one). Make a
+# throwaway one rather than commit a default.
+throwaway_pgpassword() {
+    head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'
+}
+
 # Build environment variable arguments for podman
 ENV_ARGS=""
 [ -n "$GOOGLE_CLIENT_ID" ] && ENV_ARGS="$ENV_ARGS -e GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
@@ -242,7 +249,7 @@ TWITTER_PASSWORD=$TWITTER_PASSWORD
 IMAGE_SERVER_URL=$IMAGE_SERVER_URL
 MCP_ADMIN_TOKEN=$MCP_ADMIN_TOKEN
 PGUSER=${PGUSER:-postgres}
-PGPASSWORD=${PGPASSWORD:-rotv}
+PGPASSWORD=${PGPASSWORD:-$(throwaway_pgpassword)}
 PGDATABASE=${PGDATABASE:-rotv}
 NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}
 ENVFILE
@@ -322,6 +329,7 @@ ENVFILE
 
         # Create environment file for systemd services (use main 'rotv' database like CI)
         mkdir -p ~/.rotv
+        TEST_PGPASSWORD=${PGPASSWORD:-$(throwaway_pgpassword)}
         cat > ~/.rotv/environment-test <<ENVFILE
 GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID
 GOOGLE_CLIENT_SECRET=$GOOGLE_CLIENT_SECRET
@@ -341,6 +349,7 @@ DKIM_DOMAIN=$DKIM_DOMAIN
 DKIM_SELECTOR=$DKIM_SELECTOR
 DKIM_PRIVATE_KEY_B64=$DKIM_PRIVATE_KEY_B64
 ADMIN_EMAIL=$ADMIN_EMAIL
+PGPASSWORD=$TEST_PGPASSWORD
 DISABLE_LIVE_BOAT_TRACKER=true
 DISABLE_LIVE_TRAIN_TRACKER=true
 NEWSLETTER_SEND_ENABLED=${NEWSLETTER_SEND_ENABLED:-false}
@@ -388,7 +397,7 @@ ENVFILE
         # Run tests INSIDE container
         echo "Running tests inside container..."
         TEST_EXIT_CODE=0
-        podman exec "$CONTAINER_NAME" sh -c "cd /app && npm test" || TEST_EXIT_CODE=$?
+        podman exec -e PGPASSWORD="$TEST_PGPASSWORD" "$CONTAINER_NAME" sh -c "cd /app && npm test" || TEST_EXIT_CODE=$?
 
         # Clean up - stop test container
         echo ""
