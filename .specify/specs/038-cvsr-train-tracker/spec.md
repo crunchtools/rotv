@@ -70,7 +70,7 @@ The train position is cached in backend memory (same as Harbor Hopper). No datab
 The CVSR already exists as a POI in the database. The existing `live_tracker_url` column will be populated with the USFT shared view URL.
 
 ```sql
-UPDATE pois SET live_tracker_url = 'https://www.lvgps.net/view/gzr9jEzIiHPd5c71ZfUv6uaFCN3rsf-kAts08dBEZPgMzyqR'
+UPDATE pois SET live_tracker_url = 'https://www.lvgps.net/view/<USFT_SHARING_TOKEN>'
 WHERE name ILIKE '%Cuyahoga Valley Scenic Railroad%';
 ```
 
@@ -108,7 +108,7 @@ Returns `{ "cvsr": null }` when no position is available or data is stale.
 ### Auth Flow
 
 1. **POST** `https://hades.usft.com/auth/login/shared-view`
-   - Body: `{"token":"gzr9jEzIiHPd5c71ZfUv6uaFCN3rsf-kAts08dBEZPgMzyqR"}`
+   - Body: `{"token":"<USFT_SHARING_TOKEN>"}`
    - Returns: `{"token":"<jwt>", "options":{...}}`
    - JWT expires in ~30 hours
 

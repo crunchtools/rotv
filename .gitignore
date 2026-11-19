@@ -31,3 +31,6 @@ gourmand-report.txt
 # Claude Code per-machine state (skills and shared settings are tracked)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Database dumps never belong in the repo (a497)
+backup/

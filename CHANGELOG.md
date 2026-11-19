@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- Removed credentials committed to this public repository and rotated them
+  (a497): the database dumps under `backup/` (which carried a Google OAuth
+  grant) are deleted and `backup/` is ignored, `migrate-from-immich.sh` reads
+  `IMMICH_API_KEY` from the environment and refuses to run without it, and the
+  CVSR tracker spec no longer quotes a USFT sharing token. Every credential was
+  revoked or confirmed dead before this change; history is not rewritten.
 - The backend no longer falls back to the dev database password `rotv` when
   `PGPASSWORD` is unset; it exits at startup with a clear error instead (#920).
 
