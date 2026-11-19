@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (was v1.46.0) and grant it `issues: write`, so a failed scheduled rebuild
   opens an issue instead of only warning.
 
+### Fixed
+
+- `/api/health/collection` is now tested against a real database. Every test it
+  had mocked the connection pool, so the queries behind the Nagios check were
+  never run against the schema they read: a wrong column or `job_type` filter
+  would have left the check green right through an outage, which is the one
+  thing it exists to prevent (#888).
+
 ## [1.71.1] - 2026-11-16
 
 ### Fixed

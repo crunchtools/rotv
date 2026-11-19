@@ -14,7 +14,7 @@ export function classifyProviderError(error) {
   // further along can quote either name (#902 review)
   const provider = /^Serper API /.test(message) ? 'serper'
     : /^(?:OpenRouter |Invalid OpenRouter API key)/.test(message) ? 'openrouter' : 'unknown';
-  const status = message.match(/\b(?:returned|\)\:) ?(\d{3})\b/)?.[1];
+  const status = message.match(/\b(?:returned|\):) ?(\d{3})\b/)?.[1];
 
   // OpenRouter also answers 403 when a moderated model flags one input. That is
   // about the page being summarized, not the key, and the body quotes the page,
