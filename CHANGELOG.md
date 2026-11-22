@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The rotv-base image carries Weston and Xwayland (a1018). They came only from
+  the app layer's subscribed install, so a Dependabot PR's app image, built
+  without the RHSM subscription, failed the `runtime.expect` contract gate.
+
 - Dependabot pull requests build their container again (a1018): the Container
   workflow pins constitution `container-release.yml` v1.60.0, which builds a
   Dependabot PR without the RHSM subscription GitHub withholds from it, gates a

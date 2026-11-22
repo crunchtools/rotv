@@ -103,7 +103,8 @@ describe('forgot password', () => {
     expect(mailer.sent).toHaveLength(1);
     const [message] = mailer.sent;
     expect(message.subject).toBe('Reset your Roots of the Valley password');
-    expect(message.text).not.toMatch(/\d{6}/);
+    // The link's random token can hold six digits by chance; look for a code outside it
+    expect(message.text.replace(resetToken(message), '')).not.toMatch(/\d{6}/);
     expect(message.text).toContain('expires in 30 minutes');
 
     await agent.post('/auth/password/reset').send({ token: resetToken(message), password: NEW }).expect(200);
