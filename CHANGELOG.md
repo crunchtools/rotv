@@ -42,6 +42,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Dependabot pull requests build their container again (a1018): the Container
+  workflow pins constitution `container-release.yml` v1.60.0, which builds a
+  Dependabot PR without the RHSM subscription GitHub withholds from it, gates a
+  local archive and pushes nothing. v1.51.0 failed every such build with
+  "rhsm: true but no RHSM_ACTIVATION_KEY".
+
 - `/api/health/collection` is now tested against a real database. Every test it
   had mocked the connection pool, so the queries behind the Nagios check were
   never run against the schema they read: a wrong column or `job_type` filter
