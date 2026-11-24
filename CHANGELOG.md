@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.72.0] - 2026-11-24
+
 ### Security
 - Removed credentials committed to this public repository and rotated them
   (a497): the database dumps under `backup/` (which carried a Google OAuth
@@ -502,7 +504,8 @@ without changelog sections, so their entries are collected here.
 - **MINOR** (1.X.0) - New features, backwards-compatible functionality
 - **PATCH** (1.0.X) - Bug fixes, backwards-compatible improvements
 
-[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.71.1...HEAD
+[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.72.0...HEAD
+[1.72.0]: https://github.com/crunchtools/rotv/releases/tag/v1.72.0
 [1.71.1]: https://github.com/crunchtools/rotv/releases/tag/v1.71.1
 [1.71.0]: https://github.com/crunchtools/rotv/releases/tag/v1.71.0
 [1.70.0]: https://github.com/crunchtools/rotv/releases/tag/v1.70.0
