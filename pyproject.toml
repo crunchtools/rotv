@@ -32,3 +32,11 @@ project = "image-server"
 # than scanning nothing and calling it a pass.
 skip = ["semgrep"]
 
+[tool.sdlc.image]
+# Written by crunchtools/sdlc's scripts/convert_repo.py: moved from the workflows.
+image = "quay.io/crunchtools/rotv"
+default-branch = "master"
+build-args = "BASE_IMAGE=quay.io/crunchtools/rotv-base:latest\n"
+rhsm = true
+boot = "command"
+boot-command = "tests/image/contract.sh \"$IMAGE\" app && tests/image/boot.sh \"$IMAGE\" app"
