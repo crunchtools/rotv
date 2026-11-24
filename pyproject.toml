@@ -24,6 +24,7 @@ max-complexity = 10
 # constitution validator, Gourmand, Gatehouse, CodeQL and `ruff check .` --
 # still runs from here.
 [tool.sdlc]
+repo-kinds = ["web-application"]
 project = "image-server"
 
 [tool.sdlc.push]
