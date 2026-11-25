@@ -2,6 +2,8 @@
 # Image contract test: assert what an image contains without booting it.
 #
 #   tests/image/contract.sh <image-ref> <profile>
+#   tests/image/contract.sh --here <profile>   inside the image: an sdlc
+#                                               command check runs it so
 #
 # Reads tests/image/<profile>.expect. One directive per line:
 #   exec    <path-or-glob>   must exist and be executable
@@ -53,7 +55,14 @@ exit $fail
 
 directives=$(expand "$profile")
 echo "contract: $image against '$profile' ($(wc -l <<<"$directives") checks)"
-if "$engine" run --rm -i --entrypoint /bin/sh "$image" -c "$checker" <<<"$directives"; then
+check() {
+  if [ "$image" = --here ]; then
+    /bin/sh -c "$checker"
+  else
+    "$engine" run --rm -i --entrypoint /bin/sh "$image" -c "$checker"
+  fi
+}
+if check <<<"$directives"; then
   echo "contract: PASS"
 else
   echo "contract: FAIL"

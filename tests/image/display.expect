@@ -1,0 +1,6 @@
+# The virtual display (Weston + Xwayland) the app and dev images run. Only a
+# build with the RHSM entitlement installs it (CRB), and nothing in sdlc's
+# check job is entitled, so no profile includes this one. Run it against a
+# published image by hand: tests/image/contract.sh quay.io/crunchtools/rotv:main display
+exec /usr/bin/weston
+exec /usr/bin/Xwayland

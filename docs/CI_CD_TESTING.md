@@ -66,6 +66,16 @@ The `backend` check runs the backend suite where the backend runs:
 5. Restart rotv-backend, wait again, run npm --prefix /app test
 ```
 
+### The image checks
+
+Each run builds every image (`Containerfile`, `.base`, `.dev`, `.images`) and
+runs `tests/image/contract.sh --here <profile>` inside it, then
+`tests/image/boot.sh --here` in the app and image-server images booted under
+systemd. The check job has no RHSM entitlement, so its app build has no
+Weston: `display.expect` holds those two binaries and is run by hand against a
+published image. The image job's own boot gate (`systemd`, `boot-units`) runs
+on the build it publishes.
+
 ### Build Arguments
 
 The workflow uses `BUILD_ENV=test` to install dev dependencies:
@@ -298,28 +308,17 @@ Prevent merging PRs with failing tests:
 
 ## Security Scanning
 
-Findings from everything below land in **Security → Code scanning** (SARIF) or **Security → Dependabot**.
-
 | What | Where | Blocks a PR? |
 |------|-------|--------------|
-| CVE Lite CLI (OSV) on `/`, `backend/`, `frontend/` lockfiles | `dependency-scan.yml` | Yes, required checks `CVE Lite (.)`, `(backend)`, `(frontend)` — new findings at high+ only |
-| CVE Lite full scan, SARIF upload | `dependency-scan.yml`, weekly + manual | No |
+| `npm audit` at high on `/`, `backend/`, `frontend/` | `sdlc ci` `npm-audit` | Yes, on any high finding |
+| grype on the built app image | `sdlc ci` `container-scan` | Yes, on a fixable critical |
 | Fleet image CVE scan (grype, every 6 h, published images) | gloval `grype.crunchtools.com` → Nagios `Fleet image CVEs` | Pages on a new fixable Critical; not a PR check (constitution 1.40.0, RT #1551) |
-| Dependabot alerts + security PRs, secret scanning + push protection | repo settings | Push protection blocks pushes containing secrets |
+| Secret scanning + push protection | repo settings | Push protection blocks pushes containing secrets |
 
-CVE Lite uses OSV rather than the npm registry. npm audit misses advisories on prerelease-tagged versions (multer `1.4.5-lts.2`, #640).
-
-### Baselines (CVE Lite ratchet)
-
-Each scanned directory has a committed `.cve-lite/baseline.json` of accepted debt. A PR fails only on a finding that isn't in it, meaning a new package, a new version, or a new advisory ID. After fixing debt, shrink the baseline:
-
-```bash
-podman run --rm -v "$PWD":/src:Z -w /src/backend docker.io/library/node:22 \
-  npx -y cve-lite-cli@1.37.0 . --ratchet
-git add backend/.cve-lite/baseline.json
-```
-
-The PR gate compares against the **base branch's** baseline, so a PR that edits its own baseline changes nothing. Fixing a dependency is always the first answer. To accept new debt, a maintainer adds the `security-debt-accepted` label, and the gate then uses the PR's baseline.
+The CVE Lite (OSV) scan and its per-directory baselines went with the old
+workflows (a1221). npm audit reads the npm registry's advisories, which miss
+prerelease-tagged versions (multer `1.4.5-lts.2`, #640), and it has no
+baseline: a high finding fails the gate until it is fixed.
 
 ### Accepting a CVE in the image
 

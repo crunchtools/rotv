@@ -1,7 +1,5 @@
 # What the app image and the dev image built on it both need at runtime
 include base
-exec /usr/bin/weston
-exec /usr/bin/Xwayland
 enabled postgresql
 enabled rotv-init
 enabled rotv-backend
