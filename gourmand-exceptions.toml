@@ -228,3 +228,9 @@ check = "SE001-security_practices"
 path = "backend/tests/pgpasswordRequired.unit.test.js"
 justification = "Spawns process.execPath with the fixed argv ['server.js'] and no shell to assert the startup exit path (#922); no external input reaches the command"
 classification = "by_design"
+
+[[exceptions]]
+check = "CH001-absolute_paths"
+path = "pyproject.toml"
+justification = "PLAYWRIGHT_BROWSERS_PATH names where the image installs Playwright's browsers inside the container, under root's cache directory; it is a container path, not a developer's machine"
+classification = "by_design"
