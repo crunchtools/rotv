@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Security
+- rotv-base's Umami install no longer carries High npm advisories in
+  Prisma's dependencies (a1546): prisma 7.10.1 brings deepmerge-ts 8.0.2
+  (GHSA-ggr8-5vv4-36mx) and mysql2 3.24.4 (GHSA-3f6p-5ww8-9rcr), and a pnpm
+  override floors effect at 3.22.1 (GHSA-7589-6fvf-x4pw). `.grype.yaml`
+  accepts the old versions only until the rebuilt base ships.
 - Removed credentials committed to this public repository and rotated them
   (a497): the database dumps under `backup/` (which carried a Google OAuth
   grant) are deleted and `backup/` is ignored, `migrate-from-immich.sh` reads
