@@ -90,6 +90,8 @@ systemd = true
 image = "localhost/rotv:test"
 # The image installs Chromium as root at build time; the check runs with HOME=/tmp.
 env = { PLAYWRIGHT_BROWSERS_PATH = "/root/.cache/ms-playwright" }
+# The UI tests load map tiles and fonts from the internet, as tests.yml let them.
+network = true
 ready = ["systemctl", "is-active", "--quiet", "rotv-init"]
 setup = [
   ["bash", "/repo/tests/ci/check-logging.sh"],
