@@ -30,6 +30,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   exits 1 with the FATAL message (#922).
 
 ### Changed
+- CI runs on the fleet's one `ci.yml` (sdlc 0.15, a1221): `[tool.sdlc]` now
+  declares the tests `tests.yml` ran (Containerfile chains, migration checks,
+  frontend tests, and the backend suite inside the app image under systemd)
+  and the rotv-base, rotv-dev and images-rotv images. The per-image container,
+  Gatehouse, Ashigaru, dependency-scan and constitution workflows fold into
+  it; the production smoke test stays a manual workflow. The image contracts
+  and boot tests run as checks on the images each run builds
+  (`contract.sh`/`boot.sh --here`), and each image's boot gate is `systemd`
+  (rotv-dev: `none`). Weston and Xwayland move to `display.expect`: the
+  check job's builds have no RHSM entitlement, so no display.
+- Dropped with the old workflows: cve-lite's baseline-diff scan and its
+  `.cve-lite/baseline.json` baselines (`npm audit` at high on `.`, `frontend`
+  and `backend` replaces it, failing on any high finding rather than new ones),
+  its SARIF upload, and Dependabot with its automerge (Renovate owns updates).
 - Gatehouse triage now receives `review_result`, so a PR whose review job died before posting is held instead of passing.
 - Promote signs the `rotv` and `images-rotv` images with the fleet cosign key
   (`sign: true`), because bootc hosts are moving to trust only signed
@@ -41,6 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   opens an issue instead of only warning.
 
 ### Fixed
+- The lists' "today in the valley" date is built from date parts, not the
+  `en-CA` format: a small-ICU Node such as the sdlc gate's carries only `en`
+  and printed `8/31/2026` (crunchtools/sdlc#164).
 
 - The rotv-base image carries Weston and Xwayland (a1018). They came only from
   the app layer's subscribed install, so a Dependabot PR's app image, built

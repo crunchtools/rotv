@@ -81,7 +81,8 @@ describe('GET /api/health/collection against the real schema', () => {
         classifyProviderError(OUT_OF_CREDITS));
       await flush();
 
-      const stored = await client.query('SELECT details FROM job_logs WHERE job_id = $1', [jobId]);
+      const stored = await client.query(
+        "SELECT details FROM job_logs WHERE job_id = $1 AND job_type = 'news' AND level = 'warn'", [jobId]);
       expect(stored.rows[0].details).toEqual({ provider: 'serper', error_class: 'quota_exhausted' });
 
       const res = await get(client);

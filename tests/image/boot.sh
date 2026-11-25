@@ -3,6 +3,10 @@
 # monitoring asserts (the Nagios checks on ctr-rootsofthevalley.org).
 #
 #   tests/image/boot.sh <image-ref> <profile>     profile: app | images
+#   tests/image/boot.sh --here <profile>          inside the booted image: an
+#                                                 sdlc systemd command check
+#                                                 runs it so, after its setup
+#                                                 wrote /etc/rotv/environment
 #
 # Ephemeral storage only; no secrets needed. CONTAINER_ENGINE as contract.sh.
 set -euo pipefail
@@ -42,23 +46,35 @@ case "$profile" in
   *) echo "boot: no boot profile '$profile'" >&2; exit 2 ;;
 esac
 
-envfile=$(mktemp)
-# umami's setup waits for a PGPASSWORD (prod sets one in rotv.env). The test
-# database is fresh and local-trust, so any per-run value will do.
-printf '%s\n' "DISABLE_LIVE_BOAT_TRACKER=true" \
-  "PGPASSWORD=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')" > "$envfile"
-trap '"$engine" rm -f "$name" >/dev/null 2>&1 || true; rm -f "$envfile"' EXIT
+if [ "$image" = --here ]; then
+  in_ctr() { "$@"; }
+else
+  envfile=$(mktemp)
+  # umami's setup waits for a PGPASSWORD (prod sets one in rotv.env). The test
+  # database is fresh and local-trust, so any per-run value will do.
+  printf '%s\n' "DISABLE_LIVE_BOAT_TRACKER=true" \
+    "PGPASSWORD=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n')" > "$envfile"
+  trap '"$engine" rm -f "$name" >/dev/null 2>&1 || true; rm -f "$envfile"' EXIT
 
-# systemd as PID 1, with the profile's flags.
-# No network: the image must come up on its own, and nothing it schedules
-# at boot can reach a real API or mail server.
-"$engine" run -d --name "$name" "${runflags[@]}" --network none \
-  --memory 3g \
-  --tmpfs /run --tmpfs /run/lock "${mounts[@]}" \
-  -v "$envfile:/etc/rotv/environment:ro" \
-  "$image" >/dev/null
+  # systemd as PID 1, with the profile's flags.
+  # No network: the image must come up on its own, and nothing it schedules
+  # at boot can reach a real API or mail server.
+  "$engine" run -d --name "$name" "${runflags[@]}" --network none \
+    --memory 3g \
+    --tmpfs /run --tmpfs /run/lock "${mounts[@]}" \
+    -v "$envfile:/etc/rotv/environment:ro" \
+    "$image" >/dev/null
 
-in_ctr() { "$engine" exec "$name" "$@"; }
+  in_ctr() { "$engine" exec "$name" "$@"; }
+fi
+# A build without the RHSM entitlement has no Weston (CRB), so no display to
+# judge: sdlc's check job builds that way. display.expect covers a published one.
+if [ "$profile" = app ] && ! in_ctr test -x /usr/bin/weston; then
+  echo "boot: no /usr/bin/weston (built without the entitlement): rotv-display not judged"
+  units=${units/ rotv-display/}
+  procs=""
+fi
+
 fail=0
 check() { local d=$1; shift; if "$@" >/dev/null 2>&1; then echo "ok   $d"; else echo "FAIL $d"; fail=1; fi; }
 

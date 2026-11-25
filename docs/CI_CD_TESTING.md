@@ -47,23 +47,34 @@ Roots of The Valley uses automated testing and code quality tools via GitHub Act
 
 ### Workflow File
 
-`.github/workflows/test.yml` - Runs on every pull request and push to master
+`.github/workflows/ci.yml` is the fleet's standard file; it runs `sdlc ci`,
+and what that runs is declared in `pyproject.toml` under `[tool.sdlc]`. Run
+the same thing locally with `.sdlc/bin/sdlc ci`.
 
-### Workflow Steps
+### The backend check
 
-```yaml
-1. Checkout repository
-2. Login to Quay.io (private base image registry)
-3. Pull base image: quay.io/fatherlinux/rotv-base:latest
-4. Build application image with BUILD_ENV=test
-5. Prepare test seed data (20 sample POIs)
-6. Run tests:
-   - Start container with ephemeral tmpfs storage
-   - Wait for server to initialize database
-   - Import test seed data
-   - Execute npm test
-7. Cleanup (always runs, even on failure)
+The `backend` check runs the backend suite where the backend runs:
+
 ```
+1. Build localhost/rotv:test with BASE_IMAGE=quay.io/crunchtools/rotv-base:latest
+   and BUILD_ENV=test (the backend-image check)
+2. Boot it under systemd, with no network; ready once rotv-init is active
+3. tests/ci/write-environment.sh writes /etc/rotv/environment (a per-run
+   PGPASSWORD, no API keys), restart rotv-backend, wait for /api/destinations
+4. Import the test seed data, then tests/ci/apply-migrations.sh re-runs every
+   migration over it and fails on any error but "already exists"
+5. Restart rotv-backend, wait again, run npm --prefix /app test
+```
+
+### The image checks
+
+Each run builds every image (`Containerfile`, `.base`, `.dev`, `.images`) and
+runs `tests/image/contract.sh --here <profile>` inside it, then
+`tests/image/boot.sh --here` in the app and image-server images booted under
+systemd. The check job has no RHSM entitlement, so its app build has no
+Weston: `display.expect` holds those two binaries and is run by hand against a
+published image. The image job's own boot gate (`systemd`, `boot-units`) runs
+on the build it publishes.
 
 ### Build Arguments
 
@@ -133,8 +144,7 @@ Contains 20 sample POIs for testing:
 View test results:
 1. Go to PR page
 2. Click "Checks" tab
-3. Click "Run Tests" workflow
-4. Expand "Run tests" step to see detailed output
+3. Click the "sdlc / check" job; each check's output is under its own name
 
 ### Common Test Failures
 
@@ -298,28 +308,17 @@ Prevent merging PRs with failing tests:
 
 ## Security Scanning
 
-Findings from everything below land in **Security → Code scanning** (SARIF) or **Security → Dependabot**.
-
 | What | Where | Blocks a PR? |
 |------|-------|--------------|
-| CVE Lite CLI (OSV) on `/`, `backend/`, `frontend/` lockfiles | `dependency-scan.yml` | Yes, required checks `CVE Lite (.)`, `(backend)`, `(frontend)` — new findings at high+ only |
-| CVE Lite full scan, SARIF upload | `dependency-scan.yml`, weekly + manual | No |
+| `npm audit` at high on `/`, `backend/`, `frontend/` | `sdlc ci` `npm-audit` | Yes, on any high finding |
+| grype on the built app image | `sdlc ci` `container-scan` | Yes, on a fixable critical |
 | Fleet image CVE scan (grype, every 6 h, published images) | gloval `grype.crunchtools.com` → Nagios `Fleet image CVEs` | Pages on a new fixable Critical; not a PR check (constitution 1.40.0, RT #1551) |
-| Dependabot alerts + security PRs, secret scanning + push protection | repo settings | Push protection blocks pushes containing secrets |
+| Secret scanning + push protection | repo settings | Push protection blocks pushes containing secrets |
 
-CVE Lite uses OSV rather than the npm registry. npm audit misses advisories on prerelease-tagged versions (multer `1.4.5-lts.2`, #640).
-
-### Baselines (CVE Lite ratchet)
-
-Each scanned directory has a committed `.cve-lite/baseline.json` of accepted debt. A PR fails only on a finding that isn't in it, meaning a new package, a new version, or a new advisory ID. After fixing debt, shrink the baseline:
-
-```bash
-podman run --rm -v "$PWD":/src:Z -w /src/backend docker.io/library/node:22 \
-  npx -y cve-lite-cli@1.37.0 . --ratchet
-git add backend/.cve-lite/baseline.json
-```
-
-The PR gate compares against the **base branch's** baseline, so a PR that edits its own baseline changes nothing. Fixing a dependency is always the first answer. To accept new debt, a maintainer adds the `security-debt-accepted` label, and the gate then uses the PR's baseline.
+The CVE Lite (OSV) scan and its per-directory baselines went with the old
+workflows (a1221). npm audit reads the npm registry's advisories, which miss
+prerelease-tagged versions (multer `1.4.5-lts.2`, #640), and it has no
+baseline: a high finding fails the gate until it is fixed.
 
 ### Accepting a CVE in the image
 
