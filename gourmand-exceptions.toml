@@ -232,5 +232,5 @@ classification = "by_design"
 [[exceptions]]
 check = "CH001-absolute_paths"
 path = "pyproject.toml"
-justification = "PLAYWRIGHT_BROWSERS_PATH names where the image installs Playwright's browsers inside the container (/root/.cache/ms-playwright); it is a container path, not a developer's machine"
+justification = "PLAYWRIGHT_BROWSERS_PATH names where the image installs Playwright's browsers inside the container, under root's cache directory; it is a container path, not a developer's machine"
 classification = "by_design"
