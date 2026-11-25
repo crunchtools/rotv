@@ -26,17 +26,97 @@ max-complexity = 10
 [tool.sdlc]
 repo-kinds = ["web-application"]
 project = "image-server"
+# The app is Node. Naming a stack turns off the python-only default a
+# pyproject.toml implies; python still runs, for image-server/.
+stacks = ["node"]
 
 [tool.sdlc.push]
 # No in-repo Semgrep rules: the check exits 2 when .semgrep is absent rather
 # than scanning nothing and calling it a pass.
 skip = ["semgrep"]
 
+# The backend's tests need its database, so they run in the image
+# (`backend` below). Lint is the root's: eslint and its plugins are root
+# devDependencies, and its script lints frontend/ and backend/.
+[tool.sdlc.push.npm-test]
+packages = ["frontend"]
+
+[tool.sdlc.push.npm-lint]
+packages = ["."]
+
+[tool.sdlc.push.npm-audit]
+packages = [".", "frontend", "backend"]
+
+# What tests.yml ran, as checks. The backend's tests run where it runs: the
+# app image, built with its devDependencies, booted under systemd.
+[tool.sdlc.ci]
+checks = ["containerfile-chains", "migration-tests", "migration-compat", "backend-image", "backend"]
+
+[tool.sdlc.ci.containerfile-chains]
+kind = "command"
+argv = ["bash", "tests/image/lint-containerfiles.sh"]
+
+[tool.sdlc.ci.migration-tests]
+kind = "command"
+argv = ["node", "--test", "tests/migrations/check-migrations.test.mjs"]
+
+# With no --base it checks every migration above BASELINE; an edit to an
+# older one is caught only where git history is at hand (a local run).
+[tool.sdlc.ci.migration-compat]
+kind = "command"
+argv = ["node", "scripts/check-migrations.mjs"]
+
+[tool.sdlc.ci.container-build]
+build_args = { BASE_IMAGE = "quay.io/crunchtools/rotv-base:latest" }
+
+[tool.sdlc.ci.backend-image]
+kind = "image-build"
+tag = "localhost/rotv:test"
+build_args = { BASE_IMAGE = "quay.io/crunchtools/rotv-base:latest", BUILD_ENV = "test" }
+
+# Ready once rotv-init has created the database. The backend cannot start
+# until setup writes its environment file, and the seed is INSERT-only: the
+# backend creates the schema on its first start, so it seeds after that.
+[tool.sdlc.ci.backend]
+kind = "command"
+systemd = true
+image = "localhost/rotv:test"
+ready = ["systemctl", "is-active", "--quiet", "rotv-init"]
+setup = [
+  ["bash", "/repo/tests/ci/write-environment.sh"],
+  ["systemctl", "restart", "rotv-backend"],
+  ["bash", "/repo/tests/ci/wait-for-api.sh"],
+  ["psql", "-U", "postgres", "-d", "rotv", "-f", "/repo/backend/tests/fixtures/test-seed-data.sql"],
+  ["bash", "/repo/tests/ci/apply-migrations.sh"],
+  ["systemctl", "restart", "rotv-backend"],
+  ["bash", "/repo/tests/ci/wait-for-api.sh"],
+]
+argv = ["npm", "--prefix", "/app", "test"]
+
 [tool.sdlc.image]
 # Written by crunchtools/sdlc's scripts/convert_repo.py: moved from the workflows.
 image = "quay.io/crunchtools/rotv"
-default-branch = "master"
 build-args = "BASE_IMAGE=quay.io/crunchtools/rotv-base:latest\n"
 rhsm = true
 boot = "command"
 boot-command = "tests/image/contract.sh \"$IMAGE\" app && tests/image/boot.sh \"$IMAGE\" app"
+
+[[tool.sdlc.images]]
+name = "rotv-base"
+containerfile = "Containerfile.base"
+rhsm = true
+boot = "command"
+boot-command = "tests/image/contract.sh \"$IMAGE\" base"
+
+[[tool.sdlc.images]]
+name = "rotv-dev"
+containerfile = "Containerfile.dev"
+boot = "command"
+boot-command = "tests/image/contract.sh \"$IMAGE\" dev"
+
+[[tool.sdlc.images]]
+name = "images-rotv"
+containerfile = "Containerfile.images"
+rhsm = true
+boot = "command"
+boot-command = "tests/image/contract.sh \"$IMAGE\" images && tests/image/boot.sh \"$IMAGE\" images"

@@ -47,22 +47,23 @@ Roots of The Valley uses automated testing and code quality tools via GitHub Act
 
 ### Workflow File
 
-`.github/workflows/test.yml` - Runs on every pull request and push to master
+`.github/workflows/ci.yml` is the fleet's standard file; it runs `sdlc ci`,
+and what that runs is declared in `pyproject.toml` under `[tool.sdlc]`. Run
+the same thing locally with `.sdlc/bin/sdlc ci`.
 
-### Workflow Steps
+### The backend check
 
-```yaml
-1. Checkout repository
-2. Login to Quay.io (private base image registry)
-3. Pull base image: quay.io/fatherlinux/rotv-base:latest
-4. Build application image with BUILD_ENV=test
-5. Prepare test seed data (20 sample POIs)
-6. Run tests:
-   - Start container with ephemeral tmpfs storage
-   - Wait for server to initialize database
-   - Import test seed data
-   - Execute npm test
-7. Cleanup (always runs, even on failure)
+The `backend` check runs the backend suite where the backend runs:
+
+```
+1. Build localhost/rotv:test with BASE_IMAGE=quay.io/crunchtools/rotv-base:latest
+   and BUILD_ENV=test (the backend-image check)
+2. Boot it under systemd, with no network; ready once rotv-init is active
+3. tests/ci/write-environment.sh writes /etc/rotv/environment (a per-run
+   PGPASSWORD, no API keys), restart rotv-backend, wait for /api/destinations
+4. Import the test seed data, then tests/ci/apply-migrations.sh re-runs every
+   migration over it and fails on any error but "already exists"
+5. Restart rotv-backend, wait again, run npm --prefix /app test
 ```
 
 ### Build Arguments
@@ -133,8 +134,7 @@ Contains 20 sample POIs for testing:
 View test results:
 1. Go to PR page
 2. Click "Checks" tab
-3. Click "Run Tests" workflow
-4. Expand "Run tests" step to see detailed output
+3. Click the "sdlc / check" job; each check's output is under its own name
 
 ### Common Test Failures
 

@@ -9,7 +9,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Today's date in the valley, as YYYY-MM-DD: the season's dates are the organizer's. */
 export function todayInValley(now = new Date()) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: LIST_TIMEZONE }).format(now);
+  // Built from parts: en-CA's ISO format needs that locale's data, and a
+  // small-ICU Node (the sdlc gate's carries only en) falls back to M/D/YYYY.
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: LIST_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(now).map(({ type, value }) => [type, value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 const daysBetween = (fromIso, toIso) =>
