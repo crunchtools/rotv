@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.72.0] - 2026-11-24
+
 ### Security
 - rotv-base's Umami install no longer carries High npm advisories in
   Prisma's dependencies (a1546): prisma 7.10.1 brings deepmerge-ts 8.0.2
@@ -524,7 +526,8 @@ without changelog sections, so their entries are collected here.
 - **MINOR** (1.X.0) - New features, backwards-compatible functionality
 - **PATCH** (1.0.X) - Bug fixes, backwards-compatible improvements
 
-[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.71.1...HEAD
+[Unreleased]: https://github.com/crunchtools/rotv/compare/v1.72.0...HEAD
+[1.72.0]: https://github.com/crunchtools/rotv/releases/tag/v1.72.0
 [1.71.1]: https://github.com/crunchtools/rotv/releases/tag/v1.71.1
 [1.71.0]: https://github.com/crunchtools/rotv/releases/tag/v1.71.0
 [1.70.0]: https://github.com/crunchtools/rotv/releases/tag/v1.70.0
