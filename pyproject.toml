@@ -88,6 +88,8 @@ build_args = { BASE_IMAGE = "quay.io/crunchtools/rotv-base:latest", BUILD_ENV = 
 kind = "command"
 systemd = true
 image = "localhost/rotv:test"
+# The image installs Chromium as root at build time; the check runs with HOME=/tmp.
+env = { PLAYWRIGHT_BROWSERS_PATH = "/root/.cache/ms-playwright" }
 ready = ["systemctl", "is-active", "--quiet", "rotv-init"]
 setup = [
   ["bash", "/repo/tests/ci/check-logging.sh"],
