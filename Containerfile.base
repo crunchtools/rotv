@@ -12,7 +12,7 @@
 FROM quay.io/crunchtools/ubi10-core:latest AS umami
 ARG UMAMI_VERSION=3.4.1
 ARG PNPM_VERSION=12.3.4
-ARG PRISMA_VERSION=7.10.0
+ARG PRISMA_VERSION=7.10.1
 RUN dnf install -y nodejs npm tar gzip && dnf clean all && \
     npm install -g pnpm@${PNPM_VERSION}
 WORKDIR /build
@@ -29,9 +29,11 @@ ENV BASE_PATH=/stats \
 RUN pnpm build:docker
 # Runtime layout: prisma CLI + client for check-db's `prisma migrate deploy`,
 # then the standalone server layered on top (same order as upstream's runner).
+# effect is floored at 3.22.1 (GHSA-7589-6fvf-x4pw): @prisma/config 7.10.1 still
+# pins 3.20.0. Drop the override when Prisma ships effect >= 3.22.1.
 WORKDIR /opt/umami
 RUN echo {} > package.json && \
-    printf "allowBuilds:\n  '@prisma/engines': true\n  prisma: false\nverifyDepsBeforeRun: false\n" > pnpm-workspace.yaml && \
+    printf "allowBuilds:\n  '@prisma/engines': true\n  prisma: false\nverifyDepsBeforeRun: false\noverrides:\n  'effect@<3.22.1': 3.22.1\n" > pnpm-workspace.yaml && \
     pnpm add npm-run-all dotenv chalk semver \
       prisma@${PRISMA_VERSION} @prisma/client@${PRISMA_VERSION} @prisma/adapter-pg@${PRISMA_VERSION} && \
     cp -a /build/public /build/prisma /build/prisma.config.ts /build/scripts /build/generated /build/geo ./ && \
