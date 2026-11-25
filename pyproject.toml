@@ -50,13 +50,14 @@ packages = [".", "frontend", "backend"]
 # What tests.yml ran, as checks. The backend's tests run where it runs: the
 # app image, built with its devDependencies, booted under systemd.
 [tool.sdlc.ci]
+# rotv-base and images-rotv install from RHSM, and `check` gets no secrets (a fork's
+# PR runs it), so their builds and contracts are not listed here: the image job
+# builds and boot-gates both, with the subscription, before it publishes them.
 checks = [
   "containerfile-chains", "migration-tests", "migration-compat",
   "backend-image", "backend",
   "app-contract", "app-boot",
-  "base-image", "base-contract",
   "dev-image", "dev-contract",
-  "images-image", "images-contract", "images-boot",
 ]
 
 [tool.sdlc.ci.containerfile-chains]
