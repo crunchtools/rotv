@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The image boots to systemd `running` without `/etc/rotv/environment`
+  (a1648): Umami's setup no longer waits 180s for a heartbeat when
+  `PGPASSWORD` is unset and `umami-start.sh` has already left analytics off,
+  so its start job no longer holds the boot past the release's boot gate.
+
 ## [1.72.0] - 2026-11-24
 
 ### Security

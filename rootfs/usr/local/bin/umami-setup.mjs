@@ -59,6 +59,12 @@ async function login(password) {
 }
 
 async function main() {
+  // umami-start.sh exits 0 without PGPASSWORD and Umami never listens; waiting
+  // for its heartbeat would hold the start job, and the boot, for 180s.
+  if (!process.env.PGPASSWORD) {
+    console.log('umami-setup: PGPASSWORD unset, Umami is off, nothing to set up');
+    return;
+  }
   if (!(await waitForHeartbeat())) {
     stopUmami('no answer on /api/heartbeat within 180s, so the default password may be live');
     return;
